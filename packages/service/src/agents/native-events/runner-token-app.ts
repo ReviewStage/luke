@@ -52,7 +52,11 @@ import { parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
-import { DEVICE_ISOLATION, deviceAgentLaunchPayloadSchema } from "@luke/features/device-agent-wire";
+import {
+  DEVICE_ISOLATION,
+  type DeviceIsolation,
+  deviceAgentLaunchPayloadSchema,
+} from "@luke/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { type HostGithubTokenAnswer, hostGithubTokenRequestSchema } from "@luke/features/host-wire";
 import { HTTP_METHOD } from "@luke/wire";
@@ -182,13 +186,20 @@ const repositoryTokenFor = /* @__PURE__ */ Effect.fn("web/repositoryTokenFor")(f
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
 });
 
+/** How a device runs agents that Luke hands a GitHub token: on Luke's sign-ins, in a VM or straight on the device. */
+const ON_LUKES_SIGN_INS: ReadonlySet<DeviceIsolation> = new Set([
+  DEVICE_ISOLATION.SANDBOX,
+  DEVICE_ISOLATION.DIRECT,
+]);
+
 /**
  * A GitHub token for a device's own agent named in the body, the one rule
  * every device caller is held to: an installation token for the agent's
  * repository, where the agent is the member's own and pinned to the caller's own device
- * (`actsForDevice`), that device runs its agents in a VM
- * of their own (`DEVICE_ISOLATION.SANDBOX`), since an agent run directly on
- * a device pushes on its developer's own login, and the agent works in a
+ * (`actsForDevice`), that device runs its agents on Luke's sign-ins, in a VM
+ * of their own (`DEVICE_ISOLATION.SANDBOX`) or straight on the device
+ * (`DEVICE_ISOLATION.DIRECT`), never on its developer's own logins
+ * (`DEVICE_ISOLATION.BARE`), whose agents push on those, and the agent works in a
  * repository the installation of its task's workspace reaches; refused
  * otherwise.
  */
@@ -215,7 +226,7 @@ const deviceGithubToken = /* @__PURE__ */ Effect.fn("web/deviceGithubToken")(fun
   }
   // Note that the device is read under the member, so another member's device reads as none.
   const standing = yield* hostedStoreOrUnavailable(deviceLayout(userId, deviceId));
-  if (!Option.exists(standing, (each) => each.isolation === DEVICE_ISOLATION.SANDBOX)) {
+  if (!Option.exists(standing, (each) => ON_LUKES_SIGN_INS.has(each.isolation))) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
   return yield* repositoryTokenFor(userId, agent.value, brake);

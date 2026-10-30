@@ -27,7 +27,9 @@ const INSTALL_TOKEN = `lkh_${"b".repeat(40)}`;
 const DEVICE_SECRET = `lkd_${"a".repeat(43)}`;
 const RUNNER_TOKEN = "sk-ant-oat01-fixture-not-a-real-token";
 const SMOLVM = "/usr/local/bin/smolvm";
-/** The runner's bundle each OS runs: a Linux release's own, and on a Mac the app's, which its VMs mount. */
+/** The Node the daemon runs on, which its runners run on too. */
+const NODE = "/opt/luke-host/node/bin/node";
+/** The runner's bundle each OS runs: a Linux release's own, and on a Mac the app's. */
 const RUNNER_BUNDLE = {
   LINUX: "/opt/luke-host/lib/agent-runner.mjs",
   DARWIN: "/opt/agent-runner/agent-runner.mjs",
@@ -44,15 +46,16 @@ const HTTP = {
 /** A Linux box named fra-01, with no `/dev/kvm`. */
 const FRA_01: HostOs = { ...LINUX_HOST, deviceName: () => "fra-01", nested: () => false };
 
-/** A box's platform on the OS given, as its daemon builds it. */
-const platformOn = (os: HostOs, stateRoot: string) =>
+/** A box's platform on the OS given, as its daemon builds it, running as the user given. */
+const platformOn = (os: HostOs, stateRoot: string, uid = 990) =>
   hostPlatform({
     os,
     installFolder: "/opt/luke-host",
     arch: DEVICE_ARCH.X64,
     stateRoot,
     smolvm: SMOLVM,
-    user: { uid: 990, gid: 990 },
+    node: NODE,
+    user: { uid, gid: uid },
     clis: fakeClis(),
   });
 
@@ -73,25 +76,17 @@ const box = Effect.gen(function* () {
   return { home: `${root}/home`, stateRoot: `${root}/state` };
 });
 
-/** Whether a spawn is the runner, started in its agent's VM. */
+/** Whether a spawn is the runner, started straight on the box on the daemon's own Node. */
 const isRunner = (each: { readonly program: string; readonly args: readonly string[] }) =>
-  each.program === SMOLVM && each.args.some((arg) => RUNNER_BUNDLES.has(arg));
+  each.program === NODE && each.args.some((arg) => RUNNER_BUNDLES.has(arg));
 
-/** What smolvm prints for a machine it has not made. */
-const NOT_FOUND = JSON.stringify({ error: { code: "NOT_FOUND", message: "machine not found" } });
-
-/** The daemon's world: its home and shell, a spawner whose login shell answers a PATH, whose smolvm makes each machine the first time it is started and whose runners run, and the reports it makes. */
+/** The daemon's world: its home and shell, a spawner whose login shell answers a PATH and whose runners run, with no smolvm on the box, and the reports it makes. */
 const world = (home: string, reports: string[]) => {
-  const made = new Set<string>();
   const spawner = scriptedSpawner((program, args) => {
     if (program === "/bin/bash" && args[0] === "-l")
       return { stdout: "/usr/bin:/bin", exitCode: 0 };
-    if (program !== SMOLVM) return undefined;
     if (isRunner({ program, args })) return {};
-    const [, verb, , machine = ""] = args;
-    if (verb === "create") made.add(machine);
-    if (verb === "start" && !made.has(machine)) return { stderr: NOT_FOUND, exitCode: 1 };
-    return { exitCode: 0 };
+    return undefined;
   });
   const layer = Layer.mergeAll(
     NodeFileSystem.layer,
@@ -150,22 +145,24 @@ describe("a host's daemon", () => {
 
   it.effect.each([
     {
-      os: { ...LINUX_HOST, deviceName: () => "fra-01", nested: () => true },
+      os: { ...LINUX_HOST, deviceName: () => "fra-01" },
       name: "fra-01",
       platform: "linux",
-      nested: true,
+      uid: 0,
+      sandboxed: "1",
       runnerBundle: RUNNER_BUNDLE.LINUX,
     },
     {
       os: { ...DARWIN_HOST, deviceName: () => "Studio" },
       name: "Studio",
       platform: "darwin",
-      nested: false,
+      uid: 501,
+      sandboxed: undefined,
       runnerBundle: RUNNER_BUNDLE.DARWIN,
     },
   ])(
-    "registers as its OS ($platform) on its device secret with its version on every call, hands a launch to its VM, nested where its OS allows, with the claim's secrets, and stops its runner and ends once Luke refuses its secret",
-    ({ os, name, platform: devicePlatform, nested, runnerBundle }) =>
+    "registers as its OS ($platform) on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets, and stops its runner's group and ends once Luke refuses its secret",
+    ({ os, name, platform: devicePlatform, uid, sandboxed, runnerBundle }) =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
         const reports: string[] = [];
@@ -212,7 +209,7 @@ describe("a host's daemon", () => {
               return jsonResponse({ done: true });
           }
         });
-        const platform = platformOn(os, stateRoot);
+        const platform = platformOn(os, stateRoot, uid);
 
         const daemon = yield* hostDaemon({
           stateRoot,
@@ -229,6 +226,9 @@ describe("a host's daemon", () => {
           platform: devicePlatform,
           arch: "x64",
           home: home,
+          isolation: "direct",
+          claudeExecutable: fakeClis().paths.claude,
+          codexExecutable: fakeClis().paths.codex,
           signedIn: { claudeCode: false, codex: false },
         });
         expect(new Set(http.requests.map((request) => request.authorization))).toEqual(
@@ -237,31 +237,31 @@ describe("a host's daemon", () => {
         expect(
           new Set(http.requests.map((request) => request.headers.get(HOST_WIRE.VERSION_HEADER))),
         ).toEqual(new Set([VERSION]));
-        const created = spawner.spawned.find(
-          (each) => each.program === SMOLVM && each.args[1] === "create",
-        );
-        expect(created?.args.includes("--nested")).toBe(nested);
+        expect(spawner.spawned.some((each) => each.program === SMOLVM)).toBe(false);
         const launched = spawner.spawned.filter(isRunner);
         expect(launched).toHaveLength(1);
         const [runner] = launched;
         const folder = `${home}/.luke/agents/${AGENT_ID}`;
-        expect(runner?.args.slice(0, 4)).toEqual(["machine", "exec", "--name", `luke-${AGENT_ID}`]);
-        expect(runner?.args).toContain(runnerBundle);
-        expect(runner?.args).toContain(`${folder}/repository`);
-        expect(runner?.args).toContain(`HOME=${folder}/home`);
+        expect(runner?.args).toEqual([runnerBundle]);
+        expect(runner?.cwd).toBe(`${folder}/repository`);
+        expect(runner?.extendEnv).toBe(false);
         expect(runner?.env).toMatchObject({
           CLAUDE_CODE_OAUTH_TOKEN: RUNNER_TOKEN,
           LUKE_RUNNER_PLACE: "host",
+          HOME: `${folder}/home`,
+          XDG_CACHE_HOME: `${folder}/cache`,
+          PNPM_HOME: `${folder}/home/.local/share/pnpm`,
+          NPM_CONFIG_PREFIX: `${folder}/home/.npm-global`,
+          PATH: `${folder}/home/.local/share/pnpm:${folder}/home/.npm-global/bin:/opt/luke/agent-tools:/usr/bin:/bin`,
         });
+        expect(runner?.env?.IS_SANDBOX).toBe(sandboxed);
         expect(reports).toContain("Luke host: Connected to Luke.");
 
         removed = true;
         yield* TestClock.adjust(Duration.seconds(20));
-        // Note that the runner, which never exits here, is signalled in its VM and given its grace before it is ended.
-        yield* settled(() => spawner.spawned.some((each) => each.args.includes("-e")));
-        yield* TestClock.adjust(Duration.seconds(5));
         yield* Fiber.join(daemon);
-        expect(runner?.ended).not.toBe("running");
+        // Note that the runner, which never exits here, has its group ended under the grace it was started with.
+        expect(runner?.ended).toEqual({ killSignal: "SIGTERM", forceKillAfterMillis: 3_000 });
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
 

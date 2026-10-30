@@ -50,8 +50,8 @@ export const RUNNER_ENV = {
   OPENAI_API_KEY: "OPENAI_API_KEY",
   /**
    * Where the runner runs, where its starter says (`RUNNER_PLACE`): set by a
-   * host's daemon alone, and unset in a sandbox and on a Mac, which the
-   * runner tells apart by its platform.
+   * host's daemon alone, on a Linux box and a Mac alike, This Mac's among
+   * them, and unset in the cloud's sandbox.
    */
   PLACE: "LUKE_RUNNER_PLACE",
 } as const;
@@ -59,10 +59,12 @@ export const RUNNER_ENV = {
 /** The places a runner's starter names in `RUNNER_ENV.PLACE`. */
 export const RUNNER_PLACE = {
   /**
-   * A Linux box its member added as a host, with nobody signed in at it,
-   * where each launch runs in a VM of its own, as the device's user, and no
-   * harness runs a sandbox of its own: the VM is the boundary, and
-   * bubblewrap and Landlock would keep a command from `/dev/kvm`.
+   * A machine its member runs Luke's host on, a Linux box or a Mac, with
+   * nobody signed in at it, where each launch runs straight on the box as
+   * the host's own user, with full access to what that user reaches, and no
+   * harness runs a sandbox of its own or asks an approval: Claude Code under
+   * `bypassPermissions`, and Codex in `danger-full-access` with approval
+   * `never`.
    */
   HOST: "host",
 } as const;

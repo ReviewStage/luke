@@ -51,10 +51,10 @@
  * `workspace-write` with approval `never` (https://learn.chatgpt.com/docs/sandboxing),
  * set as the thread starts and again as the `sandboxPolicy` of each
  * `turn/start`, as app-server documents: the checkout writable, its Git
- * directory, and the folders the machine grants, with the network on. In a
- * local agent's VM (`runsOnHost`) Codex runs no sandbox of its own,
- * `danger-full-access`, since the VM is the boundary and Landlock would keep
- * a command from `/dev/kvm`; its commands still inherit no bearer or key
+ * directory, and the folders the machine grants, with the network on. On a
+ * host (`runsOnHost`) Codex runs no sandbox of its own,
+ * `danger-full-access`, since an agent there has full access to the box it
+ * runs on; its commands still inherit no bearer or key
  * (`shell_environment_policy`).
  */
 

@@ -614,20 +614,27 @@ it.layer(getTestDB())("a Mac's GitHub token", (it) => {
       }),
   );
 
-  it.effect("refuses an agent on a Mac running its agents directly on it", () =>
-    Effect.gen(function* () {
-      const { ask } = yield* hostStanding;
-      const forbidden = {
-        status: HOSTED_HTTP_STATUS.FORBIDDEN,
-        cache: null,
-        body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
-      };
-      const member = yield* openMember;
-      const bare = yield* enrolledMac(member.userId, DEVICE_ISOLATION.BARE);
-      assert.deepEqual(
-        yield* ask(bare.secret, yield* agentOnDevice(member, bare.deviceId)),
-        forbidden,
-      );
-    }),
+  it.effect(
+    "refuses an agent on a Mac running its agents on its own logins, and mints for one running them on the box on Luke's",
+    () =>
+      Effect.gen(function* () {
+        const { ask } = yield* hostStanding;
+        const forbidden = {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          cache: null,
+          body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
+        };
+        const member = yield* openMember;
+        const bare = yield* enrolledMac(member.userId, DEVICE_ISOLATION.BARE);
+        assert.deepEqual(
+          yield* ask(bare.secret, yield* agentOnDevice(member, bare.deviceId)),
+          forbidden,
+        );
+        const direct = yield* enrolledMac(member.userId, DEVICE_ISOLATION.DIRECT);
+        assert.equal(
+          (yield* ask(direct.secret, yield* agentOnDevice(member, direct.deviceId))).status,
+          HOSTED_HTTP_STATUS.OK,
+        );
+      }),
   );
 });

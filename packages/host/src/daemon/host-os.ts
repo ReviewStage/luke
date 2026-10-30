@@ -24,17 +24,19 @@ import { macDeviceName } from "../node/mac-device-name.js";
 import { agentUnsavedWorkScript } from "../node/open-on-mac.js";
 
 /**
- * host-os.ts -- what a host's daemon does differently on each OS it runs on (`HostOs`): the platform it enrolls and registers as, the architectures it is built for, its default name, whether its agents' VMs may nest, where its `smolvm` comes from, which builds of the agent CLIs it keeps, whether agents ran directly on it before, and whether its agents' folders and VMs are its own alone.
+ * host-os.ts -- what a host's daemon does differently on each OS it runs on (`HostOs`): the platform it enrolls and registers as, the architectures it is built for, its default name, whether its agents' VMs from before may nest, where the `smolvm` they ran in comes from, which builds of the agent CLIs it keeps, whether agents ran on the developer's own logins on it before, and whether its agents' folders and VMs are its own alone.
  *
- * Everything else, the enroll, the follower, and the VM per agent, is the
- * same program on every OS (`hostPlatform`, `hostDaemon`). A description
+ * Everything else, the enroll, the follower, and each agent run straight
+ * on the box, is the same program on every OS (`hostPlatform`,
+ * `hostDaemon`), the check of an agent's folder for unsaved work before a
+ * discard among it. A description
  * reads the machine only when its daemon asks it to, as it starts. Which one
  * a daemon runs on, and where its state lives there, is `hostRuntime`'s.
  */
 
-/** Where a host's `smolvm` comes from. */
+/** Where the `smolvm` a host's agents ran their VMs in before they ran on the box comes from, which deletes what they left standing. */
 export const HOST_SMOLVM = {
-  /** A path its service names in a variable, which the daemon checks answers the pinned release. */
+  /** A path its service names in a variable, where the install script put one. */
   PATH: "path",
   /** The pinned release, fetched and checked under the daemon's state. */
   PIN: "pin",
@@ -60,14 +62,15 @@ export interface HostOs {
   readonly smolvm: HostSmolvmSource;
   /** The builds of the agent CLIs it fetches and keeps, for the architecture it runs on (`LocalAgentPlatformSeam.clis`). */
   readonly agentClis: (arch: DeviceArch) => AgentCliPins;
-  /** Whether agents may have run directly on the machine before every agent ran in a VM (`LocalAgentPlatformSeam.formerlyDirect`). */
+  /** Whether agents may have run on the developer's own logins on the machine before (`LocalAgentPlatformSeam.formerlyDirect`). */
   readonly formerlyDirect: boolean;
   /** Whether the agents' folders and the smolvm store the daemon runs with are its own alone (`LocalAgentPlatformSeam.storesOwned`). */
   readonly storesOwned: boolean;
-  readonly unsavedWorkScript?: LocalAgentPlatformSeam["unsavedWorkScript"];
+  /** What says a discard would lose work from an agent's worktree (`LocalAgentPlatformSeam.unsavedWorkScript`), run on the box. */
+  readonly unsavedWorkScript: NonNullable<LocalAgentPlatformSeam["unsavedWorkScript"]>;
   /** The folder the daemon's state lives in, for the home it runs with (`hostRuntime`). */
   readonly stateRoot: (home: string, app: HostApp) => string;
-  /** The folder holding the runner's bundle, which every agent's VM mounts read-only, for the folder the release is installed in. */
+  /** The folder holding the runner's bundle, for the folder the release is installed in. */
   readonly runnerFolder: (installFolder: string) => string;
 }
 
@@ -77,7 +80,7 @@ export interface HostApp {
   readonly developerIdSigned: boolean;
 }
 
-/** A Linux box: its state, its agents' folders and its smolvm store under the `luke-host` user's home, that user's alone, its host name, `/dev/kvm` passed through where it has it, the `smolvm` the install script put at the path its service names, and the glibc builds of the agent CLIs for its architecture. */
+/** A Linux box: its state, its agents' folders and its smolvm store under the daemon's user's home, that user's alone, its host name, `/dev/kvm` passed through where it has it, the `smolvm` the install script put at the path its service names where it put one, and the glibc builds of the agent CLIs for its architecture. */
 export const LINUX_HOST: HostOs = {
   name: "Linux",
   platform: DEVICE_PLATFORM.LINUX,
@@ -92,6 +95,7 @@ export const LINUX_HOST: HostOs = {
   }),
   formerlyDirect: false,
   storesOwned: true,
+  unsavedWorkScript: agentUnsavedWorkScript,
   stateRoot: (home) => path.join(home, "state"),
   runnerFolder: (installFolder) => path.join(installFolder, "lib"),
 };
@@ -100,8 +104,8 @@ export const LINUX_HOST: HostOs = {
  * A Mac: Apple silicon alone, its Computer Name, no nested VMs, which
  * Hypervisor.framework never gives its guests, the pinned `smolvm`
  * fetched and checked in-process, and the macOS arm64 builds of the agent
- * CLIs, each install keeping its own copy. Note that agents ran directly on This Mac
- * before, so a discard checks a folder for work that is nowhere else. Its
+ * CLIs, each install keeping its own copy. Note that agents ran on the
+ * developer's own logins on This Mac before, which never start again. Its
  * `luke-host` runs as the member and ships inside the desktop app, so its
  * state is the app's own folder, which Electron puts under Application
  * Support by the app's name (`resolveAppName`, a packaged build's), and the
@@ -109,8 +113,7 @@ export const LINUX_HOST: HostOs = {
  * looks. Those folders and VMs stand in the member's own `~/.luke/agents`
  * and smolvm store, which a standalone `luke-host` shares, so they are
  * never its own alone. Its runner is the app's own bundle, beside the
- * release in `Contents/Resources/agent-runner`, because every VM the app
- * made before mounts that folder and keeps the mounts it was made with.
+ * release in `Contents/Resources/agent-runner`.
  */
 export const DARWIN_HOST: HostOs = {
   name: "macOS",

@@ -585,14 +585,19 @@ const EXAMPLE_REPOSITORY = "acme/app";
 
 /**
  * Where an agent works: its own sandbox, or, for a local agent, its
- * starter's Mac (`agent.machine`), directly or in a Linux VM of its
- * own there, with the checkout's path the machine reports either way
+ * starter's device (`agent.machine`), straight on it or in a Linux VM of
+ * its own there, with the checkout's path the machine reports either way
  * (`../machine/agent-machine.ts`'s `layout`).
  */
 export interface CoderMachine {
   readonly local: boolean;
-  /** Whether a local agent runs in a VM of its own on its device (`DEVICE_ISOLATION`), out of reach of the device's own tools and services. */
-  readonly sandboxed: boolean;
+  /**
+   * How a local agent runs on its device (`DEVICE_ISOLATION`): in a VM of
+   * its own, out of reach of the device's own tools and services; straight
+   * on it, on Luke's sign-ins, with full access to it; or on the
+   * developer's own logins. None in the cloud.
+   */
+  readonly isolation?: DeviceIsolation | undefined;
   readonly checkoutPath: string;
   /** Where the machine keeps the skills the member installed into Luke. */
   readonly installedSkills: string;
@@ -603,7 +608,6 @@ export interface CoderMachine {
 /** A sandbox of the agent's own, its checkout and installed skills where every sandbox keeps them. */
 const SANDBOX_MACHINE: CoderMachine = {
   local: false,
-  sandboxed: false,
   checkoutPath: CODER.CHECKOUT_PATH,
   installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
   sharedFiles: SHARED_FILES_DIRECTORY,
@@ -629,23 +633,36 @@ function toolsOn(tools: ToolWords, machine: CoderMachine): ToolWords {
 const DEVICE_VM_WORDS =
   "You run in a Linux virtual machine of your own on one of the developer's devices, booted from Luke's sandbox image, with your folder mounted in from the device: the device's own installed tools, running services, and files outside your folder are out of your reach.";
 
+/** Where a local agent run straight on its device runs, and what of it it reaches. */
+const DEVICE_DIRECT_WORDS =
+  "You run straight on one of the developer's own machines, as its own user and with full access to it, in a folder of your own: its installed tools, running services, and files are all within your reach, the folders of its other agents among them, so work in your own folder and leave what is not yours alone.";
+
+/** Where a local agent on its device runs on Luke's sign-ins, in a VM or straight on the device, in words; none for one on the developer's own logins or in the cloud. */
+function deviceWords(machine: CoderMachine): string | undefined {
+  if (machine.isolation === DEVICE_ISOLATION.SANDBOX) return DEVICE_VM_WORDS;
+  if (machine.isolation === DEVICE_ISOLATION.DIRECT) return DEVICE_DIRECT_WORDS;
+  return undefined;
+}
+
 /** The checkout section's words after where it stands and the tools' own: how GitHub is reached, and the Mac beside the sandbox. */
 function checkoutReachWords(tools: ToolWords, machine: CoderMachine): string {
-  if (machine.sandboxed) {
-    return `GitHub is reachable through \`gh\` and \`git\` from the shell, already signed in for you, so never put a token in a URL or a command, and never try to sign in. ${DEVICE_VM_WORDS}`;
+  const device = deviceWords(machine);
+  if (device !== undefined) {
+    return `GitHub is reachable through \`gh\` and \`git\` from the shell, already signed in for you, so never put a token in a URL or a command, and never try to sign in. ${device}`;
   }
   return machine.local
     ? `GitHub is reachable through \`gh\` and \`git\` from the shell, under the developer's own git credentials on their Mac, so never put a token in a URL or a command, and never sign in as anyone else. You run on the developer's own Mac, in a worktree of your own, with their installed tools and running services, inside ${tools.ownSandbox}, which keeps your worktree and the temp folder writable.`
     : "GitHub is reachable through `gh` and `git` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in. `run_on_mac` runs a command on the developer's own Mac instead, from their home folder, where the developer may be asked to allow the command, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.";
 }
 
-/** How the agent looks at what it built before it publishes: on the sandbox's Playwright, display, and browser, or on the developer's Mac with whatever the repository runs. */
+/** How the agent looks at what it built before it publishes: on the sandbox's Playwright, display, and browser, or on the developer's machine with whatever the repository runs. */
 function seeingWords(tools: ToolWords, machine: CoderMachine): string {
-  if (machine.sandboxed) {
+  if (machine.isolation === DEVICE_ISOLATION.SANDBOX) {
     return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with Playwright from the shell, whose \`playwright\` command, package, and Chromium are installed in your machine, look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words; a WebM of a flow plays there too, kept under 4 MB. ${tools.started}`;
   }
   if (machine.local) {
-    return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with whatever the repository or the Mac has for it, such as Playwright from the shell, look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words; a WebM of a flow plays there too, kept under 4 MB. ${tools.started}`;
+    const where = machine.isolation === DEVICE_ISOLATION.DIRECT ? "the machine" : "the Mac";
+    return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with whatever the repository or ${where} has for it, such as Playwright from the shell, look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words; a WebM of a flow plays there too, kept under 4 MB. ${tools.started}`;
   }
   return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with Playwright, whose \`playwright\` command, package, and Chromium are installed: \`playwright screenshot --wait-for-timeout=2000 http://localhost:3000 ${SHARED_FILES_DIRECTORY}/home.png\`, saving every picture, video, and page you show or post under \`${SHARED_FILES_DIRECTORY}/\` (\`mkdir -p ${SHARED_FILES_DIRECTORY}\` where it is missing) or the checkout, which Luke reads, never in a temp folder of your harness's own, which only you can read, or, for a page that needs a click, a viewport, or a dark color scheme, a short CommonJS script of your own that requires \`playwright\`, run with \`NODE_PATH="${PLAYWRIGHT_PIN.PREFIX}/lib/node_modules:$(npm root -g)" node shot.cjs\` so it finds the installed package rather than one of the checkout's. An Electron app runs here too, on the X display \`xvfb-run -a\` gives it: fetch its binary first, which an install on Linux often skips, with \`node node_modules/electron/install.js\` from the app's own folder, then start it with \`--disable-gpu\`, without which its window never draws, or drive it from such a script with Playwright's \`_electron.launch\`, choosing its window by URL, since the first one open may be a hidden one. Look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words. Where what you built is a flow rather than a screen, such as a form to fill in and submit, record it as a video: in your browser, \`record\` before the flow and \`stop_recording\` with a caption after it, which keeps the video in your transcript; or, in such a script, its \`browser.newContext({ recordVideo: { dir: "${SHARED_FILES_DIRECTORY}/video", size: { width: 1280, height: 800 } } })\` writes a WebM of each page once the context closes, which \`${CODER_TOOL.SHOW_IMAGE}\` plays in your transcript; keep it to the steps that matter, under 4 MB. ${tools.started}`;
 }
@@ -754,10 +771,11 @@ ${tools.integrations}`,
 
 /** The sandbox with no repository an agent with none works in, and the Mac beside it; or, for a local agent, its folder on that Mac. */
 function sandboxSection(tools: ToolWords, machine: CoderMachine = SANDBOX_MACHINE): string {
-  if (machine.sandboxed) {
+  const device = deviceWords(machine);
+  if (device !== undefined) {
     return `## Your folder
 
-You work in a folder of your own with no repository in it. ${DEVICE_VM_WORDS} ${tools.sandbox}`;
+You work in a folder of your own with no repository in it. ${device} ${tools.sandbox}`;
   }
   if (machine.local) {
     return `## Your folder
@@ -1294,9 +1312,7 @@ export function agentCoderInstructions(agent: Agent, context: AgentInstructionsC
     context.memoryOn,
     {
       local: agent.machine === AGENT_MACHINE.DEVICE,
-      sandboxed:
-        agent.machine === AGENT_MACHINE.DEVICE &&
-        context.place?.isolation === DEVICE_ISOLATION.SANDBOX,
+      isolation: agent.machine === AGENT_MACHINE.DEVICE ? context.place?.isolation : undefined,
       checkoutPath: context.place?.checkoutPath ?? SANDBOX_MACHINE.checkoutPath,
       installedSkills: context.place?.installedSkills ?? SANDBOX_MACHINE.installedSkills,
       sharedFiles: context.place?.sharedFiles ?? SANDBOX_MACHINE.sharedFiles,

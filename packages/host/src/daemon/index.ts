@@ -13,4 +13,4 @@ export {
   LINUX_HOST,
 } from "./host-os.js";
 export { type HostPlatformOptions, hostPlatform } from "./host-platform.js";
-export { hostSmolvm } from "./host-smolvm.js";
+export { hostSmolvmLeft } from "./host-smolvm.js";

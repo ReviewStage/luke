@@ -693,7 +693,7 @@ export function localAgentRefusalWords(
     case LOCAL_AGENT_REFUSAL.NO_HARNESS:
       return `${name} can't run this model's agents. Choose a Claude or Codex model, ${RUN_IN_CLOUD}.`;
     case LOCAL_AGENT_REFUSAL.PREPARING:
-      return `${name} is still getting ready for local agents (downloading its sandbox). Try again in a few minutes.`;
+      return `${name} is still getting ready for local agents (downloading Claude Code, Codex, and GitHub's CLI). Try again in a few minutes.`;
     case LOCAL_AGENT_REFUSAL.SETUP_FAILED:
       return `${name} couldn't set up local agents. ${SETUP_RETRY[devicePlatformOf(device ?? {})]} to try again, ${RUN_IN_CLOUD}.`;
     // Note that no way out is offered, because the cloud is the owner's to set and a teammate can change nothing here.
