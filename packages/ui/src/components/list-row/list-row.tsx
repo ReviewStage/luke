@@ -83,7 +83,10 @@ export type { ListSelection } from "../selection/list-selection.js";
  * from: the ⋯, what held the keyboard as the menu key was pressed, or, for
  * a right-click, the row's press, or its ⋯ where it opens nothing. A row
  * that offers no acts now, its groups empty, or is unavailable, draws no ⋯
- * and opens nothing.
+ * and opens nothing. A row that opens something may leave its ⋯ out
+ * (`more`), as a phone's mail list draws none on its rows, and offer its
+ * menu by the long press, the right-click, and the menu key alone; its end
+ * then runs to the row's edge, as a row with no menu's does.
  * `menu` is the one way a row wires its menu: a row never opens one by a
  * right-click it wires itself.
  *
@@ -180,7 +183,18 @@ export type { ListSelection } from "../selection/list-selection.js";
  * is swiped to mark it read: a short swipe leaves it open on the act's
  * button, a long one does the act on release (`use-row-swipe.ts`). The
  * swipe is the pointer's and the trackpad's alone; the act it does is one
- * the row offers another way too, so the button takes no Tab stop.
+ * the row offers another way too, so the button takes no Tab stop. Its
+ * label may stay short where a reader hears the act's whole name (`name`),
+ * the menu's words for it, which hold the label's.
+ *
+ * A row whose description says more than a reader should hear, a message's
+ * whole code block, hands the words a reader hears of it instead
+ * (`describedAs`), cut to what the eye reads first: its press is then named
+ * by its lead, its title, and its metadata, in that order, and described by
+ * those words, a text node of its own that no box draws, so a recording
+ * masks it as it masks every word. An unread row whose unread weight
+ * nothing else says to a reader says it at the head of its title
+ * (`unreadWords`), which nothing hides while its acts hold the keyboard.
 
  */
 
@@ -220,6 +234,8 @@ export type ListRowLeadAt = (typeof LIST_ROW_LEAD)[keyof typeof LIST_ROW_LEAD];
 /** A row's one swipe: what its act is called, its glyph, and the act. */
 export interface ListRowSwipe {
   readonly label: string;
+  /** What a reader hears the act called, where the label is its short form ("Mark as read" for "Read"); the label where none is said. */
+  readonly name?: string | undefined;
   readonly icon: ReactNode;
   readonly onAct: () => void;
 }
@@ -551,9 +567,12 @@ export function ListRow({
   ref,
   onKeyDown,
   menu,
+  more = true,
   swipe,
   depth = 0,
   fold,
+  describedAs,
+  unreadWords,
 }: {
   /** A mark before the title (an avatar, a status's glyph), drawn as decoration. */
   leading?: ReactNode;
@@ -612,12 +631,18 @@ export function ListRow({
   onKeyDown?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
   /** The menu of the row's thing's acts, opened alike by its ⋯, a right-click, a long press, and the menu key; it takes `menuOpen`'s place. */
   menu?: ListRowMenu | undefined;
+  /** Whether the row draws its menu's ⋯; one that opens something may leave it out, its menu still a long press, a right-click, and the menu key away. */
+  more?: boolean | undefined;
   /** The row's one swipe right; none where it offers none. */
   swipe?: ListRowSwipe | undefined;
   /** How deep it stands nested under other rows: 0, at the top, unless said. */
   depth?: number | undefined;
   /** The rows nested under it, which it folds; none where it holds none. */
   fold?: ListRowFold | undefined;
+  /** What a reader hears of its description, cut to what the eye reads first, which names the press by its other words and describes it by these; none where the press is named by its words as drawn. */
+  describedAs?: string | undefined;
+  /** What an unread row says to a reader at the head of its title, its weight being drawn for the eye alone; none where its owner says it elsewhere. */
+  unreadWords?: string | undefined;
 }): React.JSX.Element {
   const swiped = useRowSwipe(swipe?.label, swipe?.onAct ?? NO_ACT);
   // The press hands the row's ref its element, and the link menu the address it opens.
@@ -636,6 +661,9 @@ export function ListRow({
     [ref, linkAddress],
   );
   const titleId = useId();
+  const leadId = useId();
+  const metaId = useId();
+  const describedId = useId();
   // Note that → and ← are the row's only while they would move its fold, so a list walking its rows along them still hears the rest.
   const foldKeys = (event: KeyboardEvent<HTMLElement>) => {
     if (fold === undefined) return;
@@ -656,6 +684,8 @@ export function ListRow({
     opener: onPress ? pressElement : undefined,
   });
   const offered = rowMenu.offered;
+  // Note that a row that opens nothing keeps its ⋯, because it is the one control its menu hands focus back to.
+  const moreDrawn = offered && (more || onPress === undefined);
   const [titleMeasured, titleClipped] = useClipped(plainWords(title));
   useEffect(() => {
     onTitleClipped?.(titleClipped);
@@ -683,10 +713,13 @@ export function ListRow({
   const heading = (
     <span
       ref={titleMeasured}
-      id={offered || said(actions) ? titleId : undefined}
+      id={moreDrawn || said(actions) || describedAs !== undefined ? titleId : undefined}
       className="luke-list-row-title"
       data-overflow={String(titleClipped)}
     >
+      {unread === true && unreadWords !== undefined ? (
+        <VisuallyHidden>{unreadWords}</VisuallyHidden>
+      ) : null}
       {title}
     </span>
   );
@@ -695,7 +728,11 @@ export function ListRow({
   const end =
     said(meta) || chevron ? (
       <span className={END_CLASS}>
-        {said(meta) ? <span className="luke-list-row-meta">{meta}</span> : null}
+        {said(meta) ? (
+          <span id={metaId} className="luke-list-row-meta">
+            {meta}
+          </span>
+        ) : null}
         {chevron ? (
           <span className={CHEVRON_CLASS} aria-hidden="true">
             <ChevronRightIcon />
@@ -714,6 +751,7 @@ export function ListRow({
         </span>
         <span
           ref={leadMeasured}
+          id={leadId}
           className="luke-list-row-lead-label min-w-0 overflow-hidden whitespace-nowrap"
           data-overflow={String(leadClipped)}
         >
@@ -724,6 +762,18 @@ export function ListRow({
   // Note that a lead over the title takes the first line, the one the metadata ends.
   const above = leadAt === LIST_ROW_LEAD.ABOVE && lead !== undefined;
   const firstLine = above ? leadMark : heading;
+  // Note that a row described apart is named by its words but the description, the time last, as a mail app's row is read.
+  const namedBy =
+    describedAs === undefined
+      ? undefined
+      : [
+          above ? leadId : undefined,
+          titleId,
+          lead !== undefined && !above ? leadId : undefined,
+          said(meta) ? metaId : undefined,
+        ]
+          .filter((each) => each !== undefined)
+          .join(" ");
   const face = (
     <>
       {said(leading) ? (
@@ -764,7 +814,9 @@ export function ListRow({
       type="button"
       className={MAIN_BUTTON_CLASS}
       aria-current={current}
-      aria-description={chosen ? SELECTION_WORDS.SELECTED : undefined}
+      aria-labelledby={namedBy}
+      aria-describedby={describedAs === undefined ? undefined : describedId}
+      aria-description={chosen && describedAs === undefined ? SELECTION_WORDS.SELECTED : undefined}
       disabled={disabled}
       tabIndex={tabbable === false ? -1 : undefined}
       {...(tabbable === undefined ? rovingItem() : {})}
@@ -815,6 +867,12 @@ export function ListRow({
           {press}
         </hint.Hint>
       )}
+      {press === undefined || describedAs === undefined ? null : (
+        // Note that a description's words outrank `aria-description`, so a chosen row says so among them.
+        <span id={describedId} hidden>
+          {chosen ? `${SELECTION_WORDS.SELECTED}, ${describedAs}` : describedAs}
+        </span>
+      )}
       {said(actions) ? (
         // Note that the acts are a group named by the row's title, so a reader hears which row's "Pin" or "Mark as read" it is.
         // biome-ignore lint/a11y/useSemanticElements: a row's acts are presses on its thing, not a form's fields, so they are no `<fieldset>`.
@@ -826,7 +884,7 @@ export function ListRow({
           {actions}
         </div>
       ) : null}
-      {offered ? (
+      {moreDrawn ? (
         <div className="luke-list-row-more row-1 flex items-center">
           {rowMenu.button({
             size:
@@ -839,7 +897,7 @@ export function ListRow({
   );
   const { view, item } = swiped;
   // Note that a row whose only act is its ⋯ offers it as a hover row offers its acts, so no row keeps an empty ⋯ track at rest.
-  const actsOnHover = actionsAt === LIST_ROW_ACTIONS.HOVER || (offered && !said(actions));
+  const actsOnHover = actionsAt === LIST_ROW_ACTIONS.HOVER || (moreDrawn && !said(actions));
   const hold = (element: HTMLLIElement | null) => {
     item.ref.current = element;
     if (!onPress) ref?.(element);
@@ -887,6 +945,7 @@ export function ListRow({
                 type="button"
                 className={SWIPE_ACT_CLASS}
                 tabIndex={-1}
+                aria-label={swipe.name}
                 data-swipe-act=""
                 onClick={pulseOnPress(swiped.onPress)}
               >

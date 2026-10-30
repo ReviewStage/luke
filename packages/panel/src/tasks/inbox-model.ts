@@ -852,10 +852,22 @@ export function inboxPreview(
   ticked?: readonly number[],
 ): string {
   const line = itemLine(item);
-  if (line.ask !== undefined) {
-    return ticked === undefined || ticked.length === 0 ? line.words : askLine(line.ask, ticked);
-  }
-  return line.byAgent ? line.words : `${nameOf(line.member)}: ${line.words}`;
+  return previewOf(line, nameOf, ticked, line.words);
+}
+
+/**
+ * What a reader hears of an item's row's second line (`inboxPreview`): the
+ * same words, but a message cut to its first line, the one the eye reads
+ * before the row cuts it short, so a code block under it is never heard
+ * whole.
+ */
+export function inboxPreviewHeard(
+  item: InboxItem,
+  nameOf: (member: InboxMember | undefined) => string,
+  ticked?: readonly number[],
+): string {
+  const line = itemLine(item);
+  return previewOf(line, nameOf, ticked, line.heard);
 }
 
 /** What an item's second line leads with, as its glyph says it: the kind of ask that waits, an answer that settled it, or words alone. */
@@ -985,7 +997,7 @@ function askLine(ask: InboxKnownAsk, ticked: readonly number[]): string {
         .join(" / ");
     case INBOX_ASK.DO: {
       const steps = ask.steps.map((step) => plainWords(step));
-      if (steps.length === 0) return "Mark it done";
+      if (steps.length === 0) return "Mark done";
       const done = new Set(ticked.filter((at) => at < steps.length));
       const next = steps.find((_, at) => !done.has(at));
       if (next === undefined) return "Every step ticked · Mark done";
@@ -1013,6 +1025,8 @@ interface ItemLine {
   readonly ask: InboxKnownAsk | undefined;
   /** The ask's words with no step ticked, or the latest message's words without who said them. */
   readonly words: string;
+  /** The same words as a reader hears them: the latest message's first line alone. */
+  readonly heard: string;
   /** Whether the latest message is the agent's, whose words its row says alone, its tile saying who. */
   readonly byAgent: boolean;
   /** The member who said the latest message, where the agent did not. */
@@ -1045,13 +1059,15 @@ function itemLine(item: InboxItem): ItemLine {
           kind: ASK_LINE[asking.ask.type],
           ask: asking.ask,
           words: askLine(asking.ask, []),
+          heard: askLine(asking.ask, []),
           byAgent: true,
           member: undefined,
         }
       : {
           kind: last?.answers === undefined ? INBOX_LINE.SAID : INBOX_LINE.SETTLED,
           ask: undefined,
-          words: last === undefined ? "" : lastWords(thread, last),
+          words: last === undefined ? "" : lastWords(thread, last, plainWords),
+          heard: last === undefined ? "" : lastWords(thread, last, firstWords),
           byAgent: last === undefined || last.author === INBOX_MESSAGE_AUTHOR.AGENT,
           member: last?.member,
         };
@@ -1059,13 +1075,40 @@ function itemLine(item: InboxItem): ItemLine {
   return line;
 }
 
+/** An item's second line from its line's `words`: the ask, as the draft ticks it, or the message's words after who said them where the agent did not. */
+function previewOf(
+  line: ItemLine,
+  nameOf: (member: InboxMember | undefined) => string,
+  ticked: readonly number[] | undefined,
+  words: string,
+): string {
+  if (line.ask !== undefined) {
+    return ticked === undefined || ticked.length === 0 ? line.words : askLine(line.ask, ticked);
+  }
+  return line.byAgent ? words : `${nameOf(line.member)}: ${words}`;
+}
+
+/** A message's first line that says anything, as plain words (`plainWords`): a fence's line is passed over, and nothing under the first is kept. */
+function firstWords(text: string): string {
+  return (
+    text
+      .split("\n")
+      .map(plainWords)
+      .find((line) => line !== "") ?? ""
+  );
+}
+
 /**
  * A thread's latest message as its row says it, before who said it: an
  * answer by its stamp's words first, "Chose 7 days · and say it in the
  * docs", a message's words, and its files where it said nothing.
  */
-function lastWords(thread: readonly InboxMessage[], last: InboxMessage): string {
-  const words = plainWords(last.text);
+function lastWords(
+  thread: readonly InboxMessage[],
+  last: InboxMessage,
+  read: (text: string) => string,
+): string {
+  const words = read(last.text);
   const answers = last.answers;
   if (answers === undefined) return words === "" ? (filesWords(last.files) ?? "") : words;
   const stamp = sentStamp(answers, thread.find((each) => each.id === answers.ask)?.ask).words;

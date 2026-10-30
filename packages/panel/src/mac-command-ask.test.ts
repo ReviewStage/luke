@@ -120,7 +120,7 @@ test("the earliest ask is drawn with its command, and each answer goes back by t
   assert.equal(document.querySelector(".luke-file-text-words")?.textContent, FIRST.command);
 
   await act(async () => button("Allow once").click());
-  await act(async () => button("Always allow").click());
+  await act(async () => button("Allow all commands").click());
   await act(async () => button("Deny").click());
   assert.deepEqual(answered, [
     { id: FIRST.id, decision: MAC_COMMAND_DECISION.ALLOW_ONCE },

@@ -19,6 +19,7 @@ import {
 } from "@luke/features/agent-wire";
 import { Cache, Clock, Data, Duration, Effect, Exit, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import { recordServerEvent, SERVER_EVENT } from "../../events/server-events.js";
 import {
   GITHUB_HTTP_STATUS,
   GitHubApp,
@@ -268,7 +269,9 @@ export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(fu
   const { answer, stored, ended } = yield* publishedOnGitHub(userId, agent);
   const at = yield* Clock.currentTimeMillis;
   const read = { at, branch: agent.branch, pushed: answer.branch !== null };
-  yield* recordAgentPublished(userId, agent.id, stored, read);
+  const firstMerged = yield* recordAgentPublished(userId, agent.id, stored, read);
+  // Counted once per pull request, by the one write that first kept it merged, under the agent's starter.
+  if (firstMerged) yield* recordServerEvent(SERVER_EVENT.PULL_REQUEST_MERGE, agent.userId, {});
   // A merge first seen may have finished the task's work; the task is asked once the row says merged.
   const merged = ended === PULL_REQUEST_STATE.MERGED;
   if (merged && agent.taskId !== null) yield* settleTaskIfFinished(userId, agent.taskId);

@@ -83,13 +83,11 @@ function PlanMark({ taskId }: { taskId: string }): React.JSX.Element {
 
 /**
  * The harness an agent runs in, read off its model. Where no model is known
- * the box is held empty while the read is out, so the harness's mark lands in
- * it without moving a thing, and is let go once the read has answered with
- * none: a chip of an agent the window cannot read is its name alone, with no
- * blank where a mark would stand (`InlineRef` hides a glyph that drew nothing).
+ * the chip wears the mark of no known harness, while the read is out and
+ * after it answered with none alike, so the harness's mark lands in its place
+ * without moving a thing and the chip's name never shifts when it does not.
  */
-function harnessMark(model: string | undefined, settled = false): ReactNode {
-  if (model === undefined && settled) return null;
+function harnessMark(model: string | undefined): ReactNode {
   return <AgentMark provider={model === undefined ? undefined : providerOf(model)} />;
 }
 /**

@@ -393,7 +393,13 @@ import {
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
-import type { AppAccessSlice, AppHolderInboxes, AppHostRead, AppInboxItems } from "./app-state.js";
+import type {
+  AppAccessSlice,
+  AppHolderInboxes,
+  AppHostRead,
+  AppInboxItems,
+  SessionReplayState,
+} from "./app-state.js";
 import { type ThisMacHostStanding, thisMacHostStandingSchema } from "./contract/this-mac-host.js";
 import {
   type MacCommandAnswer,
@@ -415,7 +421,7 @@ import {
 export interface HostBootstrap {
   settings: AppSettings;
   account: AccountSnapshot;
-  sessionReplay: { permitted: boolean; accountId?: string };
+  sessionReplay: SessionReplayState;
   /** What the signed-in account may open in the app, as the host last read it. */
   access: AppAccessSlice;
 }
@@ -424,11 +430,6 @@ interface HostSettingsChange {
   settings: AppSettings;
   /** The opaque reporter whose write produced the change, so the relay can skip echoing it. */
   reporter?: string;
-}
-
-interface HostSessionReplay {
-  permitted: boolean;
-  accountId?: string;
 }
 
 export interface HostOperator {
@@ -885,7 +886,7 @@ export interface HostOperator {
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onAccountAccessChanged(listener: (access: AppAccessSlice) => void): () => void;
-  onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
+  onSessionReplayChanged(listener: (replay: SessionReplayState) => void): () => void;
   onTasksChanged(listener: (view: TasksView) => void): () => void;
   /** The commands agents asked to run on this Mac that wait on the developer, whole, each time one is asked or answered. */
   onMacCommandAsksChanged(listener: (asks: readonly MacCommandAsk[]) => void): () => void;
@@ -2447,11 +2448,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     onSessionReplayChanged: (listener) =>
       on(
         GATEWAY_EVENT.SESSION_REPLAY_CHANGED,
-        (payload): HostSessionReplay | undefined =>
+        (payload): SessionReplayState | undefined =>
           isRecord(payload) && isWireBoolean(payload.permitted)
             ? {
                 permitted: payload.permitted,
                 ...(isWireString(payload.accountId) ? { accountId: payload.accountId } : undefined),
+                ...(isWireString(payload.name) ? { name: payload.name } : undefined),
+                ...(isWireString(payload.email) ? { email: payload.email } : undefined),
               }
             : undefined,
         listener,

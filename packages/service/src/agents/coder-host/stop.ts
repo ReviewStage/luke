@@ -239,7 +239,7 @@ export interface TurnStop {
   readonly forRunning?: boolean;
 }
 
-/** eve's cancel of the agent's turn under way, as the request's own caller for the account it resolved to (`eveFor`), then the row's stamp; nothing where no turn runs that a Stop has to stop. */
+/** eve's cancel of the agent's turn under way, as the request's own caller for the account it resolved to (`eveFor`), then the row's stamp, and whether eve took it (`cancelledTurn`); nothing where no turn runs that a Stop has to stop. */
 export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   reach: EveReach,
   writer: Effect.Effect<StoreWriter>,
@@ -247,10 +247,10 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   account: string,
   agent: Agent,
   stop: TurnStop = {},
-): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
+): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   // An agent its starter's plan pays for is stopped by those the plan's policy admits.
   yield* admitsPlanWriter(account, agent);
-  yield* cancelledTurn(eveFor(reach, request, account), writer, agent, stop);
+  return yield* cancelledTurn(eveFor(reach, request, account), writer, agent, stop);
 });
 
 /**

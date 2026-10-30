@@ -191,8 +191,8 @@ function modelOf(read: AsyncResult.AsyncResult<AgentsRead>, agentId: string): st
   return read.value?.find((agent) => agent.id === agentId)?.model;
 }
 
-/** What a mark draws of the model read, or of none, and whether the read has answered, which is false while it is out. */
-type ModelDrawer = (model: string | undefined, settled: boolean) => ReactNode;
+/** What a mark draws of the model read, or of none while it is out or where it answered none. */
+type ModelDrawer = (model: string | undefined) => ReactNode;
 
 function TaskAgentModel({
   taskId,
@@ -204,7 +204,7 @@ function TaskAgentModel({
   children: ModelDrawer;
 }): ReactNode {
   const read = useAtomValue(taskAgentsAtom(taskId));
-  return children(modelOf(read, agentId), AsyncResult.isNotInitial(read));
+  return children(modelOf(read, agentId));
 }
 
 function TasklessAgentModel({
@@ -219,7 +219,7 @@ function TasklessAgentModel({
   children: ModelDrawer;
 }): ReactNode {
   const read = useAtomValue(tasklessAgentsAtom(workspaceId)(agentId)(name));
-  return children(modelOf(read, agentId), AsyncResult.isNotInitial(read));
+  return children(modelOf(read, agentId));
 }
 
 function AgentModelById({
@@ -230,7 +230,7 @@ function AgentModelById({
   children: ModelDrawer;
 }): ReactNode {
   const read = useAtomValue(agentByIdAtom(agentId));
-  return children(modelOf(read, agentId), AsyncResult.isNotInitial(read));
+  return children(modelOf(read, agentId));
 }
 
 /**

@@ -64,6 +64,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, assert, beforeEach, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { useAppKeymap } from "../app-commands.js";
+import type { SideBundles } from "../bundle-loader.js";
 import { useDraftsOwner } from "../composer-drafts.js";
 import { DesktopInbox } from "../desktop/desktop-inbox.js";
 import { DesktopSidebar } from "../desktop/desktop-sidebar.js";
@@ -97,6 +98,7 @@ import { sidebarProps } from "./desktop-sidebar.js";
 import { restOn } from "./hint-rest.js";
 import { relayout } from "./resize-observer.js";
 import { installScrollIntoView } from "./scroll-into-view.js";
+import { onSideBundles } from "./side-bundles.js";
 import { agentHoldingsOf, tasksControl, waitingOf } from "./tasks-control.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -752,6 +754,7 @@ export function mount(
     chosen: firstChosen,
     drawnWhileOpen = false,
     agents: firstAgents = agentHoldingsOf(firstTaskless),
+    bundles,
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
@@ -776,6 +779,8 @@ export function mount(
     drawnWhileOpen?: boolean;
     /** Main's first word of the agents with no task holding items; those the items given name where none are given. */
     agents?: readonly AppInboxAgentHolding[];
+    /** The bundles the window's surfaces load, where the test hands importers of its own; the window's where none are handed. */
+    bundles?: SideBundles;
   } = {},
 ) {
   // Note that a mount is a fresh window over a fresh host, holding no inbox yet, so a test mounting again reads what its knobs say now.
@@ -893,7 +898,8 @@ export function mount(
     room === undefined || panel !== undefined
       ? createElement(Page, { sidePanel: panel })
       : createElement(Panelled, { at: room });
-  const page = toasts ? createElement(Fragment, null, inbox, createElement(ToastHost)) : inbox;
+  const shown = toasts ? createElement(Fragment, null, inbox, createElement(ToastHost)) : inbox;
+  const page = bundles === undefined ? shown : onSideBundles(bundles, shown);
   if (channels) chooseChannel(GENERAL.id);
   act(() => world.root?.render(onRegistry(AtomRegistry.make(), page)));
   return { page: container, asked };
@@ -908,6 +914,37 @@ export async function settle(): Promise<void> {
 
 /** A row's title, as its ListRow draws it. */
 export const ROW_TITLE = ".luke-list-row-title";
+
+/** A row's title as the eye reads it, the words it says to a reader alone ("Unread") left out. */
+export function titleOf(row: Element): string {
+  const title = row.querySelector(ROW_TITLE)?.cloneNode(true);
+  if (!(title instanceof Element)) return "";
+  for (const hidden of title.querySelectorAll(".luke-visually-hidden")) hidden.remove();
+  return title.textContent ?? "";
+}
+
+/**
+ * What a reader hears of the nodes an `aria-labelledby` or `aria-describedby`
+ * names: each one's words but what it hides from them, joined by spaces, and
+ * the words drawn for a reader alone heard apart from those beside them, as
+ * a browser hears a box of their own.
+ */
+export function heardOf(ids: string | null): string {
+  return (ids ?? "")
+    .split(" ")
+    .filter((id) => id !== "")
+    .map((id) => {
+      const copy = document.getElementById(id)?.cloneNode(true);
+      assert.ok(copy instanceof Element, `nothing is drawn as ${id}`);
+      for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
+      for (const apart of copy.querySelectorAll(".luke-visually-hidden")) {
+        apart.before(" ");
+        apart.after(" ");
+      }
+      return (copy.textContent ?? "").replace(/\s+/gu, " ").trim();
+    })
+    .join(" ");
+}
 
 /**
  * What marks a row as needing the developer: `*` where it says "Needs you"
@@ -937,7 +974,7 @@ export function listed(page: HTMLElement): string[] {
   const fold = ".luke-group-header-head button[aria-expanded]:not([aria-haspopup])";
   return [...list.querySelectorAll(`${fold}, li button.luke-list-row-main`)].map((node) => {
     if (node.matches(fold) || !(node instanceof HTMLButtonElement)) return `# ${heardName(node)}`;
-    const name = node.querySelector(ROW_TITLE)?.textContent ?? "";
+    const name = titleOf(node);
     return `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${name}`;
   });
 }
@@ -954,7 +991,7 @@ export function wordsOf(element: Element | null | undefined): string | null {
 export function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
   const row = [
     ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),
-  ].find((each) => each.querySelector(ROW_TITLE)?.textContent === title);
+  ].find((each) => titleOf(each) === title);
   assert.ok(row, `no row for ${title}`);
   return row;
 }
@@ -1408,7 +1445,7 @@ export function rowLines(page: HTMLElement, title: string): [boolean, string | n
   const row = rowNamed(page, title);
   const head = row.querySelector(".luke-list-row-head");
   const titled =
-    row.querySelector(ROW_TITLE)?.textContent === title &&
+    titleOf(row) === title &&
     head?.querySelector(ROW_TITLE) === null &&
     head.querySelector("time") !== null;
   return [titled, row.querySelector(".luke-list-row-description")?.textContent];

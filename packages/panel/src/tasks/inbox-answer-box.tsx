@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { AGENT_STATUS, type AgentAttachment, type AgentSummary } from "@luke/features/agent-wire";
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
@@ -188,6 +188,8 @@ interface AnswerField {
   readonly module: PlanEditorModule | undefined;
   /** Whether the editor's bundle could not be loaded. */
   readonly failed: boolean;
+  /** Reads the editor's bundle again, the way on from a load that failed. */
+  readonly reload: () => void;
   readonly pickers: ComposerPickers;
 }
 
@@ -221,7 +223,9 @@ function useAnswerField({
 }): AnswerField {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
-  const bundle = useAtomValue(useSideBundles().planEditor);
+  const { planEditor } = useSideBundles();
+  const bundle = useAtomValue(planEditor);
+  const reload = useAtomRefresh(planEditor);
   const pickers = useComposerPickers({
     editor,
     room,
@@ -245,6 +249,7 @@ function useAnswerField({
     room,
     module: AsyncResult.isSuccess(bundle) ? bundle.value : undefined,
     failed: AsyncResult.isFailure(bundle),
+    reload,
     pickers,
   };
 }
@@ -637,7 +642,12 @@ function AnswerCard({
                   failure: noteFailure,
                   remedy: { label: UNARCHIVE, onClick: unarchive },
                 }
-              : { words: note, failure: noteFailure }
+              : {
+                  words: note,
+                  failure: noteFailure,
+                  // An editor that could not be loaded is read again by its own Retry, while its note is the one shown.
+                  onRetry: note === EDITOR_LOAD_FAILED ? field.reload : undefined,
+                }
         }
         nod={nod}
         starts={starts}

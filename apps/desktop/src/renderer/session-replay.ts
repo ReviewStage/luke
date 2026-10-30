@@ -14,10 +14,10 @@
  * keep doing it.
  */
 
+import { PRODUCT_PLATFORM } from "@luke/features/analytics";
 import type { BundleImporter } from "@luke/panel/bundle-loader";
 import {
   type ApplySessionReplay,
-  SESSION_REPLAY_APP,
   sessionReplay,
   withoutOwnAddress,
 } from "@luke/panel/session-replay";
@@ -112,7 +112,7 @@ const importSessionRecorder: BundleImporter<unknown> = () => import("./session-r
 
 /** The panel window's recording, which `desktop-platform.ts` answers the panel's platform with. */
 export const applySessionReplay: ApplySessionReplay = sessionReplay({
-  appName: SESSION_REPLAY_APP.DESKTOP,
+  platform: PRODUCT_PLATFORM.DESKTOP,
   projectApiKey,
   ...ADDRESS,
   importRecorder: importSessionRecorder,

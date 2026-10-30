@@ -247,6 +247,7 @@ function tasksTab(
 const roots: Root[] = [];
 
 beforeEach(() => {
+  fakeAppPlatform(QUIET_PANEL);
   handState({}, { access: { admin: true } });
 });
 

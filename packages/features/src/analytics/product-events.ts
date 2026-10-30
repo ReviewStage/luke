@@ -32,6 +32,7 @@ export const PRODUCT_EVENT = {
   SETTINGS_VIEW_OPEN: "settings:view_open",
   SETTINGS_RESET: "settings:reset",
   SEARCH_OPEN: "search:open",
+  SURFACE_OPEN: "surface:open",
   UPDATE_ACTION: "update:action",
   FEEDBACK_SEND: "feedback:send",
   VOICE_PERMISSION: "voice:permission",
@@ -56,6 +57,7 @@ export const PRODUCT_SURFACE_EVENT = {
   PANEL_TAB_CHANGE: PRODUCT_EVENT.PANEL_TAB_CHANGE,
   SETTINGS_VIEW_OPEN: PRODUCT_EVENT.SETTINGS_VIEW_OPEN,
   SEARCH_OPEN: PRODUCT_EVENT.SEARCH_OPEN,
+  SURFACE_OPEN: PRODUCT_EVENT.SURFACE_OPEN,
 } as const;
 
 export type ProductSurfaceEventName =
@@ -80,6 +82,8 @@ export const PRODUCT_EVENT_PROPERTY = {
   PANEL_TAB: "panel_tab",
   SETTINGS_VIEW: "settings_view",
   SEARCH_SURFACE: "search_surface",
+  SURFACE: "surface",
+  LAYOUT: "layout",
   PERMISSION_RESULT: "permission_result",
   SETTING_ID: "setting_id",
   SETTING_VALUE: "setting_value",
@@ -163,6 +167,43 @@ export const PRODUCT_SEARCH_SURFACE = {
 } as const;
 
 type ProductSearchSurface = (typeof PRODUCT_SEARCH_SURFACE)[keyof typeof PRODUCT_SEARCH_SURFACE];
+
+/**
+ * Which surface of the panel was opened: the kind of page or pane, never which
+ * task, agent, file, or person it showed. Where a task's column and its side
+ * panel each show a surface, each is opened on its own.
+ */
+export const PRODUCT_SURFACE = {
+  HOME: "home",
+  TASK: "task",
+  VERSION_HISTORY: "version_history",
+  INBOX: "inbox",
+  CHANNEL: "channel",
+  THREAD: "thread",
+  AGENT: "agent",
+  SUBAGENT: "subagent",
+  PERSON: "person",
+  AUTOMATIONS: "automations",
+  BOARD: "board",
+  ADMIN: "admin",
+  SETTINGS: "settings",
+  COMMENTS: "comments",
+  PULL_REQUEST: "pull_request",
+  FILES: "files",
+  TERMINAL: "terminal",
+  BROWSER: "browser",
+  PAGE: "page",
+} as const;
+
+export type ProductSurface = (typeof PRODUCT_SURFACE)[keyof typeof PRODUCT_SURFACE];
+
+/** How the panel was laid out as a surface opened: panes side by side, or one pane at a time. */
+export const PRODUCT_LAYOUT = {
+  WIDE: "wide",
+  NARROW: "narrow",
+} as const;
+
+export type ProductLayout = (typeof PRODUCT_LAYOUT)[keyof typeof PRODUCT_LAYOUT];
 
 /** What the system answered a permission ask with. */
 export const PRODUCT_PERMISSION_RESULT = {
@@ -269,6 +310,8 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: ProductPanelTab;
   [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: ProductSettingsView;
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: ProductSearchSurface;
+  [PRODUCT_EVENT_PROPERTY.SURFACE]: ProductSurface;
+  [PRODUCT_EVENT_PROPERTY.LAYOUT]: ProductLayout;
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: ProductPermissionResult;
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: AppSettingId;
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: ProductSettingValue;
@@ -292,6 +335,8 @@ const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: Object.values(PRODUCT_PANEL_TAB),
   [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: Object.values(PRODUCT_SETTINGS_VIEW),
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: Object.values(PRODUCT_SEARCH_SURFACE),
+  [PRODUCT_EVENT_PROPERTY.SURFACE]: Object.values(PRODUCT_SURFACE),
+  [PRODUCT_EVENT_PROPERTY.LAYOUT]: Object.values(PRODUCT_LAYOUT),
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: Object.values(PRODUCT_PERMISSION_RESULT),
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: Object.values(APP_SETTING_ID),
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: Object.values(PRODUCT_SETTING_VALUE),
@@ -313,6 +358,7 @@ const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.SETTINGS_VIEW_OPEN]: [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW],
   [PRODUCT_EVENT.SETTINGS_RESET]: [],
   [PRODUCT_EVENT.SEARCH_OPEN]: [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE],
+  [PRODUCT_EVENT.SURFACE_OPEN]: [PRODUCT_EVENT_PROPERTY.SURFACE, PRODUCT_EVENT_PROPERTY.LAYOUT],
   [PRODUCT_EVENT.UPDATE_ACTION]: [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION],
   [PRODUCT_EVENT.FEEDBACK_SEND]: [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT],
   [PRODUCT_EVENT.VOICE_PERMISSION]: [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT],
@@ -500,9 +546,11 @@ export function productEventBatchFromWire(value: UnparsedWireValue): ProductEven
 }
 
 /**
- * Which app a count came from. A client names itself, `desktop` or `web`, in
- * its batch's `build`; the service's own counts are `server`, which no client
- * may claim.
+ * Which of Luke's shells something came from, under the `platform` property:
+ * the desktop's panel window or the web app's tab, for the counted events and
+ * the session replay alike, so one filter separates both. A client names
+ * itself in its batch's `build`; the service's own counts are `server`, which
+ * no client may claim.
  */
 export const PRODUCT_PLATFORM = {
   DESKTOP: "desktop",

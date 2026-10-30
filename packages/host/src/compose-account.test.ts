@@ -170,7 +170,11 @@ it.effect("a sign-in after a deletion in the same run lets session replay record
       assert.ok(handler, method);
       return Effect.orDie(handler(params, CONTEXT));
     };
-    assert.deepEqual(yield* account.sessionReplayState, { permitted: true, accountId: "user-1" });
+    assert.deepEqual(yield* account.sessionReplayState, {
+      permitted: true,
+      accountId: "user-1",
+      email: "dev@example.com",
+    });
 
     // The deletion lands: recording is stood down, signed out, for the rest of the run so far.
     yield* call(GATEWAY_METHOD.ACCOUNT_DELETE);
@@ -182,8 +186,16 @@ it.effect("a sign-in after a deletion in the same run lets session replay record
     yield* call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider: ACCOUNT_PROVIDER.GITHUB });
     assert.equal(account.signedIn(), true);
     yield* until(() => lastPermitted() === true);
-    assert.deepEqual(lastReplay(), { permitted: true, accountId: "user-2" });
-    assert.deepEqual(yield* account.sessionReplayState, { permitted: true, accountId: "user-2" });
+    assert.deepEqual(lastReplay(), {
+      permitted: true,
+      accountId: "user-2",
+      email: "dev@example.com",
+    });
+    assert.deepEqual(yield* account.sessionReplayState, {
+      permitted: true,
+      accountId: "user-2",
+      email: "dev@example.com",
+    });
   }).pipe(
     Effect.provideService(FetchHttpClient.Fetch, accountService),
     Effect.provide([NodeFileSystem.layer, NodePath.layer]),

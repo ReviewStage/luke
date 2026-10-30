@@ -1,7 +1,12 @@
+import { settledTurnAgentKind } from "@luke/database/models/agent-store";
+import { type SettledAgentTurn, SettledTurnListener } from "@luke/database/models/writer";
 import { PULL_REQUEST_CHAPTERS_FAILURE } from "@luke/database/pull-request-chapters-vocabulary";
-import type { AgentKind } from "@luke/features/agent-wire";
+import type { ConversationRuntime } from "@luke/database/storage-vocabulary";
+import type { AgentKind, AgentMachineKind } from "@luke/features/agent-wire";
 import type { AutomationTriggerKind } from "@luke/features/automation-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
+import { TURN_FAILURE } from "@luke/features/turn-run";
+import { TURN_STATUS } from "@luke/wire";
 import { Clock, Context, Effect, Layer, Option, Redacted } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { PRODUCT_PLATFORM } from "../core.js";
@@ -12,8 +17,9 @@ import { type PosthogBatch, postBatchEffect } from "../providers/posthog.js";
 /**
  * What Luke's service counts about the work done through it: the core loop the
  * desktop cannot see, because it happens on the service or in an agent's
- * sandbox — a task started, a coding agent started, a pull request opened, an
- * automation made, an integration connected.
+ * sandbox — a task started, a coding agent started, a member's message to it,
+ * each of its turns ended, a Stop, an archive, a pull request opened and
+ * merged, an automation made, an integration connected.
  *
  * It holds to the desktop's counted events' rule
  * (`@luke/features/analytics`'s `product-events.ts`): an event is a name from
@@ -40,6 +46,11 @@ export const SERVER_EVENT = {
   INTEGRATION_CONNECTION_DELETE: "integration:connection_delete",
   WORKSPACE_CREATE: "workspace:create",
   AGENT_HANDOFF: "agent:handoff",
+  MESSAGE_SEND: "agent:message_send",
+  TURN_END: "agent:turn_end",
+  AGENT_STOP: "agent:stop",
+  AGENT_ARCHIVE: "agent:archive",
+  PULL_REQUEST_MERGE: "pull_request:merge",
 } as const;
 
 type ServerEventName = (typeof SERVER_EVENT)[keyof typeof SERVER_EVENT];
@@ -76,6 +87,38 @@ export const SERVER_HANDOFF_PATH = {
   RESUMED: "resumed",
   FRESH: "fresh",
 } as const;
+
+/** How an agent's turn ended: answered, failed, stopped by a Stop, or settled by the sweep with no end heard. */
+export const SERVER_TURN_OUTCOME = {
+  COMPLETED: "completed",
+  FAILED: "failed",
+  STOPPED: "stopped",
+  ABANDONED: "abandoned",
+} as const;
+
+/**
+ * How long an agent's turn ran, as a bucket rather than a count, each named
+ * for its upper bound and read in order: the first whose bound the turn ran
+ * under is its bucket, and one past them all is `over_4h`.
+ */
+export const SERVER_TURN_DURATION = {
+  UNDER_1M: "under_1m",
+  UNDER_5M: "under_5m",
+  UNDER_15M: "under_15m",
+  UNDER_1H: "under_1h",
+  UNDER_4H: "under_4h",
+  OVER_4H: "over_4h",
+} as const;
+
+const MINUTE_MS = 60_000;
+
+const TURN_DURATION_BOUNDS = [
+  [SERVER_TURN_DURATION.UNDER_1M, MINUTE_MS],
+  [SERVER_TURN_DURATION.UNDER_5M, 5 * MINUTE_MS],
+  [SERVER_TURN_DURATION.UNDER_15M, 15 * MINUTE_MS],
+  [SERVER_TURN_DURATION.UNDER_1H, 60 * MINUTE_MS],
+  [SERVER_TURN_DURATION.UNDER_4H, 240 * MINUTE_MS],
+] as const;
 
 /** Which account a pull request was opened as. */
 export const SERVER_PULL_REQUEST_OPENER = {
@@ -133,6 +176,25 @@ interface ServerEventProperties {
     turn_running: boolean;
     idle_seconds?: number;
   };
+  /** A member's own message to an agent: what answers it, where it runs, what it is, and whether a turn was under way. */
+  [SERVER_EVENT.MESSAGE_SEND]: {
+    runtime: ConversationRuntime;
+    machine: AgentMachineKind;
+    agent_kind: AgentKind;
+    turn_running: boolean;
+  };
+  [SERVER_EVENT.TURN_END]: {
+    outcome: Values<typeof SERVER_TURN_OUTCOME>;
+    duration: Values<typeof SERVER_TURN_DURATION>;
+    agent_kind: AgentKind;
+  };
+  /** A member's Stop, and whether it stopped a pilot's agents with it. */
+  [SERVER_EVENT.AGENT_STOP]: {
+    agent_kind: AgentKind;
+    stopped_tree: boolean;
+  };
+  [SERVER_EVENT.AGENT_ARCHIVE]: { agent_kind: AgentKind };
+  [SERVER_EVENT.PULL_REQUEST_MERGE]: Record<string, never>;
 }
 
 /** One event as the service records it. */
@@ -193,7 +255,7 @@ class ProductAnalytics extends Context.Service<ProductAnalytics, ProductAnalytic
  * is posted under. A deployment without one — a Preview, a local run — records
  * nothing, the same kill switch `/api/events` has.
  */
-export const productAnalyticsFromEnvironment = Layer.effect(
+const productAnalyticsOfEnvironment = Layer.effect(
   ProductAnalytics,
   Effect.gen(function* () {
     const environment = yield* HostedEnvironment;
@@ -226,26 +288,93 @@ export function recordServerEvent<Name extends ServerEventName>(
   userId: string,
   properties: ServerEventProperties[Name],
 ): Effect.Effect<void> {
+  return recordServerEventOf(name, userId, Effect.succeed(Option.some(properties)));
+}
+
+/**
+ * Counts one event whose properties are read once the request has answered,
+ * or counts nothing where that read finds none or fails, so a read the count
+ * needs never holds or fails the work it follows.
+ */
+function recordServerEventOf<Name extends ServerEventName, E, R>(
+  name: Name,
+  userId: string,
+  properties: Effect.Effect<Option.Option<ServerEventProperties[Name]>, E, R>,
+): Effect.Effect<void, never, R> {
   return Effect.flatMap(Effect.serviceOption(ProductAnalytics), (analytics) =>
     Option.isNone(analytics)
       ? Effect.void
       : afterResponse(
           name,
-          // SAFETY: `properties` is typed as this `name`'s own entry above; the
-          // union `ServerEvent` widens the pairing TypeScript cannot follow.
-          analytics.value.capture({ name, userId, properties } as ServerEvent),
+          Effect.flatMap(properties, (read) =>
+            Option.isNone(read)
+              ? Effect.void
+              : // SAFETY: `read` is typed as this `name`'s own entry above; the
+                // union `ServerEvent` widens the pairing TypeScript cannot follow.
+                analytics.value.capture({ name, userId, properties: read.value } as ServerEvent),
+          ),
         ),
   );
 }
 
+/** What a settled turn's row says of how it ended, in the count's words. */
+function turnOutcomeOf(turn: SettledAgentTurn): Values<typeof SERVER_TURN_OUTCOME> {
+  if (turn.status === TURN_STATUS.SETTLED) return SERVER_TURN_OUTCOME.COMPLETED;
+  if (turn.status === TURN_STATUS.CANCELLED) return SERVER_TURN_OUTCOME.STOPPED;
+  return turn.failure === TURN_FAILURE.ABANDONED
+    ? SERVER_TURN_OUTCOME.ABANDONED
+    : SERVER_TURN_OUTCOME.FAILED;
+}
+
+function turnDurationOf(ranMs: number): Values<typeof SERVER_TURN_DURATION> {
+  const bucket = TURN_DURATION_BOUNDS.find(([, bound]) => ranMs < bound);
+  return bucket === undefined ? SERVER_TURN_DURATION.OVER_4H : bucket[0];
+}
+
+/**
+ * Counts every agent turn the store writer settled, wherever it was settled:
+ * the relay's or a runner's own end, a lost runner's or ended session's, and
+ * the sweep's abandon alike, since each is the one write that moved the turn
+ * to its end and a repeat of it settles nothing. It is counted under the
+ * account the turn stands in, the agent's starter, as `agent:start` is, so an
+ * automation's run counts under its owner. The agent's kind is read once the
+ * request has answered, by then past any transaction the settle ran inside,
+ * and only where the turn still stands ended, so a settle that transaction
+ * rolled back is not counted.
+ */
+const turnEndCounting = Layer.succeed(SettledTurnListener, {
+  heard: (turn) =>
+    recordServerEventOf(
+      SERVER_EVENT.TURN_END,
+      turn.userId,
+      Effect.map(
+        settledTurnAgentKind(turn.turnId),
+        Option.map((agentKind) => ({
+          outcome: turnOutcomeOf(turn),
+          duration: turnDurationOf(turn.ranMs),
+          agent_kind: agentKind,
+        })),
+      ),
+    ),
+});
+
+/** The deployment's analytics as `productAnalyticsOfEnvironment` posts them, with the store's settled turns counted through them. */
+export const productAnalyticsFromEnvironment = Layer.merge(
+  productAnalyticsOfEnvironment,
+  turnEndCounting,
+);
+
 /**
  * Analytics that keeps what it was handed rather than posting it, for a test
- * that asserts what an endpoint counted.
+ * that asserts what an endpoint counted, the store's settled turns among it.
  */
 export function recordingProductAnalytics() {
   const recorded: ServerEvent[] = [];
-  const layer = Layer.succeed(ProductAnalytics, {
-    capture: (event) => Effect.sync(() => void recorded.push(event)),
-  });
+  const layer = Layer.merge(
+    Layer.succeed(ProductAnalytics, {
+      capture: (event) => Effect.sync(() => void recorded.push(event)),
+    }),
+    turnEndCounting,
+  );
   return { layer, recorded };
 }

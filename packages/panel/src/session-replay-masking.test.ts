@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { PRODUCT_PLATFORM } from "@luke/features/analytics";
 import { afterEach, expect, test, vi } from "vitest";
 import { sessionReplay } from "./session-replay.js";
 
@@ -29,12 +30,12 @@ afterEach(() => {
 async function mask(): Promise<Mask> {
   window.__PosthogExtensions__ = { initSessionRecording: () => undefined };
   sessionReplay({
-    appName: "desktop",
+    platform: PRODUCT_PLATFORM.DESKTOP,
     projectApiKey: () => "test-project-key",
     address: "luke://panel",
     namesOwnAddress: () => false,
     importRecorder: () => Promise.resolve(undefined),
-  })({ permitted: true, appVersion: "0.0.0", packaged: true, accountId: undefined });
+  })({ permitted: true, appVersion: "0.0.0", packaged: true, accountId: "user-1" });
   await vi.waitFor(() => expect(client.init).toHaveBeenCalledOnce());
   const options = client.init.mock.calls[0]?.[1] as {
     session_recording: { maskAttributeFn: Mask };
