@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useReducer, useRef } from "react";
 import {
   EVERYONES,
   INBOX_SORT,
@@ -33,16 +33,33 @@ import { type HeldOrder, useHeldOrder } from "./use-held-order.js";
  * scoped, searched, or Whose chosen anew, the list is drawn again where each
  * item stands now. A row that leaves the list lets its place go, so a later
  * change brings it back where it stands then.
+ *
+ * Note that the pointer is kept where the next draw reads it rather than in
+ * state, as ⌘K lights a row without ranking any, because a pointer crossing
+ * a long list is no reason to draw it again: it draws again as the pointer
+ * leaves only where a row held still stands apart from where its item does
+ * now. Note too that the list is drawn again only as what it is drawn from
+ * moves, since the page around it draws again for much that moves no row.
  */
 
 /** What an Inbox lists and how, bar the item chosen and the places held, which this module adds. */
 type InboxFilter = Omit<Parameters<typeof inboxList>[1], "chosen" | "places">;
 
-/** What an Inbox draws: its rows, its steps, and the chosen item its rows kept. */
+/** What an Inbox draws: its rows, its steps, the chosen item its rows kept, and whether a row held still stands apart from where its item does now. */
 interface Drawn {
   readonly list: InboxListView;
   readonly steps: InboxListView;
   readonly kept: string | undefined;
+  readonly heldBack: boolean;
+}
+
+/** What a draw was drawn from, by which the next draw from the same is the same draw (`sameDraw`). */
+interface DrawnFrom {
+  readonly groups: readonly InboxGroup[];
+  readonly filter: InboxFilter;
+  readonly chosen: string | undefined;
+  readonly pointing: boolean;
+  readonly shown: boolean;
 }
 
 /** The places held of `chosen` alone, or of every row while the pointer is over the list. */
@@ -88,6 +105,31 @@ function sameOrder(was: InboxFilter | undefined, now: InboxFilter): boolean {
 }
 
 /**
+ * Whether a draw is drawn from what the last one was, so it draws the same.
+ * Note that the places it holds need no comparing, because they are where
+ * the last draw stood its rows, which the same draw stands where they are.
+ */
+function sameDraw(was: DrawnFrom | undefined, now: DrawnFrom): boolean {
+  return (
+    was !== undefined &&
+    was.groups === now.groups &&
+    sameOrder(was.filter, now.filter) &&
+    was.chosen === now.chosen &&
+    was.pointing === now.pointing &&
+    was.shown === now.shown
+  );
+}
+
+/** Whether a row's place held stands apart from where its item stands now, so letting the hold go moves it. */
+function holdsBack(list: InboxListView, held: ReadonlyMap<string, InboxPlace>): boolean {
+  if (held.size === 0) return false;
+  for (const [id, now] of inboxPlaces(list, NO_PLACES)) {
+    const place = held.get(id);
+    if (place !== undefined && (place.at !== now.at || place.status !== now.status)) return true;
+  }
+  return false;
+}
+/**
  * The rows an Inbox draws (`list`) and the items K, J, and Next step through
  * (`steps`), which keep the chosen item in its place whether or not it has a
  * row, both held still as the module's head says while `shown`; and what the
@@ -105,10 +147,20 @@ export function useHeldInboxList(
 } {
   const keptLast = useRef<string | undefined>(undefined);
   // Note that the hold is the pointer's and not the list's being shown, because the Inbox may stand open for as long as the window does.
-  const [pointing, setPointing] = useState(false);
+  const pointer = useRef(false);
+  const pointing = pointer.current;
+  const last = useRef<{ readonly from: DrawnFrom; readonly drawn: Drawn }>(undefined);
+  const placed = useRef<{
+    readonly drawn: Drawn;
+    readonly places: ReadonlyMap<string, InboxPlace>;
+  }>(undefined);
+  const [, redraw] = useReducer((count: number) => count + 1, 0);
+  const from: DrawnFrom = { groups, filter, chosen, pointing, shown };
   const order: HeldOrder<InboxFilter, InboxPlace, Drawn> = {
     sameOrder,
     draw: (held, was) => {
+      if (last.current !== undefined && sameDraw(last.current.from, from))
+        return last.current.drawn;
       const places = heldPlaces(held, chosen, pointing);
       const matching = inboxList(groups, { ...filter, chosen: undefined, places });
       const listed = listedItems(matching).some(({ item }) => item.id === chosen);
@@ -122,13 +174,25 @@ export function useHeldInboxList(
           ? matching
           : inboxList(groups, { ...filter, chosen: kept, places });
       const steps = inboxList(groups, { ...filter, chosen, places });
-      return { list, steps, kept };
+      return { list, steps, kept, heldBack: pointing && holdsBack(list, places) };
     },
-    placesOf: ({ list }, held) => inboxPlaces(list, heldPlaces(held, chosen, pointing)),
+    // Note that the same draw over the places it was drawn from stands its rows where they were, so their places stand as they were.
+    placesOf: (drawn, held) => {
+      if (placed.current?.drawn === drawn && placed.current.places === held) return held;
+      const places = inboxPlaces(drawn.list, heldPlaces(held, chosen, pointing));
+      placed.current = { drawn, places };
+      return places;
+    },
   };
-  const { list, steps, kept } = useHeldOrder(filter, shown, order);
+  const drawn = useHeldOrder(filter, shown, order);
   useLayoutEffect(() => {
-    keptLast.current = shown ? kept : undefined;
+    keptLast.current = shown ? drawn.kept : undefined;
+    last.current = { from, drawn };
   });
-  return { list, steps, onPointing: setPointing };
+  // Note that only the pointer leaving a list it held apart from where its items stand draws it again.
+  const onPointing = useCallback((now: boolean) => {
+    pointer.current = now;
+    if (!now && last.current?.drawn.heldBack === true) redraw();
+  }, []);
+  return { list: drawn.list, steps: drawn.steps, onPointing };
 }

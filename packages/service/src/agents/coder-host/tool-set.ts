@@ -132,27 +132,21 @@ export function taskToolsOf(agent: Pick<Agent, "taskId">): ReadonlySet<TaskTool>
   ]);
 }
 
-/** The tools only an agent working in a repository is offered, and never a pilot: the pull request the service opens for it and `apply_patch`, which edits its checkout. */
+/** The tools only an agent working in a repository is offered: the pull request the service opens for it and `apply_patch`, which edits its checkout. */
 export type RepositoryTool = typeof CODER_TOOL.OPEN_PULL_REQUEST | typeof CODER_TOOL.APPLY_PATCH;
 
 /**
  * The repository's tools an agent is offered, on every turn, typed or
  * spoken: all of them for one working in a repository, and none for one
  * with no repository, whose sandbox holds no checkout to patch and which
- * has no branch to open a pull request from, nor for a pilot, which plans
- * its task and starts the coding agents that change the code, and never
- * opens a pull request or patches code itself. Note that
+ * has no branch to open a pull request from. Note that
  * its shell, its reads, and `write_file` stay, in the empty working folder
  * its sandbox opens with (`checkout.ts`'s `openWorkingFolder`), where it
- * writes the files its work makes, such as a page to show; that the
- * instructions leave out the same words for one with no repository
- * (`instructions.ts`); and that a harness may still call a tool left off its
- * list, so `open_pull_request`'s door refuses both (`agent-doors.ts`).
+ * writes the files its work makes, such as a page to show; and that the
+ * instructions leave out the same words (`instructions.ts`).
  */
-export function repositoryToolsOf(
-  agent: Pick<Agent, "repository" | "kind">,
-): ReadonlySet<RepositoryTool> {
-  if (agent.repository === null || agent.kind === AGENT_KIND.PILOT) return new Set();
+export function repositoryToolsOf(agent: Pick<Agent, "repository">): ReadonlySet<RepositoryTool> {
+  if (agent.repository === null) return new Set();
   return new Set([CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.APPLY_PATCH]);
 }
 
@@ -227,7 +221,7 @@ export interface OfferedBeside {
 /** The coder's tools eve offers some agents and not others: each one some agent's task, repository, kind, starter, machine, or Memory withholds. */
 const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
   ...taskToolsOf({ taskId: "any" }),
-  ...repositoryToolsOf({ repository: "any", kind: AGENT_KIND.CODER }),
+  ...repositoryToolsOf({ repository: "any" }),
   ...kindToolsOf({ kind: AGENT_KIND.OPERATOR }),
   ...kindToolsOf({ kind: AGENT_KIND.CODER }),
   ...starterToolsOf({ underPilot: false }),

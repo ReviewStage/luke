@@ -126,7 +126,7 @@ function relayRepository(pull: PullRequestFixture, ref: string) {
     if (path === `/commits/${HEAD_SHA}/check-runs`) {
       return Response.json({
         total_count: 1,
-        check_runs: [{ status: "completed", conclusion: pull.conclusion }],
+        check_runs: [{ name: "build", status: "completed", conclusion: pull.conclusion }],
       });
     }
     if (path === `/commits/${HEAD_SHA}/status`) {

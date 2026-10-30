@@ -7,6 +7,8 @@ import {
   BUTTON_VARIANT,
   Button,
   ComposerFrame,
+  NOTE_LINE_LOOK,
+  NoteLine,
   riseAboveEnd,
   TEXT_TONE,
   Text,
@@ -246,16 +248,12 @@ function ContinuedIn({
   );
 }
 
-/** The row at a transcript's end naming the agents that continued it, led by an arrow as Forked to is by its split. */
+/** The trail at a transcript's end naming the agents that continued it, led by an arrow as Forked to is by its split. */
 export function ContinuedTrail(doors: ContinuedDoors): React.JSX.Element {
   return (
-    <p
-      className="m-0 flex flex-wrap items-baseline gap-tight-gap text-caption-inline text-muted-foreground"
-      data-continued-trail=""
-    >
-      <ArrowRightIcon className="size-control-icon flex-none self-center" aria-hidden="true" />
+    <NoteLine look={NOTE_LINE_LOOK.TRAIL} glyph={<ArrowRightIcon />} data-continued-trail="">
       <ContinuedIn {...doors} />
-    </p>
+    </NoteLine>
   );
 }
 

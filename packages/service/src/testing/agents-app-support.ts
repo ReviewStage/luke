@@ -337,8 +337,13 @@ const NO_KEYS: HostedEnvironmentValues = {
 const ANALYTICS = recordingProductAnalytics();
 
 /** How many of one event the account was counted for. */
-export const countedFor = (userId: string, name: string) =>
-  ANALYTICS.recorded.filter((event) => event.userId === userId && event.name === name).length;
+export const countedFor = (userId: string, name: string) => countedWith(userId, name).length;
+
+/** The properties of each of one event the account was counted for, in order. */
+export const countedWith = (userId: string, name: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === name)
+    .map((event) => event.properties);
 
 /**
  * The public path of each route the hosted oRPC router answers, by the

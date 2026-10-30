@@ -3,12 +3,12 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { EventCard } from "./event-card.js";
+import { EventNotes } from "./event-notes.js";
 
 /**
- * event-card.test.ts -- a card's notes past its first three wait behind
- * "Show 2 more", drawn hidden until found, and the card opens whole when a
- * find's match lands in one. Synthetic notes.
+ * event-notes.test.ts -- notes past their first three wait behind
+ * "Show 2 more", drawn hidden until found, and they open whole when a find's
+ * match lands in one. Synthetic notes.
  */
 
 declare global {
@@ -30,11 +30,11 @@ const NOTES = ["One.", "Two.", "Three.", "Four.", "Five."].map((body) => ({
   body,
 }));
 
-test("notes past the first three fold behind the foot, hidden until found, and a find landing in one opens the card", () => {
+test("notes past the first three fold behind the foot, hidden until found, and a find landing in one opens them all", () => {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(EventCard, { lead: "@octocat reviewed #42", notes: NOTES })));
+  act(() => root.render(createElement(EventNotes, { notes: NOTES })));
   const foot = [...document.querySelectorAll("button")].find((button) =>
     /Show 2 more/u.test(button.textContent ?? ""),
   );

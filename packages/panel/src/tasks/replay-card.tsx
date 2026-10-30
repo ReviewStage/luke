@@ -10,18 +10,19 @@ import {
   Disclosure,
   DisclosureBody,
   DisclosureSummary,
+  GlyphSlot,
   Inline,
   MESSAGE_LINE_ALIGN,
+  MessageHead,
   MessageLine,
   OneLine,
   TEXT_ELEMENT,
-  TEXT_LINK_LOOK,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  TextLink,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
+import { ICON_SIZE } from "@luke/ui/icons";
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
@@ -31,10 +32,10 @@ import { Message, MessageContent, RECEIVED_MESSAGE_CLASS } from "../ai-elements/
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { lineSender, providerOf, receivedLine } from "./agent-model.js";
+import { lineSender, providerOf } from "./agent-model.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
 import { CopyMessageAction } from "./copy-message.js";
-import { linkChip } from "./mention-chip.js";
+import { CHIP_OR_LINK_FRAME, ChipOrLink, ORIGIN_CHIP } from "./mention-chip.js";
 import {
   earlierStepsLine,
   leftOutLine,
@@ -75,13 +76,6 @@ import { useOpenPlace } from "./use-open-link.js";
  * where known. The source's whole transcript is a press of its chip away.
  * The model is `replay-card-model.ts`.
  */
-
-/**
- * A chip naming what a transcript's opening came from, as the transcript
- * draws one, which cuts its own name to the line: held to the line's width
- * so a narrow line cuts the title, never the state after it.
- */
-export const ORIGIN_CHIP = "agent-origin-chip inline-flex min-w-0 max-w-full";
 
 /**
  * Where an agent's replay card stands: the agents of its task, archived ones
@@ -240,9 +234,9 @@ function useLineSender(
 
 /**
  * A replayed line, drawn as a transcript draws a line sent to the agent: a
- * sent message, at the column's left where it is the other side's words
- * (Luke's, GitHub's, another agent's), under the line naming who sent it,
- * unless it is the reader's own, when, where its marker said, and Copy.
+ * sent message, at the column's left under who sent it where it is anyone's
+ * but the reader's, as a transcript's line is, then when, where its marker
+ * said, and Copy.
  */
 function LineStep({
   view,
@@ -252,19 +246,19 @@ function LineStep({
   readerId: string | undefined;
 }): React.JSX.Element {
   const sender = useLineSender(view, readerId);
-  const received = receivedLine(view.sentBy);
+  const received = sender !== undefined;
   return (
     <Message
       from={received ? MESSAGE_ROLE.ASSISTANT : MESSAGE_ROLE.USER}
       className={received ? RECEIVED_MESSAGE_CLASS : undefined}
       data-replay-step={REPLAY_STEP_KIND.LINE}
     >
+      {received ? <MessageHead sender={sender} /> : null}
       <MessageContent>
         <TranscriptWords text={view.words} />
       </MessageContent>
       <MessageLine
         align={received ? MESSAGE_LINE_ALIGN.START : MESSAGE_LINE_ALIGN.END}
-        sender={sender}
         at={view.at}
         actions={<CopyMessageAction words={view.words} />}
       />
@@ -310,6 +304,8 @@ function CallStep({
       server={server}
       subject={call.subject}
       description={call.description}
+      files={call.files}
+      page={call.page}
       agent={agent}
       agentCard={agentId === undefined ? undefined : place.card(agentId)}
       input={call.input}
@@ -360,7 +356,9 @@ function SummaryRow({ line, text }: { line: string; text: string }): React.JSX.E
   return (
     <Disclosure data-replay-summary="">
       <DisclosureSummary>
-        <TextQuoteIcon aria-hidden="true" />
+        <GlyphSlot size={ICON_SIZE.MEDIUM}>
+          <TextQuoteIcon />
+        </GlyphSlot>
         {line}
       </DisclosureSummary>
       <DisclosureBody inset={DISCLOSURE_BODY.FLUSH}>
@@ -455,20 +453,13 @@ function ReplayFoot({
         </span>
       )}
       {pullRequest === undefined || pullRequest === null || words === undefined ? null : (
-        <span className={ORIGIN_CHIP}>
-          {linkChip(pullRequest.url, words, doors) ?? (
-            <TextLink
-              href={pullRequest.url}
-              look={TEXT_LINK_LOOK.UNDERLINED}
-              onClick={(event) => {
-                event.preventDefault();
-                place.openGitHub(pullRequest.url);
-              }}
-            >
-              {words}
-            </TextLink>
-          )}
-        </span>
+        <ChipOrLink
+          href={pullRequest.url}
+          words={words}
+          doors={doors}
+          onOpen={place.openGitHub}
+          frame={CHIP_OR_LINK_FRAME.ORIGIN}
+        />
       )}
     </div>
   );

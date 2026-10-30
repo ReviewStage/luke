@@ -32,10 +32,9 @@ export const PRODUCT_EVENT = {
   SETTINGS_VIEW_OPEN: "settings:view_open",
   SETTINGS_RESET: "settings:reset",
   SEARCH_OPEN: "search:open",
+  SURFACE_OPEN: "surface:open",
   UPDATE_ACTION: "update:action",
   FEEDBACK_SEND: "feedback:send",
-  VOICE_CALL_START: "voice:call_start",
-  VOICE_EXCHANGE: "voice:exchange",
   VOICE_PERMISSION: "voice:permission",
   SETTING_UPDATE: "setting:update",
   EXPERIMENT_TOGGLE: "experiment:toggle",
@@ -58,6 +57,7 @@ export const PRODUCT_SURFACE_EVENT = {
   PANEL_TAB_CHANGE: PRODUCT_EVENT.PANEL_TAB_CHANGE,
   SETTINGS_VIEW_OPEN: PRODUCT_EVENT.SETTINGS_VIEW_OPEN,
   SEARCH_OPEN: PRODUCT_EVENT.SEARCH_OPEN,
+  SURFACE_OPEN: PRODUCT_EVENT.SURFACE_OPEN,
 } as const;
 
 export type ProductSurfaceEventName =
@@ -77,13 +77,13 @@ export function isProductSurfaceEventName(
 export const PRODUCT_EVENT_PROPERTY = {
   APP_VERSION: "app_version",
   IMAGE_COUNT: "image_count",
-  SESSION_SOURCE: "session_source",
   ACCOUNT_ACTION: "account_action",
   UPDATE_ACTION: "update_action",
   PANEL_TAB: "panel_tab",
   SETTINGS_VIEW: "settings_view",
   SEARCH_SURFACE: "search_surface",
-  EXCHANGE_KIND: "exchange_kind",
+  SURFACE: "surface",
+  LAYOUT: "layout",
   PERMISSION_RESULT: "permission_result",
   SETTING_ID: "setting_id",
   SETTING_VALUE: "setting_value",
@@ -91,16 +91,6 @@ export const PRODUCT_EVENT_PROPERTY = {
 } as const;
 
 type ProductEventProperty = (typeof PRODUCT_EVENT_PROPERTY)[keyof typeof PRODUCT_EVENT_PROPERTY];
-
-/** Which source opened a live voice session — Luke's hosted voice service on the account, or the introduction's accountless endpoint — never a credential or a session id. */
-export const PRODUCT_VOICE_SESSION_SOURCE = {
-  HOSTED: "hosted",
-  /** The one-time onboarding introduction's own bounded, accountless session. */
-  INTRODUCTION: "introduction",
-} as const;
-
-export type ProductVoiceSessionSource =
-  (typeof PRODUCT_VOICE_SESSION_SOURCE)[keyof typeof PRODUCT_VOICE_SESSION_SOURCE];
 
 /** Where a Luke account stands after an action, never who the account is. */
 export const PRODUCT_ACCOUNT_ACTION = {
@@ -171,38 +161,49 @@ export const PRODUCT_SETTINGS_VIEW = {
 export type ProductSettingsView =
   (typeof PRODUCT_SETTINGS_VIEW)[keyof typeof PRODUCT_SETTINGS_VIEW];
 
-/** Which list a search field was summoned over — the Conversation thread and an agent's transcript apart — never what was typed into it. */
+/** Which list a search field was summoned over, never what was typed into it. */
 export const PRODUCT_SEARCH_SURFACE = {
-  SESSIONS: "sessions",
   SETTINGS: "settings",
-  CONVERSATION: "conversation",
-  TRANSCRIPT: "transcript",
 } as const;
 
 type ProductSearchSurface = (typeof PRODUCT_SEARCH_SURFACE)[keyof typeof PRODUCT_SEARCH_SURFACE];
 
 /**
- * Who opened the exchange being counted, never a word of it. The developer's
- * own turn comes two ways — the talk key and the composer — and the third is
- * no turn of theirs at all: the speak-only call Luke opens himself to read an
- * announcement out, which reaches the same status edge and would otherwise be
- * counted as somebody speaking to him.
+ * Which surface of the panel was opened: the kind of page or pane, never which
+ * task, agent, file, or person it showed. Where a task's column and its side
+ * panel each show a surface, each is opened on its own.
  */
-export const PRODUCT_EXCHANGE_KIND = {
-  SPOKEN: "spoken",
-  TYPED: "typed",
-  ANNOUNCEMENT: "announcement",
+export const PRODUCT_SURFACE = {
+  HOME: "home",
+  TASK: "task",
+  VERSION_HISTORY: "version_history",
+  INBOX: "inbox",
+  CHANNEL: "channel",
+  THREAD: "thread",
+  AGENT: "agent",
+  SUBAGENT: "subagent",
+  PERSON: "person",
+  AUTOMATIONS: "automations",
+  BOARD: "board",
+  ADMIN: "admin",
+  SETTINGS: "settings",
+  COMMENTS: "comments",
+  PULL_REQUEST: "pull_request",
+  FILES: "files",
+  TERMINAL: "terminal",
+  BROWSER: "browser",
+  PAGE: "page",
 } as const;
 
-export type ProductExchangeKind =
-  (typeof PRODUCT_EXCHANGE_KIND)[keyof typeof PRODUCT_EXCHANGE_KIND];
+export type ProductSurface = (typeof PRODUCT_SURFACE)[keyof typeof PRODUCT_SURFACE];
 
-const PRODUCT_EXCHANGE_KINDS: ReadonlySet<string> = new Set(Object.values(PRODUCT_EXCHANGE_KIND));
+/** How the panel was laid out as a surface opened: panes side by side, or one pane at a time. */
+export const PRODUCT_LAYOUT = {
+  WIDE: "wide",
+  NARROW: "narrow",
+} as const;
 
-/** Guards the kind the renderer names for the exchange it just opened. */
-export function isProductExchangeKind(value: UnparsedWireValue): value is ProductExchangeKind {
-  return isWireString(value) && PRODUCT_EXCHANGE_KINDS.has(value);
-}
+export type ProductLayout = (typeof PRODUCT_LAYOUT)[keyof typeof PRODUCT_LAYOUT];
 
 /** What the system answered a permission ask with. */
 export const PRODUCT_PERMISSION_RESULT = {
@@ -261,9 +262,11 @@ export const PRODUCT_EXPERIMENT = {
   /** Removed with the Inbox-first sidebar, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   INBOX_FIRST: "inbox-first",
   OPERATOR: "operator",
+  /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   LOCAL_AGENTS: "local-agents",
   CHANNELS: "channels",
   PILOT: "pilot",
+  SKILLS: "skills",
 } as const;
 
 export type ProductExperiment = (typeof PRODUCT_EXPERIMENT)[keyof typeof PRODUCT_EXPERIMENT];
@@ -303,13 +306,13 @@ export function productSessionCountBucket(count: number): ProductSessionCountBuc
 interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.APP_VERSION]: string;
   [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT]: ProductSessionCountBucket;
-  [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE]: ProductVoiceSessionSource;
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION]: ProductAccountAction;
   [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION]: ProductUpdateAction;
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: ProductPanelTab;
   [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: ProductSettingsView;
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: ProductSearchSurface;
-  [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND]: ProductExchangeKind;
+  [PRODUCT_EVENT_PROPERTY.SURFACE]: ProductSurface;
+  [PRODUCT_EVENT_PROPERTY.LAYOUT]: ProductLayout;
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: ProductPermissionResult;
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: AppSettingId;
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: ProductSettingValue;
@@ -328,13 +331,13 @@ type EnumeratedProductEventProperty = Exclude<
 
 /** Every value each enumerable property may ever hold. */
 const PRODUCT_EVENT_PROPERTY_VALUES = {
-  [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE]: Object.values(PRODUCT_VOICE_SESSION_SOURCE),
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION]: Object.values(PRODUCT_ACCOUNT_ACTION),
   [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION]: Object.values(PRODUCT_UPDATE_ACTION),
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: Object.values(PRODUCT_PANEL_TAB),
   [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: Object.values(PRODUCT_SETTINGS_VIEW),
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: Object.values(PRODUCT_SEARCH_SURFACE),
-  [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND]: Object.values(PRODUCT_EXCHANGE_KIND),
+  [PRODUCT_EVENT_PROPERTY.SURFACE]: Object.values(PRODUCT_SURFACE),
+  [PRODUCT_EVENT_PROPERTY.LAYOUT]: Object.values(PRODUCT_LAYOUT),
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: Object.values(PRODUCT_PERMISSION_RESULT),
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: Object.values(APP_SETTING_ID),
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: Object.values(PRODUCT_SETTING_VALUE),
@@ -356,11 +359,10 @@ const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.SETTINGS_VIEW_OPEN]: [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW],
   [PRODUCT_EVENT.SETTINGS_RESET]: [],
   [PRODUCT_EVENT.SEARCH_OPEN]: [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE],
+  [PRODUCT_EVENT.SURFACE_OPEN]: [PRODUCT_EVENT_PROPERTY.SURFACE, PRODUCT_EVENT_PROPERTY.LAYOUT],
   [PRODUCT_EVENT.UPDATE_ACTION]: [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION],
   [PRODUCT_EVENT.FEEDBACK_SEND]: [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT],
-  [PRODUCT_EVENT.VOICE_EXCHANGE]: [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND],
   [PRODUCT_EVENT.VOICE_PERMISSION]: [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT],
-  [PRODUCT_EVENT.VOICE_CALL_START]: [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE],
   [PRODUCT_EVENT.SETTING_UPDATE]: [
     PRODUCT_EVENT_PROPERTY.SETTING_ID,
     PRODUCT_EVENT_PROPERTY.SETTING_VALUE,
@@ -434,6 +436,8 @@ const RETIRED_PRODUCT_EVENT = {
   VOICE_ANNOUNCEMENT_SPEAK: "voice:announcement_speak",
   VOICE_FIRST_ANNOUNCEMENT: "voice:first_announcement",
   CONVERSATION_RATED: "conversation:rated",
+  VOICE_CALL_START: "voice:call_start",
+  VOICE_EXCHANGE: "voice:exchange",
 } as const;
 
 const RETIRED_PRODUCT_EVENT_NAMES: ReadonlySet<string> = new Set(
@@ -542,10 +546,29 @@ export function productEventBatchFromWire(value: UnparsedWireValue): ProductEven
   return events;
 }
 
+/**
+ * Which of Luke's shells something came from, under the `platform` property:
+ * the desktop's panel window or the web app's tab, for the counted events and
+ * the session replay alike, so one filter separates both. A client names
+ * itself in its batch's `build`; the service's own counts are `server`, which
+ * no client may claim.
+ */
+export const PRODUCT_PLATFORM = {
+  DESKTOP: "desktop",
+  WEB: "web",
+  SERVER: "server",
+} as const;
+
+export type ProductPlatform = (typeof PRODUCT_PLATFORM)[keyof typeof PRODUCT_PLATFORM];
+
+/** The platforms a client batch may name for itself. */
+export type ProductClientPlatform = Exclude<ProductPlatform, typeof PRODUCT_PLATFORM.SERVER>;
+
 /** The fields of a batch's `build`, which the service stamps on every event the batch carries. */
 export const PRODUCT_EVENT_BUILD_FIELD = {
   APP_VERSION: PRODUCT_EVENT_PROPERTY.APP_VERSION,
   PACKAGED: "packaged",
+  PLATFORM: "platform",
 } as const;
 
 /**
@@ -565,6 +588,9 @@ const ProductEventBuildSchema = Schema.Struct({
     ),
   ),
   [PRODUCT_EVENT_BUILD_FIELD.PACKAGED]: Schema.optionalKey(Schema.Boolean),
+  [PRODUCT_EVENT_BUILD_FIELD.PLATFORM]: Schema.optionalKey(
+    Schema.Literals([PRODUCT_PLATFORM.DESKTOP, PRODUCT_PLATFORM.WEB]),
+  ),
 });
 
 export type ProductEventBuild = typeof ProductEventBuildSchema.Type;

@@ -40,7 +40,7 @@ import { wholeWordsHint } from "../tooltip/hint.js";
  * since their colours draw the code's shape.
  *
  * It is drawn in the Tailwind theme's utilities: the header on the hover
- * fill over a hairline, its title holding to one line and fading where the
+ * fill over a hairline, a glyph before its title where it wears one, its title holding to one line and fading where the
  * header cuts it (`OneLine`), its controls and the Copy flush with its right
  * edge; the lines in mono at the caption's size and the reading leading,
  * tabs two wide; a block drawn as rows, a suggestion's or a diff's, its
@@ -90,6 +90,9 @@ const TITLE_CLASS = {
   [CODE_CARD_TITLE.WORDS]:
     "luke-code-card-title flex min-w-0 items-center font-label text-foreground",
 } as const satisfies Record<CodeCardTitle, string>;
+
+/** A glyph before the title, at an icon's size on the title's line. */
+const GLYPH = "luke-code-card-glyph mr-icon-gap inline-flex flex-none [&>svg]:size-icon-16";
 
 /** The lines, whole and scrolling sideways, each run in its colour for the appearance it stands in. */
 const BODY =
@@ -178,6 +181,7 @@ type CodeCardLines =
 
 /** A block of code in its card: `title` and the Copy over its lines, cut at 40 until the rest is asked for. */
 export function CodeCard({
+  glyph,
   title,
   titleIs = CODE_CARD_TITLE.NAME,
   code,
@@ -190,6 +194,8 @@ export function CodeCard({
   data,
   copy,
 }: CodeCardLines & {
+  /** A glyph before the title, such as the language's file icon; none for a title alone. */
+  glyph?: ReactNode;
   /** What the lines are: the language they are written in, or the file they came from or a chip naming it. */
   title: ReactNode;
   /** Whether a text title is a name, in mono, or words. */
@@ -238,6 +244,7 @@ export function CodeCard({
     >
       <figcaption className="luke-code-card-header flex min-w-0 items-center justify-between gap-control-gap border-b border-border bg-muted pl-list-inset text-caption text-muted-foreground">
         <span className={TITLE_CLASS[titleIs]} data-title={titleIs}>
+          {glyph === undefined ? null : <span className={GLYPH}>{glyph}</span>}
           {typeof title === "string" ? (
             <OneLine hint={wholeWordsHint(title)}>{title}</OneLine>
           ) : (

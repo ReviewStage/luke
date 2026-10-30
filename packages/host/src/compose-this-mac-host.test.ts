@@ -1,5 +1,5 @@
 /**
- * compose-this-mac-host.test.ts -- This Mac's `luke-host` as the desktop turns it on: the Mac enrolled under the device id the app already had before the login item is registered, never turned on beside the install command's `luke-host`, and a Mac Luke removed never enrolled again but by the member's own act.
+ * compose-this-mac-host.test.ts -- This Mac's `luke-host` as the member turns it on: a Mac holding no record never enrolled but by the member's own Turn on, which enrolls it under the device id the app already had before the login item is registered, and a Mac Luke removed never enrolled again but by the member's own act.
  *
  * The composer runs over a real state folder of its own, holding the device
  * id the account already had, and a fake service and login item that each
@@ -19,7 +19,11 @@ import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Duration, Effect, Layer, Option, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { composeThisMacHost, type ThisMacSetup } from "./compose-this-mac-host.js";
-import { THIS_MAC_HOST_STANDING, thisMacHostStandingSchema } from "./contract/this-mac-host.js";
+import {
+  THIS_MAC_HOST_STANDING,
+  type ThisMacHostStanding,
+  thisMacHostStandingSchema,
+} from "./contract/this-mac-host.js";
 import {
   HOST_LOGIN_ITEM_ACT,
   HOST_LOGIN_ITEM_STATUS,
@@ -51,26 +55,15 @@ const until = (holds: () => boolean) =>
   });
 
 /**
- * This Mac's `luke-host` composed over a state folder of its own, with the
- * Local agents experiment on until the test turns it off, or off from the
- * start where `off` says so, the account's device id already kept there, a
- * service that enrolls the Mac and lists the setup `setup` says until the
- * test lists another (none where it cannot answer), a login
- * item that refuses as many unregisters as `refusedUnregisters` says; what
- * each fake was asked, in the order it was asked.
+ * This Mac's `luke-host` composed over a state folder of its own, the
+ * account's device id already kept there, a service that enrolls the Mac
+ * and lists the setup `setup` says until the test lists another (none where
+ * it cannot answer), and a login item that takes every act; what each fake
+ * was asked, in the order it was asked.
  */
-const thisMac = (
-  stateRoot: string,
-  options: {
-    refusedUnregisters?: number;
-    off?: boolean;
-    setup?: Option.Option<ThisMacSetup>;
-  } = {},
-) =>
+const thisMac = (stateRoot: string, options: { setup?: Option.Option<ThisMacSetup> } = {}) =>
   Effect.gen(function* () {
-    let on = options.off !== true;
     let setup = options.setup ?? Option.none<ThisMacSetup>();
-    let refusals = options.refusedUnregisters ?? 0;
     const asked: string[] = [];
     const enrolled: string[] = [];
     const client = {
@@ -87,10 +80,6 @@ const thisMac = (
     const loginItem = (act: HostLoginItemAct) =>
       Effect.sync(() => {
         asked.push(`login item ${act}`);
-        if (act === HOST_LOGIN_ITEM_ACT.UNREGISTER && refusals > 0) {
-          refusals -= 1;
-          return Result.fail("Operation not permitted");
-        }
         return Result.succeed(
           act === HOST_LOGIN_ITEM_ACT.UNREGISTER
             ? HOST_LOGIN_ITEM_STATUS.NOT_REGISTERED
@@ -106,7 +95,6 @@ const thisMac = (
       },
       account: { capabilitiesActive: () => true },
       accountId: () => USER_ID,
-      switchedOn: Effect.sync(() => on),
       deviceSetup: () => Effect.sync(() => setup),
       client,
     }).pipe(
@@ -139,24 +127,53 @@ const thisMac = (
       assert.ok(handler !== undefined);
       return Effect.map(Effect.orDie(handler({}, CONTEXT)), decodeStanding);
     };
-    const switchOff = () => {
-      on = false;
-    };
     const listSetup = (next: Option.Option<ThisMacSetup>) => {
       setup = next;
     };
-    return { asked, enrolled, call, switchOff, listSetup };
+    return { asked, enrolled, call, listSetup };
   });
 
+/** The first standing `read` answers past off, read again as the clock moves. */
+const firstStanding = (read: Effect.Effect<ThisMacHostStanding>) =>
+  Effect.gen(function* () {
+    let standing = yield* read;
+    for (
+      let round = 0;
+      round < 20_000 && standing.standing === THIS_MAC_HOST_STANDING.OFF;
+      round += 1
+    ) {
+      yield* TestClock.adjust(Duration.millis(100));
+      yield* Effect.yieldNow;
+      standing = yield* read;
+    }
+    return standing;
+  });
+
+/** A minute of the clock nudged, in which the composer, reading again every five seconds, reads a dozen times. */
+const aDozenReads = Effect.gen(function* () {
+  for (let round = 0; round < 600; round += 1) {
+    yield* TestClock.adjust(Duration.millis(100));
+    yield* Effect.yieldNow;
+  }
+});
+
 it.effect(
-  "turning on enrolls before it registers luke-host, under the device id the app already had",
+  "a Mac holding no record stands not turned on and enrolls nothing on its own, and Turn on enrolls it before it registers luke-host, under the device id the app already had",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
-        const { asked, enrolled } = yield* thisMac(stateRoot);
-        yield* until(() => asked.includes(`login item ${HOST_LOGIN_ITEM_ACT.REGISTER}`));
+        const { asked, enrolled, call } = yield* thisMac(stateRoot);
+        const standing = yield* firstStanding(call(GATEWAY_METHOD.THIS_MAC_HOST_READ));
+        yield* aDozenReads;
 
+        assert.deepEqual(standing, { standing: THIS_MAC_HOST_STANDING.NOT_TURNED_ON });
+        // Note that the length is asserted rather than the list, which an assertion would narrow to an empty one.
+        assert.equal(asked.length, 0, "nothing was enrolled and no login item asked");
+        assert.equal(Option.isNone(yield* readHostDevice(stateRoot)), true);
+
+        yield* Effect.forkScoped(call(GATEWAY_METHOD.THIS_MAC_HOST_TURN_ON));
+        yield* until(() => asked.includes(`login item ${HOST_LOGIN_ITEM_ACT.REGISTER}`));
         assert.deepEqual(asked.slice(0, 2), [
           "enroll",
           `login item ${HOST_LOGIN_ITEM_ACT.REGISTER}`,
@@ -185,21 +202,8 @@ it.effect(
           refused: true,
         });
         const { asked, enrolled, call } = yield* thisMac(stateRoot);
-        let standing = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
-        for (
-          let round = 0;
-          round < 20_000 && standing.standing === THIS_MAC_HOST_STANDING.OFF;
-          round += 1
-        ) {
-          yield* TestClock.adjust(Duration.millis(100));
-          yield* Effect.yieldNow;
-          standing = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
-        }
-        // Note that the composer reads again every five seconds, so a dozen more reads pass here.
-        for (let round = 0; round < 600; round += 1) {
-          yield* TestClock.adjust(Duration.millis(100));
-          yield* Effect.yieldNow;
-        }
+        const standing = yield* firstStanding(call(GATEWAY_METHOD.THIS_MAC_HOST_READ));
+        yield* aDozenReads;
 
         assert.deepEqual(standing, { standing: THIS_MAC_HOST_STANDING.REMOVED });
         assert.deepEqual(yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ), standing);
@@ -209,63 +213,6 @@ it.effect(
         yield* Effect.forkScoped(call(GATEWAY_METHOD.THIS_MAC_HOST_TURN_ON));
         yield* until(() => enrolled.length > 0);
         assert.deepEqual(enrolled, [DEVICE_ID]);
-      }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
-    ),
-);
-
-it.effect(
-  "a switch-off macOS refuses says agents may still run and unregisters again until the login item is off",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
-        const { asked, call, switchOff } = yield* thisMac(stateRoot, { refusedUnregisters: 1 });
-        yield* until(() => asked.includes(`login item ${HOST_LOGIN_ITEM_ACT.REGISTER}`));
-        switchOff();
-        const unregisters = () =>
-          asked.filter((each) => each === `login item ${HOST_LOGIN_ITEM_ACT.UNREGISTER}`).length;
-        yield* until(() => unregisters() === 1);
-        let standing = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
-        for (let round = 0; round < 20_000 && unregisters() === 1; round += 1) {
-          if (standing.standing === THIS_MAC_HOST_STANDING.FAILED) break;
-          yield* Effect.yieldNow;
-          standing = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
-        }
-
-        assert.equal(standing.standing, THIS_MAC_HOST_STANDING.FAILED);
-        yield* until(() => unregisters() === 2);
-        let after = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
-        for (
-          let round = 0;
-          round < 20_000 && after.standing !== THIS_MAC_HOST_STANDING.OFF;
-          round += 1
-        ) {
-          yield* Effect.yieldNow;
-          after = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
-        }
-        assert.deepEqual(after, { standing: THIS_MAC_HOST_STANDING.OFF });
-      }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
-    ),
-);
-
-it.effect(
-  "with the Local agents experiment off from the start, nothing is enrolled and no login item registered",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
-        const { asked, call } = yield* thisMac(stateRoot, { off: true });
-        // Note that the composer reads again every five seconds, so a dozen reads pass here.
-        for (let round = 0; round < 600; round += 1) {
-          yield* TestClock.adjust(Duration.millis(100));
-          yield* Effect.yieldNow;
-        }
-
-        assert.deepEqual(asked, []);
-        assert.deepEqual(yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ), {
-          standing: THIS_MAC_HOST_STANDING.OFF,
-        });
-        assert.equal(Option.isNone(yield* readHostDevice(stateRoot)), true);
       }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
     ),
 );
@@ -280,16 +227,7 @@ const enrolledMac = (setup: Option.Option<ThisMacSetup>) =>
       serviceOrigin: SERVICE,
     });
     const mac = yield* thisMac(stateRoot, { setup });
-    let first = yield* mac.call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
-    for (
-      let round = 0;
-      round < 20_000 && first.standing === THIS_MAC_HOST_STANDING.OFF;
-      round += 1
-    ) {
-      yield* TestClock.adjust(Duration.millis(100));
-      yield* Effect.yieldNow;
-      first = yield* mac.call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
-    }
+    const first = yield* firstStanding(mac.call(GATEWAY_METHOD.THIS_MAC_HOST_READ));
     return { ...mac, first };
   });
 

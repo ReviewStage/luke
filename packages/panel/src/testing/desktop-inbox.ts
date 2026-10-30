@@ -2,7 +2,7 @@
  * desktop-inbox.ts -- the window every `desktop-inbox-*.test.ts` stands the Inbox in: its fakes, `mount`, and the helpers more than one of those files reads.
  *
  * Importing it registers the `beforeEach` that answers the Inbox's acts,
- * main's follows, and the account's feed of every item from `world`, and the `afterEach` that unmounts what a test
+ * the windows' holds on the holders' inboxes, and the account's feed of every item from `world`, and the `afterEach` that unmounts what a test
  * drew, as `announcer.ts` registers its own, so each file of the Inbox's
  * tests meets the same window. What one file alone reads stays in that file,
  * beside the assertions it serves.
@@ -45,6 +45,8 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type {
+  AppHolderInbox,
+  AppHolderInboxes,
   AppHostRead,
   AppInboxAgentHolding,
   AppInboxItems,
@@ -52,7 +54,8 @@ import type {
   AppInboxTaskHolding,
   AppInboxTasklessItem,
 } from "@luke/host/app-state";
-import { UNREAD } from "@luke/host/app-state";
+import { NO_HOLDER_INBOXES, UNREAD } from "@luke/host/app-state";
+import { AGENT_INBOX_ACT_KIND, type PortActResult } from "@luke/host/contract";
 import { isTranscriptTab } from "@luke/ui/tab-strip-model";
 import type { TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -61,6 +64,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, assert, beforeEach, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { useAppKeymap } from "../app-commands.js";
+import type { SideBundles } from "../bundle-loader.js";
 import { useDraftsOwner } from "../composer-drafts.js";
 import { DesktopInbox } from "../desktop/desktop-inbox.js";
 import { DesktopSidebar } from "../desktop/desktop-sidebar.js";
@@ -74,13 +78,14 @@ import {
   type AnyAct,
   FAKE_ANSWER,
   type FakeActAnswer,
+  type FakeActPort,
   fakeActPort,
   fakeActPortCalls,
   fakeActs,
   fakeActsAnswer,
 } from "./app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "./app-platform.js";
-import { handInboxItems } from "./app-state.js";
+import { handHostReads } from "./app-state.js";
 import { attachmentChipName } from "./attachment-chip.js";
 import {
   composerEditor,
@@ -90,10 +95,10 @@ import {
 } from "./composer.js";
 import { onRegistry } from "./copy-feedback.js";
 import { sidebarProps } from "./desktop-sidebar.js";
-import { followedInboxes } from "./followed-inboxes.js";
 import { restOn } from "./hint-rest.js";
 import { relayout } from "./resize-observer.js";
 import { installScrollIntoView } from "./scroll-into-view.js";
+import { onSideBundles } from "./side-bundles.js";
 import { agentHoldingsOf, tasksControl, waitingOf } from "./tasks-control.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -319,6 +324,8 @@ class InboxWorld {
   feedLeavesOut: ReadonlySet<string> = new Set();
   /** Delivers the account's feed to the window as it now stands, as main delivers a move of it; nothing before a mount. */
   deliverFeed: (read: AppHostRead<AppInboxItems>) => void = () => undefined;
+  /** Delivers the holders' own inboxes to the window as the host holds them, as main delivers a move of them; nothing before a mount. */
+  deliverHolders: (held: AppHolderInboxes) => void = () => undefined;
   /** Whether a read of a plan's agents is held open, never answering. */
   agentListHeld = false;
   /** Holds the next agent read's answer, handing the test what lands it, where a test asks. */
@@ -336,8 +343,8 @@ class InboxWorld {
   copied: string[] = [];
   /** Each agent with no plan as a read of its own page answers it. */
   pageAgents = new Map<string, AgentSummary>();
-  /** Main's follows for the window, each followed inbox pushed as the knobs above say. */
-  main = followedInboxes(() => undefined);
+  /** The host's held inboxes for the window, each pushed as it is held, as the knobs above say. */
+  main = heldInboxes();
   /** The reads of an item's images, each held until the test lands it with a PNG's first bytes. */
   imageReads: (() => void)[] = [];
   /** Every read mark the Inbox sent, in order: `read:<item>`, `unread:<item>`, or `all:<workspace>`. */
@@ -363,8 +370,100 @@ export function pushedOf(answer: AgentInboxAnswerView) {
   return "failure" in answer ? { failure: answer.failure } : { items: answer.items };
 }
 
+/** A followed inbox as the host tells it: its items whole, or why there are none. */
+type Pushed = { readonly items: readonly InboxItem[] } | { readonly failure: string };
+
+/**
+ * The host's held inboxes for the window: each holder's own read, pushed a
+ * moment after the window holds it as the host pushes one, or nothing yet
+ * where the knobs hold it, and kept once the window lets go, as the host
+ * keeps the holders let go lately; `push` pushes a change of one. Its
+ * procedures are spread into the test's `fakeActPort`: the hold, and Try
+ * again, which reads the holder anew.
+ */
+function heldInboxes() {
+  let held: AppHolderInboxes = NO_HOLDER_INBOXES;
+  /** Every hold the window holds open, as `kind:id`, each once per open stream. */
+  const open: string[] = [];
+  /** Every hold the window asked for, in order, as `kind:id`. */
+  const asked: string[] = [];
+  const keyOf = (scope: AgentInboxScope) => `${scope.kind}:${scope.id}`;
+  const set = (scope: AgentInboxScope, read: AppHolderInbox) => {
+    held = { ...held, [scope.kind]: { ...held[scope.kind], [scope.id]: read } };
+    world.deliverHolders(held);
+  };
+  const push = (scope: AgentInboxScope, pushed: Pushed) => {
+    if ("items" in pushed) return set(scope, { rows: pushed.items });
+    // Note that a read that stops answering keeps its rows, as the host keeps them.
+    if (held[scope.kind][scope.id]?.rows === undefined) set(scope, { failed: true });
+  };
+  const isFollowed = (scope: AgentInboxScope) => open.includes(keyOf(scope));
+  const isHeld = (scope: AgentInboxScope) => held[scope.kind][scope.id] !== undefined;
+  /** Reads the holder as the knobs say, pushing what they answer now. */
+  const read = (scope: AgentInboxScope) => {
+    const pushed =
+      scope.kind === INBOX_SCOPE_KIND.PLAN ? answerTask(scope.id) : answerAgent(scope.id);
+    if (pushed !== undefined) push(scope, pushed);
+  };
+  const procedures: Pick<
+    FakeActPort,
+    typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_RETRY
+  > = {
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: (scope) => {
+      asked.push(keyOf(scope));
+      open.push(keyOf(scope));
+      // Note that the host pushes a holder held again from where its read stands, so one held already is read anew by nothing.
+      void Promise.resolve().then(() => {
+        if (isFollowed(scope) && !isHeld(scope)) read(scope);
+      });
+      const ended = Promise.withResolvers<IteratorReturnResult<undefined>>();
+      const close = () => {
+        const at = open.indexOf(keyOf(scope));
+        if (at >= 0) open.splice(at, 1);
+        ended.resolve({ done: true, value: undefined });
+      };
+      const stream: AsyncIteratorObject<never, undefined, unknown> = {
+        next: () => ended.promise,
+        return: async () => {
+          close();
+          return { done: true, value: undefined };
+        },
+        [Symbol.asyncIterator]: () => stream,
+        [Symbol.asyncDispose]: async () => {
+          close();
+        },
+      };
+      // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
+      return Promise.resolve(
+        stream as unknown as PortActResult<typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW>,
+      );
+    },
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_RETRY]: (scope) => {
+      // Note that the host tells nothing of a holder that had failed while it is read again.
+      if (held[scope.kind][scope.id]?.failed === true) set(scope, UNREAD);
+      read(scope);
+      return Promise.resolve();
+    },
+  };
+  return {
+    asked,
+    push,
+    isFollowed,
+    /** Whether the host holds the holder's read, for a window that holds it or let it go lately. */
+    isHeld,
+    /** Every holder the host holds, as scopes. */
+    heldScopes: (): AgentInboxScope[] =>
+      [INBOX_SCOPE_KIND.PLAN, INBOX_SCOPE_KIND.AGENT].flatMap((kind) =>
+        Object.keys(held[kind]).map((id) => ({ kind, id })),
+      ),
+    /** The holders as the host holds them now, for a mount to hand the window first. */
+    now: () => held,
+    procedures,
+  };
+}
+
 /** A task's inbox as main pushes it now: as `startRead` settles it, where it holds one, or as `inboxes` holds it. */
-function answerTask(taskId: string) {
+function answerTask(taskId: string): Pushed | undefined {
   const held = world.startRead?.(taskId);
   if (held === undefined) return { items: world.inboxes.get(taskId) ?? [] };
   void held.then((outcome) =>
@@ -374,7 +473,7 @@ function answerTask(taskId: string) {
 }
 
 /** An agent's inbox as main pushes it now, the push counted: refused, held in the test's hands, or as `agentInboxes` holds it. */
-function answerAgent(agentId: string) {
+function answerAgent(agentId: string): Pushed | undefined {
   world.agentReads.push(agentId);
   if (world.agentReadFails) return { failure: AGENT_CALL_FAILURE.UNANSWERED };
   const items = world.agentInboxes.get(agentId) ?? [];
@@ -385,8 +484,8 @@ function answerAgent(agentId: string) {
 }
 
 /**
- * Every held item `drawn` changes, and every followed inbox holding one
- * pushed so, as the host draws a write into every inbox it follows the
+ * Every held item `drawn` changes, and every held inbox holding one
+ * pushed so, as the host draws a write into every inbox it holds the
  * moment it is asked, reading none of them again; none where it leaves an
  * item alone.
  */
@@ -397,7 +496,7 @@ function drawnByHost(drawn: (item: InboxItem) => InboxItem | undefined): void {
       const next = items.map((item) => drawn(item) ?? item);
       held.set(id, next);
       const scope = { kind, id };
-      if (world.main.isFollowed(scope)) world.main.push(scope, { items: next });
+      if (world.main.isHeld(scope)) world.main.push(scope, { items: next });
     }
   };
   draw(INBOX_SCOPE_KIND.PLAN, world.inboxes);
@@ -410,19 +509,12 @@ function marked(itemIds: ReadonlySet<string>, unread: boolean): void {
   drawnByHost((item) => (itemIds.has(item.id) ? { ...item, unread } : undefined));
 }
 
-/** Every followed inbox, and the account's feed, pushed again as it now stands, as main pushes a change. */
+/** Every held inbox, and the account's feed, pushed again as it now stands, as main pushes a change. */
 export function pushAgain(): void {
   deliverFeed();
-  for (const taskId of [...world.inboxes.keys(), BILLING.id, INVITES.id]) {
-    const scope = { kind: INBOX_SCOPE_KIND.PLAN, id: taskId };
-    if (!world.main.isFollowed(scope)) continue;
-    const inbox = answerTask(taskId);
-    if (inbox !== undefined) world.main.push(scope, inbox);
-  }
-  for (const agentId of world.agentInboxes.keys()) {
-    const scope = { kind: INBOX_SCOPE_KIND.AGENT, id: agentId };
-    if (!world.main.isFollowed(scope)) continue;
-    const inbox = answerAgent(agentId);
+  for (const scope of world.main.heldScopes()) {
+    const inbox =
+      scope.kind === INBOX_SCOPE_KIND.PLAN ? answerTask(scope.id) : answerAgent(scope.id);
     if (inbox !== undefined) world.main.push(scope, inbox);
   }
 }
@@ -485,9 +577,8 @@ beforeEach(() => {
   world.readMarkRefused = false;
   world.members = [];
   world.fileReads = [];
-  world.main = followedInboxes((scope) =>
-    scope.kind === INBOX_SCOPE_KIND.PLAN ? answerTask(scope.id) : answerAgent(scope.id),
-  );
+  world.main = heldInboxes();
+  world.deliverHolders = () => undefined;
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.AGENTS_INBOX_ITEMS_RETRY) {
@@ -663,6 +754,7 @@ export function mount(
     chosen: firstChosen,
     drawnWhileOpen = false,
     agents: firstAgents = agentHoldingsOf(firstTaskless),
+    bundles,
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
@@ -687,12 +779,18 @@ export function mount(
     drawnWhileOpen?: boolean;
     /** Main's first word of the agents with no task holding items; those the items given name where none are given. */
     agents?: readonly AppInboxAgentHolding[];
+    /** The bundles the window's surfaces load, where the test hands importers of its own; the window's where none are handed. */
+    bundles?: SideBundles;
   } = {},
 ) {
-  // Note that the host's inbox streams are answered beside whatever acts the test answers by now.
+  // Note that a mount is a fresh window over a fresh host, holding no inbox yet, so a test mounting again reads what its knobs say now.
+  world.main = heldInboxes();
+  // Note that the host's inbox holds are answered beside whatever acts the test answers by now.
   fakeActPort({ ...fakeActPortCalls(), ...world.main.procedures });
-  // Note that the account's feed is laid over whatever document the test handed the window, its experiments among it.
-  world.deliverFeed = handInboxItems(feedNow());
+  // Note that the host's reads are laid over whatever document the test handed the window, its experiments among it.
+  const reads = handHostReads({ items: feedNow(), holders: world.main.now() });
+  world.deliverFeed = reads.deliverItems;
+  world.deliverHolders = reads.deliverHolders;
   const asked: Asked = {
     shownTasks: [],
     shownAgents: [],
@@ -800,7 +898,8 @@ export function mount(
     room === undefined || panel !== undefined
       ? createElement(Page, { sidePanel: panel })
       : createElement(Panelled, { at: room });
-  const page = toasts ? createElement(Fragment, null, inbox, createElement(ToastHost)) : inbox;
+  const shown = toasts ? createElement(Fragment, null, inbox, createElement(ToastHost)) : inbox;
+  const page = bundles === undefined ? shown : onSideBundles(bundles, shown);
   if (channels) chooseChannel(GENERAL.id);
   act(() => world.root?.render(onRegistry(AtomRegistry.make(), page)));
   return { page: container, asked };
@@ -815,6 +914,37 @@ export async function settle(): Promise<void> {
 
 /** A row's title, as its ListRow draws it. */
 export const ROW_TITLE = ".luke-list-row-title";
+
+/** A row's title as the eye reads it, the words it says to a reader alone ("Unread") left out. */
+export function titleOf(row: Element): string {
+  const title = row.querySelector(ROW_TITLE)?.cloneNode(true);
+  if (!(title instanceof Element)) return "";
+  for (const hidden of title.querySelectorAll(".luke-visually-hidden")) hidden.remove();
+  return title.textContent ?? "";
+}
+
+/**
+ * What a reader hears of the nodes an `aria-labelledby` or `aria-describedby`
+ * names: each one's words but what it hides from them, joined by spaces, and
+ * the words drawn for a reader alone heard apart from those beside them, as
+ * a browser hears a box of their own.
+ */
+export function heardOf(ids: string | null): string {
+  return (ids ?? "")
+    .split(" ")
+    .filter((id) => id !== "")
+    .map((id) => {
+      const copy = document.getElementById(id)?.cloneNode(true);
+      assert.ok(copy instanceof Element, `nothing is drawn as ${id}`);
+      for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
+      for (const apart of copy.querySelectorAll(".luke-visually-hidden")) {
+        apart.before(" ");
+        apart.after(" ");
+      }
+      return (copy.textContent ?? "").replace(/\s+/gu, " ").trim();
+    })
+    .join(" ");
+}
 
 /**
  * What marks a row as needing the developer: `*` where it says "Needs you"
@@ -844,7 +974,7 @@ export function listed(page: HTMLElement): string[] {
   const fold = ".luke-group-header-head button[aria-expanded]:not([aria-haspopup])";
   return [...list.querySelectorAll(`${fold}, li button.luke-list-row-main`)].map((node) => {
     if (node.matches(fold) || !(node instanceof HTMLButtonElement)) return `# ${heardName(node)}`;
-    const name = node.querySelector(ROW_TITLE)?.textContent ?? "";
+    const name = titleOf(node);
     return `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${name}`;
   });
 }
@@ -861,7 +991,7 @@ export function wordsOf(element: Element | null | undefined): string | null {
 export function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
   const row = [
     ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),
-  ].find((each) => each.querySelector(ROW_TITLE)?.textContent === title);
+  ].find((each) => titleOf(each) === title);
   assert.ok(row, `no row for ${title}`);
   return row;
 }
@@ -1315,7 +1445,7 @@ export function rowLines(page: HTMLElement, title: string): [boolean, string | n
   const row = rowNamed(page, title);
   const head = row.querySelector(".luke-list-row-head");
   const titled =
-    row.querySelector(ROW_TITLE)?.textContent === title &&
+    titleOf(row) === title &&
     head?.querySelector(ROW_TITLE) === null &&
     head.querySelector("time") !== null;
   return [titled, row.querySelector(".luke-list-row-description")?.textContent];

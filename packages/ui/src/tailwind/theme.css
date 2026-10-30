@@ -83,7 +83,6 @@
      glyphs, measures, and motions. */
   --spacing-ring-reach: var(--luke-focus-ring-reach);
   --spacing-column-inset: var(--luke-space-12);
-  --spacing-origin-glyph: 14px; /* off-scale: a document glyph in a 16px mark's place */
   --spacing-attention-mark: 14px; /* off-scale: the attention disc, a row glyph's size */
   --spacing-find-field: 240px; /* off-scale: the find bar's field, one width whatever is typed */
   --radius-disc: 50%; /* off-scale: a circle, whose corner what it holds inherits */
@@ -818,6 +817,7 @@
   --radius-text-link: 2px; /* off-scale: a hairline corner the keyboard's ring hugs the words by */
   --color-link-underline: color-mix(in srgb, currentColor 32%, transparent);
   --spacing-glyph: var(--luke-glyph-size, var(--luke-space-16));
+  --spacing-glyph-inset: calc(var(--luke-glyph-size, var(--luke-space-16)) - var(--luke-space-2));
   --color-shortcut-ink: var(--luke-shortcut-ink, var(--luke-color-text-muted));
   --text-shortcut: var(--luke-shortcut-text, var(--luke-type-caption-size));
   --spacing-working-mark: var(--luke-working-mark-size, var(--luke-space-16));
@@ -869,8 +869,6 @@
     [more-end];
   /* A row's lead chip, its name cut short at a short name's measure, its glyph and the gap after it beside that. */
   --spacing-list-row-lead: calc(18ch + var(--luke-type-caption-size) + var(--luke-space-2));
-  /* The label a swiped row's act rides its face's edge in, in a tag's size on the line it stands on. */
-  --spacing-swipe-label: 56px; /* off-scale: a swipe act's label column */
   --text-tag-size: var(--luke-type-tag-size);
   /* A part's corner, its row's own, so its fill follows the row's round. */
   --radius-inherit: inherit;

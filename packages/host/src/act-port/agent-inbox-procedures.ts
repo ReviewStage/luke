@@ -4,12 +4,13 @@
  * The one check these procedures make is who asked, as for every task act:
  * only a panel draws the Inbox, so every one refuses the takeover and any
  * other window, in its own sentence. What the service answers comes
- * back as the panel's own answer. A task's or an agent's inbox is followed
- * while a panel holds its stream open: the host follows one on the first stream of it and
- * lets it go with the last, and every change it tells reaches every stream
- * of it. How many streams stand open of each is all else held here. Every
- * item the account reaches reaches a panel on app state, never here, so a
- * panel asks only that it be read again; the notices
+ * back as the panel's own answer. A task's or an agent's inbox is held
+ * followed while a panel holds its stream open: the host holds one on the
+ * first stream of it and lets it go with the last, and what it holds
+ * reaches every panel on app state, never down the stream, which carries
+ * nothing. How many streams stand open of each is all else held here. Every
+ * item the account reaches reaches a panel on app state the same way, so a
+ * panel asks only that either be read again; the notices
  * (`@luke/host/agent-notices`) watch what waits across the account on a
  * read of their own.
  */
@@ -19,7 +20,6 @@ import type {
   AgentInboxAnswerParams,
   AgentInboxAttachmentParams,
   AgentInboxAttachmentView,
-  AgentInboxChanged,
   AgentInboxCloseParams,
   AgentInboxMessagedView,
   AgentInboxMessageParams,
@@ -39,10 +39,11 @@ import { followedStream, type OpenFollows, streamed } from "./followed-stream.js
 /** What the Inbox procedures reach: the host's asks of the service. */
 export interface AgentInboxProceduresDependencies {
   host: {
-    /** A task's or agent's inbox followed at the host, heard through `onInboxChanged`; following again starts over. */
+    /** A task's or agent's inbox held followed at the host while any stream of it stands; what it holds reaches the panel on app state. */
     agentInboxFollow(scope: AgentInboxScope): Effect.Effect<void>;
     agentInboxUnfollow(scope: AgentInboxScope): Effect.Effect<void>;
-    onInboxChanged(listener: (changed: AgentInboxChanged) => void): () => void;
+    /** A held task's or agent's inbox read again at once, as Try again asks. */
+    agentInboxRetry(scope: AgentInboxScope): Effect.Effect<void>;
     /** Every item the account reaches read again at once, as Try again asks. */
     agentInboxItemsRetry(): Effect.Effect<void>;
     agentInboxAnswer(params: AgentInboxAnswerParams): Effect.Effect<AgentInboxAnsweredView>;
@@ -66,28 +67,31 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 export function agentInboxProcedures(dependencies: AgentInboxProceduresDependencies) {
   const { host } = dependencies;
   /** Every inbox a window holds a stream open of, so the host lets one go only with the last. */
-  const openInboxes: OpenFollows<AgentInboxChanged["inbox"], AgentInboxScope> =
-    MutableHashMap.empty();
+  const openInboxes: OpenFollows<never, AgentInboxScope> = MutableHashMap.empty();
   return {
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: actPort[
       AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const changes = followedStream(
+      // Note that nothing is heard down the hold, since the held inbox reaches the panel on app state.
+      const hold = followedStream(
         {
           keyOf: (scope: AgentInboxScope) => ({ kind: scope.kind, id: scope.id }),
           follow: host.agentInboxFollow,
           unfollow: host.agentInboxUnfollow,
-          onChanged: host.onInboxChanged,
-          valueOf: (changed: AgentInboxChanged, scope: AgentInboxScope) =>
-            changed.scope.kind === scope.kind && changed.scope.id === scope.id
-              ? Option.some(changed.inbox)
-              : Option.none(),
+          onChanged: () => () => undefined,
+          valueOf: () => Option.none<never>(),
         },
         openInboxes,
         input,
       );
-      return streamed(yield* Stream.toAsyncIterableEffect(changes));
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
+    }),
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_RETRY]: actPort[
+      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_RETRY
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.agentInboxRetry(input);
     }),
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEMS_RETRY]: actPort[
       AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEMS_RETRY

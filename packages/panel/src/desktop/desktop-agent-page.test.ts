@@ -802,45 +802,7 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
   );
 });
 
-test("the row of a page the agent showed opens it in the panel beside the agent's page", async () => {
-  transcript = {
-    messages: [
-      {
-        id: "answer",
-        role: MESSAGE_ROLE.ASSISTANT,
-        parts: [
-          {
-            type: "tool-show_page",
-            toolCallId: "call-1",
-            state: "output-available",
-            input: { title: FUNNEL.title, path: "funnel.html" },
-            output: { status: "accepted", page: { id: FUNNEL.id, version: 2 } },
-          },
-        ],
-      },
-    ],
-    cursor: "1:0",
-    status: AGENT_STATUS.COMPLETED,
-    title: null,
-  };
-  const chosen: unknown[] = [];
-  const tasks = tasksControl({});
-  const page = mount({
-    ...tasks,
-    sidePanel: { ...tasks.sidePanel, onChoose: (tab) => chosen.push(tab) },
-  });
-  await settle();
-
-  const row =
-    [...page.querySelectorAll<HTMLButtonElement>(".desktop-agent button")].find((each) =>
-      (each.textContent ?? "").includes(FUNNEL.title),
-    ) ?? assert.fail("the call's row names the page it showed");
-  act(() => row.click());
-
-  assert.deepEqual(chosen, [{ page: FUNNEL.id }]);
-});
-
-test("the row of a page an agent on a task showed hangs the page's card, read from the task the page stands on", async () => {
+test("the chip of a page an agent on a task showed hangs the page's card, read from the task the page stands on", async () => {
   pages = [{ agent: { ...PAGE, planId: PAGE_TASK } }];
   transcript = {
     messages: [
@@ -865,12 +827,11 @@ test("the row of a page an agent on a task showed hangs the page's card, read fr
   const page = mount();
   await settle();
 
-  const row =
-    [...page.querySelectorAll<HTMLButtonElement>(".desktop-agent button")].find((each) =>
-      (each.textContent ?? "").includes(FUNNEL.title),
-    ) ?? assert.fail("the call's row names the page it showed");
+  const chip =
+    page.querySelector<HTMLElement>('.desktop-agent [data-call-id="call-1"] [data-mention-ref]') ??
+    assert.fail("the call's row names the page it showed by its chip");
   document.documentElement.dataset.keyboard = "true";
-  focusRestOn(row);
+  focusRestOn(chip);
   await settle();
 
   const card = document.querySelector(".luke-tooltip-card [data-page-card]");
@@ -1172,6 +1133,7 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md in a
     status: AGENT_STATUS.COMPLETED,
     title: null,
   };
+  handState(experimentsOn(EXPERIMENT.SKILLS));
   localStorage.clear();
   installScrollIntoView();
   const page = document.createElement("div");
@@ -1379,7 +1341,7 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
   await settle();
 
   const sender = page.querySelector(
-    ".is-user:not(.agent-origin) .luke-message-line-sender [data-actor-ref]",
+    ".is-received:not(.agent-origin) .luke-message-head-sender [data-actor-ref]",
   );
   assert.equal(sender?.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
   assert.equal(sender?.querySelector("img")?.getAttribute("src"), picture);
@@ -1480,7 +1442,7 @@ test("a GitHub event's run names its pull request beside the automation, which o
   await settle();
 
   const { sender } = origin(page);
-  assert.equal(words(sender), "Flaky-test sweep · pull request #2905 View commands · Run by you");
+  assert.equal(words(sender), "Flaky-test sweep · pull request #2905 · Run by you");
   act(() => sender?.querySelector<HTMLElement>("[data-mention-ref]")?.click());
   await settle();
   assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
@@ -1516,7 +1478,7 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
       chip?.querySelector(".luke-inline-ref-state")?.textContent,
       chip?.querySelector<SVGElement>("[data-pull-request-mark]")?.dataset.pullRequestState,
     ],
-    ["#2905 View commands", "Open", PULL_REQUEST_STATE.OPEN],
+    ["#2905", "Open", PULL_REQUEST_STATE.OPEN],
   );
 });
 

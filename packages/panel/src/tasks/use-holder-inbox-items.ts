@@ -12,6 +12,8 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import {
   agentGroups,
   type InboxGroup,
+  inboxGroup,
+  NO_ITEMS,
   type TasklessInboxAgent,
   taskHolder,
 } from "./inbox-model.js";
@@ -83,7 +85,9 @@ export function agentHoldings(holdings: readonly AppInboxAgentHolding[]): readon
  * so one not yet read, or another workspace's, is listed nowhere, and each
  * agent with no task of the listed workspace (`agentGroups`). Note that a
  * task's status never leaves it out: a task done or canceled is listed,
- * its items with it.
+ * its items with it. Each holder's group is the one made last while its
+ * items are (`inboxGroup`), so the page drawn again regroups nothing that
+ * did not move.
  */
 export function inboxGroups(
   read: ByHolderKind<ReadonlyMap<string, readonly InboxItem[]>>,
@@ -94,10 +98,11 @@ export function inboxGroups(
     readonly workspaceId: string | undefined;
   },
 ): readonly InboxGroup[] {
+  const listed = new Map(holders.listed.map((task) => [task.id, task]));
   const ofTasks = holders.tasks.flatMap(({ taskId }) => {
-    const task = holders.listed.find((each) => each.id === taskId);
+    const task = listed.get(taskId);
     if (task === undefined) return [];
-    return [{ holder: taskHolder(task), items: read[INBOX_SCOPE_KIND.PLAN].get(taskId) ?? [] }];
+    return [inboxGroup(taskHolder(task), read[INBOX_SCOPE_KIND.PLAN].get(taskId) ?? NO_ITEMS)];
   });
   return [
     ...ofTasks,
@@ -147,9 +152,14 @@ function currentOf(
   /** The account's feed: a holder it holds nothing of is current. */
   fed: FedKind,
 ): ReadonlySet<string> {
+  // Note that the holdings are found by id rather than searched for each holder, as a long Inbox follows hundreds of them.
+  const ofKind = new Map<string, InboxHolding>();
+  for (const holding of holdings) {
+    if (holding.kind === kind && !ofKind.has(holding.id)) ofKind.set(holding.id, holding);
+  }
   return new Set(
     [...pushed].flatMap(([id, held]) => {
-      const holding = holdings.find((each) => each.kind === kind && each.id === id);
+      const holding = ofKind.get(id);
       const absentFromFeed = fed !== undefined && !Object.hasOwn(fed, id);
       return holding === undefined || absentFromFeed || newest(held) >= holding.updatedAt
         ? [id]

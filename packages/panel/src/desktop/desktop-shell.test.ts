@@ -1534,3 +1534,47 @@ test("on a phone no page draws the title bar's controls over its own head, an ag
   assert.ok(wide.querySelector(".desktop-shell > .title-bar-controls"), "a wide window keeps them");
   assert.ok(wide.querySelector('.title-bar-controls[data-edge="end"]'), "and the panel's toggle");
 });
+
+/** Whether a reader is shown `element`: nothing over it hides it, as a box drawn with `display: none` is hidden from the screen and the accessibility tree alike. */
+function shownToReader(element: Element): boolean {
+  for (let at: Element | null = element; at !== null; at = at.parentElement) {
+    if (at.hasAttribute("hidden") || getComputedStyle(at).display === "none") return false;
+  }
+  return true;
+}
+
+test("the Inbox left stays drawn, hidden from a reader, and comes back with its search as it stood", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  let setOpen: (open: boolean) => void = ignore;
+  function Shell() {
+    const [open, setInboxOpen] = useState(true);
+    setOpen = setInboxOpen;
+    const tasks = tasksControl({
+      page: TASKS_PAGE.HOME,
+      workspaces: [ACME],
+      workspace: ACME,
+      inboxView: { ...tasksControl().inboxView, open },
+    });
+    return createElement(DesktopShell, shellProps(tasks, PANEL_TAB.TASKS, ignore, {}));
+  }
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Shell))));
+  const search = () =>
+    container.querySelector<HTMLInputElement>('.inbox-tasks input[aria-label="Search inbox"]');
+  const input = search();
+  assert.ok(input, "the Inbox's search stands");
+  // Note that the value goes in through the prototype's setter, because React tracks the field's own.
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "zzz");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  act(() => setOpen(false));
+  assert.equal(search(), input, "the Inbox left is the same Inbox, kept");
+  assert.equal(shownToReader(input), false, "and hidden from a reader while the window is away");
+
+  act(() => setOpen(true));
+  assert.equal(shownToReader(input), true);
+  assert.equal(search()?.value, "zzz", "its search as it stood");
+});

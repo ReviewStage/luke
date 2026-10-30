@@ -13,15 +13,16 @@ import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 
 /**
- * this-mac-host-row.tsx -- where This Mac's `luke-host` stands, as Settings › Hosts draws it: nothing beyond the machine's own line while it runs, and otherwise getting ready, not running yet, waiting for approval in Login Items, removed from Luke with Turn on again, or a turn-on or setup that failed with why and Retry.
+ * this-mac-host-row.tsx -- where This Mac's `luke-host` stands, as Settings › Hosts draws it: nothing beyond the machine's own line while it runs, and otherwise not turned on with Turn on, getting ready, not running yet, waiting for approval in Login Items, removed from Luke with Turn on again, or a turn-on or setup that failed with why and Retry.
  *
  * The host keeps where it stands (`@luke/host`'s `compose-this-mac-host.ts`)
  * and Hosts reads it every `READ_EVERY_MS` while it is drawn, so a Mac
  * approved in System Settings, or one `luke-host` just started following,
- * reads so within seconds. Turn on again and Retry are the member's own act,
- * the only one that enrolls a removed Mac again or starts `luke-host` again.
- * A browser tab runs no local agents and refuses the read, so it draws none
- * of this.
+ * reads so within seconds. Turn on, Turn on again, and Retry are the
+ * member's own act, the only one that enrolls this Mac or starts `luke-host`
+ * again; Turn on's line says what turning it on does, since it runs
+ * `luke-host` at login and downloads what agents run on. A browser tab runs
+ * no local agents and refuses the read, so it draws none of this.
  */
 
 /** How often Hosts reads where `luke-host` stands while it is drawn. */
@@ -40,6 +41,14 @@ function lineOf(standing: ThisMacHostStanding): ThisMacLine | null {
     case THIS_MAC_HOST_STANDING.OFF:
     case THIS_MAC_HOST_STANDING.RUNNING:
       return null;
+    case THIS_MAC_HOST_STANDING.NOT_TURNED_ON:
+      return {
+        words:
+          "Run agents here, each in a VM of its own. Turning on downloads what they run on " +
+          "and starts Luke's host at login.",
+        state: SETTINGS_ROW_STATE.PLAIN,
+        act: "Turn on",
+      };
     case THIS_MAC_HOST_STANDING.TURNING_ON:
       return { words: "Turning on…", state: SETTINGS_ROW_STATE.PLAIN };
     case THIS_MAC_HOST_STANDING.GETTING_READY:
@@ -70,7 +79,7 @@ function lineOf(standing: ThisMacHostStanding): ThisMacLine | null {
   }
 }
 
-/** This Mac as Hosts draws it: where it stands and the line for it, none before the first read or in a browser tab, and the member's own Turn on again or Retry. */
+/** This Mac as Hosts draws it: where it stands and the line for it, none before the first read or in a browser tab, and the member's own Turn on, Turn on again, or Retry. */
 export interface ThisMacHost {
   readonly standing: ThisMacHostStanding | undefined;
   readonly line: ThisMacLine | null;
@@ -129,7 +138,7 @@ export function ThisMacStateLine({ line }: { line: ThisMacLine }): React.JSX.Ele
   );
 }
 
-/** The act a This Mac row offers, Turn on again or Retry; nothing where it offers none. */
+/** The act a This Mac row offers, Turn on, Turn on again, or Retry; nothing where it offers none. */
 export function ThisMacAct({ thisMac }: { thisMac: ThisMacHost }): React.JSX.Element | null {
   const offered = thisMac.line?.act;
   if (offered === undefined) return null;
@@ -145,7 +154,7 @@ export function ThisMacAct({ thisMac }: { thisMac: ThisMacHost }): React.JSX.Ele
   );
 }
 
-/** This Mac's own row, where the service lists no machine for it: removed, never enrolled, a turn-on that failed, or another account's. */
+/** This Mac's own row, where the service lists no machine for it: not turned on, removed, a turn-on that failed, or another account's. */
 export function ThisMacHostRow({
   thisMac,
   line,

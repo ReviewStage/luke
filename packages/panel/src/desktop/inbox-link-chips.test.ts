@@ -9,6 +9,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
@@ -30,7 +31,6 @@ import {
 } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { followedInboxes } from "../testing/followed-inboxes.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
@@ -139,16 +139,18 @@ async function inbox(options: {
   workspaces?: readonly Workspace[];
 }) {
   const asked: AnyAct[] = [];
+  // The account's feed holds the task's items, and the sweep agent's, which the Inbox draws from.
   const state = {
     ...signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" }),
     tasks: { ...IDLE_TASKS_VIEW, tasks: [TASK], workspaces: options.workspaces ?? [ACME, GLOBEX] },
+    [LIVE_READ.INBOX_ITEMS]: {
+      rows: {
+        [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: options.taskItems },
+        [INBOX_SCOPE_KIND.AGENT]:
+          options.sweep === undefined ? {} : { [options.sweep.item.agentId]: [options.sweep.item] },
+      },
+    },
   };
-  // The host pushes the task's inbox, and the sweep agent's, as each is followed.
-  const host = followedInboxes(({ kind }) =>
-    kind === INBOX_SCOPE_KIND.PLAN
-      ? { items: options.taskItems }
-      : { items: options.sweep === undefined ? [] : [options.sweep.item] },
-  );
   fakeActs({
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
@@ -175,7 +177,7 @@ async function inbox(options: {
       }
     },
   });
-  fakeActPort({ ...fakeActPortCalls(), ...host.procedures });
+  fakeActPort({ ...fakeActPortCalls() });
   const sweep = options.sweep;
   // The Inbox's own choice is held as the plans tab holds it, so the item it stands chosen is drawn.
   function Page() {
@@ -250,7 +252,7 @@ test("a plan's item in the window's Inbox reads its links through the plan's wor
     sweep: undefined,
   });
 
-  assert.deepEqual(chips(container), [["#42 Send invitations in batches", "Merged"]]);
+  assert.deepEqual(chips(container), [["#42", "Merged"]]);
   assert.deepEqual(readThrough(asked), ["workspace-acme acme/relay#42"]);
 });
 
@@ -266,7 +268,7 @@ test("an item of a workspace an older service answered with no slug still reads 
     workspaces: [ACME, unslugged],
   });
 
-  assert.deepEqual(chips(container), [["#5 Settle the ledger nightly", "Merged"]]);
+  assert.deepEqual(chips(container), [["#5", "Merged"]]);
   assert.deepEqual(readThrough(asked), ["workspace-globex globex/ledger#5"]);
 });
 
@@ -280,7 +282,7 @@ test("an item of an agent with no plan reads its links through the agent's own w
     },
   });
 
-  assert.deepEqual(chips(container), [["#5 Settle the ledger nightly", "Merged"]]);
+  assert.deepEqual(chips(container), [["#5", "Merged"]]);
   assert.deepEqual(readThrough(asked), ["workspace-globex globex/ledger#5"]);
 });
 

@@ -50,8 +50,8 @@ const PAGE_CAPABILITY = {
  * while the account has it off, the page is not listed, found, or drawn.
  */
 const PAGE_EXPERIMENT: Partial<Record<SettingsView, Experiment>> = {
+  [SETTINGS_VIEW.SKILLS]: EXPERIMENT.SKILLS,
   [SETTINGS_VIEW.MEMORY]: EXPERIMENT.MEMORY,
-  [SETTINGS_VIEW.HOSTS]: EXPERIMENT.LOCAL_AGENTS,
 };
 
 /** Whether a page stands for the account's experiments: every page but one an experiment the account has off holds. */

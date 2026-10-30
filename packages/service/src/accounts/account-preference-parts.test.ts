@@ -12,6 +12,8 @@ import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import { LINK_OPEN } from "@luke/features/link-open";
+import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { EXPERIMENT } from "@luke/settings";
 import {
   HTTP_METHOD,
@@ -27,6 +29,7 @@ import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { accountProcedures } from "./account-procedures.js";
@@ -43,13 +46,32 @@ import { accountProcedures } from "./account-procedures.js";
  * shared part a build that predates it writes back whole, and refused where
  * it names no choice. The chapters model: Haiku until the account chooses,
  * written on its own and read back, and refused where it names no model the
- * set offers. The bearer names the account and nothing else does.
+ * set offers. The agent default: GPT-6.1 Sol at high effort for an account
+ * only an OpenAI key pays for until it stores one, an Effort kept on a model
+ * no credential of the account's pays for, and a move to another such model
+ * refused, keeping what stood. The bearer names the account and nothing else does.
  *
  * Synthetic accounts and bearers throughout.
  */
 
 const ORIGIN = "https://luke.test";
 const PREFERENCES_PATH = "/api/account/preferences";
+
+const OPUS: CatalogModel = {
+  id: "anthropic/claude-opus-5.5",
+  name: "Claude Opus 5.5",
+  provider: MODEL_PROVIDER.ANTHROPIC,
+  efforts: ["low", "medium", "high", "xhigh", "max"],
+};
+
+const OPUS_FAST: CatalogModel = { ...OPUS, id: "anthropic/claude-opus-5.5-fast" };
+
+const SOL: CatalogModel = {
+  id: "openai/gpt-6.1-sol",
+  name: "GPT-6.1 Sol",
+  provider: MODEL_PROVIDER.OPENAI,
+  efforts: ["low", "high"],
+};
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
@@ -106,7 +128,7 @@ const answer = (procedures: ReturnType<typeof accountProcedures>, request: Reque
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
       noNetwork,
-      modelCatalogOf([]),
+      modelCatalogOf([OPUS, OPUS_FAST, SOL]),
       // Only a delete asks Connect anything, and this suite deletes nothing.
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
@@ -259,6 +281,45 @@ it.layer(getTestDB())("the preferences snapshot's chapters model part", (it) => 
         });
       }
       assert.equal(partOf(yield* ask(request(owner)), "chaptersModel"), CHAPTERS_MODEL.OPUS);
+    }),
+  );
+});
+
+it.layer(getTestDB())("the preferences snapshot's agent part", (it) => {
+  it.effect(
+    "keeps an Effort on a model nothing pays for, and refuses moving to another such model",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts;
+        yield* connectAgentApiKeys(owner, { providers: [PROVIDER_KEY_PROVIDER.OPENAI] });
+        // Note that the Claude default stands from before, as one saved while a Claude credential paid for it.
+        yield* writeAccountPreferences(owner, { agent: { model: OPUS.id, effort: "high" } });
+        const lowEffort = { model: OPUS.id, effort: "low" };
+        assert.deepEqual(
+          partOf(yield* ask(request(owner, { agent: lowEffort })), "agent"),
+          lowEffort,
+        );
+
+        // Note that an account with no Anthropic key of its own is offered every fast version, so only the payer refuses this one.
+        const opusFast = yield* ask(
+          request(owner, { agent: { model: OPUS_FAST.id, effort: "high" } }),
+        );
+        assert.deepEqual(opusFast, {
+          status: HOSTED_HTTP_STATUS.BAD_REQUEST,
+          body: { error: HOSTED_API_ERROR.INVALID_REQUEST },
+        });
+        assert.deepEqual(partOf(yield* ask(request(owner)), "agent"), lowEffort);
+      }),
+  );
+
+  it.effect("is GPT-6.1 Sol for an account only an OpenAI key pays for, until it stores one", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts;
+      yield* connectAgentApiKeys(owner, { providers: [PROVIDER_KEY_PROVIDER.OPENAI] });
+      assert.deepEqual(partOf(yield* ask(request(owner)), "agent"), {
+        model: "openai/gpt-6.1-sol",
+        effort: "high",
+      });
     }),
   );
 });

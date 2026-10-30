@@ -7,8 +7,6 @@ import { DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import type { Host } from "@luke/features/host-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { THIS_MAC_HOST_STANDING, type ThisMacHostStanding } from "@luke/host/contract";
-import { EXPERIMENT } from "@luke/settings";
-import { experimentsOn } from "@luke/settings/testing";
 import { timeRuntime } from "@luke/ui";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -19,7 +17,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { HostsSection } from "./hosts-section.js";
@@ -58,7 +55,6 @@ async function settle(): Promise<void> {
 }
 
 test("Add hosts shows the token in its command and sends the service only the token's SHA-256", async () => {
-  handState(experimentsOn(EXPERIMENT.LOCAL_AGENTS));
   const sent: unknown[] = [];
   fakeActPort({
     [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [], installScriptUrl: SCRIPT }),
@@ -95,7 +91,6 @@ it.effect(
   "a server or a Mac that enrolls while Settings stays open is listed within a minute",
   () =>
     Effect.gen(function* () {
-      handState(experimentsOn(EXPERIMENT.LOCAL_AGENTS));
       const hosts: Host[] = [];
       fakeActPort({
         [ACT_KIND.HOSTS_LIST]: () =>
@@ -149,7 +144,6 @@ async function machinesWithThisMac(
   hosts: readonly Host[],
   standing: ThisMacHostStanding,
 ): Promise<{ turnOns: () => number }> {
-  handState(experimentsOn(EXPERIMENT.LOCAL_AGENTS));
   let turnOns = 0;
   fakeActPort({
     [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
@@ -213,10 +207,26 @@ test("this Mac stands first on its own machine's row, with why its setup failed 
   assert.equal(turnOns(), 1);
 });
 
-test("a Mac the service no longer lists keeps a This Mac row with Turn on again", async () => {
-  const { turnOns } = await machinesWithThisMac([], { standing: THIS_MAC_HOST_STANDING.REMOVED });
+test.each([
+  {
+    case: "removed",
+    standing: THIS_MAC_HOST_STANDING.REMOVED,
+    says: "Removed from Luke.",
+    offers: "Turn on again",
+  },
+  {
+    case: "never turned on",
+    standing: THIS_MAC_HOST_STANDING.NOT_TURNED_ON,
+    says: "Run agents here",
+    offers: "Turn on",
+  },
+])(
+  "a Mac the service does not list, $case, keeps a This Mac row with $offers",
+  async ({ standing, says, offers }) => {
+    const { turnOns } = await machinesWithThisMac([], { standing });
 
-  assert.ok(document.body.textContent?.includes("Removed from Luke."));
-  await press("Turn on again");
-  assert.equal(turnOns(), 1);
-});
+    assert.ok(document.body.textContent?.includes(says));
+    await press(offers);
+    assert.equal(turnOns(), 1);
+  },
+);

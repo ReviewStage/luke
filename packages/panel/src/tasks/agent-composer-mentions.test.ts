@@ -1740,7 +1740,7 @@ test("a pull request picked from the @ list is drawn as its link's chip and sent
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(chips.map(chipName), ["#3059 feat(billing): bill by seat"]);
+  assert.deepEqual(chips.map(chipName), ["#3059"]);
   assert.deepEqual(sent, [
     `Review ${mentionMarkdown({ kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.GITHUB, url: SEATS.url }, "#3059 feat(billing): bill by seat", PLACE)}`,
   ]);

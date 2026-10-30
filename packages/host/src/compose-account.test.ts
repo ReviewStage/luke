@@ -6,7 +6,7 @@ import { it } from "@effect/vitest";
 import type { OpenConsent } from "@luke/credentials";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@luke/features/analytics";
+import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT, PRODUCT_PLATFORM } from "@luke/features/analytics";
 import { SIGN_IN_FAILURE } from "@luke/features/words";
 import {
   GATEWAY_CLIENT_ROLE,
@@ -159,14 +159,22 @@ it.effect("a sign-in after a deletion in the same run lets session replay record
 
     const account = yield* signedInAccount({
       kernel,
-      machine: Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
+      machine: Layer.succeed(AppIdentity, {
+        appVersion: "0.0.0-test",
+        packaged: false,
+        platform: PRODUCT_PLATFORM.DESKTOP,
+      }),
     });
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = account.methods[method];
       assert.ok(handler, method);
       return Effect.orDie(handler(params, CONTEXT));
     };
-    assert.deepEqual(yield* account.sessionReplayState, { permitted: true, accountId: "user-1" });
+    assert.deepEqual(yield* account.sessionReplayState, {
+      permitted: true,
+      accountId: "user-1",
+      email: "dev@example.com",
+    });
 
     // The deletion lands: recording is stood down, signed out, for the rest of the run so far.
     yield* call(GATEWAY_METHOD.ACCOUNT_DELETE);
@@ -178,8 +186,16 @@ it.effect("a sign-in after a deletion in the same run lets session replay record
     yield* call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider: ACCOUNT_PROVIDER.GITHUB });
     assert.equal(account.signedIn(), true);
     yield* until(() => lastPermitted() === true);
-    assert.deepEqual(lastReplay(), { permitted: true, accountId: "user-2" });
-    assert.deepEqual(yield* account.sessionReplayState, { permitted: true, accountId: "user-2" });
+    assert.deepEqual(lastReplay(), {
+      permitted: true,
+      accountId: "user-2",
+      email: "dev@example.com",
+    });
+    assert.deepEqual(yield* account.sessionReplayState, {
+      permitted: true,
+      accountId: "user-2",
+      email: "dev@example.com",
+    });
   }).pipe(
     Effect.provideService(FetchHttpClient.Fetch, accountService),
     Effect.provide([NodeFileSystem.layer, NodePath.layer]),
@@ -208,7 +224,11 @@ it.effect(
       for (const failure of Object.values(SIGN_IN_FAILURE)) {
         const account = yield* desktopAccount({
           kernel,
-          machine: Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
+          machine: Layer.succeed(AppIdentity, {
+            appVersion: "0.0.0-test",
+            packaged: false,
+            platform: PRODUCT_PLATFORM.DESKTOP,
+          }),
           consent: () => ({
             signInEffect: () => Effect.succeed({ reason, failure }),
             cancel: () => undefined,
@@ -257,7 +277,11 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
 
     const account = yield* signedInAccount({
       kernel,
-      machine: Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
+      machine: Layer.succeed(AppIdentity, {
+        appVersion: "0.0.0-test",
+        packaged: false,
+        platform: PRODUCT_PLATFORM.DESKTOP,
+      }),
     });
     // Nothing is read until the gate opening asks, so nothing is an admin before it, and the read is owed.
     assert.deepEqual(yield* account.accessState, { admin: false, pending: true });
@@ -378,7 +402,11 @@ const browserAccount = (service: TabService) =>
       ),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
       // A version the counted events allowlist reads, and packaged as a browser tab is, so the counts are sent.
-      Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged: true }),
+      Layer.succeed(AppIdentity, {
+        appVersion: "1.0.0",
+        packaged: true,
+        platform: PRODUCT_PLATFORM.DESKTOP,
+      }),
       Layer.provide(cookieAccountSourceLayer(door), FetchHttpClient.layer),
       NodeFileSystem.layer,
       NodePath.layer,

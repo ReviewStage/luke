@@ -7,6 +7,7 @@ import {
 } from "@luke/features/device-agent-wire";
 import type { LocalAgentPlatformSeam } from "../effect/seams.js";
 import { openAgentState, sealAgentState } from "../node/agent-state-seal.js";
+import { diskFree } from "../node/disk-free.js";
 import { agentWorktreeScript, cloneFolder, worktreesRoot } from "../node/open-on-mac.js";
 import { smolvmSandbox } from "../node/smolvm-sandbox.js";
 import type { HostOs } from "./host-os.js";
@@ -25,8 +26,9 @@ import type { HostOs } from "./host-os.js";
  * the box reaches them, so they run on the sign-ins saved in Luke; its
  * agents' GitHub token comes from Luke and stays on the box, outside every
  * VM, which holds only a placeholder. What differs by OS, the platform it
- * registers as, its name, nesting, and whether agents ran directly on it
- * before, comes from its description (`HostOs`).
+ * registers as, its name, nesting, whether agents ran directly on it
+ * before, and whether its agents' folders and VMs are its own alone, comes
+ * from its description (`HostOs`).
  */
 
 /** The runner's bundle, in the folder the host's OS names for it (`HostOs.runnerFolder`). */
@@ -64,6 +66,7 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
     runnerBundle: `${vm.runnerFolder}/${RUNNER_BUNDLE}`,
     runnerEnv: { [RUNNER_ENV.PLACE]: RUNNER_PLACE.HOST },
     formerlyDirect: options.os.formerlyDirect,
+    storesOwned: options.os.storesOwned,
     deviceName: options.os.deviceName(),
     devicePlatform: options.os.platform,
     // Note that a host runs every agent in a sandbox, lets go of an archived agent's folder (`discard`), and saves each agent's state at its turn's end (`agent-state`).
@@ -81,5 +84,6 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
     unsavedWorkScript: options.os.unsavedWorkScript,
     stateSealed: sealAgentState,
     stateOpened: openAgentState,
+    diskFree,
   };
 }

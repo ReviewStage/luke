@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { EXPERIMENT } from "@luke/settings";
+import { experimentsOn } from "@luke/settings/testing";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handState } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout, typeInComposer } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -23,6 +26,8 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({});
+  // The `/` list stands only while the account has the Skills experiment on.
+  handState(experimentsOn(EXPERIMENT.SKILLS));
   fakeActPort({});
 });
 

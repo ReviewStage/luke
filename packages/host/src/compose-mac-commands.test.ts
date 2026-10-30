@@ -190,14 +190,14 @@ interface Gate {
   mode: MacCommandMode;
   signedIn: boolean;
   account?: string;
-  /** Whether the prompt's Always allow fails to keep the setting, as a file that cannot be written does. */
+  /** Whether the prompt's Allow all commands fails to keep the setting, as a file that cannot be written does. */
   saveFails?: boolean;
 }
 
 /**
  * The concern composed over the scripted service, the gate as `gate` holds
  * it, with the asks it tells, as the panel would hear them, the modes the
- * prompt's Always allow wrote, and one ask answered as the panel answers it.
+ * prompt's Allow all commands wrote, and one ask answered as the panel answers it.
  */
 const subject = (
   service: ReturnType<typeof scriptedService>,

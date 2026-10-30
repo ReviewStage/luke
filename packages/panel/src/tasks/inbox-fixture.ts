@@ -1,15 +1,15 @@
 /**
  * inbox-fixture.ts -- the synthetic Inbox a fixture run's Inbox and person profiles draw, and the answers its items and agents are read by in place of the service's.
  *
- * A fixture run signs in to nothing and follows no inbox, so the window's
+ * A fixture run signs in to nothing and holds no inbox, so the window's
  * Inbox says only that nothing needs you, an item never opens, and a
  * person's page has no tasks to list. Under these profiles the window's
  * document holds a synthetic account signed in, the owner of the fixture's
  * first workspace, and main's read of the account names the tasks holding
- * items; each of those tasks' inboxes is pushed whole when it is followed,
- * as the host pushes one on opening; and the list holds the account's tasks
- * assigned to it, created by it, and worked on by its agents, which its
- * own page lists. The items are an ask of each kind (a decision, an
+ * items; the account's feed of every item holds each of those tasks'
+ * items whole, which every surface draws from; and the list holds the
+ * account's tasks assigned to it, created by it, and worked on by its
+ * agents, which its own page lists. The items are an ask of each kind (a decision, an
  * approval, steps to do, an answer in words, and a form), a notice whose
  * message carries code, a long thread, one answered, and one closed. Every
  * name, address, and repository here is invented; nothing is read from an
@@ -17,7 +17,7 @@
  */
 
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { type AgentInboxChanged, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import { AUTOMATION_FOLLOW, type AutomationListView } from "@luke/features/automation-view";
 import {
@@ -612,10 +612,6 @@ const NO_AUTOMATIONS: AutomationListView = { automations: [] };
  * (`settings-fixture.ts`), and the page names the account by its tasks meanwhile.
  */
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
-  [ACT_KIND.AGENTS_INBOX_FOLLOW]: ({ id }) => {
-    const pushed: AgentInboxChanged["inbox"] = { items: INBOXES.get(id) ?? [] };
-    return pushedOnce(pushed);
-  },
   [ACT_KIND.AGENTS_LIST]: ({ taskId }) => {
     const agent = AGENTS.get(taskId);
     return { agents: agent === undefined ? [] : [agent] };

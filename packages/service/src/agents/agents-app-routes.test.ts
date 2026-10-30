@@ -7,10 +7,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
-import {
-  readAccountPreferences,
-  writeAccountPreferences,
-} from "@luke/database/models/account-store";
+import { readAccountPreferences } from "@luke/database/models/account-store";
 import {
   archiveAgent,
   readAgent,
@@ -65,7 +62,6 @@ import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { TASK_STATUS, taskListAnswerSchema, taskStartAnswerSchema } from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
 import type { WireBoundaryInput } from "@luke/wire";
 import { and, eq, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option } from "effect";
@@ -664,9 +660,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
       Effect.gen(function* () {
         const { owner, other, task, eve, ask } = yield* openTask();
         yield* joinWorkspace(task.workspaceId, other);
-        yield* writeAccountPreferences(owner, {
-          experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
-        });
         const studio = randomUUID();
         yield* registerDevice(owner, {
           id: studio,

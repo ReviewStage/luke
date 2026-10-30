@@ -159,10 +159,15 @@
    under its own row of tabs. The frame stays a gap round every sheet, the
    sidebar folded or not, since the row above it is the frame already. Note
    that each sheet is drawn beneath its column rather than as its ground,
-   because the row above it is the same column's. */
+   because the row above it is the same column's. The Inbox kept drawn,
+   hidden, between visits (`desktop-shell.tsx`) is no page standing, so a
+   page with tabs is any but the Inbox's, or the Inbox while it is shown. */
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell
-  > .desktop-main:not(:has(.desktop-task))::before,
+  > .desktop-main:not(
+    :has(.desktop-task:not([data-page="inbox"])),
+    [data-inbox-shown="true"]
+  )::before,
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell
   > :is(.desktop-settings, .desktop-version-history)
@@ -250,7 +255,10 @@
 
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell
-  > .desktop-main:not(:has(.desktop-task))::before,
+  > .desktop-main:not(
+    :has(.desktop-task:not([data-page="inbox"])),
+    [data-inbox-shown="true"]
+  )::before,
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell
   > .desktop-main
@@ -378,7 +386,8 @@
    here, and nowhere else. */
 :where(:root):not([data-luke-room="narrow"])
   :is(
-    .desktop-shell > .desktop-main:not(:has(.desktop-task)),
+    .desktop-shell
+      > .desktop-main:not(:has(.desktop-task:not([data-page="inbox"])), [data-inbox-shown="true"]),
     .desktop-shell
       > .desktop-main
       .desktop-task
@@ -399,7 +408,11 @@
     .luke-toolbar:nth-child(1 of :not([hidden]))
   ):not(
     :is(
-        .desktop-shell > .desktop-main:not(:has(.desktop-task)),
+        .desktop-shell
+          > .desktop-main:not(
+            :has(.desktop-task:not([data-page="inbox"])),
+            [data-inbox-shown="true"]
+          ),
         .desktop-shell
           > .desktop-main
           .desktop-task

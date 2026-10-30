@@ -3,8 +3,7 @@
  *
  * Every function is the Mac's side of `machine/device-machine.ts`, under the
  * account its sign-in token names and the device it names, and answers
- * nothing where the account has the `local-agents` experiment off or holds
- * no such Mac (`deviceAgentDeviceOf`). A held read counts as the Mac's beat,
+ * nothing where the account holds no such Mac (`deviceAgentDeviceOf`). A held read counts as the Mac's beat,
  * withdraws the account's work queued too long ago for any Mac to take
  * (`DEVICE_AGENT_SERVICE.EXPIRY`, past the longest a coding agent's turn may
  * run), and answers what waits for that Mac as soon as anything does, or
@@ -16,7 +15,6 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
-import { accountExperimentOn } from "@luke/database/models/account-store";
 import { readAgent } from "@luke/database/models/agent-store";
 import {
   claimDeviceAgentLine,
@@ -40,7 +38,6 @@ import {
   deviceAgentLaunchSecretsSchema,
 } from "@luke/features/device-agent-wire";
 import { TURN_FAILURE } from "@luke/features/turn-run";
-import { EXPERIMENT } from "@luke/settings";
 import { Clock, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import { HostedEnvironment } from "../environment.js";
 import { heldUntil } from "../http/held-read.js";
@@ -68,15 +65,12 @@ const decodeSecrets = Schema.decodeUnknownResult(
 );
 
 /**
- * Whether the account may follow the Mac it names: its `local-agents`
- * experiment is on and the Mac is its own. Every procedure of the Mac's
- * asks this first, and answers not found where it is false.
+ * Whether the account may follow the Mac it names: the Mac is its own.
+ * Every procedure of the Mac's asks this first, and answers not found where
+ * it is false.
  */
 export function deviceAgentDeviceOf(userId: string, deviceId: string): DeviceAgentEffect<boolean> {
-  return Effect.gen(function* () {
-    if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) return false;
-    return Option.isSome(yield* deviceLayout(userId, deviceId));
-  });
+  return Effect.map(deviceLayout(userId, deviceId), Option.isSome);
 }
 
 /**

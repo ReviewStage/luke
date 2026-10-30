@@ -3,19 +3,16 @@
 import assert from "node:assert/strict";
 import { AGENT_MACHINE, type AgentSummary } from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT, type Experiment } from "@luke/settings";
-import { experimentsOn } from "@luke/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort, refusedOnPort } from "../testing/app-bridge.js";
-import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { AgentPlace } from "./agent-place.js";
 
 /**
- * agent-place.test.ts -- the chip an agent's box wears says where it runs: a device named with its standing as the window's shared presence read says it, not as the agent's own read once did, or the cloud; and nothing while the Local agents experiment is off.
+ * agent-place.test.ts -- the chip an agent's box wears says where it runs: a device named with its standing as the window's shared presence read says it, not as the agent's own read once did, or the cloud.
  * Synthetic ids and names.
  */
 
@@ -55,10 +52,8 @@ async function settle(): Promise<void> {
 async function placeOf(
   agent: Pick<AgentSummary, "mac" | "machine">,
   presence: () => Promise<unknown>,
-  experiments: readonly Experiment[] = [EXPERIMENT.LOCAL_AGENTS],
 ): Promise<string> {
   clear();
-  handState(experimentsOn(...experiments));
   fakeActPort({ [ACT_KIND.HOSTS_PRESENCE]: presence as never });
   const registry = AtomRegistry.make();
   registries.push(registry);
@@ -113,8 +108,4 @@ const noRead = () => Promise.reject(refusedOnPort("No read is asked."));
 
 test("an agent in the cloud says Cloud", async () => {
   assert.equal(await placeOf({}, noRead), "Runs on: Cloud");
-});
-
-test("nothing is said of where an agent runs while the Local agents experiment is off", async () => {
-  assert.equal(await placeOf({}, noRead, []), "");
 });

@@ -31,7 +31,7 @@ import {
   useHolderInboxItems,
 } from "./use-holder-inbox-items.js";
 import { useInboxReadMarks } from "./use-inbox-read-marks.js";
-import { useTaskInbox } from "./use-task-inbox.js";
+import { useHeldTaskInbox, useInboxDraftsLetGo } from "./use-task-inbox.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tasks-tab.js";
 
 /**
@@ -45,7 +45,16 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  *
  * Its search, the words typed in the list's head, is held here too, the item
  * the pane shows keeping its place among the steps, as it does under any
- * scope (`inboxList`).
+ * scope (`inboxList`); the field hands it on a render behind its own words
+ * (`inbox-list.tsx`'s `ListSearch`), so a key lands in the field before the
+ * list is ranked again for it.
+ *
+ * The chosen item's holder's own read is held here without its cards'
+ * drafts, which the pane that draws the box reads (`useInboxCardDrafts`),
+ * so a word typed there draws nothing here; only where each draft stands
+ * is read here, to let go of those the read no longer holds. What is read
+ * across the whole feed, its groups, counts, and list, is read again only
+ * as what it is read from moves.
  *
  * Narrowed to a channel, it lists and counts that channel's items alone
  * (`channelGroups`), under the channels' scope, one for every channel and
@@ -66,7 +75,8 @@ function listedHoldings(
   holdings: TasksControl["inboxTasks"],
   listed: TasksControl["tasks"],
 ): readonly AppInboxTaskHolding[] {
-  return holdings.filter((holding) => listed.some((task) => task.id === holding.taskId));
+  const ids = new Set(listed.map((task) => task.id));
+  return holdings.filter((holding) => ids.has(holding.taskId));
 }
 
 /** The Inbox's view choices, under the channels' scope where a channel is given; the Inbox's kept choices where none is. */
@@ -139,9 +149,12 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     me: tasks.me,
   });
   // Note that an agent with no task holds its own read, by its id, as a task's is held by the task's.
-  const live = useTaskInbox({
+  const liveScope = {
     taskId: taskId ?? chosenAgentId,
     kind: chosenAgentId === undefined ? INBOX_SCOPE_KIND.PLAN : INBOX_SCOPE_KIND.AGENT,
+  };
+  const live = useHeldTaskInbox({
+    ...liveScope,
     shown: tasks.shown,
     onScreen: taskId !== undefined && tasks.inboxShown === taskId,
     waiting:
@@ -150,68 +163,86 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     readerId: tasks.me,
     agents,
   });
+  // Note that the drafts the read no longer holds are let go here, where the read stands, rather than in the pane, which goes with its item.
+  useInboxDraftsLetGo(live, liveScope);
   // Note that the models come from the open task's agents where this task's have not read them, so an agent is named alike in both.
   const named = { ...agents, models: agents.models ?? tasks.agents.models };
   // The chosen holder's own held read stands in for the list's once it answered, so an answer shows
   // at once, and only while it holds, since one that failed stops hearing what changed.
-  const liveItems: readonly InboxItem[] = [...live.board.open, ...live.board.settled];
+  const liveBoard = live.board;
+  const liveItems = useMemo(
+    (): readonly InboxItem[] => [...liveBoard.open, ...liveBoard.settled],
+    [liveBoard],
+  );
   const holdsLive = live.read && !live.failed;
-  const chosenHolder =
-    taskId !== undefined
-      ? { kind: INBOX_SCOPE_KIND.PLAN, id: taskId }
-      : chosenAgentId === undefined
-        ? undefined
-        : { kind: INBOX_SCOPE_KIND.AGENT, id: chosenAgentId };
-  const held =
-    holdsLive && chosenHolder !== undefined
-      ? {
-          ...read.items,
-          [chosenHolder.kind]: new Map(read.items[chosenHolder.kind]).set(
-            chosenHolder.id,
-            liveItems,
-          ),
-        }
-      : read.items;
+  const liveKind = taskId !== undefined ? INBOX_SCOPE_KIND.PLAN : INBOX_SCOPE_KIND.AGENT;
+  const liveId = holdsLive ? (taskId ?? chosenAgentId) : undefined;
+  const readItems = read.items;
+  const held = useMemo(
+    () =>
+      liveId === undefined
+        ? readItems
+        : {
+            ...readItems,
+            [liveKind]: new Map(readItems[liveKind]).set(liveId, liveItems),
+          },
+    [readItems, liveKind, liveId, liveItems],
+  );
   // An agent with no plan that a link names, which main does not list as holding items yet, is grouped by its own read, in its own workspace's list alone.
   const pageAgent = agents.agents?.[0] ?? agents.archived?.[0];
-  const settledAgent =
+  const settles =
     chosenAgentId !== undefined &&
     holdsLive &&
     pageAgent !== undefined &&
-    !agentsHolding.some((each) => each.agentId === chosenAgentId)
-      ? [
-          inboxAgentOf({
-            ...pageAgent,
-            repository: agents.agentRepository,
-            workspaceId: agents.workspaceId,
-          }),
-        ]
-      : [];
+    !agentsHolding.some((each) => each.agentId === chosenAgentId);
+  const { agentRepository, workspaceId: agentWorkspace } = agents;
+  const holdingAgents = useMemo(
+    () =>
+      settles && pageAgent !== undefined
+        ? [
+            ...agentsHolding,
+            inboxAgentOf({
+              ...pageAgent,
+              repository: agentRepository,
+              workspaceId: agentWorkspace,
+            }),
+          ]
+        : agentsHolding,
+    [settles, pageAgent, agentsHolding, agentRepository, agentWorkspace],
+  );
   // Note that every read here draws the window's own marks, answers, and messages already, as the host draws them into each (`@luke/host`'s `inbox-collections.ts`).
-  const everyChannel: readonly InboxGroup[] = inboxGroups(held, {
-    tasks: holdings,
-    listed: tasks.tasks,
-    agents: [...agentsHolding, ...settledAgent],
-    workspaceId: tasks.workspace?.id,
-  });
-  const standing =
-    channelId === undefined
-      ? everyChannel
-      : channelGroups(everyChannel, channelId, asked?.opened === true ? asked.itemId : undefined);
+  const everyTask = tasks.tasks;
+  const listedWorkspace = tasks.workspace?.id;
+  const everyChannel: readonly InboxGroup[] = useMemo(
+    () =>
+      inboxGroups(held, {
+        tasks: holdings,
+        listed: everyTask,
+        agents: holdingAgents,
+        workspaceId: listedWorkspace,
+      }),
+    [held, holdings, everyTask, holdingAgents, listedWorkspace],
+  );
+  const keptInChannel = asked?.opened === true ? asked.itemId : undefined;
+  const standing = useMemo(
+    () =>
+      channelId === undefined
+        ? everyChannel
+        : channelGroups(everyChannel, channelId, keptInChannel),
+    [everyChannel, channelId, keptInChannel],
+  );
   // Note that every item marked read is pushed with each followed inbox, its marker among its rows, so nothing is read again.
   const marks = useInboxReadMarks({ act, workspaceId: tasks.workspace?.id });
   // The list's search, which narrows what it lists, never what it counts.
   const [query, setQuery] = useState("");
-  const search = searchTokens(query);
-  const counts = inboxCounts(standing, tasks.me, choices.whose);
-  const filter = {
-    grouping: choices.grouping,
-    show: choices.show,
-    sort: choices.sort,
-    whose: choices.whose,
-    search,
-    readerId: tasks.me,
-  };
+  const search = useMemo(() => searchTokens(query), [query]);
+  const me = tasks.me;
+  const { grouping, show, sort, whose } = choices;
+  const counts = useMemo(() => inboxCounts(standing, me, whose), [standing, me, whose]);
+  const filter = useMemo(
+    () => ({ grouping, show, sort, whose, search, readerId: me }),
+    [grouping, show, sort, whose, search, me],
+  );
   // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its place,
   // both held still while the page stands: every row while the pointer is over the list, and the chosen row while it stays chosen.
   const { list, steps, onPointing } = useHeldInboxList(
@@ -220,12 +251,17 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     asked?.itemId,
     view.open && tasks.shown,
   );
-  const chosen = listedItems(steps).find(({ item }) => item.id === asked?.itemId);
+  const listedRows = useMemo(() => listedItems(list), [list]);
+  const askedId = asked?.itemId;
+  const chosen = useMemo(
+    () => listedItems(steps).find(({ item }) => item.id === askedId),
+    [steps, askedId],
+  );
   // Note that a scope leaving out every item listed is said apart from an Inbox holding none.
   const searched = search.length > 0 ? query : undefined;
   const filteredOut =
     searched === undefined &&
-    listedItems(list).length === 0 &&
+    listedRows.length === 0 &&
     (choices.show !== INBOX_SHOW.ALL || choices.whose.kind !== INBOX_WHOSE.EVERYONE) &&
     standing.some(({ items }) => items.length > 0);
   // Note that a chosen item whose task or agent is listed but not read yet keeps its place, because
@@ -303,11 +339,13 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     chosenAgentId,
     agents,
     live,
+    liveScope,
     named,
     marks,
     standing,
     counts,
     list,
+    listedRows,
     steps,
     onPointing,
     chosen,

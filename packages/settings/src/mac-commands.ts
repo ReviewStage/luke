@@ -6,7 +6,7 @@ import { Schema } from "effect";
  *
  * Settings stores the mode as an app setting (`schema.ts`), the host reads
  * it before each read for commands and as each claimed command is about to
- * run (`compose-mac-commands.ts`), and the prompt's Always allow writes it.
+ * run (`compose-mac-commands.ts`), and the prompt's Allow all commands writes it.
  */
 
 export const MAC_COMMAND_MODE = {

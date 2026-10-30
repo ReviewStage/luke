@@ -3,7 +3,7 @@ import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
 import { GLYPH } from "@luke/ui/icons";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import type { MenuAction } from "../desktop/action-menu.js";
-import { type InboxClose, type InboxCloser, useInboxClose } from "./inbox-close.js";
+import { closeAction } from "./inbox-close.js";
 import { isUnread } from "./inbox-model.js";
 import { markReadItem } from "./task-menu-items.js";
 
@@ -15,8 +15,9 @@ import { markReadItem } from "./task-menu-items.js";
  * unread, naming U where U reaches the item; Move to channel…, which asks
  * which channel its thread moves to (`move-thread-dialog.tsx`); and, alone
  * and last while the item is open, Resolve without answering, asked first
- * (`inbox-close.tsx`). A surface hands down only the doors it has, and a
- * group whose door is missing stands nowhere.
+ * through the surface's one question (`inbox-close.tsx`). A surface hands
+ * down only the doors it has, and a group whose door is missing stands
+ * nowhere.
  */
 
 /** What moves an item's thread, which asks where to first. */
@@ -28,18 +29,14 @@ interface InboxItemDoors {
   readonly onMark: ((item: InboxItem, unread: boolean) => void) | undefined;
   /** Asks which channel the item's thread moves to; none where Channels is off or the surface offers no move. */
   readonly onMove?: ((item: InboxItem) => void) | undefined;
-  /** Closes an open item without an answer; none where the surface offers no close. */
-  readonly onClose: InboxCloser | undefined;
-  /** Whether the surface is in sight, which the close's question goes with. */
-  readonly shown: boolean;
+  /** Asks to close an open item without an answer, through the question the surface draws (`useInboxCloseAsk`); none where it offers no close. */
+  readonly onAskClose: ((item: InboxItem) => void) | undefined;
   /** Whether U marks this item, so its Mark names the chord. */
   readonly keyed: boolean;
 }
 
 /** An item's acts as a menu draws them. */
 interface InboxItemActions {
-  /** The close, its menu item and its question, which the surface draws. */
-  readonly close: InboxClose;
   /** The menu's groups, with `lead` over the item's own: a phone's, standing for what its bar draws. */
   readonly groups: (lead?: readonly MenuAction[][]) => MenuAction[][];
 }
@@ -51,13 +48,13 @@ function inboxItemPlace(item: InboxItem): LinkPlace {
 
 /** One item's acts. */
 export function useInboxItemActions(item: InboxItem, doors: InboxItemDoors): InboxItemActions {
-  const { onMark, onMove, onClose, shown, keyed } = doors;
+  const { onMark, onMove, onAskClose, keyed } = doors;
   const read =
     onMark === undefined
       ? undefined
       : markReadItem({ unread: isUnread(item), onMark: (unread) => onMark(item, unread) }, keyed);
   const copyLink = useCopyLinkItem()(inboxItemPlace(item));
-  const close = useInboxClose(item, onClose, shown);
+  const close = closeAction(item, onAskClose);
   const move: MenuAction | undefined =
     onMove === undefined
       ? undefined
@@ -68,7 +65,7 @@ export function useInboxItemActions(item: InboxItem, doors: InboxItemDoors): Inb
       copyLink === undefined ? [] : [copyLink],
       read === undefined ? [] : [read],
       move === undefined ? [] : [move],
-      close.action === undefined ? [] : [close.action],
+      close === undefined ? [] : [close],
     ].filter((group) => group.length > 0);
-  return { close, groups };
+  return { groups };
 }

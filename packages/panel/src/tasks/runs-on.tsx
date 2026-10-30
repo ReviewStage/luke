@@ -25,7 +25,6 @@ import { GLYPH } from "@luke/ui/icons";
 import { Schema } from "effect";
 import { devicePlatformOf } from "../device-platform.js";
 import { type PresenceBook, presenceStanding, useDevicePresence } from "../device-presence.js";
-import { EXPERIMENTAL, ExperimentBadge } from "../experiment-marks.js";
 import { Picker } from "../settings/picker-row.js";
 import { keptKey, useKept } from "../use-kept.js";
 
@@ -52,14 +51,11 @@ import { keptKey, useKept } from "../use-kept.js";
  * on Cloud only where nothing is kept or that device is no longer listed. A
  * kept device that is offline, as a Mac is while Luke restarts on it, or
  * still getting ready or not set up, stays picked and says so, so its start
- * is refused by name rather than sent quietly to the cloud; it wears the
- * experiment's flask as a badge on its corner, and its hint says
- * Experimental; it stands only while the member has a device to pick. The task's
- * chip stands with its status and priority, saying the device it runs on
- * and whether it is online, or that the device was removed, with no menu, and
- * its hint says it was set when the task was created. Both are
- * drawn only while the Local agents experiment is on, which their owners
- * ask.
+ * is refused by name rather than sent quietly to the cloud; it stands only
+ * while the member has a device to pick. The task's chip stands with its
+ * status and priority, saying the device it runs on and whether it is
+ * online, or that the device was removed, with no menu, and its hint says it
+ * was set when the task was created.
  */
 
 /** What the menu and its chips say. */
@@ -180,17 +176,23 @@ function runsOnRows(devices: readonly MacOffer[], book: PresenceBook): readonly 
 /**
  * New task's pick, starting on the member's last where that device is
  * listed, ready or not, else Cloud, and kept as it changes. Answers the
- * device picked, none for the cloud, and the setter. Note that an offline
- * device, or one still getting ready, stays picked rather than falling back to Cloud, because a task's
- * Runs on is fixed as it starts, and one sent to the cloud while its Mac was
- * away for a moment could never be moved back.
+ * device picked, none for the cloud, the setter, and whether the pick kept
+ * is a device, listed or not, which a start waits on the devices' read for.
+ * Note that an offline device, or one still getting ready, stays picked
+ * rather than falling back to Cloud, because a task's Runs on is fixed as it
+ * starts, and one sent to the cloud while its Mac was away for a moment could
+ * never be moved back.
  */
 export function useNewTaskRunsOn(
   devices: readonly MacOffer[] | undefined,
-): readonly [MacOffer | undefined, (deviceId: string | undefined) => void] {
+): readonly [MacOffer | undefined, (deviceId: string | undefined) => void, boolean] {
   const [kept, keep] = useKept(KEPT.PICK, CLOUD_ROW);
   const picked = devices?.find((each) => each.deviceId === kept);
-  return [picked, (deviceId: string | undefined) => keep(deviceId ?? CLOUD_ROW)];
+  return [
+    picked,
+    (deviceId: string | undefined) => keep(deviceId ?? CLOUD_ROW),
+    kept !== CLOUD_ROW,
+  ];
 }
 
 /** What New task's chip says of the device picked: its name while it takes an agent, and why it does not, or that its standing cannot be told, otherwise. */
@@ -210,7 +212,7 @@ export function newTaskRunsOn(device: MacOffer | undefined): TaskRunsOnRequest {
     : { machine: AGENT_MACHINE.DEVICE, deviceId: device.deviceId };
 }
 
-/** New task's Runs on chip, wearing the experiment's flask at its corner: Cloud or the device picked, dropping the menu. */
+/** New task's Runs on chip: Cloud or the device picked, dropping the menu. */
 export function NewTaskRunsOnChip({
   devices,
   device,
@@ -226,22 +228,19 @@ export function NewTaskRunsOnChip({
   useSecond();
   const book = useDevicePresence(true);
   return (
-    <ExperimentBadge>
-      <Picker
-        label={RUNS_ON_WORDS.LABEL}
-        value={device?.deviceId ?? CLOUD_ROW}
-        valueLabel={device === undefined ? RUNS_ON_WORDS.CLOUD : offerStateWords(device, book)}
-        valueIcon={device === undefined ? <GLYPH.CLOUD /> : <DeviceGlyph device={device} />}
-        rows={runsOnRows(devices, book)}
-        noMatch={RUNS_ON_WORDS.NO_MATCH}
-        align={POPOVER_ALIGN.START}
-        width={CHIP_WIDTH.AUTO}
-        menuWidth={POPOVER_WIDTH.REGULAR}
-        disabled={disabled}
-        hint={EXPERIMENTAL}
-        onPick={(id) => onChoose(id === CLOUD_ROW ? undefined : id)}
-      />
-    </ExperimentBadge>
+    <Picker
+      label={RUNS_ON_WORDS.LABEL}
+      value={device?.deviceId ?? CLOUD_ROW}
+      valueLabel={device === undefined ? RUNS_ON_WORDS.CLOUD : offerStateWords(device, book)}
+      valueIcon={device === undefined ? <GLYPH.CLOUD /> : <DeviceGlyph device={device} />}
+      rows={runsOnRows(devices, book)}
+      noMatch={RUNS_ON_WORDS.NO_MATCH}
+      align={POPOVER_ALIGN.START}
+      width={CHIP_WIDTH.AUTO}
+      menuWidth={POPOVER_WIDTH.REGULAR}
+      disabled={disabled}
+      onPick={(id) => onChoose(id === CLOUD_ROW ? undefined : id)}
+    />
   );
 }
 

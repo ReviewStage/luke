@@ -82,13 +82,18 @@ import type { NewTaskAgent, NewTaskParent, NewTaskStart, TasksControl } from "./
  * words or files, and a repository, without which it is held and
  * the card says so under it. It starts the task with an empty plan and no
  * call, Untitled until the
- * agent names it, and the agent on the words, the files, and the model on
- * the chip, in the one start (`use-tasks-tab.ts`), then opens the task on
- * the agent's tab; an agent refused opens it on a draft agent's tab holding
- * the words, why under the box, and Retry (`draft-agent-tab.tsx`). The
- * model chip starts on the account's default, and a pick here runs this one
- * agent alone: only Settings changes the default. A call starts only from an
- * agent's own tab, so starting a task never opens one.
+ * agent names it, and the agent on the words, the files, and the model
+ * picked on the chip, in the one start (`use-tasks-tab.ts`), then opens the
+ * task on the agent's tab; an agent refused opens it on a draft agent's tab
+ * holding the words, why under the box, and Retry (`draft-agent-tab.tsx`).
+ * The model chip shows the account's default as the card read it, and a
+ * pick here runs this one agent alone: only Settings changes the default.
+ * Until the chip is picked the start names no model, so the agent runs on
+ * the default Settings holds as Start is pressed, which may be newer than
+ * the one the chip read, as on the welcome's card left standing; a draft
+ * handed over on a refusal names none either, and its tab reads the
+ * default afresh. A call starts only from an agent's own tab, so starting
+ * a task never opens one.
  *
  * An agent's start carries a key the card mints, and a press asking the
  * same again, as Retry after a start the service never answered does,
@@ -180,11 +185,7 @@ const MODE_CHOICES: readonly ChoiceItem<TaskMode>[] = [
     label: "Pilot",
     hint: `One pilot plans the ${TERM.TASK.one}, splits it into child ${TERM.TASK.many}, and runs ${TERM.AGENT.many} on them`,
   },
-  {
-    value: TASK_MODE.AGENT,
-    label: "Agent",
-    hint: `One ${TERM.AGENT.one} works on the ${TERM.TASK.one}`,
-  },
+  { value: TASK_MODE.AGENT, label: "Agent" },
 ];
 
 /** Why an automation's agent did not start where the brief and the words pass an agent's first message's bound. */
@@ -205,7 +206,7 @@ const DEVICES_UNREAD: Failure = {
   text: "Couldn't read your devices, so Luke can't tell where this task should run.",
 };
 
-/** What one Agent-mode press asked beside its key: the task's repository and workspace, and where its agents run, and the agent's words, files, and model. */
+/** What one Agent-mode press asked beside its key: the task's repository and workspace, and where its agents run, and the agent's words, files, and the model picked, none for the account's default. */
 interface AgentAsk {
   readonly repository: string | null;
   readonly workspaceId: string | undefined;
@@ -245,12 +246,19 @@ function newTaskPlace(workspaceId: string | undefined, purpose: NewTaskPurpose):
   return { kind, workspaceId: workspaceId ?? null };
 }
 
-/** The account's default model as read, and the chip's pick, which runs this one agent and leaves the default as it stands. */
+/**
+ * The model chip's choice: what it shows, the chip's pick over the account's
+ * default as read, and the pick alone, which runs this one agent and leaves
+ * the default as it stands. Note that a start names only the pick, because
+ * a default read as the card opened may be one Settings changed since, and
+ * a start naming no model runs on the default stored as it is pressed.
+ */
 function useDefaultChoice(
   newTask: TasksControl["newTask"],
   kept: ModelChoice | undefined,
-): readonly [ModelChoice | undefined, (next: ModelChoice) => void] {
-  const [choice, setChoice] = useState<ModelChoice | undefined>(kept);
+): readonly [ModelChoice | undefined, ModelChoice | undefined, (next: ModelChoice) => void] {
+  const [picked, setPicked] = useState<ModelChoice | undefined>(kept);
+  const [read, setRead] = useState<ModelChoice | undefined>(undefined);
   // Note that the control is read through a ref, because the tab hands a
   // new one on every render and the default is read once, as the card opens.
   const latest = useRef(newTask);
@@ -258,13 +266,13 @@ function useDefaultChoice(
   useEffect(() => {
     let live = true;
     latest.current.readDefault().then((answer) => {
-      if (live && !("failure" in answer)) setChoice((picked) => picked ?? answer.choice);
+      if (live && !("failure" in answer)) setRead(answer.choice);
     });
     return () => {
       live = false;
     };
   }, []);
-  return [choice, setChoice];
+  return [picked ?? read, picked, setPicked];
 }
 
 /** Whether a card's draft for `purpose` in `workspaceId` holds words or files, which its card keeps from a stray dismissal. */
@@ -322,7 +330,7 @@ export function NewTaskComposer({
   const [chosen, setChosen] = useState<string | null | undefined>(
     refused === undefined ? newTask.preset?.repository : refused.card.repository,
   );
-  const [choice, choose] = useDefaultChoice(newTask, refused?.card.choice);
+  const [choice, pickedModel, choose] = useDefaultChoice(newTask, refused?.card.choice);
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(refused?.note);
   // Pilot or Agent stands on a task's card while the Pilot experiment is on, set to Pilot.
@@ -343,9 +351,8 @@ export function NewTaskComposer({
   const pressed = useRef<NewTaskPress | undefined>(refused?.card.press);
   const repositories = newTask.repositoriesIn(workspaceId);
   const workspace = newTask.workspaces.find((each) => each.id === workspaceId);
-  // Runs on stands while local agents are on and the member has a device, never for an automation's agent or a child, which runs where its parent runs.
-  const localAgents = useExperiment(EXPERIMENT.LOCAL_AGENTS);
-  const asksDevices = localAgents && !forAutomation && parent === undefined;
+  // Runs on stands while the member has a device, never for an automation's agent or a child, which runs where its parent runs.
+  const asksDevices = !forAutomation && parent === undefined;
   // Note that the devices are read as the card opens rather than when the
   // model chip first draws, which waits on the default's read, so Start is held for as short as can be.
   const readModels = useRef(newTask.readModels);
@@ -353,10 +360,18 @@ export function NewTaskComposer({
   useEffect(() => {
     if (asksDevices) readModels.current();
   }, [asksDevices]);
-  // Start is held until a read made since the card opened lands, since a start before then would
-  // name none. Note that a list read before the card opened does not count, because it may be one
-  // read before a device was added, and a failed read leaves it standing; a read is told by the
-  // generation it took, never by its list, which a read listing the same devices hands back as it was.
+  const devices =
+    asksDevices && newTask.devices !== undefined && newTask.devices.length > 0
+      ? newTask.devices
+      : undefined;
+  const [device, chooseDevice, keptDevice] = useNewTaskRunsOn(devices);
+  // Start is held until a read made since the card opened lands, where the member's last pick is a
+  // device, since a start before then would name none. Note that a pick of the cloud, every member's
+  // with no device among them, holds nothing, because a start before the read runs in the cloud as
+  // the pick would after it; that a list read before the card opened does not count, because it may
+  // be one read before a device was added, and a failed read leaves it standing; and that a read is
+  // told by the generation it took, never by its list, which a read listing the same devices hands
+  // back as it was.
   const { modelsRead } = newTask;
   const [readAsOpened] = useState(modelsRead.generation);
   const readSinceOpened = modelsRead.generation > readAsOpened;
@@ -364,13 +379,8 @@ export function NewTaskComposer({
   if (!devicesLanded && readSinceOpened && modelsRead.state === MODELS_READ.READ) {
     setDevicesLanded(true);
   }
-  const devicesUnread = asksDevices && !devicesLanded;
+  const devicesUnread = asksDevices && keptDevice && !devicesLanded;
   const devicesFailed = devicesUnread && readSinceOpened && modelsRead.state === MODELS_READ.FAILED;
-  const devices =
-    asksDevices && newTask.devices !== undefined && newTask.devices.length > 0
-      ? newTask.devices
-      : undefined;
-  const [device, chooseDevice] = useNewTaskRunsOn(devices);
   const runsOn = devices === undefined ? undefined : newTaskRunsOn(device);
   // The repositories the chip's last read listed, an App's and a member's token's alike.
   const [listed, setListed] = useState<readonly string[] | undefined>(undefined);
@@ -423,9 +433,11 @@ export function NewTaskComposer({
           ),
     [workspaceId, slug, repository, onShowMention, readMentionAgents],
   );
+  // A `/` offers no skill while the Skills experiment is off.
+  const skillsOn = useExperiment(EXPERIMENT.SKILLS);
   const skills = useMemo(
     () =>
-      workspaceId === undefined
+      workspaceId === undefined || !skillsOn
         ? undefined
         : keptSkills(() =>
             act(
@@ -433,7 +445,7 @@ export function NewTaskComposer({
               repository === null ? { workspaceId } : { workspaceId, repository },
             ),
           ),
-    [act, workspaceId, repository],
+    [act, workspaceId, repository, skillsOn],
   );
   // A skill's chip opens its `SKILL.md` on GitHub, as on an agent's page no task holds, since no File tab stands here.
   const openSkill = (skill: SkillWithFile) => {
@@ -486,7 +498,7 @@ export function NewTaskComposer({
       workspaceId,
       deviceId: device?.deviceId,
       mode: asked,
-      agent: { prompt, attachments, choice },
+      agent: { prompt, attachments, choice: pickedModel },
     };
     const held = pressed.current;
     const key = held !== undefined && sameAsk(held.ask, ask) ? held.key : crypto.randomUUID();
@@ -499,7 +511,7 @@ export function NewTaskComposer({
         ...(forAutomation ? { purpose } : undefined),
         ...(parent === undefined ? undefined : { parent }),
         repository,
-        choice,
+        choice: pickedModel,
         press,
         words,
       },

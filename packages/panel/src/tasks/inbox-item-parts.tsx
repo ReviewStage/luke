@@ -253,7 +253,8 @@ export function InboxItemCard({
   readerId,
 }: {
   listed: InboxListed;
-  now: number;
+  /** The time its age counts from; the window's minute where none is handed. */
+  now?: number | undefined;
   models: readonly CatalogModel[] | undefined;
   /** The signed-in account's id, whose own agents' cards name no starter, and whose own open items alone need them. */
   readerId: string | undefined;
@@ -575,6 +576,25 @@ function InboxRowMeta({ children }: { children: ReactNode }): React.JSX.Element 
   return <span className={HOME_ROW_META}>{children}</span>;
 }
 
+/** What an item row's end is handed: the item, and how it stands on its row. */
+interface InboxItemEndProps {
+  listed: InboxListed;
+  /** The time its age counts from; the window's minute where none is handed. */
+  now?: number | undefined;
+  readerId: string | undefined;
+  /** Whether the item's box stands beside the list, so its draft is in sight and unmarked. */
+  open?: boolean;
+  /** Whether a teammate's item wears their face, which a person's group header says instead. */
+  face?: boolean;
+  /** Whether the end draws the attention mark and the task's status, which a row saying them elsewhere leaves to a reader's ears. */
+  standing?: boolean;
+  /** Whether a reader hears Needs you where the item needs them, which a row under a name already saying it leaves out. */
+  needsYouSaid?: boolean;
+  before?: ReactNode;
+  /** What stands after the time, as a shortcut does. */
+  after?: ReactNode;
+}
+
 /**
  * The marks at an item row's end, in the Inbox's own order: the face of the
  * teammate whose agent asks it, the Draft pencil where an answer or message
@@ -585,32 +605,32 @@ function InboxRowMeta({ children }: { children: ReactNode }): React.JSX.Element 
  * off), the Inbox's own, draws neither the attention mark nor the status at
  * its end, a reader still hearing both there.
  */
-export function InboxItemEnd({
+export function InboxItemEnd(props: InboxItemEndProps): React.JSX.Element {
+  return <InboxItemMarks {...props} drafted={useInboxItemDrafted(props.listed.item)} />;
+}
+
+/**
+ * An item row's end (`InboxItemEnd`) where its list reads every row's
+ * draft at once (`useInboxRowDrafts`), handed whether the item's box holds
+ * one rather than reading it row by row.
+ */
+export function InboxItemMarks({
   listed,
   now,
   readerId,
   open = false,
   face = true,
   standing = true,
+  needsYouSaid = true,
+  drafted,
   before,
   after,
-}: {
-  listed: InboxListed;
-  now: number;
-  readerId: string | undefined;
-  /** Whether the item's box stands beside the list, so its draft is in sight and unmarked. */
-  open?: boolean;
-  /** Whether a teammate's item wears their face, which a person's group header says instead. */
-  face?: boolean;
-  /** Whether the end draws the attention mark and the task's status, which a row saying them elsewhere leaves to a reader's ears. */
-  standing?: boolean;
-  before?: ReactNode;
-  /** What stands after the time, as a shortcut does. */
-  after?: ReactNode;
+}: InboxItemEndProps & {
+  /** Whether the item's box holds a draft as the item now stands (`rowDrafted`), marked where that box is not the one open. */
+  drafted: boolean;
 }): React.JSX.Element {
   const { holder, item } = listed;
   const { needsYou, starter } = useInboxStanding(listed, readerId);
-  const drafted = useInboxItemDrafted(item) && !open;
   return (
     <InboxRowMeta>
       {before}
@@ -618,14 +638,16 @@ export function InboxItemEnd({
       {starter === undefined || item.status !== INBOX_STATUS.OPEN ? null : (
         <VisuallyHidden>{waitingOn(starter)}</VisuallyHidden>
       )}
-      {drafted ? <DraftMark /> : null}
+      {drafted && !open ? <DraftMark /> : null}
       {needsYou && standing ? (
         <span className={INBOX_ROW_ATTENTION}>
           <AttentionMark />
-          <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
+          {needsYouSaid ? <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden> : null}
         </span>
       ) : null}
-      {needsYou && !standing ? <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden> : null}
+      {needsYou && !standing && needsYouSaid ? (
+        <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
+      ) : null}
       <TaskStatusChip holder={holder} drawn={standing} />
       <Time at={item.updatedAt} now={now} hint={false} />
       {after}

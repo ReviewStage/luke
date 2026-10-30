@@ -19,16 +19,37 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * chip.
  */
 
+/**
+ * How much of the line the subject takes: the rest of it, standing on a
+ * line of its own where less than a title's floor is left (`LINE`), or its
+ * own width alone, cut where the line runs out (`OWN`), for a subject inside
+ * a line that names more beside it (`MessageHead`).
+ */
+export const SUBJECT_FIT = {
+  LINE: "line",
+  OWN: "own",
+} as const;
+
+export type SubjectFit = (typeof SUBJECT_FIT)[keyof typeof SUBJECT_FIT];
+
+/** The subject's seat, by how much of the line it takes. */
+const SUBJECT_SEAT_CLASS: Record<SubjectFit, string> = {
+  [SUBJECT_FIT.LINE]: "flex min-w-0 shrink-0 basis-title-floor grow *:min-w-0 *:max-w-full",
+  [SUBJECT_FIT.OWN]: "flex min-w-0 *:min-w-0 *:max-w-full",
+};
+
 /** A head line: `lead`, whole, then `children`, the one thing it names, cut only at the line's end. */
 export function SubjectLine({
   lead,
   children,
+  fit = SUBJECT_FIT.LINE,
   ...attributes
 }: {
   /** What happened, in words: "Thread answer", "Reviewed". */
   lead: ReactNode;
   /** The chip, or link, of what it happened to; none where nothing names it. */
   children?: ReactNode;
+  fit?: SubjectFit | undefined;
 } & { readonly [data: `data-${string}`]: string | undefined }): React.JSX.Element {
   return (
     <Text
@@ -43,11 +64,7 @@ export function SubjectLine({
         {lead}
         {children == null ? null : " "}
       </span>
-      {children == null ? null : (
-        <span className="flex min-w-0 shrink-0 basis-title-floor grow *:min-w-0 *:max-w-full">
-          {children}
-        </span>
-      )}
+      {children == null ? null : <span className={SUBJECT_SEAT_CLASS[fit]}>{children}</span>}
     </Text>
   );
 }

@@ -14,7 +14,7 @@ import { macDeviceName } from "../node/mac-device-name.js";
 import { agentUnsavedWorkScript } from "../node/open-on-mac.js";
 
 /**
- * host-os.ts -- what a host's daemon does differently on each OS it runs on (`HostOs`): the platform it enrolls and registers as, the architectures it is built for, its default name, whether its agents' VMs may nest, where its `smolvm` comes from, and whether agents ran directly on it before.
+ * host-os.ts -- what a host's daemon does differently on each OS it runs on (`HostOs`): the platform it enrolls and registers as, the architectures it is built for, its default name, whether its agents' VMs may nest, where its `smolvm` comes from, whether agents ran directly on it before, and whether its agents' folders and VMs are its own alone.
  *
  * Everything else, the enroll, the follower, and the VM per agent, is the
  * same program on every OS (`hostPlatform`, `hostDaemon`). A description
@@ -50,6 +50,8 @@ export interface HostOs {
   readonly smolvm: HostSmolvmSource;
   /** Whether agents may have run directly on the machine before every agent ran in a VM (`LocalAgentPlatformSeam.formerlyDirect`). */
   readonly formerlyDirect: boolean;
+  /** Whether the agents' folders and the smolvm store the daemon runs with are its own alone (`LocalAgentPlatformSeam.storesOwned`). */
+  readonly storesOwned: boolean;
   readonly unsavedWorkScript?: LocalAgentPlatformSeam["unsavedWorkScript"];
   /** The folder the daemon's state lives in, for the home it runs with (`hostRuntime`). */
   readonly stateRoot: (home: string, app: HostApp) => string;
@@ -63,7 +65,7 @@ export interface HostApp {
   readonly developerIdSigned: boolean;
 }
 
-/** A Linux box: its state under the `luke-host` user's home, its host name, `/dev/kvm` passed through where it has it, and the `smolvm` the install script put at the path its service names. */
+/** A Linux box: its state, its agents' folders and its smolvm store under the `luke-host` user's home, that user's alone, its host name, `/dev/kvm` passed through where it has it, and the `smolvm` the install script put at the path its service names. */
 export const LINUX_HOST: HostOs = {
   name: "Linux",
   platform: DEVICE_PLATFORM.LINUX,
@@ -72,6 +74,7 @@ export const LINUX_HOST: HostOs = {
   nested: () => existsSync(KVM),
   smolvm: { kind: HOST_SMOLVM.PATH, variable: "LUKE_HOST_SMOLVM" },
   formerlyDirect: false,
+  storesOwned: true,
   stateRoot: (home) => path.join(home, "state"),
   runnerFolder: (installFolder) => path.join(installFolder, "lib"),
 };
@@ -85,9 +88,11 @@ export const LINUX_HOST: HostOs = {
  * state is the app's own folder, which Electron puts under Application
  * Support by the app's name (`resolveAppName`, a packaged build's), and the
  * app's device ids, agent folders, VMs and fetched `smolvm` are where it
- * looks. Its runner is the app's own bundle, beside the release in
- * `Contents/Resources/agent-runner`, because every VM the app made before
- * mounts that folder and keeps the mounts it was made with.
+ * looks. Those folders and VMs stand in the member's own `~/.luke/agents`
+ * and smolvm store, which a standalone `luke-host` shares, so they are
+ * never its own alone. Its runner is the app's own bundle, beside the
+ * release in `Contents/Resources/agent-runner`, because every VM the app
+ * made before mounts that folder and keeps the mounts it was made with.
  */
 export const DARWIN_HOST: HostOs = {
   name: "macOS",
@@ -97,6 +102,7 @@ export const DARWIN_HOST: HostOs = {
   nested: () => false,
   smolvm: { kind: HOST_SMOLVM.PIN, pin: SMOLVM_MAC_PIN },
   formerlyDirect: true,
+  storesOwned: false,
   unsavedWorkScript: agentUnsavedWorkScript,
   stateRoot: (home, app) =>
     path.join(

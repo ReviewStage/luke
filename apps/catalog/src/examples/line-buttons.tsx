@@ -3,6 +3,7 @@ import {
   DisclosureBody,
   LINE_BUTTON_LOOK,
   LineButton,
+  LineRow,
   LineSummary,
   Stack,
   TEXT_ELEMENT,
@@ -15,7 +16,8 @@ import { CatalogSection } from "../section";
 
 /**
  * line-buttons.tsx -- a LineButton as a call's row that opens a tab, a row
- * whose every word is muted brightening under the pointer, a LineSummary
+ * whose every word is muted brightening under the pointer, a LineRow as the
+ * same row where it opens nothing, a LineSummary
  * folding a call's body open under it, and a quote that shows its words,
  * cut short after two lines in a narrow column, and a band naming the lines
  * a card is on across its top.
@@ -47,7 +49,7 @@ function CallGlyph(): React.JSX.Element {
 function LineButtons(): React.JSX.Element {
   return (
     <>
-      <CatalogSection id="line-buttons-row" title="Row, a call's line that opens a tab">
+      <CatalogSection id="line-buttons-row" title="Row, a call's line that opens a tab, or nothing">
         <div className="catalog-transcript">
           <Stack>
             <LineButton onClick={pressed}>
@@ -61,6 +63,10 @@ function LineButtons(): React.JSX.Element {
               <CallGlyph />
               <span>Webhook body</span>
             </LineButton>
+            <LineRow>
+              <CallGlyph />
+              <span>Review the invite flow, a subagent that opens no tab</span>
+            </LineRow>
           </Stack>
         </div>
       </CatalogSection>

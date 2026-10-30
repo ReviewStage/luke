@@ -187,6 +187,16 @@ const LIVE_POLL_HOLD = {
   HOLD: Duration.seconds(25),
 } as const;
 
+/**
+ * The account inbox's parts a released desktop (v0.22.0) keeps of its
+ * answer, whose decode strips `agents`, so the `after` it sends is the
+ * digest over these alone, which never equals the digest over every part.
+ * Its poll is held on these too, or it is answered at once and asks again
+ * every 0.6 s; a reader that keeps every part sends a digest over six,
+ * which never equals the one over these, so it is still held on all.
+ */
+const INBOX_RELEASED_PARTS = ["items", "planless", "plans", "automations", "failedRuns"] as const;
+
 /** How many of a read's parts are read at once: under the web pool's five connections, so one poll leaves room for the rest of its instance. */
 const LIVE_PART_CONCURRENCY = 3;
 
@@ -284,7 +294,11 @@ function standingDigest<Part extends string>(
  * past it (`heldParts`), or, where it is held on some parts alone
  * (`heldOn`), until those move, so a part whose rows the reader's own query
  * narrows, such as the items changed since its `since`, answers no poll
- * that only narrowed it. Unavailable where the rows could not be read.
+ * that only narrowed it. Where an older reader keeps fewer parts than the
+ * read answers (`olderParts`), the poll is answered only where the rows
+ * moved past `after` over those parts as well, so a reader that sends
+ * their digest is held as one that sends every part's. Unavailable where
+ * the rows could not be read.
  */
 const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends string>(
   statements: Readonly<Record<Part, LiveStatement>>,
@@ -292,6 +306,7 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
   topics: readonly SyncTopic[] = NO_TOPICS,
   look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
   heldOn?: readonly Part[],
+  olderParts?: readonly Part[],
 ): Effect.fn.Return<ReadParts<Part>, HostedRefusal, SqlClient.SqlClient> {
   const read = readParts(statements, (sealer) => sealer.seal);
   const after = asked[LIVE_POLL.AFTER];
@@ -299,7 +314,9 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
   return yield* heldParts(
     readParts(statements, (sealer) => sealer.digest),
     read,
-    (standing) => standingDigest(standing.queries, heldOn) !== after,
+    (standing) =>
+      standingDigest(standing.queries, heldOn) !== after &&
+      (olderParts === undefined || liveDigestOn(standing.queries, olderParts) !== after),
     topics,
     look,
   );
@@ -319,7 +336,8 @@ function topicsOf<Param extends string, Part extends string>(
  * its procedure bound once it admitted the caller, and held on a watch of
  * the topics those params name, or that the read looks up from them, which
  * looks again every `look` where nothing wakes it, on every part or on
- * those it is held on alone (`heldOn`, `sealedParts`). This is how a
+ * those it is held on alone (`heldOn`), and for an older reader on the
+ * parts it keeps (`olderParts`, `sealedParts`). This is how a
  * procedure answers a read Luke Sync wakes; unavailable where its
  * statements can't be built or its topics looked up.
  */
@@ -332,13 +350,14 @@ const queryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   asked: { readonly [LIVE_POLL.AFTER]?: string },
   look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
   heldOn?: readonly NoInfer<Part>[],
+  olderParts?: readonly NoInfer<Part>[],
 ) {
   const statements = query.statements(params);
   if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   // A read that names no `after` is answered at once, so it needs no topics to wait on.
   const held = asked[LIVE_POLL.AFTER] !== undefined;
   const topics = held ? yield* topicsOf(query, params) : NO_TOPICS;
-  return yield* sealedParts(statements.value, asked, topics, look, heldOn);
+  return yield* sealedParts(statements.value, asked, topics, look, heldOn, olderParts);
 });
 
 /**
@@ -432,8 +451,9 @@ export function liveQueryParts<Param extends string, Part extends string>(
   asked: { readonly [LIVE_POLL.AFTER]?: string },
   look?: Duration.Duration,
   heldOn?: readonly NoInfer<Part>[],
+  olderParts?: readonly NoInfer<Part>[],
 ) {
-  return queryParts(query, params, asked, look, heldOn).pipe(
+  return queryParts(query, params, asked, look, heldOn, olderParts).pipe(
     Effect.withSpan(`web/live/${query.name}`),
   );
 }
@@ -491,6 +511,9 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         inboxLive,
         { userId: context.userId, repositoryless: input[ACCOUNT_INBOX_REPOSITORYLESS.QUERY] ?? "" },
         input,
+        LIVE_POLL_HOLD.LOOK,
+        undefined,
+        INBOX_RELEASED_PARTS,
       );
     }),
     inboxItems: signedIn.inboxItems.effect(function* ({ input, context }) {

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import {
   INBOX_MESSAGE_AUTHOR,
@@ -32,9 +33,8 @@ import {
   fakeActs,
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
+import { handInboxItems, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { followedInboxes } from "../testing/followed-inboxes.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
@@ -122,9 +122,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The host's inbox streams for the window, the task's inbox pushed as holding the one item. */
-const follows = followedInboxes(() => ({ items: [ITEM] }));
-
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   if (request.kind === ACT_KIND.AGENTS_LIST) {
     return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: [AGENT] } });
@@ -146,8 +143,12 @@ async function inbox() {
   const went: string[] = [];
   fakeAppPlatform(QUIET_PANEL);
   fakeActs({ act: answer });
-  fakeActPort({ ...fakeActPortCalls(), ...follows.procedures });
+  fakeActPort({ ...fakeActPortCalls() });
   handState(NO_EXPERIMENTS);
+  // The account's feed holds the task's one item, which the Inbox draws from.
+  handInboxItems({
+    rows: { [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: [ITEM] }, [INBOX_SCOPE_KIND.AGENT]: {} },
+  });
   function Page() {
     // Note that the item stands chosen, as a press on its row chooses it.
     const [chosen, setChosen] = useState<InboxChoice | undefined>({

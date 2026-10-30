@@ -230,8 +230,6 @@ export type AgentMachineKind = (typeof AGENT_MACHINE)[keyof typeof AGENT_MACHINE
 
 /** Why a Start on This Mac was refused, which the refusal names (`local-agent-refused`). */
 export const LOCAL_AGENT_REFUSAL = {
-  /** The account has the `local-agents` experiment off. */
-  OFF: "off",
   /** No Mac of the account's beat lately, so none would take the agent. */
   MAC_AWAY: "mac-away",
   /** The model runs on Codex, which the Mac has none of checked yet: an app from before Codex on the Mac, or one whose download has not finished. */

@@ -139,6 +139,7 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script, vmLe
           ? { ...fakeSandbox().sandbox, deleted: () => Effect.succeed(false) }
           : fakeSandbox().sandbox,
         formerlyDirect: !vmLeft,
+        storesOwned: false,
         runnerBundle: "/opt/luke/agent-runner.mjs",
         runnerEnv: {},
         deviceName: "Studio",
@@ -150,6 +151,7 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script, vmLe
         unsavedWorkScript: unsavedWork === undefined ? undefined : () => UNSAVED_WORK_SCRIPT,
         stateSealed: () => Effect.die("this device saves no state"),
         stateOpened: () => Effect.die("this device restores no state"),
+        diskFree: () => Effect.succeed(Option.none()),
       }),
     );
     const composer = yield* composeLocalAgents({
@@ -534,6 +536,7 @@ const saving = (
             ),
         },
         formerlyDirect: false,
+        storesOwned: false,
         runnerBundle: "/opt/luke/agent-runner.mjs",
         runnerEnv: {},
         deviceName: "rack-1",
@@ -547,6 +550,7 @@ const saving = (
         },
         stateSealed: sealAgentState,
         stateOpened: openAgentState,
+        diskFree: () => Effect.succeed(Option.none()),
       }),
     );
     const composer = yield* composeLocalAgents({
@@ -608,7 +612,7 @@ it.effect(
             baseCommit: BASE,
           },
         ]);
-        assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 1 });
+        assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 1, endedAt: 0 });
         const fileSystem = yield* FileSystem.FileSystem;
         assert.equal(yield* fileSystem.exists(bundle), false, "the committed bundle is still kept");
       }),
@@ -642,7 +646,7 @@ it.effect(
 
         assert.deepEqual(happened, ["pack", "verify", "deleted", "upload", "upload", "commit"]);
         assert.deepEqual(uploads[1], uploads[0]);
-        assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 1 });
+        assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 1, endedAt: 0 });
         assert.equal(yield* fileSystem.exists(bundle), false);
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
@@ -678,7 +682,7 @@ it.effect(
         yield* launchSettled;
 
         assert.deepEqual(saves, [{ deviceId: DEVICE_ID, agentId: AGENT_ID, fromGeneration: null }]);
-        assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 1 });
+        assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 1, endedAt: 0 });
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
@@ -714,7 +718,7 @@ it.effect(
           saves.map((each) => (each as { fromGeneration: number | null }).fromGeneration),
           [null, 1],
         );
-        assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 2 });
+        assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 2, endedAt: 0 });
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );

@@ -13,6 +13,7 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import type { Task } from "@luke/features/task-wire";
+import type { AppHostRead, AppInboxItems } from "@luke/host/app-state";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { Clock, Context, Effect } from "effect";
@@ -48,6 +49,7 @@ import { NO_LOOKS } from "./tasks/use-task-looks.js";
 import type { TasksControl } from "./tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
+import { handHostReads, handInboxItems } from "./testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -57,7 +59,6 @@ import {
 } from "./testing/composer.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { sidebarProps } from "./testing/desktop-sidebar.js";
-import { followedInboxes } from "./testing/followed-inboxes.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "./testing/tasks-control.js";
 
@@ -774,6 +775,11 @@ test("words left in New task's card mark its sidebar row with the Draft pencil w
 /** The key the Teammate invitations task's draft agent starts under. */
 const DRAFT_KEY = "draft-invites";
 
+/** The account's feed holding each plan's items as given, which the window's inboxes draw first. */
+function feedOf(plans: Record<string, readonly InboxItem[]>): AppHostRead<AppInboxItems> {
+  return { rows: { [INBOX_SCOPE_KIND.PLAN]: plans, [INBOX_SCOPE_KIND.AGENT]: {} } };
+}
+
 /** The side panel shown on `tab`, its Plan and Inbox standing. */
 function inboxPanel(tab: SidePanelTab): TasksControl["sidePanel"] {
   const tabs = [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX];
@@ -794,6 +800,7 @@ async function columnOn(
   side: SidePanelTab | undefined = undefined,
   opening = "",
 ) {
+  handInboxItems(feedOf({ [INVITES.plan.id]: [approval(1)] }));
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     tasks: [INVITES.plan],
@@ -809,11 +816,7 @@ async function columnOn(
     },
     ...(side === undefined ? undefined : { sidePanel: inboxPanel(side) }),
     agents: {
-      ...agentsControl({
-        agents: [agent],
-        agentIds: [agent.id],
-        inboxFollower: followedInboxes(() => ({ items: [approval(1)] })).follower,
-      }),
+      ...agentsControl({ agents: [agent], agentIds: [agent.id] }),
       draft: {
         id: DRAFT_KEY,
         prompt: opening,
@@ -853,7 +856,8 @@ async function columnOn(
   await settle();
   const pencil = `[role="img"][aria-label="${DRAFT_WORD}"]`;
   return {
-    rowDrafted: () => container.querySelector(`ul > li > button ${pencil}`) !== null,
+    // Note that the task's row is the one in the list drawn first, since the column's Inbox draws rows of its own that may wear a pencil.
+    rowDrafted: () => container.querySelector(`:scope > ul > li > button ${pencil}`) !== null,
     tabDrafted: (label: string) =>
       (
         [...container.querySelectorAll<HTMLElement>(".luke-tab")].find(
@@ -985,7 +989,7 @@ function approval(revision: number): InboxItem {
  */
 async function inboxOn(item: InboxItem) {
   answerMotion();
-  const main = followedInboxes(() => ({ items: [item] }));
+  handInboxItems(feedOf({ [INVITES.plan.id]: [item] }));
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -995,11 +999,7 @@ async function inboxOn(item: InboxItem) {
     activeTaskId: INVITES.plan.id,
     region: { kind: DOCUMENT_REGION.READY, task: INVITES.plan },
     sidePanel: inboxPanel(SIDE_PANEL_TAB.INBOX),
-    agents: agentsControl({
-      agents: [INVITES.agent],
-      agentIds: [INVITES.agent.id],
-      inboxFollower: main.follower,
-    }),
+    agents: agentsControl({ agents: [INVITES.agent], agentIds: [INVITES.agent.id] }),
   });
   await act(async () =>
     root.render(
@@ -1080,7 +1080,9 @@ function tasklessItem(agentId: string, id: string, revision: number): InboxItem 
 async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
   // Another window opening takes the focus from those before it.
   leaveWindow();
-  const main = followedInboxes(() => ({ items }));
+  handInboxItems({
+    rows: { [INBOX_SCOPE_KIND.PLAN]: {}, [INBOX_SCOPE_KIND.AGENT]: { [agentId]: items } },
+  });
   let control: TaskInboxControl | undefined;
   function Probe(): null {
     useDraftsOwner(undefined);
@@ -1092,7 +1094,6 @@ async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
       readerId: undefined,
       agents: {
         heldIds: [agentId],
-        inboxFollower: main.follower,
         answerInbox: () => new Promise(() => undefined),
         messageInbox: () => new Promise(() => undefined),
         readInboxImage: () => new Promise(() => undefined),
@@ -1166,6 +1167,59 @@ test("a reader still holding an item's older revision leaves the answer carried 
   await tasklessInbox(INVITES.agent.id, [mine]);
   const caughtUp = await tasklessInbox(INVITES.agent.id, [reposted]);
   assert.equal(caughtUp.draftOf(reposted).note, "Check guests");
+});
+
+test("a draft on an item the account's feed leaves out stands while the feed draws first, and goes only once the agent's own read answers without the item", async () => {
+  const mine = tasklessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
+  const older = tasklessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000004", 1);
+  const first = await tasklessInbox(INVITES.agent.id, [mine, older]);
+  act(() =>
+    first.onDraft(older, { choices: [], values: [], note: "Reply later", attachments: [] }),
+  );
+
+  // The feed holds only the newer item, as it leaves out one settled past its bound; the agent's own read is still out.
+  leaveWindow();
+  const reads = handHostReads({
+    items: {
+      rows: {
+        [INBOX_SCOPE_KIND.PLAN]: {},
+        [INBOX_SCOPE_KIND.AGENT]: { [INVITES.agent.id]: [mine] },
+      },
+    },
+  });
+  let control: TaskInboxControl | undefined;
+  function Probe(): null {
+    useDraftsOwner(undefined);
+    control = useTaskInbox({
+      taskId: INVITES.agent.id,
+      kind: INBOX_SCOPE_KIND.AGENT,
+      shown: true,
+      waiting: true,
+      readerId: undefined,
+      agents: {
+        heldIds: [INVITES.agent.id],
+        answerInbox: () => new Promise(() => undefined),
+        messageInbox: () => new Promise(() => undefined),
+        readInboxImage: () => new Promise(() => undefined),
+        onRetryList: () => undefined,
+      },
+    });
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
+  await settle();
+  assert.equal(control?.draftOf(older).note, "Reply later", "the feed drawing first drops nothing");
+
+  await act(async () =>
+    reads.deliverHolders({
+      [INBOX_SCOPE_KIND.PLAN]: {},
+      [INBOX_SCOPE_KIND.AGENT]: { [INVITES.agent.id]: { rows: [mine] } },
+    }),
+  );
+  await settle();
+  assert.equal(control?.draftOf(older).note, "", "the agent's own read says the item is gone");
 });
 
 test("another item landing in the inbox leaves the answer being written on one as it was", async () => {

@@ -36,7 +36,6 @@ import {
   useListSelection,
 } from "../selection/list-selection.js";
 import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
-import { useRowSwipe } from "./use-row-swipe.js";
 
 export type { ListRowMenu } from "../row-menu/row-menu.js";
 export type { ListSelection } from "../selection/list-selection.js";
@@ -83,7 +82,10 @@ export type { ListSelection } from "../selection/list-selection.js";
  * from: the ⋯, what held the keyboard as the menu key was pressed, or, for
  * a right-click, the row's press, or its ⋯ where it opens nothing. A row
  * that offers no acts now, its groups empty, or is unavailable, draws no ⋯
- * and opens nothing.
+ * and opens nothing. A row that opens something may leave its ⋯ out
+ * (`more`), as a phone's mail list draws none on its rows, and offer its
+ * menu by the long press, the right-click, and the menu key alone; its end
+ * then runs to the row's edge, as a row with no menu's does.
  * `menu` is the one way a row wires its menu: a row never opens one by a
  * right-click it wires itself.
  *
@@ -176,11 +178,14 @@ export type { ListSelection } from "../selection/list-selection.js";
  * description's ink, a middle dot, then the description, as a two-line
  * row of its own kind reads its one quiet line.
  *
- * A row may be swiped right to one act (`swipe`), as a mail app's thread
- * is swiped to mark it read: a short swipe leaves it open on the act's
- * button, a long one does the act on release (`use-row-swipe.ts`). The
- * swipe is the pointer's and the trackpad's alone; the act it does is one
- * the row offers another way too, so the button takes no Tab stop.
+ * A row whose description says more than a reader should hear, a message's
+ * whole code block, hands the words a reader hears of it instead
+ * (`describedAs`), cut to what the eye reads first: its press is then named
+ * by its lead, its title, and its metadata, in that order, and described by
+ * those words, a text node of its own that no box draws, so a recording
+ * masks it as it masks every word. An unread row whose unread weight
+ * nothing else says to a reader says it at the head of its title
+ * (`unreadWords`), which nothing hides while its acts hold the keyboard.
 
  */
 
@@ -216,13 +221,6 @@ export const LIST_ROW_LEAD = {
 } as const;
 
 export type ListRowLeadAt = (typeof LIST_ROW_LEAD)[keyof typeof LIST_ROW_LEAD];
-
-/** A row's one swipe: what its act is called, its glyph, and the act. */
-export interface ListRowSwipe {
-  readonly label: string;
-  readonly icon: ReactNode;
-  readonly onAct: () => void;
-}
 
 /** What a row belongs to, as the chip before its description names it: its glyph and its name, words but for a placeholder row's block. */
 export interface ListRowLead {
@@ -312,10 +310,10 @@ export type ListRowInk = (typeof LIST_ROW_INK)[keyof typeof LIST_ROW_INK];
  * state restyles stays in `list-row.css`: the row's fill and ring, the
  * press's insets and height, which a variant, a density, or the acts beside
  * it set, the words' type and ink, the hover acts' crossfade and the room
- * they take, the swipe's slide, and every reveal the pointer, the keyboard,
- * or a menu makes, through `:has()` and the pointer's media. Each part keeps
- * its `luke-list-row-*` class, which that sheet, the panel's, and the tests
- * find it by.
+ * they take, and every reveal the pointer, the keyboard, or a menu makes,
+ * through `:has()` and the pointer's media. Each part keeps its
+ * `luke-list-row-*` class, which that sheet, the panel's, and the tests find
+ * it by.
  */
 const LIST_CLASS =
   "luke-list flex list-none flex-col gap-list-gap p-0 data-[variant=card]:gap-0 data-[variant=card]:overflow-hidden data-[variant=card]:rounded-control data-[variant=card]:border data-[variant=card]:border-border data-[variant=card]:bg-surface";
@@ -377,15 +375,6 @@ const LEAD_CLASS = {
 /** What stands between a lead's plain words and the description they lead. */
 const LEAD_SEPARATOR = " · ";
 
-/** The parts of a row swiped to its one act: the act's button under the face, its press, and the label riding the face's edge. */
-const SWIPE_CLASS = "luke-list-row-swipe absolute inset-0 rounded-inherit";
-const SWIPE_ACT_CLASS =
-  "luke-list-row-swipe-act absolute inset-0 m-0 border-0 bg-transparent p-0 text-on-accent [font:inherit]";
-const SWIPE_LABEL_CLASS =
-  "luke-list-row-swipe-label absolute inset-y-0 start-0 flex w-swipe-label flex-col items-center justify-center gap-luke-2 text-tag-size font-tag [&>svg]:size-control-icon";
-const SLIDE_CLASS =
-  "luke-list-row-slide relative col-span-full row-1 grid min-w-0 grid-cols-subgrid items-center rounded-inherit";
-
 /** A pointer's press that leaves the focus where it is. */
 function preventFocusMove(event: MouseEvent<HTMLElement>): void {
   event.preventDefault();
@@ -416,26 +405,9 @@ const ListDensityContext = createContext<ListDensity>(LIST_DENSITY.REGULAR);
  */
 const ListVariantContext = createContext<ListVariant>(LIST_VARIANT.PLAIN);
 
-/** The act of a row that offers no swipe. */
-const NO_ACT = (): void => undefined;
-
-/** The custom properties a row's sheet reads: how deep it stands, and where a swipe has carried it. */
-function rowProperties(
-  depth: number,
-  swiped: ReturnType<typeof useRowSwipe>["view"] | undefined,
-): CSSProperties | undefined {
-  const nest = depth === 0 ? {} : { "--luke-list-row-depth": depth };
-  const swipe =
-    swiped === undefined
-      ? {}
-      : {
-          "--luke-list-row-swipe": `${swiped.offset}px`,
-          "--luke-list-row-swipe-label": `${swiped.label.offset}px`,
-          "--luke-list-row-swipe-shown": swiped.label.opacity,
-        };
-  return depth === 0 && swiped === undefined
-    ? undefined
-    : cssCustomProperties({ ...nest, ...swipe });
+/** The custom properties a row's sheet reads: how deep it stands. */
+function rowProperties(depth: number): CSSProperties | undefined {
+  return depth === 0 ? undefined : cssCustomProperties({ "--luke-list-row-depth": depth });
 }
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
@@ -550,9 +522,11 @@ export function ListRow({
   ref,
   onKeyDown,
   menu,
-  swipe,
+  more = true,
   depth = 0,
   fold,
+  describedAs,
+  unreadWords,
 }: {
   /** A mark before the title (an avatar, a status's glyph), drawn as decoration. */
   leading?: ReactNode;
@@ -611,19 +585,21 @@ export function ListRow({
   onKeyDown?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
   /** The menu of the row's thing's acts, opened alike by its ⋯, a right-click, a long press, and the menu key; it takes `menuOpen`'s place. */
   menu?: ListRowMenu | undefined;
-  /** The row's one swipe right; none where it offers none. */
-  swipe?: ListRowSwipe | undefined;
+  /** Whether the row draws its menu's ⋯; one that opens something may leave it out, its menu still a long press, a right-click, and the menu key away. */
+  more?: boolean | undefined;
   /** How deep it stands nested under other rows: 0, at the top, unless said. */
   depth?: number | undefined;
   /** The rows nested under it, which it folds; none where it holds none. */
   fold?: ListRowFold | undefined;
+  /** What a reader hears of its description, cut to what the eye reads first, which names the press by its other words and describes it by these; none where the press is named by its words as drawn. */
+  describedAs?: string | undefined;
+  /** What an unread row says to a reader at the head of its title, its weight being drawn for the eye alone; none where its owner says it elsewhere. */
+  unreadWords?: string | undefined;
 }): React.JSX.Element {
-  const swiped = useRowSwipe(swipe?.label, swipe?.onAct ?? NO_ACT);
   // The press hands the row's ref its element, and the link menu the address it opens.
   const linkAddress = useLinkAddress(linkHref);
   const pressElement = useRef<HTMLButtonElement | null>(null);
-  // Note that the row a hint hangs its card beside is the press's parent, the
-  // item or, on a row that swipes, the slide that carries its acts with it.
+  // Note that the row a hint hangs its card beside is the press's parent, the item.
   const rowElement = useRef<HTMLElement | null>(null);
   const pressRef = useCallback(
     (element: HTMLButtonElement | null) => {
@@ -635,6 +611,9 @@ export function ListRow({
     [ref, linkAddress],
   );
   const titleId = useId();
+  const leadId = useId();
+  const metaId = useId();
+  const describedId = useId();
   // Note that → and ← are the row's only while they would move its fold, so a list walking its rows along them still hears the rest.
   const foldKeys = (event: KeyboardEvent<HTMLElement>) => {
     if (fold === undefined) return;
@@ -655,6 +634,8 @@ export function ListRow({
     opener: onPress ? pressElement : undefined,
   });
   const offered = rowMenu.offered;
+  // Note that a row that opens nothing keeps its ⋯, because it is the one control its menu hands focus back to.
+  const moreDrawn = offered && (more || onPress === undefined);
   const [titleMeasured, titleClipped] = useClipped(plainWords(title));
   useEffect(() => {
     onTitleClipped?.(titleClipped);
@@ -682,10 +663,13 @@ export function ListRow({
   const heading = (
     <span
       ref={titleMeasured}
-      id={offered || said(actions) ? titleId : undefined}
+      id={moreDrawn || said(actions) || describedAs !== undefined ? titleId : undefined}
       className="luke-list-row-title"
       data-overflow={String(titleClipped)}
     >
+      {unread === true && unreadWords !== undefined ? (
+        <VisuallyHidden>{unreadWords}</VisuallyHidden>
+      ) : null}
       {title}
     </span>
   );
@@ -694,7 +678,11 @@ export function ListRow({
   const end =
     said(meta) || chevron ? (
       <span className={END_CLASS}>
-        {said(meta) ? <span className="luke-list-row-meta">{meta}</span> : null}
+        {said(meta) ? (
+          <span id={metaId} className="luke-list-row-meta">
+            {meta}
+          </span>
+        ) : null}
         {chevron ? (
           <span className={CHEVRON_CLASS} aria-hidden="true">
             <ChevronRightIcon />
@@ -713,6 +701,7 @@ export function ListRow({
         </span>
         <span
           ref={leadMeasured}
+          id={leadId}
           className="luke-list-row-lead-label min-w-0 overflow-hidden whitespace-nowrap"
           data-overflow={String(leadClipped)}
         >
@@ -723,6 +712,18 @@ export function ListRow({
   // Note that a lead over the title takes the first line, the one the metadata ends.
   const above = leadAt === LIST_ROW_LEAD.ABOVE && lead !== undefined;
   const firstLine = above ? leadMark : heading;
+  // Note that a row described apart is named by its words but the description, the time last, as a mail app's row is read.
+  const namedBy =
+    describedAs === undefined
+      ? undefined
+      : [
+          above ? leadId : undefined,
+          titleId,
+          lead !== undefined && !above ? leadId : undefined,
+          said(meta) ? metaId : undefined,
+        ]
+          .filter((each) => each !== undefined)
+          .join(" ");
   const face = (
     <>
       {said(leading) ? (
@@ -763,7 +764,9 @@ export function ListRow({
       type="button"
       className={MAIN_BUTTON_CLASS}
       aria-current={current}
-      aria-description={chosen ? SELECTION_WORDS.SELECTED : undefined}
+      aria-labelledby={namedBy}
+      aria-describedby={describedAs === undefined ? undefined : describedId}
+      aria-description={chosen && describedAs === undefined ? SELECTION_WORDS.SELECTED : undefined}
       disabled={disabled}
       tabIndex={tabbable === false ? -1 : undefined}
       {...(tabbable === undefined ? rovingItem() : {})}
@@ -814,6 +817,12 @@ export function ListRow({
           {press}
         </hint.Hint>
       )}
+      {press === undefined || describedAs === undefined ? null : (
+        // Note that a description's words outrank `aria-description`, so a chosen row says so among them.
+        <span id={describedId} hidden>
+          {chosen ? `${SELECTION_WORDS.SELECTED}, ${describedAs}` : describedAs}
+        </span>
+      )}
       {said(actions) ? (
         // Note that the acts are a group named by the row's title, so a reader hears which row's "Pin" or "Mark as read" it is.
         // biome-ignore lint/a11y/useSemanticElements: a row's acts are presses on its thing, not a form's fields, so they are no `<fieldset>`.
@@ -825,7 +834,7 @@ export function ListRow({
           {actions}
         </div>
       ) : null}
-      {offered ? (
+      {moreDrawn ? (
         <div className="luke-list-row-more row-1 flex items-center">
           {rowMenu.button({
             size:
@@ -836,19 +845,14 @@ export function ListRow({
       ) : null}
     </>
   );
-  const { view, item } = swiped;
   // Note that a row whose only act is its ⋯ offers it as a hover row offers its acts, so no row keeps an empty ⋯ track at rest.
-  const actsOnHover = actionsAt === LIST_ROW_ACTIONS.HOVER || (offered && !said(actions));
-  const hold = (element: HTMLLIElement | null) => {
-    item.ref.current = element;
-    if (!onPress) ref?.(element);
-  };
+  const actsOnHover = actionsAt === LIST_ROW_ACTIONS.HOVER || (moreDrawn && !said(actions));
   return (
     <>
       <li
         id={id}
         {...(followedBy === undefined ? {} : motionKey(followedBy))}
-        ref={swipe === undefined ? (onPress ? undefined : ref) : hold}
+        ref={onPress ? undefined : ref}
         className={ROW_CLASS}
         data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
         data-lead={above ? LIST_ROW_LEAD.ABOVE : undefined}
@@ -860,45 +864,12 @@ export function ListRow({
         data-density={density}
         data-ink={ink}
         data-menu-open={menuOpen || rowMenu.open ? "true" : undefined}
-        data-swipe={swipe === undefined ? undefined : view.state}
         data-depth={depth === 0 ? undefined : depth}
-        data-armed={view.armed ? "true" : undefined}
         onKeyDown={rowMenu.onKeyDown}
-        {...withContextMenu(
-          rowMenu.doors,
-          swipe === undefined ? {} : { onPointerDown: item.onPointerDown },
-        )}
-        {...(swipe === undefined
-          ? undefined
-          : {
-              onPointerMove: item.onPointerMove,
-              onPointerUp: item.onPointerUp,
-              onPointerCancel: item.onPointerCancel,
-              onClickCapture: item.onClickCapture,
-            })}
-        style={rowProperties(depth, swipe === undefined ? undefined : view)}
+        {...withContextMenu(rowMenu.doors, {})}
+        style={rowProperties(depth)}
       >
-        {swipe === undefined ? (
-          row
-        ) : (
-          <>
-            <div className={SWIPE_CLASS}>
-              <button
-                type="button"
-                className={SWIPE_ACT_CLASS}
-                tabIndex={-1}
-                data-swipe-act=""
-                onClick={pulseOnPress(swiped.onPress)}
-              >
-                <span className={SWIPE_LABEL_CLASS}>
-                  {swipe.icon}
-                  <span>{swipe.label}</span>
-                </span>
-              </button>
-            </div>
-            <div className={SLIDE_CLASS}>{row}</div>
-          </>
-        )}
+        {row}
       </li>
       {/* Note that the menu stands beside the row rather than in it, because a
           press or a key in the menu's portal would otherwise reach the row's

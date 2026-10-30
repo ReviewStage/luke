@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { createAgent, recordAgentRunnerToken } from "@luke/database/models/agent-store";
 import { queueDeviceAgentLine } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
@@ -34,7 +33,6 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Clock, DateTime, Effect, Layer, Logger, Option, Redacted, Result } from "effect";
 import { HttpRouter } from "effect/http";
@@ -463,10 +461,9 @@ const openMember = Effect.gen(function* () {
   return { userId, taskId: task.id };
 });
 
-/** A host enrolled under the member with Local agents on, and registered running its agents in VMs, as a host does once it starts: its device id and its secret. */
+/** A host enrolled under the member, and registered running its agents in VMs, as a host does once it starts: its device id and its secret. */
 const enrolledHost = (userId: string) =>
   Effect.gen(function* () {
-    yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.LOCAL_AGENTS]: true } });
     const install = mintHostSecret(HOST_WIRE.INSTALL_TOKEN_PREFIX);
     yield* mintHostInstallToken(userId, install.hash);
     const secret = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
@@ -604,9 +601,6 @@ it.layer(getTestDB())("a Mac's GitHub token", (it) => {
       Effect.gen(function* () {
         const { ask, desktops } = yield* hostStanding;
         const member = yield* openMember;
-        yield* writeAccountPreferences(member.userId, {
-          experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
-        });
         desktops.set("desktop-sign-in", member.userId);
         const mac = yield* enrolledMac(member.userId, DEVICE_ISOLATION.SANDBOX);
         const agentId = yield* agentOnDevice(member, mac.deviceId);
@@ -620,31 +614,20 @@ it.layer(getTestDB())("a Mac's GitHub token", (it) => {
       }),
   );
 
-  it.effect(
-    "refuses an agent on a Mac running its agents directly on it, and a member with Local agents off",
-    () =>
-      Effect.gen(function* () {
-        const { ask } = yield* hostStanding;
-        const forbidden = {
-          status: HOSTED_HTTP_STATUS.FORBIDDEN,
-          cache: null,
-          body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
-        };
-        const member = yield* openMember;
-        const sandboxed = yield* enrolledMac(member.userId, DEVICE_ISOLATION.SANDBOX);
-        const onSandboxed = yield* agentOnDevice(member, sandboxed.deviceId);
-
-        // With Local agents off, even the member's own sandboxed Mac is refused.
-        assert.deepEqual(yield* ask(sandboxed.secret, onSandboxed), forbidden);
-        yield* writeAccountPreferences(member.userId, {
-          experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
-        });
-
-        const bare = yield* enrolledMac(member.userId, DEVICE_ISOLATION.BARE);
-        assert.deepEqual(
-          yield* ask(bare.secret, yield* agentOnDevice(member, bare.deviceId)),
-          forbidden,
-        );
-      }),
+  it.effect("refuses an agent on a Mac running its agents directly on it", () =>
+    Effect.gen(function* () {
+      const { ask } = yield* hostStanding;
+      const forbidden = {
+        status: HOSTED_HTTP_STATUS.FORBIDDEN,
+        cache: null,
+        body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
+      };
+      const member = yield* openMember;
+      const bare = yield* enrolledMac(member.userId, DEVICE_ISOLATION.BARE);
+      assert.deepEqual(
+        yield* ask(bare.secret, yield* agentOnDevice(member, bare.deviceId)),
+        forbidden,
+      );
+    }),
   );
 });

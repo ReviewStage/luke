@@ -20,7 +20,7 @@ import {
   type GatewayShutdownSteps,
   NODE_CAPABILITY_STATUS,
 } from "@luke/gateway";
-import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn, MAC_COMMAND_MODE } from "@luke/settings";
+import { APP_SETTING_SCHEMA, MAC_COMMAND_MODE } from "@luke/settings";
 import { Effect, Layer, Option } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -243,11 +243,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           kernel,
           account,
           accountId,
-          // Note that a settings file that cannot be read runs nothing here, since the experiment reads off without it.
-          switchedOn: settings.store.snapshot().pipe(
-            Effect.map(({ experiments }) => experimentOn(experiments, EXPERIMENT.LOCAL_AGENTS)),
-            Effect.orElseSucceed(() => false),
-          ),
           // Note that the account's devices are read where a Start reads them, so this Mac's setup is the one Runs on shows.
           deviceSetup: (deviceId) =>
             Effect.map(agentClient.models(), (answer) => {

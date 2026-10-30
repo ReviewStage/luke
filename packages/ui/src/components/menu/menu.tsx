@@ -27,14 +27,13 @@ import {
 } from "../../shadcn/dropdown-menu.js";
 import { useDisclosure } from "../../use-disclosure.js";
 import { visibleViewport } from "../../visible-viewport.js";
-import { BackButton, NO_BACK_KEY } from "../back-button/back-button.js";
-import { DIALOG_SIZE, Dialog } from "../dialog/dialog.js";
 import { OneLine } from "../one-line/one-line.js";
 import { ROVING_STOP, rovingItem, useRovingKeys } from "../roving-keys/roving-keys.js";
 import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area.js";
 import { SwitchMark } from "../switch/switch.js";
 import { hintedControlOf, Tooltip } from "../tooltip/hint.js";
 import { MENU_LINE, type MenuLine, menuCut } from "./menu-cut.js";
+import { inNarrowRoom, MenuSheetFrame } from "./menu-sheet.js";
 import { MenuGlyph } from "./menu-surface.js";
 import { useTouchHold } from "./touch-hold.js";
 
@@ -371,7 +370,7 @@ function heardBoth<E>(
 
 /**
  * The props an element spreads to carry a context menu beside handlers of
- * its own for the same events, as a row's swipe hears the same pointer:
+ * its own for the same events, as a card's press hears the same pointer:
  * each event heard by both, its own first; its own alone where it carries
  * no menu.
  */
@@ -1298,88 +1297,6 @@ function FloatingMenu({
   );
 }
 
-/** The attribute the document's root wears the room it stands in, and the room a phone's layout is (the panel's `stage-room.ts`). */
-const ROOM_ATTRIBUTE = "data-luke-room";
-const NARROW_ROOM = "narrow";
-
-/** Whether the window stands in a phone's layout now, where a menu rises as a sheet. */
-function inNarrowRoom(): boolean {
-  return document.documentElement.getAttribute(ROOM_ATTRIBUTE) === NARROW_ROOM;
-}
-
-/**
- * How a finger swiping a sheet down puts it away: let go past this share of
- * its height, or flicked faster than this, in CSS pixels a millisecond.
- */
-const SHEET_SWIPE = {
-  SHARE: 0.25,
-  FLICK: 0.5,
-} as const;
-
-/** A finger holding a sheet's head: which, where it last stood and when, how far down it has drawn the sheet, and how fast. */
-interface SheetDrag {
-  readonly pointerId: number;
-  readonly from: number;
-  at: number;
-  down: number;
-  speed: number;
-}
-
-/**
- * A sheet swiped down by its head, following the finger and put away as
- * it is let go past `SHEET_SWIPE`, or sprung back short of it. Only a
- * finger swipes, and never from a button in the head, which keeps its own
- * press. The sheet follows on its own `translate`, its transition off while
- * held (`data-dragging`), so no render runs per move.
- */
-function useSheetSwipe(onAway: () => void) {
-  const sheet = useRef<HTMLDivElement | null>(null);
-  const drag = useRef<SheetDrag | null>(null);
-  const follow = (down: number, held: boolean) => {
-    const element = sheet.current;
-    if (element === null) return;
-    element.style.translate = down === 0 ? "" : `0 ${down}px`;
-    element.toggleAttribute("data-dragging", held);
-  };
-  const letGo = (event: React.PointerEvent<HTMLElement>, away: boolean) => {
-    const held = drag.current;
-    if (held === null || held.pointerId !== event.pointerId) return;
-    drag.current = null;
-    const height = sheet.current?.getBoundingClientRect().height ?? 0;
-    const far = held.down > height * SHEET_SWIPE.SHARE || held.speed > SHEET_SWIPE.FLICK;
-    // Note that a sheet put away sinks on from where the finger left it.
-    follow(away && far ? held.down : 0, false);
-    if (away && far) onAway();
-  };
-  const head = {
-    onPointerDown: (event: React.PointerEvent<HTMLElement>) => {
-      if (event.pointerType !== "touch") return;
-      if (event.target instanceof Element && event.target.closest("button") !== null) return;
-      drag.current = {
-        pointerId: event.pointerId,
-        from: event.clientY,
-        at: event.timeStamp,
-        down: 0,
-        speed: 0,
-      };
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-    },
-    onPointerMove: (event: React.PointerEvent<HTMLElement>) => {
-      const held = drag.current;
-      if (held === null || held.pointerId !== event.pointerId) return;
-      const down = Math.max(0, event.clientY - held.from);
-      const elapsed = event.timeStamp - held.at;
-      if (elapsed > 0) held.speed = (down - held.down) / elapsed;
-      held.down = down;
-      held.at = event.timeStamp;
-      follow(down, true);
-    },
-    onPointerUp: (event: React.PointerEvent<HTMLElement>) => letGo(event, true),
-    onPointerCancel: (event: React.PointerEvent<HTMLElement>) => letGo(event, false),
-  };
-  return { sheet, head };
-}
-
 /** The item a sheet's page lands focus on: its checked one where it opens on that, else its first that applies now. */
 function startOf(list: HTMLElement, onChecked: boolean): HTMLElement | undefined {
   const items = itemsOf(list);
@@ -1484,10 +1401,11 @@ function SheetRows({
 }
 
 /**
- * The menu as a phone's sheet: a dialog (`DIALOG_SIZE.SHEET`) risen from
- * the window's foot over the dimmed window, the page under it unmoved. Its
- * head names what it acts on (`subject`), else the menu itself, under a
- * grip a finger swipes it down by; its rows are the menu's, its groups,
+ * The menu as a phone's sheet, in the frame every menu's sheet stands in
+ * (`MenuSheetFrame`): a dialog risen from the window's foot over the dimmed
+ * window, the page under it unmoved. Its head names what it acts on
+ * (`subject`), else the menu itself, under a grip a finger swipes it down
+ * by; its rows are the menu's, its groups,
  * glyphs, and red, at a finger's height and with no shortcuts, scrolling
  * under the fixed head and fading where they are cut, its heading over
  * them and its footer last. A submenu opens in the sheet's place, its head
@@ -1527,18 +1445,14 @@ function MenuSheet({
   const roving = useRovingKeys<HTMLDivElement>({ stop: ROVING_STOP.NONE });
   const [list, setList] = useState<HTMLDivElement | null>(null);
   const start = useRef<HTMLElement | null>(null);
-  const nameId = useId();
   const away = () => onClose(false);
-  const { sheet, head } = useSheetSwipe(away);
-  // Note that the dialog's card is what the menu's exit is waited on, since its fade is what plays as the sheet goes.
   const listed = useCallback(
     (node: HTMLDivElement | null) => {
       setList(node);
       roving.ref(node);
       start.current = node === null ? null : (startOf(node, openOnChecked) ?? null);
-      hold(node?.closest<HTMLElement>(".luke-dialog") ?? null);
     },
-    [roving.ref, hold, openOnChecked],
+    [roving.ref, openOnChecked],
   );
   // Each page lands focus as it stands: the first page on its start, or on the row of the submenu just left.
   // Note that it is keyed by the submenu's name, never the submenu its owner draws anew, so a value toggled where it stays keeps focus.
@@ -1592,72 +1506,48 @@ function MenuSheet({
   const name = page?.label ?? title;
   const detail = page === undefined ? subject?.detail : title;
   return (
-    <Dialog
+    <MenuSheetFrame
       open={!leaving}
-      size={DIALOG_SIZE.SHEET}
-      labelledBy={nameId}
-      invoker={opener}
+      opener={opener}
       initialFocus={start}
-      onDismiss={away}
+      hold={hold}
+      name={name}
+      detail={detail}
+      mark={subject?.mark}
+      back={page === undefined ? undefined : { label: title, onBack: back }}
+      onAway={away}
     >
-      <div ref={sheet} className="luke-menu-sheet">
-        <div className="luke-menu-sheet-head" {...head}>
-          <span className="luke-menu-sheet-grip" aria-hidden="true" />
-          <div className="luke-menu-sheet-title">
-            {page === undefined ? null : (
-              <span className="luke-menu-sheet-back">
-                <BackButton label={title} place={title} command={NO_BACK_KEY} onBack={back} />
-              </span>
-            )}
-            {page === undefined && subject?.mark !== undefined ? (
-              <span className="luke-menu-sheet-mark" aria-hidden="true">
-                {subject.mark}
-              </span>
-            ) : null}
-            <span className="luke-menu-sheet-words">
-              <span id={nameId} className="luke-menu-sheet-name">
-                <OneLine>{name}</OneLine>
-              </span>
-              {detail === undefined ? null : (
-                <span className="luke-menu-sheet-detail">
-                  <OneLine>{detail}</OneLine>
-                </span>
+      <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
+        <div
+          ref={listed}
+          id={id}
+          role="menu"
+          aria-label={page?.label ?? label}
+          className="luke-menu-sheet-rows"
+          data-roving={roving["data-roving"]}
+          onKeyDown={keyDown}
+          onFocus={roving.onFocus}
+        >
+          {page === undefined ? (
+            <>
+              {heading === undefined ? null : (
+                <div className={MENU_HEADING} role="none">
+                  {heading}
+                </div>
               )}
-            </span>
-          </div>
+              <SheetRows groups={groups} onChoose={choose} onOpen={setPage} />
+              {footer === undefined ? null : (
+                <div className={MENU_FOOTER} role="none">
+                  {footer}
+                </div>
+              )}
+            </>
+          ) : (
+            <SheetRows groups={[page.items]} onChoose={choose} onOpen={setPage} />
+          )}
         </div>
-        <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
-          <div
-            ref={listed}
-            id={id}
-            role="menu"
-            aria-label={page?.label ?? label}
-            className="luke-menu-sheet-rows"
-            data-roving={roving["data-roving"]}
-            onKeyDown={keyDown}
-            onFocus={roving.onFocus}
-          >
-            {page === undefined ? (
-              <>
-                {heading === undefined ? null : (
-                  <div className={MENU_HEADING} role="none">
-                    {heading}
-                  </div>
-                )}
-                <SheetRows groups={groups} onChoose={choose} onOpen={setPage} />
-                {footer === undefined ? null : (
-                  <div className={MENU_FOOTER} role="none">
-                    {footer}
-                  </div>
-                )}
-              </>
-            ) : (
-              <SheetRows groups={[page.items]} onChoose={choose} onOpen={setPage} />
-            )}
-          </div>
-        </ScrollArea>
-      </div>
-    </Dialog>
+      </ScrollArea>
+    </MenuSheetFrame>
   );
 }
 

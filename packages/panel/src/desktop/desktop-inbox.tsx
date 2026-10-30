@@ -8,10 +8,10 @@ import { backToWords, readFailedWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { ERROR_STATE_PLACEMENT, ErrorState, STATUS_TONE, Toolbar, useMinute } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, STATUS_TONE, Toolbar } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import type { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -46,7 +46,6 @@ import {
   type InboxHolder,
   type InboxListed,
   itemWorkspaceId,
-  listedItems,
 } from "../tasks/inbox-model.js";
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
 import { type InboxNewThread, InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
@@ -71,8 +70,10 @@ import {
 } from "../tasks/use-channels.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
+import { useInboxItemOpenSpan, useInboxOpenSpan } from "../tasks/use-inbox-spans.js";
 import { type OpenHere, OpenHereProvider } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel.js";
+import { type HeldTaskInboxControl, useInboxCardDrafts } from "../tasks/use-task-inbox.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
@@ -151,6 +152,14 @@ import { taskCardOf } from "./task-card.js";
  * #general.
  *
  * Its items are read and listed by `use-inbox-listing.ts`.
+ *
+ * It is a memo boundary over the window's steady tasks (`useSteadyDoors`),
+ * as the sidebar and a task's page are, so the shell drawn again over the
+ * same tasks leaves it as it was. Nothing over its list reads the clock or
+ * the pointer: each row's time counts from the window's minute on its own,
+ * and the list keeps the pointer where its next draw reads it; and the box's
+ * drafts are read in the pane that draws it (`DraftedInboxPane`), so a word
+ * typed there draws the pane alone.
  */
 
 /** What the pane says where the item asked for could not be read, its holder's own read having failed. */
@@ -173,8 +182,8 @@ const NO_CHANNELS: readonly Channel[] = [];
 /** What heads the Inbox narrowed to no channel: nothing it draws. */
 const NO_CHANNEL: HeadedChannel = { id: "", name: "", purpose: "" };
 
-/** The window's Inbox, in the task's place: every task's items and every automation's, and the chosen one read beside them. */
-export function DesktopInbox({
+/** The window's Inbox, in the task's place: every task's items and every automation's, and the chosen one read beside them; a memo boundary, as the module's head says. */
+export const DesktopInbox = memo(function DesktopInbox({
   tasks,
   room = SHELL_ROOM.WIDE,
 }: {
@@ -184,7 +193,6 @@ export function DesktopInbox({
 }): React.JSX.Element {
   // New task is the way on from an Inbox with nothing in it, wherever an account can start one.
   const newTask = tasks.signedIn ? tasks.onNewTask : undefined;
-  const now = useMinute();
   // With Channels on, a row's ⋯ moves its thread to another channel, and a channel chosen narrows the Inbox to its own items.
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const narrowed = useInboxNarrowed();
@@ -214,7 +222,6 @@ export function DesktopInbox({
           archivedAt: archivedShown.archivedAt,
           onUnarchive: () => channels.onUnarchive(archivedShown.id),
         },
-    now,
   );
   const {
     view,
@@ -229,11 +236,13 @@ export function DesktopInbox({
     chosenAgentId,
     agents,
     live,
+    liveScope,
     named,
     marks,
     standing,
     counts,
     list,
+    listedRows,
     steps,
     onPointing,
     chosen,
@@ -258,10 +267,13 @@ export function DesktopInbox({
     () => (shownChannelId === undefined ? undefined : () => look.current(shownChannelId)),
     [shownChannelId],
   );
+  // Every item standing, which Mark all as read marks and a thread is moved among.
+  const standingItems = useMemo(() => standing.flatMap(({ items }) => items), [standing]);
+  const unread = useMemo(() => anyUnread(standing), [standing]);
   // An item's ⋯, its row's and its thread bar's, moves its thread to another open channel, which the channels' counts are read again for.
   const move = useMoveThreadDialog({
     channels: channels.channels ?? NO_CHANNELS,
-    threads: standing.flatMap(({ items }) => items),
+    threads: standingItems,
     shown: tasks.shown,
     onMove: channels.onMove,
     onMoved: channels.onRefresh,
@@ -304,14 +316,18 @@ export function DesktopInbox({
     chosen?.item.id ?? (missing || chosenFailed ? asked?.itemId : undefined),
     { onClear, onSingle },
   );
+  const timeOpen = useInboxItemOpenSpan(chosen?.item.id, live.read);
+  useInboxOpenSpan(listedRows.length);
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
+    timeOpen(listed.item.id);
     choose(listed);
     columns.onOpen(listed.item.id);
   };
   const { onMark: markItem } = marks;
   // K and J choose the item above or below, the keyboard following it to its row.
   const step = (listed: InboxListed) => {
+    timeOpen(listed.item.id);
     choose(listed);
     columns.onStep();
   };
@@ -413,8 +429,6 @@ export function DesktopInbox({
     active: tasks.shown && !sideFocused,
     onMark: markItem,
   });
-  // A notice of the reader's own is acknowledged as it opens, on the same terms, once its holder's held read holds it.
-  useNodOnOpen({ shown: opened, readerId: tasks.me, control: live });
   // ⌘O opens what holds the keys in its full place: the agent the panel shows while it holds them, in its task; else the item shown, in its task, or on its agent's page where it has none.
   const panelAgent =
     sideFocused && sidePanel.tab !== undefined && isTranscriptTab(sidePanel.tab)
@@ -520,10 +534,13 @@ export function DesktopInbox({
         <LinkWorkspaceProvider value={chosenLinkWorkspace}>
           {/* Its thread's words read their mentions where its box does, so a file it names opens as its code does. */}
           <TaskMentions value={mentions}>
-            <InboxPane
+            <DraftedInboxPane
               holder={listed.holder}
               item={listed.item}
               control={live}
+              scope={liveScope}
+              opened={opened}
+              readerId={tasks.me}
               agents={named}
               hidden={columns.shown === INBOX_COLUMNS.LIST}
               onBack={columns.onBack}
@@ -538,7 +555,6 @@ export function DesktopInbox({
               doors={{
                 ...paneDoors(tasks, listed.holder, {
                   act,
-                  now,
                   panelFor,
                   place,
                   besideAgents: named.agentIds,
@@ -561,6 +577,7 @@ export function DesktopInbox({
             ref={onArea}
             className="desktop-task relative flex min-h-0 flex-1"
             data-panel-open={String(sidePanel.open)}
+            data-page="inbox"
           >
             {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
             <PageFind
@@ -588,8 +605,8 @@ export function DesktopInbox({
                       show: choices,
                       view: { choices, folds },
                       readAll: {
-                        unread: anyUnread(standing),
-                        onMarkAll: () => marks.onMarkAll(standing.flatMap(({ items }) => items)),
+                        unread,
+                        onMarkAll: () => marks.onMarkAll(standingItems),
                       },
                       search,
                       phone:
@@ -605,7 +622,7 @@ export function DesktopInbox({
                       <InboxListNote
                         failed={failed}
                         reading={reading}
-                        empty={listedItems(list).length === 0}
+                        empty={listedRows.length === 0}
                         alone={columns.shown === INBOX_COLUMNS.LIST}
                         filteredOut={filteredOut ? choices : undefined}
                         counts={counts}
@@ -651,7 +668,7 @@ export function DesktopInbox({
                       </ErrorState>
                     ) : failed || reading || filteredOut || searched !== undefined ? null : (
                       // Note that the list says the read failed, or what the filter or its search left out, so the pane beside it stands bare.
-                      <InboxPaneEmpty listed={listedItems(list).length} newTask={newTask} />
+                      <InboxPaneEmpty listed={listedRows.length} newTask={newTask} />
                     )}
                   </section>
                 ) : (
@@ -694,6 +711,33 @@ export function DesktopInbox({
       </MemberDirectory>
     </LinkWorkspaceProvider>
   );
+});
+
+/**
+ * The chosen item's thread (`InboxPane`), its box's drafts read here,
+ * where the box is drawn, rather than by the page around it, so a word typed
+ * draws the pane alone (`useInboxCardDrafts`); and its notice acknowledged
+ * as it opens, once its holder's held read holds it, unless its box holds
+ * words (`useNodOnOpen`).
+ */
+function DraftedInboxPane({
+  control,
+  scope,
+  opened,
+  readerId,
+  ...pane
+}: Omit<React.ComponentProps<typeof InboxPane>, "control"> & {
+  /** The chosen item's holder's own held read, without its cards' drafts. */
+  control: HeldTaskInboxControl;
+  /** Whose read it is, under which its cards keep their drafts. */
+  scope: Parameters<typeof useInboxCardDrafts>[1];
+  /** The item shown while the Inbox holds the keys, which is acknowledged as it opens; none while it is not. */
+  opened: InboxListed | undefined;
+  readerId: string | undefined;
+}): React.JSX.Element {
+  const live = { ...control, ...useInboxCardDrafts(control, scope) };
+  useNodOnOpen({ shown: opened, readerId, control: live });
+  return <InboxPane {...pane} control={live} />;
 }
 
 /** A file the item names as its code names it: its path, and its lines where it names them. */
@@ -897,7 +941,6 @@ function paneDoors(
   holder: InboxHolder,
   seams: {
     act: ReturnType<typeof useAct>["act"];
-    now: number;
     /** The task, or the agent, the panel beside the Inbox stands for. */
     panelFor: string | undefined;
     /** The task's agents whose transcripts the panel beside the Inbox draws: its agents not archived, once read. */
@@ -910,7 +953,8 @@ function paneDoors(
     const { task } = holder;
     return {
       onOpenHolder: () => tasks.onShowTask(task.id),
-      taskCard: taskCardOf(tasks, task, seams.now),
+      // Note that the card's times count from the window's minute, so the page reads no clock.
+      taskCard: taskCardOf(tasks, task, undefined),
       // An agent the item names reads beside it, as a link to it does; pressed with ⌘, it goes to the task on its tab.
       // Note that an archived agent's transcript is drawn on its task alone, so it goes there.
       onOpenAgent: (agentId) =>

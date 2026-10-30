@@ -31,7 +31,9 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { pasteCutWords } from "@luke/features/words";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/settings/microphone";
+import { experimentsOn } from "@luke/settings/testing";
 import { DocumentIcon } from "@luke/ui";
 import { Effect } from "effect";
 import { act, createElement } from "react";
@@ -1325,6 +1327,7 @@ test("in the window's Inbox a skill an answer's words name is the chip a sent me
     "Run /release first.",
     5_000,
   );
+  handState(experimentsOn(EXPERIMENT.SKILLS));
   world.inboxes = new Map([
     [BILLING.id, [THRESHOLD, answered]],
     [INVITES.id, [EXPIRY]],
@@ -1346,6 +1349,7 @@ test("in the window's Inbox a skill an answer's words name is the chip a sent me
 
 test("a skill named by a settled item of an agent with no plan that a link reached opens beside the Inbox, in the agent's own repository, which its group names none of", async () => {
   const settled = answeredBy(BUMP, READER, "Retry once", "Run /release first.", 2_000);
+  handState(experimentsOn(EXPERIMENT.SKILLS));
   world.agentInboxes = new Map([[STRAY_AGENT, [settled]]]);
   world.pageAgents = new Map([
     [STRAY_AGENT, { ...AGENT, id: STRAY_AGENT, planId: null, title: "Bump" }],
@@ -2361,33 +2365,6 @@ test("opening the reader's own notice acknowledges it at its revision, once whil
   act(() => rowNamed(page, notice.title).click());
   await settle();
   assert.deepEqual(answersOf(answered), [acknowledged, acknowledged]);
-});
-
-test("a notice shown while its plan's follow has failed reads Got it, since opening it acknowledges nothing then, and Got it answers it", async () => {
-  const notice = noticeItem();
-  const { answered: sent } = noticeWrites();
-  world.inboxes = new Map([
-    [BILLING.id, [notice, RETRY]],
-    [INVITES.id, [EXPIRY]],
-  ]);
-  // The list draws the plan's items from the account's feed, and the item's own follow of it could not be read.
-  const unanswered = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
-  world.startRead = (taskId) =>
-    taskId === BILLING.id
-      ? Promise.resolve({ status: FAKE_ANSWER.DONE, value: unanswered })
-      : undefined;
-  const { page } = mount();
-  await settle();
-  act(() => rowNamed(page, notice.title).click());
-  await settle();
-  const pane = itemPane(page);
-  assert.deepEqual(sent, [], "opening it answers nothing");
-  assert.equal(sendWords(pane), "Got it");
-  act(() => answerSend(pane).click());
-  await settle();
-  assert.deepEqual(answersOf(sent), [
-    { itemId: notice.id, revision: 4, reply: INBOX_REPLY.ACKNOWLEDGED },
-  ]);
 });
 
 test("a notice whose box holds a draft is left open as it is opened, and its words go as a reply naming the notice's revision, no answer beside it", async () => {

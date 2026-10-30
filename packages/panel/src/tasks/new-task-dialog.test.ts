@@ -15,12 +15,14 @@ import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/featu
 import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import {
   agentKeyLink,
   SETTINGS_SECTION,
   SETTINGS_VIEW,
   type SettingsLink,
 } from "@luke/settings/settings-views";
+import { experimentsOn } from "@luke/settings/testing";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -36,6 +38,7 @@ import {
   fakeAppBridge,
 } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
+import { handState } from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -82,6 +85,9 @@ const MODELS: readonly CatalogModel[] = [
   },
 ];
 
+/** The models the chip offers in this test, `MODELS` unless it says otherwise. */
+let models: readonly CatalogModel[] = MODELS;
+
 /** The account's default model, as the composer's chip reads it. */
 const DEFAULT_CHOICE: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" };
 
@@ -89,6 +95,7 @@ const DEFAULT_CHOICE: ModelChoice = { model: "anthropic/claude-opus-5.5", effort
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
+  models = MODELS;
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({});
@@ -145,7 +152,7 @@ async function mount(
         open,
         preset: reopened ?? preset,
         repositoriesIn: () => repositories,
-        models: MODELS,
+        models,
         readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
         start: (
           name: string,
@@ -296,7 +303,7 @@ test("the card, named New task, holds the composer with its words focused, the r
   );
 });
 
-test("Return starts the task without planning, Untitled, on the repository last used, and an agent on the words with the chip's model", async () => {
+test("Return starts the task without planning, Untitled, on the repository last used, and an agent on the words naming no model while the chip is unpicked", async () => {
   const card = await mount();
   assert.equal(card.startButton().disabled, true, "an empty box starts nothing");
   card.type("  Make the sidebar keep its folds.  ");
@@ -307,7 +314,7 @@ test("Return starts the task without planning, Untitled, on the repository last 
   assert.deepEqual(agent, {
     prompt: "Make the sidebar keep its folds.",
     attachments: [],
-    choice: DEFAULT_CHOICE,
+    choice: undefined,
   });
   assert.ok(idempotencyKey, "the agent's start carries the card's key");
 });
@@ -327,6 +334,23 @@ test("a model picked on the chip runs this agent alone, and the account's defaul
   await card.key("Enter");
 
   assert.equal(card.agents[0]?.choice?.model, "anthropic/claude-opus-5.5-fast");
+});
+
+test("Fast on a model nothing pays for lands on its harness's row in Settings, as picking it does, and the chip stays off Fast", async () => {
+  models = MODELS.map((model) => ({ ...model, credentialMissing: true }));
+  const card = await mount();
+  const chip =
+    document.querySelector<HTMLButtonElement>(".agent-model-chip button") ??
+    assert.fail("the model chip stands");
+  act(() => chip.click());
+  const fast =
+    document.querySelector<HTMLButtonElement>('[role="switch"]') ??
+    assert.fail("the menu offers Fast");
+  act(() => fast.click());
+  await settle();
+
+  assert.deepEqual(card.links, [agentKeyLink(MODEL_PROVIDER.ANTHROPIC)]);
+  assert.equal(chip.textContent?.includes("Fast"), false);
 });
 
 test("a server whose sign-in expired is offered nowhere in the card, which hands an agent no servers", async () => {
@@ -456,6 +480,7 @@ test("once a repository is chosen, an @ offers its files, read through the works
 test("a skill chosen from the / list is its chip, which opens its SKILL.md in the chosen repository on GitHub", async () => {
   const onGitHub: string[] = [];
   fakeAppPlatform(DESKTOP_LINKS);
+  handState(experimentsOn(EXPERIMENT.SKILLS));
   fakeActPort({
     [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
       onGitHub.push(url);
@@ -484,14 +509,17 @@ test("a skill chosen from the / list is its chip, which opens its SKILL.md in th
   const control = tasksControl();
   act(() =>
     root.render(
-      createElement(NewTaskDialog, {
-        newTask: {
-          ...control.newTask,
-          open: true,
-          workspaceId: "workspace-acme",
-          repositoriesIn: () => ({ ...control.repositories, recent: ["acme/web"] }),
-        },
-      }),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(NewTaskDialog, {
+          newTask: {
+            ...control.newTask,
+            open: true,
+            workspaceId: "workspace-acme",
+            repositoriesIn: () => ({ ...control.repositories, recent: ["acme/web"] }),
+          },
+        }),
+      ),
     ),
   );
   await settle();

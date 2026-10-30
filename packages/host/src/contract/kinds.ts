@@ -192,11 +192,14 @@ export const AGENT_ACT_KIND = {
  */
 export const AGENT_INBOX_ACT_KIND = {
   /**
-   * A task's inbox, or one agent's, followed while the window holds the
-   * stream open: what it holds, whole, each time it changes, or why there
-   * is none.
+   * A task's inbox, or one agent's, held followed while the window holds
+   * the stream open, and a while after among those let go lately: what it
+   * holds reaches the panel on app state (`LIVE_READ.HOLDER_INBOX`), so the
+   * stream carries nothing.
    */
   AGENTS_INBOX_FOLLOW: "agents.inboxFollow",
+  /** A held task's or agent's inbox, which the panel reads on app state, read again at once, as Try again asks. */
+  AGENTS_INBOX_RETRY: "agents.inboxRetry",
   /** Every inbox item the account reaches, which the panel reads on app state, read again at once, as Try again asks. */
   AGENTS_INBOX_ITEMS_RETRY: "agents.inboxItemsRetry",
   AGENTS_INBOX_ANSWER: "agents.inboxAnswer",

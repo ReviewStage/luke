@@ -191,7 +191,7 @@ test("a cut command output is read whole only as its fold opens, says it is read
 
   land({ part: { ...COMMAND, output: WHOLE_OUTPUT } });
   await settled();
-  const output = row?.querySelector("[data-tool-output]")?.textContent ?? "";
+  const output = row?.querySelector("[data-tool-terminal]")?.textContent ?? "";
   assert.match(output, /compiled the middle file/u);
   assert.doesNotMatch(row?.textContent ?? "", /Reading the whole output/u);
   assert.equal(row?.querySelector("summary")?.getAttribute("aria-expanded"), "true");
@@ -212,7 +212,7 @@ test("a cut thought is read whole as its fold opens, and one whose read fails dr
   await settled();
   assert.equal(asked.length, 2);
   const output =
-    container.querySelector('[data-call-id="call-build"] [data-tool-output]')?.textContent ?? "";
+    container.querySelector('[data-call-id="call-build"] [data-tool-terminal]')?.textContent ?? "";
   assert.match(output, /compiled the first file/u);
   assert.match(output, /compiled the last file/u);
   assert.doesNotMatch(output, /compiled the middle file/u);
@@ -228,7 +228,7 @@ test("a read that answers some other call than the one cut, as an index read acr
   press(container.querySelector<HTMLElement>('[data-call-id="call-build"] summary'));
   await settled();
   const output =
-    container.querySelector('[data-call-id="call-build"] [data-tool-output]')?.textContent ?? "";
+    container.querySelector('[data-call-id="call-build"] [data-tool-terminal]')?.textContent ?? "";
   assert.match(output, /compiled the first file/u);
   assert.doesNotMatch(output, /compiled the middle file/u);
 });

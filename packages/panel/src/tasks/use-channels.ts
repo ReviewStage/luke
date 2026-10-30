@@ -8,6 +8,7 @@ import { ACT_UNREACHED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { STATUS_TONE } from "@luke/ui";
+import { keepIdentity } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { askAct, useAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";
@@ -115,15 +116,21 @@ function told(): void {
   for (const listener of listeners) listener();
 }
 
-/** Holds a workspace's channels as an answer says, a failure keeping what was held. */
+/**
+ * Holds a workspace's channels as an answer says, a failure keeping what was
+ * held. Note that each channel the answer left as it was is kept as the one
+ * held, and an answer that changed nothing tells no one, because the
+ * channels are read again whenever an item is written anywhere, and every
+ * surface drawing them would draw again for nothing.
+ */
 function hold(workspaceId: string, view: ChannelsView | undefined): void {
-  const was = held.get(workspaceId) ?? NOTHING_HELD;
-  held.set(
-    workspaceId,
+  const was = held.get(workspaceId);
+  const now: HeldChannels =
     view === undefined || "failure" in view
-      ? { channels: was.channels, failed: true }
-      : { channels: view.channels, failed: false },
-  );
+      ? { channels: was?.channels, failed: true }
+      : { channels: keepIdentity(was?.channels, view.channels), failed: false };
+  if (was !== undefined && was.channels === now.channels && was.failed === now.failed) return;
+  held.set(workspaceId, now);
   heldChannels = new Map(
     [...held].flatMap(([id, each]) => (each.channels === undefined ? [] : [[id, each.channels]])),
   );

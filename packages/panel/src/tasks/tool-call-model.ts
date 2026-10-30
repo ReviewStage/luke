@@ -32,6 +32,7 @@ import {
   integrationOfRemoteTool,
   integrationRemoteCallSchema,
 } from "@luke/features/integration-wire";
+import { LINK_PLACE, type LinkPlace, linkOf } from "@luke/features/link-grammar";
 import { linkLabels } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
@@ -56,6 +57,7 @@ import { INLINE_SPAN, readInline } from "../plan-editor/composer-markdown.js";
 import { fileRefText } from "./file-ref-model.js";
 import { shortCommit } from "./file-tab-model.js";
 import { askHeadWords } from "./inbox-ask-words.js";
+import { holderTaskId, type MentionHolder } from "./mention-holder.js";
 
 /**
  * tool-call-model.ts -- what a coding agent's tool call says on its one row, and what its body shows, decided from the part's own input and output.
@@ -88,6 +90,10 @@ export interface ToolCallView {
   readonly kind: CallKind;
   /** The thing the call was done to, after its kind's verb. */
   readonly subject: string;
+  /** For a call that read, wrote, or edited files in the task's checkout, their paths as the call named them, in order, which its row names by the first one's chip; none for a patch of a checkout its root names. */
+  readonly files?: readonly string[];
+  /** For a read of a web page, its whole address, which its row names by its website chip. */
+  readonly page?: string;
   /** For a command, the plain words the model said it is for, which its line says in place of the verb and the command; for a browser call, what it did (`browserCallWords`); absent where there are none. */
   readonly description?: string;
   readonly input: ToolBlock;
@@ -116,14 +122,25 @@ function stripAnsi(text: string): string {
 }
 
 /** A patch header naming a file, as `apply_patch` spells one. */
-const PATCH_FILE_HEADER = /^\*\*\* (?:Add|Update|Delete|Move to) File: (.+)$/u;
+const PATCH_FILE_HEADER = /^\*\*\* (?:Add|Update|Delete) File: (.+)$/u;
 
-/** The files a patch touches, in the order its headers name them. */
+/** The header that moves the file the header before it names, as `apply_patch` spells it. */
+const PATCH_MOVE_HEADER = /^\*\*\* Move to: (.+)$/u;
+
+/**
+ * The files a patch touches, in the order its headers name them. Note that
+ * a file it moves is named where it moved to, in its old path's place,
+ * because the old path names nothing once the patch is applied.
+ */
 function patchPaths(patchText: string): readonly string[] {
-  return patchText.split("\n").flatMap((line) => {
-    const match = PATCH_FILE_HEADER.exec(line.trimEnd());
-    return match?.[1] === undefined ? [] : [match[1]];
-  });
+  const paths: string[] = [];
+  for (const line of patchText.split("\n")) {
+    const moved = PATCH_MOVE_HEADER.exec(line.trimEnd())?.[1];
+    if (moved !== undefined && paths.length > 0) paths[paths.length - 1] = moved;
+    const named = PATCH_FILE_HEADER.exec(line.trimEnd())?.[1];
+    if (named !== undefined) paths.push(named);
+  }
+  return paths;
 }
 
 /** Where a value is drawn as JSON, how it reads: pretty-printed, a string as it is. */
@@ -149,6 +166,12 @@ function pathsSubject(paths: readonly string[]): string {
 /** The string under a key of a record, or nothing where the record has none. */
 function stringAt(value: WireValue | undefined, key: string): string | undefined {
   return isRecord(value) && isWireString(value[key]) ? value[key] : undefined;
+}
+
+/** The one file a call's `filePath` names, as a list; none where it names none. */
+function filesAt(input: WireValue | undefined): readonly string[] {
+  const path = stringAt(input, "filePath");
+  return path === undefined || path === "" ? [] : [path];
 }
 
 /** The files a `show_image` call named, in order, as its row's subject. */
@@ -953,6 +976,7 @@ const AGENT_TOOL_VIEWS = {
   [AGENT_TOOL.READ_WEB_PAGE]: ({ input, output }) => ({
     kind: CALL_KIND.WEB_PAGE,
     subject: pageName(stringAt(input, "url") ?? ""),
+    page: stringAt(input, "url") ?? "",
     input: textBlock(stringAt(input, "url") ?? ""),
     output: output === undefined ? undefined : wordsOutput(output, "text"),
   }),
@@ -992,12 +1016,14 @@ const AGENT_TOOL_VIEWS = {
   [AGENT_TOOL.READ_FILE]: ({ input, output }) => ({
     kind: CALL_KIND.READ_FILE,
     subject: stringAt(input, "filePath") ?? "",
+    files: filesAt(input),
     input: textBlock(stringAt(input, "filePath") ?? ""),
     output: output === undefined ? undefined : wordsOutput(output, "content"),
   }),
   [AGENT_TOOL.WRITE_FILE]: ({ input, output }) => ({
     kind: CALL_KIND.WRITE_FILE,
     subject: stringAt(input, "filePath") ?? "",
+    files: filesAt(input),
     input: textBlock(stringAt(input, "content") ?? ""),
     output: output === undefined ? undefined : wordsOutput(output, "path"),
   }),
@@ -1005,9 +1031,12 @@ const AGENT_TOOL_VIEWS = {
   [AGENT_TOOL.GREP]: READ_SEARCH,
   [AGENT_TOOL.APPLY_PATCH]: ({ input, output }) => {
     const patchText = stringAt(input, "patchText") ?? "";
+    const paths = patchPaths(patchText);
     return {
       kind: CALL_KIND.EDIT,
-      subject: pathsSubject(patchPaths(patchText)),
+      subject: pathsSubject(paths),
+      // Note that a patch whose root names a checkout may name another than the task's, so its files name none of the task's.
+      files: stringAt(input, "root") === undefined ? paths : [],
       input: { kind: TOOL_BLOCK.PATCH, text: patchText },
       output: output === undefined ? undefined : patchOutput(output),
     };
@@ -1107,6 +1136,7 @@ const RETIRED_TOOL_VIEWS = {
   [RETIRED_TOOL.WEB_FETCH]: ({ input, output }) => ({
     kind: CALL_KIND.WEB_PAGE,
     subject: pageName(stringAt(input, "url") ?? ""),
+    page: stringAt(input, "url") ?? "",
     input: textBlock(stringAt(input, "url") ?? ""),
     output: output === undefined ? undefined : wordsOutput(output, "content"),
   }),
@@ -1208,6 +1238,8 @@ export type ToolTarget =
       readonly kind: typeof TOOL_TARGET.INBOX;
       /** The key of the calling agent's thread the call posted on or withdrew, whose item the Inbox opens on; none for a read of the whole Inbox. */
       readonly key?: string;
+      /** The thread's id, as the call's answer names the thread under its key, which its chip is linked by; none where the answer names none. */
+      readonly item?: string;
     }
   | {
       readonly kind: typeof TOOL_TARGET.TASK;
@@ -1238,10 +1270,19 @@ interface TargetedCall {
 const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
 
-/** The thread a call names by its key, a post's or a withdrawal's, whose item its row opens; the whole Inbox where it names none. */
+/** The thread a call names by its key, a post's or a withdrawal's, whose item its row opens, by the id its answer lists the thread under; the whole Inbox where it names none. */
 function namedThread(call: TargetedCall): ToolTarget {
   const key = stringAt(call.input, "key");
-  return key === undefined || key === "" ? INBOX_TARGET : { kind: TOOL_TARGET.INBOX, key };
+  if (key === undefined || key === "") return INBOX_TARGET;
+  const threads =
+    isRecord(call.output) && Array.isArray(call.output.inbox) ? call.output.inbox : [];
+  const item = stringAt(
+    threads.find((thread) => stringAt(thread, "key") === key),
+    "id",
+  );
+  return item === undefined
+    ? { kind: TOOL_TARGET.INBOX, key }
+    : { kind: TOOL_TARGET.INBOX, key, item };
 }
 
 /** The agent a call names in its input, as a read of or a message to one does. */
@@ -1363,6 +1404,51 @@ function refused(output: WireValue | undefined): boolean {
 export function toolTarget(call: TargetedCall): ToolTarget | undefined {
   if (call.output === undefined || refused(call.output)) return undefined;
   return TOOL_TARGETS.get(call.tool)?.(call);
+}
+
+/** Where a call's row stands, which the link of what the call made is read under: the workspace, the task, and the agent whose transcript it is. */
+export interface TargetPlace {
+  /** The workspace's slug; empty where the place names none. */
+  readonly workspace: string;
+  /** The task whose page draws the transcript, or the agent on no task whose own page does, which the plan and the pages stand on; none where the place holds neither. */
+  readonly holder: MentionHolder | undefined;
+  /** The agent whose transcript is drawn, whose threads a post names. */
+  readonly agentId: string | undefined;
+}
+
+/**
+ * The link of what a call made or is about, which its row's chip is drawn
+ * from as the window draws that link anywhere: a pull request by its
+ * address, another task by its plan, the task's own plan, a page on it or
+ * on the agent of no task, or the agent's thread by the id its answer named. Nothing for an agent,
+ * whose row names it by its own chip (`AgentCallChip`), for the whole
+ * Inbox, and where the place names no workspace or what the thing is on.
+ */
+export function targetLink(target: ToolTarget, place: TargetPlace): string | undefined {
+  if (target.kind === TOOL_TARGET.PULL_REQUEST) return target.url;
+  if (place.workspace === "") return undefined;
+  const linked = (at: LinkPlace) => linkOf(at, place.workspace);
+  switch (target.kind) {
+    case TOOL_TARGET.TASK:
+      return linked({ kind: LINK_PLACE.TASK, planId: target.task });
+    case TOOL_TARGET.PLAN: {
+      const taskId = holderTaskId(place.holder);
+      return taskId === undefined ? undefined : linked({ kind: LINK_PLACE.TASK, planId: taskId });
+    }
+    case TOOL_TARGET.PAGE: {
+      const holder = place.holder;
+      if (holder === undefined) return undefined;
+      return "taskId" in holder
+        ? linked({ kind: LINK_PLACE.PAGE, planId: holder.taskId, pageId: target.page })
+        : linked({ kind: LINK_PLACE.PAGE, agentId: holder.agentId, pageId: target.page });
+    }
+    case TOOL_TARGET.INBOX:
+      return target.item === undefined || place.agentId === undefined
+        ? undefined
+        : linked({ kind: LINK_PLACE.INBOX_ITEM, agentId: place.agentId, itemId: target.item });
+    case TOOL_TARGET.AGENT:
+      return undefined;
+  }
 }
 
 /** The tools whose call is about one coding agent, under every name one was made under, which a row names by the agent's chip. */

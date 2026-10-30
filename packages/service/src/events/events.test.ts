@@ -89,6 +89,22 @@ it.effect(
     }),
 );
 
+it.effect("a web batch is stamped web, and one that names no platform is stamped desktop", () =>
+  Effect.gen(function* () {
+    const web = upstream();
+    yield* post("user-web", { events: [LAUNCH], build: { platform: "web" } }, web);
+    const older = upstream();
+    yield* post("user-older", { events: [LAUNCH], build: { app_version: "0.17.0" } }, older);
+
+    const [webItem] = web.forwarded[0]?.body.batch ?? [];
+    assert.equal(webItem?.properties.platform, "web");
+    assert.equal(webItem?.properties.$lib, "luke-web");
+    const [olderItem] = older.forwarded[0]?.body.batch ?? [];
+    assert.equal(olderItem?.properties.platform, "desktop");
+    assert.equal(olderItem?.properties.$lib, "luke-desktop");
+  }),
+);
+
 it.effect(
   "the person is set on the first item alone, and each timestamp is clamped into the window",
   () =>

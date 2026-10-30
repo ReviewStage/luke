@@ -23,6 +23,8 @@ import { Effect, Schema } from "effect";
 import { act } from "react";
 import { beforeAll, test } from "vitest";
 import { appBridge } from "../app-bridge.js";
+import { sideBundles } from "../bundle-loader.js";
+import { planEditor } from "../plan-editor/index.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -77,6 +79,7 @@ import {
   ON_THRESHOLD,
   openOptions,
   pressKey,
+  pushAgain,
   READER,
   RETRY,
   readTitle,
@@ -260,6 +263,44 @@ test("a close taken lets go of the item's draft, though another item is chosen",
   await confirmClose();
 
   assert.equal(rowDrafted(page, "Alert at 80%?"), false, "the closed item's draft is let go");
+});
+
+test("an item gone from under its open box, as a teammate's delete takes it, lets go of its draft", async () => {
+  const { page } = mount([], { chosen: ON_THRESHOLD });
+  await settle();
+  typeInComposer(itemPane(page), "Use 90% instead");
+  await settle();
+
+  world.inboxes.set(BILLING.id, [RETRY]);
+  act(() => pushAgain());
+  await settle();
+  // Note that the item standing again shows what was kept of its draft, since its row and its box went with it.
+  world.inboxes.set(BILLING.id, [THRESHOLD, RETRY]);
+  act(() => pushAgain());
+  await settle();
+
+  assert.equal(composerEditor(itemPane(page)).textContent, "", "the gone item's draft is let go");
+});
+
+test("an answer box whose editor bundle could not be loaded says so beside Retry, and Retry mounts the editor once the bundle lands", async () => {
+  // Note that the chunk fails the first time it is asked for and lands the next, as a connection that dropped for a moment does.
+  let failed = false;
+  const bundles = sideBundles({
+    planEditor: () => {
+      if (failed) return Promise.resolve(planEditor);
+      failed = true;
+      return Promise.reject(new Error("The chunk could not be loaded."));
+    },
+  });
+  const { page } = mount([], { chosen: ON_THRESHOLD, bundles });
+  await settle();
+  const note = page.querySelector(".luke-composer-foot-note");
+  assert.equal(note?.textContent, "The answer box could not be loaded.Retry");
+
+  await act(async () => note?.querySelector("button")?.click());
+  await settle();
+
+  assert.equal(page.querySelector(".luke-composer-foot-note"), null, "the note is gone");
 });
 
 test("a waiting choice wears a Recommended badge at the head of the option its agent recommends and of no other, and a choice recommending nothing wears none", async () => {
@@ -709,7 +750,7 @@ test("on To do, answering the chosen item draws its row gray where it stood, and
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   const { answer } = gatedAnswers();
-  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["▸ Expire after 7 days?", "Alert at 80%?"]);
   assert.equal(rowMuted(page, "Expire after 7 days?"), false);
 
   answerWithNote(page, "Keep 7 days");
@@ -725,19 +766,15 @@ test("on To do, answering the chosen item draws its row gray where it stood, and
   await settle();
   assert.deepEqual(
     listed(page),
-    ["▸ Expire after 7 days?", "*Alert at 80%?"],
-    "the answered row stays where it stood, needing nobody",
+    ["▸ Expire after 7 days?", "Alert at 80%?"],
+    "the answered row stays where it stood",
   );
   assert.equal(rowMuted(page, "Expire after 7 days?"), true, "drawn gray");
   assert.equal(rowMuted(page, "Alert at 80%?"), false);
 
   act(() => rowNamed(page, "Alert at 80%?").click());
   await settle();
-  assert.deepEqual(
-    listed(page),
-    ["▸ *Alert at 80%?"],
-    "the gray row clears once another is chosen",
-  );
+  assert.deepEqual(listed(page), ["▸ Alert at 80%?"], "the gray row clears once another is chosen");
 });
 
 test("on To do, the chosen row is let go once the Inbox is left, so an item answered while it was hidden is gone when it is come back to", async () => {
@@ -745,7 +782,7 @@ test("on To do, the chosen row is let go once the Inbox is left, so an item answ
   window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
-  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["▸ Expire after 7 days?", "Alert at 80%?"]);
 
   act(() => world.setInboxOpen(false));
   await settle();
@@ -760,7 +797,7 @@ test("on To do, the chosen row is let go once the Inbox is left, so an item answ
   await settle();
   assert.deepEqual(
     listed(page),
-    ["*Alert at 80%?"],
+    ["Alert at 80%?"],
     "the item answered while the Inbox was hidden no longer needs you, so it has no row",
   );
 });

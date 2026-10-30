@@ -75,10 +75,20 @@ function keyOf(press: HTMLElement): string {
   return press.getAttribute(KEY_ATTRIBUTE) ?? "";
 }
 
+/** What a reader hears a press described as: the words its `aria-describedby` names, which outrank its `aria-description`, else that. */
+function describedAs(press: HTMLElement): string {
+  const named = press.getAttribute("aria-describedby");
+  if (named === null) return press.getAttribute("aria-description") ?? "";
+  return named
+    .split(" ")
+    .map((id) => document.getElementById(id)?.textContent ?? "")
+    .join(" ");
+}
+
 /** The keys of the rows chosen now, in the order drawn. */
 function chosen(root: HTMLElement): string[] {
   return presses(root)
-    .filter((press) => press.getAttribute("aria-description") === SELECTED)
+    .filter((press) => describedAs(press).split(", ")[0] === SELECTED)
     .map(keyOf);
 }
 

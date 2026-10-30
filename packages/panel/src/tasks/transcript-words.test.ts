@@ -8,8 +8,10 @@ import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { SIDE_BUNDLES } from "../bundle-loader.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { bundleLanded } from "../testing/side-bundles.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
@@ -54,8 +56,12 @@ const SAMPLES = {
   mention: "Ask [@the plan](https://tryluke.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b).",
 } as const;
 
-// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
-beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
+// A reply is drawn once the parser has landed, as the panel lands it after its first paint, and a code block's file icon once the tree's bundle has.
+beforeAll(() =>
+  Effect.runPromise(
+    Effect.all([markdownHtmlParserLanded, bundleLanded(SIDE_BUNDLES.fileTree)], { discard: true }),
+  ),
+);
 
 const roots: Root[] = [];
 
