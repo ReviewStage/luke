@@ -805,10 +805,12 @@ function PlanDocument({
       pullRequestCardDoor,
     ],
   );
-  // The task's agents head its plan, a row opening its agent in this column as its tab does.
+  // The task's agents head its plan, a row opening its agent in this column as its tab does,
+  // keyed by the task, so another task's group starts folded rather than as this one was left.
   const planAgents = useMemo(
     () => (
       <PlanAgents
+        key={openedId}
         agents={agents}
         held={views.held}
         tab={tab}
@@ -817,7 +819,7 @@ function PlanDocument({
         onOpenPullRequest={openPullRequestDoor}
       />
     ),
-    [agents, views.held, tab, opened?.runsOn, openAgentTab, openPullRequestDoor],
+    [openedId, agents, views.held, tab, opened?.runsOn, openAgentTab, openPullRequestDoor],
   );
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
