@@ -14,7 +14,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeEach, test } from "vitest";
 import { runAppCommand } from "./app-commands.js";
 import { stepTitle } from "./history-titles.js";
 import { useCopyLink } from "./links-at-hand.js";
@@ -71,6 +71,8 @@ function unmountAll(): void {
   });
   document.body.innerHTML = "";
 }
+
+beforeEach(() => fakeAppPlatform(QUIET_PANEL));
 
 afterEach(unmountAll);
 
@@ -1347,3 +1349,30 @@ test("with Channels on, an archived channel shown, once the Inbox read the archi
 function stepTitleOf(tasks: TasksControl): StepTitle | undefined {
   return stepTitle(PANEL_TAB.TASKS, tasks);
 }
+
+test("each surface the window opens is counted once, by its kind and layout alone, and not again while it stands", () => {
+  const counted: unknown[] = [];
+  fakeAppPlatform({
+    ...QUIET_PANEL,
+    recordSurfaceEvent: (name, properties) => counted.push([name, properties]),
+  });
+  const opened = (surface: string) => ["surface:open", { surface, layout: "wide" }];
+  const file = { file: "src/relay.ts" };
+  const window = mount(onTabs({ column: undefined }));
+  assert.deepEqual(counted, [opened("task")]);
+
+  // The same place drawn again, as a render or a state patch does, counts nothing.
+  window.stand(onTabs({ column: undefined }));
+  assert.equal(counted.length, 1);
+
+  // The column keeps its plan while the side panel opens a file: one more surface, and only that.
+  window.stand(onTabs({ column: undefined, side: file }));
+  assert.deepEqual(counted.slice(1), [opened("files")]);
+
+  // The column moving to an agent opens it; the file stays open and is not counted again.
+  window.stand(onTabs({ column: AGENT_A, side: file }));
+  assert.deepEqual(counted.slice(2), [opened("agent")]);
+
+  window.stand(tasksControl({ inboxView: { ...tasksControl().inboxView, open: true } }));
+  assert.deepEqual(counted.slice(3), [opened("inbox")]);
+});

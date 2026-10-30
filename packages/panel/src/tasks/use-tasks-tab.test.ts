@@ -59,6 +59,7 @@ import {
 import { PANEL_TAB } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { FAKE_ANSWER, fakeActPort, fakeActs } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -164,7 +165,10 @@ function mount(
     ...initial,
   };
   let windowHistory: WindowHistoryLists | undefined;
-  if (standing.history) installWindowHistory(memoryHistory());
+  if (standing.history) {
+    fakeAppPlatform(QUIET_PANEL);
+    installWindowHistory(memoryHistory());
+  }
   /** The window's history over the tab, as the panel's root keeps it, on the room the tab stands in. */
   function WindowHistoryProbe({ tasks, room }: { tasks: TasksControl; room: ShellRoom }) {
     windowHistory = useWindowHistory({

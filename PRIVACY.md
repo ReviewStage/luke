@@ -1060,7 +1060,10 @@ already changed on GitHub, and the record of it, stays.
 
 **Usage data.** We count how Luke's features are used on the Mac, and attach
 your name and email to that record. The counts are event names and values from
-a fixed list. A count
+a fixed list. Among them is which kind of page or pane you opened (a task's
+plan, an agent, the Inbox, a channel, a pull request, a file, a terminal, a
+browser, Settings, and the like, never which one) and whether Luke's window
+was wide or narrow as you opened it. A count
 made before you sign in waits in Luke's memory and is sent under your account
 if you sign in before Luke quits, and is dropped otherwise. The mark that you
 used Luke on a day is counted once a day for each account signed in, so Luke

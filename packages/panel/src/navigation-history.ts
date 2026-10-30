@@ -76,10 +76,25 @@
  * as that step is (`WindowHistory`'s `away` and `onLeave`).
  */
 
+import { PRODUCT_SURFACE } from "@luke/features/analytics";
 import { linkOf, type ReadLink } from "@luke/features/link-grammar";
 import type { SettingsView } from "@luke/settings/settings-views";
 import type { HistoryAdapter, HistoryEntry, HistorySnapshot } from "@luke/ui/history-adapter";
-import { type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
+import {
+  isAgentTab,
+  isChangesTab,
+  isCloudBrowserTab,
+  isDraftTab,
+  isFileTab,
+  isMacTerminalTab,
+  isPageTab,
+  isSubagentTab,
+  isTerminalTab,
+  isTranscriptTab,
+  type StripTab,
+  sameTab,
+  tabKey,
+} from "@luke/ui/tab-strip-model";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import {
   useCallback,
@@ -104,7 +119,7 @@ import {
 } from "./tasks/use-channels.js";
 import type { MainTab } from "./tasks/use-main-tabs.js";
 import type { HistorySpot } from "./tasks/use-plan-history.js";
-import type { SidePanelTab } from "./tasks/use-side-panel.js";
+import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
@@ -115,6 +130,7 @@ import {
 } from "./tasks/use-tasks-tab.js";
 import { useWorkspaceMembersRead } from "./tasks/use-workspace-members.js";
 import { useAdminAccess, useAdminAccessPending, useExperimentChoices } from "./use-app-state.js";
+import { type OpenSurface, useSurfaceOpen } from "./use-surface-open.js";
 
 /** `MouseEvent.button` for the mouse's own back and forward buttons. */
 export const MOUSE_BUTTON = {
@@ -418,6 +434,66 @@ function choosesWithin(one: Place | undefined, other: Place): boolean {
   return (
     one !== undefined && samePage(one, other) && sameSubStep(one, other) && !sameShown(one, other)
   );
+}
+
+/** The surface a tab of a task's column or side panel shows, which a task's own fixed tabs name by the task. */
+function tabSurface(taskId: string, tab: StripTab): OpenSurface {
+  if (isAgentTab(tab) || isDraftTab(tab) || isTranscriptTab(tab)) {
+    return { surface: PRODUCT_SURFACE.AGENT, of: tabKey(tab) };
+  }
+  const of = tabKey(tab);
+  if (isSubagentTab(tab)) return { surface: PRODUCT_SURFACE.SUBAGENT, of };
+  if (isFileTab(tab)) return { surface: PRODUCT_SURFACE.FILES, of };
+  if (isChangesTab(tab)) return { surface: PRODUCT_SURFACE.PULL_REQUEST, of };
+  if (isTerminalTab(tab) || isMacTerminalTab(tab)) {
+    return { surface: PRODUCT_SURFACE.TERMINAL, of };
+  }
+  if (isCloudBrowserTab(tab)) return { surface: PRODUCT_SURFACE.BROWSER, of };
+  if (isPageTab(tab)) return { surface: PRODUCT_SURFACE.PAGE, of };
+  // A word of the side panel's own: the plan, the task's Inbox, or its comments.
+  if (tab === SIDE_PANEL_TAB.INBOX) return { surface: PRODUCT_SURFACE.INBOX, of: taskId };
+  if (tab === SIDE_PANEL_TAB.COMMENTS) return { surface: PRODUCT_SURFACE.COMMENTS, of: taskId };
+  return { surface: PRODUCT_SURFACE.TASK, of: taskId };
+}
+
+/**
+ * The surfaces a place shows, as the window counts them opened: a task's column and its side panel each show one, and the column's is held back while the task's agents are unread (`columnKnown`), since the plan it would name may be an agent's tab still on its way.
+ */
+function surfacesOf(place: Place | undefined, columnKnown: boolean): OpenSurface[] {
+  if (place === undefined) return [];
+  switch (place.kind) {
+    case PLACE_KIND.TASK: {
+      const surfaces: OpenSurface[] = [];
+      if (columnKnown) surfaces.push(tabSurface(place.taskId, place.column ?? SIDE_PANEL_TAB.PLAN));
+      const side = place.side ?? openPanelTab(place.panel);
+      if (side !== undefined) surfaces.push(tabSurface(place.taskId, side));
+      return surfaces;
+    }
+    case PLACE_KIND.VERSION_HISTORY:
+      return [{ surface: PRODUCT_SURFACE.VERSION_HISTORY, of: place.taskId }];
+    case PLACE_KIND.INBOX: {
+      if (place.channelId === undefined) return [{ surface: PRODUCT_SURFACE.INBOX }];
+      return [
+        place.chosen === undefined
+          ? { surface: PRODUCT_SURFACE.CHANNEL, of: place.channelId }
+          : { surface: PRODUCT_SURFACE.THREAD, of: place.chosen.itemId },
+      ];
+    }
+    case PLACE_KIND.AGENT:
+      return [{ surface: PRODUCT_SURFACE.AGENT, of: place.agentId }];
+    case PLACE_KIND.PERSON:
+      return [{ surface: PRODUCT_SURFACE.PERSON, of: place.userId }];
+    case PLACE_KIND.HOME:
+      return [{ surface: PRODUCT_SURFACE.HOME }];
+    case PLACE_KIND.AUTOMATIONS:
+      return [{ surface: PRODUCT_SURFACE.AUTOMATIONS }];
+    case PLACE_KIND.BOARD:
+      return [{ surface: PRODUCT_SURFACE.BOARD }];
+    case PLACE_KIND.SETTINGS:
+      return [{ surface: PRODUCT_SURFACE.SETTINGS }];
+    case PLACE_KIND.ADMIN:
+      return [{ surface: PRODUCT_SURFACE.ADMIN }];
+  }
 }
 
 /** Whether a version history stands where it stood: on the same version, with the same sections open. */
@@ -1182,6 +1258,11 @@ export function useWindowHistory(input: {
     adminOpen,
     adminView,
   ]);
+  // Each surface the place shows is counted as it opens, from here rather than from the doors that open it, as the history is written.
+  useSurfaceOpen(
+    useMemo(() => surfacesOf(untitled, columnKnown), [untitled, columnKnown]),
+    input.room,
+  );
   // Note that a channel's step is named by its channel, and by the thread's task while one stands open in it.
   const channelName = inboxChannel === undefined ? undefined : shown?.channel.name;
   const channelDetail = inboxChosen === undefined ? undefined : titleDetail;
