@@ -7,9 +7,11 @@ import {
   TaskRows,
 } from "@luke/ui";
 import { childTaskCounts } from "@luke/ui/task-list-model";
-import { type ReactNode, useMemo } from "react";
+import { LIST_COLUMN, type ListColumn, TASK_PROPERTY } from "@luke/ui/tasks-page-model";
+import { type ReactNode, useMemo, useState } from "react";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
+import { useFittedColumns } from "./fitted-columns.js";
 import { openPullRequests, TaskListRow } from "./task-list-row.js";
 import { useStandingDoor } from "./task-row-parts.js";
 import { useTasksSelection } from "./tasks-selection.js";
@@ -22,7 +24,9 @@ import { useTasksSelection } from "./tasks-selection.js";
  * priority, key, and status before its name, then its assignee, its open
  * pull requests, how many of its sub-tasks are finished, and what its owner
  * stands at its end, a relation's kind, say, before its ⋯, each of those
- * last three drawn only where a row fills it. Its chips change the task where it stands, a press
+ * last three drawn only where a row fills it, and the List's columns
+ * folding away by the list's own width as the List folds them
+ * (`fitted-columns.ts`), key and sub-tasks first, before a name is squeezed. Its chips change the task where it stands, a press
  * opens it, and its ⋯, a right-click, and the menu key open its menu. Its
  * rows are one Tab stop that ↑↓ walk, and are chosen together as the List's
  * are, a row chosen among several offering the List's bar's acts on every
@@ -45,10 +49,38 @@ export interface RelatedTaskRow {
   readonly menu?: readonly (readonly MenuEntry[])[];
 }
 
+/** The room, in CSS pixels, each cell of a related task's that is none of the List's columns takes at its widest, the gap before it included. */
+const OWN_CELL_ROOM = {
+  [TASK_ROW_CELL.PULL_REQUESTS]: 72,
+  [TASK_ROW_CELL.END]: 56,
+} as const;
+
+/** The List's columns, which fold away by a list's width as the List folds them. */
+const LIST_COLUMNS: ReadonlySet<string> = new Set([
+  ...Object.values(TASK_PROPERTY),
+  ...Object.values(LIST_COLUMN),
+]);
+
+/** Whether a cell is one of the List's columns. */
+function isListColumn(cell: TaskRowCell): cell is TaskRowCell & ListColumn {
+  return LIST_COLUMNS.has(cell);
+}
+
+/** The room the cells drawn that are none of the List's columns take, which a list counts out of its width before it folds. */
+function ownRoom(cells: readonly TaskRowCell[]): number {
+  return cells.reduce(
+    (room, cell) =>
+      cell === TASK_ROW_CELL.PULL_REQUESTS || cell === TASK_ROW_CELL.END
+        ? room + OWN_CELL_ROOM[cell]
+        : room,
+    0,
+  );
+}
+
 /**
  * The cells the list draws: the related task's own, leaving out a column no
  * row fills, its pull requests, its sub-tasks' count, or its end, since an
- * empty column still costs the list a gap, which a narrow column cannot spare.
+ * empty column still costs the list a gap.
  */
 function drawnCells(
   rows: readonly RelatedTaskRow[],
@@ -77,9 +109,15 @@ export function RelatedTasks({
   const selection = useTasksSelection(tasks, new Set(rows.map((row) => row.task.id)));
   const workspaceName = tasks.workspace?.name ?? "";
   const subTasks = useMemo(() => childTaskCounts(tasks.tasks), [tasks.tasks]);
-  const cells = drawnCells(rows, subTasks);
+  const [list, setList] = useState<HTMLDivElement | null>(null);
+  const filled = drawnCells(rows, subTasks);
+  const fitted = useFittedColumns(list, filled.filter(isListColumn), {
+    reserved: ownRoom(filled),
+  });
+  const cells = filled.filter((cell) => !isListColumn(cell) || fitted.includes(cell));
   return (
-    <>
+    // Note that the list is measured from a box of its own, the width its rows stand in, so its columns fold for the room it has.
+    <div ref={setList} className="related-tasks min-w-0">
       <TaskRows
         id={selection.regionId}
         label={label}
@@ -106,6 +144,6 @@ export function RelatedTasks({
         ))}
       </TaskRows>
       {selection.dialog}
-    </>
+    </div>
   );
 }
