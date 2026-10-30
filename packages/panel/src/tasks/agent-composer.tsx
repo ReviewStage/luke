@@ -553,6 +553,8 @@ export function AgentComposer({
     },
   });
   const editingQueued = queueing?.editing === true;
+  // Whether Send takes nothing now: the box held, unable to send, or still reading a file handed to it.
+  const sendHeld = held || !sendable || files.reading;
   // Note that an edit's Save stands with the box emptied, since saving nothing gives the edit up.
   const empty =
     !sendsEmpty && !editingQueued && !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
@@ -728,31 +730,38 @@ export function AgentComposer({
     );
   };
 
-  /** The box's message sent now: into the turn under way, or opening one. */
-  const steer = () => {
+  /**
+   * The box's message gone the way `go` takes it: sent, queued behind the
+   * turn, or an edit of a queued message saved or steered. Note that every
+   * way is the one step, so the box's notes go and its caret comes back
+   * alike whichever way its message went.
+   */
+  const sentBy = (go: () => void) => {
     setRefusal(undefined);
     setCut(false);
     refocus.current = card.current?.contains(document.activeElement) === true;
-    composer.send();
+    go();
     setSends((count) => count + 1);
   };
+  /** The box's message sent now: into the turn under way, or opening one. */
+  const steer = () => sentBy(composer.send);
   /** Send as it stands: an edit saved, the message queued where a send queues now, or sent. */
   const submit = () => {
-    if (editingQueued) return queueing?.onSave();
-    if (queuesNow) return queueing?.onQueue();
+    if (editingQueued) return sentBy(queueing.onSave);
+    if (queuesNow) return sentBy(queueing.onQueue);
     steer();
   };
-  /** A key the queue takes: ⌘↩ steers an edit, or sends the other way than Enter. */
+  /** A key the queue takes: ⌘↩ steers an edit, or sends the other way than Enter, held where Send is. */
   const queueKey = (event: KeyboardEvent): boolean => {
     if (queueing === undefined) return false;
     if (!modEnterSends(event)) return false;
     if (editingQueued) {
-      queueing.onSteer();
+      if (!sendHeld) sentBy(queueing.onSteer);
       return true;
     }
     if (!queues || !sendable) return false;
     if (queueing.enterQueues) steer();
-    else queueing.onQueue();
+    else sentBy(queueing.onQueue);
     return true;
   };
   // Send says what a send does while it is other than steering, as its glyph alone in the round send's place:
@@ -934,7 +943,7 @@ export function AgentComposer({
                   enterQueues={queueing.enterQueues}
                   disabled={!sendable}
                   onSteer={steer}
-                  onQueue={queueing.onQueue}
+                  onQueue={() => sentBy(queueing.onQueue)}
                 />
               ) : null}
             </ComposerActions>
@@ -945,7 +954,7 @@ export function AgentComposer({
             ...(sendWay === undefined ? undefined : { icon: sendWay.icon }),
             chord: wording?.chord,
             empty,
-            held: held || !sendable || files.reading,
+            held: sendHeld,
             busy: composer.sending,
             busyLabel: BUTTON.SENDING,
           }}
