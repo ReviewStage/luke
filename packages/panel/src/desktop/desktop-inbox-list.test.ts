@@ -38,6 +38,7 @@ import {
   headerNamed,
   headTitle,
   heardName,
+  heardOf,
   hoveredCard,
   INVITES,
   inOrder,
@@ -81,6 +82,7 @@ import {
   takenCloses,
   threadItem,
   threadMessage,
+  titleOf,
   viewItem,
   waitingTaskless,
   world,
@@ -169,8 +171,8 @@ function commandClick(page: HTMLElement, title: string): void {
 /** The titles of the rows the list holds chosen, in the order drawn. */
 function picked(page: HTMLElement): string[] {
   return [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main")]
-    .filter((row) => row.getAttribute("aria-description") === "Selected")
-    .map((row) => row.querySelector(ROW_TITLE)?.textContent ?? "");
+    .filter((row) => heardOf(row.getAttribute("aria-describedby")).startsWith("Selected, "))
+    .map(titleOf);
 }
 
 /** The selection's bar under the list, or none while nothing is chosen. */
@@ -327,7 +329,7 @@ test("a plain click still opens its item, leaving what is chosen as it stands", 
 test("a plan main says changed is read again, so an item answered on another Mac lists as settled, gray where it stood while the pointer is over the list and sorted anew once it leaves; To do then lists only what still needs you, and the choice outlives a relaunch", async () => {
   let { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
-  const list = page.querySelector('nav[aria-label="Inbox items"]');
+  const list = page.querySelector('nav[aria-label^="Inbox items"]');
   assert.ok(list !== null);
   pointerCross(document.body, list);
   world.inboxes.set(INVITES.id, [
@@ -364,14 +366,14 @@ test("a plan main says changed is read again, so an item answered on another Mac
 
   showScope(page, "Needs you");
   assert.deepEqual(scopes(page), ["Inbox", "[Needs you]", "All"]);
-  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ Alert at 80%?"]);
 
   act(() => world.root?.unmount());
   world.root = undefined;
   ({ page } = mount([], { chosen: ON_THRESHOLD }));
   await settle();
   assert.deepEqual(scopes(page), ["Inbox", "[Needs you]", "All"]);
-  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ Alert at 80%?"]);
 
   showScope(page, "All");
   assert.deepEqual(scopes(page), ["Inbox · All", "Needs you", "[All]"]);
@@ -447,7 +449,7 @@ test("a fresh profile opens the Inbox on To do, grouped by nothing, None first a
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   assert.deepEqual(scopes(page), ["Inbox", "[Needs you]", "All"]);
-  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["▸ Expire after 7 days?", "Alert at 80%?"]);
   const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   act(() => options?.click());
   act(() => viewItem("Group by").click());
@@ -494,7 +496,7 @@ test("a task done or canceled keeps its items listed and counted as any other's,
   await settle();
   assert.deepEqual(scopes(page), ["Inbox", "[Needs you]", "All"]);
   const rows = listed(page);
-  for (const row of ["*Alert at 80%?", "*Expire after 7 days?", "*Quarantine the flaky test?"]) {
+  for (const row of ["Alert at 80%?", "Expire after 7 days?", "Quarantine the flaky test?"]) {
     assert.ok(
       rows.some((each) => each.replace(/^▸ /u, "") === row),
       `To do lists ${row}: ${rows.join(" | ")}`,
@@ -880,9 +882,9 @@ test("one column wide, an answered item that To do draws no row for shows no cou
   showScope(page, "Needs you");
   assert.deepEqual(listed(page), [
     "# Invites",
-    "*Expire after 7 days?",
+    "Expire after 7 days?",
     "# Billing usage alerts",
-    "*Alert at 80%?",
+    "Alert at 80%?",
   ]);
   layOut(page, 800);
   assert.equal(readTitle(page), "How is a failed email retried?");
@@ -907,7 +909,7 @@ test("on To do, a focused row whose item is answered on another Mac leaves the k
     ]),
   );
   await settle();
-  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ Alert at 80%?"]);
   assert.ok(
     document.activeElement === page.querySelector('button[aria-label="View options"]'),
     "the keyboard is on View options",
@@ -938,7 +940,7 @@ test("on a phone, a focused row whose item is answered elsewhere leaves the keyb
     ]),
   );
   await settle();
-  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ Alert at 80%?"]);
   assert.ok(document.activeElement === more(), "the keyboard is on the head's ⋯");
 });
 
@@ -1004,7 +1006,7 @@ test("on To do, an item answered on another Mac slides out from where its row st
   act(() => {
     for (const fade of fades) fade.finish();
   });
-  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ Alert at 80%?"]);
   assert.equal(page.querySelector("[data-leaving]"), null);
 });
 
@@ -1139,7 +1141,7 @@ function unreadOf(page: HTMLElement, title: string): boolean | "?" {
   const marks = [
     row.querySelector(".luke-unread-gutter .luke-unread-dot") !== null,
     row.closest("li")?.dataset.unread === "true",
-    [...row.querySelectorAll(".luke-list-row-meta .luke-visually-hidden")].some(
+    [...row.querySelectorAll(`${ROW_TITLE} .luke-visually-hidden`)].some(
       (each) => each.textContent === "Unread",
     ),
   ];
@@ -1148,6 +1150,71 @@ function unreadOf(page: HTMLElement, title: string): boolean | "?" {
 }
 
 /** The mark a row's hover offers over its time. */
+/** The row of the item so titled as a reader hears it: its name, then its description. */
+function heardRow(page: HTMLElement, title: string): [string, string] {
+  const row = rowNamed(page, title);
+  return [
+    heardOf(row.getAttribute("aria-labelledby")),
+    heardOf(row.getAttribute("aria-describedby")),
+  ];
+}
+
+/** Expire after 7 days? as an unread notice whose message shows its code under its first line. */
+const CODED: InboxItem = {
+  ...EXPIRY,
+  unread: true,
+  thread: [
+    threadMessage(
+      "a1b2c3d4-0000-4000-8000-0000000000c1",
+      "agent",
+      [
+        "A link opened twice adds them twice:",
+        "",
+        "```ts",
+        "await db.members.add(invite);",
+        "```",
+      ].join("\n"),
+      4_000,
+    ),
+  ],
+};
+
+test("a row is heard as its task, Unread, its title, and its time, and described by its latest message's first line alone, never the code under it", async () => {
+  world.inboxes.set(INVITES.id, [CODED]);
+  const { page } = mount();
+  await settle();
+  showScope(page, "Needs you");
+  const time = rowNamed(page, CODED.title).querySelector("time")?.textContent;
+  assert.deepEqual(heardRow(page, CODED.title), [
+    `Invites Unread Expire after 7 days? ${time}`,
+    "A link opened twice adds them twice:",
+  ]);
+});
+
+test("a row says Needs you to a reader only outside Needs you, whose name says it of every row", async () => {
+  world.inboxes.set(INVITES.id, [CODED]);
+  const { page } = mount();
+  await settle();
+  const time = rowNamed(page, CODED.title).querySelector("time")?.textContent;
+  showScope(page, "All");
+  assert.equal(
+    page.querySelector("nav.inbox-tasks")?.getAttribute("aria-label"),
+    "Inbox items",
+    "the head names All itself",
+  );
+  assert.equal(
+    heardRow(page, CODED.title)[0],
+    `Invites Unread Expire after 7 days? Needs you ${time}`,
+  );
+  showScope(page, "Needs you");
+  assert.equal(heardRow(page, CODED.title)[0], `Invites Unread Expire after 7 days? ${time}`);
+  assert.equal(
+    page.querySelector("nav.inbox-tasks")?.getAttribute("aria-label"),
+    "Inbox items · Needs you",
+    "the list says it once, since the head names no scope",
+  );
+});
+
 test("an unread item wears the blue dot in its row's gutter, its title in the unread weight, and says Unread to a reader; opening it marks it read at once, and the Inbox opening, choosing nothing, marks none", async () => {
   world.inboxes.set(BILLING.id, [
     { ...THRESHOLD, unread: true },
@@ -1342,6 +1409,7 @@ test("a row swiped right marks its item: a long swipe marks an unread item read 
   await settle();
   const button = item.querySelector<HTMLButtonElement>("button[data-swipe-act]");
   assert.equal(button?.textContent, "Unread");
+  assert.equal(button?.getAttribute("aria-label"), "Mark as unread", "named as the menu names it");
   act(() => button?.click());
   await settle();
   assert.deepEqual(world.readMarks, [`read:${RETRY.id}`, `unread:${RETRY.id}`]);

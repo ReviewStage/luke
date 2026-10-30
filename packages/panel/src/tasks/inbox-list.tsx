@@ -67,7 +67,6 @@ import {
   useMinute,
   useResizeEdge,
   useRovingKeys,
-  VisuallyHidden,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -178,6 +177,7 @@ import {
   type InboxWhose,
   inboxLineKind,
   inboxPreview,
+  inboxPreviewHeard,
   inboxShownTicks,
   isDone,
   isUnread,
@@ -264,11 +264,17 @@ const ARCHIVED_WORDS = {
   UNARCHIVING: "Unarchiving",
 } as const;
 
+/** What the list's region is named. */
+const INBOX_ITEMS = "Inbox items";
+
 /** What an unread row says to a reader, its dot being drawn for the eye alone. */
 const UNREAD = "Unread";
 
-/** What a row's swipe button says it does: marks the item read, or unread. */
-const SWIPE_WORDS = { READ: "Read", UNREAD: "Unread" } as const;
+/** What a row's swipe button says it does, short for the eye and in the menu's own words to a reader: marks the item read, or unread. */
+const SWIPE_WORDS = {
+  READ: { label: "Read", name: commandHead(PANEL_COMMAND.MARK_READ).label },
+  UNREAD: { label: "Unread", name: commandHead(PANEL_COMMAND.MARK_UNREAD).label },
+} as const;
 
 /** What the view's menu offers to clear every dot with. */
 const MARK_ALL_READ = "Mark all as read";
@@ -300,6 +306,18 @@ const INBOX_SCOPES = [INBOX_SHOW.TO_DO, INBOX_SHOW.ALL] as const satisfies reado
 /** The Inbox's name at its head: the scope after it, but for Needs you, where the Inbox opens, since no other control on the head says it. */
 function inboxTitle(show: InboxShow): string {
   return show === INBOX_SHOW.TO_DO ? "Inbox" : `Inbox · ${SCOPE_WORDS[show].label}`;
+}
+
+/**
+ * The list's region's name, Needs you after it only on the window's Inbox
+ * on Needs you, whose head names no scope and whose rows leave it unsaid
+ * (`needsYouShown`), so a reader hears the scope once; every other head
+ * names its scope itself, or names All, where the rows say Needs you.
+ */
+function regionLabel(head: InboxListHead): string {
+  return head.show.show === INBOX_SHOW.TO_DO && head.channel === undefined
+    ? `${INBOX_ITEMS} · ${NEEDS_YOU.LABEL}`
+    : INBOX_ITEMS;
 }
 
 /** A channel's name at the head of the Inbox narrowed to it: the scope after it, but for All, where a channel opens. */
@@ -451,6 +469,7 @@ export const InboxItemRow = memo(function InboxItemRow({
   readerId,
   face = true,
   muted = false,
+  needsYouShown = false,
   ref,
   selectKey,
   onChoose,
@@ -475,6 +494,8 @@ export const InboxItemRow = memo(function InboxItemRow({
   face?: boolean;
   /** Whether the row is drawn gray, its item done with (`isDone`), as the Inbox's own list draws it; nothing says so in words, since its marks and its card do. */
   muted?: boolean;
+  /** Whether the row stands under a name that already says Needs you, the scope's or a section's, so it leaves the words unsaid. */
+  needsYouShown?: boolean;
   /** Handed the row's press, by which the list finds the row of an item. */
   ref?: React.RefCallback<HTMLElement> | undefined;
   /** What the row is chosen by where its list chooses rows (`SelectionRegion`); none where it is never chosen. */
@@ -495,6 +516,7 @@ export const InboxItemRow = memo(function InboxItemRow({
   const { nameOf } = useInboxStanding(listed, readerId);
   const lineKind = inboxLineKind(item);
   const preview = inboxPreview(item, nameOf, ticked);
+  const heard = inboxPreviewHeard(item, nameOf, ticked);
   const addressedTo = inboxAddressedTo(item);
   const addressee = usePerson(addressedTo);
   const coarse = useCoarsePointer();
@@ -522,6 +544,7 @@ export const InboxItemRow = memo(function InboxItemRow({
             {preview}
           </span>
         }
+        describedAs={heard}
         lead={{
           icon: <HolderGlyph holder={holder} />,
           // Note that a thread its agent addressed by name says so after its task, since its task's assignee may be someone else.
@@ -539,7 +562,7 @@ export const InboxItemRow = memo(function InboxItemRow({
             face={face}
             standing={false}
             drafted={drafted}
-            before={unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
+            needsYouSaid={!needsYouShown}
           />
         }
         metaAt={LIST_ROW_META.TITLE}
@@ -547,13 +570,14 @@ export const InboxItemRow = memo(function InboxItemRow({
           onMark === undefined
             ? undefined
             : {
-                label: unread ? SWIPE_WORDS.READ : SWIPE_WORDS.UNREAD,
+                ...(unread ? SWIPE_WORDS.READ : SWIPE_WORDS.UNREAD),
                 icon: unread ? <MailOpenIcon /> : <MailIcon />,
                 onAct: () => onMark(listed, !unread),
               }
         }
         current={current ? LIST_ROW_CURRENT.PAGE : undefined}
         unread={unread}
+        unreadWords={UNREAD}
         muted={muted}
         hint={{ Hint: RowHint, label: title }}
         selectKey={selectKey}
@@ -1692,6 +1716,7 @@ export function InboxList({
       readerId={readerId}
       face={view.grouping !== INBOX_GROUPING.PERSON}
       muted={isDone(listed.item)}
+      needsYouShown={head.show.show === INBOX_SHOW.TO_DO}
       ref={leaving ? undefined : rows.hold(listed.item.id)}
       selectKey={leaving ? undefined : listed.item.id}
       onChoose={choose}
@@ -1787,7 +1812,7 @@ export function InboxList({
     <nav
       ref={rowFocus.ref}
       className="inbox-tasks relative flex min-h-0 min-w-0 flex-col border-r border-border"
-      aria-label="Inbox items"
+      aria-label={regionLabel(head)}
       hidden={columns === INBOX_COLUMNS.ITEM}
       onFocus={rowFocus.onFocus}
       onBlur={rowFocus.onBlur}
