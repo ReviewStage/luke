@@ -257,22 +257,26 @@ test("a path that fits its bar folds nothing", () => {
   ]);
 });
 
-test("the … of a folded path opens a menu of the crumbs it stands for, each leading where its crumb did", () => {
+test("the … of a folded path opens a menu of the crumbs it stands for, each by its words and detail, leading where its crumb did", () => {
   layOut(250);
   const opened: string[] = [];
   const container = draw({
     label: "Path",
     crumbs: [
       { label: "Teammate invitations", onPress: () => opened.push("task") },
-      { label: "Build teammate invitations", onPress: () => opened.push("agent") },
+      {
+        label: "Build teammate invitations",
+        detail: "REL-12",
+        onPress: () => opened.push("agent"),
+      },
       { label: "What the expired invite page says", current: true },
     ],
   });
-  act(() => button(container, "Teammate invitations › Build teammate invitations").click());
+  act(() => button(container, "Teammate invitations › Build teammate invitations REL-12").click());
   const rows = [...document.body.querySelectorAll("[role='menuitem']")];
   expect(rows.map((row) => row.textContent)).toEqual([
     "Teammate invitations",
-    "Build teammate invitations",
+    "Build teammate invitationsREL-12",
   ]);
   act(() => (rows[1] as HTMLElement).click());
   expect(opened).toEqual(["agent"]);

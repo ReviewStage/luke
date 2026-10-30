@@ -91,7 +91,10 @@ function folded(
     };
   });
   if (count === 0) return drawn;
-  const names = crumbs.slice(start, start + count).map((crumb) => crumb.label);
+  // Note that a crumb's detail joins its name, because two tasks may share a name and only their keys tell them apart.
+  const names = crumbs
+    .slice(start, start + count)
+    .map((crumb) => (crumb.detail === undefined ? crumb.label : `${crumb.label} ${crumb.detail}`));
   const hint = names.join(FOLDED_SEPARATOR);
   // Note that the "…" is no legible crumb, because its floor is its own width.
   const crumb: Crumb = { label: FOLDED_WORDS, hint, name: hint };

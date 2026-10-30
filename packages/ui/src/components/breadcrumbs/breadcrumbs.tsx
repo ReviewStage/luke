@@ -17,7 +17,7 @@ import {
 import { useDisclosure } from "../../use-disclosure.js";
 import { BUTTON_VARIANT } from "../button/button.js";
 import { FoldingButton, type FoldingButtonHint } from "../folding-button/folding-button.js";
-import { dropBelowStart, Menu, type MenuAction, useMenu } from "../menu/menu.js";
+import { dropBelowStart, MENU_DETAIL, Menu, type MenuAction, useMenu } from "../menu/menu.js";
 import {
   ClippedLine,
   ONE_LINE_ELEMENT,
@@ -474,6 +474,8 @@ export function Breadcrumbs({
   const opener = menu.open?.opener;
   const hiddenRows: MenuAction[] = hidden.map((crumb) => ({
     label: crumb.label,
+    detail: crumb.detail,
+    detailPlace: MENU_DETAIL.BESIDE,
     ...(isValidElement(crumb.glyph) ? { icon: crumb.glyph as React.JSX.Element } : {}),
     disabled: crumb.onPress === undefined,
     onSelect: () => {
