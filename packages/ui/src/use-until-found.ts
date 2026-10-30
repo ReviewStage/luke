@@ -4,7 +4,7 @@ import { type RefObject, useLayoutEffect, useRef, useState } from "react";
  * use-until-found.ts -- what a capped surface folds away stays findable: drawn under `hidden="until-found"`, and opened when a find lands in it.
  *
  * A long code block's rest (`code-card.tsx`) and a card's notes past the
- * first few (`event-card.tsx`) are still drawn while folded, so a find over
+ * first few (`event-notes.tsx`) are still drawn while folded, so a find over
  * the page reaches them, the browser's own and the window's alike
  * (`find-matches.ts`), and the surface opens whole when a match lands there
  * (`beforematch`), as a closed `<details>` opens.

@@ -1123,7 +1123,34 @@ test("a teammate's message on a thread is headed by who sent it, what they did a
   );
 });
 
-test("a review from GitHub draws as a card of who said what on the pull request, their words, and each inline comment by its line, without the agent's instructions", () => {
+/** The head that folds a GitHub card, by which a reader names it: who did what to which pull request. */
+function cardHead(card: HTMLElement): HTMLElement {
+  return card.querySelector<HTMLElement>("summary") ?? assert.fail("The card has no head");
+}
+
+/** A GitHub line the agent was told, as the service steers one in. */
+function githubLine(
+  id: string,
+  text: string,
+  metadata: Record<string, unknown>,
+): AgentTranscriptMessage {
+  return {
+    id,
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text }],
+    metadata: {
+      channel: "github",
+      repository: "acme/relay",
+      number: 42,
+      url: "https://github.com/acme/relay/commit/c0ffee/checks",
+      by: "github-actions[bot]",
+      ...metadata,
+    },
+    sentBy: { kind: "github", name: "github-actions[bot]" },
+  };
+}
+
+test("a review from GitHub draws as a folding card, open, headed by who did what to the pull request and how many comments it holds, holding their words and each inline comment by its file and line, without the agent's instructions", () => {
   const container = agentMessageDrawn({
     id: "github-line",
     role: MESSAGE_ROLE.USER,
@@ -1155,9 +1182,88 @@ test("a review from GitHub draws as a card of who said what on the pull request,
   });
   const card = container.querySelector<HTMLElement>("[data-github-line]");
   assert.ok(card, "the line draws as GitHub's card");
-  const text = card.textContent ?? "";
-  assert.match(text, /^@octocat requested changes on .*#42/u);
-  assert.match(text, /Close, but the store reads the list twice\./u);
-  assert.match(text, /apps\/web\/store\.ts:12\s*Guard the empty list here\./u);
+  const head = cardHead(card);
+  assert.equal(head.getAttribute("aria-label"), "octocat requested changes on #42, 1 comment");
+  assert.equal(head.getAttribute("aria-expanded"), "true");
+  const body = card.textContent ?? "";
+  assert.match(body, /Close, but the store reads the list twice\./u);
+  assert.match(body, /apps\/web\/store\.ts L12\s*Guard the empty list here\./u);
   assert.doesNotMatch(container.textContent ?? "", /Act on it|github-review/u);
+});
+
+test("a check line is headed by how many of its checks failed on the pull request, and holds the Pull request tab's rows of them, those that failed first, each saying how it ended", () => {
+  const container = agentMessageDrawn(
+    githubLine("checks-failed", "Every check finished on `c0ffee`.\n\nAt least one failed.", {
+      event: "checks_completed",
+      sha: "c0ffee",
+      failing: true,
+      checks: [
+        { name: "lint", conclusion: "success" },
+        { name: "test (webkit)", conclusion: "failure" },
+        {
+          name: "e2e",
+          conclusion: "timed_out",
+          url: "https://github.com/acme/relay/actions/runs/3",
+        },
+      ],
+    }),
+  );
+  const card = container.querySelector<HTMLElement>("[data-github-line]");
+  assert.ok(card, "the line draws as GitHub's card");
+  assert.equal(
+    cardHead(card).getAttribute("aria-label"),
+    "github-actions[bot] 2 of 3 checks failed on #42",
+  );
+  const rows = [...card.querySelectorAll("li")].map((row) => row.textContent ?? "");
+  assert.deepEqual(
+    rows.map((row) => /^(.*?),/u.exec(row)?.[1]),
+    ["test (webkit)", "e2e", "lint"],
+  );
+  assert.match(rows[1] ?? "", /Timed out/u);
+});
+
+test("a check line whose checks were skipped rather than passed says so, and holds their rows", () => {
+  const container = agentMessageDrawn(
+    githubLine("checks-skipped", "Every check finished on `c0ffee`.\n\nNone failed.", {
+      event: "checks_completed",
+      failing: false,
+      checks: [{ name: "deploy", conclusion: "skipped" }],
+    }),
+  );
+  const card = container.querySelector<HTMLElement>("[data-github-line]");
+  assert.ok(card, "the line draws as GitHub's card");
+  const head = cardHead(card);
+  assert.equal(head.getAttribute("aria-label"), "github-actions[bot] 1 check skipped on #42");
+  assert.equal(head.getAttribute("aria-expanded"), "true");
+  assert.match(card.textContent ?? "", /deploy.*Skipped/u);
+});
+
+test.each([
+  {
+    held: "an approval with no words",
+    line: githubLine("approved", "@octocat approved your pull request #42.", {
+      event: "review",
+      url: "https://github.com/acme/relay/pull/42#pullrequestreview-2",
+      by: "octocat",
+      verdict: "approved",
+    }),
+    head: "octocat approved #42",
+  },
+  {
+    held: "every check passing",
+    line: githubLine("checks-passed", "Every check finished on `c0ffee`.", {
+      event: "checks_completed",
+      failing: false,
+      checks: [{ name: "lint", conclusion: "success" }],
+    }),
+    head: "github-actions[bot] 1 check passed on #42",
+  },
+])("$held draws its card's head alone, with nothing to open", ({ line, head }) => {
+  const card = agentMessageDrawn(line).querySelector<HTMLElement>("[data-github-line]");
+  assert.ok(card, "the line draws as GitHub's card");
+  const summary = cardHead(card);
+  assert.equal(summary.getAttribute("aria-label"), head);
+  act(() => summary.click());
+  assert.equal(summary.getAttribute("aria-expanded"), "false", "a press opens nothing");
+  assert.equal(card.textContent?.trim(), "");
 });

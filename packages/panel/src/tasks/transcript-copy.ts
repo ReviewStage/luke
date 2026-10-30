@@ -300,7 +300,7 @@ function developerTurn(message: AgentTranscriptMessage): CopiedTurn {
  */
 function sentLineWords(message: AgentTranscriptMessage): string | undefined {
   const github = githubLineOf(message);
-  if (github !== undefined) return githubLineWords(github);
+  if (github !== undefined) return githubLineWords(github, messageWords(message));
   const thread = threadLineOf(message);
   if (thread === undefined) return undefined;
   return [THREAD_LINE_LEAD[thread.event], threadLineWords(messageWords(message), thread.event)]

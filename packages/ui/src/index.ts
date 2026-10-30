@@ -52,7 +52,7 @@ export * from "./components/editable-heading/editable-heading.js";
 export * from "./components/empty-state/empty-state.js";
 export * from "./components/error-line/error-line.js";
 export * from "./components/error-state/error-state.js";
-export * from "./components/event-card/event-card.js";
+export * from "./components/event-notes/event-notes.js";
 export * from "./components/facts/facts.js";
 export * from "./components/failure-note/failure-note.js";
 export * from "./components/file-picker/file-picker.js";

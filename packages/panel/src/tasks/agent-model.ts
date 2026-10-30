@@ -87,8 +87,11 @@ import {
 import {
   ACTION_RESULT_STATUS,
   type AgentMessageMetadata,
+  GITHUB_CHECK_CONCLUSION,
   GITHUB_LINE_EVENT,
+  type GitHubCheckConclusion,
   type GitHubLineMetadata,
+  isFailingConclusion,
   isRecord,
   isWireString,
   MESSAGE_CHANNEL,
@@ -1676,9 +1679,6 @@ export function githubLineOf(message: AgentTranscriptMessage): GitHubLineMetadat
   return read?.channel === MESSAGE_CHANNEL.GITHUB ? read : undefined;
 }
 
-/** How many characters of a commit a GitHub line's head names it by, as GitHub's own short form. */
-const SHORT_SHA_CHARS = 7;
-
 /** What a review's verdict reads as before its pull request, by GitHub's own state; any other reads as reviewed. */
 const VERDICT_WORDS: ReadonlyMap<string, string> = new Map([
   ["approved", "approved"],
@@ -1688,52 +1688,130 @@ const VERDICT_WORDS: ReadonlyMap<string, string> = new Map([
 /** What a review that is neither an approval nor a change request reads as. */
 const REVIEWED = "reviewed";
 
+/** What a comment on the pull request, not a review, reads as. */
+const COMMENTED = "commented on";
+
+/** How a check a GitHub line names ended, in words, as its row on the line's card says it. */
+export const CONCLUSION_WORDS = {
+  [GITHUB_CHECK_CONCLUSION.SUCCESS]: "Passed",
+  [GITHUB_CHECK_CONCLUSION.FAILURE]: "Failed",
+  [GITHUB_CHECK_CONCLUSION.NEUTRAL]: "Neutral",
+  [GITHUB_CHECK_CONCLUSION.CANCELLED]: "Cancelled",
+  [GITHUB_CHECK_CONCLUSION.SKIPPED]: "Skipped",
+  [GITHUB_CHECK_CONCLUSION.TIMED_OUT]: "Timed out",
+  [GITHUB_CHECK_CONCLUSION.ACTION_REQUIRED]: "Needs action",
+  [GITHUB_CHECK_CONCLUSION.STALE]: "Stale",
+  [GITHUB_CHECK_CONCLUSION.STARTUP_FAILURE]: "Failed to start",
+} as const satisfies Record<GitHubCheckConclusion, string>;
+
+/** What the service tells an agent when every check finished and one failed, which is how a line kept before it said `failing` says so. */
+const SOME_FAILED_WORDS = /\bAt least one failed\b/u;
+
+/** One check a GitHub line names. */
+type GitHubLineCheck = NonNullable<GitHubLineMetadata["checks"]>[number];
+
 /** A GitHub line's head: what GitHub did, then what it did it to, which links the line's page. */
 export interface GitHubLineHead {
+  /** What happened, whole, as a copy reads it: "@octocat approved", "2 of 3 checks failed on". */
   readonly event: string;
+  /** What its sender did, as the card says it after their chip: "approved", "2 of 3 checks failed on". */
+  readonly does: string;
   readonly target: string;
+}
+
+/** Whether a check line says a check failed: a failed check always does, every check finished by its `failing`, or, on a line kept before it said so, by the words that told the agent. */
+export function githubChecksFailed(line: GitHubLineMetadata, words: string): boolean {
+  if (line.event === GITHUB_LINE_EVENT.CHECK_FAILED) return true;
+  return line.failing ?? SOME_FAILED_WORDS.test(words);
+}
+
+/** The checks a check line names, those that failed first, each kind in the order the line lists them; none on a line that names none. */
+export function githubLineChecks(line: GitHubLineMetadata): readonly GitHubLineCheck[] {
+  const checks = line.checks ?? [];
+  return [
+    ...checks.filter((check) => isFailingConclusion(check.conclusion)),
+    ...checks.filter((check) => !isFailingConclusion(check.conclusion)),
+  ];
+}
+
+/** Whether every check a check line names passed: none failed, and each it names succeeded rather than was skipped, neutral, or stale. */
+export function githubChecksPassed(line: GitHubLineMetadata, words: string): boolean {
+  if (githubChecksFailed(line, words)) return false;
+  return (line.checks ?? []).every((check) => check.conclusion === GITHUB_CHECK_CONCLUSION.SUCCESS);
+}
+
+/** How many checks, as a head counts them: one, or all of them. */
+function allChecks(count: number): string {
+  return count === 1 ? "1 check" : `all ${count} checks`;
+}
+
+/**
+ * What a check line's sender did, by how many of its checks failed where it
+ * names them, else by whether any did; with none failed, by how many passed
+ * and how many were skipped, neutral and stale among them, as the Pull
+ * request tab counts them, since a check skipped did not pass.
+ */
+function checksDid(line: GitHubLineMetadata, words: string): string {
+  const checks = line.checks ?? [];
+  const failed = checks.filter((check) => isFailingConclusion(check.conclusion)).length;
+  const noun = checks.length === 1 ? "check" : "checks";
+  if (failed > 0) return `${failed} of ${checks.length} ${noun} failed on`;
+  if (line.event === GITHUB_LINE_EVENT.CHECK_FAILED) return "a check failed on";
+  if (githubChecksFailed(line, words)) return "some checks failed on";
+  if (checks.length === 0) return "every check passed on";
+  const passed = checks.filter(
+    (check) => check.conclusion === GITHUB_CHECK_CONCLUSION.SUCCESS,
+  ).length;
+  const skipped = checks.length - passed;
+  if (skipped === 0) return `${allChecks(passed)} passed on`;
+  return passed === 0
+    ? `${allChecks(skipped)} skipped on`
+    : `${passed} passed, ${skipped} skipped on`;
 }
 
 /**
  * A GitHub line's head, as its card draws it and a copy or a find reads
- * it: who reviewed or commented, or that a check failed or every check
- * finished; then a check's commit by its short form where the line says
- * it, else the pull request by its number, else its checks.
+ * it: who reviewed by their verdict, or commented; or, for a check event,
+ * how many of the checks it names failed, or whether any did; then the
+ * pull request by its number, else its checks. The card names a reviewer
+ * by their chip, so it reads what they did alone (`does`); a copy reads
+ * them by their login (`event`), and a check event as its words alone.
  */
-export function githubLineHead(line: GitHubLineMetadata): GitHubLineHead {
+export function githubLineHead(line: GitHubLineMetadata, words: string): GitHubLineHead {
+  const target = line.number === undefined ? "its checks" : `#${line.number}`;
   switch (line.event) {
-    case GITHUB_LINE_EVENT.REVIEW:
-      return {
-        event: `@${line.by} ${VERDICT_WORDS.get(line.verdict ?? "") ?? REVIEWED}`,
-        target: pullRequestTarget(line),
-      };
+    case GITHUB_LINE_EVENT.REVIEW: {
+      const does = VERDICT_WORDS.get(line.verdict ?? "") ?? REVIEWED;
+      return { event: `@${line.by} ${does}`, does, target };
+    }
     case GITHUB_LINE_EVENT.COMMENT:
-      return { event: `@${line.by} commented on`, target: pullRequestTarget(line) };
+      return { event: `@${line.by} ${COMMENTED}`, does: COMMENTED, target };
     case GITHUB_LINE_EVENT.CHECK_FAILED:
-      return { event: "A check failed on", target: commitTarget(line) };
-    case GITHUB_LINE_EVENT.CHECKS_COMPLETED:
-      return { event: "Every check finished on", target: commitTarget(line) };
+    case GITHUB_LINE_EVENT.CHECKS_COMPLETED: {
+      const does = checksDid(line, words);
+      return { event: `${does.charAt(0).toUpperCase()}${does.slice(1)}`, does, target };
+    }
   }
 }
 
-/** The pull request a GitHub line names, by its number; its checks where GitHub named none. */
-function pullRequestTarget(line: GitHubLineMetadata): string {
-  return line.number === undefined ? "its checks" : `#${line.number}`;
-}
-
-/** A check's commit by its short form, else the pull request it ran on. */
-function commitTarget(line: GitHubLineMetadata): string {
-  return line.sha === undefined ? pullRequestTarget(line) : line.sha.slice(0, SHORT_SHA_CHARS);
-}
-
-/** A GitHub line as words, as its card draws them: its head, the words, then each inline comment by its line over what it says. */
-export function githubLineWords(line: GitHubLineMetadata): string {
-  const head = githubLineHead(line);
+/**
+ * A GitHub line as words, as its card draws them, which a copy reads and a
+ * find counts: its head, the words, each inline comment by its file and
+ * line over what it says, then each check it names by how it ended, where
+ * the card holds them, every check passing being its head alone.
+ */
+export function githubLineWords(line: GitHubLineMetadata, words: string): string {
+  const head = githubLineHead(line, words);
   const comments = (line.comments ?? []).map((comment) => {
-    const where = comment.line === undefined ? comment.path : `${comment.path}:${comment.line}`;
+    const where = comment.line === undefined ? comment.path : `${comment.path} L${comment.line}`;
     return comment.body === "" ? where : `${where}\n\n${comment.body}`;
   });
-  return [`${head.event} ${head.target}`, line.words ?? "", ...comments]
+  const checks = githubChecksPassed(line, words)
+    ? ""
+    : githubLineChecks(line)
+        .map((check) => `${check.name}: ${CONCLUSION_WORDS[check.conclusion]}`)
+        .join("\n");
+  return [`${head.event} ${head.target}`, line.words ?? "", ...comments, checks]
     .filter((part) => part !== "")
     .join("\n\n");
 }
