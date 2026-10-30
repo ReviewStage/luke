@@ -110,7 +110,7 @@ export interface ReviewOptions {
 /** The agent's repository's labels, assignable users, and teams, read once, as a picker first asks, and again only after a failure. */
 export function useReviewOptions(
   agentId: string,
-  readOptions: (agentId: string) => Promise<AgentReviewOptionsAnswerView>,
+  readOptions: () => Promise<AgentReviewOptionsAnswerView>,
 ): ReviewOptions {
   const [held, setHeld] = useState<{ agentId: string; read: OptionsRead }>({
     agentId,
@@ -120,7 +120,7 @@ export function useReviewOptions(
   const ask = useCallback(() => {
     if (read.kind === OPTIONS.READING || read.kind === OPTIONS.LANDED) return;
     setHeld({ agentId, read: { kind: OPTIONS.READING } });
-    void readOptions(agentId)
+    void readOptions()
       .catch(
         (): AgentReviewOptionsAnswerView => ({
           failure: AGENT_CALL_FAILURE.UNANSWERED,

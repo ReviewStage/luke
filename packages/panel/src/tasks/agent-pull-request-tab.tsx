@@ -1,7 +1,6 @@
 import { githubAvatarAt, githubAvatarUrl } from "@luke/features/account-picture";
 import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
 import {
-  AGENT_STATUS,
   type AgentOverviewChecks,
   type AgentOverviewConversation,
   type AgentOverviewPullRequest,
@@ -159,7 +158,7 @@ import {
   useAgentRead,
   useChangesReads,
 } from "./agent-changes-tab.js";
-import { agentStillWriting, pullRequestNumberLabel } from "./agent-model.js";
+import { pullRequestNumberLabel } from "./agent-model.js";
 import {
   ANNOTATION_TONE,
   AnnotationCard,
@@ -201,7 +200,7 @@ import {
 } from "./pull-request-comment-box.js";
 import { PullRequestDescription } from "./pull-request-description.js";
 import { PullRequestLabels } from "./pull-request-labels.js";
-import { PullRequestNumberProvider, pullRequestOfTab } from "./pull-request-number.js";
+import { PullRequestNumberProvider } from "./pull-request-number.js";
 import { HeaderReviewers, OpenedLine, ReviewStanding, useNamer } from "./pull-request-people.js";
 import {
   LabelPicker,
@@ -214,6 +213,11 @@ import {
 import { EntryPictures, useGitHubImageRead, usePictureDrawer } from "./pull-request-pictures.js";
 import { Reactions } from "./pull-request-reactions.js";
 import { PullRequestReview } from "./pull-request-review.js";
+import {
+  type PullRequestSource,
+  PullRequestSourceProvider,
+  useAgentPullRequestSource,
+} from "./pull-request-source.js";
 import { PullRequestStack } from "./pull-request-stack.js";
 import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actions.js";
 import {
@@ -2624,23 +2628,19 @@ function useConversationAnchors(input: {
  * says so in its own part, with its own Retry, the others standing. Files
  * changed draws the conversation's review threads on their lines.
  */
-export function AgentPullRequestTab(props: AgentPullRequestTabProps): React.JSX.Element {
-  const { control, agentId } = props;
-  const planId = (
-    control.agents?.find((each) => each.id === agentId) ??
-    control.archived?.find((each) => each.id === agentId)
-  )?.planId;
-  // Note that a repository out of reach is mended in the agent's own workspace, by its task or, on none, its page's.
-  const place = useMemo(
-    () => ({ taskId: planId ?? null, workspaceId: control.workspaceId }),
-    [planId, control.workspaceId],
-  );
-  // Note that the number is handed down before any of the tab's own hooks run, its writes among them.
+export function AgentPullRequestTab({
+  control,
+  ...props
+}: AgentPullRequestTabProps): React.JSX.Element {
+  const source = useAgentPullRequestSource(control, props.agentId, props.number);
+  // Note that the number and the source are handed down before any of the tab's own hooks run, its writes among them.
   return (
     <PullRequestNumberProvider value={props.number}>
-      <WritePlaceProvider value={place}>
-        <PullRequestTabBody {...props} />
-      </WritePlaceProvider>
+      <PullRequestSourceProvider value={source}>
+        <WritePlaceProvider value={source.place}>
+          <PullRequestTabBody {...props} source={source} />
+        </WritePlaceProvider>
+      </PullRequestSourceProvider>
     </PullRequestNumberProvider>
   );
 }
@@ -2740,11 +2740,11 @@ function useHeaderFold(view: PullRequestView): HeaderFold {
   };
 }
 
-/** The Pull request tab under the number it names (`AgentPullRequestTab`). */
+/** The Pull request tab under the number it names, reading through its source (`AgentPullRequestTab`). */
 function PullRequestTabBody({
   agentId,
   number,
-  control,
+  source,
   shown,
   repository,
   tree,
@@ -2752,13 +2752,8 @@ function PullRequestTabBody({
   onView,
   onActions,
   onRun,
-}: AgentPullRequestTabProps): React.JSX.Element {
-  // The agent, archived or not, since an archived agent's pull request keeps its tab.
-  const agent =
-    control.agents?.find((each) => each.id === agentId) ??
-    control.archived?.find((each) => each.id === agentId);
-  const status = agent?.status;
-  const ended = !agentStillWriting(status ?? AGENT_STATUS.RUNNING);
+}: Omit<AgentPullRequestTabProps, "control"> & { source: PullRequestSource }): React.JSX.Element {
+  const { ended } = source;
   const id = useId();
   // A phone names each of the tabs in words, never their glyphs alone, which a finger cannot hover for a name.
   const tabsFold =
@@ -2774,23 +2769,17 @@ function PullRequestTabBody({
     agentId,
     shown,
     ended,
-    (id: string) => control.readOverviewPullRequest(id, number),
+    source.readOverviewPullRequest,
     UNANSWERED,
   );
   const conversationRead = useAgentRead(
     agentId,
     shown,
     ended,
-    (id: string) => control.readOverviewConversation(id, number),
+    source.readOverviewConversation,
     UNANSWERED,
   );
-  const checksRead = useAgentRead(
-    agentId,
-    shown,
-    ended,
-    (id: string) => control.readOverviewChecks(id, number),
-    UNANSWERED,
-  );
+  const checksRead = useAgentRead(agentId, shown, ended, source.readOverviewChecks, UNANSWERED);
   const ask = {
     pullRequest: pullRequestRead.ask,
     checks: checksRead.ask,
@@ -2803,11 +2792,7 @@ function PullRequestTabBody({
     ask.conversation();
     ask.checks();
     if (askedYet(chapters)) chapters.ask();
-    const read =
-      number === undefined
-        ? control.readPullRequest(agentId)
-        : control.readNumberedPullRequest(agentId, number);
-    void read.catch(() => undefined);
+    void source.readPublished().catch(() => undefined);
   };
   const parts: OverviewParts = {
     pullRequest: partOf(pullRequestRead),
@@ -2816,7 +2801,7 @@ function PullRequestTabBody({
     ask,
   };
   const reading = pullRequestRead.out || checksRead.out || conversationRead.out;
-  const published = pullRequestOfTab(control, { changes: agentId, number });
+  const { published } = source;
   const held = headerPullRequestOf(landed(parts.pullRequest), landed(parts.checks), published);
   const none = [parts.pullRequest, parts.checks, parts.conversation].some(
     (part) => part.kind === PART.NONE,
@@ -2867,7 +2852,7 @@ function PullRequestTabBody({
   // Chapters view draws the same files and marks; asked as either is first shown.
   const changes = useChangesReads(
     agentId,
-    control,
+    source,
     shown && !none && (view === PULL_REQUEST_VIEW.FILES || view === PULL_REQUEST_VIEW.CHAPTERS),
   );
   refreshAllNow.current = () => {
@@ -2881,7 +2866,7 @@ function PullRequestTabBody({
   // The chapters, read as their view is first shown once the pull request's own read has answered, naming the number it found, which its tab counts once they are ready.
   const chapters = useChaptersRead(
     agentId,
-    control,
+    source,
     shown && overview !== undefined && view === PULL_REQUEST_VIEW.CHAPTERS,
     overview === undefined
       ? undefined
@@ -2900,7 +2885,7 @@ function PullRequestTabBody({
   const pendingReview = landed(parts.conversation)?.pendingReview;
   const picture = usePictureDrawer(agentId);
   const comment = usePullRequestComment(agentId, written);
-  const options = useReviewOptions(agentId, control.readReviewOptions);
+  const options = useReviewOptions(agentId, source.readReviewOptions);
   const picks = usePullRequestPicks(overview, writes);
   // Note that Files changed is handed the same threads while the conversation
   // and the minute stand, because a file a thread is on draws its notes anew
@@ -3090,7 +3075,7 @@ function PullRequestTabBody({
                       >
                         <CHAPTERS_TAB.Route
                           agentId={agentId}
-                          control={control}
+                          source={source}
                           shown={shown && view === PULL_REQUEST_VIEW.CHAPTERS}
                           repository={repository}
                           tree={tree}
@@ -3118,7 +3103,7 @@ function PullRequestTabBody({
                 >
                   <AgentChangesTab
                     agentId={agentId}
-                    control={control}
+                    source={source}
                     shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
                     repository={repository}
                     tree={tree}

@@ -118,8 +118,8 @@ import {
 import type { ChaptersRead } from "./chapters-read.js";
 import { drawnIn, useFloatsOver } from "./drawn-in.js";
 import type { TreeShown } from "./file-view.js";
+import type { PullRequestSource } from "./pull-request-source.js";
 import { TranscriptWords } from "./transcript-blocks.js";
-import type { AgentsControl } from "./use-agents.js";
 
 /**
  * agent-chapters-tab.tsx -- the Chapters view of an agent's Pull request tab (`agent-pull-request-tab.tsx`): its pull request's diff told as chapters to review in order, each read as its title, risk, and summary over its own hunks, drawn by Files changed's own list.
@@ -685,7 +685,7 @@ function StepButton({
 /** The chapters ready: the rail, the chapter chosen, its diff, and its foot. */
 function ChaptersReading({
   agentId,
-  control,
+  source,
   shown,
   repository,
   tree,
@@ -700,7 +700,7 @@ function ChaptersReading({
   lineComments,
 }: {
   agentId: string;
-  control: AgentsControl;
+  source: PullRequestSource;
   shown: boolean;
   repository: string | null;
   tree: TreeShown;
@@ -962,7 +962,7 @@ function ChaptersReading({
               // Note that each chapter's list stands on its own, its folds and the file stood on its own, as a chapter is its own page.
               key={at}
               agentId={agentId}
-              control={control}
+              source={source}
               shown={shown}
               repository={repository}
               tree={filesTree}
@@ -1083,7 +1083,7 @@ function chaptersState(
  */
 export function AgentChaptersTab({
   agentId,
-  control,
+  source,
   shown,
   repository,
   tree,
@@ -1093,7 +1093,7 @@ export function AgentChaptersTab({
   lineComments,
 }: {
   agentId: string;
-  control: AgentsControl;
+  source: PullRequestSource;
   /** Whether the view is on screen, which is when its time counts and its keys' sheet stands. */
   shown: boolean;
   repository: string | null;
@@ -1137,7 +1137,7 @@ export function AgentChaptersTab({
   return (
     <ChaptersReading
       agentId={agentId}
-      control={control}
+      source={source}
       shown={shown}
       repository={repository}
       tree={tree}
