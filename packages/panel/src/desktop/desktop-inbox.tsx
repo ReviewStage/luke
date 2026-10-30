@@ -597,6 +597,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                 ) : (
                   <InboxList
                     view={list}
+                    scene={narrowed ? channelPlace.channelId : undefined}
                     chosen={chosen?.item.id}
                     columns={columns.shown}
                     rows={columns.rows}

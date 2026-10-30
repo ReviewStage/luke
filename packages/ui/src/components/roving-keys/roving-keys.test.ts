@@ -3,13 +3,21 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { ROVING_ORIENTATION, rovingItem, useRovingColumns, useRovingKeys } from "./roving-keys.js";
+import {
+  ROVING_ORIENTATION,
+  ROVING_REACH,
+  type RovingReach,
+  rovingItem,
+  useRovingColumns,
+  useRovingKeys,
+} from "./roving-keys.js";
 
 /**
  * roving-keys.test.ts -- a row of items walks with ←→ and leaves ↑↓ alone,
  * a key heard on the box itself steps from none, and an item's own handler
- * that takes a key keeps it; columns of sets are crossed by ←→, an empty
- * column passed over. A `List`'s walk down its rows is tested
+ * that takes a key keeps it; a set drawing only some of its items hands
+ * its owner each key reaching past them; columns of sets are crossed by
+ * ←→, an empty column passed over. A `List`'s walk down its rows is tested
  * through the list (`list-row.test.ts`), and a set's other options through
  * the components that take them: a chosen stop and a `moveTo` through
  * `Tabs` and `ChoiceBar`, both pairs of arrows through `ChoiceBar` and
@@ -114,6 +122,46 @@ test("a key heard on the box itself steps from none: forward and Home to the fir
     key(name);
     expect(document.activeElement, name).toBe(landed);
   }
+});
+
+/** The tools drawn of a longer toolbar, the owner taking every key reaching past them but a step back from the first, and hearing where each reached. */
+function DrawnTools({ heard }: { heard: RovingReach[] }): React.JSX.Element {
+  const roving = useRovingKeys<HTMLDivElement>({
+    orientation: ROVING_ORIENTATION.HORIZONTAL,
+    reach: (_from, to) => {
+      heard.push(to);
+      return to !== ROVING_REACH.PREVIOUS;
+    },
+  });
+  return createElement(
+    "div",
+    { ...roving, "aria-label": "Format" },
+    TOOLS.map((tool) =>
+      createElement("button", { key: tool, type: "button", ...rovingItem() }, tool),
+    ),
+  );
+}
+
+test("a set drawing only some of its items hands its owner Home, End, and a step past either drawn end, and walks one it leaves", () => {
+  const heard: RovingReach[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(DrawnTools, { heard })));
+  const [bold, italic, link] = [...container.querySelectorAll("button")];
+
+  link?.focus();
+  key("ArrowRight");
+  key("Home");
+  key("End");
+  key("ArrowLeft");
+  expect(heard).toEqual([ROVING_REACH.NEXT, ROVING_REACH.FIRST, ROVING_REACH.LAST]);
+  expect(document.activeElement).toBe(italic);
+
+  bold?.focus();
+  key("ArrowLeft");
+  expect(heard.at(-1)).toBe(ROVING_REACH.PREVIOUS);
+  expect(document.activeElement).toBe(link);
 });
 
 const COLUMNS = [["Backlog one", "Backlog two"], [], ["Done one"]] as const;

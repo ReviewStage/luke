@@ -40,8 +40,10 @@ import {
  *
  * Note that the order and who is available are read off the rows as they
  * are drawn, as `useRovingKeys` reads its items, because the rows are
- * drawn by whoever fills the list. And note that a key pressed in a field
- * inside the list is the field's.
+ * drawn by whoever fills the list; a region drawing only the rows near the
+ * view (`VirtualRows`) is handed the order of every row it lists instead
+ * (`order`), so ⇧-click and ⌘A reach the rows it leaves undrawn. And note
+ * that a key pressed in a field inside the list is the field's.
  */
 
 /** Which rows of a `List` are chosen, kept by its owner: the keys chosen, and what hears the next set. */
@@ -134,18 +136,23 @@ function sameKeys(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
   return a.size === b.size && [...a].every((key) => b.has(key));
 }
 
-/** `base` with every row from `from` to `to` in it, both ends included; `to` alone where `from` is drawn no more. */
+/** `base` with every row from `from` to `to` in it, by the rows' keys in order, both ends included; `to` alone where `from` is listed no more. */
 function withRun(
-  rows: readonly Choosable[],
+  keys: readonly string[],
   base: ReadonlySet<string>,
   from: string,
   to: string,
 ): ReadonlySet<string> {
-  const end = rows.findIndex((row) => row.key === to);
-  const found = rows.findIndex((row) => row.key === from);
+  const end = keys.indexOf(to);
+  const found = keys.indexOf(from);
   const start = found < 0 ? end : found;
-  const run = rows.slice(Math.min(start, end), Math.max(start, end) + 1).map((row) => row.key);
+  const run = keys.slice(Math.min(start, end), Math.max(start, end) + 1);
   return new Set([...base, ...run]);
+}
+
+/** The keys of `rows`, in their order. */
+function keysOf(rows: readonly Choosable[]): readonly string[] {
+  return rows.map((row) => row.key);
 }
 
 /** Whether a key landed in a field, whose own it is. */
@@ -174,9 +181,14 @@ export function holdRun(event: MouseEvent<HTMLElement>): void {
 /**
  * The selection a `List` keeps over its rows: what its rows read, and the
  * keys it hears, which answer whether they chose anything so the arrows'
- * walk is not also made. A list asked for none chooses nothing.
+ * walk is not also made. A list asked for none chooses nothing. `order`,
+ * where given, is every choosable row's key in order, those not drawn
+ * among them, which ⇧-click and ⌘A read in place of the rows drawn.
  */
-export function useListSelection(selection: ListSelection | undefined): {
+export function useListSelection(
+  selection: ListSelection | undefined,
+  order?: readonly string[],
+): {
   readonly selecting: ListSelecting | undefined;
   readonly onKeyDown: (event: KeyboardEvent<HTMLElement>) => boolean;
 } {
@@ -184,6 +196,8 @@ export function useListSelection(selection: ListSelection | undefined): {
   // The latest selection, which a caller hands anew on every render.
   const latest = useRef(selection);
   latest.current = selection;
+  const listed = useRef(order);
+  listed.current = order;
 
   // Note that an anchor stands only while the set is the one it left, so a
   // set its owner changed itself, a Clear, starts the next run afresh.
@@ -218,8 +232,8 @@ export function useListSelection(selection: ListSelection | undefined): {
         const list = event.currentTarget.closest(ROOT_SELECTOR);
         if (list === null) return false;
         const from = standing(chosen) ?? { key, base: chosen, head: key, left: chosen };
-        const rows = inRunOf(choosableOf(list), event.currentTarget);
-        const next = withRun(rows, from.base, from.key, key);
+        const keys = listed.current ?? keysOf(inRunOf(choosableOf(list), event.currentTarget));
+        const next = withRun(keys, from.base, from.key, key);
         hand(next, { ...from, head: key, left: next });
         return true;
       }
@@ -248,7 +262,7 @@ export function useListSelection(selection: ListSelection | undefined): {
       }
       if (command(event) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "a") {
         event.preventDefault();
-        hand(new Set(choosableOf(list).map((row) => row.key)), undefined);
+        hand(new Set(listed.current ?? keysOf(choosableOf(list))), undefined);
         return true;
       }
       const bare = !command(event) && !event.shiftKey && !event.altKey;
@@ -276,7 +290,7 @@ export function useListSelection(selection: ListSelection | undefined): {
           : { key: here, base: current.selected, head: here, left: current.selected };
       const to = rows[at + step];
       if (to === undefined) return true;
-      const next = withRun(rows, from.base, from.key, to.key);
+      const next = withRun(keysOf(rows), from.base, from.key, to.key);
       hand(next, { ...from, head: to.key, left: next });
       to.press.focus();
       return true;
