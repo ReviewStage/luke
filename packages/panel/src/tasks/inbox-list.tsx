@@ -21,14 +21,12 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorLine,
   ErrorState,
-  GAP,
   GROUP_SURFACE,
   GroupHeader,
   HoverCard,
   HoverCardHead,
   IconButton,
   joinRefs,
-  LAYOUT_ELEMENT,
   LIST_LEAVING_SELECTOR,
   LIST_MOTION_WAY,
   LIST_ROW_CURRENT,
@@ -45,6 +43,7 @@ import {
   PaneBar,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
+  ROVING_REACH,
   RowHint,
   RowHintOptions,
   SCROLL_FADE,
@@ -54,7 +53,6 @@ import {
   Shortcut,
   Skeleton,
   SkeletonRegion,
-  Stack,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -90,6 +88,13 @@ import {
 } from "@luke/ui/icons";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
+  VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowPlace,
+  VirtualRows,
+  type VirtualRowsHandle,
+} from "@luke/ui/virtual-rows";
+import {
+  Fragment,
   memo,
   type RefObject,
   startTransition,
@@ -129,6 +134,7 @@ import {
 import { groupCount, sidebarFold } from "../desktop/sidebar-fold.js";
 import { type TabActionGroups, useTabActions } from "../desktop/strip-tabs.js";
 import { refusedShown, unreadShown } from "../failure-report.js";
+import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
 import { usePhoneRoom } from "../stage-room.js";
@@ -466,6 +472,7 @@ export const InboxItemRow = memo(function InboxItemRow({
   onMark,
   onAskClose,
   onAskMove,
+  place,
 }: {
   listed: InboxListed;
   chosen: boolean;
@@ -497,6 +504,8 @@ export const InboxItemRow = memo(function InboxItemRow({
   onAskClose?: ((item: InboxItem) => void) | undefined;
   /** Asks which channel to move the item's thread to; none where the row offers no move, as with Channels off. */
   onAskMove?: ((listed: InboxListed) => void) | undefined;
+  /** Where the row stands in a run drawing only the rows near the view (`VirtualRows`); none where every row is drawn. */
+  place?: VirtualRowPlace | undefined;
 }): React.JSX.Element {
   const { holder, item } = listed;
   const unread = isUnread(item);
@@ -565,6 +574,7 @@ export const InboxItemRow = memo(function InboxItemRow({
         onPress={() => onChoose(listed)}
         menu={rowMenu(ITEM_THING, groups())}
         more={!coarse}
+        place={place}
       />
     </RowHintOptions>
   );
@@ -1565,20 +1575,72 @@ function groupKey({ key }: { readonly key: string }): string {
   return key;
 }
 
-/** A run of rows, each drawn on after it is no longer listed until its exit has played (`ListMotion`). */
+/** How tall a row is taken to be before it is drawn, in pixels: its three lines and its insets. */
+const ROW_ESTIMATE_PX = 72;
+
+/**
+ * The room between two rows, in pixels: the tight gap (`--luke-tight-gap`),
+ * a step further apart than a list's, because a row of three lines standing
+ * clear on its ground is told from the next by the room between them alone.
+ */
+const ROW_GAP_PX = 4;
+
+/**
+ * Where the list's runs of rows stand: the scroller they stand in, the
+ * list's body, whose resizing moves the runs below a group that grew or
+ * folded, whether a find bar stands open, which draws every row so the find
+ * covers them, and where each run is held while it stands, so a row out of
+ * view can be brought in (`InboxRowPresses`).
+ */
+interface RowsPlace {
+  readonly scroller: RefObject<HTMLElement | null>;
+  readonly body: RefObject<HTMLElement | null>;
+  readonly finding: boolean;
+  readonly holdRun: InboxRowPresses["holdRun"];
+}
+
+/**
+ * A run of rows, each drawn on after it is no longer listed until its exit
+ * has played (`ListMotion`), drawing only the rows near the view
+ * (`VirtualRows`), as a mail app's list does, so a long list, or another
+ * channel's, draws as quickly as a short one; every row while a find bar
+ * stands open, and the row holding the keyboard wherever the list is
+ * scrolled.
+ */
 function InboxRows({
   items,
+  place,
   row,
 }: {
   items: readonly InboxListed[];
-  row: (listed: InboxListed, leaving: boolean) => React.ReactNode;
+  place: RowsPlace;
+  row: (listed: InboxListed, leaving: boolean, at: VirtualRowPlace) => React.ReactNode;
 }): React.JSX.Element {
   const drawn = useLeaving(items, (listed) => listed.item.id);
-  // Note that the rows stand a step further apart than a list's, because a row of three lines standing clear on its ground is told from the next by the room between them alone.
+  const keys = useMemo(() => drawn.map(({ key }) => key), [drawn]);
+  const handle = useRef<VirtualRowsHandle>(null);
+  const { holdRun } = place;
+  useLayoutEffect(() => holdRun(handle), [holdRun]);
   return (
-    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} className="sidebar-tasks" moves>
-      {drawn.map(({ value, leaving }) => row(value, leaving))}
-    </Stack>
+    <VirtualRows
+      scroller={place.scroller}
+      shiftedBy={place.body}
+      keys={keys}
+      estimate={ROW_ESTIMATE_PX}
+      gap={ROW_GAP_PX}
+      overscan={place.finding ? keys.length : undefined}
+      anchor={VIRTUAL_ROWS_ANCHOR.START}
+      listItems
+      moves
+      holdsFocus
+      className="sidebar-tasks"
+      handle={handle}
+    >
+      {(index, at) => {
+        const entry = drawn[index];
+        return entry === undefined ? null : row(entry.value, entry.leaving, at);
+      }}
+    </VirtualRows>
   );
 }
 
@@ -1599,6 +1661,7 @@ function InboxGroups<G>({
 /** The list: its head where it has one, then each task's or each person's group of rows, or every row in one run, or a line where nothing is listed. */
 export function InboxList({
   view,
+  scene,
   chosen,
   head,
   note,
@@ -1614,6 +1677,8 @@ export function InboxList({
   onPointing,
 }: {
   view: InboxListView;
+  /** What the list lists, the channel it is narrowed to, none where it lists every channel's: another is another list, whose rows stand at once rather than move (`ListMotion`'s `scene`). */
+  scene?: string | undefined;
   /** The id of the item the pane shows. */
   chosen: string | undefined;
   /** The catalog as last read, which names each agent's model on its card. */
@@ -1654,9 +1719,39 @@ export function InboxList({
   // Note that a finger's list standing alone marks no row open, since no item is, and the chosen row would show its acts in its time's place at rest (`list-row.css`).
   const marked = !useCoarsePointer() || columns !== INBOX_COLUMNS.LIST;
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  // Note that the rows of every group are one Tab stop that ↑↓ walk.
-  const roving = useRovingKeys<HTMLDivElement>();
+  const scroller = useRef<HTMLDivElement | null>(null);
+  // Note that the rows of every group are one Tab stop that ↑↓ walk, a key reaching past the rows drawn
+  // going on to the list's own first or last row, or the one after or before, brought into view where it is not drawn.
+  const roving = useRovingKeys<HTMLDivElement>({
+    reach: (from, to) => {
+      const ids = drawn.map(({ item }) => item.id);
+      const at = from === undefined ? -1 : ids.indexOf(rows.itemOf(from) ?? "");
+      const index =
+        to === ROVING_REACH.FIRST
+          ? 0
+          : to === ROVING_REACH.LAST
+            ? ids.length - 1
+            : at < 0
+              ? -1
+              : (at + (to === ROVING_REACH.NEXT ? 1 : ids.length - 1)) % ids.length;
+      const id = ids[index];
+      if (id === undefined) return false;
+      const press = rows.find(id);
+      if (press !== undefined) {
+        press.focus();
+        return true;
+      }
+      return rows.bringIn(id, () => rows.find(id)?.focus());
+    },
+  });
   const rovingBody = useMemo(() => joinRefs(bodyRef, roving.ref), [roving.ref]);
+  // Note that the runs draw only the rows near the view, and every row while a find bar stands open over the list.
+  const finding = useFindOpen();
+  const { holdRun } = rows;
+  const rowsPlace = useMemo(
+    (): RowsPlace => ({ scroller, body: bodyRef, finding, holdRun }),
+    [finding, holdRun],
+  );
   const edge = useResizeEdge({
     side: RESIZE_EDGE_SIDE.RIGHT,
     width,
@@ -1681,9 +1776,10 @@ export function InboxList({
   // Note that a row wears a teammate's face wherever no person's header stands over it.
   // A row whose item is done with is drawn gray, the chosen row kept on Needs you and every such row on All alike.
   // A row leaving the list is the list's motion's rather than one of the keyboard's rows (`ListMotion`).
-  const row = (listed: InboxListed, leaving: boolean) => (
+  const row = (listed: InboxListed, leaving: boolean, at?: VirtualRowPlace) => (
     <InboxItemRow
       key={listed.item.id}
+      place={at}
       listed={listed}
       chosen={listed.item.id === chosen}
       open={listed.item.id === chosen && columns === INBOX_COLUMNS.BOTH}
@@ -1718,7 +1814,7 @@ export function InboxList({
           count={needingYou(items)}
           onToggle={() => head.view?.folds.toggle(key)}
         >
-          <InboxRows items={items} row={row} />
+          <InboxRows items={items} place={rowsPlace} row={row} />
         </StatusHeader>
       </div>
     );
@@ -1734,12 +1830,13 @@ export function InboxList({
           count={needingYou(items)}
           onToggle={() => head.view?.folds.toggle(key)}
         >
-          <InboxRows items={items} row={row} />
+          <InboxRows items={items} place={rowsPlace} row={row} />
         </PersonHeader>
       </div>
     );
   };
-  // Note that each grouping draws its groups anew, keyed by it, so a group of one grouping never leaves into another's.
+  // Note that each grouping draws its groups anew, keyed by it, so a group of one grouping never leaves into another's;
+  // and so does each scene, so the rows of the channel left go with it rather than leave one by one.
   const body = (
     <div
       {...roving}
@@ -1748,44 +1845,46 @@ export function InboxList({
       data-empty={String(listedItems(view).length === 0)}
       {...motionRows()}
     >
-      {view.grouping === INBOX_GROUPING.NONE ? (
-        <InboxRows items={view.items} row={row} />
-      ) : view.grouping === INBOX_GROUPING.PERSON ? (
-        <InboxGroups
-          key={view.grouping}
-          groups={view.groups}
-          keyOf={groupKey}
-          group={personSection}
-        />
-      ) : view.grouping === INBOX_GROUPING.STATUS ? (
-        <InboxGroups
-          key={view.grouping}
-          groups={view.groups}
-          keyOf={groupKey}
-          group={statusSection}
-        />
-      ) : (
-        <InboxGroups
-          key={view.grouping}
-          groups={view.groups}
-          keyOf={groupKey}
-          group={({ key, holder, items }) => {
-            const folded = head.view?.folds.folded(key) ?? false;
-            return (
-              <div key={key} className="sidebar-repository" {...motionKey(key)}>
-                <HolderHeader
-                  holder={holder}
-                  folded={folded}
-                  count={needingYou(items)}
-                  onToggle={() => head.view?.folds.toggle(key)}
-                >
-                  <InboxRows items={items} row={row} />
-                </HolderHeader>
-              </div>
-            );
-          }}
-        />
-      )}
+      <Fragment key={scene ?? ""}>
+        {view.grouping === INBOX_GROUPING.NONE ? (
+          <InboxRows items={view.items} place={rowsPlace} row={row} />
+        ) : view.grouping === INBOX_GROUPING.PERSON ? (
+          <InboxGroups
+            key={view.grouping}
+            groups={view.groups}
+            keyOf={groupKey}
+            group={personSection}
+          />
+        ) : view.grouping === INBOX_GROUPING.STATUS ? (
+          <InboxGroups
+            key={view.grouping}
+            groups={view.groups}
+            keyOf={groupKey}
+            group={statusSection}
+          />
+        ) : (
+          <InboxGroups
+            key={view.grouping}
+            groups={view.groups}
+            keyOf={groupKey}
+            group={({ key, holder, items }) => {
+              const folded = head.view?.folds.folded(key) ?? false;
+              return (
+                <div key={key} className="sidebar-repository" {...motionKey(key)}>
+                  <HolderHeader
+                    holder={holder}
+                    folded={folded}
+                    count={needingYou(items)}
+                    onToggle={() => head.view?.folds.toggle(key)}
+                  >
+                    <InboxRows items={items} place={rowsPlace} row={row} />
+                  </HolderHeader>
+                </div>
+              );
+            }}
+          />
+        )}
+      </Fragment>
       {note}
     </div>
   );
@@ -1802,9 +1901,16 @@ export function InboxList({
       style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
       <ListHead head={head} readerId={readerId} />
-      <ListMotion root={bodyRef} change={laidOut} reading={reading}>
-        <SelectionRegion id={regionId} selection={{ selected: picked, onChange: setPicked }}>
-          <ScrollArea fade={SCROLL_FADE.START}>{body}</ScrollArea>
+      <ListMotion root={bodyRef} change={laidOut} scene={scene} reading={reading}>
+        <SelectionRegion
+          id={regionId}
+          selection={{ selected: picked, onChange: setPicked }}
+          order={drawn.map(({ item }) => item.id)}
+          bringIn={rows.bringIn}
+        >
+          <ScrollArea ref={scroller} fade={SCROLL_FADE.START}>
+            {body}
+          </ScrollArea>
         </SelectionRegion>
       </ListMotion>
       {/* Note that the bar stands at the list's foot rather than over its rows, so choosing a row moves none under the pointer. */}

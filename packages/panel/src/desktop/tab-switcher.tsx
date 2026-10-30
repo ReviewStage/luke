@@ -273,12 +273,12 @@ function cardLook(
 /**
  * The channel the Inbox is narrowed to, which its card goes back to, or
  * Channels before the window has read its channels; none while it lists
- * every channel. Note that it reads the channels the window holds rather
- * than reading them again.
+ * every channel. Note that it reads the channels the host holds for the
+ * window, as the sidebar draws them.
  */
 function useChannelsLook(tasks: TasksControl): KindLook | undefined {
   const narrowed = useInboxNarrowed();
-  const { channels } = useChannels(narrowed ? tasks.workspace?.id : undefined, false);
+  const { channels } = useChannels(narrowed ? tasks.workspace?.id : undefined);
   const { channelId } = useChannelPlace();
   if (!narrowed) return undefined;
   const shown = channelShown(channels, channelId);

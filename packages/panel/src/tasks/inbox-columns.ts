@@ -20,7 +20,8 @@
 
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { TOOLBAR_LOOK } from "@luke/ui";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
+import { type RefObject, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useColumnSplit } from "../column-split.js";
 
@@ -59,6 +60,10 @@ export interface InboxRowPresses {
   readonly first: () => HTMLElement | undefined;
   /** The item whose row's press is the element given, if it is one. */
   readonly itemOf: (element: EventTarget) => string | undefined;
+  /** Holds a run of rows drawing only those near the view while it stands, so a row it leaves undrawn can be brought in; the answer lets it go. */
+  readonly holdRun: (run: RefObject<VirtualRowsHandle | null>) => () => void;
+  /** Brings the row of the item given into view, drawing it, and calls `then` once it is drawn; false where no run lists it. */
+  readonly bringIn: (itemId: string, then: () => void) => boolean;
 }
 
 /** The list's rows' presses, kept as each row is drawn and dropped as it goes. */
@@ -66,6 +71,7 @@ export function useInboxRowPresses(): InboxRowPresses {
   const [presses] = useState(() => {
     const held = new Map<string, HTMLElement>();
     const refs = new Map<string, React.RefCallback<HTMLElement>>();
+    const runs = new Set<RefObject<VirtualRowsHandle | null>>();
     return {
       hold: (itemId: string) => {
         const known = refs.get(itemId);
@@ -93,6 +99,14 @@ export function useInboxRowPresses(): InboxRowPresses {
           undefined,
         ),
       itemOf: (element: EventTarget) => [...held].find(([, press]) => press === element)?.[0],
+      holdRun: (run: RefObject<VirtualRowsHandle | null>) => {
+        runs.add(run);
+        return () => {
+          runs.delete(run);
+        };
+      },
+      bringIn: (itemId: string, then: () => void) =>
+        [...runs].some((run) => run.current?.bringIn(itemId, then) === true),
     };
   });
   return presses;
@@ -211,14 +225,19 @@ export function useInboxColumns(chosen: string | undefined, choosing: InboxChoos
       }
       return;
     }
-    // Split, a press that opens an item from outside the list, as Next does, hands the keyboard to its row, and so do K and J.
+    // Split, a press that opens an item from outside the list, as Next does, hands the keyboard to its row, and so do K and J,
+    // its row brought into view and drawn first where the list draws only the rows near the view.
     const row = from === undefined ? undefined : rows.find(from);
+    const broughtIn =
+      row === undefined && from !== undefined && rows.bringIn(from, () => rows.find(from)?.focus());
     if (!handed) {
       row?.focus();
       return;
     }
     // An item chosen that the list holds no row for, as a link's missing item or one its scope leaves out, hands the keyboard to the first row instead, or to View options, the list's one steady control, where no row stands.
-    (row ?? rows.first() ?? listHeadControl(held.querySelector(".inbox-tasks")))?.focus();
+    if (!broughtIn) {
+      (row ?? rows.first() ?? listHeadControl(held.querySelector(".inbox-tasks")))?.focus();
+    }
     setShowAlls(0);
   }, [shown, chosen, showAlls, rows]);
 

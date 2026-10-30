@@ -107,7 +107,7 @@ export function scopeInboxes(
           answered
             ? SubscriptionRef.set(inbox, {
                 kind: LIVE_STATE.STANDING,
-                inbox: { items: read.shown() },
+                inbox: { items: read.inOrder() },
               })
             : Effect.void,
         );
@@ -115,7 +115,7 @@ export function scopeInboxes(
           shown: read.shown,
           take: read.take,
           txWait: () => wait,
-          drawn,
+          drawn: () => drawn,
           accountWide: false,
         });
         const taken = followTakingRows(

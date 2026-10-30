@@ -2445,7 +2445,7 @@ function byPlan(plans: Readonly<Record<string, readonly InboxItem[]>>) {
 }
 
 it.effect(
-  "the account's items are told whole by plan once the gate opens and their rows land, and whole again as an item moves",
+  "the account's items are told whole by plan once the gate opens and their rows land, and again as an item moves, each plan it did not move on told as the very list told before",
   () =>
     Effect.gen(function* () {
       const { open, sealItems, live, accountItems } = yield* subject();
@@ -2465,6 +2465,13 @@ it.effect(
         byPlan({ [TASK_ID]: [HELD_ITEM], [OTHER_TASK_ID]: [OTHER_ITEM] }),
         byPlan({ [TASK_ID]: [moved], [OTHER_TASK_ID]: [OTHER_ITEM] }),
       ]);
+      const otherPlanOf = (told: WireValue | undefined) => {
+        const rows = isRecord(told) ? told.rows : undefined;
+        const plans = isRecord(rows) ? rows[INBOX_SCOPE_KIND.PLAN] : undefined;
+        return isRecord(plans) ? plans[OTHER_TASK_ID] : undefined;
+      };
+      const [first, second] = accountItems();
+      assert.equal(otherPlanOf(second), otherPlanOf(first));
     }),
 );
 

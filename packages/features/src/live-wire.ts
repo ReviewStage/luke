@@ -730,6 +730,8 @@ export const LIVE_READ = {
   HOLDER_INBOX: "holderInbox",
   /** One task's pages, or one agent's on no task, by what they stand on: the service's `taskPagesLive` or `agentPagesLive` query, by its kind, held for the windows that chose it and a few they chose lately. */
   PAGES: "pages",
+  /** One workspace's channels, open and archived, as the reader reads them: the service's `workspaceChannels` query, held for the windows that list the workspace and a few they listed lately. */
+  CHANNELS: "workspaceChannels",
 } as const;
 
 export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];

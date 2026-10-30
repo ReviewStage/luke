@@ -2043,10 +2043,7 @@ function SidebarColumn({
     (onTasks && tasks.agentView.agentId !== undefined);
   // With Channels on, the channels stand under the Inbox's row as its filters, and one chosen narrows the Inbox to it, which then marks its row rather than the Inbox's.
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
-  const channels = useChannels(
-    channelsOn && tasks.signedIn ? tasks.workspace?.id : undefined,
-    tasks.shown,
-  );
+  const channels = useChannels(channelsOn && tasks.signedIn ? tasks.workspace?.id : undefined);
   const channelPlace = useChannelPlace();
   const narrowed = useInboxNarrowed();
   // Note that a channel archived or unknown marks no row, its place saying it is gone.

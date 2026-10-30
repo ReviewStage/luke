@@ -271,6 +271,8 @@ export interface AgentsDependencies {
 export interface AgentsComposer extends Composer {
   /** The session's account reads opened for the account signed in, as the gate opening opens them. */
   readonly open: Effect.Effect<void>;
+  /** The inbox reads every write on an item is drawn over, which a thread moved between channels is drawn over too (`compose-channels.ts`). */
+  readonly inbox: Pick<InboxReads, "write">;
   /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
 }
@@ -1207,6 +1209,7 @@ function composed(
     methods,
     lifetime: Effect.void,
     open: Effect.andThen(sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems), holders.open),
+    inbox: { write: reads.write },
     reset,
   };
 }

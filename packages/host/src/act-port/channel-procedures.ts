@@ -1,16 +1,11 @@
 import type {
-  ArchivedChannelsView,
   ChannelArchiveParams,
   ChannelCreateParams,
   ChannelEditParams,
   ChannelLookParams,
   ChannelMoveParams,
   ChannelMoveView,
-  ChannelsArchivedParams,
-  ChannelsChanged,
   ChannelsFollowParams,
-  ChannelsListParams,
-  ChannelsMoved,
   ChannelsView,
   ChannelThreadsParams,
   ChannelThreadsView,
@@ -27,26 +22,26 @@ import { followedStream, type OpenFollows, streamed } from "./followed-stream.js
  * The one check these procedures make is who asked: only a panel draws the
  * Channels view, so every one refuses the takeover, in its own sentence. What the service answers comes back as the
  * panel's own answer, or why there is none. A workspace's channels are
- * followed while a panel holds a stream of them open: the host follows them
- * on the first stream and lets them go with the last, and every move it
- * tells reaches every stream of them. How many streams stand open of each
- * is all that is held here.
+ * held followed while a panel holds a stream of them open: the host holds
+ * them on the first stream and lets them go with the last, and what they
+ * hold reaches every panel on app state, never down the stream, which
+ * carries nothing. How many streams stand open of each is all that is held
+ * here.
  */
 export interface ChannelProceduresDependencies {
   host: {
-    channelsList(params: ChannelsListParams): Effect.Effect<ChannelsView>;
     channelsCreate(params: ChannelCreateParams): Effect.Effect<ChannelsView>;
     channelsEdit(params: ChannelEditParams): Effect.Effect<ChannelsView>;
     channelsArchive(params: ChannelArchiveParams): Effect.Effect<ChannelsView>;
     channelsUnarchive(params: ChannelUnarchiveParams): Effect.Effect<ChannelsView>;
-    channelsArchived(params: ChannelsArchivedParams): Effect.Effect<ArchivedChannelsView>;
     channelsLook(params: ChannelLookParams): Effect.Effect<ChannelsView>;
     channelsThreads(params: ChannelThreadsParams): Effect.Effect<ChannelThreadsView>;
     channelsMove(params: ChannelMoveParams): Effect.Effect<ChannelMoveView>;
-    /** A workspace's channels followed at the host, heard through `onChannelsChanged`; following again starts over. */
+    /** A workspace's channels held followed at the host while any stream of them stands; what they hold reaches the panel on app state. */
     channelsFollow(params: ChannelsFollowParams): Effect.Effect<void>;
     channelsUnfollow(params: ChannelsFollowParams): Effect.Effect<void>;
-    onChannelsChanged(listener: (changed: ChannelsChanged) => void): () => void;
+    /** A held workspace's channels read again at once, as Try again asks. */
+    channelsRetry(params: ChannelsFollowParams): Effect.Effect<void>;
   };
 }
 
@@ -58,16 +53,8 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 export function channelProcedures(dependencies: ChannelProceduresDependencies) {
   const { host } = dependencies;
   /** Every workspace a window holds a stream of channels open of, so the host lets one go only with the last. */
-  const openChannels: OpenFollows<ChannelsMoved> = MutableHashMap.empty();
+  const openChannels: OpenFollows<never> = MutableHashMap.empty();
   return {
-    [CHANNEL_ACT_KIND.CHANNELS_LIST]: actPort[CHANNEL_ACT_KIND.CHANNELS_LIST].effect(function* ({
-      input,
-      context,
-      errors,
-    }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.channelsList(input);
-    }),
     [CHANNEL_ACT_KIND.CHANNELS_CREATE]: actPort[CHANNEL_ACT_KIND.CHANNELS_CREATE].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
@@ -88,12 +75,6 @@ export function channelProcedures(dependencies: ChannelProceduresDependencies) {
         return yield* host.channelsUnarchive(input);
       },
     ),
-    [CHANNEL_ACT_KIND.CHANNELS_ARCHIVED]: actPort[CHANNEL_ACT_KIND.CHANNELS_ARCHIVED].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.channelsArchived(input);
-      },
-    ),
     [CHANNEL_ACT_KIND.CHANNELS_MOVE]: actPort[CHANNEL_ACT_KIND.CHANNELS_MOVE].effect(function* ({
       input,
       context,
@@ -105,23 +86,29 @@ export function channelProcedures(dependencies: ChannelProceduresDependencies) {
     [CHANNEL_ACT_KIND.CHANNELS_FOLLOW]: actPort[CHANNEL_ACT_KIND.CHANNELS_FOLLOW].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        const moves = followedStream(
+        // Note that nothing is heard down the hold, since the held channels reach the panel on app state.
+        const hold = followedStream(
           {
             keyOf: (params: ChannelsFollowParams) => params.workspaceId,
             follow: host.channelsFollow,
             unfollow: host.channelsUnfollow,
-            onChanged: host.onChannelsChanged,
-            valueOf: (changed: ChannelsChanged, params: ChannelsFollowParams) =>
-              changed.workspaceId === params.workspaceId
-                ? Option.some(changed.heard)
-                : Option.none(),
+            onChanged: () => () => undefined,
+            valueOf: () => Option.none<never>(),
           },
           openChannels,
           input,
         );
-        return streamed(yield* Stream.toAsyncIterableEffect(moves));
+        return streamed(yield* Stream.toAsyncIterableEffect(hold));
       },
     ),
+    [CHANNEL_ACT_KIND.CHANNELS_RETRY]: actPort[CHANNEL_ACT_KIND.CHANNELS_RETRY].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.channelsRetry(input);
+    }),
     [CHANNEL_ACT_KIND.CHANNELS_ARCHIVE]: actPort[CHANNEL_ACT_KIND.CHANNELS_ARCHIVE].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());

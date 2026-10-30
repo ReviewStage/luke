@@ -227,8 +227,6 @@ export const GATEWAY_METHOD = {
   AGENTS_DELETE: "agents.delete",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   AGENTS_PAGE: "agents.page",
-  /** A workspace's open channels, each with what waits on the reader there and when they last looked; or why there are none. */
-  CHANNELS_LIST: "channels.list",
   /** A channel made; the workspace's channels as they then stand. */
   CHANNELS_CREATE: "channels.create",
   /** A channel's name, purpose, or both edited; the workspace's channels as they then stand. */
@@ -237,18 +235,19 @@ export const GATEWAY_METHOD = {
   CHANNELS_ARCHIVE: "channels.archive",
   /** An archived channel opened again; the workspace's channels as they then stand. */
   CHANNELS_UNARCHIVE: "channels.unarchive",
-  /** A workspace's archived channels, the latest archived first; or why there are none. */
-  CHANNELS_ARCHIVED: "channels.archived",
   /** A thread moved into another open channel of its workspace; the thread as it then stands, or why it did not move. */
   CHANNELS_MOVE: "channels.move",
   /**
-   * A workspace's channels, followed from now until let go or the account
-   * signs out, over Neon Realtime. Which of them moved is heard as
-   * `CHANNELS_CHANGED` events, never answered; following again starts over.
+   * A workspace's channels, open and archived, held followed for a window
+   * from now until it is let go, and a while after among the workspaces let
+   * go lately. What they hold is heard as `WORKSPACE_CHANNELS_CHANGED`
+   * events, on the app state every window draws, never answered.
    */
   CHANNELS_FOLLOW: "channels.follow",
-  /** A followed workspace's channels let go: no more `CHANNELS_CHANGED` events of it until it is followed again. */
+  /** A workspace's channels let go by the window that held them: they stay among those let go lately until later ones push them out. */
   CHANNELS_UNFOLLOW: "channels.unfollow",
+  /** A held workspace's channels read again at once, as Try again asks; never answered. */
+  CHANNELS_RETRY: "channels.retry",
   /** The reader's look at a channel stamped; the workspace's channels as they then stand. */
   CHANNELS_LOOK: "channels.look",
   /** A page of a channel's threads the reader may read, oldest first; or why there are none. */
@@ -550,8 +549,8 @@ export const GATEWAY_EVENT = {
   TASKS_BROWSER_TABS_CHANGED: "tasks.browserTabsChanged",
   /** A followed workspace's automations, or an automation's runs, as they now stand, each time they move while followed. */
   AUTOMATIONS_CHANGED: "automations.changed",
-  /** Which of a followed workspace's channels moved, each time any does while followed, or why it is heard no more. */
-  CHANNELS_CHANGED: "channels.changed",
+  /** Every workspace's channels the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  WORKSPACE_CHANNELS_CHANGED: "workspaceChannels.changed",
   /** A followed workspace's people as they now stand, each time they move while followed. */
   WORKSPACE_PEOPLE_CHANGED: "workspacePeople.changed",
   /** A followed workspace's pending invitations as they now stand, each time they move while followed. */

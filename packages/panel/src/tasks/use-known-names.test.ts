@@ -1,19 +1,18 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { LIVE_READ } from "@luke/features/live-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeAppBridge } from "../testing/app-bridge.js";
 import { deliveryOf, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { useChannels } from "./use-channels.js";
 import { useKnownNames, useWordTargets } from "./use-known-names.js";
 
 /**
@@ -171,7 +170,7 @@ test("the tasks' keys are handed again for a delivery that moves no key, and ane
   assert.deepEqual([...(seen.at(-1)?.keys() ?? [])], ["ACME-41", "ACME-42"]);
 });
 
-test("a channel the window holds is named by its name, and #name among words names it by its link under its workspace's slug", async () => {
+test("a channel the host holds is named by its name, and #name among words names it by its link under its workspace's slug", async () => {
   const acme = {
     id: "workspace-acme",
     name: "Acme",
@@ -180,21 +179,23 @@ test("a channel the window holds is named by its name, and #name among words nam
     github: null,
   } as const;
   const app = { id: "a1000001-0000-4000-8000-000000000002", name: "app" };
+  const open = [{ ...app, purpose: "", project: false, createdAt: 1, waiting: 0 }];
   fakeAppBridge({
     onAppState: () => () => undefined,
     requestAppState: () =>
-      Promise.resolve(stateWith({}, { tasks: { ...IDLE_TASKS_VIEW, workspaces: [acme] } })),
-  });
-  fakeActPort({
-    [ACT_KIND.CHANNELS_LIST]: () =>
-      Promise.resolve({
-        channels: [{ ...app, purpose: "", project: false, createdAt: 1, waiting: 0 }],
-      }),
+      Promise.resolve(
+        stateWith(
+          {},
+          {
+            tasks: { ...IDLE_TASKS_VIEW, workspaces: [acme] },
+            [LIVE_READ.CHANNELS]: { [acme.id]: { rows: { open, archived: [] } } },
+          },
+        ),
+      ),
   });
   let names: KnownNames | undefined;
   let targets: ReadonlyMap<string, string> | undefined;
   function Reader(): null {
-    useChannels(acme.id, true);
     names = useKnownNames();
     targets = useWordTargets();
     return null;

@@ -1,7 +1,6 @@
-import { useAtomValue } from "@effect/atom-react";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
 import { dateOfText } from "@luke/features/time-format";
-import { ACT_KIND } from "@luke/host/acts";
 import {
   HoverCard,
   HoverCardHead,
@@ -12,15 +11,11 @@ import {
   useMinute,
 } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
-import { Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
-import { askAct } from "../act.js";
 import { PROVENANCE_VERB, ProvenanceRow } from "../actor-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { useLinkWorkspace, WorkspaceDirectory } from "./chip-cards.js";
 import { needsYouWords, threadsWords } from "./inbox-model.js";
 import { useHeldChannel } from "./use-channels.js";
@@ -37,12 +32,11 @@ import { useHeldChannel } from "./use-channels.js";
  * as a task's card says it. A #general the workspace minted itself, and a
  * channel whose maker's account is gone, has no foot. It says nothing in
  * colour and offers no way in, since the control it hangs from opens the
- * channel. What it shows is read from the channels the window holds
- * (`useHeldChannel`); a chip naming one no list the window holds names, as
- * a channel of another workspace, reads that workspace's channels, open and
- * archived, as the card is first hung, once for every card hung of it
- * while one stands, and holds them nowhere else, so no other surface's
- * channels move under it. The card waits as every chip's card does
+ * channel. What it shows is read from the channels the host holds
+ * (`useHeldChannel`); a chip naming one no list the host holds names, as a
+ * channel of another workspace, holds that workspace's channels, open and
+ * archived, while the card is hung (`useHostRead`), as every surface holds
+ * the channels it reads. The card waits as every chip's card does
  * (`HoverCardSkeleton`) while that read or its maker's name is out.
  */
 
@@ -51,31 +45,6 @@ const CHANNEL_KIND_WORDS = { CHANNEL: "Channel", PROJECT: "Project" } as const;
 
 /** What parts the kind from the size in a card's sub. */
 const PART = " · ";
-
-/** The channels a read answered; none where it refused, or did not land. */
-function listed<C>(
-  answer: { readonly channels: readonly C[] } | { readonly failure: unknown } | undefined,
-): readonly C[] {
-  return answer === undefined || "failure" in answer ? [] : answer.channels;
-}
-
-/** A workspace's channels, open and archived, as the service answered them, each list standing whether or not the other was read. */
-function workspaceChannels(
-  workspaceId: string,
-): Effect.Effect<readonly (Channel | ArchivedChannel)[]> {
-  const landed = <A,>(asked: Promise<A>) => asked.catch(() => undefined);
-  return Effect.promise(() =>
-    Promise.all([
-      landed(askAct(ACT_KIND.CHANNELS_LIST, { workspaceId })),
-      landed(askAct(ACT_KIND.CHANNELS_ARCHIVED, { workspaceId })),
-    ]).then(([open, archived]) => [...listed(open), ...listed(archived)]),
-  );
-}
-
-/** One workspace's channels where the window holds none naming the channel, read once for every card hung of it while one stands. */
-const workspaceChannelsAtom = Atom.family((workspaceId: string) =>
-  rendererRuntime.atom(workspaceChannels(workspaceId)),
-);
 
 /** What a channel's card says under its name: its kind, and how many threads it holds, or when it was archived. */
 function channelSub(channel: Channel | ArchivedChannel, now: number): string {
@@ -170,7 +139,7 @@ export function ChannelCard({
   );
 }
 
-/** A channel's card where the window holds no list naming it, its workspace's channels read as it is hung; `reading` while they are, and `fallback` where the read failed or names no such channel. */
+/** A channel's card where the host holds no list naming it, its workspace's channels held while it is hung; `reading` until they are read, and `fallback` where the read failed or names no such channel. */
 function ReadChannelChipCard({
   workspaceId,
   channelId,
@@ -182,11 +151,11 @@ function ReadChannelChipCard({
   reading: ReactNode;
   fallback: ReactNode;
 }): ReactNode {
-  const read = useAtomValue(workspaceChannelsAtom(workspaceId));
-  if (AsyncResult.isInitial(read)) return reading;
-  const channel = AsyncResult.isSuccess(read)
-    ? read.value.find((each) => each.id === channelId)
-    : undefined;
+  const { rows, status } = useHostRead(LIVE_READ.CHANNELS, workspaceId);
+  if (status === HOST_READ_STATUS.LOADING) return reading;
+  const channel =
+    rows?.open.find((each) => each.id === channelId) ??
+    rows?.archived.find((each) => each.id === channelId);
   if (channel === undefined) return fallback;
   return <ChannelCard channel={channel} workspaceId={workspaceId} />;
 }

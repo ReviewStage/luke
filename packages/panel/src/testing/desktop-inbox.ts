@@ -53,6 +53,7 @@ import type {
   AppInboxTask,
   AppInboxTaskHolding,
   AppInboxTasklessItem,
+  AppWorkspaceChannels,
 } from "@luke/host/app-state";
 import { NO_HOLDER_INBOXES, UNREAD } from "@luke/host/app-state";
 import { AGENT_INBOX_ACT_KIND, type PortActResult } from "@luke/host/contract";
@@ -327,6 +328,10 @@ class InboxWorld {
   deliverFeed: (read: AppHostRead<AppInboxItems>) => void = () => undefined;
   /** Delivers the holders' own inboxes to the window as the host holds them, as main delivers a move of them; nothing before a mount. */
   deliverHolders: (held: AppHolderInboxes) => void = () => undefined;
+  /** Each workspace's channels as the host holds them when the window mounts. */
+  channels: AppWorkspaceChannels = {};
+  /** Delivers the workspaces' channels to the window as the host holds them, as main delivers a move of them; nothing before a mount. */
+  deliverChannels: (held: AppWorkspaceChannels) => void = () => undefined;
   /** Whether a read of a plan's agents is held open, never answering. */
   agentListHeld = false;
   /** Holds the next agent read's answer, handing the test what lands it, where a test asks. */
@@ -581,6 +586,8 @@ beforeEach(() => {
   world.fileReads = [];
   world.main = heldInboxes();
   world.deliverHolders = () => undefined;
+  world.channels = {};
+  world.deliverChannels = () => undefined;
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.AGENTS_INBOX_ITEMS_RETRY) {
@@ -790,9 +797,14 @@ export function mount(
   // Note that the host's inbox holds are answered beside whatever acts the test answers by now.
   fakeActPort({ ...fakeActPortCalls(), ...world.main.procedures });
   // Note that the host's reads are laid over whatever document the test handed the window, its experiments among it.
-  const reads = handHostReads({ items: feedNow(), holders: world.main.now() });
+  const reads = handHostReads({
+    items: feedNow(),
+    holders: world.main.now(),
+    channels: world.channels,
+  });
   world.deliverFeed = reads.deliverItems;
   world.deliverHolders = reads.deliverHolders;
+  world.deliverChannels = reads.deliverChannels;
   // Note that a task's or an agent's pages are laid on the document as the window holds them, as the host lays them.
   holdPages(reads.deliverPages, (place) =>
     "taskId" in place

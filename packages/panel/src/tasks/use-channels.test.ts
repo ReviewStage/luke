@@ -2,12 +2,11 @@
 
 import assert from "node:assert/strict";
 import type { Channel } from "@luke/features/channel-wire";
-import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { fakeActPort } from "../testing/app-bridge.js";
+import { handHostReads } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import {
   type ChannelPlaceControl,
@@ -58,14 +57,14 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The window's place as a surface drawing it reads it, after the workspace's channels are read as the sidebar reads them. */
+/** The window's place as a surface drawing it reads it, after the workspace's channels the host holds are drawn as the sidebar draws them. */
 async function placeAfterRead(
   workspaceId: string,
   thread?: { readonly id: string; readonly channelId: string },
 ): Promise<() => ChannelPlaceControl> {
   let seen: ChannelPlaceControl | undefined;
   const Reader = () => {
-    useChannels(workspaceId, true);
+    useChannels(workspaceId);
     useThreadChannel(thread);
     seen = useChannelPlace();
     return null;
@@ -79,11 +78,11 @@ async function placeAfterRead(
   return () => seen ?? assert.fail("the place is read");
 }
 
-fakeActPort({
-  [ACT_KIND.CHANNELS_LIST]: ({ workspaceId }) =>
-    Promise.resolve({
-      channels: workspaceId === ACME ? [ACME_GENERAL, ACME_APP] : [LABS_GENERAL],
-    }),
+handHostReads({
+  channels: {
+    [ACME]: { rows: { open: [ACME_GENERAL, ACME_APP], archived: [] } },
+    [LABS]: { rows: { open: [LABS_GENERAL], archived: [] } },
+  },
 });
 
 test("at launch the Inbox is narrowed to no channel once the workspace's channels are read, and a thread opened by its item alone narrows it to none", async () => {

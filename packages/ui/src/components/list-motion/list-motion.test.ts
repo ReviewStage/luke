@@ -114,15 +114,17 @@ function Rows({ keys }: { keys: readonly string[] }): React.JSX.Element {
   );
 }
 
-/** Lists side by side, each by its rows' keys, under one motion where `moving`, still being read where `reading`. */
+/** Lists side by side, each by its rows' keys, under one motion where `moving`, still being read where `reading`, as the scene `scene`. */
 function Lists({
   lists,
   moving,
   reading,
+  scene,
 }: {
   lists: readonly (readonly string[])[];
   moving: boolean;
   reading: boolean;
+  scene?: string | undefined;
 }): React.JSX.Element {
   const box = useRef<HTMLDivElement>(null);
   const drawn = createElement(
@@ -130,18 +132,19 @@ function Lists({
     { ref: box },
     lists.map((keys, at) => createElement(Rows, { key: String(at), keys })),
   );
-  return moving ? createElement(ListMotion, { root: box, reading, children: drawn }) : drawn;
+  return moving ? createElement(ListMotion, { root: box, reading, scene, children: drawn }) : drawn;
 }
 
-/** Draws `lists`, the motion's tokens set where `tokens`, and hands back a way to draw others, still being read where it says. */
+/** Draws `lists`, the motion's tokens set where `tokens`, and hands back a way to draw others, still being read where it says, as the scene it names. */
 function draw(
   lists: readonly (readonly string[])[],
   {
     moving = true,
     tokens = true,
     reading = false,
-  }: { moving?: boolean; tokens?: boolean; reading?: boolean } = {},
-): (next: readonly (readonly string[])[], stillReading?: boolean) => void {
+    scene,
+  }: { moving?: boolean; tokens?: boolean; reading?: boolean; scene?: string } = {},
+): (next: readonly (readonly string[])[], stillReading?: boolean, nextScene?: string) => void {
   if (tokens) {
     for (const [name, value] of Object.entries(TOKENS)) {
       document.documentElement.style.setProperty(name, value);
@@ -149,9 +152,13 @@ function draw(
   }
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() => root?.render(createElement(Lists, { lists, moving, reading })));
-  return (next, stillReading = false) =>
-    act(() => root?.render(createElement(Lists, { lists: next, moving, reading: stillReading })));
+  act(() => root?.render(createElement(Lists, { lists, moving, reading, scene })));
+  return (next, stillReading = false, nextScene = scene) =>
+    act(() =>
+      root?.render(
+        createElement(Lists, { lists: next, moving, reading: stillReading, scene: nextScene }),
+      ),
+    );
 }
 
 /** The rows drawn, each list's keys in its order. */
@@ -192,6 +199,15 @@ test("a row arriving fades in and slides in from the leading edge, and the row i
     [{ transform: `translate(0px, ${-ROW}px)` }, { transform: "none" }],
   ]);
   expect(motionsOf(rowOf("A"))).toEqual([]);
+});
+
+test("a list drawn as another scene plays nothing, and what the last scene drew goes at once", () => {
+  const show = draw([["A", "B"]], { scene: "app" });
+
+  show([["C", "D"]], false, "design");
+
+  expect(played).toEqual([]);
+  expect(drawn()).toEqual([["C", "D"]]);
 });
 
 test("rows arriving together arrive a stagger apart", () => {

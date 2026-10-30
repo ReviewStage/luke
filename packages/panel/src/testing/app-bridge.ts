@@ -10,6 +10,7 @@ import {
   AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
   actContract,
+  CHANNEL_ACT_KIND,
   type PortActKind,
   type PortActPayload,
   type PortActResult,
@@ -89,10 +90,11 @@ function followedFromReads(
     );
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, and its pages. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages, and a workspace's channels. */
 type HoldKind =
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
-  | typeof TASKS_ACT_KIND.TASKS_PAGES_FOLLOW;
+  | typeof TASKS_ACT_KIND.TASKS_PAGES_FOLLOW
+  | typeof CHANNEL_ACT_KIND.CHANNELS_FOLLOW;
 
 /** A hold as the host answers it: a stream carrying nothing, standing until the window closes it. */
 export function quietHold<Kind extends HoldKind>(): Promise<PortActResult<Kind>> {
@@ -117,16 +119,18 @@ export function quietHold<Kind extends HoldKind>(): Promise<PortActResult<Kind>>
  * Installs an act port answering only the procedures given, each by its
  * kind, as a test's window calls them. A follow of the automations it does
  * not answer is answered from the list's or the runs' read where it answers
- * that, and a hold on a task's or an agent's inbox or pages it does not
+ * that, and a hold on a task's or an agent's inbox or pages, or a workspace's channels, it does not
  * answer is held quietly, since what the hold reads reaches the window on
  * app state.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
   const list = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_LIST];
   const runs = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS];
+  // Note that the host's holds are answered quietly unless the test answers them, since their reads arrive on app state.
   const held: Partial<FakeActPort> = {
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: quietHold,
     [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: quietHold,
+    [CHANNEL_ACT_KIND.CHANNELS_FOLLOW]: quietHold,
     ...procedures,
   };
   const answered: Partial<FakeActPort> =
@@ -283,9 +287,16 @@ export function fakeActs(
       [kind]: async (payload: WireBoundaryInput) => {
         // SAFETY: the window paired this payload with this kind, as its own procedure takes it.
         const request = (payload === undefined ? { kind } : { kind, payload }) as PortAct;
-        if (request.kind !== AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW) return answered(request);
+        if (
+          request.kind !== AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW &&
+          request.kind !== CHANNEL_ACT_KIND.CHANNELS_FOLLOW
+        ) {
+          return answered(request);
+        }
         const outcome = await answer(request);
         if (outcome.status === FAKE_ANSWER.DONE) return outcome.value;
+        // Note that a hold on a workspace's channels the switch does not answer stands quiet, since the channels arrive on app state.
+        if (request.kind === CHANNEL_ACT_KIND.CHANNELS_FOLLOW) return quietHold();
         return followed(request.payload);
       },
     });

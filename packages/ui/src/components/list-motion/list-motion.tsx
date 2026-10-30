@@ -31,6 +31,11 @@
  * reader, so a row arriving fades in where it stands, with every other
  * arriving, rather than sliding in a stagger after the last.
  *
+ * A commit that draws another scene (`scene`), the list narrowed to another
+ * channel, plays nothing: its rows are another list's, not this one's rows
+ * moving, so they stand at once, as a list's first draw does, and what the
+ * last scene drew goes at once.
+ *
  * A change landing while rows still move, as reads landing one after
  * another while the window opens, stops nothing under way: each place is
  * read where the layout stands an element, not where its motion draws it, and
@@ -594,6 +599,7 @@ interface ListMotionPlayerProps {
   root: RefObject<HTMLElement | null>;
   leaves: Leaves;
   change: unknown;
+  scene: unknown;
   way: ListMotionWay;
   reading: boolean;
 }
@@ -622,6 +628,11 @@ class ListMotionPlayer extends Component<
     const root = this.props.root.current;
     if (root === null) return null;
     if (this.props.change !== undefined && previous.change === this.props.change) return null;
+    // Note that another scene is another list, whose rows stand at once, the height held for the last one's given back with it.
+    if (previous.scene !== this.props.scene) {
+      this.release?.();
+      return null;
+    }
     let batch = batches.get(root);
     if (batch === undefined) {
       const opened: Batch = { before: snapshotOf(root), waiting: 0, leavers: [] };
@@ -785,19 +796,23 @@ class ListMotionPlayer extends Component<
  * `root` names stands among them, and each list under it that opts in
  * (`motionRows`) moves as this file's header says. `change`, where given,
  * is what the lists draw, and a commit that keeps it plays nothing; without
- * it every commit is read. `way` is how a row arrives and leaves, and
+ * it every commit is read. `scene`, where given, is what the lists draw a
+ * list of, and a commit that changes it plays nothing, as the file's head
+ * says. `way` is how a row arrives and leaves, and
  * `reading` whether what the lists draw is still being read, which fades a
  * row arriving in where it stands.
  */
 export function ListMotion({
   root,
   change,
+  scene,
   way = LIST_MOTION_WAY.SLIDE,
   reading = false,
   children,
 }: {
   root: RefObject<HTMLElement | null>;
   change?: unknown;
+  scene?: unknown;
   way?: ListMotionWay;
   reading?: boolean;
   children: ReactNode;
@@ -806,7 +821,14 @@ export function ListMotion({
   return (
     <LeavesContext.Provider value={leaves}>
       {children}
-      <ListMotionPlayer root={root} leaves={leaves} change={change} way={way} reading={reading} />
+      <ListMotionPlayer
+        root={root}
+        leaves={leaves}
+        change={change}
+        scene={scene}
+        way={way}
+        reading={reading}
+      />
     </LeavesContext.Provider>
   );
 }

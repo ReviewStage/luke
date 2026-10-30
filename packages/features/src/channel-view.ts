@@ -1,6 +1,5 @@
 import { Schema as EffectSchema } from "effect";
 import {
-  archivedChannelsAnswerSchema,
   channelArchiveRequestSchema,
   channelCreateRequestSchema,
   channelEditRequestSchema,
@@ -8,7 +7,6 @@ import {
   channelMoveAnswerSchema,
   channelMoveRequestSchema,
   channelsAnswerSchema,
-  channelsQuerySchema,
   channelThreadsAnswerSchema,
   channelThreadsQuerySchema,
   channelUnarchiveRequestSchema,
@@ -20,12 +18,12 @@ import { workspaceIdSchema } from "./task-wire.js";
  *
  * The host asks the service on the window's behalf (`channel-client.ts`) and
  * answers the window one of the shapes here: the workspace's channels as
- * they then stand, which every write on a channel answers as the read does,
- * its archived channels, a page of one channel's threads, or a thread as a
- * move left it; or why there is no answer. A window following a
- * workspace's channels hears which of them moved each time any does, and
- * reads them again itself. What a window asks with is
- * the service's own request (`channel-wire.ts`), checked again at the host.
+ * they then stand, which every write on a channel answers, a page of one
+ * channel's threads, or a thread as a move left it; or why there is no
+ * answer. A workspace's channels themselves reach a window on the app state
+ * the host holds them in (`LIVE_READ.CHANNELS`), never as an answer here.
+ * What a window asks with is the service's own request (`channel-wire.ts`),
+ * checked again at the host.
  */
 
 /** Why a channel call answered nothing a window can draw. */
@@ -48,11 +46,6 @@ const failed = EffectSchema.Struct({
   failure: EffectSchema.Literals(Object.values(CHANNEL_CALL_FAILURE)),
 });
 
-/** The workspace whose channels are read. */
-export const channelsListParamsSchema = channelsQuerySchema;
-
-export type ChannelsListParams = typeof channelsListParamsSchema.Type;
-
 /** A channel to make, as the service takes it. */
 export const channelCreateParamsSchema = channelCreateRequestSchema;
 
@@ -73,17 +66,12 @@ export const channelUnarchiveParamsSchema = channelUnarchiveRequestSchema;
 
 export type ChannelUnarchiveParams = typeof channelUnarchiveParamsSchema.Type;
 
-/** The workspace whose archived channels are read. */
-export const channelsArchivedParamsSchema = channelsQuerySchema;
-
-export type ChannelsArchivedParams = typeof channelsArchivedParamsSchema.Type;
-
 /** A thread moved into another open channel of its workspace. */
 export const channelMoveParamsSchema = channelMoveRequestSchema;
 
 export type ChannelMoveParams = typeof channelMoveParamsSchema.Type;
 
-/** The workspace whose channels a window follows. */
+/** The workspace whose channels a window holds. */
 export const channelsFollowParamsSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
 
 export type ChannelsFollowParams = typeof channelsFollowParamsSchema.Type;
@@ -98,7 +86,7 @@ export const channelThreadsParamsSchema = channelThreadsQuerySchema;
 
 export type ChannelThreadsParams = typeof channelThreadsParamsSchema.Type;
 
-/** The workspace's channels as they stand, the read's answer and every write's, or why there are none. */
+/** The workspace's channels as they stand, every write's answer, or why there are none. */
 export const channelsViewSchema = EffectSchema.Union([channelsAnswerSchema, failed]);
 
 export type ChannelsView = typeof channelsViewSchema.Type;
@@ -108,36 +96,7 @@ export const channelThreadsViewSchema = EffectSchema.Union([channelThreadsAnswer
 
 export type ChannelThreadsView = typeof channelThreadsViewSchema.Type;
 
-/** The workspace's archived channels, or why there are none. */
-export const archivedChannelsViewSchema = EffectSchema.Union([
-  archivedChannelsAnswerSchema,
-  failed,
-]);
-
-export type ArchivedChannelsView = typeof archivedChannelsViewSchema.Type;
-
 /** The thread as a move left it, or why it did not move. */
 export const channelMoveViewSchema = EffectSchema.Union([channelMoveAnswerSchema, failed]);
 
 export type ChannelMoveView = typeof channelMoveViewSchema.Type;
-
-/**
- * What a window following a workspace's channels hears: the channels that
- * moved, by id, each time any does, every one on the first, since the read
- * it opened with may have missed what it says; or why it hears nothing more
- * until it follows again.
- */
-export const channelsMovedSchema = EffectSchema.Union([
-  EffectSchema.Struct({ moved: EffectSchema.Array(EffectSchema.String) }),
-  failed,
-]);
-
-export type ChannelsMoved = typeof channelsMovedSchema.Type;
-
-/** A followed workspace's channels moved, as the host tells every window: the workspace, and what its followers hear. */
-export const channelsChangedSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.String,
-  heard: channelsMovedSchema,
-});
-
-export type ChannelsChanged = typeof channelsChangedSchema.Type;

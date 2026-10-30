@@ -2,6 +2,7 @@ import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { AgentKind } from "@luke/features/agent-wire";
+import type { WorkspaceChannels } from "@luke/features/channel-live";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { LIVE_READ } from "@luke/features/live-wire";
 import { PAGE_OWNER, type PageLine } from "@luke/features/page-wire";
@@ -321,11 +322,23 @@ export type AppPages = {
 /** No pages held, as the host stands before any window chooses a task or an agent and after the session ends. */
 export const NO_PAGES: AppPages = { [PAGE_OWNER.TASK]: {}, [PAGE_OWNER.AGENT]: {} };
 
+/**
+ * Each workspace's channels the host holds for the windows
+ * (`channel-follow.ts`): the workspaces a window lists or names, and the few
+ * let go lately, by id, each as its own read stands, its open channels by
+ * name and its archived ones the latest archived first.
+ */
+export type AppWorkspaceChannels = Readonly<Record<string, AppHostRead<WorkspaceChannels>>>;
+
+/** No workspace's channels held, as the host stands before any window lists one and after the session ends. */
+export const NO_WORKSPACE_CHANNELS: AppWorkspaceChannels = {};
+
 /** The rows of each read the host holds for the panel, by its name: a keyed read's are one key's rows. */
 export interface AppHostReads {
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
   [LIVE_READ.PAGES]: readonly PageLine[];
+  [LIVE_READ.CHANNELS]: WorkspaceChannels;
 }
 
 /**
@@ -410,6 +423,8 @@ export interface AppState {
   [LIVE_READ.HOLDER_INBOX]: AppHolderInboxes;
   /** Each task's or agent's pages the windows chose, held while a window holds them and a while after: what the panel beside an Inbox item, and beside an agent's page, lists. */
   [LIVE_READ.PAGES]: AppPages;
+  /** Each workspace's channels, open and archived, held while a window holds them and a while after: what the sidebar's channels, the Inbox's head, the palette, and a `#channel` chip read. */
+  [LIVE_READ.CHANNELS]: AppWorkspaceChannels;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;
@@ -492,7 +507,10 @@ type InboxHoldersMoved<Value extends object> = ByInboxHolder<Value | null>;
  * Each holder that moved from `before` to `after`, whole, and each gone as
  * null; none where none moved. Note that a change crosses as the holders
  * it moved, since the largest workspace's feed is megabytes, a held inbox
- * is a task's whole, and a change moves one holder's.
+ * is a task's whole, and a change moves one holder's. A holder is compared
+ * by reference alone, because the document keeps the identity of every
+ * holder a patch did not move, so one that is not the very value sent is
+ * one that moved.
  */
 function inboxHoldersMoved<Value extends object>(
   before: ByInboxHolder<Value>,
@@ -500,9 +518,7 @@ function inboxHoldersMoved<Value extends object>(
 ): InboxHoldersMoved<Value> | undefined {
   const ofKind = (kind: InboxHolderKind) =>
     Object.fromEntries([
-      ...Object.entries(after[kind]).filter(
-        ([id, value]) => !Equal.equals(before[kind][id], value),
-      ),
+      ...Object.entries(after[kind]).filter(([id, value]) => before[kind][id] !== value),
       ...Object.keys(before[kind])
         .filter((id) => !Object.hasOwn(after[kind], id))
         .map((id) => [id, null]),
