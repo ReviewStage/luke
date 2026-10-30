@@ -116,7 +116,7 @@ test("every hunk is named by its file and old-side start, and a file with none, 
   );
 });
 
-test("lockfiles, folder metadata, minified files, maps, snapshots, images, fonts, video, and documents are left out of the chapters, whatever their case or folder", () => {
+test("lockfiles, folder metadata, minified files, maps, snapshots, images, fonts, video, documents, and Drizzle's migration snapshots are left out of the chapters, whatever their case or folder", () => {
   for (const path of [
     "pnpm-lock.yaml",
     "apps/web/package-lock.json",
@@ -133,6 +133,8 @@ test("lockfiles, folder metadata, minified files, maps, snapshots, images, fonts
     "docs/guide.pdf",
     "public/icon.svg",
     "assets/raw.png/notes.txt",
+    "packages/database/migrations/20261030154518_agent_queue/snapshot.json",
+    "drizzle/meta/0007_snapshot.json",
   ]) {
     assert.equal(ignoredForChapters(path), true, path);
   }
@@ -142,6 +144,8 @@ test("lockfiles, folder metadata, minified files, maps, snapshots, images, fonts
     "src/map.ts",
     "src/lockfile.ts",
     "docs/pdf-export.md",
+    "src/snapshot.json",
+    "packages/database/migrations/20261030154518_agent_queue/migration.sql",
   ]) {
     assert.equal(ignoredForChapters(path), false, path);
   }

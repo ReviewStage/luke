@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import ignore from "ignore";
 import type { AgentChangedFile, ReviewThread } from "./agent-wire.js";
 import { DIFF_SIDE } from "./agent-wire.js";
 import { DIFF_ROW, type DiffHunk, LOCKFILE_NAMES, patchHunks } from "./diff-hunks.js";
@@ -156,50 +157,49 @@ function chapterOwnHunks(chapter: Chapter, index: HunkIndex): readonly ChapterHu
 }
 
 /**
- * The ends of the names of files a reader reads past, as ReviewStage's
- * default ignore list writes them (`*.min.js` and the rest): minified and
- * generated files, source maps, snapshots, images, fonts, video, and
- * documents.
+ * The patterns of files a reader reads past, as `.gitignore` writes them:
+ * ReviewStage's default ignore list (every lockfile, what an operating
+ * system leaves in a folder, minified files, source maps, snapshots,
+ * images, fonts, video, and documents), and the schema snapshots Drizzle
+ * writes beside each migration, which can run to tens of thousands of
+ * lines a reader never reads.
  */
-const IGNORED_ENDINGS = [
-  ".min.js",
-  ".min.css",
-  ".map",
-  ".snap",
-  ".svg",
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".gif",
-  ".ico",
-  ".woff",
-  ".woff2",
-  ".ttf",
-  ".eot",
-  ".mp4",
-  ".webm",
-  ".pdf",
-] as const;
+const IGNORE_PATTERNS: readonly string[] = [
+  ...LOCKFILE_NAMES,
+  ".DS_Store",
+  "Thumbs.db",
+  "*.min.js",
+  "*.min.css",
+  "*.map",
+  "*.snap",
+  "*.svg",
+  "*.png",
+  "*.jpg",
+  "*.jpeg",
+  "*.gif",
+  "*.ico",
+  "*.woff",
+  "*.woff2",
+  "*.ttf",
+  "*.eot",
+  "*.mp4",
+  "*.webm",
+  "*.pdf",
+  "**/migrations/*/snapshot.json",
+  "**/meta/*_snapshot.json",
+];
 
-/** The whole names of files a reader reads past: every lockfile, and what an operating system leaves in a folder. */
-const IGNORED_NAMES: ReadonlySet<string> = new Set(
-  [...LOCKFILE_NAMES, ".DS_Store", "Thumbs.db"].map((name) => name.toLowerCase()),
-);
+/** The one matcher every path is held to, whatever its case, as ReviewStage's `filterFilesForLlm` builds it. */
+const IGNORED = ignore({ ignoreCase: true }).add([...IGNORE_PATTERNS]);
 
 /**
  * Whether a file is left out of the chapters a model tells and stands in
- * "Other changes" instead, as ReviewStage's default ignore list leaves it
- * out: a lockfile, an operating system's folder metadata, a minified file,
- * a source map, a snapshot, an image, a font, a video, or a document.
- * Matched as `.gitignore` matches a pattern with no slash, whatever its
- * case: against every step of the path, so a folder so named leaves out
- * everything in it.
+ * "Other changes" instead (`IGNORE_PATTERNS`). Matched with `.gitignore`'s
+ * semantics, whatever the case: a pattern with no slash matches every step
+ * of the path, so a folder so named leaves out everything in it.
  */
 export function ignoredForChapters(path: string): boolean {
-  return path.split("/").some((step) => {
-    const name = step.toLowerCase();
-    return IGNORED_NAMES.has(name) || IGNORED_ENDINGS.some((ending) => name.endsWith(ending));
-  });
+  return IGNORED.ignores(path);
 }
 
 /** A model's chapters held to the hunks it was given, and the hunks no chapter holds. */
