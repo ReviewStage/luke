@@ -588,6 +588,8 @@ interface InboxItemEndProps {
   face?: boolean;
   /** Whether the end draws the attention mark and the task's status, which a row saying them elsewhere leaves to a reader's ears. */
   standing?: boolean;
+  /** Whether a reader hears Needs you where the item needs them, which a row under a name already saying it leaves out. */
+  needsYouSaid?: boolean;
   before?: ReactNode;
   /** What stands after the time, as a shortcut does. */
   after?: ReactNode;
@@ -619,6 +621,7 @@ export function InboxItemMarks({
   open = false,
   face = true,
   standing = true,
+  needsYouSaid = true,
   drafted,
   before,
   after,
@@ -639,10 +642,12 @@ export function InboxItemMarks({
       {needsYou && standing ? (
         <span className={INBOX_ROW_ATTENTION}>
           <AttentionMark />
-          <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
+          {needsYouSaid ? <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden> : null}
         </span>
       ) : null}
-      {needsYou && !standing ? <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden> : null}
+      {needsYou && !standing && needsYouSaid ? (
+        <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
+      ) : null}
       <TaskStatusChip holder={holder} drawn={standing} />
       <Time at={item.updatedAt} now={now} hint={false} />
       {after}

@@ -794,6 +794,7 @@ function PersonColumn({
                 {...inboxRowDraft(drafts.get(listed.item.id), listed.item, false)}
                 models={tasks.agents.models}
                 readerId={tasks.me}
+                needsYouShown={you}
                 onChoose={openItem}
               />
             ))}

@@ -67,7 +67,6 @@ import {
   useMinute,
   useResizeEdge,
   useRovingKeys,
-  VisuallyHidden,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -178,6 +177,7 @@ import {
   type InboxWhose,
   inboxLineKind,
   inboxPreview,
+  inboxPreviewHeard,
   inboxShownTicks,
   isDone,
   isUnread,
@@ -267,8 +267,11 @@ const ARCHIVED_WORDS = {
 /** What an unread row says to a reader, its dot being drawn for the eye alone. */
 const UNREAD = "Unread";
 
-/** What a row's swipe button says it does: marks the item read, or unread. */
-const SWIPE_WORDS = { READ: "Read", UNREAD: "Unread" } as const;
+/** What a row's swipe button says it does, short for the eye and in the menu's own words to a reader: marks the item read, or unread. */
+const SWIPE_WORDS = {
+  READ: { label: "Read", name: commandHead(PANEL_COMMAND.MARK_READ).label },
+  UNREAD: { label: "Unread", name: commandHead(PANEL_COMMAND.MARK_UNREAD).label },
+} as const;
 
 /** What the view's menu offers to clear every dot with. */
 const MARK_ALL_READ = "Mark all as read";
@@ -451,6 +454,7 @@ export const InboxItemRow = memo(function InboxItemRow({
   readerId,
   face = true,
   muted = false,
+  needsYouShown = false,
   ref,
   selectKey,
   onChoose,
@@ -475,6 +479,8 @@ export const InboxItemRow = memo(function InboxItemRow({
   face?: boolean;
   /** Whether the row is drawn gray, its item done with (`isDone`), as the Inbox's own list draws it; nothing says so in words, since its marks and its card do. */
   muted?: boolean;
+  /** Whether the row stands under a name that already says Needs you, the scope's or a section's, so it leaves the words unsaid. */
+  needsYouShown?: boolean;
   /** Handed the row's press, by which the list finds the row of an item. */
   ref?: React.RefCallback<HTMLElement> | undefined;
   /** What the row is chosen by where its list chooses rows (`SelectionRegion`); none where it is never chosen. */
@@ -495,6 +501,7 @@ export const InboxItemRow = memo(function InboxItemRow({
   const { nameOf } = useInboxStanding(listed, readerId);
   const lineKind = inboxLineKind(item);
   const preview = inboxPreview(item, nameOf, ticked);
+  const heard = inboxPreviewHeard(item, nameOf, ticked);
   const addressedTo = inboxAddressedTo(item);
   const addressee = usePerson(addressedTo);
   const coarse = useCoarsePointer();
@@ -522,6 +529,7 @@ export const InboxItemRow = memo(function InboxItemRow({
             {preview}
           </span>
         }
+        describedAs={heard}
         lead={{
           icon: <HolderGlyph holder={holder} />,
           // Note that a thread its agent addressed by name says so after its task, since its task's assignee may be someone else.
@@ -539,7 +547,7 @@ export const InboxItemRow = memo(function InboxItemRow({
             face={face}
             standing={false}
             drafted={drafted}
-            before={unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
+            needsYouSaid={!needsYouShown}
           />
         }
         metaAt={LIST_ROW_META.TITLE}
@@ -547,13 +555,14 @@ export const InboxItemRow = memo(function InboxItemRow({
           onMark === undefined
             ? undefined
             : {
-                label: unread ? SWIPE_WORDS.READ : SWIPE_WORDS.UNREAD,
+                ...(unread ? SWIPE_WORDS.READ : SWIPE_WORDS.UNREAD),
                 icon: unread ? <MailOpenIcon /> : <MailIcon />,
                 onAct: () => onMark(listed, !unread),
               }
         }
         current={current ? LIST_ROW_CURRENT.PAGE : undefined}
         unread={unread}
+        unreadWords={UNREAD}
         muted={muted}
         hint={{ Hint: RowHint, label: title }}
         selectKey={selectKey}
@@ -1692,6 +1701,7 @@ export function InboxList({
       readerId={readerId}
       face={view.grouping !== INBOX_GROUPING.PERSON}
       muted={isDone(listed.item)}
+      needsYouShown={head.show.show === INBOX_SHOW.TO_DO}
       ref={leaving ? undefined : rows.hold(listed.item.id)}
       selectKey={leaving ? undefined : listed.item.id}
       onChoose={choose}
