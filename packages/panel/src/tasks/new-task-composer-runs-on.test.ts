@@ -353,6 +353,13 @@ test("a member whose last pick is the cloud, as every member's with no device is
 
 test("while Bring your own host is off the card reads no devices, offers Cloud alone, and starts in the cloud at once, though the last pick is a device", async () => {
   handState(experimentsOn());
+  let beats = 0;
+  fakeActPort({
+    [ACT_KIND.HOSTS_PRESENCE]: () => {
+      beats += 1;
+      return Promise.resolve({ devices: [] });
+    },
+  });
   window.localStorage.setItem("luke.newTaskRunsOn", STUDIO);
   const { container, starts, reads } = await mount({ devices: devicesWith(), reads: READS.HOLD });
   pressInComposer(container, "Enter", { metaKey: true });
@@ -366,6 +373,7 @@ test("while Bring your own host is off the card reads no devices, offers Cloud a
     ["Cloud"],
   );
   assert.equal(reads(), 0);
+  assert.equal(beats, 0);
 });
 
 test("a child's card starts under its parent alone, naming no repository and no device", async () => {

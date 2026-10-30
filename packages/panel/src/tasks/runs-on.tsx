@@ -229,7 +229,8 @@ export function NewTaskRunsOnChip({
 }): React.JSX.Element {
   // Note that the clock only redraws the chip as a beat ages, since the standing is read off the book's own monotonic clock.
   useSecond();
-  const book = useDevicePresence(true);
+  // Note that a chip offering Cloud alone reads no beats, because it draws no device's standing.
+  const book = useDevicePresence(devices.length > 0);
   return (
     <Picker
       label={RUNS_ON_WORDS.LABEL}
