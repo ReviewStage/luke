@@ -1431,6 +1431,14 @@ body,
   -webkit-app-region: drag;
 }
 
+/* Its chips, buttons, and crumbs claim their presses back as they do on any
+   bar (above, and `@luke/ui`'s breadcrumb), coming after the bar in document
+   order; so does a field a page names itself with, as Rename's on an
+   agent's page, so a press in it moves the caret rather than the window. */
+[data-luke-profile="desktop"] .window-title-bar input {
+  -webkit-app-region: no-drag;
+}
+
 /* Under the title bar every pane's top row is an ordinary bar, the window's
    handle no longer, and the title bar's buttons stand over none of them: the
    plan's first tab starts on one line with its sheet's edge, folded or not,
