@@ -49,7 +49,6 @@ import {
   threadNeedsReader,
 } from "@luke/features/inbox-wire";
 import {
-  ACCOUNT_INBOX_ITEMS,
   accountInboxItemsLiveRowsSchema,
   accountInboxLiveRowSchemas,
   accountInboxOfLiveRows,
@@ -59,7 +58,7 @@ import {
 } from "@luke/features/live-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
-import { DateTime, Duration, Effect, Option, Result, Schema } from "effect";
+import { Clock, DateTime, Duration, Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import {
@@ -292,10 +291,12 @@ const liveAnswerOf = (userId: string, readAt: number) =>
     );
   });
 
-/** The account's items read as the desktop decodes its rows, read since the instant given: the ids it stamps, and the items it carries. */
-const accountItemsOf = (userId: string, since: number) =>
+/** The account's items read as the desktop decodes its rows, read since the instants given: the ids it stamps, and the items it carries. */
+const accountItemsOf = (userId: string, since: number, settledSince: number) =>
   Effect.gen(function* () {
-    const parts = Option.getOrThrow(accountItemsLiveStatements(userId, new Date(since)));
+    const parts = Option.getOrThrow(
+      accountItemsLiveStatements(userId, new Date(since), new Date(settledSince)),
+    );
     const sql = yield* SqlClient.SqlClient;
     const rowsOf = (statement: LiveStatement) => sql.unsafe(statement.sql, [...statement.params]);
     const rows = yield* Schema.decodeUnknownEffect(accountInboxItemsLiveRowsSchema)(
@@ -309,9 +310,9 @@ const accountItemsOf = (userId: string, since: number) =>
     return { stamps: rows.stamps.map((stamp) => stamp.id), items: inboxOfLiveRows(rows) };
   });
 
-/** The ids the account's items read carries as the desktop decodes its rows: those it stamps, and those it carries, read since the instant given. */
-const accountItemIdsOf = (userId: string, since: number) =>
-  Effect.map(accountItemsOf(userId, since), ({ stamps, items }) => ({
+/** The ids the account's items read carries as the desktop decodes its rows: those it stamps, and those it carries, read since the instants given. */
+const accountItemIdsOf = (userId: string, since: number, settledSince: number) =>
+  Effect.map(accountItemsOf(userId, since, settledSince), ({ stamps, items }) => ({
     stamps: stamps.toSorted(),
     items: items.map((item) => item.id).toSorted(),
   }));
@@ -332,8 +333,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const elsewhere = yield* post(outsider.agent);
 
         const both = [onTask.id, ofTaskless.id].toSorted();
-        assert.deepEqual(yield* accountItemIdsOf(teammate, 0), { stamps: both, items: both });
-        assert.deepEqual(yield* accountItemIdsOf(outsider.agent.userId, 0), {
+        assert.deepEqual(yield* accountItemIdsOf(teammate, 0, 0), { stamps: both, items: both });
+        assert.deepEqual(yield* accountItemIdsOf(outsider.agent.userId, 0, 0), {
           stamps: [elsewhere.id],
           items: [elsewhere.id],
         });
@@ -341,47 +342,26 @@ it.layer(getTestDB())("the inbox store", (it) => {
   );
 
   it.effect(
-    "the account's items stamp every open item however old and the latest settled ones up to their bound, and carry only those changed since the reader's instant",
+    "the account's items stamp every open item and the settled ones of the last week, and carry whole only those changed since the reader's instant",
     () =>
       Effect.gen(function* () {
-        const { agent, workspaceId } = yield* openAgentIn;
+        const { agent } = yield* openAgentIn;
+        yield* post(agent, { ...SETTINGS, key: "stale" });
+        assert.ok(Option.isSome(yield* closeInboxItem(agent, "stale", "Not needed after all")));
         const waiting = yield* post(agent, { ...SETTINGS, key: "waiting" });
-        // One settled item more than the read carries, each changed after the open one.
-        const at = (step: number) => new Date(Date.parse("2026-10-21T12:00:00Z") + step * 1_000);
-        const settled = yield* Database.use((db) =>
-          db
-            .insert(inboxItem)
-            .values(
-              Array.from({ length: ACCOUNT_INBOX_ITEMS.MAX_SETTLED + 1 }, (_, step) => ({
-                userId: agent.userId,
-                taskId: agent.taskId,
-                organizationId: workspaceId,
-                agentId: agent.agentId,
-                channelId: waiting.channelId,
-                key: `settled-${step}`,
-                revision: 1,
-                version: INBOX_WIRE_VERSION,
-                title: `Settled ${step}`,
-                needsReply: false,
-                status: INBOX_STATUS.CLOSED,
-                closedReason: "Done another way",
-                postedAt: at(step),
-                settledAt: at(step),
-                updatedAt: at(step),
-              })),
-            )
-            .returning({ id: inboxItem.id, updatedAt: inboxItem.updatedAt }),
-        );
-        const [oldest, ...latest] = settled.toSorted(
-          (one, other) => one.updatedAt.getTime() - other.updatedAt.getTime(),
-        );
-        const newest = latest.at(-1);
-        assert.ok(oldest !== undefined && newest !== undefined);
+        yield* TestClock.adjust(Duration.days(8));
+        const lately = yield* post(agent, { ...SETTINGS, key: "lately" });
+        assert.ok(Option.isSome(yield* closeInboxItem(agent, "lately", "Done another way")));
+        const fresh = yield* post(agent, { ...SETTINGS, key: "fresh" });
+        const now = yield* Clock.currentTimeMillis;
 
-        assert.deepEqual(yield* accountItemIdsOf(agent.userId, newest.updatedAt.getTime()), {
-          stamps: [waiting.id, ...latest.map((item) => item.id)].toSorted(),
-          items: [newest.id],
-        });
+        assert.deepEqual(
+          yield* accountItemIdsOf(agent.userId, now, now - Duration.toMillis(Duration.days(7))),
+          {
+            stamps: [waiting.id, lately.id, fresh.id].toSorted(),
+            items: [lately.id, fresh.id].toSorted(),
+          },
+        );
       }),
   );
 
@@ -409,7 +389,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const threadOf = (items: readonly InboxItem[]) =>
           items.find((item) => item.id === opened.id)?.thread?.map((message) => message.text);
 
-        assert.deepEqual(threadOf((yield* accountItemsOf(agent.userId, 0)).items), [
+        assert.deepEqual(threadOf((yield* accountItemsOf(agent.userId, 0, 0)).items), [
           NOTICE.body,
           "Pick the region.",
           "Still checking.",

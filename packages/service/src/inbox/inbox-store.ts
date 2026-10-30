@@ -1724,33 +1724,27 @@ export interface AccountItemsLiveStatements extends ScopeInboxLiveStatements {
 
 /**
  * Every inbox item the account reaches written for Neon Realtime: where
- * each stands (`stamps`), every open item and the latest settled ones
- * (`ACCOUNT_INBOX_ITEMS.MAX_SETTLED`), and the items among those changed at
- * or after `since`, each with what its row draws: its first message, the
+ * each stands (`stamps`), every open item and every settled one changed at
+ * or after `settledSince`, and the items among those changed at or after
+ * `since`, each with what its row draws: its first message, the
  * one whose ask it holds open, and its latest few
  * (`ACCOUNT_INBOX_ITEMS.LATEST_MESSAGES`), with their files
  * (`itemsLiveStatements`). A stamp carries what moves an item without
  * moving its last change: whether it is unread for the reader, who it waits
  * on, the channel it lives in, which a move between channels changes, and
- * how many messages its thread holds, which a withdrawn message moves. Note that the instant is bound rather than read from the clock,
+ * how many messages its thread holds, which a withdrawn message moves. Note that the instants are bound rather than read from the clock,
  * because a live read measures nothing from it. None where a statement
  * names a value Realtime cannot carry.
  */
 export function accountItemsLiveStatements(
   userId: string,
   since: Date,
+  settledSince: Date,
 ): Option.Option<AccountItemsLiveStatements> {
-  // Every item the account may read, as its read of what waits names them (`accountWaiting`, `tasklessWaiting`).
-  const visible = itemVisibleTo(userId);
-  const latestSettled = queryBuilder
-    .select({ id: inboxItem.id })
-    .from(inboxItem)
-    .where(and(visible, ne(inboxItem.status, INBOX_STATUS.OPEN)))
-    .orderBy(...LATEST_FIRST)
-    .limit(ACCOUNT_INBOX_ITEMS.MAX_SETTLED);
   const carried = and(
-    visible,
-    or(eq(inboxItem.status, INBOX_STATUS.OPEN), inArray(inboxItem.id, latestSettled)),
+    // Every item the account may read, as its read of what waits names them (`accountWaiting`, `tasklessWaiting`).
+    itemVisibleTo(userId),
+    or(eq(inboxItem.status, INBOX_STATUS.OPEN), gte(inboxItem.updatedAt, settledSince)),
   );
   const stamps = liveStatementOf(
     queryBuilder
