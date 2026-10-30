@@ -13,7 +13,9 @@
  * reads and writes), and the inbox's paths reach theirs the same way, each with an id among
  * its segments. And every procedure the contract declares is reached the same way and refuses
  * a caller who names no account as unauthenticated, over the deployment's own seams, so a
- * procedure built without a caller check answers something else and is named.
+ * procedure built without a caller check answers something else and is named; the one that
+ * reads no credential by design, a box's pairing start, is named here and answers a caller
+ * with no daemon version as needing an upgrade.
  */
 
 import assert from "node:assert/strict";
@@ -67,6 +69,9 @@ const PATH_PARAMETER_ID = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
 
 /** The dashboard's resource, which answers a signed-out caller in its own words. */
 const ADMIN_RESOURCE: keyof typeof hostedContract = "admin";
+
+/** The procedures that read no credential, by key: a box starting a pairing, which answers a caller who names no daemon version as needing an upgrade. */
+const CREDENTIAL_FREE: ReadonlySet<string> = new Set(["deviceAgents.startPairing"]);
 
 /** A procedure's public path, every parameter written as a value it reads. */
 function readablePath(procedure: ProcedureRoute): string {
@@ -383,6 +388,10 @@ test("every procedure the contract declares is reached through the committed fal
     status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
     text: JSON.stringify({ error: ADMIN_ERROR.NOT_SIGNED_IN }),
   };
+  const upgradeNeeded = {
+    status: HOSTED_HTTP_STATUS.UPGRADE_REQUIRED,
+    error: HOSTED_API_ERROR.HOST_UPGRADE_NEEDED,
+  };
   const procedures = hostedProcedureRoutes();
   assert.ok(procedures.length > 0);
   for (const procedure of procedures) {
@@ -391,10 +400,20 @@ test("every procedure the contract declares is reached through the committed fal
       ORPC_ROUTES,
     );
     const [resource] = procedure.key;
+    const key = procedure.key.join(".");
+    const text = await answer.text();
+    if (CREDENTIAL_FREE.has(key)) {
+      assert.deepEqual(
+        { status: answer.status, error: JSON.parse(text).error },
+        upgradeNeeded,
+        key,
+      );
+      continue;
+    }
     assert.deepEqual(
-      { status: answer.status, text: await answer.text() },
+      { status: answer.status, text },
       resource === ADMIN_RESOURCE ? signedOut : unauthenticated,
-      procedure.key.join("."),
+      key,
     );
   }
 });
