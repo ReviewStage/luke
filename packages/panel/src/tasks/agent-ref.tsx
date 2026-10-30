@@ -377,7 +377,8 @@ export function AgentActorRef({
   subject: AgentSubject;
   /** The catalog as last read, which names the agent's model on its card. */
   models: readonly CatalogModel[] | undefined;
-  onOpen: () => void;
+  /** What opens its tab; none for an agent the place holds no tab of, whose name hangs its card alone. */
+  onOpen: (() => void) | undefined;
   /** Whether the name stands without its tile, whose face the line already draws. */
   nameOnly?: boolean;
 }): React.JSX.Element {

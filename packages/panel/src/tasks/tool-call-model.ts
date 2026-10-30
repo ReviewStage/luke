@@ -35,6 +35,7 @@ import {
 import { LINK_PLACE, type LinkPlace, linkOf } from "@luke/features/link-grammar";
 import { linkLabels } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { planAttachmentOf } from "@luke/features/plan-attachment-link";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
 import {
   browserCallWords,
@@ -1316,10 +1317,20 @@ function changedAgent(call: TargetedCall): ToolTarget | undefined {
   return agentUpdateKind(call.input) === CALL_KIND.ARCHIVE_AGENT ? undefined : namedAgent(call);
 }
 
-/** The plan an edit named by its task, which its row opens; the task's own plan for an edit made before every edit named one. */
-function editedPlan(call: TargetedCall): ToolTarget {
-  const task = stringAt(call.input, "taskId");
+/** The plan of the task named, which a row opens; the task's own plan where it names none. */
+function planOf(task: string | undefined): ToolTarget {
   return task === undefined ? TASK_TARGET : { kind: TOOL_TARGET.TASK, task };
+}
+
+/** The plan a call named by its task, an edit's or a comment tool's, which its row opens; the task's own plan for a call made before every such call named one. */
+function namedPlan(call: TargetedCall): ToolTarget {
+  return planOf(stringAt(call.input, "taskId"));
+}
+
+/** The plan a look's address names, which its row opens; the task's own plan where the address names no picture. */
+function lookedPlan(call: TargetedCall): ToolTarget {
+  const address = stringAt(call.input, "address");
+  return planOf(address === undefined ? undefined : planAttachmentOf(address.trim())?.taskId);
 }
 
 /** The task a change answered, which its row opens as the sidebar opens it. */
@@ -1378,8 +1389,12 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [RETIRED_TOOL.READ_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.MESSAGE_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.START_CODING_AGENT, startedAgent],
-  [AGENT_TOOL.EDIT_PLAN, editedPlan],
-  [AGENT_TOOL.LOOK_AT_PICTURE, () => TASK_TARGET],
+  [AGENT_TOOL.EDIT_PLAN, namedPlan],
+  [AGENT_TOOL.LOOK_AT_PICTURE, lookedPlan],
+  [AGENT_TOOL.READ_COMMENTS, namedPlan],
+  [AGENT_TOOL.REPLY_TO_COMMENT, namedPlan],
+  [AGENT_TOOL.RESOLVE_THREAD, namedPlan],
+  [AGENT_TOOL.REOPEN_THREAD, namedPlan],
   [AGENT_TOOL.OPEN_PULL_REQUEST, openedPullRequest],
   [AGENT_TOOL.POST_THREAD, namedThread],
   [RETIRED_TOOL.POST_TO_INBOX, namedThread],

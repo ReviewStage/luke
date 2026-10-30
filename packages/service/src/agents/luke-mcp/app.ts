@@ -237,9 +237,8 @@ function toolResult(tool: LukeMcpTool, result: LukeMcpToolResult): McpToolCallRe
  */
 const TOOL_META = { "anthropic/maxResultSizeChars": 500_000 } as const;
 
-/** What an agent whose row is gone is offered by: no task, no repository, and no operator's tools. */
+/** What an agent whose row is gone is offered by: no repository, and no operator's tools. */
 const NO_AGENT_OFFERED: LukeMcpOfferedTo = {
-  taskId: null,
   repository: null,
   kind: AGENT_KIND.CODER,
   machine: AGENT_MACHINE.VERCEL,
@@ -323,8 +322,8 @@ function callLukeTool(
 }
 
 /**
- * The tools listed to the admitted agent: those eve offers it, by its task,
- * its repository, its kind, whether a pilot started it, and its starter's
+ * The tools listed to the admitted agent: those eve offers it, by its
+ * repository, its kind, whether a pilot started it, and its starter's
  * Memory (`offeredLukeMcpTool`),
  * each in the words it is shown them with (`describe`); those eve offers
  * every agent where its row is gone, since no narrowed tool's door would

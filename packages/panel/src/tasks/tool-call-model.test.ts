@@ -535,21 +535,28 @@ test("an agent's task calls draw from their parts", () => {
   assert.deepEqual([stopped.kind, stopped.subject], [CALL_KIND.WORKER_CANCEL, "delegate-7k2m9q"]);
 });
 
-test("a plan edit opens the task it named, and one made before edits named a task opens the plan", () => {
+test("a plan edit or a comment call opens the task it named, and one made before such calls named a task opens the plan", () => {
   const edited = {
     tool: "edit_plan",
     callId: "call-1",
     input: { taskId: "task-2", notes: [{ kind: "add", section: "Problem", text: "- Slow." }] },
     output: { status: "accepted", taken: 1 },
   };
+  const replied = {
+    tool: "reply_to_comment",
+    callId: "call-2",
+    input: { taskId: "task-2", thread: "thread-1", words: "Done." },
+    output: { status: "accepted", thread: "thread-1" },
+  };
 
   assert.deepEqual(toolTarget(edited), { kind: TOOL_TARGET.TASK, task: "task-2" });
+  assert.deepEqual(toolTarget(replied), { kind: TOOL_TARGET.TASK, task: "task-2" });
   assert.deepEqual(toolTarget({ ...edited, input: { notes: edited.input.notes } }), {
     kind: TOOL_TARGET.PLAN,
   });
 });
 
-test("a look at one of the plan's pictures says it looked and opens the plan, and one refused shows why and opens nothing", () => {
+test("a look at a plan's picture says it looked and opens the task its address names, and one refused shows why and opens nothing", () => {
   const input = {
     address:
       "https://tryluke.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/9d2e4c61-7a3b-4f0e-8b1a-2c6d4e8f0a13",
@@ -561,7 +568,10 @@ test("a look at one of the plan's pictures says it looked and opens the plan, an
   };
 
   assert.equal(toolCallView(looked).kind, CALL_KIND.LOOK_AT_PICTURE);
-  assert.deepEqual(toolTarget(looked), { kind: TOOL_TARGET.PLAN });
+  assert.deepEqual(toolTarget(looked), {
+    kind: TOOL_TARGET.TASK,
+    task: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
+  });
   const shown = toolCallView(refused).output;
   assert.equal(shown?.kind, TOOL_BLOCK.JSON);
   assert.ok(shown?.text.includes(refused.output.reason));

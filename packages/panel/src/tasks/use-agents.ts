@@ -199,6 +199,8 @@ export interface AgentsControl {
   agents: readonly AgentSummary[] | undefined;
   /** The open task's archived agents in the order started, or nothing before the task list carries the task. */
   archived: readonly AgentSummary[] | undefined;
+  /** Every agent the followed task list carries, on any task or none, the archived ones among them, which names an agent of another task that wrote on the open task's plan; none where the list is not followed or does not list the open task. */
+  listed?: readonly AgentSummary[] | undefined;
   /** The workspace the one agent read as its page belongs to; none on a task, where the task says it, and before the page's read lands. */
   workspaceId?: string | undefined;
   /** The repository of the one agent read as its page, `owner/name`, on the same terms as its workspace. */
@@ -1590,6 +1592,7 @@ export function useAgents(input: {
   return useSteadyDoors({
     agents,
     archived: archivedAgents,
+    listed: listedAgents,
     workspaceId,
     agentRepository,
     origin: ours(list) ? list.origin : undefined,
