@@ -528,8 +528,12 @@ export function useTaskInbox(input: {
   latest.current = { ...agents, taskId };
 
   // Each read is the inbox whole, which replaces what was held, an answer's own patch among it.
+  // Note that a holder neither read holds any more, as after a sign-out, is let go with its items, so nothing of the last account stands drawn.
   useEffect(() => {
-    if (pushed === undefined) return;
+    if (pushed === undefined) {
+      setHeld((was) => (was.drawn ? fresh(was.taskId, undefined) : was));
+      return;
+    }
     setHeld((was) =>
       was.drawn && was.items === pushed ? was : { ...was, items: pushed, drawn: true },
     );
@@ -692,25 +696,28 @@ export function useTaskInbox(input: {
   }, [held.items, ids]);
 
   // A read lets go of the drafts of the items it covers that it no longer holds: a plan's, or, for
-  // an agent with no plan, that agent's alone.
+  // an agent with no plan, that agent's alone. Note that only the holder's own read says an item is
+  // gone, since the feed leaves out a settled item past its bound whose draft still stands.
   // Note that the agent posting on the item again, or a teammate settling it, lets only the picks go,
   // which stand on the ask as it was, while the words and files being written stay as they are.
   const { drop, update } = writer;
+  const whole = holder.rows;
   useEffect(() => {
     if (!held.drawn || (ownTask === undefined && readAgent === undefined)) return;
     const covered = drafts.filter(
       (kept) => ownTask !== undefined || kept.place.agentId === readAgent,
     );
-    const gone = covered.filter(
-      (kept) => !held.items.some((item) => item.id === kept.place.itemId),
-    );
+    const gone =
+      whole === undefined
+        ? []
+        : covered.filter((kept) => !whole.some((item) => item.id === kept.place.itemId));
     const lapsed = covered.filter((kept) => {
       const item = held.items.find((each) => each.id === kept.place.itemId);
       return item !== undefined && caughtUp(item, kept) && draftOfItem(kept, item) !== kept;
     });
     for (const kept of lapsed) update(kept.place, withoutPicks);
     if (gone.length > 0) drop((place) => gone.some((kept) => Equal.equals(kept.place, place)));
-  }, [held.drawn, held.items, ownTask, readAgent, drafts, drop, update]);
+  }, [held.drawn, held.items, whole, ownTask, readAgent, drafts, drop, update]);
 
   const board = useMemo(() => inboxBoard(held.items, readerId), [held.items, readerId]);
   const draftOf = useCallback(

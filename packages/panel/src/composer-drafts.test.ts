@@ -49,7 +49,7 @@ import { NO_LOOKS } from "./tasks/use-task-looks.js";
 import type { TasksControl } from "./tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
-import { handInboxItems } from "./testing/app-state.js";
+import { handHostReads, handInboxItems } from "./testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -1166,6 +1166,59 @@ test("a reader still holding an item's older revision leaves the answer carried 
   await tasklessInbox(INVITES.agent.id, [mine]);
   const caughtUp = await tasklessInbox(INVITES.agent.id, [reposted]);
   assert.equal(caughtUp.draftOf(reposted).note, "Check guests");
+});
+
+test("a draft on an item the account's feed leaves out stands while the feed draws first, and goes only once the agent's own read answers without the item", async () => {
+  const mine = tasklessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
+  const older = tasklessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000004", 1);
+  const first = await tasklessInbox(INVITES.agent.id, [mine, older]);
+  act(() =>
+    first.onDraft(older, { choices: [], values: [], note: "Reply later", attachments: [] }),
+  );
+
+  // The feed holds only the newer item, as it leaves out one settled past its bound; the agent's own read is still out.
+  leaveWindow();
+  const reads = handHostReads({
+    items: {
+      rows: {
+        [INBOX_SCOPE_KIND.PLAN]: {},
+        [INBOX_SCOPE_KIND.AGENT]: { [INVITES.agent.id]: [mine] },
+      },
+    },
+  });
+  let control: TaskInboxControl | undefined;
+  function Probe(): null {
+    useDraftsOwner(undefined);
+    control = useTaskInbox({
+      taskId: INVITES.agent.id,
+      kind: INBOX_SCOPE_KIND.AGENT,
+      shown: true,
+      waiting: true,
+      readerId: undefined,
+      agents: {
+        heldIds: [INVITES.agent.id],
+        answerInbox: () => new Promise(() => undefined),
+        messageInbox: () => new Promise(() => undefined),
+        readInboxImage: () => new Promise(() => undefined),
+        onRetryList: () => undefined,
+      },
+    });
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
+  await settle();
+  assert.equal(control?.draftOf(older).note, "Reply later", "the feed drawing first drops nothing");
+
+  await act(async () =>
+    reads.deliverHolders({
+      [INBOX_SCOPE_KIND.PLAN]: {},
+      [INBOX_SCOPE_KIND.AGENT]: { [INVITES.agent.id]: { rows: [mine] } },
+    }),
+  );
+  await settle();
+  assert.equal(control?.draftOf(older).note, "", "the agent's own read says the item is gone");
 });
 
 test("another item landing in the inbox leaves the answer being written on one as it was", async () => {
