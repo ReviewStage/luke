@@ -30,6 +30,7 @@ import {
   LIST_LEAVING_SELECTOR,
   LIST_MOTION_WAY,
   LIST_ROW_CURRENT,
+  LIST_ROW_CURRENT_LOOK,
   LIST_ROW_INK,
   LIST_ROW_LEAD,
   LIST_ROW_META,
@@ -532,6 +533,7 @@ export const InboxItemRow = memo(function InboxItemRow({
         ref={ref}
         motionKey={listed.item.id}
         ink={LIST_ROW_INK.SIDEBAR}
+        currentLook={LIST_ROW_CURRENT_LOOK.TINT}
         leading={<UnreadMark unread={unread} />}
         title={title}
         description={
