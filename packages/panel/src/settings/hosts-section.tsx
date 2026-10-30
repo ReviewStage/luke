@@ -145,6 +145,7 @@ const WORDS = {
   WAITING_HOW: "Once you approve a code, its host shows here.",
   CONNECTING: "Connecting…",
   READY: "Ready",
+  CLOSE: "Close",
 } as const;
 
 /** The row that stands while the machines are read: a machine with its ⋯. */
@@ -355,8 +356,9 @@ function joinedLine(host: Host): HostLine {
 /**
  * The dialog Add hosts opens: the install command, what comes after it, and
  * the hosts that joined since it opened, each where it stands, or a wait
- * until one does; a reader is told as each moves. It has no answers of its
- * own and closes as any dialog does.
+ * until one does; a reader is told as each moves. Its one answer is a
+ * quiet Close, which only closes: nothing waits on it, since the dialog
+ * moves on by itself whether or not it is pressed.
  */
 function AddHostsDialog({
   known,
@@ -376,7 +378,17 @@ function AddHostsDialog({
     joined.map((host) => `${host.name}: ${joinedLine(host).words}`).join(" "),
   );
   return (
-    <Dialog open title={WORDS.ADD} size={DIALOG_SIZE.WIDE} onDismiss={onClose}>
+    <Dialog
+      open
+      title={WORDS.ADD}
+      size={DIALOG_SIZE.WIDE}
+      onDismiss={onClose}
+      actions={
+        <Button variant={BUTTON_VARIANT.QUIET} onClick={onClose}>
+          {WORDS.CLOSE}
+        </Button>
+      }
+    >
       <div className={COMMAND}>
         <CodeCard
           title={WORDS.INSTALL_TITLE}

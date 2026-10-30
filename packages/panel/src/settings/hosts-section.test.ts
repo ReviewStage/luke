@@ -83,7 +83,7 @@ function dialogText(): string {
   return document.querySelector('[role="dialog"]')?.textContent ?? "";
 }
 
-test("Add hosts shows the public install command, with no secret in it, and waits for a host it has not seen", async () => {
+test("Add hosts shows the public install command, with no secret in it, waits for a host it has not seen, and Close puts it away", async () => {
   fakeActPort({
     [ACT_KIND.HOSTS_LIST]: () =>
       Promise.resolve({
@@ -109,6 +109,8 @@ test("Add hosts shows the public install command, with no secret in it, and wait
   assert.ok(!/lkh_|--token|sudo/u.test(dialogText()), "the command carries no secret");
   assert.ok(dialogText().includes("Waiting for approval"));
   assert.ok(!dialogText().includes("fra-03"), "a host the account had already is not named");
+  await press("Close");
+  assert.equal(document.querySelector('[role="dialog"]'), null, "Close puts the dialog away");
 });
 
 it.effect(
