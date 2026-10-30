@@ -96,7 +96,12 @@ const API_ROUTE_PREFIX = "/api/";
  * as the script's origin. Vercel runs these rules before it looks at the
  * built site's files, and the build writes no file at such a path besides.
  */
-const PUBLIC_REWRITES: readonly { readonly path: string; readonly route: string }[] = [
+interface PublicRewrite {
+  readonly path: string;
+  readonly route: string;
+}
+
+const PUBLIC_REWRITES: readonly PublicRewrite[] = [
   {
     path: HOST_WIRE.INSTALL_SCRIPT_PATH,
     route: HOST_WIRE.INSTALL_SCRIPT_ROUTE.slice(API_ROUTE_PREFIX.length),
@@ -147,6 +152,7 @@ function passThroughPaths(definitions: readonly FunctionDefinition[]): readonly 
 export function apiRewrites(
   definitions: readonly FunctionDefinition[],
   segments: readonly SegmentRewrite[] = SEGMENT_REWRITES,
+  publics: readonly PublicRewrite[] = PUBLIC_REWRITES,
 ): readonly Rewrite[] {
   const functionOf = new Map(
     definitions.flatMap((definition) =>
@@ -156,7 +162,7 @@ export function apiRewrites(
   const orpc = functionOf.get(ORPC_ROUTE_KEY);
   if (orpc === undefined) throw new Error("no function holds the hosted oRPC route");
   const rewrites: Rewrite[] = [];
-  for (const { path, route } of PUBLIC_REWRITES) {
+  for (const { path, route } of publics) {
     const definition = functionOf.get(route);
     if (definition === undefined) throw new Error(`no route behind the public path ${path}`);
     rewrites.push({ src: exactPattern(path), dest: dest(definition, route) });

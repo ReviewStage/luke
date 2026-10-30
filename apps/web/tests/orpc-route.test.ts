@@ -98,7 +98,7 @@ const partRoute = routeFromHostedFetch(
 /** A client's path landed by the generated fallback alone and dispatched to the test procedure. */
 function partAnswer(path: string): Promise<Response> {
   return dispatchedBy(
-    apiRewrites([GROUPED], []),
+    apiRewrites([GROUPED], [], []),
     new Request(`${ORIGIN}${path}`),
     new Map([[ORPC_ROUTE_KEY, partRoute]]),
   );
