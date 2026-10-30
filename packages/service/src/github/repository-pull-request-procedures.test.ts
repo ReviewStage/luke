@@ -48,6 +48,12 @@ const NUMBERED_ASKS = [
   { method: HTTP_METHOD.POST, path: "/api/pull-requests/chapters" },
 ] as const;
 
+/** The review options' read, of the repository and so of no number: a member's missing one still answers. */
+const REVIEW_OPTIONS_READ = {
+  method: HTTP_METHOD.GET,
+  path: "/api/pull-requests/review-options",
+} as const;
+
 /** The chapters' read, which asks GitHub nothing of the number, so a member's missing one answers as no chapters rather than as none found. */
 const CHAPTERS_READ = { method: HTTP_METHOD.GET, path: "/api/pull-requests/chapters" } as const;
 
@@ -73,6 +79,10 @@ function relayRead(sent: { readonly url: string }): Response | undefined {
     return Response.json({ check_runs: [] });
   if (path === "/repos/acme/relay/commits/sha-42/status") return Response.json({ statuses: [] });
   if (path === "/repos/acme/relay/issues/42/labels") return Response.json([{ name: "ready" }]);
+  if (path === "/repos/acme/relay/labels")
+    return Response.json([{ name: "ready", color: "0e8a16" }]);
+  if (path === "/repos/acme/relay/assignees") return Response.json([]);
+  if (path === "/repos/acme/relay/teams") return Response.json([]);
   return undefined;
 }
 
@@ -169,6 +179,15 @@ it.layer(getTestDB())("a pull request by its repository and number", (it) => {
           assert.deepEqual(yield* ask(numbered, outsider, 42), notFound, numbered.path);
         }
         assert.deepEqual(yield* ask(CHAPTERS_READ, outsider, 42), notFound);
+        // The review options are the repository's, so a member's missing number answers and only a non-member is refused.
+        const options = yield* ask(REVIEW_OPTIONS_READ, member, 99);
+        assert.equal(options.status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(JSON.parse(options.text), {
+          labels: [{ name: "ready", color: "0e8a16" }],
+          users: [],
+          teams: [],
+        });
+        assert.deepEqual(yield* ask(REVIEW_OPTIONS_READ, outsider, 42), notFound);
       }),
   );
 });
