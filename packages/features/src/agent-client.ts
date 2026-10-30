@@ -230,6 +230,13 @@ const ROW_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
 } satisfies NamedRefusals;
 
+/** The refusals a read or a change of a pull request by its repository can answer with: no such pull request to the caller, its repository out of the workspace's reach, or GitHub not answering. */
+const REPOSITORY_PULL_REQUEST_REFUSALS = {
+  [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
+} satisfies NamedRefusals;
+
 /** The refusals an archive or a delete can answer with: the agent gone, or one still starting or awaiting its turn, which has no turn to stop yet. */
 const ARCHIVE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
@@ -1333,7 +1340,7 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentPullRequestAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(this.#hosted.pullRequests.pullRequest, numberedQuery(place)),
-      ROW_REFUSALS,
+      REPOSITORY_PULL_REQUEST_REFUSALS,
     );
   }
 
@@ -1343,7 +1350,7 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentChangesAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(this.#hosted.pullRequests.changes, numberedQuery(place)),
-      ROW_REFUSALS,
+      REPOSITORY_PULL_REQUEST_REFUSALS,
     );
   }
 
@@ -1353,7 +1360,7 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentOverviewPullRequestAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(this.#hosted.pullRequests.overviewPullRequest, numberedQuery(place)),
-      ROW_REFUSALS,
+      REPOSITORY_PULL_REQUEST_REFUSALS,
     );
   }
 
@@ -1363,7 +1370,7 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentOverviewChecksAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(this.#hosted.pullRequests.overviewChecks, numberedQuery(place)),
-      ROW_REFUSALS,
+      REPOSITORY_PULL_REQUEST_REFUSALS,
     );
   }
 
@@ -1373,7 +1380,7 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentOverviewConversationAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(this.#hosted.pullRequests.overviewConversation, numberedQuery(place)),
-      ROW_REFUSALS,
+      REPOSITORY_PULL_REQUEST_REFUSALS,
     );
   }
 
@@ -1386,7 +1393,7 @@ export class HostedAgentClient {
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
       askHosted(this.#hosted.pullRequests.action, { query: numberedQuery(place), body: admitted }),
-      ROW_REFUSALS,
+      REPOSITORY_PULL_REQUEST_REFUSALS,
     );
   }
 
@@ -1396,7 +1403,7 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentPullRequestViewedAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(this.#hosted.pullRequests.viewed, numberedQuery(place)),
-      ROW_REFUSALS,
+      REPOSITORY_PULL_REQUEST_REFUSALS,
     );
   }
 
