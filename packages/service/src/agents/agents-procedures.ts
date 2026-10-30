@@ -38,6 +38,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
+import { agentOwnerFactsOf } from "@luke/database/models/agent-owners";
 import {
   type Agent,
   type AgentCommitted,
@@ -185,10 +186,19 @@ const listedSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
     agents.map((agent) => agent.id),
   );
   const macs = yield* hostedStoreOrUnavailable(devicesNamed(summaryDevices(agents)));
+  const owners = yield* hostedStoreOrUnavailable(agentOwnerFactsOf(agents));
   const now = yield* Clock.currentTimeMillis;
   return {
     agents: agents.map((agent) =>
-      agentSummary(agent, standing(agent.conversationId), now, names, continuedBy(agent.id), macs),
+      agentSummary(
+        agent,
+        standing(agent.conversationId),
+        now,
+        names,
+        owners,
+        continuedBy(agent.id),
+        macs,
+      ),
     ),
   };
 });
@@ -503,6 +513,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const names = yield* hostedStoreOrUnavailable(readAccountNames(pageAccounts(agent)));
       const continuedBy = yield* continuedByOf(userId, [agent.id]);
       const macs = yield* hostedStoreOrUnavailable(devicesNamed(summaryDevices([agent])));
+      const owners = yield* hostedStoreOrUnavailable(agentOwnerFactsOf([agent]));
       const now = yield* Clock.currentTimeMillis;
       return {
         agent: agentPage(
@@ -510,6 +521,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           standing(agent.conversationId),
           now,
           names,
+          owners,
           continuedBy(agent.id),
           macs,
         ),

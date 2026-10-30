@@ -1,3 +1,4 @@
+import { NO_AGENT_OWNER_FACTS } from "@luke/database/models/agent-owners";
 import type { AgentLatestTurn, AgentLine } from "@luke/database/models/agent-store";
 import {
   AGENT_BRIEF,
@@ -160,6 +161,7 @@ test("a local agent's summary names its Mac and when it last beat; an agent in a
       { turn: undefined, awaitingLineAt: undefined },
       now,
       new Map(),
+      NO_AGENT_OWNER_FACTS,
       [],
       new Map([
         [

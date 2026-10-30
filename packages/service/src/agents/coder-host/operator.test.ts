@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
+import { NO_AGENT_OWNER_FACTS } from "@luke/database/models/agent-owners";
 import {
   type Agent,
   archiveAgent,
@@ -227,6 +228,7 @@ it.layer(getTestDB())("the member's operator", (it) => {
               { turn: undefined, awaitingLineAt: undefined },
               0,
               new Map(),
+              NO_AGENT_OWNER_FACTS,
             );
             return agentName(summary);
           });

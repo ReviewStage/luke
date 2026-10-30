@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { type DatabaseServices, READ_CONCURRENCY } from "@luke/database/core/query";
 import { accountExperimentOn, readAccountPreferences } from "@luke/database/models/account-store";
+import { agentOwnerFactsOf } from "@luke/database/models/agent-owners";
 import {
   type Agent,
   type AgentPlace,
@@ -1508,14 +1509,15 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     landed,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
   if (!created) return { agent: yield* summaryOf(userId, agent), created };
-  const [names, runtimes, macs] = yield* hostedStoreOrUnavailable(
+  const [names, runtimes, macs, owners] = yield* hostedStoreOrUnavailable(
     Effect.all(
       [
         readAccountNames(summaryAccounts(agent)),
         nativeRuntimesOfReached([agent.conversationId]),
         devicesNamed(summaryDevices([agent])),
+        agentOwnerFactsOf([agent]),
       ],
-      { concurrency: 3 },
+      { concurrency: 4 },
     ),
   );
   return {
@@ -1528,6 +1530,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
       },
       yield* Clock.currentTimeMillis,
       names,
+      owners,
       [],
       macs,
     ),
