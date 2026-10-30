@@ -102,9 +102,12 @@
     --luke-disclosure-inset-end: var(--luke-space-12);
   }
 
+  /* A row's start is a step shorter than its end, because the chevron's
+     press there keeps a step of its own around its glyph, so the glyph and
+     the last words at the end stand the same inset from either edge. */
   .luke-disclosure-frame:has(> details > .luke-disclosure-summary[data-look="row"]) {
     --luke-disclosure-gap: var(--luke-space-8);
-    --luke-disclosure-inset-start: var(--luke-space-4);
+    --luke-disclosure-inset-start: var(--luke-space-8);
     --luke-disclosure-inset-end: var(--luke-space-12);
     color: var(--luke-color-text);
     white-space: nowrap;
