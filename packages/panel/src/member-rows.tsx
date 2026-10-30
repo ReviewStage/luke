@@ -15,7 +15,7 @@ import type { Directory } from "./member-directory.js";
  * everyone else as the detail, found by their name and their email, and
  * their card hung beside the row. The `@` menu, ⌘K, the assignee picker, the
  * Tasks page's filters, and the new-owner picker each map these rows onto
- * their own engine's; a filter by person, the Inbox's Whose and the
+ * their own engine's; a filter by person, the Inbox's Addressed to and the
  * sidebar's Assigned to and Created by, leads with Anyone and the reader as
  * Me (`peopleFilterActions`), so every filter says the same two words.
  */

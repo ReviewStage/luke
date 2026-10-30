@@ -577,6 +577,10 @@ function PlanDocument({
       case TOOL_TARGET.PAGE:
         return sidePanel.onPreview({ page: target.page });
       case TOOL_TARGET.TASK:
+        // A call that named this very task opens its plan beside the column, as one on its own plan does.
+        if (target.agent === undefined && target.task === taskId) {
+          return openPanelTab(SIDE_PANEL_TAB.PLAN);
+        }
         return target.agent === undefined
           ? tasks.onShowTask(target.task)
           : tasks.onShowAgent(target.task, target.agent);

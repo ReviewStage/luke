@@ -2,19 +2,16 @@ import { Schema, SchemaTransformation } from "effect";
 import { useCallback, useState } from "react";
 import {
   EVERYONES,
-  INBOX_GROUPING,
   INBOX_SHOW,
-  INBOX_SORT,
   INBOX_WHOSE,
-  type InboxGrouping,
   type InboxShow,
-  type InboxSort,
   type InboxWhose,
+  MINE,
 } from "../tasks/inbox-model.js";
 import { keptKey, useKept } from "../use-kept.js";
 
 /**
- * folded-groups.ts -- which of the sidebar's groups the developer folded, Pinned and the repositories', kept across launches, and the Inbox's plan groups, how it lists its items, and how wide its list stands kept the same way.
+ * folded-groups.ts -- which of the sidebar's groups the developer folded, Pinned and the repositories', kept across launches, and what the Inbox lists and how wide its list stands kept the same way.
  *
  * A fold is this window's alone, as the sidebar's width is, so it is kept in
  * the renderer's own storage rather than on the account: a group folded on
@@ -27,18 +24,19 @@ import { keptKey, useKept } from "../use-kept.js";
  * its row stand folded until it is opened, so the tasks opened are kept,
  * each by its id, under a key of their own. A fixture run starts with every group open
  * and keeps nothing, so its frames never wear a developer's folds. The
- * Inbox's task groups are kept on the same terms, each by its task's id,
- * and so are its view choices, the scope it shows, how it groups and sorts,
- * whose items it lists, a teammate by their account's id, and its list's
- * width; a task's own Inbox keeps a
+ * Inbox's view choices are kept on the same terms, the scope it shows and
+ * whom the items it lists are addressed to, a teammate by their account's
+ * id, and so is its list's width; a task's own Inbox keeps a
  * scope of its own, one for every task, apart from the window's; and the channels keep one scope and one choice of whose items
  * they list, shared by every channel, apart from the window's, All of
  * everyone's until first turned. A choice kept before its scope was is read
  * as the scope that now lists what it listed: a tab kept before the scopes, Needs you or
- * Unread, as To do, and All open or Everything as All; the Needs you
- * button's press, kept before the tabs, as To do where it was pressed and
- * All where it was not; and the sort Waiting longest as Oldest first. A
- * fixture run draws no inbox, so it has nothing staged to keep apart. An automation's Runs panel keeps its width and whether it
+ * Unread, as Open, and All open or Everything as All; and the Needs you
+ * button's press, kept before the tabs, as Open where it was pressed and
+ * All where it was not. Open is kept under the value To do was, so a
+ * scope kept as To do reads as Open. A grouping or a sort kept before the
+ * list was always one run, the latest first, is left where it was and
+ * read by nothing. A fixture run draws no inbox, so it has nothing staged to keep apart. An automation's Runs panel keeps its width and whether it
  * stands on the same terms, one for every automation, as the side panel
  * keeps one for every plan, and so does the tree beside every File and
  * Changes tab, one width for them all.
@@ -50,16 +48,11 @@ const STORAGE_KEY = {
   PINNED: "luke.sidebarPinnedFolded",
   SECTIONS: "luke.sidebarFoldedSections",
   OPENED_TASKS: "luke.sidebarOpenedTasks",
-  INBOX_TASKS: "luke.inboxFoldedTasks",
-  /** Where the Inbox's task groups were kept before tasks had their name. */
-  INBOX_TASKS_EARLIER: "luke.inboxFoldedPlans",
   INBOX_SHOW: "luke.inboxShow",
   TASK_INBOX_SHOW: "luke.taskInboxShow",
   /** Where the Inbox's Needs you button kept its press, before its tabs, which stood before its scopes. */
   INBOX_WAITING_ONLY: "luke.inboxWaitingOnly",
   TASK_INBOX_WAITING_ONLY: "luke.taskInboxWaitingOnly",
-  INBOX_GROUPING: "luke.inboxGrouping",
-  INBOX_SORT: "luke.inboxSort",
   INBOX_WHOSE: "luke.inboxWhose",
   CHANNEL_SCOPE: "luke.channelScope",
   INBOX_LIST_WIDTH: "luke.inboxListWidth",
@@ -104,7 +97,7 @@ const storedFolds = Schema.fromJsonString(Schema.Array(Schema.NullOr(Schema.Stri
 /** Whether Pinned is folded, or whether the Inbox shows a second line. */
 const storedFlag = Schema.fromJsonString(Schema.Boolean);
 
-/** The Inbox's folded tasks, by id. */
+/** The account's sections folded, or the tasks opened, by id. */
 const storedTasks = Schema.fromJsonString(Schema.Array(Schema.String));
 
 /** How wide the Inbox's list stands. */
@@ -115,26 +108,7 @@ const storedRunsPanel = Schema.fromJsonString(
   Schema.Struct({ width: Schema.Finite, open: Schema.Boolean }),
 );
 
-/** How the Inbox groups its items. */
-const storedGrouping = Schema.fromJsonString(Schema.Literals(Object.values(INBOX_GROUPING)));
-
-/** The sort an earlier version kept that the sorts no longer name: the open items first, the one waiting longest first. */
-const EARLIER_SORT = { WAITING: "waiting" } as const;
-
-/** How the Inbox sorts its items, Waiting longest, which the sorts no longer name, read as Oldest first. */
-const storedSort = Schema.fromJsonString(
-  Schema.Literals([...Object.values(INBOX_SORT), ...Object.values(EARLIER_SORT)]).pipe(
-    Schema.decodeTo(
-      Schema.Literals(Object.values(INBOX_SORT)),
-      SchemaTransformation.transform({
-        decode: (kept) => (kept === EARLIER_SORT.WAITING ? INBOX_SORT.OLDEST : kept),
-        encode: (sort) => sort,
-      }),
-    ),
-  ),
-);
-
-/** Whose items an Inbox lists. */
+/** Whom the items an Inbox lists are addressed to. */
 const whoseSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal(INBOX_WHOSE.EVERYONE) }),
   Schema.Struct({ kind: Schema.Literal(INBOX_WHOSE.MINE) }),
@@ -145,7 +119,7 @@ const whoseSchema = Schema.Union([
   }),
 ]);
 
-/** Whose items the Inbox lists. */
+/** Whom the items the Inbox lists are addressed to. */
 const storedWhose = Schema.fromJsonString(whoseSchema);
 
 /** The channels' scope and whose items they list, one for every channel. */
@@ -158,10 +132,10 @@ const EARLIER_SHOW = { NEEDS_YOU: "needs-you", UNREAD: "unread", OPEN: "open" } 
 
 /** The scope each kept value now stands for: a tab before the scopes as the scope listing what it did. */
 const SHOW_OF_KEPT = {
-  [INBOX_SHOW.TO_DO]: INBOX_SHOW.TO_DO,
+  [INBOX_SHOW.OPEN]: INBOX_SHOW.OPEN,
   [INBOX_SHOW.ALL]: INBOX_SHOW.ALL,
-  [EARLIER_SHOW.NEEDS_YOU]: INBOX_SHOW.TO_DO,
-  [EARLIER_SHOW.UNREAD]: INBOX_SHOW.TO_DO,
+  [EARLIER_SHOW.NEEDS_YOU]: INBOX_SHOW.OPEN,
+  [EARLIER_SHOW.UNREAD]: INBOX_SHOW.OPEN,
   [EARLIER_SHOW.OPEN]: INBOX_SHOW.ALL,
 } as const satisfies Record<
   InboxShow | (typeof EARLIER_SHOW)[keyof typeof EARLIER_SHOW],
@@ -172,7 +146,7 @@ const SHOW_OF_KEPT = {
  * Which scope the Inbox shows, as any version kept it: a scope; a tab
  * before the scopes, read as the scope that lists what it did
  * (`SHOW_OF_KEPT`); or, as the key the Needs you button kept its press
- * under is read, whether it was pressed, To do where it was and All, all it
+ * under is read, whether it was pressed, Open where it was and All, all it
  * then listed, where it was not. Note that a `null`, which an earlier build
  * kept where nothing was chosen, reads as none, so the key beside it is read.
  */
@@ -185,7 +159,7 @@ const storedShow = Schema.fromJsonString(
       Schema.Literals(Object.values(INBOX_SHOW)),
       SchemaTransformation.transform({
         decode: (kept) => {
-          if (typeof kept === "boolean") return kept ? INBOX_SHOW.TO_DO : INBOX_SHOW.ALL;
+          if (typeof kept === "boolean") return kept ? INBOX_SHOW.OPEN : INBOX_SHOW.ALL;
           return SHOW_OF_KEPT[kept];
         },
         encode: (show) => show,
@@ -212,15 +186,12 @@ const KEPT = {
     storedShow,
     STORAGE_KEY.TASK_INBOX_WAITING_ONLY,
   ),
-  GROUPING: keptKey<InboxGrouping>(STORAGE_KEY.INBOX_GROUPING, storedGrouping),
-  SORT: keptKey<InboxSort>(STORAGE_KEY.INBOX_SORT, storedSort),
   WHOSE: keptKey<InboxWhose>(STORAGE_KEY.INBOX_WHOSE, storedWhose),
   CHANNEL_SCOPE: keptKey<ChannelScope>(STORAGE_KEY.CHANNEL_SCOPE, storedChannelScope),
   FOLDED_GROUPS: keptKey(STORAGE_KEY.GROUPS, storedFolds),
   PINNED_FOLDED: keptKey(STORAGE_KEY.PINNED, storedFlag),
   FOLDED_SECTIONS: keptKey(STORAGE_KEY.SECTIONS, storedTasks),
   OPENED_TASKS: keptKey(STORAGE_KEY.OPENED_TASKS, storedTasks),
-  INBOX_TASKS: keptKey(STORAGE_KEY.INBOX_TASKS, storedTasks, STORAGE_KEY.INBOX_TASKS_EARLIER),
   INBOX_LIST_WIDTH: keptKey(STORAGE_KEY.INBOX_LIST_WIDTH, storedWidth),
   FILE_TREE_WIDTH: keptKey(STORAGE_KEY.FILE_TREE_WIDTH, storedWidth),
   RUNS_PANEL: keptKey(STORAGE_KEY.RUNS_PANEL, storedRunsPanel),
@@ -235,9 +206,6 @@ interface Folds {
   /** The tasks whose child tasks stand open under them, by id. */
   readonly openedTasks: readonly string[];
 }
-
-/** No Inbox task group folded. */
-const NO_FOLDED_TASKS: readonly string[] = [];
 
 const OPEN: Folds = {
   groups: [],
@@ -299,70 +267,37 @@ export function useFoldedGroups(staged: boolean): FoldedGroups {
   };
 }
 
-/** Which of the Inbox's task groups are folded, and the press that folds or unfolds one. */
-export interface InboxTaskFolds {
-  folded: (taskId: string) => boolean;
-  toggle: (taskId: string) => void;
-}
-
-/** The Inbox's task groups, each open until it is first folded, and kept as it is pressed. */
-export function useInboxTaskFolds(): InboxTaskFolds {
-  const [folded, keep] = useKept(KEPT.INBOX_TASKS, NO_FOLDED_TASKS);
-  return {
-    folded: (taskId) => folded.includes(taskId),
-    toggle: (taskId) =>
-      keep(
-        folded.includes(taskId) ? folded.filter((held) => held !== taskId) : [...folded, taskId],
-      ),
-  };
-}
-
 /** Which scope an Inbox shows, and the press that shows another. */
 export interface InboxShowChoice {
   show: InboxShow;
   onShow: (show: InboxShow) => void;
 }
 
-/** How the window's Inbox lists its items, and the presses that change it. */
-export interface InboxViewChoices extends InboxShowChoice, InboxWhoseChoice {
-  grouping: InboxGrouping;
-  onGrouping: (grouping: InboxGrouping) => void;
-  sort: InboxSort;
-  onSort: (sort: InboxSort) => void;
-}
+/** What the window's Inbox lists, and the presses that change it. */
+export interface InboxViewChoices extends InboxShowChoice, InboxWhoseChoice {}
 
-/** Whose items the window's Inbox lists, and the press that lists another's. */
+/** Whom the items the window's Inbox lists are addressed to, and the press that lists another's. */
 export interface InboxWhoseChoice {
   whose: InboxWhose;
   onWhose: (whose: InboxWhose) => void;
 }
 
-/** An Inbox's scope, To do until first chosen, and kept under `key` as it is chosen. */
+/** An Inbox's scope, Open until first chosen, and kept under `key` as it is chosen. */
 function useKeptShow(key: typeof KEPT.INBOX_SHOW | typeof KEPT.TASK_INBOX_SHOW): InboxShowChoice {
-  const [show, onShow] = useKept(key, INBOX_SHOW.TO_DO);
+  const [show, onShow] = useKept(key, INBOX_SHOW.OPEN);
   return { show, onShow };
 }
 
-/** A task's own Inbox's scope, To do until first chosen, kept apart from the window's and shared by every task. */
+/** A task's own Inbox's scope, Open until first chosen, kept apart from the window's and shared by every task. */
 export function useTaskInboxShow(): InboxShowChoice {
   return useKeptShow(KEPT.TASK_INBOX_SHOW);
 }
 
-/** The Inbox's view choices, To do of everyone's, grouped by nothing, the latest first, until first changed, and kept as each is pressed. */
+/** The Inbox's view choices, Open addressed to the reader, which is Needs you, until first changed, and kept as each is pressed. */
 export function useInboxViewChoices(): InboxViewChoices {
   const shown = useKeptShow(KEPT.INBOX_SHOW);
-  const [grouping, onGrouping] = useKept(KEPT.GROUPING, INBOX_GROUPING.NONE);
-  const [sort, onSort] = useKept(KEPT.SORT, INBOX_SORT.LATEST);
-  const [whose, onWhose] = useKept(KEPT.WHOSE, EVERYONES);
-  return {
-    ...shown,
-    grouping,
-    onGrouping,
-    sort,
-    onSort,
-    whose,
-    onWhose,
-  };
+  const [whose, onWhose] = useKept(KEPT.WHOSE, MINE);
+  return { ...shown, whose, onWhose };
 }
 
 /** The channels' scope until the reader turns it: All of everyone's, since a channel is everyone's threads on one topic. */

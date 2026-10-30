@@ -14,6 +14,7 @@ import {
   createdByOnly,
   drawnTaskRows,
   hiddenStatuses,
+  openParentIds,
   type RepositoryGroup,
   repositoryGroups,
   repositoryLabel,
@@ -196,11 +197,11 @@ test("the list leaves the backlog and the settled out, counting them by status, 
     standing("Older service", undefined, undefined, 5),
   ].map(taskRow);
 
-  expect(taskRowsInStatuses(rows, SHOWN_STATUSES).map(taskRowName)).toEqual([
+  expect(taskRowsInStatuses(rows, SHOWN_STATUSES, new Set()).map(taskRowName)).toEqual([
     "Under way",
     "Older service",
   ]);
-  expect(hiddenStatuses(rows, SHOWN_STATUSES)).toEqual([
+  expect(hiddenStatuses(rows, SHOWN_STATUSES, new Set())).toEqual([
     { status: TASK_STATUS.BACKLOG, count: 2 },
     { status: TASK_STATUS.DONE, count: 1 },
   ]);
@@ -333,4 +334,30 @@ test("a parent counts its direct child tasks that are done or canceled, of all i
   expect(counts.get("parent")).toEqual({ finished: 2, total: 4 });
   expect(counts.get("working")).toEqual({ finished: 1, total: 1 });
   expect(counts.has("shipped")).toBe(false);
+});
+
+test("a parent stays in the list, uncounted as hidden, while the view shows any child task under it, at any depth, whatever its own status", () => {
+  const withStatus = (name: string, parent: string | undefined, status: TaskStatus) => ({
+    ...childTask(name, 1, parent),
+    status,
+  });
+  const tasks = [
+    withStatus("shipped parent", undefined, TASK_STATUS.DONE),
+    withStatus("shipped child", "shipped parent", TASK_STATUS.DONE),
+    withStatus("waiting grandchild", "shipped child", TASK_STATUS.TODO),
+    withStatus("cut parent", undefined, TASK_STATUS.CANCELED),
+    withStatus("filed child", "cut parent", TASK_STATUS.BACKLOG),
+  ];
+  const rows = tasks.map(taskRow);
+  const open = openParentIds(tasks, SHOWN_STATUSES);
+
+  expect(taskRowsInStatuses(rows, SHOWN_STATUSES, open).map(taskRowName)).toEqual([
+    "shipped parent",
+    "shipped child",
+    "waiting grandchild",
+  ]);
+  expect(hiddenStatuses(rows, SHOWN_STATUSES, open)).toEqual([
+    { status: TASK_STATUS.BACKLOG, count: 1 },
+    { status: TASK_STATUS.CANCELED, count: 1 },
+  ]);
 });

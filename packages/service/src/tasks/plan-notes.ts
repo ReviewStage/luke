@@ -56,9 +56,12 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
  * the developer's that names the one it brought back.
  *
  * Note that the notes are the plan's content and nothing else. Which account
- * and which task they land in are the binding the service built from the
- * authenticated session and the task it opened, never a field the model
- * supplies. The task is read and saved under its row's lock, so two saves of
+ * they land as is the binding the service built from the authenticated
+ * session, never a field the model supplies. The task is the one the
+ * service opened, or, for a coding agent, the one its call names, which the
+ * door holds to the agent's own workspace; either way the store reads and
+ * writes only a task that account reaches, so naming one widens nothing past
+ * what the member may edit by hand. The task is read and saved under its row's lock, so two saves of
  * one task take each other's words into account rather than crossing. The
  * save is `savePlanText`'s single update over the row that stands, so a task
  * deleted meanwhile answers as gone and is not written back into being, and

@@ -115,13 +115,12 @@ export function inboxNext(
     readonly readerId: string | undefined;
   },
   onChoose: (listed: InboxListed) => void,
-  folded: (key: string) => boolean,
   direction: InboxDirection,
 ): InboxNext | undefined {
   if (chosen === undefined || chosen.item.status === INBOX_STATUS.OPEN) return undefined;
-  const next = nextNeedingYou(view, chosen.item.id, folded, direction);
+  const next = nextNeedingYou(view, chosen.item.id, direction);
   if (next === undefined) return undefined;
-  const steps = inboxSteps(view, chosen.item.id, folded);
+  const steps = inboxSteps(view, chosen.item.id);
   const beside = direction === INBOX_DIRECTION.UP ? steps?.previous : steps?.next;
   return {
     listed: next,
@@ -190,10 +189,9 @@ export function InboxNextUp({ next }: { next: InboxNext }): React.JSX.Element {
   );
 }
 
-/** Where the Inbox stands: whether it is on screen, and which of its groups are folded away. */
+/** Where the Inbox stands: whether it is on screen. */
 export interface InboxPagerPlace {
   readonly shown: boolean;
-  readonly folded: (key: string) => boolean;
 }
 
 /** The pager, where the steps hold the chosen item, and the way the developer last stepped, which Next follows. */
@@ -212,10 +210,10 @@ export function useInboxPager(
   place: InboxPagerPlace,
 ): InboxPaging {
   const [direction, setDirection] = useState<InboxDirection>(INBOX_DIRECTION.DOWN);
-  const at = inboxSteps(steps, chosen, place.folded);
-  const row = inboxSteps(rows, chosen, place.folded);
+  const at = inboxSteps(steps, chosen);
+  const row = inboxSteps(rows, chosen);
   // Note that with nothing chosen J chooses the first row and K the last, so the empty pane's "step with J K" holds.
-  const ends = chosen === undefined ? inboxEnds(steps, place.folded) : undefined;
+  const ends = chosen === undefined ? inboxEnds(steps) : undefined;
   const previous = at === undefined ? ends?.last : at.previous;
   const next = at === undefined ? ends?.first : at.next;
   const onPrevious =

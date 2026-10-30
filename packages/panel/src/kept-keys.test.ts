@@ -11,7 +11,6 @@ import {
   useFileTreeWidth,
   useFoldedGroups,
   useInboxListWidth,
-  useInboxTaskFolds,
   useInboxViewChoices,
   useRunsPanel,
   useTaskInboxShow,
@@ -102,14 +101,6 @@ test("a fixture run's folds keep nothing", () => {
   expect(kept("luke.sidebarFoldedGroups")).toBeNull();
 });
 
-test("the Inbox's task folds are read from the name tasks had before they were named", () => {
-  keep("luke.inboxFoldedPlans", '["t1"]');
-  const folds = draw(() => useInboxTaskFolds());
-  expect(folds.now().folded("t1")).toBe(true);
-  act(() => folds.now().toggle("t2"));
-  expect(kept("luke.inboxFoldedTasks")).toBe('["t1","t2"]');
-});
-
 test("the Inbox's scope is read from a tab, or a button's press, kept before the scopes", () => {
   keep("luke.inboxShow", '"needs-you"');
   expect(draw(() => useInboxViewChoices()).now().show).toBe("to-do");
@@ -125,7 +116,9 @@ test("the Inbox's scope is read from a tab, or a button's press, kept before the
   expect(draw(() => useInboxViewChoices()).now().show).toBe("to-do");
   act(() => root?.unmount());
   window.localStorage.clear();
-  expect(draw(() => useInboxViewChoices()).now().show).toBe("to-do");
+  const opening = draw(() => useInboxViewChoices()).now();
+  expect(opening.show).toBe("to-do");
+  expect(opening.whose).toEqual({ kind: "mine" });
 });
 
 test("an Inbox scope kept as null reads the Needs you press kept beside it, as it did before", () => {
@@ -138,20 +131,14 @@ test("an Inbox scope kept as null reads the Needs you press kept beside it, as i
   expect(shown.now().task.show).toBe("all");
 });
 
-test("the Inbox's choices are read as they were kept, and an earlier sort as the one that replaced it", () => {
+test("the Inbox's choices are read as they were kept", () => {
   keep("luke.inboxShow", '"all"');
-  keep("luke.inboxGrouping", '"plan"');
-  keep("luke.inboxSort", '"waiting"');
   keep("luke.inboxWhose", '{"kind":"person","userId":"u1","name":"Ana"}');
   const choices = draw(() => useInboxViewChoices());
   expect(choices.now().show).toBe("all");
-  expect(choices.now().grouping).toBe("plan");
-  expect(choices.now().sort).toBe("oldest");
   expect(choices.now().whose).toEqual({ kind: "person", userId: "u1", name: "Ana" });
   act(() => choices.now().onShow("to-do"));
-  act(() => choices.now().onSort("latest"));
   expect(kept("luke.inboxShow")).toBe('"to-do"');
-  expect(kept("luke.inboxSort")).toBe('"latest"');
 });
 
 test("a task's own Inbox keeps its scope apart from the window's", () => {

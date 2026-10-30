@@ -147,11 +147,11 @@ test("a task newly listed stands where it sorts, those drawn already holding the
   assert.deepEqual(names(container), ["Billing export", "Invite expiry", "Retry audit"]);
 });
 
-test("a chosen child task whose parent the view comes to hide is no longer chosen, so a menu on another chosen row acts on that row alone", () => {
+test("a chosen child task the view comes to hide with its parent is no longer chosen, so a menu on another chosen row acts on that row alone", () => {
   const working = { status: TASK_STATUS.IN_PROGRESS };
-  const listed = (parentStatus: TaskStatus) => [
-    { ...task("t-1", "Cleanup", 3), status: parentStatus },
-    { ...task("t-2", "Probe", 2), ...working, parentTaskId: "t-1" },
+  const listed = (status: TaskStatus) => [
+    { ...task("t-1", "Cleanup", 3), status },
+    { ...task("t-2", "Probe", 2), status, parentTaskId: "t-1" },
     { ...task("t-3", "Usage report", 1), ...working },
   ];
   const { container, draw } = mountSidebar(listed(TASK_STATUS.IN_PROGRESS));

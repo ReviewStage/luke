@@ -24,13 +24,14 @@ import {
   ShowEmpty,
 } from "../tasks/inbox-list.js";
 import {
-  INBOX_GROUPING,
+  EVERYONES,
   INBOX_NOT_READ,
   INBOX_SHOW,
   type InboxHolder,
   type InboxListed,
   inboxCounts,
   listedItems,
+  MINE,
   NEEDS_YOU,
 } from "../tasks/inbox-model.js";
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
@@ -50,9 +51,6 @@ import { useTaskInboxShow } from "./folded-groups.js";
  * feed's items in their first frame and the holder's own read as it lands,
  * and draw the window's Inbox's list and pane over what they read.
  */
-
-/** A panel's own Inbox lists one holder's items in one run, so nothing in it folds. */
-const NO_FOLDS = () => false;
 
 /** An item asked of the task's Inbox to open: one a link names by its id, or the thread under `key` a call's row names, of the agent whose row it was, any of the task's agents' where the row names none. */
 export type InboxItemAsk =
@@ -131,8 +129,9 @@ export function SideInboxTab({
   const search = searchTokens(query);
   const searched = search.length > 0 ? query : undefined;
   const filter = {
-    grouping: INBOX_GROUPING.NONE,
     show: show.show,
+    // Note that a task's own Open is the reader's own, Needs you, as it was before Open listed anyone's.
+    whose: show.show === INBOX_SHOW.OPEN ? MINE : EVERYONES,
     search,
     readerId,
   };
@@ -194,16 +193,8 @@ export function SideInboxTab({
   };
   const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
     shown,
-    folded: NO_FOLDS,
   });
-  const next = inboxNext(
-    steps,
-    chosen,
-    { models: agents.models, readerId },
-    open,
-    NO_FOLDS,
-    direction,
-  );
+  const next = inboxNext(steps, chosen, { models: agents.models, readerId }, open, direction);
   return (
     <section
       ref={columns.ref}

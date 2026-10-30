@@ -418,7 +418,7 @@ const removePin = SqlSchema.findOneOption({
 
 /** The agents the journal names, as their rows name them now; a row that is gone names nothing. */
 const findAgentLabels = SqlSchema.findAll({
-  Request: Schema.Struct({ taskId: Schema.String, agentIds: Schema.Array(Schema.String) }),
+  Request: Schema.Struct({ agentIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({
     id: Schema.String,
     kind: Schema.Literals(Object.values(AGENT_KIND)),
@@ -426,7 +426,7 @@ const findAgentLabels = SqlSchema.findAll({
     title: Schema.NullOr(Schema.String),
     automationName: Schema.NullOr(Schema.String),
   }),
-  execute: ({ taskId, agentIds }) =>
+  execute: ({ agentIds }) =>
     Database.use((db) =>
       db
         .select({
@@ -437,7 +437,7 @@ const findAgentLabels = SqlSchema.findAll({
           automationName: agentAutomationNameSql(agentTable),
         })
         .from(agentTable)
-        .where(and(eq(agentTable.taskId, taskId), inArray(agentTable.id, agentIds))),
+        .where(inArray(agentTable.id, agentIds)),
     ),
 });
 
@@ -445,7 +445,11 @@ const findAgentLabels = SqlSchema.findAll({
  * The agents the journal and the sections' writers name, by id, as their rows
  * name them now, so a renamed agent reads renamed everywhere: the label is
  * the name its tab shows (`agentName`), Luke for an operator. The row's own
- * account is the one they are read under.
+ * account is the one they are read under. Note that an agent is found by
+ * its id alone, wherever it works now, because an agent edits any plan of
+ * its workspace by naming the task (`edit_plan`), and the task may move to
+ * another workspace after while the agent stays with its own. The ids are
+ * the service's own, written by the save, never a caller's.
  */
 function agentLabelsOf(
   row: TaskRow,
@@ -458,7 +462,7 @@ function agentLabelsOf(
   const agentIds = [...new Set(named)];
   if (agentIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
-    findAgentLabels({ taskId: row.id, agentIds }),
+    findAgentLabels({ agentIds }),
     (agents) => new Map(agents.map((agent) => [agent.id, agentName(agent)])),
   );
 }
@@ -837,6 +841,7 @@ const findTaskHeader = SqlSchema.findOneOption({
     deviceId: Schema.NullOr(Schema.String),
     parentTaskId: Schema.NullOr(Schema.String),
     mode: taskModeSchema,
+    assigneeId: Schema.NullOr(Schema.String),
   }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
@@ -851,6 +856,7 @@ const findTaskHeader = SqlSchema.findOneOption({
           deviceId: task.deviceId,
           parentTaskId: task.parentTaskId,
           mode: task.mode,
+          assigneeId: task.assigneeId,
         })
         .from(task)
         .where(reachableTask(userId, taskId))
@@ -1207,6 +1213,8 @@ export interface TaskHeader {
   readonly parentTaskId: string | null;
   /** How the task is worked. */
   readonly mode: TaskMode;
+  /** The member it is assigned to; null for none. */
+  readonly assigneeId: string | null;
 }
 
 /**
@@ -1230,6 +1238,7 @@ export function readTaskHeader(
       runsOn: { machine: row.machine, deviceId: row.deviceId },
       parentTaskId: row.parentTaskId,
       mode: row.mode,
+      assigneeId: row.assigneeId,
     })),
   );
 }
