@@ -1375,4 +1375,8 @@ test("each surface the window opens is counted once, by its kind and layout alon
 
   window.stand(tasksControl({ inboxView: { ...tasksControl().inboxView, open: true } }));
   assert.deepEqual(counted.slice(3), [opened("inbox")]);
+
+  // The plan in the side panel beside the plan in the column is a second pane, counted as one.
+  window.stand(onTabs({ column: undefined, side: SIDE_PANEL_TAB.PLAN }));
+  assert.deepEqual(counted.slice(4), [opened("task"), opened("task")]);
 });

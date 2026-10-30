@@ -24,6 +24,8 @@ import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 export interface OpenSurface {
   readonly surface: ProductSurface;
   readonly of?: string | undefined;
+  /** Whether it is the side panel's, which stands beside a column showing a surface of the same kind. */
+  readonly side?: boolean | undefined;
 }
 
 const LAYOUT_OF_ROOM = {
@@ -32,7 +34,7 @@ const LAYOUT_OF_ROOM = {
 } as const satisfies Record<ShellRoom, ProductLayout>;
 
 function sameSurface(one: OpenSurface, other: OpenSurface): boolean {
-  return one.surface === other.surface && one.of === other.of;
+  return one.surface === other.surface && one.of === other.of && one.side === other.side;
 }
 
 /** Counts each of `surfaces` that was not among those shown before, in the layout `room` gives. */

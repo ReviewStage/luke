@@ -436,51 +436,66 @@ function choosesWithin(one: Place | undefined, other: Place): boolean {
   );
 }
 
-/** The surface a tab of a task's column or side panel shows, which a task's own fixed tabs name by the task. */
-function tabSurface(taskId: string, tab: StripTab): OpenSurface {
+/** The surface a tab of a task's column or side panel shows, which a task's own fixed tabs name by the task; `side` marks one of the side panel's, which stands beside the column's of the same kind. */
+function tabSurface(taskId: string, tab: StripTab, side: boolean): OpenSurface {
   if (isAgentTab(tab) || isDraftTab(tab) || isTranscriptTab(tab)) {
-    return { surface: PRODUCT_SURFACE.AGENT, of: tabKey(tab) };
+    return { surface: PRODUCT_SURFACE.AGENT, of: tabKey(tab), side };
   }
   const of = tabKey(tab);
-  if (isSubagentTab(tab)) return { surface: PRODUCT_SURFACE.SUBAGENT, of };
-  if (isFileTab(tab)) return { surface: PRODUCT_SURFACE.FILES, of };
-  if (isChangesTab(tab)) return { surface: PRODUCT_SURFACE.PULL_REQUEST, of };
+  if (isSubagentTab(tab)) return { surface: PRODUCT_SURFACE.SUBAGENT, of, side };
+  if (isFileTab(tab)) return { surface: PRODUCT_SURFACE.FILES, of, side };
+  if (isChangesTab(tab)) return { surface: PRODUCT_SURFACE.PULL_REQUEST, of, side };
   if (isTerminalTab(tab) || isMacTerminalTab(tab)) {
-    return { surface: PRODUCT_SURFACE.TERMINAL, of };
+    return { surface: PRODUCT_SURFACE.TERMINAL, of, side };
   }
-  if (isCloudBrowserTab(tab)) return { surface: PRODUCT_SURFACE.BROWSER, of };
-  if (isPageTab(tab)) return { surface: PRODUCT_SURFACE.PAGE, of };
+  if (isCloudBrowserTab(tab)) return { surface: PRODUCT_SURFACE.BROWSER, of, side };
+  if (isPageTab(tab)) return { surface: PRODUCT_SURFACE.PAGE, of, side };
   // A word of the side panel's own: the plan, the task's Inbox, or its comments.
-  if (tab === SIDE_PANEL_TAB.INBOX) return { surface: PRODUCT_SURFACE.INBOX, of: taskId };
-  if (tab === SIDE_PANEL_TAB.COMMENTS) return { surface: PRODUCT_SURFACE.COMMENTS, of: taskId };
-  return { surface: PRODUCT_SURFACE.TASK, of: taskId };
+  if (tab === SIDE_PANEL_TAB.INBOX) return { surface: PRODUCT_SURFACE.INBOX, of: taskId, side };
+  if (tab === SIDE_PANEL_TAB.COMMENTS) {
+    return { surface: PRODUCT_SURFACE.COMMENTS, of: taskId, side };
+  }
+  return { surface: PRODUCT_SURFACE.TASK, of: taskId, side };
 }
 
 /**
- * The surfaces a place shows, as the window counts them opened: a task's column and its side panel each show one, and the column's is held back while the task's agents are unread (`columnKnown`), since the plan it would name may be an agent's tab still on its way.
+ * The surfaces a place shows, as the window counts them opened: each pane
+ * drawn on screen shows one. A task's column and its side panel each show
+ * one, the column's held back while the task's agents are unread
+ * (`columnKnown`), since the plan it would name may be an agent's tab still on
+ * its way, and a narrow room's side panel, open, covers the column whole. The
+ * Inbox's and an agent page's side panel is `beside`, wide rooms alone; a wide
+ * channel holds its thread beside its list, where a single column shows one.
  */
-function surfacesOf(place: Place | undefined, columnKnown: boolean): OpenSurface[] {
+function surfacesOf(
+  place: Place | undefined,
+  columnKnown: boolean,
+  beside: OpenSurface | undefined,
+): OpenSurface[] {
   if (place === undefined) return [];
+  const withSide = (surfaces: OpenSurface[]) =>
+    beside === undefined ? surfaces : [...surfaces, beside];
   switch (place.kind) {
     case PLACE_KIND.TASK: {
-      const surfaces: OpenSurface[] = [];
-      if (columnKnown) surfaces.push(tabSurface(place.taskId, place.column ?? SIDE_PANEL_TAB.PLAN));
       const side = place.side ?? openPanelTab(place.panel);
-      if (side !== undefined) surfaces.push(tabSurface(place.taskId, side));
-      return surfaces;
+      const sideSurface = side === undefined ? [] : [tabSurface(place.taskId, side, true)];
+      if (place.panel?.open === true) return sideSurface;
+      const column = columnKnown
+        ? [tabSurface(place.taskId, place.column ?? SIDE_PANEL_TAB.PLAN, false)]
+        : [];
+      return [...column, ...sideSurface];
     }
     case PLACE_KIND.VERSION_HISTORY:
       return [{ surface: PRODUCT_SURFACE.VERSION_HISTORY, of: place.taskId }];
     case PLACE_KIND.INBOX: {
-      if (place.channelId === undefined) return [{ surface: PRODUCT_SURFACE.INBOX }];
-      return [
-        place.chosen === undefined
-          ? { surface: PRODUCT_SURFACE.CHANNEL, of: place.channelId }
-          : { surface: PRODUCT_SURFACE.THREAD, of: place.chosen.itemId },
-      ];
+      if (place.channelId === undefined) return withSide([{ surface: PRODUCT_SURFACE.INBOX }]);
+      const channel = { surface: PRODUCT_SURFACE.CHANNEL, of: place.channelId };
+      if (place.chosen === undefined) return withSide([channel]);
+      const thread = { surface: PRODUCT_SURFACE.THREAD, of: place.chosen.itemId };
+      return withSide(place.listed === undefined ? [channel, thread] : [thread]);
     }
     case PLACE_KIND.AGENT:
-      return [{ surface: PRODUCT_SURFACE.AGENT, of: place.agentId }];
+      return withSide([{ surface: PRODUCT_SURFACE.AGENT, of: place.agentId }]);
     case PLACE_KIND.PERSON:
       return [{ surface: PRODUCT_SURFACE.PERSON, of: place.userId }];
     case PLACE_KIND.HOME:
@@ -1260,7 +1275,13 @@ export function useWindowHistory(input: {
   ]);
   // Each surface the place shows is counted as it opens, from here rather than from the doors that open it, as the history is written.
   useSurfaceOpen(
-    useMemo(() => surfacesOf(untitled, columnKnown), [untitled, columnKnown]),
+    useMemo(() => {
+      const beside =
+        sideTab === undefined || boundFor === undefined
+          ? undefined
+          : tabSurface(boundFor, sideTab, true);
+      return surfacesOf(untitled, columnKnown, beside);
+    }, [untitled, columnKnown, sideTab, boundFor]),
     input.room,
   );
   // Note that a channel's step is named by its channel, and by the thread's task while one stands open in it.
