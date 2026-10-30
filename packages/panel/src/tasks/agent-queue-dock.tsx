@@ -46,7 +46,8 @@ import { SentWords } from "./skill-chip.js";
  * in its place, muted, with Cancel on its row, and the turn's end
  * passes over it; one another window edits is muted and offers no press.
  * A message still landing, queued from this tab and not yet the service's,
- * and every row for a reader who did not start the agent, take no press.
+ * is drawn as it will stand once landed, but takes no press, as every row
+ * for a reader who did not start the agent takes none.
  * A queue standing paused says why
  * over its rows, after a Stop in the quiet tone and after a refusal in the
  * danger one, with Resume. Nothing is drawn while none is queued.
@@ -204,7 +205,7 @@ export function AgentQueueDock({
                   )
                 }
                 attachmentsOpen
-                muted={edited || landing.has(message.id)}
+                muted={edited}
                 actionsAt={mine ? LIST_ROW_ACTIONS.ALWAYS : LIST_ROW_ACTIONS.HOVER}
                 actions={
                   mine ? (

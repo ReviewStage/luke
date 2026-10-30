@@ -9,6 +9,7 @@ import {
   QUEUE_CHANGE,
 } from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { PICTURE_STATE, pictureNow } from "@luke/ui/picture-cache";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -279,4 +280,35 @@ test("an edit takes the message's files into the box, read as its row draws them
     text: "Match this, smaller.",
     attachments: [SHOT, SPEC],
   });
+});
+
+test("a message queued with an image draws its thumbnail at once and as it lands, the bytes the box held kept under the id the service minted, never read back", async () => {
+  act(() => now().page({ messages: [], revision: 1 }));
+  act(() => now().composer.setAttachments(() => [SHOT]));
+  act(() => now().editing.queue());
+  const ready = (id: string | undefined) => {
+    assert.ok(id !== undefined, "the drawn file names an id");
+    const state = pictureNow("agent-1", id);
+    return state.kind === PICTURE_STATE.READY ? state.url : state.kind;
+  };
+  const url = `data:${SHOT.mediaType};base64,${SHOT.data}`;
+  assert.equal(ready(now().queue.messages[0]?.files?.[0]?.id), url);
+  await settle();
+  const queued = sent.at(-1);
+  assert.ok(queued?.change === QUEUE_CHANGE.ADD);
+  const landed = "5d6e7f80-1a2b-4c3d-8e9f-0a1b2c3d4e5f";
+  act(() =>
+    now().page({
+      messages: [
+        {
+          ...message("m1", ""),
+          clientKey: queued.clientKey,
+          files: [{ name: SHOT.name, mediaType: SHOT.mediaType, id: landed }],
+        },
+      ],
+      revision: 2,
+    }),
+  );
+
+  assert.equal(ready(landed), url);
 });
