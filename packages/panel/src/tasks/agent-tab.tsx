@@ -494,8 +494,9 @@ function AgentMessageRow({ message }: { message: AgentTranscriptMessage }): Reac
 
 /**
  * What GitHub said on the agent's pull request, at the column's left as
- * another's line stands: its card (`GitHubLineCard`) in a bubble's place, then who said it by their
- * login, when it arrived, and Copy, which copies their words.
+ * another's line stands: its folding card (`GitHubLineCard`) across a
+ * bubble's measure, whose head names who said it by their chip, then when
+ * it arrived, and Copy, which copies their words.
  */
 function GitHubLineRow({
   message,
@@ -513,10 +514,9 @@ function GitHubLineRow({
       className={RECEIVED_MESSAGE_CLASS}
       data-message-id={message.id}
     >
-      <GitHubLineCard line={line} />
+      <GitHubLineCard line={line} words={messageWords(message)} sender={sender} />
       <MessageLine
         align={MESSAGE_LINE_ALIGN.START}
-        sender={sender}
         at={message.sentAt}
         actions={<CopyMessageAction words={words} copyable={words !== ""} messageId={message.id} />}
       />

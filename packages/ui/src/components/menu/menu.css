@@ -3,7 +3,8 @@
    its entrance and exit run, which the window's other surfaces that open
    as a menu does run too; the hold a long press opens a menu by; the rows'
    own way of marking focus; what a finger is shown that a mouse is
-   not; and a phone's sheet of a menu (`MenuSheet`). */
+   not; and the sheet a menu rises as on a phone (`menu-sheet.tsx`), an
+   action menu's and a searchable menu's alike. */
 
 @layer components {
   /* Held, an element a long press opens a menu on shows the menu rather
@@ -79,10 +80,12 @@
      its top, standing on the window's foot clear of the home bar, risen in
      on the pane's motion and sunk out on the exit's as its dialog's card
      fades; the reduced-motion tokens hold both still. Its rows are the
-     menu's at a finger's height, and a finger dragging its head carries it
+     menu's at a finger's height, a searchable menu's list capped by the
+     sheet's own height alone, and a finger dragging its head carries it
      down (`useSheetSwipe`), springing back where it is let go short. */
   .luke-menu-sheet {
     --luke-menu-row-height: var(--luke-touch-target);
+    --luke-combobox-list-max: none;
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
@@ -159,6 +162,13 @@
     flex: 1 1 auto;
     flex-direction: column;
     min-width: 0;
+  }
+
+  /* A searchable menu's field, under the name and over the hairline. */
+  .luke-menu-sheet-field {
+    display: flex;
+    flex-direction: column;
+    margin-top: var(--luke-space-8);
   }
 
   .luke-menu-sheet-name {

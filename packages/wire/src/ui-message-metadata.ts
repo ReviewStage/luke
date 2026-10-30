@@ -113,6 +113,15 @@ export const GITHUB_CHECK_CONCLUSION = {
 export type GitHubCheckConclusion =
   (typeof GITHUB_CHECK_CONCLUSION)[keyof typeof GITHUB_CHECK_CONCLUSION];
 
+/** The conclusions that read as a check failing; every other, neutral, skipped, and stale among them, does not. */
+const FAILING_CHECK_CONCLUSIONS: ReadonlySet<string> = new Set([
+  GITHUB_CHECK_CONCLUSION.FAILURE,
+  GITHUB_CHECK_CONCLUSION.TIMED_OUT,
+  GITHUB_CHECK_CONCLUSION.CANCELLED,
+  GITHUB_CHECK_CONCLUSION.ACTION_REQUIRED,
+  GITHUB_CHECK_CONCLUSION.STARTUP_FAILURE,
+]);
+
 /**
  * The most a GitHub line's metadata holds: words and an inline comment's body
  * within the most GitHub lets one body spell, as many inline comments as Luke
@@ -394,6 +403,15 @@ export function isDeveloperLine(metadata: UserMessageMetadata): boolean {
   if ("source" in metadata) return false;
   if (metadata.channel === MESSAGE_CHANNEL.AGENT_MESSAGE) return false;
   return metadata.channel !== MESSAGE_CHANNEL.VOICE || metadata.author === MESSAGE_AUTHOR.DEVELOPER;
+}
+
+/**
+ * Whether a check that ended so failed, by GitHub's word for its conclusion:
+ * the one test the service counts a head's failures by, which a GitHub
+ * line's `failing` says, and the transcript's card reads a line's checks by.
+ */
+export function isFailingConclusion(conclusion: string): boolean {
+  return FAILING_CHECK_CONCLUSIONS.has(conclusion);
 }
 
 /**

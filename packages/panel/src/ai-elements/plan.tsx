@@ -44,13 +44,16 @@ export function Plan({ children, ...props }: TaskProps): ReactNode {
   );
 }
 
-export type TaskHeaderProps = Omit<ComponentProps<typeof DisclosureSummary>, "look">;
+export type TaskHeaderProps = Omit<ComponentProps<typeof DisclosureSummary>, "look"> & {
+  /** Whether the card folds anything: a card that is its head alone draws no chevron. */
+  folds?: boolean;
+};
 
 /** The one line a closed card shows, which opens and closes it: the chevron, then whatever names the plan. */
-export function PlanHeader({ children, ...props }: TaskHeaderProps): ReactNode {
+export function PlanHeader({ folds = true, children, ...props }: TaskHeaderProps): ReactNode {
   return (
     <DisclosureSummary look={DISCLOSURE_SUMMARY.HEAD} {...props}>
-      <DisclosureChevron />
+      {folds ? <DisclosureChevron /> : null}
       {children}
     </DisclosureSummary>
   );

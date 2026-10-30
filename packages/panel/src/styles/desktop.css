@@ -623,6 +623,14 @@ body,
   width: 100%;
 }
 
+/* What GitHub said on the agent's pull request (`line-cards.tsx`) stands at
+   the left as another's line does, its card across the received message's
+   whole measure, as an opening card spans the sent one's. Its head holds
+   chips, so the card is its frame (`Disclosure`'s `actions`). */
+.transcript-message.is-received > :is([data-github-line], :has(> [data-github-line])) {
+  width: 100%;
+}
+
 /* Who sent it can name an automation, an issue, and a runner: too narrow
    for all three on one line, it breaks between them rather than cutting
    each name to its first letters. */

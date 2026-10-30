@@ -66,6 +66,7 @@ export {
   type GitHubCheckConclusion,
   type GitHubLineMetadata,
   isDeveloperLine,
+  isFailingConclusion,
   type LukeLineMetadata,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,

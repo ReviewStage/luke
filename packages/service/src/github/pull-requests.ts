@@ -64,7 +64,11 @@ import {
 } from "@luke/features/agent-wire";
 import { githubImageOf, imageTypeOfPath } from "@luke/features/github-image";
 import { REACTION, type Reaction } from "@luke/features/pull-request-write-wire";
-import { GITHUB_CHECK_CONCLUSION, type GitHubCheckConclusion } from "@luke/wire";
+import {
+  GITHUB_CHECK_CONCLUSION,
+  type GitHubCheckConclusion,
+  isFailingConclusion,
+} from "@luke/wire";
 import { Duration, Effect, Fiber, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -133,15 +137,6 @@ const ANY_STATE = "all";
 
 /** GitHub pages check runs and statuses a hundred to a page; a head with more is read as its first hundred. */
 const CHECKS_PER_PAGE = "100";
-
-/** A check run's conclusion that reads as failing; every other conclusion, neutral and skipped among them, does not. */
-const FAILING_CONCLUSIONS: ReadonlySet<string> = new Set([
-  "failure",
-  "timed_out",
-  "cancelled",
-  "action_required",
-  "startup_failure",
-]);
 
 /** A commit status's state that reads as failing. */
 const FAILING_STATUS_STATES: ReadonlySet<string> = new Set(["failure", "error"]);
@@ -505,7 +500,7 @@ export interface HeadChecks {
 
 /** Whether a head's check failed: it ended with a conclusion that reads as failing, as a commit status that failed or errored does. */
 export function headCheckFailed(check: HeadCheck): boolean {
-  return check.conclusion !== null && FAILING_CONCLUSIONS.has(check.conclusion);
+  return check.conclusion !== null && isFailingConclusion(check.conclusion);
 }
 
 /** What one set of outcomes says: failing beats pending beats passing, and nothing at all is none. */
@@ -586,7 +581,7 @@ export function headChecksOf(
     CheckRunsSchema,
     (answer) => ({
       failing: answer.check_runs.some(
-        (run) => run.conclusion !== null && FAILING_CONCLUSIONS.has(run.conclusion),
+        (run) => run.conclusion !== null && isFailingConclusion(run.conclusion),
       ),
       pending: answer.check_runs.some((run) => run.status !== COMPLETED),
       any: answer.check_runs.length > 0,

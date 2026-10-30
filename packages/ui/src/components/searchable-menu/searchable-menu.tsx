@@ -22,6 +22,7 @@ import {
 import { useComboboxField } from "../combobox/use-combobox-field.js";
 import { LIST_DENSITY, List, ListRow } from "../list-row/list-row.js";
 import { MENU_ITEM_MARK, MenuItem } from "../menu/menu.js";
+import { inNarrowRoom, MenuSheetFrame } from "../menu/menu-sheet.js";
 import { MENU_SURFACE_INSET, MenuSurface } from "../menu/menu-surface.js";
 import { SEARCH_FIELD_LOOK, SearchField } from "../search-field/search-field.js";
 import { SearchMatch } from "../search-match/search-match.js";
@@ -85,6 +86,24 @@ import { RowHint, RowHintOptions, Tooltip } from "../tooltip/hint.js";
  * the owner's, which says where it stands and how wide. Its owner holds it
  * drawn through its exit (`useDisclosure`), handing it `leaving`, which
  * leaves it inert and fading, focus already handed back.
+ *
+ * In a phone's layout, the narrow room the document's root says it stands
+ * in, a menu hung from its button rises instead as a sheet from the
+ * window's foot over the dimmed window, in the frame an action menu's sheet
+ * stands in (`MenuSheetFrame`), the room read as it opens as `Menu` reads
+ * it. Its head holds the grip, the menu's name, and the field, which takes
+ * no focus as the sheet opens, so no keyboard rises over the rows until it
+ * is pressed: the list takes the focus and reads the keys, as a list too
+ * short to search does, and the field reads them too once pressed. Its rows
+ * are the menu's at a finger's height, scrolling under the head with the
+ * pinned rows fixed under them, and a submenu, pinned or listed, stands in
+ * the sheet's place with a way back (and Left) rather than beside its row,
+ * which only a press opens there; a pick in it puts the sheet away before
+ * it is handed on. A pick, Escape, from a submenu's page too, a press on
+ * the dimmed window, or a swipe down asks the owner to close; and since
+ * the sheet traps focus as any dialog does, a focus moving inside it,
+ * outside its owner's box as the sheet is, is never told to the owner as
+ * leaving.
  */
 
 /** Whether the menu hangs from its button in a layer of its own, or stands in a layer its owner hangs. */
@@ -210,6 +229,12 @@ const SUBMENU_FIRST_PLACE: SubmenuPlace = {
   shift: 0,
   stand: SUBMENU_STAND.DOWN,
 };
+
+/** The row whose submenu a sheet shows in its place: pinned under the list or listed in it, by its id. */
+interface SheetPage {
+  readonly pinned: boolean;
+  readonly id: string;
+}
 
 /** The gap a submenu keeps from its row's edge, which `SUBMENU`'s place (the theme's `submenu-reach`) draws. */
 const SUBMENU_GAP = 9;
@@ -562,6 +587,9 @@ export function SearchableMenu(
 ): React.JSX.Element {
   const { rows, value, onPick } = props;
   const leaving = props.leaving === true;
+  // Note that the room is read as the menu opens, so one standing open never turns into the other as the window is resized.
+  const sheeted = () => props.layer !== SEARCHABLE_MENU_LAYER.EMBEDDED && inNarrowRoom();
+  const [sheet, setSheet] = useState(sheeted);
   const [query, setQuery] = useState("");
   // Note that rows an owner searched for are its answer to the query already, so the menu filters nothing.
   const answered = props.onSearch !== undefined;
@@ -593,6 +621,8 @@ export function SearchableMenu(
   // The submenu open beside the highlighted row, listed or pinned, and the highlight inside it.
   const [submenu, setSubmenu] = useState<{ moved: number | undefined } | undefined>(undefined);
   const [place, setPlace] = useState<SubmenuPlace>(SUBMENU_FIRST_PLACE);
+  // In a sheet the submenu stands in the sheet's place, held by its row's id, so rows handed anew keep it standing.
+  const [page, setPage] = useState<SheetPage | undefined>(undefined);
   // Opened again while it was leaving, the menu starts afresh, as one opened anew does.
   const [wasLeaving, setWasLeaving] = useState(leaving);
   if (wasLeaving !== leaving) {
@@ -601,9 +631,15 @@ export function SearchableMenu(
       setQuery("");
       setHighlightAt(undefined);
       setSubmenu(undefined);
+      setPage(undefined);
+      setSheet(sheeted());
     }
   }
-  const open = branch !== undefined && submenu !== undefined ? branch : undefined;
+  const paged =
+    page === undefined
+      ? undefined
+      : (page.pinned ? foot : rows).find((row) => row.id === page.id)?.submenu;
+  const open = sheet ? paged : branch !== undefined && submenu !== undefined ? branch : undefined;
   const subChosen = open?.rows.findIndex((row) => row.id === open.value) ?? -1;
   const subAt = highlightOver({
     moved: submenu?.moved,
@@ -634,9 +670,14 @@ export function SearchableMenu(
 
   // The field takes focus as the menu opens, and keeps it; with no field, the
   // list does. A menu opened again while it was leaving takes it back too.
+  // A sheet's list takes it instead, as its dialog lands it, and again each
+  // time a submenu comes to stand in the sheet's place or goes, the list
+  // then standing being that page's.
   useEffect(() => {
-    if (!leaving) (field.current ?? list.current)?.focus();
-  }, [leaving]);
+    if (leaving) return;
+    if (sheet) list.current?.focus({ preventScroll: true });
+    else (field.current ?? list.current)?.focus();
+  }, [leaving, sheet, page]);
 
   // A submenu opens to the right and down from its row, turns to the left
   // where the room ends before it does (the window, or the box its menu
@@ -647,8 +688,8 @@ export function SearchableMenu(
   // menu so it never runs past a column; it stands up where the room's
   // bottom would cut it. Measured before it is painted, and
   // again as the pointer moves it to another row, whose submenu may stand taller.
-  const openAt = open === undefined ? undefined : at;
-  const listedAt = open !== undefined && footAt < 0 ? at : undefined;
+  const openAt = sheet || open === undefined ? undefined : at;
+  const listedAt = !sheet && open !== undefined && footAt < 0 ? at : undefined;
   // A listed row's submenu stands beside the row as the list has it scrolled now, read before it is painted.
   useLayoutEffect(() => {
     if (listedAt === undefined) return setRowBox(undefined);
@@ -688,33 +729,50 @@ export function SearchableMenu(
     setHighlight(index);
     setSubmenu(undefined);
   };
-  const openSubmenu = () => {
+  /** The submenu of the row at `index`, listed or pinned, opened beside it, or in a sheet's place. */
+  const openSubmenu = (index: number) => {
     setPlace(SUBMENU_FIRST_PLACE);
     setSubmenu({ moved: undefined });
+    const pinned = index >= matches.length;
+    const row = pinned ? foot[index - matches.length] : matches[index];
+    if (sheet && row !== undefined) setPage({ pinned, id: row.id });
+  };
+  const closeSubmenu = () => {
+    setSubmenu(undefined);
+    setPage(undefined);
   };
   /** A listed row chosen: its submenu opened beside it where it has one, else it is picked. */
   const chooseRow = (row: MenuRow, index: number) => {
     if (row.disabled !== undefined) return;
     if (row.submenu === undefined) return onPick(row.id);
     setHighlight(index);
-    openSubmenu();
+    openSubmenu(index);
   };
-  const pressFoot = (row: FootRow) => {
+  const pressFoot = (row: FootRow, index: number) => {
     if (row.disabled !== undefined) return;
-    if (row.submenu !== undefined) openSubmenu();
-    else if (row.toggle !== undefined) row.toggle.onToggle();
+    if (row.submenu !== undefined) {
+      setHighlight(matches.length + index);
+      openSubmenu(matches.length + index);
+    } else if (row.toggle !== undefined) row.toggle.onToggle();
     else row.onPress?.();
+  };
+  // Note that a sheet is put away before a submenu's pick is handed on, as
+  // an action menu's sheet is, focus already back on its trigger, because
+  // an owner whose pick opens what takes the focus, as a new Browser tab
+  // does, never hears it leave a sheet that traps it.
+  const pickIn = (shown: Submenu, id: string) => {
+    if (sheet) props.onClose();
+    shown.onPick(id);
   };
 
   // What the field controls, as the space-separated list of ids ARIA reads:
   // the list, the pinned rows, and a submenu while one is open, so every row
   // it may name stands in a popup it controls.
   const footed = foot.length > 0 || props.footNote !== undefined || props.planNote !== undefined;
-  const controlled = [
-    listId,
-    ...(footed ? [footId] : []),
-    ...(open === undefined ? [] : [submenuId]),
-  ];
+  const controlled =
+    sheet && open !== undefined
+      ? [submenuId]
+      : [listId, ...(footed ? [footId] : []), ...(open === undefined ? [] : [submenuId])];
   // Every row's id is its place: an option's in the list, a pinned row's
   // under it, an option's in the open submenu.
   const optionId = (index: number) => comboboxOptionId(listId, index);
@@ -734,13 +792,13 @@ export function SearchableMenu(
   const pick = (index: number) => {
     if (open !== undefined) {
       const row = open.rows[index];
-      if (row !== undefined) open.onPick(row.id);
+      if (row !== undefined) pickIn(open, row.id);
       return;
     }
     const row = index >= 0 ? matches[index] : undefined;
     const pinned = index >= matches.length ? foot[index - matches.length] : undefined;
     if (row !== undefined) chooseRow(row, index);
-    else if (pinned !== undefined) pressFoot(pinned);
+    else if (pinned !== undefined) pressFoot(pinned, index - matches.length);
   };
   const steered = open === undefined ? at : subAt;
   // The list always stands, so the keys always steer it: the submenu's rows
@@ -755,23 +813,28 @@ export function SearchableMenu(
     controls: controlled.join(" "),
     activeId: subActive ?? listActive ?? footActive,
     onActiveChange: (index) => {
-      (field.current ?? list.current)?.focus();
+      // A sheet's keys stay in its list, or in its field once that is pressed, so a key never raises the keyboard.
+      if (!sheet) (field.current ?? list.current)?.focus();
+      else if (document.activeElement !== field.current)
+        list.current?.focus({ preventScroll: true });
       if (open === undefined) setHighlight(index);
       else setSubmenu({ moved: index });
     },
     onChoose: pick,
     onEnter: () => pick(steered),
+    // Note that a sheet's Escape puts it away from a submenu's page too, as
+    // an action menu's sheet does, Left being its way back.
     onEscape: () => {
-      if (open !== undefined) setSubmenu(undefined);
+      if (open !== undefined && !sheet) closeSubmenu();
       else props.onClose();
     },
     onKey: (event) => {
       if (event.key === "ArrowLeft" && open !== undefined) {
         event.preventDefault();
-        setSubmenu(undefined);
+        closeSubmenu();
       } else if (event.key === "ArrowRight" && branch !== undefined && open === undefined) {
         event.preventDefault();
-        openSubmenu();
+        openSubmenu(at);
       }
     },
   });
@@ -785,22 +848,42 @@ export function SearchableMenu(
   };
 
   // The pointer over a listed row highlights it, and opens its submenu where
-  // it has one, or closes the one standing beside another row.
+  // it has one, or closes the one standing beside another row. Note that in
+  // a sheet it only highlights, because a submenu there stands in the
+  // sheet's place, which a press alone opens.
   const hoverRow = (index: number) => {
     if (index === at && open !== undefined) return;
-    if (matches[index]?.submenu === undefined) return moveTo(index);
+    if (sheet || matches[index]?.submenu === undefined) return moveTo(index);
     setHighlight(index);
-    openSubmenu();
+    openSubmenu(index);
   };
 
   // The pointer over a pinned row highlights it, and opens its submenu, or
-  // closes the one standing beside another row.
+  // closes the one standing beside another row; in a sheet, it highlights.
   const hoverFoot = (row: FootRow, index: number) => {
-    if (index === footAt && (open !== undefined || row.submenu === undefined)) return;
+    if (index === footAt && (sheet || open !== undefined || row.submenu === undefined)) return;
     setHighlight(matches.length + index);
-    if (row.submenu === undefined) setSubmenu(undefined);
-    else openSubmenu();
+    if (sheet || row.submenu === undefined) setSubmenu(undefined);
+    else openSubmenu(matches.length + index);
   };
+
+  // A submenu's rows and its note, beside its row, or in a sheet's place,
+  // where its list holds the focus and reads the keys as the menu's did.
+  const submenuBody = (shown: Submenu) => (
+    <>
+      <ComboboxList
+        ref={sheet ? list : undefined}
+        id={submenuId}
+        label={shown.label}
+        groups={[{ options: submenuOptions(shown) }]}
+        active={subAt}
+        onActiveChange={(moved) => setSubmenu({ moved })}
+        onChoose={(_index, option) => pickIn(shown, option.id)}
+        steer={sheet ? keys : undefined}
+      />
+      {shown.note === undefined ? null : <FootNote words={shown.note} />}
+    </>
+  );
 
   // Note that a press anywhere on the submenu, its note too, keeps the focus in the field.
   const submenuSurface = (shown: Submenu) => (
@@ -813,17 +896,125 @@ export function SearchableMenu(
       style={cssCustomProperties({ "--luke-submenu-shift": `${place.shift}px` })}
       onMouseDown={(event) => event.preventDefault()}
     >
-      <ComboboxList
-        id={submenuId}
-        label={shown.label}
-        groups={[{ options: submenuOptions(shown) }]}
-        active={subAt}
-        onActiveChange={(moved) => setSubmenu({ moved })}
-        onChoose={(_index, option) => shown.onPick(option.id)}
-      />
-      {shown.note === undefined ? null : <FootNote words={shown.note} />}
+      {submenuBody(shown)}
     </MenuSurface>
   );
+
+  // A sheet's field is a well of its own in the sheet's head, and a hung menu's its head row.
+  const searchField = searching ? (
+    <SearchField
+      ref={field}
+      look={sheet ? SEARCH_FIELD_LOOK.WELL : SEARCH_FIELD_LOOK.MENU}
+      label={props.placeholder ?? props.label}
+      placeholder={props.placeholder}
+      value={query}
+      combobox={keys}
+      onChange={(typed) => {
+        setQuery(typed);
+        props.onSearch?.(typed);
+        // The first match that may be picked takes the highlight; with
+        // none, nothing does, so Enter picks nothing. The owner's own
+        // answer is not in yet, so its first row takes it as it comes.
+        const first = answered ? NOWHERE : firstOpen(matchingRows(rows, typed));
+        moveTo(first === NOWHERE ? undefined : first);
+      }}
+    />
+  ) : null;
+
+  const rowList = (
+    <ComboboxList
+      ref={list}
+      id={listId}
+      label={props.label}
+      groups={optionGroups(matches, value, answered ? "" : query)}
+      active={at}
+      onActiveChange={hoverRow}
+      onChoose={(index) => {
+        const row = matches[index];
+        if (row !== undefined) chooseRow(row, index);
+      }}
+      steer={searching && !sheet ? undefined : keys}
+      note={props.note}
+      empty={props.note === undefined ? props.noMatch : undefined}
+    />
+  );
+
+  // The submenu standing beside its row, which a sheet never draws there.
+  const beside = sheet ? undefined : open;
+  const footRows = footed ? (
+    <div id={footId} className={FOOT}>
+      {foot.map((row, index) => {
+        const item = (
+          <MenuItem
+            action={{
+              label: row.label,
+              ...(row.icon === undefined ? undefined : { icon: row.icon }),
+              tag: row.tag,
+              hint: row.detail,
+              onSelect: () => pressFoot(row, index),
+              disabled: row.disabled !== undefined,
+              checked: row.toggle?.on,
+              mark: row.toggle === undefined ? undefined : MENU_ITEM_MARK.SWITCH,
+              opens: row.submenu !== undefined,
+            }}
+            steered={{
+              id: footRowId(index),
+              highlighted: index === footAt,
+              expanded: index === footAt && beside !== undefined,
+              onHover: () => hoverFoot(row, index),
+            }}
+            onChoose={() => pressFoot(row, index)}
+          />
+        );
+        const branch = (
+          <div className={BRANCH}>
+            {item}
+            {index === footAt && beside !== undefined ? submenuSurface(beside) : null}
+          </div>
+        );
+        // A row that cannot be pressed says why on hover, from around it,
+        // since the item takes no handlers but its own.
+        return row.disabled === undefined ? (
+          <Fragment key={row.id}>{branch}</Fragment>
+        ) : (
+          <Tooltip key={row.id} label={row.disabled}>
+            {branch}
+          </Tooltip>
+        );
+      })}
+      {props.footNote === undefined ? null : <FootNote words={props.footNote} />}
+      {props.planNote === undefined ? null : <FootNote words={props.planNote} aligned />}
+    </div>
+  ) : null;
+
+  // Note that the sheet hears no blur for its owner's `onLeave`, because its
+  // dialog stands outside the owner's box, so every focus moving inside it
+  // would read as leaving; it traps the focus, and is put away by `onClose`.
+  if (sheet) {
+    return (
+      <MenuSheetFrame
+        id={props.id}
+        open={!leaving}
+        initialFocus={list}
+        hold={ownerRef}
+        name={open?.label ?? props.label}
+        detail={open === undefined ? undefined : props.label}
+        back={open === undefined ? undefined : { label: props.label, onBack: closeSubmenu }}
+        field={open === undefined ? searchField : undefined}
+        onAway={props.onClose}
+        onKeyDown={onKey}
+      >
+        {open === undefined ? (
+          <>
+            {rowList}
+            {footRows}
+          </>
+        ) : (
+          submenuBody(open)
+        )}
+      </MenuSheetFrame>
+    );
+  }
 
   const menu = (
     <MenuSurface
@@ -837,90 +1028,14 @@ export function SearchableMenu(
       onKeyDown={onKey}
       onBlur={(event) => props.onLeave(event.relatedTarget)}
     >
-      {searching ? (
-        <SearchField
-          ref={field}
-          look={SEARCH_FIELD_LOOK.MENU}
-          label={props.placeholder ?? props.label}
-          placeholder={props.placeholder}
-          value={query}
-          combobox={keys}
-          onChange={(typed) => {
-            setQuery(typed);
-            props.onSearch?.(typed);
-            // The first match that may be picked takes the highlight; with
-            // none, nothing does, so Enter picks nothing. The owner's own
-            // answer is not in yet, so its first row takes it as it comes.
-            const first = answered ? NOWHERE : firstOpen(matchingRows(rows, typed));
-            moveTo(first === NOWHERE ? undefined : first);
-          }}
-        />
-      ) : null}
-      <ComboboxList
-        ref={list}
-        id={listId}
-        label={props.label}
-        groups={optionGroups(matches, value, answered ? "" : query)}
-        active={at}
-        onActiveChange={hoverRow}
-        onChoose={(index) => {
-          const row = matches[index];
-          if (row !== undefined) chooseRow(row, index);
-        }}
-        steer={searching ? undefined : keys}
-        note={props.note}
-        empty={props.note === undefined ? props.noMatch : undefined}
-      />
+      {searchField}
+      {rowList}
       {open === undefined || footAt >= 0 || rowBox === undefined ? null : (
         <div className={ROW_BRANCH} style={{ top: rowBox.top, height: rowBox.height }}>
           {submenuSurface(open)}
         </div>
       )}
-      {footed ? (
-        <div id={footId} className={FOOT}>
-          {foot.map((row, index) => {
-            const item = (
-              <MenuItem
-                action={{
-                  label: row.label,
-                  ...(row.icon === undefined ? undefined : { icon: row.icon }),
-                  tag: row.tag,
-                  hint: row.detail,
-                  onSelect: () => pressFoot(row),
-                  disabled: row.disabled !== undefined,
-                  checked: row.toggle?.on,
-                  mark: row.toggle === undefined ? undefined : MENU_ITEM_MARK.SWITCH,
-                  opens: row.submenu !== undefined,
-                }}
-                steered={{
-                  id: footRowId(index),
-                  highlighted: index === footAt,
-                  expanded: index === footAt && open !== undefined,
-                  onHover: () => hoverFoot(row, index),
-                }}
-                onChoose={() => pressFoot(row)}
-              />
-            );
-            const branch = (
-              <div className={BRANCH}>
-                {item}
-                {index === footAt && open !== undefined ? submenuSurface(open) : null}
-              </div>
-            );
-            // A row that cannot be pressed says why on hover, from around it,
-            // since the item takes no handlers but its own.
-            return row.disabled === undefined ? (
-              <Fragment key={row.id}>{branch}</Fragment>
-            ) : (
-              <Tooltip key={row.id} label={row.disabled}>
-                {branch}
-              </Tooltip>
-            );
-          })}
-          {props.footNote === undefined ? null : <FootNote words={props.footNote} />}
-          {props.planNote === undefined ? null : <FootNote words={props.planNote} aligned />}
-        </div>
-      ) : null}
+      {footRows}
     </MenuSurface>
   );
   if (props.layer === SEARCHABLE_MENU_LAYER.EMBEDDED) return menu;

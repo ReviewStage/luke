@@ -86,8 +86,8 @@ const REVIEW_TONE = {
   [REVIEW_STATE.DISMISSED]: { ink: "text-muted-foreground", disc: "bg-muted-foreground" },
 } as const satisfies Record<ReviewState, { ink: string; disc: string }>;
 
-/** A reviewer's standing beside the words for it, its glyph in its colour. */
-function ReviewBadge({ state }: { state: ReviewState }): React.JSX.Element {
+/** A reviewer's standing beside the words for it, its glyph in its colour; a GitHub line's card wears it alone in its icon's seat (`line-cards.tsx`). */
+export function ReviewBadge({ state }: { state: ReviewState }): React.JSX.Element {
   return (
     <span
       className={`review-state inline-grid place-items-center [&>svg]:size-luke-12 ${REVIEW_TONE[state].ink}`}
