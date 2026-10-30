@@ -43,9 +43,12 @@ export const HISTORY_LIMIT = 50;
 
 const EMPTY: HistorySnapshot<never> = { entries: [], at: -1 };
 
-/** A history held in memory, as the desktop's window keeps it, of at most `limit` entries. */
-export function memoryHistory<State>(limit: number = HISTORY_LIMIT): HistoryAdapter<State> {
-  let snapshot: HistorySnapshot<State> = EMPTY;
+/** A history held in memory, as the desktop's window keeps it, of at most `limit` entries, standing first where `from` does. */
+export function memoryHistory<State>(
+  limit: number = HISTORY_LIMIT,
+  from: HistorySnapshot<State> = EMPTY,
+): HistoryAdapter<State> {
+  let snapshot: HistorySnapshot<State> = from;
   const listeners = new Set<() => void>();
   const stand = (next: HistorySnapshot<State>) => {
     snapshot = next;

@@ -79,7 +79,13 @@
 import { PRODUCT_SURFACE } from "@luke/features/analytics";
 import { linkOf, type ReadLink } from "@luke/features/link-grammar";
 import type { SettingsView } from "@luke/settings/settings-views";
-import type { HistoryAdapter, HistoryEntry, HistorySnapshot } from "@luke/ui/history-adapter";
+import {
+  HISTORY_LIMIT,
+  type HistoryAdapter,
+  type HistoryEntry,
+  type HistorySnapshot,
+  memoryHistory,
+} from "@luke/ui/history-adapter";
 import {
   isAgentTab,
   isChangesTab,
@@ -619,6 +625,23 @@ function visit(
 }
 
 /**
+ * The trail as it stands once `visit` writes `place` on it, by a history in
+ * memory standing where the trail does, written as the window's is; the
+ * trail itself where `visit` writes nothing.
+ */
+function afterVisit(
+  trail: Trail,
+  place: Place,
+  address: string,
+  up: Place | undefined,
+  pressed: boolean,
+): Trail {
+  const written = memoryHistory<Place>(HISTORY_LIMIT, trail);
+  visit(written, place, address, up, pressed);
+  return written.current();
+}
+
+/**
  * The nearest step one way along the trail the window can still go to,
  * skipping any it cannot reach and any that is the step it already stands
  * on, so a deleted task between two visits of one page is passed over whole.
@@ -773,6 +796,67 @@ export interface AwayStep {
   readonly title: StepTitle | undefined;
 }
 
+/** What Back and Forward draw of a trail: whether each can go, the steps each lists, and the step a page's way out goes back to. */
+interface HistoryReading {
+  readonly canGoBack: boolean;
+  readonly canGoForward: boolean;
+  readonly steps: NavigationHistory["steps"];
+  readonly away: AwayStep | undefined;
+}
+
+function readingOf(
+  trail: Trail,
+  reachable: (place: Place) => boolean,
+  named: (place: Place) => StepTitle | undefined,
+): HistoryReading {
+  return {
+    canGoBack: nearest(trail, -1, reachable) !== undefined,
+    canGoForward: nearest(trail, 1, reachable) !== undefined,
+    steps: {
+      back: listedSteps(trail, -1, reachable, named),
+      forward: listedSteps(trail, 1, reachable, named),
+    },
+    away: awayStep(trail, reachable, named),
+  };
+}
+
+/** Whether two titles read alike, their panes' tabs among them. */
+function sameStepTitle(one: StepTitle | undefined, other: StepTitle | undefined): boolean {
+  return (
+    one?.label === other?.label &&
+    one?.detail === other?.detail &&
+    one?.panes?.column === other?.panes?.column &&
+    one?.panes?.side === other?.panes?.side
+  );
+}
+
+function sameSteps(one: readonly HistoryStep[], other: readonly HistoryStep[]): boolean {
+  return (
+    one.length === other.length &&
+    one.every((step, index) => {
+      const theirs = other[index];
+      return (
+        theirs !== undefined &&
+        step.at === theirs.at &&
+        sameHistoryPage(step.page, theirs.page) &&
+        sameStepTitle(step.title, theirs.title)
+      );
+    })
+  );
+}
+
+/** Whether two readings draw the same buttons, lists, and way out. */
+function sameReading(one: HistoryReading, other: HistoryReading): boolean {
+  return (
+    one.canGoBack === other.canGoBack &&
+    one.canGoForward === other.canGoForward &&
+    sameSteps(one.steps.back, other.steps.back) &&
+    sameSteps(one.steps.forward, other.steps.forward) &&
+    (one.away === undefined) === (other.away === undefined) &&
+    sameStepTitle(one.away?.title, other.away?.title)
+  );
+}
+
 /** The window's history, with the way a restore leaves a plan's version history and a page's way out. */
 export interface WindowHistory extends NavigationHistory {
   /** Leaves the version history for its task: a step back where the task is the step behind, else a visit. */
@@ -897,7 +981,6 @@ function useHistory(input: {
 } {
   const { place, address, reachable, named, guard } = input;
   const history = windowHistory();
-  const trail = useSyncExternalStore(history.subscribe, history.current);
   // Note that the presses read the trail from the adapter as they land, because a
   // key can land between a move and the render that shows it, and the latest
   // `place`, `reachable`, `go`, and `guard` through a ref, so a press stays the same
@@ -925,6 +1008,29 @@ function useHistory(input: {
   // The entry the window stands on, as it last wrote or followed the trail, and whether it is writing it now.
   const standing = useRef<HistoryEntry<Place> | undefined>(undefined);
   const writing = useRef(false);
+  // What Back and Forward draw, read from the trail as it stands once the
+  // visit to `place` below is written, and held while it reads the same.
+  // Note that the window follows this reading rather than the trail itself,
+  // because the visit is written after the place has drawn, and a trail
+  // followed whole draws the whole window again, mid-glide, for the step it
+  // already drew; a write that reads otherwise still draws it.
+  const drawn = useRef<HistoryReading | undefined>(undefined);
+  // The place and address the visit below last ran for, which it runs for again only once either moves.
+  const visited = useRef<{ place: Place | undefined; address: string } | undefined>(undefined);
+  const reading = useSyncExternalStore(history.subscribe, () => {
+    const held = history.current();
+    const moved = visited.current?.place !== place || visited.current?.address !== address;
+    // A window first knowing where it stands on a trail that already stands somewhere goes there rather than writing.
+    const writes =
+      place !== undefined &&
+      moved &&
+      (standing.current !== undefined || standingOf(held) === undefined);
+    const pressed = presses.current !== pressesWritten.current;
+    const trail = writes ? afterVisit(held, place, address, wentUp.current, pressed) : held;
+    const next = readingOf(trail, reachable, named);
+    if (drawn.current === undefined || !sameReading(drawn.current, next)) drawn.current = next;
+    return drawn.current;
+  });
 
   // A write of the window's own, which the adapter's listeners are not to follow.
   const own = useCallback(
@@ -942,6 +1048,7 @@ function useHistory(input: {
   );
 
   useEffect(() => {
+    visited.current = { place, address };
     const up = wentUp.current;
     wentUp.current = undefined;
     if (place === undefined) return;
@@ -1054,19 +1161,16 @@ function useHistory(input: {
   };
 
   return {
-    canGoBack: nearest(trail, -1, reachable) !== undefined,
-    canGoForward: nearest(trail, 1, reachable) !== undefined,
+    canGoBack: reading.canGoBack,
+    canGoForward: reading.canGoForward,
     onBack: useCallback(() => step(-1), [step]),
     onForward: useCallback(() => step(1), [step]),
-    steps: {
-      back: listedSteps(trail, -1, reachable, named),
-      forward: listedSteps(trail, 1, reachable, named),
-    },
+    steps: reading.steps,
     onGoTo: goTo,
     backTo,
     upTo,
     stepBack: () => step(-1),
-    away: awayStep(trail, reachable, named),
+    away: reading.away,
     stepAway: () => goTo(awayFrom(history.current(), latest.current.reachable)),
   };
 }
@@ -1455,8 +1559,16 @@ export function useWindowHistory(input: {
     else sidePanel.onSetOpen(panel.open);
   };
   // The workspace's members, read only while a person's page stands on the trail, whose step is listed by the name they go by now.
-  const trail = useSyncExternalStore(windowHistory().subscribe, windowHistory().current);
-  const personListed = trail.entries.some((entry) => entry.state?.kind === PLACE_KIND.PERSON);
+  // Note that the place standing counts as on the trail already, so its visit, written after it draws, draws the window no second time.
+  const personStanding = untitled?.kind === PLACE_KIND.PERSON;
+  const personListed = useSyncExternalStore(
+    windowHistory().subscribe,
+    () =>
+      personStanding ||
+      windowHistory()
+        .current()
+        .entries.some((entry) => entry.state?.kind === PLACE_KIND.PERSON),
+  );
   const { members } = useWorkspaceMembersRead(personListed ? tasks.workspace : undefined);
   // The workspace's channels as the window holds them, which a channel's step is listed by the name it goes by now.
   const { channels } = useChannels(shown === undefined ? undefined : tasks.workspace?.id);
