@@ -1148,9 +1148,11 @@ test("a comment's field offers no Luke among the agents, since no task has one, 
   assert.equal(card.querySelector(".comment-send-to"), null);
 });
 
-test("a reply's field empties as it is sent, and a refused reply takes the words back with the reply queued behind it, which never goes", async () => {
+test("a reply's field empties as it is sent, and a refused reply takes the words back, or with one queued behind it, which never goes, stands apart with it as not sent, Retry sending each under its own key", async () => {
   const answer = Promise.withResolvers<boolean>();
-  const { container, asked } = drawn("page", THREADS, () => answer.promise);
+  const { container, asked } = drawn("page", THREADS, () =>
+    asked.length === 1 ? false : asked.length === 2 ? answer.promise : true,
+  );
   act(() =>
     container
       .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
@@ -1161,19 +1163,31 @@ test("a reply's field empties as it is sent, and a refused reply takes the words
   );
   assert.ok(field);
   await post(field, "Not for v1.");
+  assert.equal(field.value, "Not for v1.", "a reply refused alone comes back into the field");
+
+  await post(field, "Not for v1.");
   assert.equal(field.value, "", "the field empties as the words are sent");
   await post(field, "Maybe v2.");
-
   await act(async () => answer.resolve(false));
-  assert.equal(
-    field.value,
-    "Not for v1.\n\nMaybe v2.",
-    "and takes them back where the send fails, the reply behind it after them",
-  );
+  const words = () => asked.map(({ action }) => ("words" in action ? action.words : undefined));
+  assert.deepEqual(words(), ["Not for v1.", "Not for v1."], "the reply behind never goes");
+  assert.equal(field.value, "");
+  const unsent = container.querySelector<HTMLElement>(".comment-unsent");
   assert.deepEqual(
-    asked.map(({ action }) => ("words" in action ? action.words : undefined)),
-    ["Not for v1."],
+    [...(unsent?.querySelectorAll(".comment-words") ?? [])].map((each) => each.textContent),
+    ["Not for v1.", "Maybe v2."],
   );
+
+  await act(async () =>
+    [...(unsent?.querySelectorAll("button") ?? [])]
+      .find((button) => button.textContent === "Retry")
+      ?.click(),
+  );
+  await act(async () => undefined);
+  const keys = asked.map(({ action }) => ("clientKey" in action ? action.clientKey : undefined));
+  assert.deepEqual(words().slice(2), ["Not for v1.", "Maybe v2."]);
+  assert.equal(keys[2], keys[1], "the reply whose answer may be lost goes again under its key");
+  assert.notEqual(keys[3], keys[2]);
 });
 
 test("replies sent before the first answers each stand as Sending and go one at a time, in the order written, Send never busy", async () => {

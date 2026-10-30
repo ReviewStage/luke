@@ -211,10 +211,13 @@ import {
  * again, or open in the margin and the Comments tab at once, keeps one
  * order. Each reply on its way stands at the thread's end as the reader's
  * own comment marked Sending, until the thread holds the comment it became.
- * A reply refused comes back into the field above whatever was written there
- * since, with every reply queued behind it, which never goes, so comments
- * land in the order written; where the field is gone, or they are more than
- * one comment carries, they stand apart as not sent, with Retry and Discard.
+ * A reply refused takes every reply queued behind it with it, which never
+ * goes, so comments land in the order written. Alone, it comes back into the
+ * field above whatever was written there since; with replies behind it, or
+ * where the field is gone or the two are more than one comment carries,
+ * they stand apart as not sent, each under its own key, with Retry and
+ * Discard, since a refusal may be an answer lost after the service wrote the
+ * reply, and only its own key keeps Retry from writing it twice.
  * A thread being started holds its field until it answers, since its send
  * opens the thread.
  */
@@ -984,17 +987,17 @@ function ReplyField({
   const said = heard ?? (cut ? pasteCutWords(PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS) : undefined);
   // Note that a failed send is said over a refused file, which is said over a dictation's note or a cut paste, and stands on the not-sent line where there is one.
   const note = (unsent.length === 0 ? failure : undefined) ?? refusal ?? said;
-  // Note that refused sends go back above whatever was typed or added since, in the order written, so nothing is dropped, unless the field is gone or together they are more than one comment carries.
+  // Note that a refused send goes back above whatever was typed or added since, so neither is dropped, unless the field is gone or the two together are more than one comment carries; sends refused together stand apart under their own keys, so one the service wrote before its answer was lost is not written again under a new one.
   const takeBack = (sends: readonly CommentSend[]) => {
-    attempt.current = sends[0];
+    const [first] = sends;
+    if (first === undefined) return;
+    attempt.current = first;
     const typed = wordsNow.current;
     const back = {
-      words: [...sends.map((each) => each.words), typed]
-        .filter((each) => each.trim() !== "")
-        .join("\n\n"),
-      attachments: [...sends.flatMap((each) => each.attachments), ...files.now()],
+      words: typed.trim() === "" ? first.words : `${first.words}\n\n${typed}`,
+      attachments: [...first.attachments, ...files.now()],
     };
-    if (!standing.current || !carried(back)) {
+    if (sends.length > 1 || !standing.current || !carried(back)) {
       addUnsent(sends);
       return;
     }
