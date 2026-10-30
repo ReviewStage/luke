@@ -540,6 +540,25 @@ it.effect(
 );
 
 it.effect(
+  "a discard on the box deletes a VM a run from before left, which the deletes before it could not, before it lets the agent go",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        // Note that the delete as the gate opens and those of the two passes' leftover sweeps fail, so only the second pass's discard can delete it.
+        const device = yield* following({
+          held: { whole: [AGENT.ORPHAN] },
+          reads: [[], []],
+          deleteFails: (_machine, attempt) => attempt <= 3,
+        });
+        yield* device.passed(2);
+
+        assert.deepEqual(device.holdsOf(AGENT.ORPHAN), NOTHING);
+        assert.deepEqual(device.ownedRecorded(), []);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
   "a folder kept for work nowhere else stays until a week after it was first kept, and then goes whole",
   () =>
     Effect.scoped(

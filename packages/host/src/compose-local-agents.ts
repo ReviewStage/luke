@@ -1441,7 +1441,7 @@ export function composeLocalAgents(
 
         /**
          * The agent let go of: its runner stopped and its exit settled, its
-         * VM, where it ran in one, deleted, and its folder removed with
+         * VM, where it ran in one or a run from before left one, deleted, and its folder removed with
          * everything in it, its worktree and what its runner and commands
          * wrote there; the shared clone the worktree was made from stays, and
          * the next worktree made of it prunes this one's record. A folder
@@ -1475,13 +1475,14 @@ export function composeLocalAgents(
                 : by === LET_GO.SWEEP && platform.unsavedWorkScript === undefined
                   ? Option.some(NOT_SAVED)
                   : yield* unsavedWork(agentId, layout, vm);
-            // Note that the VM goes before the folder, so nothing in it is still writing there as it is removed, and a command's hold outlasting it stops nothing.
+            // Note that the VM goes before the folder, so nothing in it is still writing there as it is removed, and a command's hold outlasting it stops nothing; on the box that is any VM a run from before left.
+            const leftBy = vm ?? (direct ? platform.sandbox : undefined);
             const vmGone =
-              vm === undefined ||
+              leftBy === undefined ||
               (yield* vmLockOf(agentId).withPermit(
                 Effect.andThen(
                   Effect.sync(() => vmHolds.delete(agentId)),
-                  vm.deleted(agentId),
+                  leftBy.deleted(agentId),
                 ),
               ));
             if (Option.isSome(unsaved)) {
