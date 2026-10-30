@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import ignore from "ignore";
 import type { AgentChangedFile, ReviewThread } from "./agent-wire.js";
 import { DIFF_SIDE } from "./agent-wire.js";
 import { DIFF_ROW, type DiffHunk, LOCKFILE_NAMES, patchHunks } from "./diff-hunks.js";
@@ -11,7 +12,8 @@ import { DIFF_ROW, type DiffHunk, LOCKFILE_NAMES, patchHunks } from "./diff-hunk
  * it holds, the changes a reviewer should weigh in it (`KeyChange`), each
  * on lines of its own hunks, and how risky it is and why. The last chapter
  * may be "Other changes", told by no model (`otherChangesChapter`): the
- * files a reader reads past (`ignoredForChapters`), those with no hunk to
+ * files a reader reads past (`ignoredForChapters`, the defaults and the
+ * repository's `.stageignore`), those with no hunk to
  * read, and any hunk the model left out. It is named by its `kind` rather
  * than its title, because a model may title a chapter of its own the same.
  *
@@ -156,50 +158,51 @@ function chapterOwnHunks(chapter: Chapter, index: HunkIndex): readonly ChapterHu
 }
 
 /**
- * The ends of the names of files a reader reads past, as ReviewStage's
- * default ignore list writes them (`*.min.js` and the rest): minified and
- * generated files, source maps, snapshots, images, fonts, video, and
- * documents.
+ * The patterns of files a reader reads past, as ReviewStage's default ignore
+ * list writes them: every lockfile, what an operating system leaves in a
+ * folder, minified and generated files, source maps, snapshots, images,
+ * fonts, video, and documents.
  */
-const IGNORED_ENDINGS = [
-  ".min.js",
-  ".min.css",
-  ".map",
-  ".snap",
-  ".svg",
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".gif",
-  ".ico",
-  ".woff",
-  ".woff2",
-  ".ttf",
-  ".eot",
-  ".mp4",
-  ".webm",
-  ".pdf",
-] as const;
+const DEFAULT_IGNORE_PATTERNS: readonly string[] = [
+  ...LOCKFILE_NAMES,
+  ".DS_Store",
+  "Thumbs.db",
+  "*.min.js",
+  "*.min.css",
+  "*.map",
+  "*.snap",
+  "*.svg",
+  "*.png",
+  "*.jpg",
+  "*.jpeg",
+  "*.gif",
+  "*.ico",
+  "*.woff",
+  "*.woff2",
+  "*.ttf",
+  "*.eot",
+  "*.mp4",
+  "*.webm",
+  "*.pdf",
+];
 
-/** The whole names of files a reader reads past: every lockfile, and what an operating system leaves in a folder. */
-const IGNORED_NAMES: ReadonlySet<string> = new Set(
-  [...LOCKFILE_NAMES, ".DS_Store", "Thumbs.db"].map((name) => name.toLowerCase()),
-);
+/** The file at a repository's root whose `.gitignore`-style patterns leave more of its files out of chapters, as stage-cli reads it. */
+export const STAGE_IGNORE_PATH = ".stageignore";
 
 /**
  * Whether a file is left out of the chapters a model tells and stands in
- * "Other changes" instead, as ReviewStage's default ignore list leaves it
- * out: a lockfile, an operating system's folder metadata, a minified file,
- * a source map, a snapshot, an image, a font, a video, or a document.
- * Matched as `.gitignore` matches a pattern with no slash, whatever its
- * case: against every step of the path, so a folder so named leaves out
- * everything in it.
+ * "Other changes" instead: what ReviewStage's default ignore list leaves
+ * out, then what the repository's own `.stageignore` names, where it has
+ * one, as stage-cli's `filterFilesForLlm` layers them. Both are one
+ * matcher with `.gitignore`'s semantics, whatever the case (comments,
+ * anchoring, folders, and `!` re-including a file a pattern above left
+ * out, a default's included), so a pattern with no slash matches every
+ * step of the path and a folder so named leaves out everything in it.
  */
-export function ignoredForChapters(path: string): boolean {
-  return path.split("/").some((step) => {
-    const name = step.toLowerCase();
-    return IGNORED_NAMES.has(name) || IGNORED_ENDINGS.some((ending) => name.endsWith(ending));
-  });
+export function ignoredForChapters(stageIgnore: string | null = null): (path: string) => boolean {
+  const matcher = ignore({ ignoreCase: true }).add([...DEFAULT_IGNORE_PATTERNS]);
+  if (stageIgnore !== null) matcher.add(stageIgnore);
+  return (path) => matcher.ignores(path);
 }
 
 /** A model's chapters held to the hunks it was given, and the hunks no chapter holds. */

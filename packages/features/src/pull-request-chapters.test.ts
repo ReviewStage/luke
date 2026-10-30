@@ -134,7 +134,7 @@ test("lockfiles, folder metadata, minified files, maps, snapshots, images, fonts
     "public/icon.svg",
     "assets/raw.png/notes.txt",
   ]) {
-    assert.equal(ignoredForChapters(path), true, path);
+    assert.equal(ignoredForChapters()(path), true, path);
   }
   for (const path of [
     "src/seats.ts",
@@ -143,7 +143,23 @@ test("lockfiles, folder metadata, minified files, maps, snapshots, images, fonts
     "src/lockfile.ts",
     "docs/pdf-export.md",
   ]) {
-    assert.equal(ignoredForChapters(path), false, path);
+    assert.equal(ignoredForChapters()(path), false, path);
+  }
+});
+
+test("a repository's .stageignore leaves out what it names over the defaults, anchored and by folder, and its ! takes a default back", () => {
+  const ignored = ignoredForChapters(
+    "# generated\npackages/database/migrations/*/snapshot.json\n/build/\n!public/icon.svg\n",
+  );
+  for (const path of [
+    "packages/database/migrations/20261030154518_agent_queue/snapshot.json",
+    "build/app.js",
+    "pnpm-lock.yaml",
+  ]) {
+    assert.equal(ignored(path), true, path);
+  }
+  for (const path of ["public/icon.svg", "src/build/app.js", "src/snapshot.json"]) {
+    assert.equal(ignored(path), false, path);
   }
 });
 
