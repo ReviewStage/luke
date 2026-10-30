@@ -8,7 +8,6 @@ import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
 import { isAgentEntry } from "@luke/features/task-section-writes";
 import {
-  TASK_BOUNDS,
   TASK_PRIORITY_ORDER,
   TASK_STATUS_ORDER,
   type TaskStanding,
@@ -21,20 +20,10 @@ import {
   readingWords,
   TERM,
 } from "@luke/features/words";
-import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  ANNOUNCE,
   AVATAR_SIZE,
-  BUTTON_SIZE,
-  CARD_CORNER,
-  CARD_ELEMENT,
-  CARD_PADDING,
   CARD_PRESS_SELECTOR,
-  CARD_SHADOW,
-  Card,
-  CardPress,
-  CHIP_LOOK,
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
@@ -49,7 +38,6 @@ import {
   GROUP_ROWS,
   GROUP_SURFACE,
   GroupHeader,
-  InlineEdit,
   joinRefs,
   LAYOUT_ELEMENT,
   ListMotion,
@@ -58,24 +46,23 @@ import {
   OneLine,
   PAGE_FRAME,
   PAGE_WIDTH,
-  SELECT_BOX_PLACE,
   SelectionBar,
   SelectionRegion,
   Stack,
   TASK_AGENTS_MARK_SIZE,
   TaskAgentsMark,
   TaskPriorityMark,
+  TaskRowDraft,
   TaskStatusMark,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   Time,
+  taskRowColumns,
   useLeaving,
   useMinute,
   useRovingKeys,
-  useRowMenu,
-  VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { FolderXIcon, GLYPH, ICON_SIZE, ListTodoIcon, PinIcon, UserXIcon } from "@luke/ui/icons";
@@ -88,13 +75,12 @@ import {
   sectionTaskIds,
   workspaceSections,
 } from "@luke/ui/task-sections-model";
-import { RENAME_FAILED_NOTE, TASK_MARK } from "@luke/ui/tasks-model";
+import { TASK_MARK } from "@luke/ui/tasks-model";
 import {
   COMPLETED_WINDOW,
   LIST_FOLD_ORDER,
   listPropertiesFitting,
   TASK_PROPERTY,
-  TASK_PROPERTY_ORDER,
   TASKS_GROUP,
   TASKS_GROUPING,
   type TaskProperty,
@@ -104,13 +90,11 @@ import {
   taskIdOf,
   tasksListGroups,
 } from "@luke/ui/tasks-page-model";
-import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { Schema } from "effect";
-import { Fragment, type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { unreadShown } from "../failure-report.js";
-import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -119,31 +103,17 @@ import {
   NO_ASSIGNEE_WORDS,
   TASK_PRIORITY_WORDS,
   TASK_STATUS_WORDS,
-  TaskKey,
 } from "../tasks/task-standing.js";
-import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { useAnnounceShown } from "../use-announce-shown.js";
 import { keptKey, useKept } from "../use-kept.js";
-import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
-import { rowMenu } from "./action-menu.js";
 import { groupNewTaskWords, NewTaskInButton, quickAddInto } from "./new-task-button.js";
 import { useTasksWaiting } from "./places-waiting.js";
 import { type DraftParts, type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { groupCount, sidebarFold } from "./sidebar-fold.js";
-import { TASK_MENU_SURFACE, useTaskMenuItems } from "./task-actions.js";
-import {
-  AssigneeChip,
-  CreatorFace,
-  PriorityChip,
-  StatusChip,
-  statusOf,
-  taskSubject,
-  useStandingDoor,
-  WaitingBadge,
-} from "./task-row-parts.js";
+import { TaskListRow } from "./task-list-row.js";
+import { CreatorFace, useStandingDoor, WaitingBadge } from "./task-row-parts.js";
 import {
   assigneeFor,
   assigneeWords,
@@ -153,7 +123,7 @@ import {
   OlderCompleted,
   type TasksViewFrame,
 } from "./tasks-page-options.js";
-import { type ChosenTasks, chosenRowMenu, useTasksSelection } from "./tasks-selection.js";
+import { type ChosenTasks, useTasksSelection } from "./tasks-selection.js";
 import { useHeldTasks } from "./use-held-tasks.js";
 import { useRowDrag } from "./use-row-drag.js";
 
@@ -237,72 +207,6 @@ const DROP_ZONE = {
   ALL: "all",
   NO_ASSIGNEE: "no-assignee",
 } as const;
-
-/** How wide each column of the grid stands, by the property it draws: its content's own, the repository's held to a short name's. */
-const COLUMN_WIDTH = {
-  [TASK_PROPERTY.PRIORITY]: "auto",
-  [TASK_PROPERTY.KEY]: "auto",
-  [TASK_PROPERTY.STATUS]: "auto",
-  [TASK_PROPERTY.WAITING]: "auto",
-  [TASK_PROPERTY.REPOSITORY]: "fit-content(22ch)",
-  [TASK_PROPERTY.ASSIGNEE]: "auto",
-  [TASK_PROPERTY.CREATOR]: "auto",
-  [TASK_PROPERTY.AGENTS]: "auto",
-  [TASK_PROPERTY.UPDATED]: "auto",
-} as const satisfies Record<TaskProperty, string>;
-
-/** A row's cell: a line in the caption's type, in its property's column, letting the pointer through to the row's press. */
-const LIST_CELL =
-  "tasks-list-cell flex min-w-0 items-center gap-item-gap text-caption text-muted-foreground tabular-nums whitespace-nowrap";
-
-/**
- * Each cell's place in a row's reading order, priority, key, and status
- * before the name and the rest after it, and whether it stands over the
- * row's press: the chips take their own presses, and an assignee's cell left
- * empty under its group's head leaves the press its own. The time ends on its
- * last letter, so times of any length line up at their ends down the column.
- */
-const LIST_CELL_PLACE = {
-  [TASK_PROPERTY.PRIORITY]: "pointer-events-auto relative z-1 order-1",
-  [TASK_PROPERTY.KEY]: "pointer-events-none order-2",
-  [TASK_PROPERTY.STATUS]: "pointer-events-auto relative z-1 order-3",
-  [TASK_PROPERTY.WAITING]: "pointer-events-none order-5",
-  [TASK_PROPERTY.REPOSITORY]: "pointer-events-none order-6",
-  [TASK_PROPERTY.ASSIGNEE]:
-    "pointer-events-none order-7 not-empty:pointer-events-auto not-empty:relative not-empty:z-1",
-  [TASK_PROPERTY.CREATOR]: "pointer-events-none order-8",
-  [TASK_PROPERTY.AGENTS]: "pointer-events-none order-9",
-  [TASK_PROPERTY.UPDATED]: "pointer-events-none order-10 justify-end",
-} as const satisfies Record<TaskProperty, string>;
-
-/** The ⋯'s cell, at a row's end, standing over its press. */
-const LIST_MORE_CELL = `${LIST_CELL} pointer-events-auto relative z-1 order-11`;
-
-/**
- * A row: a subgrid of the list's columns a little taller than a control,
- * filled under the pointer and while its menu is open, a draft's as a task's,
- * keeping a gutter at its start for its box (`SELECT_BOX_PLACE.GUTTER`), as
- * Linear's list does, so every row's name lines up whether or not it shows one.
- */
-const LIST_ROW =
-  "tasks-list-row relative col-span-full grid min-h-tasks-list-row grid-cols-subgrid items-center rounded-control px-row-inset ps-select-gutter py-luke-2 text-foreground [transition:transform_var(--luke-duration-fast)_var(--luke-spring-fast),background-color_var(--luke-duration-hover)_var(--luke-motion-exit),opacity_var(--luke-duration-quick)_var(--luke-motion-exit)] data-[menu-open=true]:bg-muted data-[menu-open=true]:shadow-menu-open-edge [&:hover]:bg-muted";
-
-/** The name's cell, the one that takes the row's press. */
-const LIST_NAME_CELL =
-  "tasks-list-cell pointer-events-auto order-4 flex min-w-0 flex-col items-stretch gap-0 text-label text-foreground tabular-nums whitespace-nowrap";
-
-/** What a row's press shows: its name on one line, in the label's weight. */
-const LIST_PRESS = "tasks-list-press flex min-w-0 items-center font-luke-medium";
-
-/** What did not land, in the name's cell. */
-const LIST_NOTE = "tasks-list-note text-caption text-danger";
-
-/** The properties drawn before a row's name; the rest stand after it. */
-const LEADING: readonly TaskProperty[] = [
-  TASK_PROPERTY.PRIORITY,
-  TASK_PROPERTY.KEY,
-  TASK_PROPERTY.STATUS,
-];
 
 /** The groups folded, each kind by the values its groups stand for; absent where none is. */
 const storedFolds = Schema.fromJsonString(
@@ -661,17 +565,12 @@ function listDrops(
 }
 
 /**
- * One task's row: its press, which reaches every edge of the row under its
- * controls, opens the task; then, each in its own column where the view draws it, the chips that
- * change its priority and its status, its key, what waits on the reader,
- * its repository, the chip that changes its assignee, empty where its group
- * already says who, its creator's face, its agents' work, when it last
- * moved, and its ⋯. Renamed from its menu, its name is its field until the edit
- * ends. Chosen among several, its ⋯, right-click, and menu key offer the
- * selection bar's acts on every task chosen, as a Mac's list does; one not
- * chosen keeps its own menu.
+ * One task's row on the page (`task-list-row.tsx`), and the cells only the
+ * page draws, each in its own column where the view draws it: what waits on
+ * the reader, its repository led by its owner's picture, its creator's face,
+ * its maker named before it, its agents' work, and when it last moved.
  */
-function TaskListRow({
+function TasksPageRow({
   tasks,
   task,
   workspaceName,
@@ -701,163 +600,63 @@ function TaskListRow({
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
   const maker = useTaskMaker(task);
-  const reads = useReadMarks();
-  const rename = useInlineRename(task.id, tasks.onRenameTask);
-  useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
-  const actions = useTaskMenuItems(tasks, task.id, task.name, {
-    rename: rename.begin,
-    drawn: true,
-    unread: reads.markedUnread(task.id),
-    surface: TASK_MENU_SURFACE.ROW,
-  });
-  const press = useRef<HTMLButtonElement | null>(null);
-  const nameId = useId();
-  const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
-  const own = {
-    ...rowMenu("Task", actions.groups(), tasks.shown),
-    footer: actions.footer,
-    subject: taskSubject(task, task.repository === null ? undefined : repositoryName, key),
-  };
-  const menu = useRowMenu(
-    rename.editing
-      ? undefined
-      : chosen === undefined
-        ? own
-        : chosenRowMenu(own.thing, chosen, tasks.shown),
-    { disabled: actions.deletion.busy, opener: press },
-  );
-  const endedByKey = useRefocusAfterEdit(rename.editing, press);
-  const drawn = (property: TaskProperty) => properties.includes(property);
-  // Note that the marks before the name are a control and decoration to a screen reader, so the key and status are said in the press, and left out of find, which finds them drawn.
-  const spoken = [
-    drawn(TASK_PROPERTY.KEY) ? key : undefined,
-    drawn(TASK_PROPERTY.STATUS) ? TASK_STATUS_WORDS[statusOf(task)] : undefined,
-  ]
-    .filter((each) => each !== undefined)
-    .map((each) => `, ${each}`)
-    .join("");
-  const cell = (property: TaskProperty, content: ReactNode) =>
-    drawn(property) ? (
-      <span className={`${LIST_CELL} ${LIST_CELL_PLACE[property]}`} data-cell={property}>
-        {content}
-      </span>
-    ) : null;
   return (
-    <li
-      className={LIST_ROW}
-      data-task-id={task.id}
-      {...motionKey(task.id)}
-      {...menu.props}
-      data-editing={rename.editing ? "true" : undefined}
-    >
-      <span className={LIST_NAME_CELL} data-cell="name">
-        {rename.editing ? (
-          <span className="tasks-list-press flex min-w-0 items-center font-luke-regular">
-            <InlineEdit
-              value={rename.asked ?? task.name}
-              label="Task name"
-              maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
-              editing
-              onEnd={(edit) => {
-                endedByKey(edit.byKey);
-                void rename.end(edit.value);
-              }}
-            />
-          </span>
-        ) : (
-          <CardPress
-            ref={press}
-            disabled={actions.deletion.busy}
-            selectKey={task.id}
-            selectBox={SELECT_BOX_PLACE.GUTTER}
-            roving
-            onPress={() => {
-              menu.close(false);
-              onOpen();
-            }}
-          >
-            <span id={nameId} className={LIST_PRESS}>
-              <OneLine>{task.name}</OneLine>
-              {spoken === "" ? null : (
-                <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{spoken}</VisuallyHidden>
-              )}
-            </span>
-          </CardPress>
-        )}
-        {rename.refused ? <span className={LIST_NOTE}>{RENAME_FAILED_NOTE}</span> : null}
-      </span>
-      {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}
-      {cell(
-        TASK_PROPERTY.PRIORITY,
-        <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />,
-      )}
-      {cell(
-        TASK_PROPERTY.KEY,
-        <TaskKey workspaceName={workspaceName} number={task.number} decorative />,
-      )}
-      {cell(
-        TASK_PROPERTY.STATUS,
-        <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />,
-      )}
-      {cell(TASK_PROPERTY.WAITING, <WaitingBadge count={waiting} />)}
-      {cell(
-        TASK_PROPERTY.REPOSITORY,
-        <>
-          {task.repository === null ? (
-            <GlyphSlot ink={GLYPH_INK.INHERIT} size={ICON_SIZE.MEDIUM}>
-              <FolderXIcon />
-            </GlyphSlot>
-          ) : (
-            <RepositoryPicture
-              repository={task.repository}
-              pictures={tasks.repositories.pictures}
-              fallback={
-                <GlyphSlot ink={GLYPH_INK.INHERIT} size={ICON_SIZE.MEDIUM}>
-                  <GLYPH.REPOSITORY />
-                </GlyphSlot>
-              }
-            />
-          )}
-          <OneLine>{repositoryName}</OneLine>
-        </>,
-      )}
-      {cell(
-        TASK_PROPERTY.ASSIGNEE,
-        assigneeHeld ? null : (
-          <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+    <TaskListRow
+      tasks={tasks}
+      task={task}
+      workspaceName={workspaceName}
+      cells={properties}
+      repositoryName={repositoryName}
+      assigneeHeld={assigneeHeld}
+      chosen={chosen}
+      onOpen={onOpen}
+      onStanding={onStanding}
+      content={{
+        [TASK_PROPERTY.WAITING]: <WaitingBadge count={waiting} />,
+        [TASK_PROPERTY.REPOSITORY]: (
+          <>
+            {task.repository === null ? (
+              <GlyphSlot ink={GLYPH_INK.INHERIT} size={ICON_SIZE.MEDIUM}>
+                <FolderXIcon />
+              </GlyphSlot>
+            ) : (
+              <RepositoryPicture
+                repository={task.repository}
+                pictures={tasks.repositories.pictures}
+                fallback={
+                  <GlyphSlot ink={GLYPH_INK.INHERIT} size={ICON_SIZE.MEDIUM}>
+                    <GLYPH.REPOSITORY />
+                  </GlyphSlot>
+                }
+              />
+            )}
+            <OneLine>{repositoryName}</OneLine>
+          </>
         ),
-      )}
-      {/* Note that a task Luke or an agent made names its maker before their square, the member it was made for worn on it, as every task surface does. */}
-      {cell(
-        TASK_PROPERTY.CREATOR,
-        <>
-          {maker === undefined ? null : (
-            <Text
-              as={TEXT_ELEMENT.SPAN}
-              variant={TEXT_VARIANT.INHERIT}
-              truncate
-              className="tasks-list-maker max-w-tasks-list-maker"
-            >
-              {actorName(maker.actor)}
-            </Text>
-          )}
-          <CreatorFace task={task} onOpen={onOpen} />
-        </>,
-      )}
-      {cell(
-        TASK_PROPERTY.AGENTS,
-        <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />,
-      )}
-      {cell(
-        TASK_PROPERTY.UPDATED,
-        <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />,
-      )}
-      <span className={LIST_MORE_CELL} data-cell="more">
-        {menu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
-      </span>
-      {menu.popup}
-      {actions.dialog}
-    </li>
+        // Note that a task Luke or an agent made names its maker before their square, the member it was made for worn on it, as every task surface does.
+        [TASK_PROPERTY.CREATOR]: (
+          <>
+            {maker === undefined ? null : (
+              <Text
+                as={TEXT_ELEMENT.SPAN}
+                variant={TEXT_VARIANT.INHERIT}
+                truncate
+                className="tasks-list-maker max-w-tasks-list-maker"
+              >
+                {actorName(maker.actor)}
+              </Text>
+            )}
+            <CreatorFace task={task} onOpen={onOpen} />
+          </>
+        ),
+        [TASK_PROPERTY.AGENTS]: (
+          <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
+        ),
+        [TASK_PROPERTY.UPDATED]: (
+          <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
+        ),
+      }}
+    />
   );
 }
 
@@ -883,40 +682,29 @@ function draftChip(draft: DraftParts, property: TaskProperty): ReactNode {
  */
 function listQuickAddLine(properties: readonly TaskProperty[]): QuickAddLine {
   return ({ draft, pending, refused }) => (
-    <Card
-      as={CARD_ELEMENT.LI}
-      corner={CARD_CORNER.CONTROL}
-      padding={CARD_PADDING.NONE}
-      shadow={CARD_SHADOW.SOFT}
-      className={`${LIST_ROW} tasks-list-draft`}
-      data-quick-add={draft === undefined ? undefined : ""}
-      data-pending={pending === undefined ? undefined : "true"}
-    >
-      <span className={LIST_NAME_CELL} data-cell="name">
-        {refused === undefined ? (
-          <span className={LIST_PRESS}>
-            {draft?.title ?? pending}
-            {draft === undefined
-              ? null
-              : DRAFT_CELLS.filter((property) => !properties.includes(property)).map((property) => (
-                  <Fragment key={property}>{draftChip(draft, property)}</Fragment>
-                ))}
-          </span>
-        ) : (
-          <span className={LIST_NOTE}>{refused}</span>
-        )}
-      </span>
-      {properties.map((property) => (
-        <span
-          key={property}
-          className={`${LIST_CELL} ${LIST_CELL_PLACE[property]}`}
-          data-cell={property}
-        >
-          {draft === undefined ? null : draftChip(draft, property)}
-        </span>
-      ))}
-      <span className={LIST_MORE_CELL} data-cell="more" />
-    </Card>
+    <TaskRowDraft
+      cells={properties}
+      content={
+        draft === undefined
+          ? {}
+          : Object.fromEntries(
+              DRAFT_CELLS.map((property) => [property, draftChip(draft, property)]),
+            )
+      }
+      name={
+        <>
+          {draft?.title ?? pending}
+          {draft === undefined
+            ? null
+            : DRAFT_CELLS.filter((property) => !properties.includes(property)).map((property) => (
+                <Fragment key={property}>{draftChip(draft, property)}</Fragment>
+              ))}
+        </>
+      }
+      note={refused}
+      drafting={draft !== undefined}
+      pending={pending !== undefined}
+    />
   );
 }
 
@@ -1044,15 +832,6 @@ function LeavingTasksGroups({
 }): React.JSX.Element {
   const drawn = useLeaving(groups, (each) => groupKey(each.head));
   return <>{drawn.map(({ value }) => group(value))}</>;
-}
-
-/** The grid's columns for the properties drawn, in the order a row draws them: those before the name, the name, those after it, and the ⋯. */
-function gridColumns(properties: readonly TaskProperty[]): string {
-  const drawn = TASK_PROPERTY_ORDER.filter((property) => properties.includes(property));
-  const width = (property: TaskProperty) => COLUMN_WIDTH[property];
-  const before = drawn.filter((property) => LEADING.includes(property)).map(width);
-  const after = drawn.filter((property) => !LEADING.includes(property)).map(width);
-  return [...before, "minmax(0, 1fr)", ...after, "auto"].join(" ");
 }
 
 /** Whether two runs of properties are the same, in the same order. */
@@ -1215,7 +994,7 @@ export function TasksList({
             className="tasks-list grid grid-cols-tasks-list gap-x-block-gap gap-y-section-gap pb-luke-24"
             data-row-drop-scope=""
             {...motionRows()}
-            style={cssCustomProperties({ "--tasks-list-columns": gridColumns(properties) })}
+            style={cssCustomProperties({ "--tasks-list-columns": taskRowColumns(properties) })}
           >
             {/* Note that an empty section stands as a place to drag into, so the view matches nothing where no group holds a task. */}
             {groups.every((group) => group.tasks.length === 0) ? (
@@ -1247,7 +1026,7 @@ export function TasksList({
                     tasks={tasks}
                     properties={properties}
                     row={(task) => (
-                      <TaskListRow
+                      <TasksPageRow
                         key={task.id}
                         tasks={tasks}
                         task={task}
