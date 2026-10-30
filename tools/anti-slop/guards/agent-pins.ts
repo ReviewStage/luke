@@ -13,8 +13,7 @@ import { loadModule, type RepositoryGuard, readJson, record, text } from "./guar
  * Claude Code and Codex of the same releases, each pin's address, size, and
  * digests read off its release, so one left behind by a bump is refused on
  * every host as it fetches; and the coding agent's
- * sandbox template, and the OCI image built from the same preparation, start
- * from the base images of the eve the service runs.
+ * sandbox template starts from the base image of the eve the service runs.
  * A pin moved on one side alone builds, typechecks, and fails only in a
  * hosted sandbox.
  */
@@ -23,7 +22,6 @@ const SDK = "@anthropic-ai/claude-agent-sdk";
 const RUNNER = "packages/agent-runner";
 const SERVICE = "packages/service";
 const EVE_BASE_IMAGE_REPOSITORY = "vcr.vercel.com/vercel/eve/base";
-const EVE_PUBLIC_IMAGE_REPOSITORY = "ghcr.io/vercel/eve";
 
 /** A host's own build of an agent CLI as the guard reads its pin: its name in `pins.ts`, its release, and its address. */
 export interface HostCliPin {
@@ -44,7 +42,6 @@ export interface AgentPins {
   readonly hostClaudePins: readonly HostCliPin[];
   readonly hostCodexPins: readonly HostCliPin[];
   readonly eveBaseImage: string;
-  readonly ociBaseImage: string;
   readonly installedEve: string;
 }
 
@@ -90,12 +87,6 @@ export function pinProblems(pins: AgentPins): readonly string[] {
     pins.eveBaseImage,
     `${EVE_BASE_IMAGE_REPOSITORY}:${eveVersion}`,
   );
-  // The OCI image's base is pinned to a digest too, which no release names, so its tag is what agrees.
-  differ(
-    "SANDBOX_OCI_IMAGE.BASE against the installed eve",
-    pins.ociBaseImage.split("@")[0],
-    `${EVE_PUBLIC_IMAGE_REPOSITORY}:${eveVersion}`,
-  );
   return problems;
 }
 
@@ -131,7 +122,6 @@ async function readPins(root: string): Promise<AgentPins> {
   const codex = record(pins.CODEX_PIN, "CODEX_PIN");
   const generated = await loadModule(root, `${RUNNER}/src/codex-protocol/generated-from.ts`);
   const template = await loadModule(root, `${SERVICE}/src/agents/native-sandbox-template.ts`);
-  const oci = await loadModule(root, `${SERVICE}/src/agents/sandbox-oci-image.ts`);
   const runner = record(readJson(root, `${RUNNER}/package.json`).dependencies, "dependencies");
   const sdk = installedManifest(root, RUNNER, SDK);
   const eveManifest = createRequire(path.join(root, SERVICE, "package.json")).resolve(
@@ -150,10 +140,6 @@ async function readPins(root: string): Promise<AgentPins> {
     hostClaudePins: hostCliPins(pins, "CLAUDE_CODE_MAC_PIN", "CLAUDE_CODE_LINUX_PINS"),
     hostCodexPins: hostCliPins(pins, "CODEX_MAC_PIN", "CODEX_LINUX_PINS"),
     eveBaseImage: text(template.EVE_BASE_IMAGE, "EVE_BASE_IMAGE"),
-    ociBaseImage: text(
-      record(oci.SANDBOX_OCI_IMAGE, "SANDBOX_OCI_IMAGE").BASE,
-      "SANDBOX_OCI_IMAGE.BASE",
-    ),
     installedEve: text(eve.version, "eve's version"),
   };
 }
