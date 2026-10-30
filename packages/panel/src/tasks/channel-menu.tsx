@@ -22,8 +22,8 @@ import type { ChannelsControl } from "./use-channels.js";
  * stamps the look alone and stands only while something in it is unread,
  * never dimmed; Edit, which asks for its name and
  * purpose, #general's purpose alone, since no member renames it; and, last
- * and alone, on any channel but #general, which is never archived, Archive,
- * whose words end in no "…" because it only asks to be sure. Archiving asks first, in
+ * and alone, on any channel but #general, which is never archived, Archive.
+ * No menu row ends in "…", even one that asks. Archiving asks first, in
  * the accent, since it can be undone but reaches everyone in the workspace
  * (`packages/panel/AGENTS.md`'s Confirms); the question goes with its
  * workspace, its channel, and its surface, and a refusal stands in the card.
@@ -31,7 +31,7 @@ import type { ChannelsControl } from "./use-channels.js";
 
 /** What a channel's menu says of each act. */
 const CHANNEL_MENU_WORDS = {
-  EDIT: "Edit…",
+  EDIT: "Edit",
   ARCHIVE: "Archive",
 } as const;
 

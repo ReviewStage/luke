@@ -12,7 +12,7 @@ import { markReadItem } from "./task-menu-items.js";
  *
  * Each menu offers the same groups in the same order: Copy link, the
  * item's link under the task or the agent that holds it; Mark as read or
- * unread, naming U where U reaches the item; Move to channel…, which asks
+ * unread, naming U where U reaches the item; Move to channel, which asks
  * which channel its thread moves to (`move-thread-dialog.tsx`); and, alone
  * and last while the item is open, Resolve without answering, asked first
  * through the surface's one question (`inbox-close.tsx`). A surface hands
@@ -21,7 +21,7 @@ import { markReadItem } from "./task-menu-items.js";
  */
 
 /** What moves an item's thread, which asks where to first. */
-const MOVE_TO_CHANNEL = "Move to channel…";
+const MOVE_TO_CHANNEL = "Move to channel";
 
 /** What an item's acts are offered with: the doors the surface hands down, and whether U reaches the item there. */
 interface InboxItemDoors {
