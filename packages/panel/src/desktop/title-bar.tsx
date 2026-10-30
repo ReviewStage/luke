@@ -22,11 +22,21 @@
  */
 
 import { FramePlace, Toolbar, type ToolbarProps } from "@luke/ui";
-import { createContext, type ReactNode, useContext } from "react";
+import { createContext, type ReactNode, useContext, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
+
+/** The class of the room a page's head stands in within the title bar, laid out as though it were not there (`desktop.css`). */
+const PLACE_ROOM = "window-title-place";
 
 /** The window's title bar a page names its place in, where one stands over it. */
 const TitleBarSlot = createContext<HTMLElement | null>(null);
+
+/** A room for one page's head, not yet in any bar. */
+function placeRoom(): HTMLDivElement {
+  const room = document.createElement("div");
+  room.className = PLACE_ROOM;
+  return room;
+}
 
 /** Hands what it holds the window's title bar to name its place in, or none, where its head is to stand in its own top row. */
 export function TitleBarRoom({
@@ -49,6 +59,13 @@ export function useTitleBar(): HTMLElement | null {
  * elsewhere nothing, where the page names itself in its own top row, or,
  * `inline`, the head where it is drawn, as a task's head stands under its
  * column's tabs.
+ *
+ * Note that the head stands in a room of its own, put in the bar as the
+ * page is drawn and taken out on the very commit that hides the page,
+ * because React defers what a hidden page draws (the Inbox kept between
+ * visits, or a page a Suspense boundary falls back over) but not its layout
+ * effects: a portal straight into the bar would stand there beside the next
+ * place's head until that deferred draw, and the two would jump together.
  */
 export function TitleBarPlace({
   inline = false,
@@ -58,7 +75,13 @@ export function TitleBarPlace({
   children: ReactNode;
 }): ReactNode {
   const bar = useTitleBar();
-  if (bar !== null) return createPortal(children, bar);
+  const [room] = useState(placeRoom);
+  useLayoutEffect(() => {
+    if (bar === null) return;
+    bar.append(room);
+    return () => room.remove();
+  }, [bar, room]);
+  if (bar !== null) return createPortal(children, room);
   return inline ? children : null;
 }
 

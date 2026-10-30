@@ -1408,6 +1408,12 @@ body,
   padding: 0 var(--sheet-gap) 0 0;
 }
 
+/* Each page's head stands in a room of its own (`title-bar.tsx`), which the
+   bar lays out as though the head stood in it directly. */
+.window-title-place {
+  display: contents;
+}
+
 .desktop-shell[data-sidebar-collapsed="true"] > .window-title-bar {
   padding-left: calc(var(--sidebar-toggle-clearance) - var(--column-inset));
 }
