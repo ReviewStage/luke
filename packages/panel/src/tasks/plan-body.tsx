@@ -945,7 +945,7 @@ export interface TitleRename {
 
 /**
  * The task's document: its name as the title over its text. `onShowHistory` opens the plan's version history from the
- * byline's "Last edited by", on the plan as it stands, and from a section's, on the
+ * byline's "Edited", on the plan as it stands, and from a section's, on the
  * revision of the save it names. With `onEdit`, the text is edited whole in
  * place, and with `onRename` the title too, its words drawn as the task's
  * name through `onDraftName` as they are typed, and with `rename` the title's ⋯
