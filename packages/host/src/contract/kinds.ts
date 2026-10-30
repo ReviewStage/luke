@@ -317,6 +317,10 @@ export const TASKS_ACT_KIND = {
   TASKS_MOVE: "tasks.move",
   /** One block of a task added or taken away on the service; answers the task's blocks as they then stand, or why they are unchanged. */
   TASKS_BLOCK: "tasks.block",
+  /** One task's parent set on the service, or cleared with null; answers the parent as it then stands, or why it is unchanged. */
+  TASKS_SET_PARENT: "tasks.setParent",
+  /** One relation of a task moved to another kind on the service, in one call; answers the task's relations as they then stand, or why they are unchanged. */
+  TASKS_CHANGE_RELATION: "tasks.changeRelation",
   /** The developer's edit of the open task's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
   TASKS_EDIT: "tasks.edit",
   /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */

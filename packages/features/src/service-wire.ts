@@ -169,6 +169,8 @@ export const HOSTED_API_ERROR = {
   CHILD_REPOSITORY_LOCKED: "child-repository-locked",
   /** A block asked for would close a cycle: the task it blocks already blocks it, itself or through others. Nothing was written. */
   TASK_BLOCK_CYCLE: "task-block-cycle",
+  /** A parent asked for is the task itself or one of its descendants, under which the task would descend from itself. Nothing was written. */
+  TASK_PARENT_CYCLE: "task-parent-cycle",
   /** A device agent's save named a generation that is no longer the agent's newest, since a newer save landed; nothing was granted or committed. */
   AGENT_STATE_STALE: "agent-state-stale",
 } as const;

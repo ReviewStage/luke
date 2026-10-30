@@ -328,6 +328,16 @@ function windowPort(
       })),
     tasksBlock: (params) =>
       ask(`block:${params.taskId}:${params.block.taskId}`, () => ({ blockedBy: [], blocks: [] })),
+    tasksSetParent: (params) =>
+      ask(`parent:${params.taskId}:${params.parentTaskId}`, () => ({
+        parentTaskId: params.parentTaskId,
+      })),
+    tasksChangeRelation: (params) =>
+      ask(`relation:${params.taskId}:${params.relation.taskId}`, () => ({
+        blockedBy: [],
+        blocks: [],
+        parentTaskId: null,
+      })),
     tasksEdit: (params) =>
       ask(
         `edit:${params.taskId}:${"document" in params.edit ? params.edit.document.value : ""}`,

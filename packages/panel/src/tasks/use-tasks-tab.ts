@@ -26,6 +26,7 @@ import {
   type TaskAgentPin,
   type TaskBlockRequest,
   type TaskMode,
+  type TaskRelationChangeRequest,
   type TaskRunsOnRequest,
   type TaskStanding,
   type TaskStatus,
@@ -33,8 +34,11 @@ import {
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
 import {
+  type ParentCallFailure,
+  type RelationCallFailure,
   TASK_BLOCK_FAILURE,
   TASK_CALL_FAILURE,
+  TASK_PARENT_FAILURE,
   TASKS_READ,
   type TasksEditAnswer,
   type TasksView,
@@ -733,6 +737,10 @@ export interface TasksControl {
   ) => Promise<Kept>;
   /** Adds one block of a task or takes it away, which the open document draws as the service answers it; a refusal says why in a toast. */
   onSetTaskBlock: (taskId: string, block: TaskBlockRequest) => void;
+  /** Sets a task's parent, or clears it with null, which the sidebar and the open document draw as the service answers it; a refusal says why in a toast. */
+  onSetTaskParent: (taskId: string, parentTaskId: string | null) => void;
+  /** Moves one relation of a task to another kind in one call, drawn as the service answers it; a refusal says why in a toast. */
+  onChangeTaskRelation: (taskId: string, relation: TaskRelationChangeRequest) => void;
   /** Opens a task's repository on GitHub in the browser. */
   onOpenOnGitHub: (taskId: string) => void;
   /** Opens Settings › Workspace at its GitHub, for the workspace the task belongs to. */
@@ -1080,6 +1088,28 @@ const BLOCK_REFUSED_NOTE = "That relation could not be changed. Try again.";
 
 /** What the toast says when a block would close a cycle, the other task already waiting on this one. */
 const BLOCK_CYCLE_NOTE = "That task already waits on this one, so it can't block it too.";
+
+/** What the toast says when a parent would put the task under itself, the other task already a sub-task of it. */
+const PARENT_CYCLE_NOTE =
+  "That task is already a sub-task of this one, so it can't be its parent too.";
+
+/** What the toast says when a parent works in another repository, which a sub-task always shares. */
+const PARENT_REPOSITORY_NOTE =
+  "A sub-task works in its parent's repository, so the two must share one.";
+
+/** What a relation's refusal says: its own reason where the service named one, and a plain refusal otherwise. */
+function relationRefusedNote(failure: RelationCallFailure | ParentCallFailure): string {
+  switch (failure) {
+    case TASK_BLOCK_FAILURE.CYCLE:
+      return BLOCK_CYCLE_NOTE;
+    case TASK_PARENT_FAILURE.CYCLE:
+      return PARENT_CYCLE_NOTE;
+    case TASK_PARENT_FAILURE.REPOSITORY_DIFFERS:
+      return PARENT_REPOSITORY_NOTE;
+    default:
+      return BLOCK_REFUSED_NOTE;
+  }
+}
 
 /** What the toast says when opening a task listed the workspace it is in. */
 function switchedNote(workspace: string): string {
@@ -2349,13 +2379,46 @@ export function useTasksTab(input: {
       .catch(taskUnreached)
       .then((answer) => {
         if (!("failure" in answer)) return;
-        const words =
-          answer.failure === TASK_BLOCK_FAILURE.CYCLE ? BLOCK_CYCLE_NOTE : BLOCK_REFUSED_NOTE;
         toast({
-          words,
+          words: relationRefusedNote(answer.failure),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
           failure: { surface: FAILURE_SURFACE.TASK_BLOCK, cause: answer, about: { taskId } },
+        });
+      });
+  };
+
+  // A fixture's tasks are read from nowhere, so no parent of one is kept. The
+  // sidebar and the open document take the task the service answers, so a
+  // refusal is all there is to say, in a toast.
+  const setTaskParent = (taskId: string, parentTaskId: string | null) => {
+    if (fixture !== undefined) return;
+    void act(ACT_KIND.TASKS_SET_PARENT, { taskId, parentTaskId })
+      .catch(taskUnreached)
+      .then((answer) => {
+        if (!("failure" in answer)) return;
+        toast({
+          words: relationRefusedNote(answer.failure),
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.TASK_PARENT, cause: answer, about: { taskId } },
+        });
+      });
+  };
+
+  // A relation's kind moves in one call, so a refusal leaves it as it stood,
+  // and the sidebar and the open document take the task the service answers.
+  const changeTaskRelation = (taskId: string, relation: TaskRelationChangeRequest) => {
+    if (fixture !== undefined) return;
+    void act(ACT_KIND.TASKS_CHANGE_RELATION, { taskId, relation })
+      .catch(taskUnreached)
+      .then((answer) => {
+        if (!("failure" in answer)) return;
+        toast({
+          words: relationRefusedNote(answer.failure),
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.TASK_RELATION, cause: answer, about: { taskId } },
         });
       });
   };
@@ -3516,6 +3579,8 @@ export function useTasksTab(input: {
     onSetRepository: setRepository,
     onSetTaskStanding: setTaskStanding,
     onSetTaskBlock: setTaskBlock,
+    onSetTaskParent: setTaskParent,
+    onChangeTaskRelation: changeTaskRelation,
     onMoveTask: moveTask,
     onOpenWorkspaceGitHub: (taskId) => {
       // The open document names its workspace where the list read did not land.

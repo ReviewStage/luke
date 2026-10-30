@@ -240,6 +240,8 @@ import {
   type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
   type TasksBrowserTabsParams,
+  type TasksChangeRelationAnswer,
+  type TasksChangeRelationParams,
   type TasksCommentActParams,
   type TasksCommentAnswer,
   type TasksCommentStartParams,
@@ -274,6 +276,8 @@ import {
   type TasksRevisionParams,
   type TasksRevisionsAnswer,
   type TasksRevisionsParams,
+  type TasksSetParentAnswer,
+  type TasksSetParentParams,
   type TasksSetRepositoryAnswer,
   type TasksSetRepositoryParams,
   type TasksSetStandingParams,
@@ -314,6 +318,7 @@ import {
   tasksBlockAnswerSchema,
   tasksBrowserTabOpenAnswerSchema,
   tasksBrowserTabsAnswerSchema,
+  tasksChangeRelationAnswerSchema,
   tasksCommentAnswerSchema,
   tasksCommentsAnswerSchema,
   tasksEditAnswerSchema,
@@ -330,6 +335,7 @@ import {
   tasksRepositoriesAnswerSchema,
   tasksRevisionAnswerSchema,
   tasksRevisionsAnswerSchema,
+  tasksSetParentAnswerSchema,
   tasksSetRepositoryAnswerSchema,
   tasksSkillsAnswerSchema,
   tasksStartAnswerSchema,
@@ -502,6 +508,10 @@ export interface HostOperator {
   tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
   /** One block of a task added or taken away; the task's blocks as they then stand, or why they are unchanged. */
   tasksBlock(params: TasksBlockParams): Effect.Effect<TasksBlockAnswer>;
+  /** One task's parent set, or cleared with null; the parent as it then stands, or why it is unchanged. */
+  tasksSetParent(params: TasksSetParentParams): Effect.Effect<TasksSetParentAnswer>;
+  /** One relation of a task moved to another kind in one call; the task's relations as they then stand, or why they are unchanged. */
+  tasksChangeRelation(params: TasksChangeRelationParams): Effect.Effect<TasksChangeRelationAnswer>;
   /** The developer's edit of a task's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
   tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
   /** A window of a file of a task's repository, coloured; or why it is not shown. */
@@ -1648,6 +1658,22 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_BLOCK, { taskId: params.taskId, block: params.block }),
         answerOf(tasksBlockAnswerSchema, TASK_UNANSWERED),
+      ),
+    tasksSetParent: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_SET_PARENT, {
+          taskId: params.taskId,
+          parentTaskId: params.parentTaskId,
+        }),
+        answerOf(tasksSetParentAnswerSchema, TASK_UNANSWERED),
+      ),
+    tasksChangeRelation: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_CHANGE_RELATION, {
+          taskId: params.taskId,
+          relation: params.relation,
+        }),
+        answerOf(tasksChangeRelationAnswerSchema, TASK_UNANSWERED),
       ),
     tasksEdit: (params) =>
       Effect.map(
