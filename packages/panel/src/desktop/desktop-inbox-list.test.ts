@@ -715,6 +715,11 @@ test("an Inbox with nothing in it stands its empty state in the pane beside the 
     [emptyStateIn(page, ".inbox-tasks"), emptyStateIn(page, ".inbox-view-items")],
     [null, "Nothing needs you"],
   );
+  assert.equal(
+    page.querySelector(".inbox-tasks .luke-note-line")?.textContent,
+    undefined,
+    "the list says it once",
+  );
   const offered = emptyStateAction(page, ".inbox-view-items");
   assert.equal(offered?.textContent, "New task", "the empty Inbox offers New task");
   act(() => offered?.click());
