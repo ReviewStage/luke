@@ -9,6 +9,7 @@ import { TURN_FAILURE } from "@luke/features/turn-run";
 import { TURN_STATUS } from "@luke/wire";
 import { Clock, Context, Effect, Layer, Option, Redacted } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
+import { PRODUCT_PLATFORM } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import { afterResponse } from "../http/after-response.js";
 import { type PosthogBatch, postBatchEffect } from "../providers/posthog.js";
@@ -228,6 +229,7 @@ function serverEventBatch(event: ServerEvent, projectApiKey: string, now: number
           // Without it an event with no address resolves to the data centre's.
           $geoip_disable: true,
           $lib: SERVER_EVENT_LIB,
+          platform: PRODUCT_PLATFORM.SERVER,
         },
       },
     ],

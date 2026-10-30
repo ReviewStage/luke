@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import type { LoopbackConsentOptions } from "@luke/credentials";
 import { loopbackConsent } from "@luke/credentials/node";
+import { PRODUCT_PLATFORM } from "@luke/features/analytics";
 import type { SecretCipher as SecretCipherSeam } from "@luke/host";
 import {
   ALL_HOST_PLATFORM_CONCERNS,
@@ -47,7 +48,11 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
   return Layer.mergeAll(
     Layer.succeed(StateRoot, config.stateRoot),
     Layer.succeed(RunMode, runMode),
-    Layer.succeed(AppIdentity, { appVersion: config.appVersion, packaged: config.packaged }),
+    Layer.succeed(AppIdentity, {
+      appVersion: config.appVersion,
+      packaged: config.packaged,
+      platform: PRODUCT_PLATFORM.DESKTOP,
+    }),
     Layer.succeed(Environment, ConfigProvider.fromEnvRecord(config.environment)),
     Layer.succeed(IdSource, { create: () => randomUUID() }),
     reporterLayer(config.report),

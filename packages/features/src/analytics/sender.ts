@@ -9,6 +9,7 @@ import {
   PRODUCT_EVENT,
   PRODUCT_EVENT_BATCH_LIMIT,
   PRODUCT_EVENT_BUILD_FIELD,
+  type ProductClientPlatform,
   type ProductEvent,
   type ProductEventBuild,
   type ProductEventName,
@@ -102,6 +103,8 @@ export interface ProductEventSenderOptions {
   appVersion: string;
   /** Whether this build runs from a packaged bundle rather than a development checkout. */
   packaged: boolean;
+  /** Which app this is, for the service to label every count with. */
+  platform: ProductClientPlatform;
   /** `runMode.sendsNetwork`. False makes every record a no-op. */
   sends: boolean;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
@@ -209,6 +212,7 @@ export class ProductEventSender {
     this.#build = {
       [PRODUCT_EVENT_BUILD_FIELD.APP_VERSION]: options.appVersion,
       [PRODUCT_EVENT_BUILD_FIELD.PACKAGED]: options.packaged,
+      [PRODUCT_EVENT_BUILD_FIELD.PLATFORM]: options.platform,
     };
     this.#sends = options.sends;
     this.#now = options.now ?? Date.now;
