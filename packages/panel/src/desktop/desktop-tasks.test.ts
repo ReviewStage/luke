@@ -428,7 +428,7 @@ async function narrowTaskInbox(
       act(() =>
         tab.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button")?.click(),
       ),
-    pager: () => tab.querySelector(".inbox-pager-count")?.textContent ?? null,
+    pager: () => tab.querySelector(".luke-pager-count")?.textContent ?? null,
     /** What the list says of a read that did not land, and whether it offers Retry. */
     failure: () => {
       const alert = tab.querySelector('.inbox-tasks [role="alert"]');

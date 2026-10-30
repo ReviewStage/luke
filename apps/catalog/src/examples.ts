@@ -79,6 +79,7 @@ import { OVER_PANES_EXAMPLE } from "./examples/over-panes";
 import { PAGE_HEADER_EXAMPLE } from "./examples/page-header";
 import { PAGE_THUMBS_EXAMPLE } from "./examples/page-thumbs";
 import { PAGE_TOOLBAR_EXAMPLE } from "./examples/page-toolbar";
+import { PAGERS_EXAMPLE } from "./examples/pagers";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
 import { PANE_BARS_EXAMPLE } from "./examples/pane-bars";
 import { PANE_PINS_EXAMPLE } from "./examples/pane-pins";
@@ -243,6 +244,7 @@ export const EXAMPLES: readonly Example[] = [
   NOTE_LINES_EXAMPLE,
   ONE_LINE_EXAMPLE,
   OVER_PANES_EXAMPLE,
+  PAGERS_EXAMPLE,
   PAGINATION_EXAMPLE,
   PAGE_HEADER_EXAMPLE,
   PAGE_THUMBS_EXAMPLE,

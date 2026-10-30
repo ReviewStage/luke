@@ -545,7 +545,7 @@ test("a chapter's diff is Files changed's list handed only its hunks, and its ra
     controlAnswering({ readChapters: () => Promise.resolve(answering(ready())) }),
   );
 
-  assert.equal(heading(tab), "1. Read the expiry");
+  assert.equal(heading(tab), "Read the expiry");
   assert.deepEqual(
     listed().map(([path]) => path),
     [STORE.path],
@@ -560,7 +560,7 @@ test("a chapter's diff is Files changed's list handed only its hunks, and its ra
 
   act(() => sweepRow.click());
   await settle();
-  assert.equal(heading(tab), "2. Sweep what expired");
+  assert.equal(heading(tab), "Sweep what expired");
   assert.deepEqual(
     listed()
       .map(([path]) => path)
@@ -575,16 +575,21 @@ test("← and → step through the chapters, held at either end, and a key chang
   );
 
   press(tab, { key: "ArrowLeft" });
-  assert.equal(heading(tab), "1. Read the expiry");
+  assert.equal(heading(tab), "Read the expiry");
   press(tab, { key: "ArrowRight" });
   press(tab, { key: "ArrowRight" });
   await settle();
-  assert.equal(heading(tab), "3. Other changes");
+  assert.equal(heading(tab), "Other changes");
   press(tab, { key: "ArrowRight" });
-  assert.equal(heading(tab), "3. Other changes");
-  act(() => button(tab, "Previous chapter").click());
-  act(() => button(tab, "Previous chapter").click());
+  assert.equal(heading(tab), "Other changes");
+  const previous =
+    tab.querySelector<HTMLButtonElement>(
+      '.chapter-reading button[aria-label="Previous chapter"]',
+    ) ?? assert.fail("the header's pager offers Previous chapter");
+  act(() => previous.click());
+  act(() => previous.click());
   await settle();
+  assert.equal(heading(tab), "Read the expiry");
 
   act(() => button(tab, "src/store.ts · L1–2").click());
   await settle();
@@ -615,7 +620,7 @@ test("a key change's press scrolls to its first lines in the chapter's file orde
   );
   press(tab, { key: "ArrowRight" });
   await settle();
-  assert.equal(heading(tab), "2. Sweep what expired");
+  assert.equal(heading(tab), "Sweep what expired");
 
   act(() => button(tab, "src/sweep.ts · L1").click());
   await settle();
@@ -694,7 +699,7 @@ test("chapters made for an older head stand under a line saying new commits came
     tab.querySelector(".luke-tab-notice")?.textContent ?? "",
     /New commits since these chapters/u,
   );
-  assert.equal(heading(tab), "1. Read the expiry", "the chapters stand as they were");
+  assert.equal(heading(tab), "Read the expiry", "the chapters stand as they were");
   assert.match(tab.textContent ?? "", /Is the expiry read in the member's time zone\?/u);
   assert.deepEqual(listed(), [], "no diff is drawn for the chapter");
   assert.match(tab.textContent ?? "", /Regenerate the chapters to see this chapter's changes\./u);
@@ -735,7 +740,7 @@ test("chapters a Generate made for a head pushed since the tab read the pull req
 
   act(() => button(tab, "Generate chapters").click());
   await settle();
-  assert.equal(heading(tab), "1. Read the expiry");
+  assert.equal(heading(tab), "Read the expiry");
   assert.doesNotMatch(
     tab.querySelector(".luke-tab-notice")?.textContent ?? "",
     /New commits since/u,
@@ -921,6 +926,6 @@ test("a chapter chosen in the rail floated over the chapter takes the rail down"
     ) ?? assert.fail("the sweep's row stands");
   act(() => sweep.click());
   await settle();
-  assert.equal(heading(tab), "2. Sweep what expired");
+  assert.equal(heading(tab), "Sweep what expired");
   assert.equal(floatedRail(tab)?.getAttribute("data-state"), "leaving");
 });
