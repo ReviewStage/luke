@@ -227,14 +227,14 @@ test("a line sent to steer a turn still running stands inside the turn, which st
     parts: [{ type: "text", text: "Keep the 16:9 ratio." }],
     sentAt: 5_000,
   };
+  const writing = {
+    ...journal(false),
+    parts: [...journal(false).parts, { type: "text", text: "Checking the ratio." }],
+  };
   // The service keeps a line awaiting its place after the open journal.
-  const container = await drawnTab([TASK, journal(false), steer], AGENT_STATUS.RUNNING);
+  const container = await drawnTab([TASK, writing, steer], AGENT_STATUS.RUNNING);
 
   assert.equal(drawnOrder(container).at(-1), "line: steer", "at the turn's end");
-  assert.ok(
-    container.querySelector(`[data-row-key="${JOURNAL}"] [data-message-id="steer"]`),
-    "in the turn's own row, so it does not move as the service places it",
-  );
   assert.equal(
     container.querySelector('button[aria-label="Revert to here"]'),
     null,

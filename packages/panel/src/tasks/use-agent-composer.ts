@@ -461,12 +461,14 @@ export function useAgentComposer(input: {
   const resend = (id: string) => {
     const line = held.sent.find((each) => each.id === id);
     if (line?.state !== SENT_LINE_STATE.FAILED || held.closed !== undefined) return;
+    // Note that a Retry is a send of its own, so the line is stamped again and the working line counts from it.
+    const again = { ...line, sentAt: Date.now(), state: SENT_LINE_STATE.PENDING };
     setHeld((was) => ({
       ...was,
       failed: was.failed?.lineId === id ? undefined : was.failed,
-      sent: marked(was.sent, id, SENT_LINE_STATE.PENDING),
+      sent: was.sent.map((each) => (each.id === id ? again : each)),
     }));
-    deliver({ ...line, state: SENT_LINE_STATE.PENDING });
+    deliver(again);
   };
 
   // Note that a closed box draws none of its words, because they stand in the transcript as the

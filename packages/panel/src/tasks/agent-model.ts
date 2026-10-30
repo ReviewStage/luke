@@ -2196,10 +2196,12 @@ function isQuietReply(message: AgentTranscriptMessage): boolean {
  * in is placed once the service says where it arrived. Note that such a
  * line steers the turn, and drawn below it, it would stand the turn as
  * done, offering a finished turn's actions, then move into it as the
- * service takes it.
+ * service takes it. A line that did not go (`unsent`) reached no turn, so
+ * it stands where the order puts it.
  */
 function steeringPlaced(
   messages: readonly AgentTranscriptMessage[],
+  unsent: (id: string) => boolean,
 ): readonly AgentTranscriptMessage[] {
   const at = messages.findLastIndex((message) => message.role === MESSAGE_ROLE.ASSISTANT);
   const journal = messages[at];
@@ -2207,7 +2209,10 @@ function steeringPlaced(
   const begun = agentParts(journal).filter((part) => part.kind === AGENT_PART.STEP_START).length;
   const arrivedIn = { journalId: journal.id, afterStep: begun };
   return messages.map((message, index) =>
-    index > at && message.role === MESSAGE_ROLE.USER && message.arrivedIn === undefined
+    index > at &&
+    message.role === MESSAGE_ROLE.USER &&
+    message.arrivedIn === undefined &&
+    !unsent(message.id)
       ? { ...message, arrivedIn }
       : message,
   );
@@ -2227,9 +2232,11 @@ function steeringPlaced(
 export function placedMessages(
   messages: readonly AgentTranscriptMessage[],
   quiet = false,
+  unsent: (id: string) => boolean = () => false,
 ): readonly PlacedMessage[] {
   const shown = steeringPlaced(
     quiet ? messages.filter((message) => !isQuietReply(message)) : messages,
+    unsent,
   );
   const journals = new Set(
     shown.filter((message) => message.role === MESSAGE_ROLE.ASSISTANT).map((each) => each.id),
@@ -2557,6 +2564,8 @@ export function openingLineOf(words: {
   readonly key: string;
   readonly prompt: string;
   readonly attachments: readonly AgentAttachment[];
+  /** When Start was pressed; now where unsaid. */
+  readonly sentAt?: number | undefined;
 }): SentLine {
   return {
     id: sentLineId(words.key),
@@ -2564,7 +2573,7 @@ export function openingLineOf(words: {
     text: words.prompt.trim(),
     attachments: words.attachments,
     steers: false,
-    sentAt: Date.now(),
+    sentAt: words.sentAt ?? Date.now(),
     state: SENT_LINE_STATE.PENDING,
   };
 }

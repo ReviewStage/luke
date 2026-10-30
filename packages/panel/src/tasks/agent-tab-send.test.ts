@@ -44,6 +44,9 @@ const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const KEY = "d16fbf9e-8c7d-42d0-9abb-be91cf7d8076";
 
+/** When the tests press Send, by a clock they hold still. */
+const PRESSED_AT = Date.parse("2026-10-30T15:42:00Z");
+
 const AGENT_SUMMARY: AgentSummary = {
   id: AGENT,
   planId: TASK,
@@ -192,6 +195,7 @@ function rowOf(line: HTMLElement | undefined): Element {
 
 test("a message sent stands in the transcript at once with its time, the box empty and taking words, and its row lands in its place, drawn once, before the send answers", async () => {
   vi.spyOn(crypto, "randomUUID").mockReturnValue(KEY);
+  vi.spyOn(Date, "now").mockReturnValue(PRESSED_AT);
   const row: AgentTranscriptMessage = {
     id: "row-1",
     role: MESSAGE_ROLE.USER,
@@ -208,7 +212,11 @@ test("a message sent stands in the transcript at once with its time, the box emp
   assert.equal(document.activeElement, editor, "and keeps the caret");
   const [pending] = tab.lines("Now the dark variant.");
   const drawnAt = rowOf(pending);
-  assert.ok(drawnAt.querySelector("time"), "its time stands under it before its row lands");
+  assert.equal(
+    drawnAt.querySelector("time")?.getAttribute("datetime"),
+    new Date(PRESSED_AT).toISOString(),
+    "the press's time stands under it before its row lands",
+  );
 
   await tab.landRow();
   const landed = tab.lines("Now the dark variant.");
@@ -242,6 +250,7 @@ test("a line whose row landed before its send answered offers Edit only once the
 test("a message sent to an agent at rest draws the working line at once, before the service takes it, counting from the press rather than the turn before it", async () => {
   // The summary still holds the ended turn's start, as the task list does until the line wakes it.
   const tab = await drawnTab([], { ...AGENT_SUMMARY, runStartedAt: 2_000 });
+  vi.spyOn(Date, "now").mockReturnValue(PRESSED_AT);
   assert.equal(tab.container.querySelector("[data-working]"), null, "an agent at rest");
 
   await tab.send("Now the dark variant.");

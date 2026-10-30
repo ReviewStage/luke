@@ -142,6 +142,37 @@ function developer(id: string, text: string): AgentTranscriptMessage {
   return { id, role: "user", parts: [{ type: "text", text }] };
 }
 
+test("a line after a turn still open is placed in that turn, unless it did not go, when it stands where the order puts it", () => {
+  const ask = developer("m-1", "Add invitations.");
+  const open: AgentTranscriptMessage = {
+    id: "m-2",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: "step-start" }],
+    startedAt: 1_000,
+  };
+  const steer = developer("m-3", "Use the mailer.");
+  const placed = (unsent: (id: string) => boolean) =>
+    placedMessages([ask, open, steer], false, unsent).map((each) => [
+      each.message.id,
+      each.arrived.map((line) => line.id),
+    ]);
+  assert.deepEqual(
+    placed(() => false),
+    [
+      ["m-1", []],
+      ["m-2", ["m-3"]],
+    ],
+  );
+  assert.deepEqual(
+    placed((id) => id === "m-3"),
+    [
+      ["m-1", []],
+      ["m-2", []],
+      ["m-3", []],
+    ],
+  );
+});
+
 test("an operator's heartbeat that found nothing draws no reply, a line it took in stands in order, and a reply that says more, or any other agent's, is drawn", () => {
   const heartbeat = developer("m-1", "Your heartbeat: look over the developer's open work.");
   const quiet: AgentTranscriptMessage = {
