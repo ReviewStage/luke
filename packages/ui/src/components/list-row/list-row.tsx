@@ -83,7 +83,10 @@ export type { ListSelection } from "../selection/list-selection.js";
  * from: the ⋯, what held the keyboard as the menu key was pressed, or, for
  * a right-click, the row's press, or its ⋯ where it opens nothing. A row
  * that offers no acts now, its groups empty, or is unavailable, draws no ⋯
- * and opens nothing.
+ * and opens nothing. A row that opens something may leave its ⋯ out
+ * (`more`), as a phone's mail list draws none on its rows, and offer its
+ * menu by the long press, the right-click, and the menu key alone; its end
+ * then runs to the row's edge, as a row with no menu's does.
  * `menu` is the one way a row wires its menu: a row never opens one by a
  * right-click it wires itself.
  *
@@ -551,6 +554,7 @@ export function ListRow({
   ref,
   onKeyDown,
   menu,
+  more = true,
   swipe,
   depth = 0,
   fold,
@@ -612,6 +616,8 @@ export function ListRow({
   onKeyDown?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
   /** The menu of the row's thing's acts, opened alike by its ⋯, a right-click, a long press, and the menu key; it takes `menuOpen`'s place. */
   menu?: ListRowMenu | undefined;
+  /** Whether the row draws its menu's ⋯; one that opens something may leave it out, its menu still a long press, a right-click, and the menu key away. */
+  more?: boolean | undefined;
   /** The row's one swipe right; none where it offers none. */
   swipe?: ListRowSwipe | undefined;
   /** How deep it stands nested under other rows: 0, at the top, unless said. */
@@ -656,6 +662,8 @@ export function ListRow({
     opener: onPress ? pressElement : undefined,
   });
   const offered = rowMenu.offered;
+  // Note that a row that opens nothing keeps its ⋯, because it is the one control its menu hands focus back to.
+  const moreDrawn = offered && (more || onPress === undefined);
   const [titleMeasured, titleClipped] = useClipped(plainWords(title));
   useEffect(() => {
     onTitleClipped?.(titleClipped);
@@ -683,7 +691,7 @@ export function ListRow({
   const heading = (
     <span
       ref={titleMeasured}
-      id={offered || said(actions) ? titleId : undefined}
+      id={moreDrawn || said(actions) ? titleId : undefined}
       className="luke-list-row-title"
       data-overflow={String(titleClipped)}
     >
@@ -826,7 +834,7 @@ export function ListRow({
           {actions}
         </div>
       ) : null}
-      {offered ? (
+      {moreDrawn ? (
         <div className="luke-list-row-more row-1 flex items-center">
           {rowMenu.button({
             size:
@@ -839,7 +847,7 @@ export function ListRow({
   );
   const { view, item } = swiped;
   // Note that a row whose only act is its ⋯ offers it as a hover row offers its acts, so no row keeps an empty ⋯ track at rest.
-  const actsOnHover = actionsAt === LIST_ROW_ACTIONS.HOVER || (offered && !said(actions));
+  const actsOnHover = actionsAt === LIST_ROW_ACTIONS.HOVER || (moreDrawn && !said(actions));
   const hold = (element: HTMLLIElement | null) => {
     item.ref.current = element;
     if (!onPress) ref?.(element);
