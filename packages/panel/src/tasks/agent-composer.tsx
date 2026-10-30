@@ -750,17 +750,22 @@ export function AgentComposer({
     if (queuesNow) return sentBy(queueing.onQueue);
     steer();
   };
+  /** The other way than a send that queues where `pressQueues` says, which ⌘↩ and a touch held on Send take: an edit steered, or the message steered or queued. */
+  const sendOtherWay = (pressQueues: boolean) => {
+    if (editingQueued) return sentBy(queueing.onSteer);
+    if (pressQueues) return steer();
+    if (queueing !== undefined) sentBy(queueing.onQueue);
+  };
   /** A key the queue takes: ⌘↩ steers an edit, or sends the other way than Enter, held where Send is. */
   const queueKey = (event: KeyboardEvent): boolean => {
     if (queueing === undefined) return false;
     if (!modEnterSends(event)) return false;
     if (editingQueued) {
-      if (!sendHeld) sentBy(queueing.onSteer);
+      if (!sendHeld) sendOtherWay(false);
       return true;
     }
     if (!queues || !sendable) return false;
-    if (queueing.enterQueues) steer();
-    else sentBy(queueing.onQueue);
+    sendOtherWay(queueing.enterQueues);
     return true;
   };
   // Send says what a send does while it is other than steering, as its glyph alone in the round send's place:
@@ -944,6 +949,8 @@ export function AgentComposer({
             label: sendWay?.label ?? sendLabel,
             ...(sendWay === undefined ? undefined : { icon: sendWay.icon }),
             chord: wording?.chord,
+            // Note that a hold takes the other way than Send as it reads, which a held ⌘ may already have turned.
+            onHold: queues || editingQueued ? () => sendOtherWay(queuesNow === true) : undefined,
             empty,
             held: sendHeld,
             busy: composer.sending,

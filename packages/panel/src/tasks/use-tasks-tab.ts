@@ -2593,6 +2593,8 @@ export function useTasksTab(input: {
     const historyBefore = historyFor;
     const stays = !opensNewTask;
     const pressedAt = navigations.current;
+    // Note that the agent's first line is stamped at the press, which its line after the answer keeps.
+    const sentAt = Date.now();
     const line =
       handed === undefined || stays
         ? undefined
@@ -2600,6 +2602,7 @@ export function useTasksTab(input: {
             key: handed.idempotencyKey,
             prompt: handed.prompt,
             attachments: handed.attachments,
+            sentAt,
           });
     // Note that a start's page is let go only while it is still this start's, because another start may have replaced it.
     const letGoOfPage = () => setStartingTask((now) => (now?.line === line ? undefined : now));
@@ -2657,7 +2660,7 @@ export function useTasksTab(input: {
         // what stands now is the developer's since, a New task opened again among it, and stays.
         if (stays) {
           if (handed === undefined) setNewTaskAsk(undefined);
-          else openAgent(answer.planId, handed, answer.agentStart, from.device);
+          else openAgent(answer.planId, handed, answer.agentStart, from.device, sentAt);
           const { agentStart } = answer;
           sayStarted(
             answer.planId,
@@ -2673,7 +2676,7 @@ export function useTasksTab(input: {
           return undefined;
         }
         letGoOfPage();
-        openAgent(answer.planId, handed, answer.agentStart, from.device);
+        openAgent(answer.planId, handed, answer.agentStart, from.device, sentAt);
         return undefined;
       },
       (refused: Error) => refusedWith({ reason: FAILURE_REASON.OTHER, text: refused.message }),
@@ -2707,6 +2710,7 @@ export function useTasksTab(input: {
     handed: NewTaskAgent,
     started: AgentAgentAnswer | undefined,
     device: MacOffer | undefined,
+    sentAt: number,
   ) => {
     sidePanel.onCloseOn(planId, SIDE_PANEL_TAB.PLAN);
     if (started !== undefined && !("failure" in started)) {
@@ -2714,6 +2718,7 @@ export function useTasksTab(input: {
         key: handed.idempotencyKey,
         prompt: handed.prompt,
         attachments: handed.attachments,
+        sentAt,
       });
       mainTabs.onShow(planId, { agent: started.agent.id });
       return;

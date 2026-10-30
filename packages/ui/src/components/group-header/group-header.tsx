@@ -154,8 +154,8 @@ const PART = {
   CHEVRON: `luke-group-header-chevron grid place-items-center ${FADE}`,
   MARK: "luke-group-header-mark inline-flex flex-none text-muted-foreground [&>svg]:size-group-header-mark",
   COUNT: `luke-group-header-count flex-none text-caption-inline tabular-nums ${FADE}`,
-  /* Each action waits for the pointer or the keyboard on its own (`group-header.css`). */
-  ACTIONS: "luke-group-header-actions flex flex-none items-center",
+  /* Each action waits for the pointer or the keyboard on its own (`group-header.css`), a row's acts' gap apart, so a head's acts stand over the rows' acts beneath it. */
+  ACTIONS: "luke-group-header-actions flex flex-none items-center gap-luke-4",
 } as const;
 
 /** A head that folds is pressed as a row is, so it wears a row's hover; and it gives the one press cursor, the Mac's arrow on the desktop as a Mac's list does, the hand on the web. */

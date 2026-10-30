@@ -1,6 +1,6 @@
 {
   "name": "@luke/host-daemon",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Luke's host daemon: a headless Linux box's own follower of the local agents its member starts on it, and the install script that sets it up",

@@ -12,6 +12,7 @@ import {
 } from "../button/button.js";
 import { ErrorLine } from "../error-line/error-line.js";
 import { ErrorState, type ErrorStateRemedy } from "../error-state/error-state.js";
+import { HoldPress } from "../hold-press/hold-press.js";
 import { LengthCounter } from "../length-counter/length-counter.js";
 import { SKELETON_SHAPE, Skeleton } from "../skeleton/skeleton.js";
 import { Tooltip } from "../tooltip/hint.js";
@@ -45,7 +46,9 @@ import { Tooltip } from "../tooltip/hint.js";
  * reads in words (`inWords`) rather than as the round glyph, and is the
  * same press otherwise; one that sends another way than the round send
  * would, an agent's Queue or Steer, wears its own glyph (`icon`) in the
- * same round place. Where the owner hands a `stop`, as an agent's box
+ * same round place. One that may also send that other way hands `onHold`,
+ * which a touch held on it does (`HoldPress`), as holding ⌘ turns it on a
+ * keyboard. Where the owner hands a `stop`, as an agent's box
  * does while a turn runs and the box holds nothing, Stop stands in the
  * send's place, the same round button wearing Stop's glyph, busy while the
  * stop it asked for is out.
@@ -85,6 +88,8 @@ export type ComposerSend = {
   inWords?: boolean | undefined;
   /** The glyph it wears in the send's round place, or before its words where it reads in words, where it sends another way than the round send would ("Queue", "Steer"). */
   icon?: ReactNode;
+  /** What a touch held on it does, where it may send another way than its press does: an agent's Queue where its press steers. */
+  onHold?: (() => void) | undefined;
   /** The key that sends where it is no bare Enter, drawn on its hint: ⌘↩ for a box whose Enter breaks the line. */
   chord?: ShortcutChord | undefined;
   /** Where the box can say why it holds nothing to send: what its press while empty tells, and what it says, once said, under the bar. */
@@ -163,8 +168,25 @@ function FootEnd({ children }: { children: ReactNode }): React.JSX.Element {
   );
 }
 
-/** The send: the round submit in the panel's ink, busy while its send is out, and pressable while empty where it says why (`refuses`), described by that line (`refusalId`). */
+/** The send: the round submit in the panel's ink, busy while its send is out, pressable while empty where it says why (`refuses`), described by that line (`refusalId`), and held by a touch where it sends another way too (`onHold`). */
 function SendButton({
+  send,
+  refusalId,
+}: {
+  send: ComposerSend;
+  refusalId: string;
+}): React.JSX.Element {
+  const { onHold, empty, held = false } = send;
+  if (onHold === undefined) return <SendPress send={send} refusalId={refusalId} />;
+  return (
+    <HoldPress onHold={onHold} disabled={empty || held || send.busy === true}>
+      <SendPress send={send} refusalId={refusalId} />
+    </HoldPress>
+  );
+}
+
+/** The send's own press, in words or round. */
+function SendPress({
   send,
   refusalId,
 }: {

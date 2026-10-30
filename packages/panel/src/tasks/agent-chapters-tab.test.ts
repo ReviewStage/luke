@@ -558,6 +558,13 @@ test("a chapter's diff is Files changed's list handed only its hunks, and its ra
   );
 
   assert.equal(heading(tab), "Read the expiry");
+  const bars = tab.querySelectorAll(".chapters-view .luke-pane-bar");
+  assert.equal(bars.length, 1, "the chapter's bar is the one bar over its list");
+  assert.notEqual(
+    bars[0]?.querySelector(".chapter-list-tools .file-tree-toggle"),
+    null,
+    "the chapter's bar holds its list's tree toggle",
+  );
   assert.deepEqual(
     listed().map(([path]) => path),
     [STORE.path],
@@ -653,6 +660,14 @@ test("a chapter is viewed once every file it holds is; Mark chapter viewed and â
   assert.doesNotMatch(railRows(tab)[1] ?? "", /viewed/u, "the sweep's new file is not");
 
   press(tab, { key: "ArrowRight" });
+  const viewedBox = () =>
+    tab.querySelector(".chapter-viewed") ?? assert.fail("the chapter's Viewed box stands");
+  assert.equal(viewedBox().textContent, "Viewed 1/2", "the box counts the sweep's files viewed");
+  assert.equal(
+    viewedBox().querySelector('[role="checkbox"]')?.getAttribute("aria-checked"),
+    "mixed",
+    "the box stands mixed while only some of them are",
+  );
   press(tab, { key: "V", shiftKey: true });
   await settle();
   assert.deepEqual(marked, [{ action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: SWEEP.path }]);
@@ -682,17 +697,17 @@ function madeBy(model: string, headSha = HEAD): AgentsControl {
   });
 }
 
-test("the chapters say which model made them, inside the tab's ph-no-capture root", async () => {
+test("the rail's foot says which model made the chapters, inside the tab's ph-no-capture root", async () => {
   const tab = await draw(madeBy("claude-haiku-5-5"));
-  const line = tab.querySelector(".chapters-made-by") ?? assert.fail("the model is named");
-  assert.equal(line.textContent, "Made by Haiku 5.5");
+  const line = tab.querySelector(".chapter-rail-credit") ?? assert.fail("the model is named");
+  assert.equal(line.textContent, "Chapters by Haiku 5.5");
   assert.notEqual(line.closest(".ph-no-capture"), null);
 });
 
 test("stale chapters still say which model made them, and a model Settings does not offer is named by its id", async () => {
   const tab = await draw(madeBy("scripted", OLDER));
   assert.match(tab.querySelector(".luke-tab-notice")?.textContent ?? "", /New commits since/u);
-  assert.equal(tab.querySelector(".chapters-made-by")?.textContent, "Made by scripted");
+  assert.equal(tab.querySelector(".chapter-rail-credit")?.textContent, "Chapters by scripted");
 });
 
 test("chapters made for an older head stand under a line saying new commits came since, with Regenerate, drawing no diff, counts, Viewed, or press to their lines, since their hunks name an older head", async () => {

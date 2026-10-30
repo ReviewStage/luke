@@ -32,7 +32,7 @@ const PAGE_MENU: PaneBarMenu = {
   groups: [
     [
       { label: "Copy link", icon: <CopyIcon />, onSelect: stay },
-      { label: "Save as…", icon: <DownloadIcon />, onSelect: stay },
+      { label: "Save as", icon: <DownloadIcon />, onSelect: stay },
     ],
   ],
 };

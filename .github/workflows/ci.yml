@@ -107,7 +107,11 @@ jobs:
   # (`apps/web/tests/storage-schema.test.ts`) and its columns
   # (`drizzle-schema.test.ts`), read back through the real `pg` driver from
   # what `db:migrate` built (`@luke/database/testing` clones it as a template). The store tests
-  # themselves run on PGlite, the same Postgres 18, in the test jobs above.
+  # themselves run on PGlite, the same Postgres 18, in the test jobs above, but
+  # for the database package's `*.postgres.test.ts`, two connections contending
+  # for one lock, which PGlite's one connection cannot hold apart: its
+  # `vitest.config.ts` leaves them out wherever no URL names a Postgres, so
+  # they run here alone.
   # The image comes from whichever of three registries answers first, because each one
   # rate-limits anonymous pulls.
   postgres:
@@ -160,6 +164,8 @@ jobs:
       - run: pnpm --filter @luke/web db:migrate
       - name: The migrations end at the declared schema
         run: pnpm exec vitest run apps/web/tests/storage-schema.test.ts apps/web/tests/drizzle-schema.test.ts
+      - name: The store's lock and claim tests on a real Postgres
+        run: pnpm exec vitest run --project database .postgres.test.ts
 
   # The coding agent's OCI image, built for each platform from the sandbox's
   # own preparation, on a runner of that architecture, and published nowhere:

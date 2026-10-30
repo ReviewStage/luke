@@ -1476,7 +1476,7 @@ test("with Channels on, a row's ⋯ moves its thread to the channel picked", asy
       new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
     );
   });
-  act(() => menuItem("Move to channel…").click());
+  act(() => menuItem("Move to channel").click());
   await settle();
   act(() => buttonSaying("Move to #app").click());
   await settle();

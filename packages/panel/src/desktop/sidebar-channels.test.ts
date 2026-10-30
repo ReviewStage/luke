@@ -231,7 +231,7 @@ test("a channel's ⋯ offers Copy link and Mark all as read, which stamps the re
   act(() => button("Channel actions").click());
   await settle();
   const words = menuWords().map((each) => each.replace(/[⇧⌥⌘⌃]+.$/u, ""));
-  assert.deepEqual(words, ["Copy link", "Mark all as read", "—", "Edit…", "—", "Archive"]);
+  assert.deepEqual(words, ["Copy link", "Mark all as read", "—", "Edit", "—", "Archive"]);
   act(() =>
     (
       [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
@@ -301,7 +301,7 @@ test("Edit on #general fills in its purpose, keeps its name locked, and sends on
   act(() =>
     (
       [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-        (item) => item.textContent === "Edit…",
+        (item) => item.textContent === "Edit",
       ) ?? assert.fail("the menu offers Edit")
     ).click(),
   );
