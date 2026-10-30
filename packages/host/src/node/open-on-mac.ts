@@ -384,12 +384,7 @@ export function openOnMacScript(input: {
  * its commits and trees only, then pointed at GitHub, which every blob it
  * lacks is had from as it is needed, through the VM's own credential inside
  * it. Nothing of the shared clone, nor of another agent's work in it, is
- * copied in beyond that head's history. A launch that restores the agent's
- * saved state names the commit its work was saved on (`base`), which the
- * repository is made at in the branch's place, fetched from GitHub by its id
- * into a ref of its own, as the state's own verify makes the repository it
- * restores into (`@luke/agent-runner`'s `scratchRepository`), so the next
- * save reckons its base from the same refs. A repository already made is left
+ * copied in beyond that head's history. A repository already made is left
  * as it stands, since it holds the agent's work, and one left half made is
  * taken away, so the next launch makes it again. It ends with its failure
  * where a step fails, having said which.
@@ -401,8 +396,6 @@ export function agentWorktreeScript(input: {
   readonly worktree: string;
   /** The branch the agent starts from; none for GitHub's default branch. */
   readonly branch: string | null;
-  /** The commit the repository is made at in the branch's place, where a launch restores the agent's saved state onto it. */
-  readonly base?: string | undefined;
   /** Where the repository is cloned from, by protocol; GitHub's own unless a test names its own. */
   readonly remotes?: { readonly https: string; readonly ssh: string } | undefined;
 }): string {
@@ -417,17 +410,13 @@ export function agentWorktreeScript(input: {
     `clone=${shellQuoted(input.clone)}`,
     `worktree=${shellQuoted(input.worktree)}`,
     `branch=${shellQuoted(input.branch ?? "")}`,
-    `base=${shellQuoted(input.base ?? "")}`,
     `https=${shellQuoted(remotes.https)}`,
     `ssh=${shellQuoted(remotes.ssh)}`,
     ...SHARED_CLONE,
     "brought_in() {",
     "  cloned || return 1",
     '  cd "$clone" || return 1',
-    '  if [ -n "$base" ]; then',
-    '    git fetch origin "+$base:refs/luke/base" || return 1',
-    '    fetched="refs/luke/base"',
-    '  elif [ -n "$branch" ]; then',
+    '  if [ -n "$branch" ]; then',
     '    git fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch" || return 1',
     '    fetched="refs/remotes/origin/$branch"',
     "  else",
@@ -447,7 +436,7 @@ export function agentWorktreeScript(input: {
     ...OWN_REPOSITORY,
     '[ -e "$worktree/.git" ] && exit 0',
     "if ! ( opened ); then",
-    '  echo "▸ Could not make the agent\'s worktree of ${base:-${branch:-the default branch}}." >&2',
+    '  echo "▸ Could not make the agent\'s worktree of ${branch:-the default branch}." >&2',
     "  exit 1",
     "fi",
     "",

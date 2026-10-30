@@ -1,5 +1,5 @@
 /**
- * local-agent-lines.test.ts -- the follower as a device sees its lines: a discard line takes the agent's folder off the disk, unless the platform's check finds work in it, whatever a save record from before says, a line of a kind it does not know is settled without holding back the lines after it, and a launch whose folder was cleared since its last turn starts afresh, told so, while one whose folder stands goes on from its session.
+ * local-agent-lines.test.ts -- the follower as a device sees its lines: a discard line takes the agent's folder off the disk, unless the platform's check finds work in it, a line of a kind it does not know is settled without holding back the lines after it, and a launch whose folder was cleared since its last turn starts afresh, told so, while one whose folder stands goes on from its session.
  *
  * The follower runs over the real client, its held read and claims answered
  * by a scripted service, so an answer is decoded as the wire decodes it; on
@@ -72,9 +72,6 @@ const json = (body: unknown) =>
 /** A fetch that never answers, as a held read the service holds past the test. */
 const held = () => new Promise<Response>(() => {});
 
-/** A record of the agent's state saved and committed, as a host that saved its agents' state left it before it stopped. */
-const SAVED_BEFORE = { userId: "user-fixture", generation: 3, endedAt: Date.UTC(2026, 9, 28, 12) };
-
 /** The platform the follower runs on: This Mac, whose agents run straight on it, checking a folder with the script given before a discard where one is. */
 const directMac = (unsavedWork: Script | undefined) => ({
   launch: ({
@@ -106,20 +103,16 @@ const directMac = (unsavedWork: Script | undefined) => ({
   deviceCapabilities: [DEVICE_CAPABILITY.DISCARD],
   worktreeScript: () => WORKTREE_SCRIPT,
   unsavedWorkScript: unsavedWork === undefined ? undefined : () => UNSAVED_WORK_SCRIPT,
-  stateSealed: () => Effect.die("this device saves no state"),
-  stateOpened: () => Effect.die("this device restores no state"),
-  diskFree: () => Effect.succeed(Option.none()),
 });
 
 /**
  * The follower on a device whose agent's folder holds a file, the agent in
- * the device's record of the agents it made as its launch left it, and, where
- * `savedBefore` says, a record of its state saved before the device stopped
- * saving, its held read answered once with the lines given and every line
- * claimable, with the folder, the record's file for the agent, the line ids
- * it settled, and what waits for the service to take the discard's settle.
+ * the device's record of the agents it made as its launch left it, its held
+ * read answered once with the lines given and every line claimable, with
+ * the folder, the record's file for the agent, the line ids it settled, and
+ * what waits for the service to take the discard's settle.
  */
-const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script, savedBefore = false) =>
+const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
   Effect.gen(function* () {
     const root = yield* temporaryDirectoryScoped("luke-agent-lines-");
     const home = path.join(root, "home");
@@ -132,10 +125,9 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script, save
     yield* fileSystem.writeFileString(owned, "");
     // Note that the agent is kept as one that ran on the box, so This Mac checks its folder as it checks every other.
     const modes = { [AGENT_ID]: DEVICE_ISOLATION.DIRECT };
-    const saves = savedBefore ? { [AGENT_ID]: SAVED_BEFORE } : {};
     yield* fileSystem.writeFileString(
       path.join(root, "state", "local-agents.json"),
-      JSON.stringify({ devices: {}, launches: [], modes, saves }),
+      JSON.stringify({ devices: {}, launches: [], modes }),
     );
 
     const settled: string[] = [];
@@ -222,28 +214,17 @@ it.effect(
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
 
-for (const [name, check, kept, savedBefore] of [
-  ["says it holds work", { stdout: "it has changes not committed\n", exitCode: 0 }, true, false],
-  ["cannot say", { exitCode: 1 }, true, false],
-  ["finds nothing", { exitCode: 0 }, false, false],
-  // Note that a save from before the device stopped saving holds no copy Luke keeps for the agent any more, so it is checked as the rest are.
-  [
-    "says it holds work, though its state was saved before",
-    { stdout: "it has changes not committed\n", exitCode: 0 },
-    true,
-    true,
-  ],
+for (const [name, check, kept] of [
+  ["says it holds work", { stdout: "it has changes not committed\n", exitCode: 0 }, true],
+  ["cannot say", { exitCode: 1 }, true],
+  ["finds nothing", { exitCode: 0 }, false],
 ] as const) {
   it.effect(
     `a discard where the platform's check ${name} ${kept ? "keeps" : "removes"} the folder, and the device's record of it, and is settled`,
     () =>
       Effect.scoped(
         Effect.gen(function* () {
-          const { folder, owned, settled, discardSettled } = yield* following(
-            [DISCARD],
-            check,
-            savedBefore,
-          );
+          const { folder, owned, settled, discardSettled } = yield* following([DISCARD], check);
           yield* discardSettled;
 
           const fileSystem = yield* FileSystem.FileSystem;

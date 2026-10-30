@@ -288,16 +288,6 @@ export class LocalAgentSandboxUnavailable extends Data.TaggedError("LocalAgentSa
   readonly detail: string;
 }> {}
 
-/** Why an agent's packed state could not be sealed, in words naming no path, key, or byte of it. */
-export class LocalAgentStateUnsealed extends Data.TaggedError("LocalAgentStateUnsealed")<{
-  readonly detail: string;
-}> {}
-
-/** Why a bundle of an agent's saved state could not be opened into its pack, in words naming no path, key, or byte of it. */
-export class LocalAgentStateUnopened extends Data.TaggedError("LocalAgentStateUnopened")<{
-  readonly detail: string;
-}> {}
-
 /**
  * What a local agent's runner is started with on this device
  * (`compose-local-agents.ts`): how every runner is started (`launch`),
@@ -337,8 +327,6 @@ export interface LocalAgentPlatformSeam {
     readonly repository: string;
     readonly worktree: string;
     readonly branch: string | null;
-    /** The commit the repository is made at, where a launch restores the agent's saved state onto it; none for the head of `branch`. */
-    readonly base?: string | undefined;
   }) => string;
   /**
    * The script that says what a discard would lose from the agent's worktree
@@ -359,41 +347,6 @@ export interface LocalAgentPlatformSeam {
   readonly sandbox: LocalAgentSandbox;
   /** The agent CLIs the device keeps of its own, had before it registers ready (`LocalAgentClis`). */
   readonly clis: LocalAgentClis;
-  /**
-   * The agent's packed state at `from`, which must be a plain file standing
-   * in the folder `within` by its real path, sealed under the agent's state
-   * key (standard base64 of its 32 bytes) into a bundle at `to`, outside
-   * every folder a VM mounts (`node/agent-state-seal.ts`): its size and
-   * SHA-256 in hex, which the save's commit names.
-   */
-  readonly stateSealed: (input: {
-    readonly from: string;
-    readonly within: string;
-    readonly to: string;
-    readonly key: string;
-  }) => Effect.Effect<{ readonly bytes: number; readonly sha256: string }, LocalAgentStateUnsealed>;
-  /**
-   * A bundle of the agent's saved state at `from`, as Luke's store answered
-   * it, opened under the agent's state key into its pack at `to`, which
-   * must stand in the folder `within` by its real path
-   * (`node/agent-state-seal.ts`): its size and SHA-256 checked against the
-   * ones its save committed before a byte of it is decrypted, and the pack
-   * kept only once GCM's tag checks.
-   */
-  readonly stateOpened: (input: {
-    readonly from: string;
-    readonly to: string;
-    readonly within: string;
-    readonly key: string;
-    readonly bytes: number;
-    readonly sha256: string;
-  }) => Effect.Effect<void, LocalAgentStateUnopened>;
-  /**
-   * The share of the disk holding the folder given that stands free, from 0
-   * to 1; none where it could not be read. A sweep lets a saved agent's
-   * folder go before its warm window ends where it runs low.
-   */
-  readonly diskFree: (folder: string) => Effect.Effect<Option.Option<number>>;
   /**
    * Whether agents on this device may have run on the developer's own logins
    * before Luke gave each agent a folder of its own
