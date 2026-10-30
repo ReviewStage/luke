@@ -156,7 +156,7 @@ test("a chosen child task the view comes to hide with its parent is no longer ch
   ];
   const { container, draw } = mountSidebar(listed(TASK_STATUS.IN_PROGRESS));
   const fold = container.querySelector<HTMLButtonElement>(
-    'button[aria-label="Child tasks of Cleanup"]',
+    'button[aria-label="Sub-tasks of Cleanup"]',
   );
   act(() => fold?.click());
   const rowOf = (name: string) =>

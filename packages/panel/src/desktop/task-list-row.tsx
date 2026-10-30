@@ -33,7 +33,7 @@ import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
-import { rowMenu } from "./action-menu.js";
+import { type MenuEntry, rowMenu } from "./action-menu.js";
 import { TASK_MENU_SURFACE, useTaskMenuItems } from "./task-actions.js";
 import { AssigneeChip, PriorityChip, StatusChip, statusOf, taskSubject } from "./task-row-parts.js";
 import { type ChosenTasks, chosenRowMenu } from "./tasks-selection.js";
@@ -55,7 +55,8 @@ import { type ChosenTasks, chosenRowMenu } from "./tasks-selection.js";
  * which the press says after the status, and in its own cell how many of
  * its sub-tasks are finished, "1/3", as the sidebar's row says it.
  *
- * Its menu is the task's own, whose Rename makes its name its field until
+ * Its menu is the task's own, after any groups its list leads it with (a
+ * related task's Change relation), whose Rename makes its name its field until
  * the edit ends; chosen among several, its ⋯, right-click, and menu key
  * offer the selection bar's acts on every task chosen, as a Mac's list
  * does, and one not chosen keeps its own menu.
@@ -70,11 +71,16 @@ function stillOpen(
   return open && pullRequest.url !== undefined;
 }
 
+/** A task's pull requests still open on GitHub, which its row draws a chip for each of. */
+export function openPullRequests(task: TaskSummary) {
+  return (task.agents?.pullRequests ?? []).filter(stillOpen);
+}
+
 /** Each of a task's open pull requests as its chip, hanging its card; nothing where it has none. */
 function OpenPullRequests({ task }: { task: TaskSummary }): React.JSX.Element | null {
   // Its page opens as a link to it does: in its agent's Pull request tab where the window knows the agent, else on GitHub.
   const openLink = useOpenLink();
-  const open = (task.agents?.pullRequests ?? []).filter(stillOpen);
+  const open = openPullRequests(task);
   if (open.length === 0) return null;
   return (
     <>
@@ -111,6 +117,9 @@ export function TaskListRow({
   onStanding,
   depth,
   fold,
+  settled,
+  menuGroups = [],
+  unlisted = false,
 }: {
   tasks: TasksControl;
   task: TaskSummary;
@@ -133,6 +142,12 @@ export function TaskListRow({
   depth?: number | undefined;
   /** The rows nested under it, which it folds; none where it holds none. */
   fold?: ListRowFold | undefined;
+  /** Whether it stands settled beside the rows still open, its name muted. */
+  settled?: boolean | undefined;
+  /** Its list's own groups, ahead of the task's menu: a related task's relation to change. */
+  menuGroups?: readonly (readonly MenuEntry[])[] | undefined;
+  /** Whether the window does not list the task yet, so only its name, its list's own cells, and its list's own menu groups stand, none of what its standing would say or change. */
+  unlisted?: boolean | undefined;
 }): React.JSX.Element {
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
@@ -149,11 +164,14 @@ export function TaskListRow({
     task.repository === null
       ? undefined
       : (repositoryName ?? repositoryLabel(task.repository, [{ repository: task.repository }]));
-  const own = {
-    ...rowMenu("Task", actions.groups(), tasks.shown),
-    footer: actions.footer,
-    subject: taskSubject(task, repository, key),
-  };
+  // Note that a task not listed yet offers only its list's groups, because the task's own acts read the listed task, which is not there to read.
+  const own = unlisted
+    ? rowMenu("Task", menuGroups, tasks.shown)
+    : {
+        ...rowMenu("Task", [...menuGroups, ...actions.groups()], tasks.shown),
+        footer: actions.footer,
+        subject: taskSubject(task, repository, key),
+      };
   const menu = rename.editing
     ? undefined
     : chosen === undefined
@@ -164,7 +182,7 @@ export function TaskListRow({
   // Note that the marks before the name are a control and decoration to a screen reader, so the key and status are said in the press, and left out of find, which finds them drawn.
   const spoken = [
     drawn(TASK_ROW_CELL.KEY) ? key : undefined,
-    drawn(TASK_ROW_CELL.STATUS) ? TASK_STATUS_WORDS[statusOf(task)] : undefined,
+    drawn(TASK_ROW_CELL.STATUS) && !unlisted ? TASK_STATUS_WORDS[statusOf(task)] : undefined,
     task.blocked === true ? BLOCKED_WORDS : undefined,
   ]
     .filter((each) => each !== undefined)
@@ -181,33 +199,37 @@ export function TaskListRow({
       }
       beside={task.blocked === true ? <BlockedMark aria-hidden="true" /> : undefined}
       cells={cells}
-      content={{
-        // Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo.
-        [TASK_ROW_CELL.PRIORITY]: (
-          <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
-        ),
-        [TASK_ROW_CELL.KEY]: (
-          <TaskKey workspaceName={workspaceName} number={task.number} decorative />
-        ),
-        [TASK_ROW_CELL.STATUS]: (
-          <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
-        ),
-        [TASK_ROW_CELL.ASSIGNEE]: assigneeHeld ? null : (
-          <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
-        ),
-        [TASK_ROW_CELL.PULL_REQUESTS]: drawn(TASK_ROW_CELL.PULL_REQUESTS) ? (
-          <OpenPullRequests task={task} />
-        ) : null,
-        [TASK_ROW_CELL.SUB_TASKS]:
-          subTasks === undefined ? null : (
-            <ListRowCount
-              settled={subTasks.finished}
-              total={subTasks.total}
-              label={`${subTasks.finished} of ${subTasks.total} sub-tasks finished`}
-            />
-          ),
-        ...content,
-      }}
+      content={
+        unlisted
+          ? { ...content }
+          : {
+              // Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo.
+              [TASK_ROW_CELL.PRIORITY]: (
+                <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+              ),
+              [TASK_ROW_CELL.KEY]: (
+                <TaskKey workspaceName={workspaceName} number={task.number} decorative />
+              ),
+              [TASK_ROW_CELL.STATUS]: (
+                <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+              ),
+              [TASK_ROW_CELL.ASSIGNEE]: assigneeHeld ? null : (
+                <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+              ),
+              [TASK_ROW_CELL.PULL_REQUESTS]: drawn(TASK_ROW_CELL.PULL_REQUESTS) ? (
+                <OpenPullRequests task={task} />
+              ) : null,
+              [TASK_ROW_CELL.SUB_TASKS]:
+                subTasks === undefined ? null : (
+                  <ListRowCount
+                    settled={subTasks.finished}
+                    total={subTasks.total}
+                    label={`${subTasks.finished} of ${subTasks.total} sub-tasks finished`}
+                  />
+                ),
+              ...content,
+            }
+      }
       editor={
         rename.editing ? (
           <InlineEdit
@@ -229,6 +251,7 @@ export function TaskListRow({
       pressRef={press}
       depth={depth}
       fold={fold}
+      settled={settled}
     >
       {actions.dialog}
     </TaskRow>

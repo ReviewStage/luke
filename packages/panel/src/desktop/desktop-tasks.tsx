@@ -1,4 +1,5 @@
 import type { AgentStatus } from "@luke/features/agent-wire";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
@@ -49,7 +50,6 @@ import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
-import type { TaskBlocksDoor } from "../tasks/task-blocks.js";
 import {
   mentionablePullRequests,
   TaskMentions,
@@ -57,6 +57,7 @@ import {
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
 import { taskLinkPlace, useOfferTaskRename } from "../tasks/task-menu-items.js";
+import type { TaskRelationsDoor } from "../tasks/task-relation-menu.js";
 import {
   TaskFrameHead,
   type TaskRepositoryDoor,
@@ -77,6 +78,7 @@ import { DesktopWelcome } from "./desktop-welcome.js";
 import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
 import { PhoneBack, PhoneHead, PlaceMore, phoneBar } from "./phone-head.js";
 import { PlanAgents } from "./plan-agents.js";
+import { PlanRelations } from "./plan-relations.js";
 import { type InboxItemAsk, SideInboxTab } from "./side-inbox-tab.js";
 import {
   COLUMN,
@@ -786,21 +788,60 @@ function PlanDocument({
     [openedId, repositories, chooseRepository, openRequest, repositoryNote],
   );
   const workspaceName = home?.name ?? "";
-  // The task's blocks name and offer the tasks of its own workspace, and a press on one opens it as a list's row would.
+  // The task's path and its add menu name and offer the tasks of its own workspace, and a press on the parent's crumb opens it as a list's row would.
   const openedWorkspace = opened?.workspaceId;
-  const { tasks: everyTask, onSelect: selectTask, onSetTaskBlock } = tasks;
+  const {
+    tasks: everyTask,
+    onSelect: selectTask,
+    onSetTaskBlock,
+    onSetTaskParent,
+    onNewChildTask,
+    relationMenu,
+  } = tasks;
   const blockTasks = useMemo(
     () => everyTask.filter((each) => each.workspaceId === openedWorkspace),
     [everyTask, openedWorkspace],
+  );
+  // A task the head names, a crumb or a related row, opens as a link to it does (`route.ts`), straight where no window opens places.
+  const openTask = useSteadyDoor((taskId: string) =>
+    openPlace === undefined
+      ? selectTask(taskId)
+      : openPlace({ kind: LINK_PLACE.TASK, planId: taskId }),
   );
   const changeBlock = useSteadyDoor(
     openedId === undefined
       ? undefined
       : (change: TaskBlockRequest) => onSetTaskBlock(openedId, change),
   );
-  const blocks = useMemo<TaskBlocksDoor>(
-    () => ({ workspaceName, tasks: blockTasks, onOpen: selectTask, onChange: changeBlock }),
-    [workspaceName, blockTasks, selectTask, changeBlock],
+  const setParent = useSteadyDoor(openedId === undefined ? undefined : onSetTaskParent);
+  const newSubTask = useSteadyDoor(
+    openedId === undefined ? undefined : () => onNewChildTask(openedId),
+  );
+  // The task's menus and ⌘K ask the head to open the add menu, each ask counted and answered as the repository chip's is, once the plan is in sight.
+  const [answeredRelation, setAnsweredRelation] = useState(0);
+  const relationPending =
+    relationMenu !== undefined &&
+    relationMenu.taskId === openedId &&
+    relationMenu.request > answeredRelation
+      ? relationMenu
+      : undefined;
+  const relationAsk = planInSight ? relationPending : undefined;
+  useEffect(() => {
+    if (relationPending === undefined || planInSight) return;
+    showOverview();
+    setActivityAsked(undefined);
+  }, [relationPending, planInSight, showOverview]);
+  const relations = useMemo<TaskRelationsDoor>(
+    () => ({
+      workspaceName,
+      tasks: blockTasks,
+      onChange: changeBlock,
+      onSetParent: setParent,
+      onNewSubTask: newSubTask,
+      ask: relationAsk,
+      onAsked: setAnsweredRelation,
+    }),
+    [workspaceName, blockTasks, changeBlock, setParent, newSubTask, relationAsk],
   );
   // Note that S opens the status chip only while the plan is in sight, never behind an agent's tab or Activity's list.
   const standing = useMemo<TaskStandingDoor>(
@@ -809,11 +850,11 @@ function PlanDocument({
       onSet: setStanding,
       repository: repositoryDoor,
       tasks: blockTasks,
-      onOpenTask: selectTask,
-      blocks,
+      onOpenTask: openTask,
+      relations,
       inSight: planInSight,
     }),
-    [workspaceName, setStanding, repositoryDoor, blockTasks, selectTask, blocks, planInSight],
+    [workspaceName, setStanding, repositoryDoor, blockTasks, openTask, relations, planInSight],
   );
   const reveal = revealed?.taskId === openedId ? revealed?.reveal : undefined;
   const { onSectionRevealed } = tasks;
@@ -857,6 +898,25 @@ function PlanDocument({
       />
     ),
     [openedId, agents, views.held, tab, opened?.runsOn, openAgentTab, openPullRequestDoor],
+  );
+  // The task's sub-tasks and relations stand over its agents, keyed by the task,
+  // so another task's sub-tasks start folded rather than as this one's were left.
+  const planHead = useMemo(
+    () => (
+      <>
+        {opened === undefined ? null : (
+          <PlanRelations
+            key={opened.id}
+            task={opened}
+            tasks={tasks}
+            door={relations}
+            onOpenTask={openTask}
+          />
+        )}
+        {planAgents}
+      </>
+    ),
+    [opened, tasks, relations, openTask, planAgents],
   );
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
@@ -1046,7 +1106,7 @@ function PlanDocument({
         looks={looks}
         sectionLinks={sectionLinks}
         standing={standing}
-        head={planAgents}
+        head={planHead}
         titleActions={room !== SHELL_ROOM.NARROW}
       />
     </Fill>

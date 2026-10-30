@@ -2248,6 +2248,35 @@ test("update_task, asked by a call from before tasks stopped being archived, set
   assert.deepEqual(await archive(true, "call-5"), answered(TASK_STATUS.CANCELED, true, assignee));
 });
 
+test("update_task refuses to mark a task done while a thread of it holds an ask open for the developer, which a Done would withdraw, leaving the task and the ask as they stand", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  await database.run(
+    postInboxThread(
+      { userId: agents.teammates.userId, taskId: tasks.billing, agentId: agents.teammates.id },
+      {
+        key: "try-billing",
+        title: "Try seat billing by hand",
+        body: "No agent could run the app.",
+        ask: { type: INBOX_ASK.DO, steps: ["Add a seat and open the invoice."] },
+      },
+    ),
+  );
+  const before = Option.getOrThrow(
+    await database.run(readTask(agents.teammates.userId, tasks.billing)),
+  ).task.status;
+
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, status: TASK_STATUS.DONE }),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: UPDATE_TASK_REFUSAL.OPEN_ASK },
+  );
+  const after = Option.getOrThrow(
+    await database.run(readTask(agents.teammates.userId, tasks.billing)),
+  ).task.status;
+  assert.equal(after, before);
+});
+
 test("update_task renames a task, pins it for the caller's starter alone, sets its repository only where the workspace's installation reaches it and clears it, and renames the caller's own task, as the member's menu does", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);

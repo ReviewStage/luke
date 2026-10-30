@@ -64,7 +64,7 @@ function NewTaskCard({
   const [starting, setStarting] = useState(false);
   // The Automations page's Create with an agent opens this card for an automation's agent, and a refusal opens it again for the same.
   const purpose = newTask.preset?.purpose ?? NEW_TASK_PURPOSE.TASK;
-  // New child task opens it under a task, whose workspace the child starts in.
+  // New sub-task opens it under a task, whose workspace the child starts in.
   const parent = newTask.preset?.parent;
   const workspaceId = parent?.workspaceId ?? newTask.workspaceId;
   const holding = useNewTaskHolding(workspaceId, purpose);

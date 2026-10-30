@@ -223,7 +223,9 @@ function markRows(): string[] {
   });
   type("mark");
   // Note that the Keyboard shortcuts page's own U row is found by the word too, and is no mark of the plan's.
-  return rows().filter((row) => row.startsWith("Mark as") && !row.endsWith("· Keyboard shortcuts"));
+  return rows().filter(
+    (row) => /^Mark as (un)?read/u.test(row) && !row.endsWith("· Keyboard shortcuts"),
+  );
 }
 
 test("⌘K marks the task on screen unread and then read, and offers no mark for a task Settings or the Inbox covers", () => {

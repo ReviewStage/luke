@@ -393,7 +393,7 @@ export function PullRequestStateMenu({
   writes,
 }: {
   pullRequest: Pick<AgentPullRequest, "number" | "state" | "checks">;
-  /** Where GitHub's merge queue holds it, as the merge control read it; none where it holds it nowhere. */
+  /** Where GitHub's merge queue holds it, as the merge control read it or, until that lands, as what was published says; none where it holds it nowhere. */
   queued?: { readonly position?: number | undefined } | null | undefined;
   /** Whether the panel the pill stands in is on screen; a question asked goes with it. */
   shown?: boolean;
@@ -436,7 +436,7 @@ export function PullRequestStateMenu({
   const shownWords = writes.pending === undefined ? words : `${ACTION_WORDS[writes.pending]}…`;
   const label = `Pull request ${shownWords}`;
   const tone = inQueue ? STATUS_TONE.ATTENTION : PULL_REQUEST_TONE[pullRequest.state];
-  // The pill says queued from the merge control's own read alone, so its mark never says it from the row's older one.
+  // The pill's mark says queued from the `queued` it is handed alone, as its words do, so the two never disagree.
   const mark = (
     <PullRequestMark
       pullRequest={{

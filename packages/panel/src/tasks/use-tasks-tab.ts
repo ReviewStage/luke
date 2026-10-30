@@ -22,11 +22,14 @@ import {
   type CodeRef,
   type ListedPullRequest,
   type RepositoryPin,
+  TASK_BLOCK_CHANGE,
   type Task,
   type TaskAgentPin,
+  type TaskBlockRelation,
   type TaskBlockRequest,
   type TaskMode,
   type TaskRelationChangeRequest,
+  type TaskRelationKind,
   type TaskRunsOnRequest,
   type TaskStanding,
   type TaskStatus,
@@ -515,7 +518,7 @@ export interface NewTaskParent {
   readonly repository: string | null;
 }
 
-/** What the press that opened New task chose: a repository (a repository group's +), the card's purpose (the Automations page's Create with an agent), the task it makes a child of (New child task), or the card a start refused after it closed opens again on. */
+/** What the press that opened New task chose: a repository (a repository group's +), the card's purpose (the Automations page's Create with an agent), the task it makes a child of (New sub-task), or the card a start refused after it closed opens again on. */
 export interface NewTaskPreset {
   readonly repository?: string;
   /** The task the card makes its task a child of; none for a task at the top. */
@@ -748,6 +751,10 @@ export interface TasksControl {
   repositoryMenu: { taskId: string; request: number } | undefined;
   /** Opens a task's repository chip menu, opening the task first where it is not the open one. */
   onChangeRepository: (taskId: string) => void;
+  /** The ask standing for the open task's head to open the add menu on a kind: which task it is about, the kind, and how many asks so far. */
+  relationMenu: { taskId: string; kind: TaskRelationKind; request: number } | undefined;
+  /** Opens a task's add menu on a kind (`task-relation-menu.tsx`), opening the task first where it is not the open one. */
+  onAddRelation: (taskId: string, kind: TaskRelationKind) => void;
   /** Gives a task its repository, or takes it away with null; answers why the service refused, or nothing once it is kept. */
   onSetRepository: (taskId: string, repository: string | null) => Promise<string | undefined>;
   /** Sets where a task stands, how much it matters, or who it is assigned to, drawn at once by the assignee's name where the caller knows it; answers whether the service kept it, with what refused it where it did not. */
@@ -760,6 +767,10 @@ export interface TasksControl {
   onSetTaskBlock: (taskId: string, block: TaskBlockRequest) => void;
   /** Sets a task's parent, or clears it with null, which the sidebar and the open document draw as the service answers it; a refusal says why in a toast. */
   onSetTaskParent: (taskId: string, parentTaskId: string | null) => void;
+  /** Takes a task out from under its parent, said in a toast whose Undo sets the parent back; nothing for a task with none. */
+  onRemoveTaskParent: (taskId: string) => void;
+  /** Takes one block of a task away, said in a toast whose Undo adds it back; a refusal says why in a toast. */
+  onRemoveTaskBlock: (taskId: string, relation: TaskBlockRelation, otherId: string) => void;
   /** Moves one relation of a task to another kind in one call, drawn as the service answers it; a refusal says why in a toast. */
   onChangeTaskRelation: (taskId: string, relation: TaskRelationChangeRequest) => void;
   /** Opens a task's repository on GitHub in the browser. */
@@ -783,7 +794,7 @@ export interface TasksControl {
   onNewTask: () => void;
   /** New task with a repository already chosen in the dialog: what a repository group's + asks. */
   onNewTaskIn: (repository: string) => void;
-  /** New task as a child of the task given, in its workspace and repository: what the task's menu and ⌘K's New child task ask. */
+  /** New task as a child of the task given, in its workspace and repository: what the task's menu and ⌘K's New sub-task ask. */
   onNewChildTask: (parentTaskId: string) => void;
   /**
    * Adds a task named `name` to a Tasks page group with no agent, in the
@@ -1118,6 +1129,12 @@ const PARENT_CYCLE_NOTE =
 const PARENT_REPOSITORY_NOTE =
   "A sub-task works in its parent's repository, so the two must share one.";
 
+/** What the toast says once a task's parent is removed, offering Undo. */
+const PARENT_REMOVED_NOTE = "Parent removed";
+
+/** What the toast says once a block is removed, offering Undo. */
+const BLOCK_REMOVED_NOTE = "Relation removed";
+
 /** What a relation's refusal says: its own reason where the service named one, and a plain refusal otherwise. */
 function relationRefusedNote(failure: RelationCallFailure | ParentCallFailure): string {
   switch (failure) {
@@ -1240,6 +1257,7 @@ export function useTasksTab(input: {
     { readonly line: SentLine; readonly navigation: number } | undefined
   >(undefined);
   const [repositoryMenu, setRepositoryMenu] = useState<TasksControl["repositoryMenu"]>(undefined);
+  const [relationMenu, setRelationMenu] = useState<TasksControl["relationMenu"]>(undefined);
   const [asked, setAsked] = useState<TaskAsk | undefined>(undefined);
   const [chosen, setChosen] = useState<PinChoice | undefined>(undefined);
   /**
@@ -2403,12 +2421,15 @@ export function useTasksTab(input: {
   // A fixture's tasks are read from nowhere, so no block of one is kept. The
   // open document takes the task the service answers, so a refusal is all
   // there is to say, in a toast, since the menu that asked has closed.
-  const setTaskBlock = (taskId: string, block: TaskBlockRequest) => {
+  const setTaskBlock = (taskId: string, block: TaskBlockRequest, onKept?: () => void) => {
     if (fixture !== undefined) return;
     void act(ACT_KIND.TASKS_BLOCK, { taskId, block })
       .catch(taskUnreached)
       .then((answer) => {
-        if (!("failure" in answer)) return;
+        if (!("failure" in answer)) {
+          onKept?.();
+          return;
+        }
         toast({
           words: relationRefusedNote(answer.failure),
           tone: STATUS_TONE.DANGER,
@@ -2418,15 +2439,30 @@ export function useTasksTab(input: {
       });
   };
 
+  // Remove relation asks nothing of a block, since it can be added back: once
+  // the service keeps it, a toast offers Undo, which adds the same block again.
+  const removeTaskBlock = (taskId: string, relation: TaskBlockRelation, otherId: string) => {
+    setTaskBlock(taskId, { change: TASK_BLOCK_CHANGE.REMOVE, relation, taskId: otherId }, () =>
+      toast(
+        undoToast(BLOCK_REMOVED_NOTE, () =>
+          setTaskBlock(taskId, { change: TASK_BLOCK_CHANGE.ADD, relation, taskId: otherId }),
+        ),
+      ),
+    );
+  };
+
   // A fixture's tasks are read from nowhere, so no parent of one is kept. The
   // sidebar and the open document take the task the service answers, so a
   // refusal is all there is to say, in a toast.
-  const setTaskParent = (taskId: string, parentTaskId: string | null) => {
+  const setTaskParent = (taskId: string, parentTaskId: string | null, onKept?: () => void) => {
     if (fixture !== undefined) return;
     void act(ACT_KIND.TASKS_SET_PARENT, { taskId, parentTaskId })
       .catch(taskUnreached)
       .then((answer) => {
-        if (!("failure" in answer)) return;
+        if (!("failure" in answer)) {
+          onKept?.();
+          return;
+        }
         toast({
           words: relationRefusedNote(answer.failure),
           tone: STATUS_TONE.DANGER,
@@ -2434,6 +2470,20 @@ export function useTasksTab(input: {
           failure: { surface: FAILURE_SURFACE.TASK_PARENT, cause: answer, about: { taskId } },
         });
       });
+  };
+
+  // Remove parent asks nothing, since the parent can be set back: once the
+  // service keeps it, a toast offers Undo, which sets the parent it had.
+  const removeTaskParent = (taskId: string) => {
+    const parentTaskId =
+      tasks.tasks.find((task) => task.id === taskId)?.parentTaskId ??
+      (region.kind === DOCUMENT_REGION.READY && region.task.id === taskId
+        ? region.task.parentTaskId
+        : undefined);
+    if (parentTaskId === undefined) return;
+    setTaskParent(taskId, null, () =>
+      toast(undoToast(PARENT_REMOVED_NOTE, () => setTaskParent(taskId, parentTaskId))),
+    );
   };
 
   // A relation's kind moves in one call, so a refusal leaves it as it stood,
@@ -2507,6 +2557,14 @@ export function useTasksTab(input: {
   const changeRepository = (taskId: string) => {
     if (taskId !== tasks.activeTaskId) select(taskId);
     setRepositoryMenu((held) => ({ taskId, request: (held?.request ?? 0) + 1 }));
+  };
+
+  // The add menu hangs from the task's head, so the task opens first, as
+  // Change repository's chip does, and comes out from under a page standing
+  // in its place, such as the Board whose card asked.
+  const addRelation = (taskId: string, kind: TaskRelationKind) => {
+    if (taskId !== tasks.activeTaskId || standIn !== undefined) select(taskId);
+    setRelationMenu((held) => ({ taskId, kind, request: (held?.request ?? 0) + 1 }));
   };
 
   const repositoryOf = (taskId: string): string | null =>
@@ -2589,6 +2647,8 @@ export function useTasksTab(input: {
     const historyBefore = historyFor;
     const stays = !opensNewTask;
     const pressedAt = navigations.current;
+    // Note that the agent's first line is stamped at the press, which its line after the answer keeps.
+    const sentAt = Date.now();
     const line =
       handed === undefined || stays
         ? undefined
@@ -2596,6 +2656,7 @@ export function useTasksTab(input: {
             key: handed.idempotencyKey,
             prompt: handed.prompt,
             attachments: handed.attachments,
+            sentAt,
           });
     // Note that a start's page is let go only while it is still this start's, because another start may have replaced it.
     const letGoOfPage = () => setStartingTask((now) => (now?.line === line ? undefined : now));
@@ -2653,7 +2714,7 @@ export function useTasksTab(input: {
         // what stands now is the developer's since, a New task opened again among it, and stays.
         if (stays) {
           if (handed === undefined) setNewTaskAsk(undefined);
-          else openAgent(answer.planId, handed, answer.agentStart, from.device);
+          else openAgent(answer.planId, handed, answer.agentStart, from.device, sentAt);
           const { agentStart } = answer;
           sayStarted(
             answer.planId,
@@ -2669,7 +2730,7 @@ export function useTasksTab(input: {
           return undefined;
         }
         letGoOfPage();
-        openAgent(answer.planId, handed, answer.agentStart, from.device);
+        openAgent(answer.planId, handed, answer.agentStart, from.device, sentAt);
         return undefined;
       },
       (refused: Error) => refusedWith({ reason: FAILURE_REASON.OTHER, text: refused.message }),
@@ -2703,12 +2764,14 @@ export function useTasksTab(input: {
     handed: NewTaskAgent,
     started: AgentAgentAnswer | undefined,
     device: MacOffer | undefined,
+    sentAt: number,
   ) => {
     if (started !== undefined && !("failure" in started)) {
       agents.onTaskStarted(planId, started.agent, {
         key: handed.idempotencyKey,
         prompt: handed.prompt,
         attachments: handed.attachments,
+        sentAt,
       });
       mainTabs.onShow(planId, { agent: started.agent.id });
       return;
@@ -3656,11 +3719,15 @@ export function useTasksTab(input: {
     onReopenClosedTab: reopenable.length === 0 ? undefined : reopenClosedTab,
     repositories,
     repositoryMenu,
+    relationMenu,
+    onAddRelation: addRelation,
     onChangeRepository: changeRepository,
     onSetRepository: setRepository,
     onSetTaskStanding: setTaskStanding,
-    onSetTaskBlock: setTaskBlock,
-    onSetTaskParent: setTaskParent,
+    onSetTaskBlock: (taskId, block) => setTaskBlock(taskId, block),
+    onRemoveTaskBlock: removeTaskBlock,
+    onSetTaskParent: (taskId, parentTaskId) => setTaskParent(taskId, parentTaskId),
+    onRemoveTaskParent: removeTaskParent,
     onChangeTaskRelation: changeTaskRelation,
     onMoveTask: moveTask,
     onOpenWorkspaceGitHub: (taskId) => {

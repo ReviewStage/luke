@@ -39,7 +39,8 @@ function stopHookOf(options: Options) {
 /**
  * A fake CLI that plays `steps` once, from Luke's first message. `prompted`
  * holds each prompt as the CLI reads it, for a test that must wait on one.
- * Each `result` names the prompts its turn took, as the CLI's does. `chain`
+ * Each `result` names the prompts its turn took, as the CLI's does, but one
+ * whose step says it names none. `chain`
  * is the stored session's entries, which every session it is asked for
  * reads as. A CLI that stops `answering` records each control request
  * (a model change, an interrupt) and never answers it.
@@ -105,7 +106,9 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
         // Note that the message crosses as a line of JSON, which the SDK takes
         // as an `SDKMessage` unchecked, just as it reads the CLI's stdout.
         const message: SDKMessage = JSON.parse(JSON.stringify(step.emit));
-        if (message.type === "result") message.user_message_uuids = taken.splice(0);
+        if (message.type === "result" && step.namesNoPrompt !== true) {
+          message.user_message_uuids = taken.splice(0);
+        }
         return Stream.make(message);
       }
       if ("awaitPrompt" in step) {

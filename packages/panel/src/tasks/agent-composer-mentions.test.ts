@@ -1998,7 +1998,7 @@ test("an @ narrowed to dates offers today, tomorrow, and next Monday before a wo
 
     assert.equal(crumb(container), "Dates");
     assert.deepEqual(groupsListed(container), [
-      ["Dates", ["Today", "Tomorrow", "Oct 26", "Pick a date…"]],
+      ["Dates", ["Today", "Tomorrow", "Oct 26", "Pick a date"]],
     ]);
   } finally {
     vi.useRealTimers();

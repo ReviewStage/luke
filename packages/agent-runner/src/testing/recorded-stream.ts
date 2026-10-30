@@ -94,15 +94,22 @@ function partial(text: string): Recorded {
   };
 }
 
-function result(subtype: string): Recorded {
+function result(subtype: string) {
   return {
     type: "result",
     subtype,
     is_error: subtype !== "success",
     session_id: SESSION,
     uuid: nextUuid(),
-  };
+  } satisfies Recorded;
 }
+
+/**
+ * The `result` the CLI put out resuming a session a Stop interrupted, ahead
+ * of the turn on Luke's message, as a hand test on a host saw it: its step
+ * names no prompt.
+ */
+export const STRAY_RESULT = result("success");
 
 /** What a Stop hook reports in flight. Built from the SDK's `StopHookInput`. */
 export interface StopReport {
@@ -127,12 +134,13 @@ export const WAKEUP: SessionCronSummary = {
 };
 
 /**
- * What the fake CLI does next: emit a message, run the Stop hook, take Luke's
- * next message into the turn, or hold until it is interrupted or the test
+ * What the fake CLI does next: emit a message, a `result` naming the prompts
+ * its turn took unless it names none, run the Stop hook, take Luke's next
+ * message into the turn, or hold until it is interrupted or the test
  * releases it.
  */
 export type Step =
-  | { readonly emit: Recorded }
+  | { readonly emit: Recorded; readonly namesNoPrompt?: true }
   | { readonly stopHook: StopReport }
   | { readonly awaitPrompt: true }
   | { readonly untilInterrupted: true }
@@ -225,6 +233,22 @@ export const SHORT_TURN: readonly Step[] = [
   { emit: said("Done.") },
   { stopHook: NOTHING_IN_FLIGHT },
   { emit: result("success") },
+];
+
+/** A resumed session's stray `result` (`STRAY_RESULT`), then the turn that answers Luke's message. */
+export const STRAY_RESULT_THEN_TURN: readonly Step[] = [
+  { emit: INIT },
+  { emit: STRAY_RESULT, namesNoPrompt: true },
+  { emit: said("Done.") },
+  { stopHook: NOTHING_IN_FLIGHT },
+  { emit: result("success") },
+];
+
+/** A resumed session's stray `result`, the CLI then silent until the launch ends. */
+export const STRAY_RESULT_THEN_SILENCE: readonly Step[] = [
+  { emit: INIT },
+  { emit: STRAY_RESULT, namesNoPrompt: true },
+  { untilReleased: true },
 ];
 
 /** Two turns that each end at their `result` with nothing pending, the second on Luke's next message, as a warm launch takes it. */

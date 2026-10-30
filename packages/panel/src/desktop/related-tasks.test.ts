@@ -105,7 +105,6 @@ test("a related task's row ends with its open pull requests and its owner's end,
     workspace: ACME,
     workspaces: [ACME],
     listRead: true,
-    onSelect: (taskId) => opened.push(taskId),
   });
   act(() =>
     root.render(
@@ -115,6 +114,7 @@ test("a related task's row ends with its open pull requests and its owner's end,
           tasks,
           label: "Related tasks",
           rows: [{ task: TASK, end: "Blocks" }],
+          onOpenTask: (taskId: string) => opened.push(taskId),
         }),
       ),
     ),
@@ -154,7 +154,12 @@ test("a related task's row says it is blocked beside its name and how many of it
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(RelatedTasks, { tasks, label: "Sub-tasks", rows: [{ task: blocked }] }),
+        createElement(RelatedTasks, {
+          tasks,
+          label: "Sub-tasks",
+          rows: [{ task: blocked }],
+          onOpenTask: tasks.onSelect,
+        }),
       ),
     ),
   );

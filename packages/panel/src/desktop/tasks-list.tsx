@@ -86,13 +86,10 @@ import { TASK_MARK } from "@luke/ui/tasks-model";
 import {
   COMPLETED_WINDOW,
   LIST_COLUMN,
-  LIST_FOLD_ORDER,
   type ListColumn,
-  listPropertiesFitting,
   TASK_PROPERTY,
   TASKS_GROUP,
   TASKS_GROUPING,
-  type TaskProperty,
   type TasksGroup,
   type TasksGroupHead,
   type TasksSection,
@@ -100,7 +97,7 @@ import {
   tasksListGroups,
 } from "@luke/ui/tasks-page-model";
 import { Schema } from "effect";
-import { Fragment, type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { unreadShown } from "../failure-report.js";
@@ -116,6 +113,7 @@ import {
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { keptKey, useKept } from "../use-kept.js";
+import { useFittedColumns } from "./fitted-columns.js";
 import { groupNewTaskWords, NewTaskInButton, quickAddInto } from "./new-task-button.js";
 import { useTasksWaiting } from "./places-waiting.js";
 import { type DraftParts, type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";
@@ -177,7 +175,7 @@ import { useRowDrag } from "./use-row-drag.js";
  * by their chips and menus, the rest on its card. A wider List narrowed,
  * beside a side panel or in a small window, folds those same columns away
  * by its own width, one by one in a fixed order, before its names are
- * squeezed (`listPropertiesFitting`).
+ * squeezed (`fitted-columns.ts`).
  *
  * Rows are chosen together (`SelectionRegion`): by the box in a row's gutter,
  * which comes in under the pointer and stays on every row while any is
@@ -847,51 +845,6 @@ function LeavingTasksGroups({
   return <>{drawn.map(({ value }) => group(value))}</>;
 }
 
-/** Whether two runs of properties are the same, in the same order. */
-function sameProperties(one: readonly ListColumn[], other: readonly ListColumn[]): boolean {
-  return one.length === other.length && one.every((property, at) => property === other[at]);
-}
-
-/**
- * The columns the List draws of those its display chose, and the sub-tasks'
- * count beside them where any task has sub-tasks, at its own width rather
- * than the window's: those `listPropertiesFitting` folds away
- * for the room the list stands in, measured as it resizes, and on a phone
- * every property that folds. Only what is folded is state, never the width,
- * so a window being dragged draws the rows again only where a column comes
- * or goes. Note that the first measure lands before the list paints, so no
- * row is ever drawn with its name squeezed first, and that a list not laid
- * out yet, which measures nothing, folds nothing.
- */
-function useFittedProperties(
-  list: HTMLElement | null,
-  chosen: readonly TaskProperty[],
-  subTasks: boolean,
-  narrow: boolean,
-): readonly ListColumn[] {
-  const properties = useMemo(
-    () => (subTasks ? [...chosen, LIST_COLUMN.SUB_TASKS] : chosen),
-    [chosen, subTasks],
-  );
-  const [folded, setFolded] = useState<readonly ListColumn[]>([]);
-  useLayoutEffect(() => {
-    if (list === null || narrow) return undefined;
-    const measure = () => {
-      const { width } = list.getBoundingClientRect();
-      if (width <= 0) return;
-      const fitting = listPropertiesFitting(properties, width);
-      const next = properties.filter((property) => !fitting.includes(property));
-      setFolded((was) => (sameProperties(was, next) ? was : next));
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(list);
-    return () => observer.disconnect();
-  }, [list, properties, narrow]);
-  const left = narrow ? LIST_FOLD_ORDER : folded;
-  return properties.filter((property) => !left.includes(property));
-}
-
 /** The List: the listed workspace's tasks under their pins, sections, and the grouping chosen, in one grid whose columns line up down the page. */
 export function TasksList({
   tasks,
@@ -911,12 +864,13 @@ export function TasksList({
   const narrow = room === SHELL_ROOM.NARROW;
   const [listElement, setListElement] = useState<HTMLDivElement | null>(null);
   const subTaskCounts = useMemo(() => childTaskCounts(tasks.listed.tasks), [tasks.listed.tasks]);
-  const properties = useFittedProperties(
-    listElement,
-    display.properties,
-    subTaskCounts.size > 0,
-    narrow,
+  // The columns its display chose, and the sub-tasks' count beside them where any task has sub-tasks, folded for its own width (`fitted-columns.ts`).
+  const chosen = useMemo(
+    () =>
+      subTaskCounts.size > 0 ? [...display.properties, LIST_COLUMN.SUB_TASKS] : display.properties,
+    [display.properties, subTaskCounts.size],
   );
+  const properties = useFittedColumns<ListColumn>(listElement, chosen, { narrow });
   const listed = tasks.listed.tasks;
   const pinned = inPinOrder(
     listed.filter((task) => task.pinnedAt !== undefined),

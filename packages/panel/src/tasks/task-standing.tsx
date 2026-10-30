@@ -51,7 +51,7 @@ import {
   type RepositoryMenu,
   useRepositoryMenu,
 } from "./repository-chip.js";
-import { TaskBlockAdd, TaskBlockLines, type TaskBlocksDoor } from "./task-blocks.js";
+import { TaskRelationAsked, type TaskRelationsDoor } from "./task-relation-menu.js";
 
 /**
  * task-standing.tsx -- a task's head over its plan: the path to it, then the chips that say and change where it stands, how much it matters, and who is on it.
@@ -68,9 +68,10 @@ import { TaskBlockAdd, TaskBlockLines, type TaskBlocksDoor } from "./task-blocks
  * window's own menu (`picker-row.tsx`): the status, each of the five with
  * its mark, the priority, each with its bars, and the assignee, each member
  * of the workspace by face and name, the reader first, and No assignee on
- * the dashed unassigned mark; then, where the page hands their door, Add
- * relation, until the task's menu adds a block instead, with the task's
- * blocks on lines of their own under the chips (`task-blocks.tsx`). A pick
+ * the dashed unassigned mark; then, where the page hands their door, the
+ * box the add menu hangs from when the task's menus or ⌘K ask for it
+ * (`task-relation-menu.tsx`). The task's sub-tasks and relations stand as
+ * groups of their own under the byline (`plan-relations.tsx`). A pick
  * is handed back for the page to send; without a door to send it, as on an
  * archived task, the chips only say. S, pressed while not typing, opens the
  * status chip's menu, as Linear's S does, and a task row's menu lists what
@@ -255,8 +256,8 @@ export interface TaskStandingDoor {
   readonly tasks?: readonly TaskSummary[] | undefined;
   /** Opens a task, as a press on the parent's crumb does; none where it opens nothing. */
   readonly onOpenTask?: ((taskId: string) => void) | undefined;
-  /** The task's blocks' door: the tasks they name, where a press opens one, and where a change is sent; none where they are not drawn. */
-  readonly blocks?: TaskBlocksDoor | undefined;
+  /** The add menu's door, and the ask from the task's menus or ⌘K to open it; none where no relation is added here. */
+  readonly relations?: TaskRelationsDoor | undefined;
   /** Whether the plan is in sight, which S's ask waits on, so it never opens a menu behind another tab; in sight where unsaid. */
   readonly inSight?: boolean | undefined;
 }
@@ -591,21 +592,21 @@ function TaskStatusPicker({
 
 /**
  * The task's status, priority, and assignee chips on one line under its
- * title, each a toolbar's chip, then Add relation, and under them the
- * task's blocks, where the page hands their door. A task from a service before statuses draws no
- * chips, and still its blocks.
+ * title, each a toolbar's chip, then the box the add menu hangs from, where
+ * the page hands its door. A task from a service before statuses draws no
+ * chips, and still that box.
  */
 export function TaskStandingChips({
   task,
   onSet,
-  blocks,
+  relations,
   inSight = true,
 }: {
   task: Task;
   /** Where a pick is sent, settling once the service has answered where the page waits on it; without one the chips only say. */
   onSet: ((standing: TaskStanding) => void | Promise<void>) | undefined;
-  /** The task's blocks' door; without it no block is drawn. */
-  blocks?: TaskBlocksDoor | undefined;
+  /** The add menu's door; without it the menu hangs nowhere here. */
+  relations?: TaskRelationsDoor | undefined;
   /** Whether the plan is in sight, which S waits on, so it never opens a menu behind another tab. */
   inSight?: boolean | undefined;
 }): React.JSX.Element | null {
@@ -619,8 +620,17 @@ export function TaskStandingChips({
       ? () => setStatusAsks((asks) => asks + 1)
       : undefined,
   );
-  const lines = blocks === undefined ? null : <TaskBlockLines task={task} door={blocks} />;
-  if (status === undefined || priority === undefined) return lines;
+  // The box the add menu hangs from, standing with or without the chips, so the task's menus and ⌘K open it on any task.
+  const asked =
+    relations === undefined ? null : (
+      <TaskRelationAsked
+        task={task}
+        door={relations}
+        ask={relations.ask}
+        onAsked={relations.onAsked}
+      />
+    );
+  if (status === undefined || priority === undefined) return asked;
   return (
     <div className="plan-task-standing">
       {/* Note that the line is pulled back by a chip's inset, so the status's mark stands on the title's edge. */}
@@ -650,11 +660,8 @@ export function TaskStandingChips({
           assignee={task.assignee}
           onPick={onSet === undefined ? undefined : (assigneeId) => onSet({ assigneeId })}
         />
-        {blocks?.onChange === undefined ? null : (
-          <TaskBlockAdd task={task} door={blocks} onChange={blocks.onChange} />
-        )}
+        {asked}
       </Inline>
-      {lines}
     </div>
   );
 }

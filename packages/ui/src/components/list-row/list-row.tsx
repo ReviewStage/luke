@@ -268,7 +268,7 @@ export type ListRowHint = ComponentType<{
 export interface ListRowFold {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  /** What the fold holds, said as the chevron's name ("Child tasks of Ship the release"). */
+  /** What the fold holds, said as the chevron's name ("Sub-tasks of Ship the release"). */
   readonly label: string;
 }
 

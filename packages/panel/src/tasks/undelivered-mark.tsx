@@ -76,6 +76,11 @@ export function useUndeliveredLines(): ReadonlySet<string> {
   return useContext(MarksContext).undelivered;
 }
 
+/** The ids of the lines refused for now that keep their words. */
+export function useUnsentLines(): ReadonlySet<string> {
+  return useContext(MarksContext).unsent;
+}
+
 /** Whether the line drawn under `messageId` is still on its way. */
 export function useLineSending(messageId: string): boolean {
   return useContext(MarksContext).sending.has(messageId);

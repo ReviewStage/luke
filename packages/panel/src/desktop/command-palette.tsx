@@ -171,6 +171,7 @@ import {
   PANEL_COMMAND,
   type PanelCommand,
   panelCommandOf,
+  RELATION_COMMAND,
 } from "../command-items.js";
 import { unreadShown } from "../failure-report.js";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand.js";
@@ -196,6 +197,7 @@ import { InboxItemCard, InboxItemEnd, ItemMark } from "../tasks/inbox-item-parts
 import { holderName, type InboxListed, inboxItemWords } from "../tasks/inbox-model.js";
 import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem, type OpenTaskRename, useTaskRenameOffer } from "../tasks/task-menu-items.js";
+import { TASK_RELATION_ORDER } from "../tasks/task-relation-menu.js";
 import { TaskKey } from "../tasks/task-standing.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
@@ -1530,7 +1532,8 @@ function agentPinRows(
 /**
  * The plan on screen's own commands, as its ⋯ menu offers them
  * (`task-actions.tsx`'s `taskActionGroups`): Rename where its page offers
- * the door its ⋯ asks, Version history, New child task, Cancel task on a task not already
+ * the door its ⋯ asks, Version history, New sub-task, the four relations,
+ * Remove parent on a task with a parent, Cancel task on a task not already
  * canceled, Change repository, and Open on GitHub where it has a
  * repository; each runs what its menu item runs, Version history and Open
  * on GitHub wearing their chords, Open on GitHub only while ⇧⌘O opens the
@@ -1553,6 +1556,13 @@ function taskCommandRows(
     ...(renamed === undefined ? [] : [{ item: PANEL_COMMAND.RENAME_TASK, run: renamed }]),
     { item: PANEL_COMMAND.VERSION_HISTORY, run: () => tasks.history.onOpen(task.id) },
     { item: PANEL_COMMAND.NEW_CHILD_TASK, run: () => tasks.onNewChildTask(task.id) },
+    ...TASK_RELATION_ORDER.map((kind) => ({
+      item: RELATION_COMMAND[kind],
+      run: () => tasks.onAddRelation(task.id, kind),
+    })),
+    ...(task.parentTaskId === undefined
+      ? []
+      : [{ item: PANEL_COMMAND.REMOVE_PARENT, run: () => tasks.onRemoveTaskParent(task.id) }]),
     ...(settleOffered(task, SETTLED_STATUS.CANCELED)
       ? [
           {
