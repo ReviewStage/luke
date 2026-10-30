@@ -216,6 +216,7 @@ function ListRows(): React.JSX.Element {
               description="Merge / Request changes"
               meta="1h"
               metaAt={LIST_ROW_META.TITLE}
+              ink={LIST_ROW_INK.SIDEBAR}
               unread
               onPress={() => undefined}
               menu={{
@@ -230,6 +231,7 @@ function ListRows(): React.JSX.Element {
               description="Approve / Request changes"
               meta="2h"
               metaAt={LIST_ROW_META.TITLE}
+              ink={LIST_ROW_INK.SIDEBAR}
               onPress={() => undefined}
               menu={{
                 thing: "Inbox item",
