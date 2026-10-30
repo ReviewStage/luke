@@ -1283,7 +1283,7 @@ function githubLine(
   };
 }
 
-test("a review from GitHub draws as a folding card, open, headed by who did what to the pull request and how many comments it holds, holding their words and each inline comment by its file and line, without the agent's instructions", () => {
+test("a review from GitHub draws as a folding card, closed, headed by who did what to the pull request and how many comments it holds, holding their words and each inline comment by its file and line, without the agent's instructions", () => {
   const container = agentMessageDrawn({
     id: "github-line",
     role: MESSAGE_ROLE.USER,
@@ -1317,7 +1317,8 @@ test("a review from GitHub draws as a folding card, open, headed by who did what
   assert.ok(card, "the line draws as GitHub's card");
   const head = cardHead(card);
   assert.equal(head.getAttribute("aria-label"), "octocat requested changes on #42, 1 comment");
-  assert.equal(head.getAttribute("aria-expanded"), "true");
+  assert.equal(head.getAttribute("aria-expanded"), "false");
+  act(() => head.click());
   const body = card.textContent ?? "";
   assert.match(body, /Close, but the store reads the list twice\./u);
   assert.match(body, /apps\/web\/store\.ts L12\s*Guard the empty list here\./u);
@@ -1347,6 +1348,7 @@ test("a check line is headed by how many of its checks failed on the pull reques
     cardHead(card).getAttribute("aria-label"),
     "github-actions[bot] 2 of 3 checks failed on #42",
   );
+  act(() => cardHead(card).click());
   const rows = [...card.querySelectorAll("li")].map((row) => row.textContent ?? "");
   assert.deepEqual(
     rows.map((row) => /^(.*?),/u.exec(row)?.[1]),
@@ -1367,7 +1369,7 @@ test("a check line whose checks were skipped rather than passed says so, and hol
   assert.ok(card, "the line draws as GitHub's card");
   const head = cardHead(card);
   assert.equal(head.getAttribute("aria-label"), "github-actions[bot] 1 check skipped on #42");
-  assert.equal(head.getAttribute("aria-expanded"), "true");
+  act(() => head.click());
   assert.match(card.textContent ?? "", /deploy.*Skipped/u);
 });
 
