@@ -185,11 +185,10 @@
     font-weight: var(--luke-type-emphasis-weight);
   }
 
-  /* A sidebar's row rests its title, and a lead line over it, in the
-     sidebar's quieter ink, lifted to the text's own while it is reached for,
-     open, unread, or its menu is. */
-  .luke-list-row[data-ink="sidebar"] .luke-list-row-title,
-  .luke-list-row[data-ink="sidebar"] .luke-list-row-lead[data-at="above"] {
+  /* A sidebar's row rests its title and lead in the sidebar's quieter ink,
+     lifted to the text's own while it is reached for, open, unread, or its menu is. */
+  .luke-list-row[data-ink="sidebar"]
+  :is(.luke-list-row-title, .luke-list-row-lead[data-at="above"]) {
     color: var(--luke-color-sidebar-ink);
     transition: color var(--luke-duration-hover) var(--luke-motion-exit);
   }
@@ -200,14 +199,7 @@
       [data-unread="true"],
       [data-menu-open="true"]
     )
-    .luke-list-row-title,
-  .luke-list-row[data-ink="sidebar"]:is(
-      :hover,
-      [data-current="true"],
-      [data-unread="true"],
-      [data-menu-open="true"]
-    )
-    .luke-list-row-lead[data-at="above"] {
+    :is(.luke-list-row-title, .luke-list-row-lead[data-at="above"]) {
     color: var(--luke-color-text);
   }
 
@@ -249,20 +241,16 @@
     font-weight: var(--luke-type-label-weight);
   }
 
-  /* A lead on a line of its own over the title reads as a mail app's
-     sender line: the row's largest and boldest words, a step over a
-     label's at the top bar's size, in the text's own ink, while the title
-     under it steps down to the body's weight, still the text's ink, and
-     an unread row lifts it again (below). The title keeps a label's size
-     rather than the body's, which is a label's on the desktop but larger
-     on the web, so it stays under the lead line in every profile. */
+  /* A lead over the title reads as a mail app's sender, the row's largest
+     words, and the title under it steps down to the body's weight, keeping
+     a label's size, under the lead's on the web too, where the body's is not. */
   .luke-list-row-lead[data-at="above"] {
     font-size: var(--luke-type-toolbar-title-size);
     line-height: var(--luke-type-toolbar-title-leading);
     font-weight: var(--luke-type-emphasis-weight);
   }
 
-  .luke-list-row:has(.luke-list-row-lead[data-at="above"]) .luke-list-row-title {
+  .luke-list-row[data-lead="above"]:not([data-unread="true"]) .luke-list-row-title {
     font-weight: var(--luke-type-body-weight);
   }
 
@@ -281,9 +269,7 @@
 
   /* What has not been seen reads in a heavier weight, and its description
      in the body's ink, until it is, as a mail app's unread threads do. */
-  .luke-list-row[data-unread="true"] .luke-list-row-title,
-  .luke-list-row[data-unread="true"]:has(.luke-list-row-lead[data-at="above"])
-    .luke-list-row-title {
+  .luke-list-row[data-unread="true"] .luke-list-row-title {
     font-weight: var(--luke-type-emphasis-weight);
   }
 
@@ -293,14 +279,13 @@
 
   /* A row whose thing is done with stands back in the palette's quieter
      inks rather than by fading its words, which still name what it opens
-     and so read at AA (`docs/DESIGN.md`): its title, and a lead line over
-     it, take the muted ink its description and metadata already wear.
-     Only its mark,
+     and so read at AA (`docs/DESIGN.md`): its title and lead take the muted
+     ink its description and metadata already wear. Only its mark,
      the leading glyph its words already say, fades.
      Its fill, which says it is open or in hand, and its acts stay as they
      are. */
-  .luke-list-row[data-muted="true"] .luke-list-row-title,
-  .luke-list-row[data-muted="true"] .luke-list-row-lead[data-at="above"] {
+  .luke-list-row[data-muted="true"]
+  :is(.luke-list-row-title, .luke-list-row-lead[data-at="above"]) {
     color: var(--luke-color-text-muted);
   }
 
@@ -334,17 +319,17 @@
      the description runs the words' and the end's tracks
      whole under both; the row's marks stand level with the title's line
      rather than the row's middle. A lead on a line of its own over the title
-     takes the title's place on that first line, as tall as its own larger
-     words, the marks standing level with it, and the title runs whole under
-     it. The words and the first line lend their parts to the press's tracks,
-     so each lands in its own. */
+     takes the title's place on that first line, the marks level with its
+     larger words, and the title runs whole under it.
+     The words and the first line lend their parts to the press's tracks, so
+     each lands in its own. */
   /* Note that a swiped row holds its press inside its slide, so the press is
      matched wherever it stands in the row. */
   .luke-list-row[data-meta="title"] {
     --luke-list-row-head-leading: var(--luke-type-label-leading);
   }
 
-  .luke-list-row[data-meta="title"]:has(.luke-list-row-lead[data-at="above"]) {
+  .luke-list-row[data-meta="title"][data-lead="above"] {
     --luke-list-row-head-leading: var(--luke-type-toolbar-title-leading);
   }
 
@@ -367,11 +352,35 @@
     height: var(--luke-list-row-head-leading);
   }
 
+  /* Note that the metadata beside a lead line sits on the lead's baseline,
+     its smaller words level with the name's, because centring the two boxes
+     leaves the smaller words high. Its line stands at the top of the meta,
+     so the meta's baseline is its words' whatever mark leads it, and its
+     marks stand at the top of that line, where a face centres on the name's
+     cap height rather than on the smaller words' middle. */
+  .luke-list-row[data-meta="title"][data-lead="above"]
+  :is(
+    .luke-list-row-lead[data-at="above"],
+    .luke-list-row-lead-label,
+    .luke-list-row-end,
+    .luke-list-row-end > .luke-list-row-meta
+  ) {
+    align-self: baseline;
+  }
+
+  .luke-list-row[data-meta="title"][data-lead="above"] .luke-list-row-meta > * {
+    vertical-align: top;
+  }
+
+  .luke-list-row[data-meta="title"][data-lead="above"] .luke-list-row-meta > * > * {
+    align-self: flex-start;
+  }
+
   .luke-list-row[data-meta="title"] .luke-list-row-description {
     grid-column: text-start / end-end;
   }
 
-  .luke-list-row[data-meta="title"]:has(.luke-list-row-lead[data-at="above"]) .luke-list-row-title {
+  .luke-list-row[data-meta="title"][data-lead="above"] .luke-list-row-title {
     grid-column: text-start / end-end;
   }
 

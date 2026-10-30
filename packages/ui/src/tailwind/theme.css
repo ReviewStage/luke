@@ -787,9 +787,8 @@
   --spacing-choice-segment: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
   --spacing-choice-segment-compact: calc(var(--luke-control-height) - 2 * var(--luke-space-4));
   --spacing-caption-glyph: var(--luke-type-caption-size);
-  /* A list row's lead line over its title, as a mail app's sender line,
-     draws its glyph at its words' size, the top bar's (`list-row.css`). */
-  --spacing-list-row-head-glyph: var(--luke-type-toolbar-title-size);
+  /* A glyph at the size of the words it stands in (`ListRow`'s lead). */
+  --spacing-words-glyph: 1em;
   --radius-choice-segment: calc(var(--luke-control-radius) - var(--luke-space-2));
   --color-choice-thumb: var(--luke-color-thumb);
   --color-tone-ink: var(--luke-tone-ink);

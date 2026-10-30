@@ -168,12 +168,10 @@ export type { ListSelection } from "../selection/list-selection.js";
  * description's words following it on the same line, as a mail app tags a
  * thread with its mailbox. A fuller row may stand it on a line of its own
  * instead (`LIST_ROW_LEAD.ABOVE`), over its title, its glyph and its whole
- * name the row's largest and boldest words, the time at that line's end in
- * its own quiet size, as a mail app names a thread's sender over its
- * subject: the title steps down under it to the body's weight, lifted again
- * while unread, so neither the name nor the title is cut short to make room
- * for the other. A fuller row that keeps to two lines may lead its
- * description with the plain words
+ * name the row's largest words, the time at that line's end, as a
+ * mail app names a thread's sender over its subject, so neither the name
+ * nor the title is cut short to make room for the other. A fuller row
+ * that keeps to two lines may lead its description with the plain words
  * instead (`LIST_ROW_LEAD.INLINE`), its glyph and its whole name in the
  * description's ink, a middle dot, then the description, as a two-line
  * row of its own kind reads its one quiet line.
@@ -366,8 +364,7 @@ const CHEVRON_CLASS =
  * What a row belongs to: a small chip of a glyph and a name cut short at a
  * short name's width leading its description, the glyph and the name bare
  * leading it, or a line of its own over its title, its glyph and its whole
- * name the row's largest words, with no chip round it, whose size and ink
- * the stylesheet sets beside the title's (`list-row.css`).
+ * name the row's largest words (`list-row.css`), with no chip round it.
  */
 const LEAD_CLASS = {
   [LIST_ROW_LEAD.DESCRIPTION]:
@@ -375,16 +372,6 @@ const LEAD_CLASS = {
   [LIST_ROW_LEAD.INLINE]:
     "luke-list-row-lead inline-flex max-w-full items-center gap-luke-4 align-bottom text-muted-foreground",
   [LIST_ROW_LEAD.ABOVE]: "luke-list-row-lead flex min-w-0 items-center gap-luke-6",
-} as const satisfies Record<ListRowLeadAt, string>;
-
-/** A lead's glyph, at its words' size: a caption's beside a description, the lead line's own over a title, in the quieter ink. */
-const LEAD_ICON_CLASS = {
-  [LIST_ROW_LEAD.DESCRIPTION]:
-    "luke-list-row-lead-icon inline-flex flex-none [&>svg]:size-caption-glyph",
-  [LIST_ROW_LEAD.INLINE]:
-    "luke-list-row-lead-icon inline-flex flex-none [&>svg]:size-caption-glyph",
-  [LIST_ROW_LEAD.ABOVE]:
-    "luke-list-row-lead-icon inline-flex flex-none text-muted-foreground [&>svg]:size-list-row-head-glyph",
 } as const satisfies Record<ListRowLeadAt, string>;
 
 /** What stands between a lead's plain words and the description they lead. */
@@ -718,7 +705,10 @@ export function ListRow({
   const leadMark =
     lead === undefined ? null : (
       <span className={LEAD_CLASS[leadAt]} data-at={leadAt}>
-        <span className={LEAD_ICON_CLASS[leadAt]} aria-hidden="true">
+        <span
+          className="luke-list-row-lead-icon inline-flex flex-none text-muted-foreground [&>svg]:size-words-glyph"
+          aria-hidden="true"
+        >
           {lead.icon}
         </span>
         <span
@@ -861,6 +851,7 @@ export function ListRow({
         ref={swipe === undefined ? (onPress ? undefined : ref) : hold}
         className={ROW_CLASS}
         data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
+        data-lead={above ? LIST_ROW_LEAD.ABOVE : undefined}
         data-actions={actsOnHover ? LIST_ROW_ACTIONS.HOVER : undefined}
         data-current={current === undefined ? undefined : "true"}
         data-selected={chosen ? "true" : undefined}

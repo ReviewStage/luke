@@ -238,21 +238,6 @@ function ListRows(): React.JSX.Element {
                 groups: [[{ label: "Mark as unread", onSelect: ignore }]],
               }}
             />
-            <ListRow
-              title="Settings rows line up their pop-ups"
-              lead={{ icon: <UserIcon />, label: "Settings layout pass" }}
-              leadAt={LIST_ROW_LEAD.ABOVE}
-              description="Merged"
-              meta="1d"
-              metaAt={LIST_ROW_META.TITLE}
-              ink={LIST_ROW_INK.SIDEBAR}
-              muted
-              onPress={() => undefined}
-              menu={{
-                thing: "Inbox item",
-                groups: [[{ label: "Mark as unread", onSelect: ignore }]],
-              }}
-            />
           </List>
         </div>
       </CatalogSection>
