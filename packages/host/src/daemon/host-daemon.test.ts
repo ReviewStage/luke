@@ -318,7 +318,7 @@ describe("a host's daemon", () => {
 
         const upgrade = reports.filter((line) => line.includes("upgrade needed"));
         expect(upgrade).toEqual([
-          `Luke host: upgrade needed: Luke no longer accepts this version. Rerun the install command to upgrade in place: curl -fsSL ${SERVICE}/install.sh | sudo sh`,
+          `Luke host: upgrade needed: Luke no longer accepts this version. Rerun the install command to upgrade in place: curl -fsSL ${SERVICE}/install.sh | sh`,
         ]);
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );

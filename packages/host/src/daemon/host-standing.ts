@@ -26,7 +26,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 /** How long the daemon asks Luke nothing after it was refused, before it tries again. */
 const QUIET = Duration.minutes(5);
 
-/** What the daemon says once Luke first took its register, which the install script reads as the box connected. */
+/** What the daemon says once Luke first took its register, which a person following its log reads as the box connected. */
 const HOST_CONNECTED_REPORT = "Luke host: Connected to Luke.";
 
 /** What Luke last said of this host. */
@@ -109,7 +109,7 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
     return now >= (yield* Ref.get(standing)).until;
   });
 
-  /** The first register Luke took, said once, which is what the install script waits to read. */
+  /** The first register Luke took, said once, which is what a person following its log waits to read. */
   const registered = (request: HttpClientRequest.HttpClientRequest, status: number) =>
     status >= 200 && status < 300 && request.url === registerUrl
       ? Effect.flatMap(Ref.getAndSet(connected, true), (said) =>

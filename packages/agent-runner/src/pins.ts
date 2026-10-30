@@ -391,12 +391,10 @@ export const GH_LINUX_PINS: LinuxToolPins = {
 
 /**
  * smolvm on a host (`apps/host`), which runs every agent in a VM of its own: the
- * release the install script fetches and checks, by the SHA-256 of each
+ * release an earlier install script fetched and checked, by the SHA-256 of each
  * architecture's tarball as smolvm's own release lists them
  * (`checksums.sha256`), and the version the daemon requires the box's
- * `smolvm` to answer `--version` with. `apps/web/install/install.sh` carries
- * the same version, addresses, and digests as literals, which a test holds
- * to these. A bump moves them together.
+ * `smolvm` to answer `--version` with.
  */
 export const SMOLVM_LINUX_PIN = {
   VERSION: "1.32.3",
@@ -420,14 +418,13 @@ export const SMOLVM_LINUX_PIN = {
  * by evicting the least recently used seeds no machine's disk backs onto
  * until the folder fits. It caps the whole folder, not Luke's image alone:
  * a seed of another image the user ran can go, and is pulled again on its
- * next use. `apps/web/install/install.sh` carries the bytes as a literal,
- * which a test holds to this.
+ * next use.
  */
 export const SMOLVM_SEED_CAP = {
   VARIABLE: "SMOLVM_IMAGE_SEED_MAX_BYTES",
   BYTES: 9 * 1024 ** 3,
 } as const;
 
-/** Luke's sandbox image, as CI publishes it from the cloud's own setup script, pinned by digest: what every host agent's VM boots, and what the install script fetches ahead of the first. */
+/** Luke's sandbox image, as CI publishes it from the cloud's own setup script, pinned by digest: what every host agent's VM boots. */
 export const SANDBOX_IMAGE =
   "ghcr.io/reviewstage/luke-sandbox:ea78580d96ce7256@sha256:f6ff07bdc663c9173a856a713e4caa02a725eedd3da4aed0029c662e3b0b33a5";
