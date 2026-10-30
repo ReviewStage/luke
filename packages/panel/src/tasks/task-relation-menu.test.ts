@@ -72,10 +72,7 @@ afterEach(() => {
 });
 
 /** Draws the task's head with its relations' door, answering each ask as it stands; drawing again hands the head the next ask. */
-function head(
-  door: TaskRelationDoor,
-  task: Task = TASK,
-): (ask: TaskRelationAsk) => void {
+function head(door: TaskRelationDoor, task: Task = TASK): (ask: TaskRelationAsk) => void {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);

@@ -22,8 +22,10 @@ import {
   type CodeRef,
   type ListedPullRequest,
   type RepositoryPin,
+  TASK_BLOCK_CHANGE,
   type Task,
   type TaskAgentPin,
+  type TaskBlockRelation,
   type TaskBlockRequest,
   type TaskMode,
   type TaskRelationChangeRequest,
@@ -746,6 +748,8 @@ export interface TasksControl {
   onSetTaskParent: (taskId: string, parentTaskId: string | null) => void;
   /** Takes a task out from under its parent, said in a toast whose Undo sets the parent back; nothing for a task with none. */
   onRemoveTaskParent: (taskId: string) => void;
+  /** Takes one block of a task away, said in a toast whose Undo adds it back; a refusal says why in a toast. */
+  onRemoveTaskBlock: (taskId: string, relation: TaskBlockRelation, otherId: string) => void;
   /** Moves one relation of a task to another kind in one call, drawn as the service answers it; a refusal says why in a toast. */
   onChangeTaskRelation: (taskId: string, relation: TaskRelationChangeRequest) => void;
   /** Opens a task's repository on GitHub in the browser. */
@@ -1106,6 +1110,9 @@ const PARENT_REPOSITORY_NOTE =
 
 /** What the toast says once a task's parent is removed, offering Undo. */
 const PARENT_REMOVED_NOTE = "Parent removed";
+
+/** What the toast says once a block is removed, offering Undo. */
+const BLOCK_REMOVED_NOTE = "Relation removed";
 
 /** What a relation's refusal says: its own reason where the service named one, and a plain refusal otherwise. */
 function relationRefusedNote(failure: RelationCallFailure | ParentCallFailure): string {
@@ -2384,12 +2391,15 @@ export function useTasksTab(input: {
   // A fixture's tasks are read from nowhere, so no block of one is kept. The
   // open document takes the task the service answers, so a refusal is all
   // there is to say, in a toast, since the menu that asked has closed.
-  const setTaskBlock = (taskId: string, block: TaskBlockRequest) => {
+  const setTaskBlock = (taskId: string, block: TaskBlockRequest, onKept?: () => void) => {
     if (fixture !== undefined) return;
     void act(ACT_KIND.TASKS_BLOCK, { taskId, block })
       .catch(taskUnreached)
       .then((answer) => {
-        if (!("failure" in answer)) return;
+        if (!("failure" in answer)) {
+          onKept?.();
+          return;
+        }
         toast({
           words: relationRefusedNote(answer.failure),
           tone: STATUS_TONE.DANGER,
@@ -2397,6 +2407,18 @@ export function useTasksTab(input: {
           failure: { surface: FAILURE_SURFACE.TASK_BLOCK, cause: answer, about: { taskId } },
         });
       });
+  };
+
+  // Remove relation asks nothing of a block, since it can be added back: once
+  // the service keeps it, a toast offers Undo, which adds the same block again.
+  const removeTaskBlock = (taskId: string, relation: TaskBlockRelation, otherId: string) => {
+    setTaskBlock(taskId, { change: TASK_BLOCK_CHANGE.REMOVE, relation, taskId: otherId }, () =>
+      toast(
+        undoToast(BLOCK_REMOVED_NOTE, () =>
+          setTaskBlock(taskId, { change: TASK_BLOCK_CHANGE.ADD, relation, taskId: otherId }),
+        ),
+      ),
+    );
   };
 
   // A fixture's tasks are read from nowhere, so no parent of one is kept. The
@@ -3621,7 +3643,8 @@ export function useTasksTab(input: {
     onChangeRepository: changeRepository,
     onSetRepository: setRepository,
     onSetTaskStanding: setTaskStanding,
-    onSetTaskBlock: setTaskBlock,
+    onSetTaskBlock: (taskId, block) => setTaskBlock(taskId, block),
+    onRemoveTaskBlock: removeTaskBlock,
     onSetTaskParent: (taskId, parentTaskId) => setTaskParent(taskId, parentTaskId),
     onRemoveTaskParent: removeTaskParent,
     onChangeTaskRelation: changeTaskRelation,

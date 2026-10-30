@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   TASK_PRIORITY,
   TASK_STATUS,
-  type TaskBlockRequest,
+  type TaskBlockRelation,
   type TaskRelationChangeRequest,
   type TaskSummary,
 } from "@luke/features/task-wire";
@@ -25,7 +25,8 @@ import { PlanRelations } from "./plan-relations.js";
  * plan-relations.test.ts -- the open task's Sub-tasks and Relations groups:
  * a sub-task's own nested under it once its fold opens, a group drawn only
  * while it holds a row, and a relation's kind moved from its pill in one
- * call, never a block taken away and added again. Synthetic tasks.
+ * call, never a block taken away and added again, and Remove relation
+ * taking the block away through the door that offers Undo. Synthetic tasks.
  */
 
 declare global {
@@ -77,7 +78,7 @@ function summary(id: string, number: number, parentTaskId?: string): TaskSummary
 function draw(
   listed: readonly TaskSummary[],
   blocks: { blockedBy?: string[]; blocks?: string[] },
-  sent: { changes: TaskRelationChangeRequest[]; blocks: TaskBlockRequest[] },
+  sent: { changes: TaskRelationChangeRequest[]; removed: [TaskBlockRelation, string][] },
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -88,24 +89,33 @@ function draw(
     workspaces: [ACME],
     listRead: true,
     onChangeTaskRelation: (_taskId, change) => sent.changes.push(change),
-    onSetTaskBlock: (_taskId, block) => sent.blocks.push(block),
+    onRemoveTaskBlock: (_taskId, relation, otherId) => sent.removed.push([relation, otherId]),
   });
   const task = { ...DOCUMENT_TASK, ...blocks };
   act(() =>
-    root?.render(onRegistry(AtomRegistry.make(), createElement(PlanRelations, { task, tasks }))),
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(PlanRelations, {
+          task,
+          tasks,
+          door: { workspaceName: ACME.name, tasks: listed },
+        }),
+      ),
+    ),
   );
   return container;
 }
 
 /** The ids of the rows a group's list draws, in order. */
 function rowIds(container: HTMLElement, list: string): (string | null)[] {
-  return [
-    ...container.querySelectorAll(`ul[aria-label='${list}'] > li[data-task-id]`),
-  ].map((row) => row.getAttribute("data-task-id"));
+  return [...container.querySelectorAll(`ul[aria-label='${list}'] > li[data-task-id]`)].map((row) =>
+    row.getAttribute("data-task-id"),
+  );
 }
 
 test("a sub-task's own stand under it once its fold opens, and a task with no relations draws no Relations group", () => {
-  const sent = { changes: [], blocks: [] };
+  const sent = { changes: [], removed: [] };
   const container = draw(
     [summary("t-2", 2, DOCUMENT_TASK.id), summary("t-3", 3, "t-2"), summary("t-4", 4)],
     {},
@@ -122,9 +132,9 @@ test("a sub-task's own stand under it once its fold opens, and a task with no re
 });
 
 test("picking another kind on a relation's pill moves it in one call, and Remove relation takes the block away", () => {
-  const sent: { changes: TaskRelationChangeRequest[]; blocks: TaskBlockRequest[] } = {
+  const sent: { changes: TaskRelationChangeRequest[]; removed: [TaskBlockRelation, string][] } = {
     changes: [],
-    blocks: [],
+    removed: [],
   };
   const container = draw([summary("t-5", 5)], { blockedBy: ["t-5"] }, sent);
   assert.equal(container.querySelector("ul[aria-label='Sub-tasks']"), null);
@@ -139,7 +149,7 @@ test("picking another kind on a relation's pill moves it in one call, and Remove
   assert.ok(blocks, "the menu offers Blocks");
   act(() => blocks.click());
   assert.deepEqual(sent.changes, [{ taskId: "t-5", from: "blocked-by", to: "blocks" }]);
-  assert.deepEqual(sent.blocks, []);
+  assert.deepEqual(sent.removed, []);
 
   act(() => pill()?.click());
   const remove = [...document.querySelectorAll<HTMLElement>("button, [role='option']")].find(
@@ -147,5 +157,5 @@ test("picking another kind on a relation's pill moves it in one call, and Remove
   );
   assert.ok(remove, "the menu offers Remove relation");
   act(() => remove.click());
-  assert.deepEqual(sent.blocks, [{ change: "remove", relation: "blocked-by", taskId: "t-5" }]);
+  assert.deepEqual(sent.removed, [["blocked-by", "t-5"]]);
 });

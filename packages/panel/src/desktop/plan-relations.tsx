@@ -1,17 +1,20 @@
 import {
-  TASK_BLOCK_CHANGE,
   TASK_RELATION_KIND,
   type Task,
   type TaskRelationKind,
   type TaskSummary,
 } from "@luke/features/task-wire";
 import {
+  BUTTON_SIZE,
   CHIP_LOOK,
   CHIP_SIZE,
   Chip,
   type FootRow,
+  GROUP_ACTIONS,
   GROUP_HEADING,
+  GroupAction,
   GroupHeader,
+  IconButton,
   ListRowCount,
   type MenuRow,
   POPOVER_ALIGN,
@@ -19,18 +22,17 @@ import {
   STATUS_TONE,
   Tooltip,
 } from "@luke/ui";
-import {
-  CornerDownRightIcon,
-  CornerLeftUpIcon,
-  GLYPH,
-  HandIcon,
-  ListTreeIcon,
-  NetworkIcon,
-  OctagonMinusIcon,
-} from "@luke/ui/icons";
+import { GLYPH, ListTreeIcon, NetworkIcon, PlusIcon } from "@luke/ui/icons";
 import { subTaskCount, subTasksOf, taskFinished } from "@luke/ui/task-list-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useId, useRef, useState } from "react";
+import {
+  TASK_RELATION_ORDER,
+  TASK_RELATION_WORDS,
+  type TaskRelationDoor,
+  TaskRelationIcon,
+  TaskRelationMenu,
+} from "../tasks/task-relation-menu.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
 import { type RelatedTaskRow, RelatedTasks } from "./related-tasks.js";
@@ -55,31 +57,23 @@ import { chipSubmenu } from "./standing-submenus.js";
  * (`onChangeTaskRelation`), so nothing is taken away and added again, and a
  * row moved to Parent leaves for the path's crumb, where a parent stands.
  * A related row's ⋯, right-click, and menu key lead its task's menu with
- * the same: Change relation, its four kinds, and Remove relation. A refusal,
- * a loop or another repository, is the service's, said in the toast its
- * door raises.
+ * the same: Change relation, its four kinds, and Remove relation, which
+ * acts at once and offers Undo in a toast. Each group's +, standing at rest
+ * on its head, drops the add menu (`task-relation-menu.tsx`) on its kind:
+ * Sub-task, or Blocked by. A refusal, a loop or another repository, is the
+ * service's, said in the toast its door raises.
  */
-
-/** Each kind as its pill, its menus' rows, and a row's Change relation say it. */
-const TASK_RELATION_WORDS = {
-  [TASK_RELATION_KIND.SUB_TASK]: "Sub-task",
-  [TASK_RELATION_KIND.PARENT]: "Parent",
-  [TASK_RELATION_KIND.BLOCKED_BY]: "Blocked by",
-  [TASK_RELATION_KIND.BLOCKS]: "Blocks",
-} as const satisfies Record<TaskRelationKind, string>;
-
-/** The kinds in the order a pill's menu and Change relation stand them. */
-const TASK_RELATION_ORDER: readonly TaskRelationKind[] = [
-  TASK_RELATION_KIND.SUB_TASK,
-  TASK_RELATION_KIND.PARENT,
-  TASK_RELATION_KIND.BLOCKED_BY,
-  TASK_RELATION_KIND.BLOCKS,
-];
 
 /** What each group is called, and its list for a reader moving between lists. */
 const GROUP_WORDS = {
   SUB_TASKS: "Sub-tasks",
   RELATIONS: "Relations",
+} as const;
+
+/** What each group's + is called, said beside its glyph. */
+const ADD_WORDS = {
+  SUB_TASK: "Add sub-task",
+  RELATION: "Add relation",
 } as const;
 
 /** What the Relations group's count counts, said to a reader beside the figure. */
@@ -94,20 +88,6 @@ const SUB_TASKS_OF = "Sub-tasks of";
 
 /** The pill's pinned row's id, apart from every kind's. */
 const REMOVE_ROW_ID = "remove-relation";
-
-/** Each kind's icon, which leads its pill and its rows wherever a kind is offered. */
-function TaskRelationIcon({ kind }: { kind: TaskRelationKind }): React.JSX.Element {
-  switch (kind) {
-    case TASK_RELATION_KIND.BLOCKED_BY:
-      return <OctagonMinusIcon aria-hidden="true" />;
-    case TASK_RELATION_KIND.BLOCKS:
-      return <HandIcon aria-hidden="true" />;
-    case TASK_RELATION_KIND.SUB_TASK:
-      return <CornerDownRightIcon aria-hidden="true" />;
-    case TASK_RELATION_KIND.PARENT:
-      return <CornerLeftUpIcon aria-hidden="true" />;
-  }
-}
 
 /** The four kinds as a menu's rows, each by its icon. */
 const KIND_ROWS: readonly MenuRow[] = TASK_RELATION_ORDER.map((kind) => ({
@@ -129,8 +109,8 @@ interface RelationDoors {
 
 /**
  * The doors that change how `other` stands to `task`, as `kind`, through
- * the task list's own: a kind moved in one call, a block taken away as the
- * blocks' change, and a sub-task taken out from under the task.
+ * the task list's own: a kind moved in one call, and a block taken away or
+ * a sub-task taken out from under the task, each offering Undo.
  */
 function relationDoors(
   tasks: TasksControl,
@@ -146,17 +126,13 @@ function relationDoors(
       switch (kind) {
         case TASK_RELATION_KIND.BLOCKED_BY:
         case TASK_RELATION_KIND.BLOCKS:
-          tasks.onSetTaskBlock(task.id, {
-            change: TASK_BLOCK_CHANGE.REMOVE,
-            relation: kind,
-            taskId: other.id,
-          });
+          tasks.onRemoveTaskBlock(task.id, kind, other.id);
           return;
         case TASK_RELATION_KIND.SUB_TASK:
-          tasks.onSetTaskParent(other.id, null);
+          tasks.onRemoveTaskParent(other.id);
           return;
         case TASK_RELATION_KIND.PARENT:
-          tasks.onSetTaskParent(task.id, null);
+          tasks.onRemoveTaskParent(task.id);
           return;
       }
     },
@@ -256,6 +232,66 @@ function RelationKindPill({
 }
 
 /**
+ * A group's +, standing at rest on its head: a glyph's button dropping the
+ * add menu on `kind`, the menu hanging from the button and handing focus
+ * back to it once closed.
+ */
+function RelationAdd({
+  task,
+  door,
+  kind,
+  label,
+}: {
+  task: Task;
+  door: TaskRelationDoor;
+  kind: TaskRelationKind;
+  label: string;
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const drawn = useDisclosure(open);
+  const menuId = useId();
+  const box = useRef<HTMLSpanElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const close = () => {
+    setOpen(false);
+    button.current?.focus();
+  };
+  return (
+    <GroupAction>
+      <span className="plan-relation-add relative inline-flex" ref={box}>
+        <Tooltip label={open ? undefined : label}>
+          <IconButton
+            ref={button}
+            icon={<PlusIcon />}
+            label={label}
+            size={BUTTON_SIZE.COMPACT}
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            aria-controls={open ? menuId : undefined}
+            onClick={() => setOpen(!open)}
+          />
+        </Tooltip>
+        {drawn.mounted ? (
+          <TaskRelationMenu
+            id={menuId}
+            task={task}
+            door={door}
+            kind={kind}
+            align={POPOVER_ALIGN.END}
+            leaving={drawn.leaving}
+            menuRef={drawn.ref}
+            onClose={close}
+            onLeave={(left) => {
+              if (!(left instanceof Node && box.current?.contains(left))) setOpen(false);
+            }}
+          />
+        ) : null}
+      </span>
+    </GroupAction>
+  );
+}
+
+/**
  * The task's sub-tasks as rows, each nested under its parent to any depth,
  * those under a folded row passed by, in the order they were made; a loop
  * of parents, which nothing writes, is cut where it closes.
@@ -314,14 +350,17 @@ function blockTasks(
 /**
  * The open task's Sub-tasks and Relations groups at the head of its plan,
  * each only while it holds a row; nothing for a task with neither. Its
- * relations change through the task list's doors.
+ * relations change through the task list's doors, and each group's + adds
+ * one through the add menu's `door`.
  */
 export function PlanRelations({
   task,
   tasks,
+  door,
 }: {
   task: Task;
   tasks: TasksControl;
+  door: TaskRelationDoor;
 }): React.JSX.Element | null {
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   const fold = (taskId: string) =>
@@ -371,6 +410,15 @@ export function PlanRelations({
             />
           }
           fold={{ defaultOpen: true }}
+          actions={
+            <RelationAdd
+              task={task}
+              door={door}
+              kind={TASK_RELATION_KIND.SUB_TASK}
+              label={ADD_WORDS.SUB_TASK}
+            />
+          }
+          actionsShown={GROUP_ACTIONS.AT_REST}
         >
           <RelatedTasks tasks={tasks} label={GROUP_WORDS.SUB_TASKS} rows={subTasks} />
         </GroupHeader>
@@ -385,6 +433,15 @@ export function PlanRelations({
             noun: relations.length === 1 ? RELATIONS_NOUN.one : RELATIONS_NOUN.many,
           }}
           fold={{ defaultOpen: true }}
+          actions={
+            <RelationAdd
+              task={task}
+              door={door}
+              kind={TASK_RELATION_KIND.BLOCKED_BY}
+              label={ADD_WORDS.RELATION}
+            />
+          }
+          actionsShown={GROUP_ACTIONS.AT_REST}
         >
           <RelatedTasks tasks={tasks} label={GROUP_WORDS.RELATIONS} rows={relations} />
         </GroupHeader>
