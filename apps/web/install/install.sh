@@ -37,13 +37,17 @@
 # `sudo loginctl enable-linger`, the one sudo it ever asks for, said first. It
 # then downloads the release's tarball for the computer and checks it against
 # the SHA-256 this script carries before anything of it is installed, unpacks
-# it beside the releases already there, points current at it, and runs
-# `luke-host connect`, which prints a link and a code and waits for a member to
-# approve it in Luke, or answers at once where the box is connected already.
-# Once it is connected it starts the service, a systemd user service enabled
-# at boot or a LaunchAgent that runs while the user is logged in, and removes
-# every other release. Run again, it upgrades in place: the box keeps its
-# pairing, and the service is restarted on the new release.
+# it beside the releases already there, and points current at it. It starts
+# the service before the box is connected, a systemd user service enabled at
+# boot or a LaunchAgent that runs while the user is logged in, which waits
+# until the box's record stands; then it runs `luke-host connect`, which prints
+# a link and a code and waits for a member to approve it in Luke, or answers at
+# once where the box is connected already. Once it is connected it restarts the
+# service on the new release and removes every other release. Where the code
+# is denied or lapses, the service stands waiting, so a later
+# `luke-host connect` by hand is followed within a minute. Run again, it
+# upgrades in place: the box keeps its pairing, and the service is restarted
+# on the new release.
 set -eu
 
 VERSION="@@VERSION@@"
@@ -258,9 +262,12 @@ download() {
 }
 
 # Writes the service's unit, run through current so a release is switched by
-# moving that link, restarted only when it crashes, since the daemon exits 0
-# once Luke refuses the box's secret, and started with the user manager, which
-# lingering starts at boot.
+# moving that link, and started with the user manager, which lingering starts
+# at boot. Note that it is restarted a minute after any exit, a clean one
+# among them: the daemon exits 0 on a record Luke refused, the box removed in
+# Luke, and asks Luke nothing on it, so a box paired again by hand with
+# luke-host connect is followed within a minute, as the daemon's own rest
+# follows one never connected.
 write_unit() {
   mkdir -p "$(dirname "$UNIT_FILE")"
   cat >"$UNIT_FILE" <<UNIT_EOF
@@ -271,8 +278,8 @@ Documentation=https://tryluke.dev
 [Service]
 Type=simple
 ExecStart=$RELEASES/current/bin/luke-host run
-Restart=on-failure
-RestartSec=10
+Restart=always
+RestartSec=60
 
 [Install]
 WantedBy=default.target
@@ -280,11 +287,11 @@ UNIT_EOF
 }
 
 # Writes the LaunchAgent to $1, running the release through current, logging
-# to $2. It runs at login, and again after a crash but not after a clean exit,
-# the daemon's answer to its host being removed in Luke. Note that the state
-# root is the release's launcher's to name, and that there is no ProcessType,
-# since a Background job's CPU and disk are throttled and its agents are work
-# the member asked for.
+# to $2. It runs at login, and again a minute after any exit, as write_unit's
+# unit does and for its reason. Note that the state root is the release's
+# launcher's to name, and that there is no ProcessType, since a Background
+# job's CPU and disk are throttled and its agents are work the member asked
+# for.
 write_launch_agent() {
   cat >"$1" <<PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -301,10 +308,9 @@ write_launch_agent() {
 	<key>RunAtLoad</key>
 	<true/>
 	<key>KeepAlive</key>
-	<dict>
-		<key>SuccessfulExit</key>
-		<false/>
-	</dict>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>60</integer>
 	<key>StandardOutPath</key>
 	<string>$2</string>
 	<key>StandardErrorPath</key>
@@ -347,14 +353,20 @@ start_launch_agent() {
 }
 
 # Stops the service before its release's folder is swapped for the same
-# version's, so no daemon runs from a folder taken away under it. Note that a
-# new version's folder stands beside the running one's, which needs no stop.
+# version's, so no daemon runs from a folder taken away under it; refuses,
+# having changed nothing, where it is still running. Note that a new
+# version's folder stands beside the running one's, which needs no stop.
 stop_service() {
   if [ "$(uname -s)" = "Darwin" ]; then
     stop_launch_agent "$(id -u)"
-  else
-    systemctl --user stop "$UNIT" >/dev/null 2>&1 || true
+    return 0
   fi
+  systemctl --user stop "$UNIT" >/dev/null 2>&1 || true
+  case "$(systemctl --user is-active "$UNIT" 2>/dev/null)" in
+    active | activating | deactivating | reloading | refreshing)
+      fail "Could not stop $UNIT, so nothing was changed. Stop it with systemctl --user stop $UNIT, then run this again."
+      ;;
+  esac
 }
 
 # Unpacks the checked tarball $1 into the releases, as versions/$VERSION, and
@@ -384,37 +396,66 @@ remove_other_releases() {
   done
 }
 
+# The command a person at the box types to run the release, by its name where
+# PATH finds it there and by its link otherwise.
+command_name() {
+  case ":${PATH:-}:" in
+    *":$HOME/.local/bin:"*) printf 'luke-host' ;;
+    *) printf '%s' "$LINK" ;;
+  esac
+}
+
 # Connects the box through the release just installed, which prints the link
 # and the code and waits for them to be approved, or answers at once where the
 # box is connected already; ends the script where it is not connected, by the
-# code connect ended with, the service not started.
+# code connect ended with, the service left waiting for a connect by hand.
 connect_box() {
   code=0
   "$LINK" connect --origin "$ORIGIN" || code=$?
   [ "$code" -eq 0 ] && return 0
-  printf '%s Luke host is installed but was not started, since this box is not connected. Run the install command again for a new code: curl -fsSL %s/install.sh | sh\n' "$CROSS" "$ORIGIN" >&2
+  printf '%s This box is not connected yet. Luke host is installed and follows it once it is. For a new code, run: %s connect --origin %s\n' "$CROSS" "$(command_name)" "$ORIGIN" >&2
   exit "$code"
 }
 
-# Starts the systemd user service on the release just installed, enabled so
-# lingering starts it at boot.
-start_unit() {
+# Enables and starts the systemd user service before the box is connected, so
+# a box connected later by hand is followed too. Note that one already running
+# is left on its release until restart_unit.
+enable_unit() {
   write_unit
   systemctl --user daemon-reload
   systemctl --user enable "$UNIT" >/dev/null 2>&1 || fail "Could not enable $UNIT."
-  systemctl --user restart "$UNIT" ||
+  systemctl --user start "$UNIT" ||
     fail "Could not start $UNIT. See journalctl --user -u $UNIT"
-  ok "Started $UNIT, which keeps running after you log out"
+  ok "Enabled $UNIT, which keeps running after you log out"
 }
 
-# Starts the LaunchAgent on the release just installed, in this user's login
-# session where they are logged in, and says it runs only while they are.
-start_mac_agent() {
-  uid="$(id -u)"
-  stop_launch_agent "$uid"
+# Restarts the systemd user service on the release just installed, once the
+# box is connected, so it follows the box at once.
+restart_unit() {
+  systemctl --user restart "$UNIT" ||
+    fail "Could not start $UNIT. See journalctl --user -u $UNIT"
+  ok "Started $UNIT on Luke host $VERSION"
+}
+
+# Writes the LaunchAgent and loads it before the box is connected, where this
+# user is logged in and it is not loaded already, as enable_unit does and for
+# its reason. Note that one already running is left on its release until
+# restart_mac_agent.
+load_mac_agent() {
   mkdir -p "$(dirname "$PLIST")" "$(dirname "$MAC_LOG")"
   write_launch_agent "$PLIST" "$MAC_LOG"
   chmod 644 "$PLIST"
+  uid="$(id -u)"
+  launchctl print "gui/$uid/$MAC_LABEL" >/dev/null 2>&1 ||
+    launchctl bootstrap "gui/$uid" "$PLIST" >/dev/null 2>&1 || true
+}
+
+# Restarts the LaunchAgent on the release just installed, once the box is
+# connected, in this user's login session where they are logged in, and says
+# it runs only while they are.
+restart_mac_agent() {
+  uid="$(id -u)"
+  stop_launch_agent "$uid"
   start_launch_agent "$uid" "$PLIST" || true
   printf 'It runs while %s is logged in, so on a Mac nobody sits at, turn on automatic login for %s.\n' "$(id -un)" "$(id -un)"
 }
@@ -492,21 +533,23 @@ main() {
   check_sha256 "$work/$tarball" "$target_sha256"
   ok "Downloaded and checked $tarball (sha256 matches)"
   install_release "$work/$tarball"
+  if [ "$kernel" = "Darwin" ]; then
+    load_mac_agent
+  else
+    enable_unit
+  fi
 
   connect_box
   if [ "$kernel" = "Darwin" ]; then
-    start_mac_agent
+    restart_mac_agent
   else
-    start_unit
+    restart_unit
   fi
   remove_other_releases
 
   printf '\nConnected. This box gets ready in Luke, then you can pick it under a task'"'"'s Runs on.\n'
   printf 'To upgrade later, run the same command again.\n'
-  case ":${PATH:-}:" in
-    *":$HOME/.local/bin:"*) printf 'To remove it: luke-host uninstall\n' ;;
-    *) printf 'To remove it: %s uninstall\n' "$LINK" ;;
-  esac
+  printf 'To remove it: %s uninstall\n' "$(command_name)"
   # Note that a systemd service does not keep a WSL distro up: WSL stops it about
   # 15 seconds after its last window closes, unless instanceIdleTimeout is -1.
   if [ "$ON_WSL" = true ]; then

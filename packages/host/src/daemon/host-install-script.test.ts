@@ -189,7 +189,8 @@ function servedScript(served: string, version: string): string {
  * keeps them in. The account lingers unless asked otherwise; where it does
  * not, `loginctl` turns lingering on only where the account may itself, or
  * under `sudo`, which refuses where asked. Where asked, `id` answers that the
- * run is root's.
+ * run is root's; and where a run says `FAKE_STOP_REFUSED`, `systemctl stop`
+ * leaves the service running.
  */
 const box = (
   os: Os,
@@ -214,8 +215,9 @@ const box = (
     systemctl: [
       `printf 'systemctl %s\\n' "$*" >>"$FAKE_ASKED"`,
       'case "$2" in',
-      '  restart) echo active >"$FAKE_ROOT/unit" ;;',
-      '  stop | disable) echo inactive >"$FAKE_ROOT/unit" ;;',
+      '  start | restart) echo active >"$FAKE_ROOT/unit" ;;',
+      '  stop) [ -n "$FAKE_STOP_REFUSED" ] || echo inactive >"$FAKE_ROOT/unit" ;;',
+      '  disable) echo inactive >"$FAKE_ROOT/unit" ;;',
       '  is-active) cat "$FAKE_ROOT/unit" 2>/dev/null || echo inactive ;;',
       "esac",
     ].join("\n"),
@@ -435,7 +437,7 @@ describe("the host's install script", () => {
   );
 
   it.each([OS.LINUX, OS.DARWIN])(
-    "a whole run on %s installs the release into the account, starts its service only once connect has connected the box, and leaves the layout luke-host uninstall removes",
+    "a whole run on %s installs the release into the account, starts its service before connect and restarts it once connect has connected the box, and leaves the layout luke-host uninstall removes",
     (os) => {
       const computer = box(os);
       const answer = computer.install("0.3.0");
@@ -450,13 +452,16 @@ describe("the host's install script", () => {
       expect(readFileSync(join(computer.state, "device.json"), "utf8")).toBe("paired");
       const asked = computer.asked();
       const connected = asked.indexOf(`luke-host connect --origin ${ORIGIN}`);
-      const started = asked.findIndex(
-        (line) =>
-          line === "systemctl --user restart luke-host.service" ||
-          line.startsWith(`launchctl bootstrap gui/`),
+      const starts = asked.flatMap((line, at) =>
+        line === "systemctl --user start luke-host.service" ||
+        line === "systemctl --user restart luke-host.service" ||
+        line.startsWith("launchctl bootstrap gui/")
+          ? [at]
+          : [],
       );
       expect(connected).toBeGreaterThanOrEqual(0);
-      expect(started).toBeGreaterThan(connected);
+      expect(starts.some((at) => at < connected)).toBe(true);
+      expect(starts.some((at) => at > connected)).toBe(true);
 
       const removed = computer.run([computer.link, "uninstall"]);
       expect(removed.status, removed.stderr).toBe(0);
@@ -466,19 +471,19 @@ describe("the host's install script", () => {
     },
   );
 
-  it("ends a run whose code is denied with connect's words and how to try again, its service not started", () => {
+  it("ends a run whose code is denied with connect's words and the connect to run by hand, its service left waiting for it", () => {
     const computer = box(OS.LINUX);
     const answer = computer.install("0.3.0", { FAKE_CONNECT_EXIT: "2" });
 
     expect(answer.status).toBe(2);
     expect(answer.stderr).toContain("The code was denied in Luke");
     expect(answer.stderr).toContain(
-      `Run the install command again for a new code: curl -fsSL ${ORIGIN}/install.sh | sh`,
+      `For a new code, run: ${computer.link} connect --origin ${ORIGIN}`,
     );
-    expect(computer.asked().some((line) => /systemctl --user (enable|restart)/u.test(line))).toBe(
-      false,
-    );
-    expect(existsSync(computer.service)).toBe(false);
+    const asked = computer.asked();
+    expect(asked).toContain("systemctl --user enable luke-host.service");
+    expect(asked).toContain("systemctl --user start luke-host.service");
+    expect(asked).not.toContain("systemctl --user restart luke-host.service");
   });
 
   it("run again on a connected box, upgrades in place: keeps its pairing, moves current to the new release, removes the old one, and restarts the service", () => {
@@ -498,7 +503,37 @@ describe("the host's install script", () => {
     expect(computer.asked().slice(before)).toContain("systemctl --user restart luke-host.service");
   });
 
-  it("writes a LaunchAgent that runs the release through current at login, again after a crash only, logging where it is told", () => {
+  it("refuses to swap a release for the same version's while its service will not stop, leaving the release it runs as it stands", () => {
+    const computer = box(OS.LINUX);
+    expect(computer.install("0.3.0").status).toBe(0);
+    const release = join(computer.releases, "versions/0.3.0/bin/luke-host");
+
+    const answer = computer.install("0.3.0", { FAKE_STOP_REFUSED: "1" });
+
+    expect(answer.status).toBe(1);
+    expect(answer.stderr).toContain("Could not stop luke-host.service, so nothing was changed");
+    expect(existsSync(release)).toBe(true);
+  });
+
+  it("writes a unit that runs the release through current with the user manager, again a minute after any exit, a clean one among them", () => {
+    const home = folder();
+    const answer = sh(["-c", `. "${SCRIPT}"; account_paths; write_unit; cat "$UNIT_FILE"`], {
+      LUKE_HOST_INSTALL_LIBRARY: "1",
+      HOME: home,
+    });
+
+    expect(answer.status).toBe(0);
+    for (const line of [
+      `ExecStart=${home}/.local/share/luke-host/current/bin/luke-host run`,
+      "Restart=always",
+      "RestartSec=60",
+      "WantedBy=default.target",
+    ]) {
+      expect(answer.stdout.split("\n")).toContain(line);
+    }
+  });
+
+  it("writes a LaunchAgent that runs the release through current at login, again a minute after any exit, logging where it is told", () => {
     const home = folder();
     const plist = join(folder(), "agent.plist");
     const log = join(home, "Library/Logs/Luke Host/luke-host.log");
@@ -513,7 +548,8 @@ describe("the host's install script", () => {
       `<key>Label</key><string>${LABEL}</string>`,
       `<key>ProgramArguments</key><array><string>${home}/.local/share/luke-host/current/bin/luke-host</string><string>run</string></array>`,
       "<key>RunAtLoad</key><true/>",
-      "<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>",
+      "<key>KeepAlive</key><true/>",
+      "<key>ThrottleInterval</key><integer>60</integer>",
       `<key>StandardOutPath</key><string>${log}</string>`,
       `<key>StandardErrorPath</key><string>${log}</string>`,
     ]) {
