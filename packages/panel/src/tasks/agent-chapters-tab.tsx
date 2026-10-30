@@ -1013,7 +1013,6 @@ function chaptersState(
           icon={<GLYPH.PULL_REQUEST_CHAPTERS />}
           action={{
             label: CHAPTERS_WORDS.GENERATE,
-            icon: <SparklesIcon aria-hidden="true" />,
             look: EMPTY_STATE_ACTION_LOOK.PRIMARY,
             onClick: read.generate,
           }}
