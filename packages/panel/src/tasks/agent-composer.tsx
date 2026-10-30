@@ -32,6 +32,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
+import { GLYPH } from "@luke/ui/icons";
 import { OPENAI_KEY_MISSING_NOTE } from "@luke/ui/microphone-access";
 import { type ReportedFailure, UNREPORTED, type Unreported } from "@luke/ui/reported-failure";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -46,6 +47,7 @@ import {
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { modEnterSends } from "../enter-sends.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
@@ -68,6 +70,7 @@ import type { SkillSource } from "./skill-picker.js";
 import { useMentionBox } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 import type { AgentModelControl } from "./use-agent-model.js";
+import { useModifierHeld } from "./use-modifier-held.js";
 
 /**
  * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go or a server's sign-in expired.
@@ -212,6 +215,9 @@ const BUTTON = {
   SENDING: "Sending",
   ATTACH: "Attach files",
   MORE_THING: "Composer",
+  QUEUE: "Queue",
+  STEER: "Steer",
+  SAVE: "Save",
 } as const;
 
 /**
@@ -393,6 +399,27 @@ function ComposerMore({
   );
 }
 
+/**
+ * How an agent's box queues a message behind the turn under way, and edits
+ * one queued already (`agent-queue-dock.tsx`); none for a box that queues
+ * nothing, as an eve agent's or New task's.
+ */
+export interface ComposerQueueing {
+  /** Whether a turn is under way or about to start, a line the box sent still on its way among them: what Queue is offered by. */
+  readonly working: boolean;
+  /** Whether Enter queues while a turn runs, as Settings says (`agentEnter`); ⌘↩ does the other. */
+  readonly enterQueues: boolean;
+  /** Queues the box's message behind the turn. */
+  readonly onQueue: () => void;
+  /** Whether the box holds a queued message's words being edited, which Send saves back into its place and ⌘↩ steers. */
+  readonly editing: boolean;
+  readonly onSave: () => void;
+  /** Sends the edited message now with the box's words, as that message. */
+  readonly onSteer: () => void;
+  /** Gives the edit up, as Escape with no list open does; the row's own Cancel does the same. */
+  readonly onCancel: () => void;
+}
+
 export function AgentComposer({
   agentId,
   status,
@@ -426,6 +453,7 @@ export function AgentComposer({
   onLeave,
   focusedByOwner = false,
   listSide = MENTION_MENU_SIDE.ABOVE,
+  queueing,
 }: {
   /** The agent the box writes to, which its `@` list does not offer; none for a draft not yet started. */
   agentId?: string | undefined;
@@ -487,6 +515,8 @@ export function AgentComposer({
   focusedByOwner?: boolean;
   /** Which side of the caret's line the `@` and `/` lists stand: over it, as at a tab's foot, or under it, as on a new account's welcome. */
   listSide?: MentionMenuSide;
+  /** How the box queues behind the turn and edits a queued message; none where it queues nothing. */
+  queueing?: ComposerQueueing | undefined;
 }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const card = useRef<HTMLDivElement>(null);
@@ -521,8 +551,17 @@ export function AgentComposer({
       setFilesRefused(words !== undefined);
     },
   });
-  const empty = !sendsEmpty && !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
-  const showsStop = empty && stoppable && !composer.sending;
+  const editingQueued = queueing?.editing === true;
+  // Whether Send takes nothing now: the box held, unable to send, or still reading a file handed to it.
+  const sendHeld = held || !sendable || files.reading;
+  // Note that an edit's Save stands with the box emptied, since saving nothing gives the edit up.
+  const empty =
+    !sendsEmpty && !editingQueued && !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
+  const showsStop = empty && stoppable && !composer.sending && !editingQueued;
+  // While a turn runs and the box holds a message it may go two ways; holding ⌘ says on Send which a send takes.
+  const queues = queueing?.working && !empty && !held && !files.reading && !editingQueued;
+  const modifierHeld = useModifierHeld(queues || editingQueued);
+  const queuesNow = queues && queueing.enterQueues !== modifierHeld;
   const { planEditor } = useSideBundles();
   const bundle = useAtomValue(planEditor);
   // Note that a bundle that failed is not kept (`bundle-loader.ts`), so Retry imports it again, as a File tab's tree does.
@@ -674,7 +713,8 @@ export function AgentComposer({
       setRefusal(words);
       setFilesRefused(false);
     },
-    onLeave,
+    // Escape with no list open gives up an edit of a queued message, the box keeping the caret.
+    onLeave: editingQueued ? queueing?.onCancel : onLeave,
     side: listSide,
   });
   const { dictation, dictating } = pickers;
@@ -688,6 +728,56 @@ export function AgentComposer({
       () => setStopping(false),
     );
   };
+
+  /**
+   * The box's message gone the way `go` takes it: sent, queued behind the
+   * turn, or an edit of a queued message saved or steered. Note that every
+   * way is the one step, so the box's notes go and its caret comes back
+   * alike whichever way its message went.
+   */
+  const sentBy = (go: () => void) => {
+    setRefusal(undefined);
+    setCut(false);
+    refocus.current = card.current?.contains(document.activeElement) === true;
+    go();
+    setSends((count) => count + 1);
+  };
+  /** The box's message sent now: into the turn under way, or opening one. */
+  const steer = () => sentBy(composer.send);
+  /** Send as it stands: an edit saved, the message queued where a send queues now, or sent. */
+  const submit = () => {
+    if (editingQueued) return sentBy(queueing.onSave);
+    if (queuesNow) return sentBy(queueing.onQueue);
+    steer();
+  };
+  /** The other way than a send that queues where `pressQueues` says, which ⌘↩ and a touch held on Send take: an edit steered, or the message steered or queued. */
+  const sendOtherWay = (pressQueues: boolean) => {
+    if (editingQueued) return sentBy(queueing.onSteer);
+    if (pressQueues) return steer();
+    if (queueing !== undefined) sentBy(queueing.onQueue);
+  };
+  /** A key the queue takes: ⌘↩ steers an edit, or sends the other way than Enter, held where Send is. */
+  const queueKey = (event: KeyboardEvent): boolean => {
+    if (queueing === undefined) return false;
+    if (!modEnterSends(event)) return false;
+    if (editingQueued) {
+      if (!sendHeld) sendOtherWay(false);
+      return true;
+    }
+    if (!queues || !sendable) return false;
+    sendOtherWay(queueing.enterQueues);
+    return true;
+  };
+  // Send says what a send does while it is other than steering, as its glyph alone in the round send's place:
+  // Save for an edit, and Queue or Steer as ⌘ turns it.
+  const sendWay =
+    editingQueued && !modifierHeld
+      ? { label: BUTTON.SAVE, icon: <GLYPH.DONE /> }
+      : queuesNow
+        ? { label: BUTTON.QUEUE, icon: <GLYPH.QUEUED /> }
+        : (queues || editingQueued) && modifierHeld
+          ? { label: BUTTON.STEER, icon: <GLYPH.STEER /> }
+          : undefined;
 
   // Note that a popover closed by key while the ⋯ stands hands focus to the
   // ⋯, after its own close has handed it to its hidden press, because a
@@ -755,13 +845,7 @@ export function AgentComposer({
       <PromptInput
         className={closed ? "opacity-60" : undefined}
         dropping={files.drop.dropping}
-        onSubmit={() => {
-          setRefusal(undefined);
-          setCut(false);
-          refocus.current = card.current?.contains(document.activeElement) === true;
-          composer.send();
-          setSends((count) => count + 1);
-        }}
+        onSubmit={submit}
       >
         <ComposerBody
           files={
@@ -796,6 +880,7 @@ export function AgentComposer({
             {...pickers.field}
             onKey={(event) =>
               pickers.field.onKey(event) ||
+              queueKey(event) ||
               // A file still being read holds the owner's keys too, as it holds Send.
               (!files.reading && onKey?.(event) === true)
             }
@@ -861,10 +946,13 @@ export function AgentComposer({
           }
           strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
           send={{
-            label: sendLabel,
+            label: sendWay?.label ?? sendLabel,
+            ...(sendWay === undefined ? undefined : { icon: sendWay.icon }),
             chord: wording?.chord,
+            // Note that a hold takes the other way than Send as it reads, which a held ⌘ may already have turned.
+            onHold: queues || editingQueued ? () => sendOtherWay(queuesNow === true) : undefined,
             empty,
-            held: held || !sendable || files.reading,
+            held: sendHeld,
             busy: composer.sending,
             busyLabel: BUTTON.SENDING,
           }}

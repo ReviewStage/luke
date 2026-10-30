@@ -20,10 +20,11 @@
 import { agentDelegationTable, agentTable } from "../schemas/agent.js";
 import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
 import { agentPin } from "../schemas/agent-pin.js";
+import { agentQueue } from "../schemas/agent-queue.js";
 import { attachment } from "../schemas/attachment.js";
 import { invitation, member, organization, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
-import { channel } from "../schemas/channel.js";
+import { channel, channelLook } from "../schemas/channel.js";
 import { device } from "../schemas/device.js";
 import { deviceAgentLine, deviceAgentRequest } from "../schemas/device-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
@@ -256,6 +257,11 @@ const runnerLineSync = defineSyncTable(runnerLine, {
   ignore: [runnerLine.acceptedAt],
 });
 
+/** Where an agent's queue stands, moved on by every write to it (`agent-queue-store.ts`), on the agent's topic, which its transcript's held read is woken on. */
+export const agentQueueSync = defineSyncTable(agentQueue, {
+  topics: [{ kind: TOPIC.AGENT, column: agentQueue.agentId }],
+});
+
 /**
  * A line queued for a local agent's runner, on its account's topic, which
  * the account's Macs' held read of their lines and a wait for a runner's
@@ -378,6 +384,11 @@ export const channelSync = defineSyncTable(channel, {
       topics: [{ kind: TOPIC.ACCOUNT, column: member.userId }],
     },
   ],
+});
+
+/** A member's last look at a channel, on that member's own topic alone, since only they read it. */
+export const channelLookSync = defineSyncTable(channelLook, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: channelLook.userId }],
 });
 
 /** An automation, on its workspace's topic and its creator's. */
@@ -532,6 +543,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   agentPinSync,
   macCommandSync,
   runnerLineSync,
+  agentQueueSync,
   deviceAgentLineSync,
   deviceAgentRequestSync,
   planCommentThreadSync,
@@ -541,6 +553,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   inboxItemReadSync,
   attachmentSync,
   channelSync,
+  channelLookSync,
   automationSync,
   automationRunSync,
   planRevisionSync,

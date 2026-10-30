@@ -16,6 +16,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { afterPaint } from "../after-paint.js";
 import type { SkillSource } from "./skill-picker.js";
 import { opensFile, SkillRef, type SkillSubject, type SkillWithFile } from "./skill-ref.js";
 import { type TranscriptElement, TranscriptWords } from "./transcript-blocks.js";
@@ -121,17 +122,21 @@ export function SkillFiles({
   const skills = read !== undefined && read.source === source ? read.skills : undefined;
   // Note that the skills are read once for every reader that asks, and a
   // read that did not land is asked again by the next reader that asks.
+  // Note that the read goes once the frame that asked has painted, so it never holds up the words being drawn.
   const ask = useCallback(() => {
     if (source === undefined || asked.current === source) return;
     asked.current = source;
-    source().then((answer) => {
-      // A read for a task or repository left since is no answer for this one.
+    afterPaint(() => {
       if (asked.current !== source) return;
-      if ("skills" in answer) {
-        setRead({ source, skills: new Map(answer.skills.map((skill) => [skill.name, skill])) });
-      } else {
-        asked.current = undefined;
-      }
+      source().then((answer) => {
+        // A read for a task or repository left since is no answer for this one.
+        if (asked.current !== source) return;
+        if ("skills" in answer) {
+          setRead({ source, skills: new Map(answer.skills.map((skill) => [skill.name, skill])) });
+        } else {
+          asked.current = undefined;
+        }
+      });
     });
   }, [source]);
   const doors = useMemo(
@@ -159,22 +164,28 @@ export function useSkillOpener(): ((skill: SkillOption) => void) | undefined {
   return useContext(SkillFileContext)?.onOpen;
 }
 
-/** A message the developer sent, as markdown with every line break typed kept, each skill it names drawn as its chip; `asDocument` draws it as a document, as `TranscriptWords` does. */
+/** A message the developer sent, as markdown with every line break typed kept, each skill it names drawn as its chip; `asDocument` draws it as a document and `line` on one line, as `TranscriptWords` does. */
 export function SentWords({
   text,
   asDocument = false,
+  line = false,
 }: {
   text: string;
   asDocument?: boolean | undefined;
+  line?: boolean | undefined;
 }): ReactNode {
   const skills = useKnownSkills(holdsSlashWord(text));
   const tokens = skills === undefined ? [] : skillTokens(text, new Set(skills.keys()));
-  if (tokens.length === 0) return <TranscriptWords text={text} typed asDocument={asDocument} />;
+  if (tokens.length === 0) {
+    return <TranscriptWords text={text} typed asDocument={asDocument} line={line} />;
+  }
   const element: TranscriptElement = {
     markdown: withChips(text, tokens),
     tag: SKILL_ELEMENT.TAG,
     attributes: [SKILL_ELEMENT.NAME],
     components: SKILL_COMPONENTS,
   };
-  return <TranscriptWords text={text} element={element} typed asDocument={asDocument} />;
+  return (
+    <TranscriptWords text={text} element={element} typed asDocument={asDocument} line={line} />
+  );
 }

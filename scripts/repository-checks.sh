@@ -156,11 +156,13 @@ pnpm --dir "$LUKE_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
 # in `packages/service/src/core.ts` exist to pull in, so a rule enforced on the packages alone
 # leaves the directory nearest the failure uncovered. Side-effect imports count
 # — a door is spelled `import "…"` with no names, and an extensionless one fails
-# exactly the same way.
+# exactly the same way. An import `?raw` is a file's text, which the function's
+# bundle inlines (`apps/web/server/function-bundles.ts`), so no loader ever
+# reads its specifier.
 extensionless_imports=$(grep -rEn '(from|import) "\.\.?/[^"]*"' \
     "$LUKE_REPO_ROOT"/packages/*/src \
     "$LUKE_REPO_ROOT"/apps/web/server |
-    grep -vE '\.(js|css)"' || true)
+    grep -vE '\.(js|css)"|\?raw"' || true)
 if [[ -n "$extensionless_imports" ]]; then
     printf 'error: relative imports in packages/ and the web function sources must end in .js (Node ESM cannot load them compiled otherwise):\n%s\n' \
         "$extensionless_imports" >&2

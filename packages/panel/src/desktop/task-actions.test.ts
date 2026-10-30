@@ -313,7 +313,7 @@ test("a question asked of one task does not outlive it: the delete the Plan tab'
   assert.equal(asking(), false, "the question went with the task it was asked of");
 });
 
-test("⌘K's Change repository shows the plan where the panel hides it, and the repository chip in the plan opens its menu for the ask once, not again on a later draw", () => {
+test("⌘K's Change repository shows the plan where the panel hides it, and the repository crumb in the plan opens its menu for the ask once, not again on a later draw", () => {
   const told: string[] = [];
   const { tasks } = openTab({ [TASK.id]: "acme/app" });
   const asked = (open: boolean): TasksControl => ({
@@ -341,16 +341,16 @@ test("⌘K's Change repository shows the plan where the panel hides it, and the 
 
   draw(asked(true));
   const chip = () =>
-    [...container.querySelectorAll<HTMLButtonElement>(".plan-task-standing button")].find((each) =>
+    [...container.querySelectorAll<HTMLButtonElement>(".plan-task-path button")].find((each) =>
       each.textContent?.includes("acme/app"),
     );
   assert.equal(
     chip()?.getAttribute("aria-expanded"),
     "true",
-    "the chip opens its menu for the ask",
+    "the crumb opens its menu for the ask",
   );
 
-  // The chip drawn afresh, as another tab and back would, opens nothing for the ask already answered.
+  // The crumb drawn afresh, as another tab and back would, opens nothing for the ask already answered.
   draw(asked(true));
   act(() => {
     chip()?.click();

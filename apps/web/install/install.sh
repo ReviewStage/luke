@@ -1,8 +1,9 @@
 #!/bin/sh
 # install.sh -- installs Luke's host daemon on a Linux box (x64 or arm64) or an Apple silicon Mac, enrolls it with an install token, and upgrades it in place when run again without one.
 #
-# Served by the web app at /install.sh with the release written in
-# (apps/web/scripts/install-script.ts), and run as root:
+# Served by the web app at /install.sh with the release, and the origin it
+# was fetched from, written in (packages/service/src/agents/host-install-script-app.ts),
+# and run as root:
 #
 #   curl -fsSL https://tryluke.dev/install.sh | sudo sh -s -- --token <token>
 #
@@ -66,7 +67,7 @@ SANDBOX_IMAGE="ghcr.io/reviewstage/luke-sandbox:ea78580d96ce7256@sha256:f6ff07bd
 # past it, of any image, so another image the user ran may be pulled again.
 SMOLVM_SEED_MAX_BYTES="9663676416"
 
-ORIGIN="https://tryluke.dev"
+ORIGIN="@@ORIGIN@@"
 HOST_USER="luke-host"
 HOST_HOME="/var/lib/luke-host"
 INSTALL_DIR="/opt/luke-host"

@@ -13,6 +13,7 @@ import {
   type AgentTodos,
   type AgentTranscriptMessage,
   agentMessageWords,
+  QUEUE_CHANGE,
 } from "@luke/features/agent-wire";
 import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/failure-remedy";
 import { threadLineWords } from "@luke/features/inbox-wire";
@@ -29,6 +30,7 @@ import {
 } from "@luke/features/turn-rows";
 import { replyFromWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
+import { AGENT_ENTER } from "@luke/settings";
 import {
   ANNOUNCE,
   announce,
@@ -46,6 +48,7 @@ import {
   InlineRef,
   LineSummary,
   MESSAGE_LINE_ALIGN,
+  MESSAGE_LINE_INSET,
   MessageHead,
   MessageLine,
   NOTE_LINE_LOOK,
@@ -102,6 +105,7 @@ import { failureShown, unreadShown } from "../failure-report.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
+import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import {
   AGENT_PART,
@@ -164,6 +168,7 @@ import {
 } from "./agent-pictures.js";
 import { AgentPlace } from "./agent-place.js";
 import { type PublishedDoors, PublishedRow } from "./agent-published.js";
+import { AgentQueueDock } from "./agent-queue-dock.js";
 import { SendingAgent } from "./agent-ref.js";
 import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
@@ -241,6 +246,7 @@ import {
 import { type HeldComposer, useAgentComposer } from "./use-agent-composer.js";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model.js";
 import { useAgentPullRequest } from "./use-agent-pull-request.js";
+import { useAgentQueue, useQueueEditing } from "./use-agent-queue.js";
 import { useAgentServers } from "./use-agent-servers.js";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript.js";
 import type { AgentsControl } from "./use-agents.js";
@@ -1348,7 +1354,8 @@ const NO_ARRIVED: readonly ArrivedLine[] = [];
  * The line a finished turn ends on, the line under every message
  * (`MessageLine`): how long it worked and when it ended as its lead, then
  * its Copy and Copy link beside it, set as any message's are under its
- * bubble rather than floated over the turn's corner. A turn still running
+ * bubble rather than floated over the turn's corner, though flush with the
+ * turn's words, which stand on no bubble. A turn still running
  * offers no Copy, because its words are not yet whole.
  */
 function TurnFoot({ workedFor, copy }: { workedFor: ReactNode; copy: ReactNode }): ReactNode {
@@ -1356,7 +1363,12 @@ function TurnFoot({ workedFor, copy }: { workedFor: ReactNode; copy: ReactNode }
   return (
     // Note that the room above is the row's rather than the worked line's, because the buttons are taller than the words and centring them would push the words down.
     <div className="agent-turn-foot mt-tight-gap" data-turn-foot="">
-      <MessageLine align={MESSAGE_LINE_ALIGN.START} sender={workedFor} actions={copy} />
+      <MessageLine
+        align={MESSAGE_LINE_ALIGN.START}
+        inset={MESSAGE_LINE_INSET.FLUSH}
+        sender={workedFor}
+        actions={copy}
+      />
     </div>
   );
 }
@@ -2581,6 +2593,12 @@ function AgentTabView({
     [transcript.messages, cut],
   );
   const lines = useMemo(() => agentLines(kept, composer.sent), [kept, composer.sent]);
+  const queue = useAgentQueue(agent.id, transcript.queue);
+  const pictures = useAgentPictureDoor(agent.id);
+  const queueEditing = useQueueEditing(composer, queue, pictures);
+  const enterQueues = useAppSlice(APP_SETTINGS_VIEW)?.agentEnter === AGENT_ENTER.QUEUE;
+  // Only the agent's starter may change its queue, as the service holds (`controlsAgent`); a teammate reads it.
+  const controlsQueue = starter === undefined;
   // A rewind writes in the box, so it is offered only while the box takes words.
   const boxOpen =
     pilotNote === undefined &&
@@ -2629,7 +2647,10 @@ function AgentTabView({
   // Note that a line on its way counts as work from the press, because the agent's status turns
   // running only once the service takes the line, which may take seconds.
   const lineGoing = composer.sent.some((line) => line.state === SENT_LINE_STATE.PENDING);
-  const working = agentStillWriting(agent.status) || lineGoing;
+  // Note that the transcript's own page says the agent runs before the agent's summary does, since a line that
+  // lands awaiting its turn moves the page and not the list the summary is read from.
+  const pageRuns = transcript.pageStatus !== undefined && agentStillWriting(transcript.pageStatus);
+  const working = agentStillWriting(agent.status) || pageRuns || lineGoing;
   const name = agentName(agent, models);
   const keyProvider = providerOf(agent.model);
   const tab = useRef<HTMLElement>(null);
@@ -2670,7 +2691,6 @@ function AgentTabView({
     [undelivered, unsent, sending, retryLine],
   );
   const starterActor = usePerson(agent.startedBy);
-  const pictures = useAgentPictureDoor(agent.id);
   const wholeParts = useWholePartDoor(agent.id);
   const { members, former } = useMemberDirectory();
   // The door the box hands Reply, which lays a quote in at its caret.
@@ -2740,10 +2760,7 @@ function AgentTabView({
                     failedWith={transcript.failedWith}
                     // Note that a rewind draws the working line from its press until its line reads back, however slow its stop and relaunch.
                     working={working || composer.rewinding}
-                    pageRuns={
-                      transcript.pageStatus !== undefined &&
-                      agentStillWriting(transcript.pageStatus)
-                    }
+                    pageRuns={pageRuns}
                     rewindOut={composer.rewindOut}
                     sessionStarting={agent.status === AGENT_STATUS.STARTING}
                     // Note that while a rewind goes the line counts from its press, never from the run before it, which is the agent's start until a new turn begins.
@@ -2787,6 +2804,22 @@ function AgentTabView({
       <AgentTabFoot>
         <TodosDock messages={lines} working={working} />
         <PublishedDock published={published} doors={doors} />
+        <AgentPicturesProvider value={pictures}>
+          <AgentQueueDock
+            messages={queue.messages}
+            controls={controlsQueue}
+            paused={queue.paused}
+            editing={queueEditing.editing}
+            onMove={queue.move}
+            onSteer={(message) =>
+              queue.change({ change: QUEUE_CHANGE.STEER, messageId: message.id })
+            }
+            onEdit={queueEditing.edit}
+            onCancelEdit={queueEditing.cancelRow}
+            onDelete={queue.remove}
+            onResume={() => queue.change({ change: QUEUE_CHANGE.RESUME })}
+          />
+        </AgentPicturesProvider>
         {pilotNote !== undefined ? (
           pilotNote
         ) : onUnarchive !== undefined ? (
@@ -2827,6 +2860,19 @@ function AgentTabView({
             skills={skills}
             replyDoor={replyDoor}
             closedRemedy={closedRemedy}
+            queueing={
+              agent.runtime === undefined || !controlsQueue
+                ? undefined
+                : {
+                    working,
+                    enterQueues,
+                    onQueue: queueEditing.queue,
+                    editing: queueEditing.editing !== undefined,
+                    onSave: queueEditing.save,
+                    onSteer: queueEditing.steer,
+                    onCancel: queueEditing.cancel,
+                  }
+            }
           />
         )}
       </AgentTabFoot>

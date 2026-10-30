@@ -1,6 +1,7 @@
 import { keepIdentity, MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
 import { describeWire, readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Effect, Schema as EffectSchema, Option, Result, SchemaTransformation } from "effect";
+import { AGENT_QUEUE_BOUNDS, agentQueueSchema } from "./agent-queue-wire.js";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import {
@@ -478,7 +479,7 @@ const agentAttachmentSchema = EffectSchema.Struct({
 export type AgentAttachment = typeof agentAttachmentSchema.Type;
 
 /** The files of one message: bounded in count, and in the bytes they hold together, each file padded apart. */
-const agentAttachmentsSchema = EffectSchema.Array(agentAttachmentSchema).check(
+export const agentAttachmentsSchema = EffectSchema.Array(agentAttachmentSchema).check(
   EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_ATTACHMENTS),
   EffectSchema.makeFilter(
     (attachments) =>
@@ -488,7 +489,7 @@ const agentAttachmentsSchema = EffectSchema.Array(agentAttachmentSchema).check(
 );
 
 /** A message's words, trimmed and bounded, and empty where the files carry the message alone. */
-const messageWordsSchema = EffectSchema.Trim.check(
+export const messageWordsSchema = EffectSchema.Trim.check(
   EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_MESSAGE_CHARS),
 );
 
@@ -659,6 +660,78 @@ export const agentMessageRequestSchema = EffectSchema.Struct({
 }).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments)));
 
 export type AgentMessageRequest = typeof agentMessageRequestSchema.Type;
+
+/** What a member asks of an agent's queue (`agent-queue-wire.ts`). */
+export const QUEUE_CHANGE = {
+  /** A message queued at the end, under the id its window minted, which a retry carries again. */
+  ADD: "add",
+  /** A queued message written again in its place, its words and files those the edit saved, its edit over. */
+  EDIT: "edit",
+  /** A queued message taken into a member's composer to edit, which stops the hand-off at it until the edit is saved or cancelled; or, `held` false, the edit cancelled. */
+  HOLD: "hold",
+  DELETE: "delete",
+  /** A queued message sent now, steering the turn under way, and taken out of the queue. */
+  STEER: "steer",
+  /** The queue in a new order: every message it holds, by id, in the order they now go. */
+  REORDER: "reorder",
+  /** The queue's pause dropped, the next message going once no turn runs. */
+  RESUME: "resume",
+} as const;
+
+const queuedMessageIdSchema = wireUuidSchema;
+
+/** One change to an agent's queue, by its kind. */
+export const agentQueueChangeSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    change: EffectSchema.Literal(QUEUE_CHANGE.ADD),
+    /** The message's id, minted by the window that queues it, which a retry carries again. */
+    id: queuedMessageIdSchema,
+    text: messageWordsSchema,
+    attachments: EffectSchema.optionalKey(agentAttachmentsSchema),
+  }).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments))),
+  EffectSchema.Struct({
+    change: EffectSchema.Literal(QUEUE_CHANGE.EDIT),
+    messageId: queuedMessageIdSchema,
+    text: messageWordsSchema,
+    /** The files the edit saved, which replace the message's; absent where it keeps none. */
+    attachments: EffectSchema.optionalKey(agentAttachmentsSchema),
+  }).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments))),
+  EffectSchema.Struct({
+    change: EffectSchema.Literal(QUEUE_CHANGE.DELETE),
+    messageId: queuedMessageIdSchema,
+  }),
+  EffectSchema.Struct({
+    change: EffectSchema.Literal(QUEUE_CHANGE.STEER),
+    messageId: queuedMessageIdSchema,
+    /** The words an edit steers it with, which replace its own as it goes; absent to steer it as it stands. */
+    text: EffectSchema.optionalKey(messageWordsSchema),
+    /** The files an edit steers it with, which replace its own, given only beside the edit's words; absent there where it keeps none. */
+    attachments: EffectSchema.optionalKey(agentAttachmentsSchema),
+  }).check(
+    EffectSchema.makeFilter(({ text, attachments }) =>
+      text === undefined ? attachments === undefined : hasWordsOrFiles(text, attachments),
+    ),
+  ),
+  EffectSchema.Struct({
+    change: EffectSchema.Literal(QUEUE_CHANGE.HOLD),
+    messageId: queuedMessageIdSchema,
+    held: EffectSchema.Boolean,
+  }),
+  EffectSchema.Struct({
+    change: EffectSchema.Literal(QUEUE_CHANGE.REORDER),
+    order: EffectSchema.Array(queuedMessageIdSchema).check(
+      EffectSchema.isMaxLength(AGENT_QUEUE_BOUNDS.MAX_MESSAGES),
+    ),
+  }),
+  EffectSchema.Struct({ change: EffectSchema.Literal(QUEUE_CHANGE.RESUME) }),
+]);
+
+export type AgentQueueChange = typeof agentQueueChangeSchema.Type;
+
+/** What a change to the queue answers: the queue as it then stands. */
+export const agentQueueAnswerSchema = EffectSchema.Struct({ queue: agentQueueSchema });
+
+export type AgentQueueAnswer = typeof agentQueueAnswerSchema.Type;
 
 /**
  * Rewinding an agent (POST): the developer's line it goes back to just
@@ -2354,6 +2427,8 @@ export type AgentSubagentTitle = typeof agentSubagentTitleSchema.Type;
 export const agentMessagesAnswerSchema = EffectSchema.Struct({
   messages: EffectSchema.Array(agentTranscriptMessageSchema),
   cursor: agentCursorSchema,
+  /** The messages queued behind the agent's turn, and whether the queue stands paused, on its own transcript; absent while none is queued, on a worker's page, and from a service older than it. */
+  queue: EffectSchema.optionalKey(agentQueueSchema),
   /**
    * The turn the page before the oldest message here is read before, on a
    * task conversation's page read from its newest turns or before one;

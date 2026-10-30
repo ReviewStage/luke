@@ -42,6 +42,10 @@ export const GATEWAY_METHOD = {
   TASKS_MOVE: "tasks.move",
   /** One block of a task added or taken away on the service; the open document takes the task it answered without reading it again. */
   TASKS_BLOCK: "tasks.block",
+  /** One task's parent set or cleared on the service; the list and the open document take the task it answered without reading either again. */
+  TASKS_SET_PARENT: "tasks.setParent",
+  /** One relation of a task moved to another kind on the service, in one call; the list and the open document take the task it answered without reading either again. */
+  TASKS_CHANGE_RELATION: "tasks.changeRelation",
   /** The developer's edit of a task's document saved on the service; the open document takes the task it answered, and a conflict leaves it unchanged. */
   TASKS_EDIT: "tasks.edit",
   /** A window of a file of one task's repository, read from GitHub through the service as it stands now and coloured here; answered to the caller, never held in the view. */
@@ -67,12 +71,13 @@ export const GATEWAY_METHOD = {
   /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the caller, never held in the view. */
   TASKS_PAGES: "tasks.pages",
   /**
-   * One plan's pages, followed from now until let go, over Neon Realtime.
-   * What they hold is heard as `TASKS_PAGES_CHANGED` events, never answered;
-   * following what is already followed does nothing.
+   * One plan's pages, or one agent's on no task, held followed for a window
+   * from now until it is let go, over Neon Realtime, and a while after among
+   * those let go lately. What they hold is heard as `PAGES_CHANGED` events,
+   * on the app state every window draws, never answered.
    */
   TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
-  /** A followed plan's pages let go: no more `TASKS_PAGES_CHANGED` events of it until it is followed again. */
+  /** One plan's or agent's pages let go by the window that held them: they stay among those let go lately until later ones push them out. */
   TASKS_PAGES_UNFOLLOW: "tasks.pagesUnfollow",
   /**
    * One plan's newest page of history, followed from now until let go, over
@@ -185,6 +190,12 @@ export const GATEWAY_METHOD = {
   HOSTS_KEEP_INSTALL_TOKEN: "hosts.keepInstallToken",
   /** One of the account's install tokens revoked; done, or why not. */
   HOSTS_REVOKE_INSTALL_TOKEN: "hosts.revokeInstallToken",
+  /** A box's pending pairing read by the code its link named; the box and where its start came from, or why not. */
+  HOSTS_PAIRING_READ: "hosts.pairingRead",
+  /** A box's pending pairing approved by its code, which makes the account's host; its id, or why not. */
+  HOSTS_PAIRING_APPROVE: "hosts.pairingApprove",
+  /** A box's pending pairing denied by its code; done, or why not. */
+  HOSTS_PAIRING_DENY: "hosts.pairingDeny",
   /** One task's coding agents with their status, read from the service now. */
   AGENTS_LIST: "agents.list",
   /** A workspace's coding agents, newest started first, narrowed to one repository where one is named. */
@@ -212,6 +223,7 @@ export const GATEWAY_METHOD = {
   AGENTS_RENAME: "agents.rename",
   /** One agent's MCP servers switched, the whole list of those off, for its next turn on; the agent as it then stands, or why it is unchanged. */
   AGENTS_SERVERS: "agents.servers",
+  AGENTS_QUEUE: "agents.queue",
   /** One agent stopped; the agent as it then stands, or why it was not. */
   AGENTS_STOP: "agents.stop",
   /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */
@@ -226,8 +238,6 @@ export const GATEWAY_METHOD = {
   AGENTS_DELETE: "agents.delete",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   AGENTS_PAGE: "agents.page",
-  /** A workspace's open channels, each with what waits on the reader there and when they last looked; or why there are none. */
-  CHANNELS_LIST: "channels.list",
   /** A channel made; the workspace's channels as they then stand. */
   CHANNELS_CREATE: "channels.create",
   /** A channel's name, purpose, or both edited; the workspace's channels as they then stand. */
@@ -236,18 +246,19 @@ export const GATEWAY_METHOD = {
   CHANNELS_ARCHIVE: "channels.archive",
   /** An archived channel opened again; the workspace's channels as they then stand. */
   CHANNELS_UNARCHIVE: "channels.unarchive",
-  /** A workspace's archived channels, the latest archived first; or why there are none. */
-  CHANNELS_ARCHIVED: "channels.archived",
   /** A thread moved into another open channel of its workspace; the thread as it then stands, or why it did not move. */
   CHANNELS_MOVE: "channels.move",
   /**
-   * A workspace's channels, followed from now until let go or the account
-   * signs out, over Neon Realtime. Which of them moved is heard as
-   * `CHANNELS_CHANGED` events, never answered; following again starts over.
+   * A workspace's channels, open and archived, held followed for a window
+   * from now until it is let go, and a while after among the workspaces let
+   * go lately. What they hold is heard as `WORKSPACE_CHANNELS_CHANGED`
+   * events, on the app state every window draws, never answered.
    */
   CHANNELS_FOLLOW: "channels.follow",
-  /** A followed workspace's channels let go: no more `CHANNELS_CHANGED` events of it until it is followed again. */
+  /** A workspace's channels let go by the window that held them: they stay among those let go lately until later ones push them out. */
   CHANNELS_UNFOLLOW: "channels.unfollow",
+  /** A held workspace's channels read again at once, as Try again asks; never answered. */
+  CHANNELS_RETRY: "channels.retry",
   /** The reader's look at a channel stamped; the workspace's channels as they then stand. */
   CHANNELS_LOOK: "channels.look",
   /** A page of a channel's threads the reader may read, oldest first; or why there are none. */
@@ -559,16 +570,16 @@ export const GATEWAY_EVENT = {
   BROWSER_LIVE_CLOSED: "browserLive.closed",
   /** A followed transcript's next page, or why there is none, each time it moves while it is followed. */
   TRANSCRIPT_CHANGED: "transcript.changed",
-  /** A followed plan's pages as they now stand, each time they move while followed. */
-  TASKS_PAGES_CHANGED: "tasks.pagesChanged",
+  /** Every plan's or agent's pages the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  PAGES_CHANGED: "pages.changed",
   /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
   TASKS_HISTORY_CHANGED: "tasks.historyChanged",
   /** A followed task's cloud Browser tabs as they now stand, each time one moves or a takeover lapses while followed. */
   TASKS_BROWSER_TABS_CHANGED: "tasks.browserTabsChanged",
   /** A followed workspace's automations, or an automation's runs, as they now stand, each time they move while followed. */
   AUTOMATIONS_CHANGED: "automations.changed",
-  /** Which of a followed workspace's channels moved, each time any does while followed, or why it is heard no more. */
-  CHANNELS_CHANGED: "channels.changed",
+  /** Every workspace's channels the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  WORKSPACE_CHANNELS_CHANGED: "workspaceChannels.changed",
   /** A followed workspace's people as they now stand, each time they move while followed. */
   WORKSPACE_PEOPLE_CHANGED: "workspacePeople.changed",
   /** A followed workspace's pending invitations as they now stand, each time they move while followed. */

@@ -54,7 +54,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES } from "../bundle-loader.js";
 import { rendererRuntime } from "../renderer-runtime.js";
@@ -94,6 +94,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { holdFrames, settleFrames } from "../testing/frames.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -216,6 +217,14 @@ async function* streamOf(
 let told: AnyAct[] = [];
 /** What a read of what the agent published answers; none refuses it. */
 let published: AgentPullRequestAnswer | undefined;
+
+/** What the agent published, as the task list carries it of the agent's row, where the host lays it; none where it published nothing. */
+function listedPublished(): TasksControl["listedPullRequests"] {
+  const opened = published?.pullRequest ?? undefined;
+  return opened === undefined
+    ? undefined
+    : [{ agentId: AGENT_ID, taskId: null, pullRequest: opened }];
+}
 /** How many of the pull request's conversation entries its read left on GitHub; none answers no read. */
 let earlier = 0;
 /** The owner of the fork the published pull request's head is pushed to; none for the base repository's own. */
@@ -417,6 +426,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   takeDownTerminal?.();
   takeDownTerminal = undefined;
+  vi.restoreAllMocks();
 });
 
 /** The page of the agent, standing in the task's place, as the window's tasks control holds it, its atoms held by `registry`. */
@@ -429,7 +439,11 @@ function mount(
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const page = createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID, away });
+  const page = createElement(DesktopAgentPage, {
+    tasks: { ...tasks, listedPullRequests: tasks.listedPullRequests ?? listedPublished() },
+    agentId: AGENT_ID,
+    away,
+  });
   act(() =>
     root?.render(
       onRegistry(
@@ -630,7 +644,7 @@ function PanelPage(): React.JSX.Element {
   );
   drawnPanel = sidePanel;
   return createElement(DesktopAgentPage, {
-    tasks: { ...tasksControl({}), sidePanel },
+    tasks: { ...tasksControl({}), sidePanel, listedPullRequests: listedPublished() },
     agentId: AGENT_ID,
   });
 }
@@ -652,7 +666,7 @@ function PhonePanelPage(): React.JSX.Element {
     ShellRoomContext.Provider,
     { value: SHELL_ROOM.NARROW },
     createElement(DesktopAgentPage, {
-      tasks: { ...tasksControl({}), sidePanel },
+      tasks: { ...tasksControl({}), sidePanel, listedPullRequests: listedPublished() },
       agentId: AGENT_ID,
       away: { label: "Inbox", onPress: () => undefined },
     }),
@@ -1133,8 +1147,11 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md in a
     status: AGENT_STATUS.COMPLETED,
     title: null,
   };
+  handState(experimentsOn(EXPERIMENT.SKILLS));
   localStorage.clear();
   installScrollIntoView();
+  // Note that the skills are read once the frame that asked for them has painted.
+  holdFrames();
   const page = document.createElement("div");
   document.body.append(page);
   root = createRoot(page);
@@ -1142,7 +1159,7 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md in a
   await settle();
 
   // The skills are read once a sent message first asks for them, a settle after the transcript lands.
-  await settle();
+  await settleFrames();
   const chip = page.querySelector<HTMLButtonElement>("button[data-skill-ref]");
   assert.ok(chip, "the skill is its chip");
   act(() => chip.click());

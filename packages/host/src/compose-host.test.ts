@@ -3,6 +3,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import { loopbackConsent } from "@luke/credentials/node";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { PRODUCT_PLATFORM } from "@luke/features/analytics";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import { GATEWAY_ERROR, GATEWAY_METHOD } from "@luke/gateway";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
@@ -56,7 +57,11 @@ const machineOver = (stateRoot: string) =>
     Layer.mergeAll(
       Layer.succeed(StateRoot, stateRoot),
       Layer.succeed(RunMode, runModeFor({ capture: false, fixture: true })),
-      Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
+      Layer.succeed(AppIdentity, {
+        appVersion: "0.0.0-test",
+        packaged: false,
+        platform: PRODUCT_PLATFORM.DESKTOP,
+      }),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
       Layer.succeed(IdSource, { create: () => "id" }),
       reporterLayer(() => undefined),

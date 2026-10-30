@@ -1,0 +1,20 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // The host's tests run the install script and the daemon's own command
+    // as a shell runs them (`src/daemon/host-install-script.test.ts`), and
+    // both live outside this workspace, so they are inputs as well, or a
+    // change to a script alone would replay the old pass. An explicit inputs
+    // list replaces the root's, so it starts with $TURBO_DEFAULT$ and keeps
+    // the shard sequencer the root names.
+    "test:vitest": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/scripts/lib/test-shards.mjs",
+        "$TURBO_ROOT$/apps/web/install/install.sh",
+        "$TURBO_ROOT$/apps/host/scripts/luke-host.sh"
+      ]
+    }
+  }
+}

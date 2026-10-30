@@ -609,7 +609,7 @@ interface SectionFold {
  * it. That row sticks to the top of the Conversation's scroller while its
  * section is in view, and the next section's pushes it off (tasks.css).
  */
-function Section({
+export function Section({
   title,
   count,
   fold,

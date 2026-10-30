@@ -45,6 +45,8 @@ import {
   type AgentPullRequestReadParams,
   type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
+  type AgentQueueAnswerView,
+  type AgentQueueParams,
   type AgentRenameParams,
   type AgentReviewOptionsAnswerView,
   type AgentRewindParams,
@@ -63,6 +65,11 @@ import {
   type HostsAnswerView,
   TRANSCRIPT_KIND,
 } from "@luke/features/agent-view";
+import type {
+  HostPairingApproveView,
+  HostPairingDenyView,
+  HostPairingView,
+} from "@luke/features/host-pairing-view";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { Data, Effect, Equal, MutableHashMap, Option, Queue, Stream } from "effect";
 import type { AgentNotices } from "../agent-notices.js";
@@ -81,6 +88,9 @@ export interface AgentProceduresDependencies {
     hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
     hostsKeepInstallToken(tokenHash: string): Effect.Effect<HostInstallTokenAnswerView>;
     hostsRevokeInstallToken(id: string): Effect.Effect<HostDoneAnswerView>;
+    hostsPairingRead(code: string): Effect.Effect<HostPairingView>;
+    hostsPairingApprove(code: string): Effect.Effect<HostPairingApproveView>;
+    hostsPairingDeny(code: string): Effect.Effect<HostPairingDenyView>;
     agentList(params: AgentListParams): Effect.Effect<AgentListAnswer>;
     agentWorkspaceList(params: AgentWorkspaceListParams): Effect.Effect<AgentListAnswer>;
     agentStart(params: AgentStartParams): Effect.Effect<AgentAgentAnswer>;
@@ -96,6 +106,7 @@ export interface AgentProceduresDependencies {
     agentChoose(params: AgentChooseParams): Effect.Effect<AgentAgentAnswer>;
     agentRename(params: AgentRenameParams): Effect.Effect<AgentAgentAnswer>;
     agentServers(params: AgentServersParams): Effect.Effect<AgentAgentAnswer>;
+    agentQueue(params: AgentQueueParams): Effect.Effect<AgentQueueAnswerView>;
     agentStop(params: AgentStopParams): Effect.Effect<AgentAgentAnswer>;
     agentRewind(params: AgentRewindParams): Effect.Effect<AgentAgentAnswer>;
     agentArchive(params: AgentArchiveParams): Effect.Effect<AgentAgentAnswer>;
@@ -280,6 +291,24 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.hostsRevokeInstallToken(input.id);
     }),
+    [AGENT_ACT_KIND.HOSTS_PAIRING_READ]: actPort[AGENT_ACT_KIND.HOSTS_PAIRING_READ].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.hostsPairingRead(input.code);
+      },
+    ),
+    [AGENT_ACT_KIND.HOSTS_PAIRING_APPROVE]: actPort[AGENT_ACT_KIND.HOSTS_PAIRING_APPROVE].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.hostsPairingApprove(input.code);
+      },
+    ),
+    [AGENT_ACT_KIND.HOSTS_PAIRING_DENY]: actPort[AGENT_ACT_KIND.HOSTS_PAIRING_DENY].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.hostsPairingDeny(input.code);
+      },
+    ),
     [AGENT_ACT_KIND.AGENTS_WORKSPACE_LIST]: actPort[AGENT_ACT_KIND.AGENTS_WORKSPACE_LIST].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
@@ -383,6 +412,14 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* notedAgent(host.agentServers(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_QUEUE]: actPort[AGENT_ACT_KIND.AGENTS_QUEUE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.agentQueue(input);
     }),
     [AGENT_ACT_KIND.AGENTS_STOP]: actPort[AGENT_ACT_KIND.AGENTS_STOP].effect(function* ({
       input,

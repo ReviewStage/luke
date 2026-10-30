@@ -16,6 +16,10 @@ export const EXPERIMENT = {
   CHANNELS: "channels",
   /** Pilot: a new task can start with one pilot agent that plans the work, splits it into child tasks, and runs a coding agent on each. */
   PILOT: "pilot",
+  /** Skills: the skills a member installs into Luke for their agents, managed in Settings › Skills, and the `/` list of skills in a box written to an agent. */
+  SKILLS: "skills",
+  /** Bring your own host: agents that run on the member's own Macs and Linux machines, This Mac among them, set up in Settings › Hosts, rather than only in Luke's cloud. */
+  BRING_YOUR_OWN_HOST: "bring-your-own-host",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
@@ -39,6 +43,24 @@ export interface ExperimentEntry {
  * there is no status to drift and every experiment is off until turned on.
  */
 export const EXPERIMENTS = [
+  {
+    key: EXPERIMENT.BRING_YOUR_OWN_HOST,
+    name: "Bring your own host",
+    detail:
+      "Run agents on your own Macs and Linux machines, This Mac among them, set up in Settings › Hosts. " +
+      "Their transcripts and the files their tools read still reach Luke.",
+    owner: "Charles",
+    since: "2026-10-30",
+  },
+  {
+    key: EXPERIMENT.SKILLS,
+    name: "Skills",
+    detail:
+      "Install skills into Luke for your agents to use, managed in Settings › Skills, " +
+      "and name one with / in a message to an agent.",
+    owner: "Charles",
+    since: "2026-10-30",
+  },
   {
     key: EXPERIMENT.PILOT,
     name: "Pilot",

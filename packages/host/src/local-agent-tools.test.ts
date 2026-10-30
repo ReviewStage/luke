@@ -66,7 +66,7 @@ describe("localAgentTool", () => {
   );
 
   it.effect(
-    "keeps nothing of an archive whose SHA-256 is not the pin's, and answers no binary",
+    "keeps nothing of an archive whose SHA-256 is not the pin's, not even the part it streamed, and answers no binary",
     () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
@@ -80,7 +80,7 @@ describe("localAgentTool", () => {
         );
 
         assert.isTrue(Option.isNone(found));
-        assert.deepStrictEqual(yield* fileSystem.readDirectory(root), []);
+        assert.deepStrictEqual(yield* fileSystem.readDirectory(`${root}/agent-tools/tool`), []);
       }).pipe(Effect.scoped, Effect.provide(NODE)),
   );
 
@@ -113,7 +113,7 @@ describe("localAgentTool", () => {
   );
 
   it.effect(
-    "removes the tool's other releases once a build is answered, fetched or kept, and nothing beside the tool's own folder",
+    "removes the tool's other releases once a build is answered, fetched or kept, and what a fetch cut off left, and nothing beside the tool's own folder",
     () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
@@ -123,6 +123,8 @@ describe("localAgentTool", () => {
         const folders = `${root}/agent-tools`;
         yield* fileSystem.makeDirectory(`${folders}/tool/0.9/bin`, { recursive: true });
         yield* fileSystem.writeFileString(`${folders}/tool/0.9/bin/tool`, "old");
+        yield* fileSystem.makeDirectory(`${folders}/tool/.tool-cut-off`, { recursive: true });
+        yield* fileSystem.writeFileString(`${folders}/tool/.tool-cut-off/archive`, "part of one");
         yield* fileSystem.makeDirectory(`${folders}/other/0.9`, { recursive: true });
 
         yield* localAgentTool(root, pin).pipe(Effect.provide(fetching));

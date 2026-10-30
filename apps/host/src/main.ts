@@ -1,5 +1,5 @@
 /**
- * main.ts -- the host daemon's process: `luke-host run` follows the machine's local agents for as long as its service runs, `luke-host enroll` trades an install token for the machine's device secret, and `luke-host version` prints the daemon's version.
+ * main.ts -- the host daemon's process: `luke-host run` follows the machine's local agents for as long as its service runs, `luke-host connect` pairs the machine with a code a member approves in Luke, `luke-host enroll` trades an install token for the machine's device secret, and `luke-host version` prints the daemon's version.
  *
  * Bundled into one file (`pnpm --filter @luke/host-daemon build`) that the
  * host's release carries at `lib/luke-host.mjs`, beside the runner's bundle
@@ -34,6 +34,13 @@
  * where `--token` gives none, prints the one line the script shows, and
  * exits by how the enroll ended (`ENROLL_EXIT`), never printing the token or
  * the secret.
+ *
+ * `connect` is the enroll's successor, run as the box is set up or by hand:
+ * it prints the link and the code a member approves in Luke, waits for
+ * them to, and exits by how the connect ended (`CONNECT_EXIT`), never
+ * printing the poll secret or the device secret. A box already connected
+ * says so and pairs nothing. Ctrl-C ends the wait with a line saying the
+ * box was not connected.
  */
 
 import { readFileSync } from "node:fs";
@@ -49,7 +56,10 @@ import {
 import { HOST_ENROLL_OUTCOME } from "@luke/features";
 import { buildCarriesDeveloperIdSigning } from "@luke/host/app-identity";
 import {
+  connectHostDevice,
   enrollHostDevice,
+  HOST_CONNECT_OUTCOME,
+  type HostPairingCode,
   type HostPlatformOptions,
   type HostRuntime,
   hostArch,
@@ -82,10 +92,23 @@ const ENROLL_EXIT = {
   USAGE: 64,
 } as const;
 
+/** The exit codes of `connect`, which the install script reads: a box already connected exits as connected. */
+const CONNECT_EXIT = {
+  CONNECTED: 0,
+  /** Luke could not be reached, or refused the pairing for a reason the box cannot fix. */
+  FAILED: 1,
+  DENIED: 2,
+  EXPIRED: 3,
+  UPGRADE_NEEDED: 4,
+  /** Luke is starting no more pairings from the box's address for now. */
+  BRAKED: 5,
+  USAGE: 64,
+} as const;
+
 /** The exit codes of `run` that end the service for good: the sysexits `EX_CONFIG`, which the install script's unit names in `RestartPreventExitStatus`. */
 const RUN_EXIT = { SMOLVM_REFUSED: 78 } as const;
 
-const COMMAND = { RUN: "run", ENROLL: "enroll", VERSION: "version" } as const;
+const COMMAND = { RUN: "run", CONNECT: "connect", ENROLL: "enroll", VERSION: "version" } as const;
 
 /** The release's own folder: this bundle stands in its `lib/`. */
 const installFolder = path.resolve(path.dirname(process.argv[1] ?? "."), "..");
@@ -221,6 +244,79 @@ const enroll = (runtime: HostRuntime, token: string, name: string, origin: strin
     }
   });
 
+/** How the code is shown: its link to open and the code to check against the one Luke shows, then that the box waits. */
+const showCode = ({ url, userCode, expiresInMs }: HostPairingCode) =>
+  Effect.sync(() =>
+    process.stdout.write(
+      [
+        "To connect this box to Luke, open this link and approve the code:",
+        "",
+        `  ${url}`,
+        "",
+        `  Code: ${userCode}`,
+        "",
+        `Waiting for approval. The code lasts ${Math.round(expiresInMs / 60_000)} minutes; Ctrl-C stops waiting.`,
+        "",
+      ].join("\n"),
+    ),
+  );
+
+/** `luke-host connect`: the box paired with a code a member approves, and the line that says how it ended. */
+const connect = (runtime: HostRuntime, name: string, origin: string) =>
+  Effect.gen(function* () {
+    const outcome = yield* connectHostDevice({
+      stateRoot: runtime.stateRoot,
+      serviceOrigin: origin,
+      name,
+      platform: runtime.os.platform,
+      arch: yield* arch(runtime),
+      version: VERSION,
+      shown: showCode,
+    });
+    switch (outcome.outcome) {
+      case HOST_CONNECT_OUTCOME.CONNECTED:
+        process.stdout.write(
+          `Connected as ${name} (secret kept readable by ${os.userInfo().username} only)\n`,
+        );
+        return CONNECT_EXIT.CONNECTED;
+      case HOST_CONNECT_OUTCOME.ALREADY_CONNECTED:
+        process.stdout.write(
+          `This box is already connected to ${outcome.serviceOrigin}, so nothing was changed.\n`,
+        );
+        return CONNECT_EXIT.CONNECTED;
+      case HOST_CONNECT_OUTCOME.DENIED:
+        process.stderr.write(
+          "The code was denied in Luke, so this box was not connected. Run luke-host connect again for a new code.\n",
+        );
+        return CONNECT_EXIT.DENIED;
+      case HOST_CONNECT_OUTCOME.EXPIRED:
+        process.stderr.write(
+          "The code expired before it was approved, so this box was not connected. Run luke-host connect again for a new code.\n",
+        );
+        return CONNECT_EXIT.EXPIRED;
+      case HOST_CONNECT_OUTCOME.BRAKED:
+        process.stderr.write(
+          "Luke is taking no more connections from this address for now. Wait a few minutes, then run luke-host connect again.\n",
+        );
+        return CONNECT_EXIT.BRAKED;
+      case HOST_CONNECT_OUTCOME.UPGRADE_NEEDED:
+        process.stderr.write(
+          `Luke needs a newer host than ${VERSION}${outcome.minimumVersion === undefined ? "" : ` (${outcome.minimumVersion} or later)`}. Run the install command again to fetch it.\n`,
+        );
+        return CONNECT_EXIT.UPGRADE_NEEDED;
+      case HOST_CONNECT_OUTCOME.REFUSED:
+        process.stderr.write(`Luke at ${origin} refused to pair this box.\n`);
+        return CONNECT_EXIT.FAILED;
+      case HOST_CONNECT_OUTCOME.UNANSWERED:
+        process.stderr.write(`Could not reach Luke at ${origin}.\n`);
+        return CONNECT_EXIT.FAILED;
+    }
+  }).pipe(
+    Effect.onInterrupt(() =>
+      Effect.sync(() => process.stderr.write("\nStopped, so this box was not connected.\n")),
+    ),
+  );
+
 /** The services every command runs on, which `nodeServices` provides. */
 type HostServices = Layer.Success<typeof nodeServices>;
 
@@ -236,6 +332,19 @@ function main(argv: readonly string[]): Effect.Effect<number, unknown, HostServi
     ).pipe(Effect.as(1));
   }
   if (command === COMMAND.RUN) return run(runtime);
+  if (command === COMMAND.CONNECT) {
+    const { values } = parseArgs({
+      args: [...rest],
+      options: { name: { type: "string" }, origin: { type: "string" } },
+    });
+    const name = values.name ?? runtime.os.deviceName();
+    if (name.length === 0) {
+      return Effect.sync(() => process.stderr.write("luke-host connect needs a --name\n")).pipe(
+        Effect.as(CONNECT_EXIT.USAGE),
+      );
+    }
+    return connect(runtime, name, (values.origin ?? DEFAULT_SERVICE_ORIGIN).replace(/\/+$/u, ""));
+  }
   if (command === COMMAND.ENROLL) {
     const { values } = parseArgs({
       args: [...rest],
@@ -260,7 +369,9 @@ function main(argv: readonly string[]): Effect.Effect<number, unknown, HostServi
     );
   }
   return Effect.sync(() =>
-    process.stderr.write("usage: luke-host run | enroll [--token <token>] | version | uninstall\n"),
+    process.stderr.write(
+      "usage: luke-host run | connect [--origin <url>] [--name <name>] | enroll [--token <token>] | version | uninstall\n",
+    ),
   ).pipe(Effect.as(ENROLL_EXIT.USAGE));
 }
 

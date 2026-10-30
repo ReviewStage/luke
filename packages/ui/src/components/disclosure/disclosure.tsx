@@ -583,9 +583,13 @@ export function DisclosureFrame({
  * The chevron, turned down while its own fold is open. Note that it reads its
  * fold's state rather than the `details` element's through a selector,
  * because folds nest, and an ancestor's open would turn every chevron inside it.
+ * A chevron standing outside its fold's scope, as a row's beside the rows it
+ * folds, is handed whether that fold is open (`open`).
  */
-export function DisclosureChevron(): React.JSX.Element {
-  const { open } = useDisclosureState();
+export function DisclosureChevron({ open: handed }: { open?: boolean }): React.JSX.Element {
+  const scoped = useContext(StateContext);
+  const open = handed ?? scoped?.open;
+  if (open === undefined) throw new Error("A disclosure's chevron must be drawn inside one");
   return (
     <span className="luke-disclosure-turn" data-open={open}>
       <FoldChevronIcon />

@@ -18,9 +18,7 @@ import { createAutomation } from "@luke/database/models/automation-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
-import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { readTask, savePlanText } from "@luke/database/models/task-store";
-import { storeWriter } from "@luke/database/models/writer";
+import { readTask } from "@luke/database/models/task-store";
 import { agentPin } from "@luke/database/schemas";
 import { agentTable } from "@luke/database/schemas/agent";
 import { attachment } from "@luke/database/schemas/attachment";
@@ -67,52 +65,39 @@ import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import {
-  MERGE_POLICY,
-  type MergePolicy,
   TASK_LIST_ARCHIVED,
-  TASK_MODE,
   TASK_STATUS,
-  taskAnswerSchema,
   taskDeleteAnswerSchema,
   taskListAnswerSchema,
 } from "@luke/features/task-wire";
 import { sentLineId } from "@luke/wire/host-ids";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import {
-  AssistantMessageBuilder,
-  isRecord,
-  MESSAGE_ROLE,
-  RUN_EVENT,
-  RUN_STATUS,
-  RUN_TURN_ORIGIN,
-  sessionKey,
-  TURN_ORIGIN,
-  TURN_TRIGGER,
-} from "../core.js";
+import { AssistantMessageBuilder, isRecord, MESSAGE_ROLE, RUN_EVENT, sessionKey } from "../core.js";
 import { SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { postInboxThread } from "../inbox/inbox-store.js";
-import { MERGE_POLICY_NOTICE } from "../tasks/pilot-switch-notice.js";
 import {
   AGENT,
   AGENT_INBOX,
   AGENT_LUKE_TOOLS,
   AGENT_MESSAGES,
   AGENT_PICTURE,
+  AGENT_STOP,
+  agentStartedOn,
   countedWith,
   deploymentFor,
   fakeEve,
   messageAs,
+  messagedAgent,
   openTask,
   RELAY_FULL_NAME,
   readAnswer,
   receiptOf,
   refusal,
   request,
-  SAVED,
   SIZED_PNG,
   SMALL_WINDOW,
   SNAPSHOT,
@@ -130,106 +115,16 @@ import {
 import { scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
 import { receivedMessage } from "./attached-files.js";
 import { CODER } from "./coder-host/bounds.js";
-import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { EVE_HOST_TURN } from "./eve-host/bounds.js";
 import { EVE_SEND_OUTCOME } from "./eve-host/eve-sessions.js";
-import type { SandboxStopReach } from "./session-sandboxes.js";
-
-/** What an agent a Stop halted is told when someone presses Start again, word for word. */
-const RESUME_WORDS =
-  "Resume your work where you stopped, and first re-read your pull request's reviews, " +
-  "comments, and checks, since nothing woke you while stopped.";
 
 it.layer(getTestDB())("messaging a coding agent", (it) => {
-  /** An agent started on the owner's task, its session claimed, and its first turn where asked. */
-  const startedAgent = (
-    eve: ReturnType<typeof fakeEve>,
-    turn: { readonly running: boolean } | undefined,
-    sessionSandboxes?: SandboxStopReach["sessionSandboxes"],
-  ) =>
-    Effect.flatMap(
-      openTask({
-        eve,
-        ...(sessionSandboxes === undefined ? undefined : { sessionSandboxes }),
-      }),
-      (opened) => agentStartedOn(opened, eve, turn),
-    );
-
-  /** Another agent the owner starts on the task opened, its turn running or ended as `turn` says, as `startedAgent` starts the first. */
-  const agentStartedOn = (
-    opened: Effect.Success<ReturnType<typeof openTask>>,
-    eve: ReturnType<typeof fakeEve>,
-    turn: { readonly running: boolean } | undefined,
-  ) =>
-    Effect.gen(function* () {
-      const agent = readAnswer(
-        agentAnswerSchema,
-        HOSTED_HTTP_STATUS.CREATED,
-        yield* opened.ask(startAs(opened.owner, opened.task.id, { idempotencyKey: randomUUID() })),
-      ).agent;
-      const stored = yield* readAgent(opened.owner, agent.id);
-      assert.ok(Option.isSome(stored));
-      const target = { userId: opened.owner, conversationId: stored.value.conversationId };
-      const sessionId = eve.opened.at(-1)?.sessionId ?? "";
-      assert.equal(yield* claimRuntimeSession(target, sessionId, new Date()), true);
-      const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-      const turnId = randomUUID();
-      if (turn !== undefined) {
-        yield* writer.enqueueTurn(target, {
-          turnId,
-          origin: TURN_ORIGIN.TYPED,
-          eveTurnId: "turn_0",
-        });
-        yield* writer.consume(target, {
-          kind: RUN_EVENT.TURN_STARTED,
-          conversationId: sessionKey(target.conversationId),
-          turnId,
-          sequence: 1,
-          origin: RUN_TURN_ORIGIN.TYPED,
-          trigger: TURN_TRIGGER.ASK,
-          at: 0,
-        });
-        // eve's receipt of the Start's first message takes the line the Start wrote into the turn, as the relay does.
-        const taken = yield* writer.takeAwaitingLine(target, { text: SNAPSHOT, turnId });
-        assert.equal(Result.getOrUndefined(taken)?.length, 1);
-        if (!turn.running) {
-          yield* writer.consume(target, {
-            kind: RUN_EVENT.TURN_ENDED,
-            conversationId: sessionKey(target.conversationId),
-            turnId,
-            sequence: 2,
-            status: RUN_STATUS.SUCCEEDED,
-            responseIds: [],
-            at: 0,
-          });
-        }
-      }
-      /** The transcript as the owner reads it now: the developer's lines, and the status. */
-      const transcript = () =>
-        Effect.map(
-          opened.ask(request(AGENT_MESSAGES, opened.owner, { id: agent.id })),
-          (answered) => {
-            const page = readAnswer(agentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered);
-            return { lines: userTexts(page), status: page.status };
-          },
-        );
-      /** A message of the owner's under the key given, or one minted, answered as the wire declares a message taken. */
-      const sent = (text: string, clientKey = randomUUID()) =>
-        Effect.map(opened.ask(messageAs(opened.owner, agent.id, { text, clientKey })), (answered) =>
-          readAnswer(agentMessageAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, answered),
-        );
-      return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
-    });
-
-  /** Where an agent's Stop lands. */
-  const AGENT_STOP = "/api/agents/stop";
-
   it.effect(
     "over a browser's session cookie a message reaches the agent as the deployment acting for the cookie's account, and over the bearer as ever over the bearer",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, agent, ask, sessionId } = yield* startedAgent(eve, { running: false });
+        const { owner, agent, ask, sessionId } = yield* messagedAgent(eve, { running: false });
         const message = (text: string) => ({ text, clientKey: randomUUID() });
 
         const overCookie = yield* ask(
@@ -274,7 +169,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, agent, ask, target, writer, turnId } = yield* startedAgent(eve, {
+        const { owner, agent, ask, target, writer, turnId } = yield* messagedAgent(eve, {
           running: true,
         });
         const shot = {
@@ -346,7 +241,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, agent, ask, fetch, target, writer, turnId } = yield* startedAgent(eve, {
+        const { owner, agent, ask, fetch, target, writer, turnId } = yield* messagedAgent(eve, {
           running: true,
         });
         const data = Buffer.from(SIZED_PNG).toString("base64");
@@ -401,9 +296,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "over a browser's session cookie a Stop, an Archive, and the task's archive each cancel the turn under way as the deployment acting for the cookie's account",
     () =>
       Effect.gen(function* () {
-        const stopped = yield* startedAgent(fakeEve(), { running: true });
-        const archived = yield* startedAgent(fakeEve(), { running: true });
-        const withTask = yield* startedAgent(fakeEve(), { running: true });
+        const stopped = yield* messagedAgent(fakeEve(), { running: true });
+        const archived = yield* messagedAgent(fakeEve(), { running: true });
+        const withTask = yield* messagedAgent(fakeEve(), { running: true });
 
         const stop = yield* stopped.ask(
           request(AGENT_STOP, undefined, {
@@ -441,7 +336,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           null,
         );
         assert.deepEqual(countedWith(stopped.owner, SERVER_EVENT.AGENT_STOP), [
-          { agent_kind: AGENT_KIND.CODER, stopped_tree: false },
+          { agent_kind: AGENT_KIND.CODER },
         ]);
         assert.deepEqual(countedWith(archived.owner, SERVER_EVENT.AGENT_ARCHIVE), [
           { agent_kind: AGENT_KIND.CODER },
@@ -459,7 +354,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const sandboxes = yield* scriptedSessionSandboxes();
-        const { owner, task, ask } = yield* startedAgent(
+        const { owner, task, ask } = yield* messagedAgent(
           fakeEve(),
           { running: false },
           sandboxes.layer,
@@ -471,218 +366,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         assert.equal(archived.status, HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(yield* Queue.poll(sandboxes.stops), Option.none());
-      }),
-  );
-
-  it.effect(
-    "a merge-policy switch is refused on a task that is no pilot tree's top, and on a top pilot task is written and told to its pilot in the member's words, once per move",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, task, agent, sessionId, ask } = yield* startedAgent(eve, {
-          running: false,
-        });
-        const switched = (mergePolicy: MergePolicy) =>
-          ask(request(TASK(task.id), owner, { method: "PATCH", body: { mergePolicy } }));
-        assert.equal((yield* switched(MERGE_POLICY.HOLD)).status, HOSTED_HTTP_STATUS.BAD_REQUEST);
-        yield* Database.use((db) =>
-          db.update(taskTable).set({ mode: TASK_MODE.PILOT }).where(eq(taskTable.id, task.id)),
-        );
-        yield* Database.use((db) =>
-          db.update(agentTable).set({ kind: AGENT_KIND.PILOT }).where(eq(agentTable.id, agent.id)),
-        );
-        const sends = eve.sent.length;
-
-        const held = yield* switched(MERGE_POLICY.HOLD);
-        assert.equal(held.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(held.body));
-        assert.equal(
-          readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.OK, held).plan.mergePolicy,
-          MERGE_POLICY.HOLD,
-        );
-        assert.deepEqual(
-          eve.sent
-            .slice(sends)
-            .map((each) => [each.authorization, each.sessionId, each.message.message]),
-          [[`Bearer ${owner}`, sessionId, MERGE_POLICY_NOTICE[MERGE_POLICY.HOLD]]],
-        );
-        // The same switch again moves nothing, so the pilot hears nothing more.
-        yield* switched(MERGE_POLICY.HOLD);
-        assert.equal(eve.sent.length, sends + 1);
-      }),
-  );
-
-  it.effect(
-    "a running switch is refused on a pilot task with a parent, and on a top pilot task is written, switched on told to its pilot word for word, once per move, and switched off told to it not at all",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, task, agent, sessionId, ask } = yield* startedAgent(eve, {
-          running: false,
-        });
-        const parent = yield* startTask(owner, { name: "Parent" });
-        const placed = (parentTaskId: string | null) =>
-          Database.use((db) =>
-            db
-              .update(taskTable)
-              .set({ mode: TASK_MODE.PILOT, parentTaskId })
-              .where(eq(taskTable.id, task.id)),
-          );
-        yield* Database.use((db) =>
-          db.update(agentTable).set({ kind: AGENT_KIND.PILOT }).where(eq(agentTable.id, agent.id)),
-        );
-        const switched = (running: boolean) =>
-          ask(request(TASK(task.id), owner, { method: "PATCH", body: { running } }));
-        const told = (from: number) =>
-          eve.sent
-            .slice(from)
-            .map((each) => [each.authorization, each.sessionId, each.message.message]);
-        yield* placed(parent.id);
-        assert.equal((yield* switched(true)).status, HOSTED_HTTP_STATUS.BAD_REQUEST);
-        yield* placed(null);
-        const sends = eve.sent.length;
-
-        const on = yield* switched(true);
-        assert.equal(on.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(on.body));
-        assert.equal(readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.OK, on).plan.running, true);
-        assert.deepEqual(told(sends), [[`Bearer ${owner}`, sessionId, "Start work when ready."]]);
-        // The same switch again moves nothing, so the pilot hears nothing more.
-        yield* switched(true);
-        assert.equal(eve.sent.length, sends + 1);
-        assert.equal((yield* switched(false)).status, HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(told(sends + 1), []);
-      }),
-  );
-
-  /**
-   * A top pilot task whose pilot's turn runs, with a child task under it on
-   * which a coding agent's turn runs and another's has ended; the switch as
-   * the member given sends it, and the sessions eve was told to carry on.
-   */
-  const pilotTree = (eve: ReturnType<typeof fakeEve>) =>
-    Effect.gen(function* () {
-      const top = yield* startedAgent(eve, { running: true });
-      // The child is named and planned as the top task is, so its agents' Starts send the line `agentStartedOn` takes.
-      const child = yield* startTask(top.owner, {
-        name: "Teammate invitations",
-        repository: RELAY_FULL_NAME,
-      });
-      yield* savePlanText(top.owner, child.id, SAVED);
-      yield* Database.use((db) =>
-        db.update(taskTable).set({ mode: TASK_MODE.PILOT }).where(eq(taskTable.id, top.task.id)),
-      );
-      yield* Database.use((db) =>
-        db
-          .update(agentTable)
-          .set({ kind: AGENT_KIND.PILOT })
-          .where(eq(agentTable.id, top.agent.id)),
-      );
-      const coder = yield* agentStartedOn({ ...top, task: child }, eve, { running: true });
-      // An agent on the child whose turn had ended is neither stopped nor told to carry on.
-      yield* agentStartedOn({ ...top, task: child }, eve, { running: false });
-      // The child joins the tree only now, since no agent starts on a child of a stopped tree.
-      yield* Database.use((db) =>
-        db.update(taskTable).set({ parentTaskId: top.task.id }).where(eq(taskTable.id, child.id)),
-      );
-      const switched = (member: string, running: boolean) =>
-        Effect.map(
-          top.ask(request(TASK(top.task.id), member, { method: "PATCH", body: { running } })),
-          (answered) => answered.status,
-        );
-      const resumes = () =>
-        eve.sent
-          .filter((each) => each.message.message === RESUME_WORDS)
-          .map((each) => [each.authorization, each.sessionId]);
-      /** The sessions eve was asked to cancel, in no order, since the switch stops a few at once. */
-      const cancelledSessions = () => new Set(eve.cancelled.map(([sessionId]) => sessionId));
-      /** The words the top pilot was sent since the count given, each message's last text part where a teammate's sender line leads it. */
-      const toldPilot = (from: number) =>
-        eve.sent
-          .slice(from)
-          .filter((each) => each.sessionId === top.sessionId)
-          .map(({ message }) =>
-            typeof message.message === "string"
-              ? message.message
-              : receiptOf(message.message).at(-1),
-          );
-      return { top, coder, switched, resumes, cancelledSessions, toldPilot };
-    });
-
-  it.effect(
-    "a top pilot task's Running switched off by a teammate stops the turn of an agent on its child task and its pilot's, both on their starter's Mac, telling the pilot nothing; switched off again stops nothing; a member's message still reaches the stopped pilot; and switched on tells the stopped agent alone to carry on, and wakes the pilot once, each as their starter's deployment",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { top, coder, switched, resumes, cancelledSessions, toldPilot } =
-          yield* pilotTree(eve);
-        yield* joinWorkspace(top.task.workspaceId, top.other);
-        yield* Database.use((db) =>
-          db
-            .update(agentTable)
-            .set({ machine: AGENT_MACHINE.DEVICE })
-            .where(inArray(agentTable.id, [coder.agent.id, top.agent.id])),
-        );
-        assert.equal(yield* switched(top.owner, true), HOSTED_HTTP_STATUS.OK);
-        const offAt = eve.sent.length;
-
-        assert.equal(yield* switched(top.other, false), HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(cancelledSessions(), new Set([coder.sessionId, top.sessionId]));
-        assert.equal(yield* switched(top.other, false), HOSTED_HTTP_STATUS.OK);
-        assert.equal(eve.cancelled.length, 2);
-        assert.deepEqual(countedWith(top.other, SERVER_EVENT.AGENT_STOP), [
-          { agent_kind: AGENT_KIND.PILOT, stopped_tree: true },
-        ]);
-        assert.deepEqual(toldPilot(offAt), [], "Running off tells the pilot nothing");
-        yield* top.sent("Split the invite email out.");
-        assert.deepEqual(toldPilot(offAt), ["Split the invite email out."]);
-
-        const onAt = eve.sent.length;
-        assert.deepEqual(resumes(), []);
-        assert.equal(yield* switched(top.other, true), HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(resumes(), [[deploymentFor(top.owner), coder.sessionId]]);
-        // The teammate's words reach no agent on its starter's Mac, so Luke wakes the pilot it stopped.
-        assert.deepEqual(toldPilot(onAt), ["Start work when ready."]);
-        assert.equal(eve.sent.at(-1)?.authorization, deploymentFor(top.owner));
-      }),
-  );
-
-  it.effect(
-    "a top pilot task's Running switched on again tells nothing to an agent whose turn had ended before eve took the switch's Stop",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve({ turnEnded: true });
-        const { top, coder, switched, resumes, cancelledSessions } = yield* pilotTree(eve);
-        assert.equal(yield* switched(top.owner, true), HOSTED_HTTP_STATUS.OK);
-        assert.equal(yield* switched(top.owner, false), HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(cancelledSessions(), new Set([coder.sessionId, top.sessionId]));
-
-        assert.equal(yield* switched(top.owner, true), HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(resumes(), []);
-      }),
-  );
-
-  it.effect(
-    "over a browser's session cookie a task's delete stops its agent and retires the agent's session as the deployment acting for the cookie's account, before the task goes",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, task, ask, sessionId } = yield* startedAgent(eve, { running: true });
-
-        const deleted = yield* ask(
-          request(TASK(task.id), undefined, {
-            method: "DELETE",
-            cookie: sessionCookieOf(owner),
-          }),
-        );
-
-        assert.equal(
-          readAnswer(taskDeleteAnswerSchema, HOSTED_HTTP_STATUS.OK, deleted).deleted,
-          true,
-        );
-        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
-        assert.deepEqual(eve.cancelledAs, [deploymentFor(owner)]);
-        assert.deepEqual(eve.reset, [sessionId]);
-        assert.deepEqual(eve.resetAs, [deploymentFor(owner)]);
-        assert.ok(Option.isNone(yield* readTask(owner, task.id)));
       }),
   );
 
@@ -701,7 +384,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           }),
         ).pipe(Effect.provide(services), Effect.orDie);
         const eve = fakeEve({ resetSees: alone });
-        const { owner, task, ask, sessionId } = yield* startedAgent(eve, { running: true });
+        const { owner, task, ask, sessionId } = yield* messagedAgent(eve, { running: true });
 
         const deleted = yield* ask(request(TASK(task.id), owner, { method: "DELETE" }));
 
@@ -720,7 +403,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve({ cancelsTogether: 2 });
-        const first = yield* startedAgent(eve, { running: true });
+        const first = yield* messagedAgent(eve, { running: true });
         const second = yield* agentStartedOn(first, eve, { running: true });
 
         const deleted = yield* first.ask(
@@ -746,10 +429,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         // An idle agent of the owner's, which the teammate messages.
-        const messaged = yield* startedAgent(fakeEve(), { running: false });
+        const messaged = yield* messagedAgent(fakeEve(), { running: false });
         yield* joinWorkspace(messaged.task.workspaceId, messaged.other);
         // A running agent of the owner's, which the teammate stops, and then deletes its task.
-        const stopped = yield* startedAgent(fakeEve(), { running: true });
+        const stopped = yield* messagedAgent(fakeEve(), { running: true });
         yield* joinWorkspace(stopped.task.workspaceId, stopped.other);
         const teammate = sessionCookieOf(stopped.other);
 
@@ -794,7 +477,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: true });
+        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: true });
         const cookie = sessionCookieOf(other);
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
 
@@ -836,7 +519,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, target, sessionId, ask } = yield* startedAgent(eve, {
+        const { owner, other, task, agent, target, sessionId, ask } = yield* messagedAgent(eve, {
           running: true,
         });
         yield* joinWorkspace(task.workspaceId, other);
@@ -893,7 +576,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, sessionId, ask } = yield* startedAgent(eve, {
+        const { owner, other, task, agent, sessionId, ask } = yield* messagedAgent(eve, {
           running: false,
         });
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
@@ -918,7 +601,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, agent, ask } = yield* startedAgent(eve, undefined);
+        const { owner, agent, ask } = yield* messagedAgent(eve, undefined);
 
         const refused = yield* ask(request(AGENT, owner, { method: "DELETE", id: agent.id }));
 
@@ -936,7 +619,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, ask } = yield* startedAgent(eve, { running: true });
+        const { owner, other, task, ask } = yield* messagedAgent(eve, { running: true });
 
         const refused = yield* ask(
           request(TASK(task.id), owner, {
@@ -960,8 +643,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a model change of a Claude Code agent is refused another provider's model or a context window, and takes a Claude model, its summary naming its runtime, while an eve agent's takes any as before",
     () =>
       Effect.gen(function* () {
-        const onEve = yield* startedAgent(fakeEve(), undefined);
-        const onClaudeCode = yield* startedAgent(fakeEve(), undefined);
+        const onEve = yield* messagedAgent(fakeEve(), undefined);
+        const onClaudeCode = yield* messagedAgent(fakeEve(), undefined);
         const stored = Option.getOrThrow(
           yield* readAgent(onClaudeCode.owner, onClaudeCode.agent.id),
         );
@@ -1016,7 +699,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a member's Archive of a teammate's agent records the member on it, which its summary names, and an Unarchive clears it",
     () =>
       Effect.gen(function* () {
-        const { other, task, agent, ask } = yield* startedAgent(fakeEve(), { running: false });
+        const { other, task, agent, ask } = yield* messagedAgent(fakeEve(), { running: false });
         yield* joinWorkspace(task.workspaceId, other);
         const changed = (archived: boolean) =>
           Effect.map(
@@ -1038,7 +721,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a member's archive of a plan, as an older build asks it, stops its running agent first and settles the plan instead, Canceled with no merged pull request and Done with one, stamping no archive, and its unarchive puts the plan back to work",
     () =>
       Effect.gen(function* () {
-        const { owner, other, task, agent, ask, eve, sessionId } = yield* startedAgent(fakeEve(), {
+        const { owner, other, task, agent, ask, eve, sessionId } = yield* messagedAgent(fakeEve(), {
           running: true,
         });
         yield* joinWorkspace(task.workspaceId, other);
@@ -1103,7 +786,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a plan's archive is refused as not ready while one of its agents holds a message awaiting its turn, which no Stop can name yet, before any Stop is sent, and leaves the plan and the agent standing",
     () =>
       Effect.gen(function* () {
-        const { owner, task, agent, ask, sent, eve } = yield* startedAgent(fakeEve(), {
+        const { owner, task, agent, ask, sent, eve } = yield* messagedAgent(fakeEve(), {
           running: true,
         });
         yield* sent("Rename the subject line too.");
@@ -1121,9 +804,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a message the running turn took in after its second step reads as arriving after that step of the turn's journal, which closes behind it, while the line that opened the turn names no place",
     () =>
       Effect.gen(function* () {
-        const { agent, ask, owner, target, writer, turnId, sent } = yield* startedAgent(fakeEve(), {
-          running: true,
-        });
+        const { agent, ask, owner, target, writer, turnId, sent } = yield* messagedAgent(
+          fakeEve(),
+          {
+            running: true,
+          },
+        );
         const turn = { conversationId: sessionKey(target.conversationId), turnId };
         /** The turn's step begun, as the relay tells the step's start. */
         const stepBegun = (step: number) =>
@@ -1172,9 +858,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, sessionId, ask, transcript } = yield* startedAgent(eve, {
-          running: false,
-        });
+        const { owner, other, task, agent, sessionId, ask, transcript } = yield* messagedAgent(
+          eve,
+          {
+            running: false,
+          },
+        );
         const asOther = (text: string) =>
           ask(messageAs(other, agent.id, { text, clientKey: randomUUID() }));
         assert.deepEqual(
@@ -1226,7 +915,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a line no turn ever took reads its agent running for the line's grace and failed past it, alike on its page, in its task's list, and on its transcript",
     () =>
       Effect.gen(function* () {
-        const { owner, task, agent, ask, transcript, sent } = yield* startedAgent(fakeEve(), {
+        const { owner, task, agent, ask, transcript, sent } = yield* messagedAgent(fakeEve(), {
           running: false,
         });
         // The session takes the line and then fails with the store's hooks, so no turn row is written for it.
@@ -1273,7 +962,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "the plan list a teammate reads names the member who started each of the plan's agents, by the name their account holds now",
     () =>
       Effect.gen(function* () {
-        const { owner, other, task, agent, ask } = yield* startedAgent(fakeEve(), {
+        const { owner, other, task, agent, ask } = yield* messagedAgent(fakeEve(), {
           running: false,
         });
         yield* joinWorkspace(task.workspaceId, other);
@@ -1299,7 +988,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "an agent an automation's run started names the automation on the plan's agent list and on the plan list's line, and one started by hand names none",
     () =>
       Effect.gen(function* () {
-        const { owner, task, agent, ask } = yield* startedAgent(fakeEve(), { running: false });
+        const { owner, task, agent, ask } = yield* messagedAgent(fakeEve(), { running: false });
         const automationIds = () =>
           Effect.gen(function* () {
             const agents = readAnswer(
@@ -1342,7 +1031,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, task, agent, sessionId, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, task, agent, sessionId, ask } = yield* messagedAgent(eve, {
+          running: false,
+        });
         // An automation's run leaves an agent so: in its workspace, on no task.
         yield* Database.use((db) =>
           db
@@ -1378,7 +1069,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
         const page = () =>
           Effect.map(ask(request(AGENT, owner, { id: agent.id })), (answered) =>
             readAnswer(agentPageAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
@@ -1415,7 +1106,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, task, agent, ask } = yield* messagedAgent(eve, { running: false });
         const ranAs = (firing: AutomationFiring) =>
           Effect.gen(function* () {
             yield* Database.use((db) =>
@@ -1463,7 +1154,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "the plan list names the teammate who archived an agent with no plan, as its own page does",
     () =>
       Effect.gen(function* () {
-        const { owner, other, task, agent, ask } = yield* startedAgent(fakeEve(), {
+        const { owner, other, task, agent, ask } = yield* messagedAgent(fakeEve(), {
           running: false,
         });
         yield* joinWorkspace(task.workspaceId, other);
@@ -1494,7 +1185,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -1539,7 +1230,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -1581,7 +1272,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, task, agent, ask } = yield* messagedAgent(eve, { running: false });
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -1612,7 +1303,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -1655,7 +1346,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
         yield* joinWorkspace(task.workspaceId, other);
         // The task is seen on its starter's own token, which the teammate holds none of, while the agent is seen through the App.
         yield* Database.use((db) =>
@@ -1685,7 +1376,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, task, agent, ask } = yield* startedAgent(eve, { running: true });
+        const { owner, task, agent, ask } = yield* messagedAgent(eve, { running: true });
         yield* Database.use((db) =>
           db
             .delete(githubInstallation)
@@ -1744,7 +1435,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       Effect.gen(function* () {
         const eve = fakeEve();
         const { owner, other, task, agent, target, sessionId, ask, transcript } =
-          yield* startedAgent(eve, { running: true });
+          yield* messagedAgent(eve, { running: true });
         yield* joinWorkspace(task.workspaceId, other);
         const clientKey = randomUUID();
         const steer = () =>
@@ -1786,7 +1477,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, ask, sent, writer, target } = yield* startedAgent(eve, {
+        const { owner, other, task, agent, ask, sent, writer, target } = yield* messagedAgent(eve, {
           running: true,
         });
         yield* joinWorkspace(task.workspaceId, other);
@@ -1877,7 +1568,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, sessionId, sent, transcript } = yield* startedAgent(eve, {
+        const { owner, sessionId, sent, transcript } = yield* messagedAgent(eve, {
           running: true,
         });
         const answered = yield* sent("  Use the helper.  ");
@@ -1908,7 +1599,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { task, transcript, sent } = yield* startedAgent(eve, { running: true });
+        const { task, transcript, sent } = yield* messagedAgent(eve, { running: true });
         const words = `Do what ${mentionMarkdown({ kind: MENTION_KIND.SECTION, taskId: task.id, anchor: "goal" }, "Goal", { workspace: "acme", repository: task.repository })} says.`;
 
         yield* sent(words);
@@ -1929,7 +1620,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, task, ask, sent } = yield* startedAgent(eve, { running: true });
+        const { owner, task, ask, sent } = yield* messagedAgent(eve, { running: true });
         const other = yield* startedAgentOf(owner, task.id, ask);
         yield* updateAgentBranch(owner, other.agent.id, "luke/store-invitations");
         const shown = yield* writePage(
@@ -1977,7 +1668,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, ask, sent } = yield* startedAgent(eve, { running: true });
+        const { owner, other, task, ask, sent } = yield* messagedAgent(eve, { running: true });
         const billing = yield* startTask(owner, { name: "Billing", repository: RELAY_FULL_NAME });
         const onBilling = yield* startedAgentOf(owner, billing.id, ask);
         const oneOff = yield* startedAgentOf(owner, task.id, ask);
@@ -2027,7 +1718,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, sent } = yield* startedAgent(eve, { running: true });
+        const { owner, other, task, sent } = yield* messagedAgent(eve, { running: true });
         // The sender and the other account share a second workspace, which is not the agent's.
         const elsewhere = yield* openWorkspace(other);
         yield* joinWorkspace(elsewhere, owner);
@@ -2056,7 +1747,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve({ sends: EVE_SEND_OUTCOME.NOT_READY });
-        const { owner, agent, ask, target } = yield* startedAgent(eve, { running: true });
+        const { owner, agent, ask, target } = yield* messagedAgent(eve, { running: true });
         const words = `Check ${mentionMarkdown({ kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.LINEAR }, "Linear", { workspace: "acme", repository: null })} first.`;
 
         const answered = yield* ask(
@@ -2106,7 +1797,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { target, sent } = yield* startedAgent(eve, { running: true });
+        const { target, sent } = yield* messagedAgent(eve, { running: true });
         const words = `Check ${mentionMarkdown({ kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.LINEAR }, "Linear", { workspace: "acme", repository: null })} first.`;
 
         yield* sent(words);
@@ -2129,7 +1820,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, agent, ask, transcript } = yield* startedAgent(eve, {
+        const { owner, other, agent, ask, transcript } = yield* messagedAgent(eve, {
           running: true,
         });
         const line = { text: "Rename the helper.", clientKey: randomUUID() };

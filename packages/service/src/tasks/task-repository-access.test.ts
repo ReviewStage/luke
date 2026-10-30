@@ -143,7 +143,7 @@ it.layer(getTestDB())("a plan's repository on a member's own GitHub token", (it)
   );
 
   it.effect(
-    "a child plan takes its parent's repository and machine, and one naming another repository is refused with nothing made",
+    "a child plan takes its parent's repository, machine, and assignee, and one naming another repository is refused with nothing made",
     () =>
       Effect.gen(function* () {
         const owner = yield* openTokenMember();
@@ -156,6 +156,7 @@ it.layer(getTestDB())("a plan's repository on a member's own GitHub token", (it)
           repository: "octo-member/side",
           githubAccess: GITHUB_ACCESS.TOKEN,
           runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId: studio },
+          assigneeId: owner,
         });
         const send = yield* standing(new Map([["Bearer owner", owner]]));
         const start = (body: object) =>
@@ -170,12 +171,14 @@ it.layer(getTestDB())("a plan's repository on a member's own GitHub token", (it)
             repository: child.task.repository,
             githubAccess: child.githubAccess,
             runsOn: child.runsOn,
+            assignee: child.task.assignee?.userId,
           },
           {
             parentTaskId: parent.id,
             repository: "octo-member/side",
             githubAccess: GITHUB_ACCESS.TOKEN,
             runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId: studio },
+            assignee: owner,
           },
         );
 

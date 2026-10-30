@@ -10,30 +10,30 @@
  * is unreached too. A child works where its parent works: it takes the
  * parent's repository and machine, and a create that names another
  * repository is refused rather than overruled, so nothing is made somewhere
- * its maker did not ask. Nesting has no bound.
+ * its maker did not ask; the refusals are the store's own, which a parent
+ * set after creation (`setTaskParent`) answers too. It also hands back the parent's assignee, which a
+ * create that names none gives its child, or none where that member has left
+ * the workspace. Nesting has no bound.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   readTaskHeader,
+  TaskParentRepositoryDiffers,
+  TaskParentUnreached,
   type TaskRunsOnWrite,
   type TaskStoreFailure,
 } from "@luke/database/models/task-store";
-import { Data, Effect, Option } from "effect";
-
-/** The parent named is none its maker reaches in the child's workspace; nothing was made. */
-export class TaskParentUnreached extends Data.TaggedError("TaskParentUnreached") {}
-
-/** The create named a repository other than the parent's, which a child always works in; nothing was made. */
-export class TaskParentRepositoryDiffers extends Data.TaggedError("TaskParentRepositoryDiffers")<{
-  readonly repository: string | null;
-}> {}
+import { isWorkspaceMember } from "@luke/database/models/workspace-store";
+import { Effect, Option } from "effect";
 
 /** The parent a child is made under, and what the child takes from it. */
 export interface TaskParent {
   readonly id: string;
   readonly repository: string | null;
   readonly runsOn: TaskRunsOnWrite;
+  /** The parent's assignee while still a member of the workspace; null for none. */
+  readonly assigneeId: string | null;
 }
 
 /** Whether a repository a create names is the parent's: GitHub's names match whatever their case, and none matches none. */
@@ -65,5 +65,9 @@ export const taskParentOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (repositoryAsked !== undefined && !sameRepository(repositoryAsked, repository)) {
     return yield* new TaskParentRepositoryDiffers({ repository });
   }
-  return { id: parentTaskId, repository, runsOn };
+  // Note that a member who has left is dropped rather than refused, since the store would refuse the child for them.
+  const { assigneeId } = header.value;
+  const assignable =
+    assigneeId !== null && (yield* isWorkspaceMember(assigneeId, workspaceId)) ? assigneeId : null;
+  return { id: parentTaskId, repository, runsOn, assigneeId: assignable };
 });

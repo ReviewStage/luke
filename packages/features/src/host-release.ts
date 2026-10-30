@@ -6,8 +6,9 @@
  * (`.github/workflows/release-host.yml`, `apps/host/scripts/package.ts`),
  * never marked the repository's latest, since the desktop's download link
  * and its updater read that one. The web app serves the install script with
- * the release named here written into it (`apps/web/scripts/install-script.ts`),
- * which checks the tarball it downloads against the digest it carries before
+ * the release named here written into it
+ * (`packages/service/src/agents/host-install-script-app.ts`), which checks the
+ * tarball it downloads against the digest it carries before
  * anything of it is installed. A release moves `HOST_RELEASE` whole, its
  * digests read off the release CI published, as a tool's pin moves
  * (`@luke/agent-runner/pins`).

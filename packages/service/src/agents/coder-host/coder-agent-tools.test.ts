@@ -35,6 +35,7 @@ import {
   createTask,
   listTasks,
   readTask,
+  readTaskHeader,
   savePlanText,
   updateTask,
 } from "@luke/database/models/task-store";
@@ -87,7 +88,6 @@ import {
 } from "@luke/features/provider-key-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import {
-  MERGE_POLICY,
   PLAN_ACTOR,
   TASK_BOUNDS,
   TASK_MODE,
@@ -1066,47 +1066,6 @@ test("start_agent on a pilot task with no pilot starts its pilot, held to Pilot 
   assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
   const pilot = Option.getOrThrow(await database.run(readAgent(caller.userId, started.agent.id)));
   assert.equal(pilot.kind, AGENT_KIND.PILOT);
-});
-
-test("start_agent on a child task of a pilot tree whose Running switch is off is refused saying so, while the top task's pilot still starts, and the child starts once Running is on", async () => {
-  const { workspaceId, agents, plans } = await openWorkspaces();
-  const { caller } = agents;
-  const eve = await fakeCoderEve(workspaceId);
-  const call = await peerCaller(hostOf(true), caller, eve.services);
-  await database.run(
-    writeAccountPreferences(caller.userId, { experiments: { [EXPERIMENT.PILOT]: true } }),
-  );
-  const setTop = (columns: Partial<typeof task.$inferInsert>) =>
-    database.run(
-      Effect.flatMap(Database, (db) =>
-        db.update(task).set(columns).where(eq(task.id, plans.billing)),
-      ),
-    );
-  await setTop({ mode: TASK_MODE.PILOT });
-  const child = await database.run(
-    createTask(caller.userId, {
-      organizationId: workspaceId,
-      parentTaskId: plans.billing,
-      repository: RELAY_FULL_NAME,
-    }),
-  );
-  const onChild = { taskId: child.id, prompt: "Bill by seat." };
-
-  assert.deepEqual(await call(CODER_TOOL.START_AGENT, onChild, "call-stopped"), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: START_AGENT_REFUSAL.TREE_STOPPED,
-  });
-  assert.equal(eve.sent.length, 0, "a stopped tree's child starts nothing");
-  const pilot = await call(
-    CODER_TOOL.START_AGENT,
-    { taskId: plans.billing, prompt: "Plan billing." },
-    "call-top-pilot",
-  );
-  assert.equal(pilot.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(pilot));
-  await setTop({ running: true });
-  const started = await call(CODER_TOOL.START_AGENT, onChild, "call-running");
-
-  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
 });
 
 test("start_agent with a branch starts an agent whose checkout is cloned at that branch and who is told to cut its own from it, and a branch GitHub does not hold is refused before anything starts", async () => {
@@ -2442,6 +2401,59 @@ test("update_task adds and takes away a task's blocks, which read_task names on 
   assert.deepEqual(await blockIds(tasks.billing), { blockedBy: [], blocks: [] });
 });
 
+test("update_task puts a task under a parent and takes it out with null, answering the parent as it then stands, and refuses a parent out of the workspace, in another repository, or under which the task would descend from itself, taking back the call's every change", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const { userId } = agents.caller;
+  const apart = await database.run(
+    createTask(userId, { organizationId: workspaceId, name: "Apart", repository: "acme/apart" }),
+  );
+  const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+  const parentOf = async (taskId: string) =>
+    Option.getOrThrow(await database.run(readTaskHeader(userId, taskId))).parentTaskId;
+
+  const under = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: tasks.billing, parentTaskId: tasks.invitations },
+    "call-1",
+  );
+  assert.ok(isRecord(under.task), JSON.stringify(under));
+  assert.deepEqual([under.already, under.task.parentTaskId], [false, tasks.invitations]);
+  assert.equal(await parentOf(tasks.billing), tasks.invitations);
+
+  const loop = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: tasks.invitations, name: "Seat invitations", parentTaskId: tasks.billing },
+    "call-2",
+  );
+  assert.deepEqual(loop, rejected(UPDATE_TASK_REFUSAL.PARENT_CYCLE));
+  const invitations = Option.getOrThrow(await database.run(readTask(userId, tasks.invitations)));
+  assert.notEqual(
+    invitations.task.name,
+    "Seat invitations",
+    "the refused parent took the rename back",
+  );
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, parentTaskId: apart.id }),
+    rejected(UPDATE_TASK_REFUSAL.PARENT_REPOSITORY),
+  );
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, parentTaskId: tasks.elsewhere }),
+    rejected(UPDATE_TASK_REFUSAL.NO_PARENT),
+  );
+  assert.equal(await parentOf(tasks.billing), tasks.invitations);
+
+  const out = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: tasks.billing, parentTaskId: null },
+    "call-3",
+  );
+  assert.ok(isRecord(out.task), JSON.stringify(out));
+  assert.deepEqual([out.already, out.task.parentTaskId], [false, null]);
+  assert.equal(await parentOf(tasks.billing), null);
+});
+
 test("archive_agent refuses an agent whose turn a Stop was asked of but which still runs, since the turn goes on until eve ends it", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
@@ -2606,55 +2618,6 @@ test("message_agent to a pilot a continue took over and archived reaches the pil
     ),
   );
   assert.deepEqual(line?.metadata, { channel: MESSAGE_CHANNEL.AGENT_MESSAGE });
-});
-
-test("message_agent to an agent on a pilot tree whose Running switch is off, on a child task or the top task's pilot, is refused saying so, and reaches it once Running is on", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
-  const eve = await fakeCoderEve(workspaceId);
-  const host = hostOf(true);
-  const setTop = (columns: Partial<typeof task.$inferInsert>) =>
-    database.run(
-      Effect.flatMap(Database, (db) =>
-        db.update(task).set(columns).where(eq(task.id, tasks.invitations)),
-      ),
-    );
-  await setTop({ mode: TASK_MODE.PILOT });
-  const child = await database.run(
-    createTask(agents.caller.userId, {
-      organizationId: workspaceId,
-      parentTaskId: tasks.invitations,
-      repository: RELAY_FULL_NAME,
-    }),
-  );
-  const start = { ...AGENT_CHOICE, planSnapshot: "# Teammate invitations", prompt: null };
-  const pilot = await claimed(agents.caller.userId, {
-    ...start,
-    taskId: tasks.invitations,
-    idempotencyKey: randomUUID(),
-    kind: AGENT_KIND.PILOT,
-  });
-  const worker = await claimed(agents.caller.userId, {
-    ...start,
-    taskId: child.id,
-    idempotencyKey: randomUUID(),
-    startedByAgentId: pilot.id,
-  });
-
-  assert.deepEqual(await directMessage(host, pilot, worker, eve.services, "call-stopped"), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: MESSAGE_AGENT_REFUSAL.TREE_STOPPED,
-  });
-  assert.deepEqual(await directMessage(host, worker, pilot, eve.services, "call-up"), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: MESSAGE_AGENT_REFUSAL.TREE_STOPPED,
-  });
-  assert.equal(eve.sent.length, 0, "a stopped tree's agents, its pilot among them, hear no agent");
-  await setTop({ running: true });
-  const down = await directMessage(host, pilot, worker, eve.services, "call-running");
-  const up = await directMessage(host, worker, pilot, eve.services, "call-running-up");
-
-  assert.equal(down.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(down));
-  assert.equal(up.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(up));
 });
 
 test("a message to an agent whose session eve no longer runs opens a fresh session over its conversation rather than being refused, and settles the turn the ended session was running as failed for its session's end, once", async () => {
@@ -3681,35 +3644,6 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
   });
 });
 
-test("read_task names a grandchild's merge policy and running switch as its top task's, whatever the grandchild's own columns hold", async () => {
-  const { workspaceId, agents } = await openWorkspaces();
-  const { caller } = agents;
-  const eve = await fakeCoderEve(workspaceId);
-  const call = await peerCaller(hostOf(true), caller, eve.services);
-  const top = await database.run(createTask(caller.userId, { organizationId: workspaceId }));
-  const child = await database.run(
-    createTask(caller.userId, { organizationId: workspaceId, parentTaskId: top.id }),
-  );
-  const grandchild = await database.run(
-    createTask(caller.userId, { organizationId: workspaceId, parentTaskId: child.id }),
-  );
-  await database.run(
-    Effect.flatMap(Database, (db) =>
-      db
-        .update(task)
-        .set({ mergePolicy: MERGE_POLICY.HOLD, running: true })
-        .where(eq(task.id, top.id)),
-    ),
-  );
-
-  const read = await call(CODER_TOOL.READ_TASK, { taskId: grandchild.id });
-  assert.deepEqual(
-    isRecord(read.task) && [read.task.topTaskMergePolicy, read.task.topTaskStarted],
-    [MERGE_POLICY.HOLD, true],
-    JSON.stringify(read),
-  );
-});
-
 test("create_task, update_task, list_tasks, and read_task carry a task's status, priority, and key, list_tasks narrows by status, and an unknown status is refused", async () => {
   const { workspaceId, plans: taskIds, agents } = await openWorkspaces();
   const { caller } = agents;
@@ -3823,6 +3757,18 @@ test("create_task, update_task, list_tasks, and read_task carry a task's assigne
     filed.assignee,
   );
 
+  // A child made with no assignee named takes its parent's; a null names no one.
+  const childAssignee = async (input: { assignee?: null; parentTaskId?: string }, key: string) => {
+    const child = taskOf(
+      await call(CODER_TOOL.CREATE_TASK, { name: key, parentTaskId: filed.id, ...input }, key),
+    );
+    assert.ok(isWireString(child.id), JSON.stringify(child));
+    return Option.getOrThrow(await database.run(readTask(caller.userId, child.id))).task.assignee
+      ?.userId;
+  };
+  assert.equal(await childAssignee({}, "child-inherits"), teammates.userId);
+  assert.equal(await childAssignee({ assignee: null }, "child-unassigned"), undefined);
+
   const cleared = await call(
     CODER_TOOL.UPDATE_TASK,
     { taskId: filed.id, assignee: null },
@@ -3864,6 +3810,18 @@ test("create_task, update_task, list_tasks, and read_task carry a task's assigne
     Option.getOrThrow(await database.run(readTask(caller.userId, filed.id))).task.assignee,
     undefined,
   );
+
+  // A parent's assignee who has since left the workspace gives the child none, and no error.
+  const assigned = taskOf(
+    await call(
+      CODER_TOOL.CREATE_TASK,
+      { name: "Leaver's", assignee: personLink(teammates.userId) },
+      "call-leaver",
+    ),
+  );
+  assert.ok(isWireString(assigned.id), JSON.stringify(assigned));
+  await database.run(leaveWorkspace(workspaceId, teammates.userId));
+  assert.equal(await childAssignee({ parentTaskId: assigned.id }, "child-of-leaver"), undefined);
 });
 
 /** The member's operator in the workspace, blank with no task and no repository, its session recorded. */

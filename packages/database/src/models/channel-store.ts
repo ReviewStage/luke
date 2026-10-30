@@ -44,11 +44,12 @@ export const CHANNEL_NAME_REFUSAL = {
 
 export type ChannelNameRefusal = (typeof CHANNEL_NAME_REFUSAL)[keyof typeof CHANNEL_NAME_REFUSAL];
 
-/** What a new channel is: its name, a lowercase slug, what it is for, and whether it is one project's. */
+/** What a new channel is: its name, a lowercase slug, what it is for, and whether it is one project's; and its id where the asker minted it, so a window draws it before the service answers. */
 export interface ChannelDraft {
   readonly name: string;
   readonly purpose: string;
   readonly project: boolean;
+  readonly id?: string | undefined;
 }
 
 /** One open channel of a workspace, as its row holds it. */
@@ -62,6 +63,18 @@ export interface ChannelRow {
   /** Epoch milliseconds. */
   readonly createdAt: number;
 }
+
+/**
+ * The transaction a write wrote its rows in, read in the write's own
+ * `RETURNING`, which a follower of the workspace's channels waits for to
+ * arrive on its live read; none where the write changed no row.
+ */
+export interface ChannelTxid {
+  readonly txid?: string;
+}
+
+/** One channel as a write left it, and the transaction it was written in. */
+export type ChannelWritten = ChannelRow & ChannelTxid;
 
 /** One archived channel of a workspace, as its row holds it, and when it was archived. */
 export interface ArchivedChannelRow extends ChannelRow {
@@ -91,6 +104,12 @@ const ChannelRowSchema = Schema.Struct({
   createdAt: InstantColumnSchema,
 });
 
+/** A channel row as a write's `RETURNING` reads it, with the transaction it was written in. */
+const WrittenChannelRowSchema = Schema.Struct({ ...ChannelRowSchema.fields, txid: Schema.String });
+
+/** The transaction a statement wrote its row in. */
+const TxidSchema = Schema.Struct({ txid: Schema.String });
+
 const ArchivedChannelRowSchema = Schema.Struct({
   ...ChannelRowSchema.fields,
   archivedAt: InstantColumnSchema,
@@ -110,9 +129,17 @@ const CHANNEL_COLUMNS = {
   createdAt: channel.createdAt,
 };
 
+/** The id of the transaction a write ran in, as Neon's mutations guide reads it. */
+const TXID = { txid: sql<string>`pg_current_xact_id()::text` };
+
 /** A row as its list carries it, its instant in epoch milliseconds. */
 function channelRow(row: typeof ChannelRowSchema.Type): ChannelRow {
   return { ...row, createdAt: row.createdAt.getTime() };
+}
+
+/** A row as a write left it, with the transaction it was written in. */
+function writtenRow({ txid, ...row }: typeof WrittenChannelRowSchema.Type): ChannelWritten {
+  return { ...channelRow(row), txid };
 }
 
 /** The workspace's open channel of that name: the lookup the open-name unique index serves. */
@@ -183,8 +210,9 @@ const findChannels = SqlSchema.findAll({
  * its workspace, and moved only forward, so a stamp that arrives after a
  * later one keeps the later.
  */
-const upsertLook = SqlSchema.void({
+const upsertLook = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, channelId: Schema.String, at: Schema.Date }),
+  Result: TxidSchema,
   execute: ({ userId, channelId, at }) =>
     Database.use((db) =>
       db
@@ -204,7 +232,8 @@ const upsertLook = SqlSchema.void({
         .onConflictDoUpdate({
           target: [channelLook.userId, channelLook.channelId],
           set: { lookedAt: sql`greatest(${channelLook.lookedAt}, excluded.looked_at)` },
-        }),
+        })
+        .returning(TXID),
     ),
 });
 
@@ -256,19 +285,28 @@ const insertChannel = SqlSchema.findOneOption({
     name: Schema.String,
     purpose: Schema.String,
     project: Schema.Boolean,
+    id: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
-  Result: ChannelRowSchema,
-  execute: ({ organizationId, userId, name, purpose, project, now }) =>
+  Result: WrittenChannelRowSchema,
+  execute: ({ organizationId, userId, name, purpose, project, id, now }) =>
     Database.use((db) =>
       db
         .insert(channel)
-        .values({ organizationId, name, purpose, project, createdBy: userId, createdAt: now })
+        .values({
+          ...(id === null ? undefined : { id }),
+          organizationId,
+          name,
+          purpose,
+          project,
+          createdBy: userId,
+          createdAt: now,
+        })
         .onConflictDoNothing({
           target: [channel.organizationId, channel.name],
           where: sql`${channel.archivedAt} is null`,
         })
-        .returning(CHANNEL_COLUMNS),
+        .returning({ ...CHANNEL_COLUMNS, ...TXID }),
     ),
 });
 
@@ -306,7 +344,7 @@ const updateEdit = SqlSchema.findOneOption({
     name: Schema.NullOr(Schema.String),
     purpose: Schema.NullOr(Schema.String),
   }),
-  Result: ChannelRowSchema,
+  Result: WrittenChannelRowSchema,
   execute: ({ channelId, name, purpose }) =>
     Database.use((db) =>
       db
@@ -322,21 +360,21 @@ const updateEdit = SqlSchema.findOneOption({
             name === null ? undefined : nameFree(name),
           ),
         )
-        .returning(CHANNEL_COLUMNS),
+        .returning({ ...CHANNEL_COLUMNS, ...TXID }),
     ),
 });
 
 /** The open channel archived, which frees its name; nothing where it was archived first. */
 const updateArchived = SqlSchema.findOneOption({
   Request: Schema.Struct({ channelId: Schema.String, now: Schema.Date }),
-  Result: IdSchema,
+  Result: TxidSchema,
   execute: ({ channelId, now }) =>
     Database.use((db) =>
       db
         .update(channel)
         .set({ archivedAt: now })
         .where(and(eq(channel.id, channelId), isNull(channel.archivedAt)))
-        .returning({ id: channel.id }),
+        .returning(TXID),
     ),
 });
 
@@ -387,7 +425,7 @@ const findAnyChannel = SqlSchema.findOneOption({
  */
 const updateUnarchived = SqlSchema.findOneOption({
   Request: Schema.Struct({ channelId: Schema.String }),
-  Result: ChannelRowSchema,
+  Result: WrittenChannelRowSchema,
   execute: ({ channelId }) =>
     Database.use((db) =>
       db
@@ -396,7 +434,7 @@ const updateUnarchived = SqlSchema.findOneOption({
         .where(
           and(eq(channel.id, channelId), isNotNull(channel.archivedAt), nameFree(channel.name)),
         )
-        .returning(CHANNEL_COLUMNS),
+        .returning({ ...CHANNEL_COLUMNS, ...TXID }),
     ),
 });
 
@@ -510,13 +548,15 @@ export function openChannels(
   });
 }
 
-/** Stamps the member's look at the channel at the instant given; nothing where they are not a member of its workspace, or a later look stands. */
+/** Stamps the member's look at the channel at the instant given, answering the transaction it was written in; nothing where they are not a member of its workspace. */
 export function stampChannelLook(
   userId: string,
   channelId: string,
   at: Date,
-): TaskStoreEffect<void> {
-  return upsertLook({ userId, channelId, at });
+): TaskStoreEffect<ChannelTxid> {
+  return Effect.map(upsertLook({ userId, channelId, at }), (written) =>
+    Option.match(written, { onNone: () => ({}), onSome: ({ txid }) => ({ txid }) }),
+  );
 }
 
 /** When the member last looked at each channel of the workspace they ever looked at; none where they are not a member of it. */
@@ -540,14 +580,15 @@ export function createChannel(
   organizationId: string,
   draft: ChannelDraft,
   now: Date,
-): TaskStoreEffect<Result.Result<ChannelRow, ChannelWriteRefusal>> {
+): TaskStoreEffect<Result.Result<ChannelWritten, ChannelWriteRefusal>> {
   return Effect.gen(function* () {
     const member = yield* isWorkspaceMember(userId, organizationId);
     if (!member) return Result.fail(CHANNEL_WRITE_REFUSAL.NOT_FOUND);
     yield* ensureGeneralChannel(organizationId, now);
-    const made = yield* insertChannel({ organizationId, userId, ...draft, now });
+    const { id = null, ...named } = draft;
+    const made = yield* insertChannel({ organizationId, userId, ...named, id, now });
     if (Option.isNone(made)) return Result.fail(CHANNEL_WRITE_REFUSAL.NAME_TAKEN);
-    return Result.succeed(channelRow(made.value));
+    return Result.succeed(writtenRow(made.value));
   });
 }
 
@@ -563,7 +604,7 @@ export function editChannel(
   organizationId: string,
   channelId: string,
   edit: ChannelEdit,
-): TaskStoreEffect<Result.Result<ChannelRow, ChannelWriteRefusal>> {
+): TaskStoreEffect<Result.Result<ChannelWritten, ChannelWriteRefusal>> {
   return Effect.gen(function* () {
     const standing = yield* findOpenChannel({ userId, organizationId, channelId });
     if (Option.isNone(standing)) return Result.fail(CHANNEL_WRITE_REFUSAL.NOT_FOUND);
@@ -579,7 +620,7 @@ export function editChannel(
     if (name === null && purpose === null) return Result.succeed(channelRow(standing.value));
     const edited = yield* updateEdit({ channelId, name, purpose });
     if (Option.isNone(edited)) return Result.fail(CHANNEL_WRITE_REFUSAL.NAME_TAKEN);
-    return Result.succeed(channelRow(edited.value));
+    return Result.succeed(writtenRow(edited.value));
   });
 }
 
@@ -594,7 +635,7 @@ export function archiveChannel(
   organizationId: string,
   channelId: string,
   now: Date,
-): TaskStoreEffect<Result.Result<void, ChannelWriteRefusal>> {
+): TaskStoreEffect<Result.Result<ChannelTxid, ChannelWriteRefusal>> {
   return Effect.gen(function* () {
     const standing = yield* findOpenChannel({ userId, organizationId, channelId });
     if (Option.isNone(standing)) return Result.fail(CHANNEL_WRITE_REFUSAL.NOT_FOUND);
@@ -603,7 +644,7 @@ export function archiveChannel(
     }
     const archived = yield* updateArchived({ channelId, now });
     if (Option.isNone(archived)) return Result.fail(CHANNEL_WRITE_REFUSAL.NOT_FOUND);
-    return Result.void;
+    return Result.succeed({ txid: archived.value.txid });
   });
 }
 
@@ -628,14 +669,14 @@ export function unarchiveChannel(
   userId: string,
   organizationId: string,
   channelId: string,
-): TaskStoreEffect<Result.Result<ChannelRow, ChannelWriteRefusal>> {
+): TaskStoreEffect<Result.Result<ChannelWritten, ChannelWriteRefusal>> {
   return Effect.gen(function* () {
     const standing = yield* findAnyChannel({ userId, organizationId, channelId });
     if (Option.isNone(standing)) return Result.fail(CHANNEL_WRITE_REFUSAL.NOT_FOUND);
     const { archived, ...row } = standing.value;
     if (!archived) return Result.succeed(channelRow(row));
     const opened = yield* updateUnarchived({ channelId });
-    if (Option.isSome(opened)) return Result.succeed(channelRow(opened.value));
+    if (Option.isSome(opened)) return Result.succeed(writtenRow(opened.value));
     // Note that a channel another member opened first answers as it now stands, rather than as a name taken.
     const now = yield* findOpenChannel({ userId, organizationId, channelId });
     if (Option.isSome(now)) return Result.succeed(channelRow(now.value));

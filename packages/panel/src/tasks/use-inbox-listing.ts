@@ -2,17 +2,14 @@ import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { searchTokens } from "@luke/ui/search-tokens";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
-import {
-  type InboxViewChoices,
-  useChannelScope,
-  useInboxTaskFolds,
-  useInboxViewChoices,
-} from "../desktop/folded-groups.js";
+import { afterPaint } from "../after-paint.js";
+import { useInboxViewChoices } from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
 import {
   channelGroups,
+  EVERYONES,
   INBOX_HOLDER,
   INBOX_SHOW,
   INBOX_WHOSE,
@@ -57,17 +54,23 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * across the whole feed, its groups, counts, and list, is read again only
  * as what it is read from moves.
  *
+ * A row's press, and K and J, choose an item for the Inbox at once, drawn
+ * in the frame the press lands in by the Inbox alone, and hand the choice
+ * to the window once that frame has painted (`useChoiceFirst`), so the
+ * sidebar, the side panel, and the window's history, which follow the
+ * window's choice, draw it a frame later rather than holding up the thread.
+ *
  * Narrowed to a channel, it lists and counts that channel's items alone
- * (`channelGroups`), under the channels' scope, one for every channel and
- * apart from the Inbox's: All of everyone's until the reader turns it,
- * since a channel is everyone's threads on one topic, and then whatever
- * they turned it to, in every channel and across a launch
- * (`useChannelScope`). Its grouping, its order, and the rest of its view
- * are the Inbox's own.
+ * (`channelGroups`), every one of them whoever it is addressed to, since a
+ * channel is everyone's threads on one topic, and offers no view choices.
+ * Its order, the latest first, is the Inbox's own.
  *
  * Narrowed to a task instead, it lists and counts that task's items alone
  * (`taskGroups`), under the Inbox's own view.
  */
+
+/** What a channel lists: every item in it, open or settled, whoever it is addressed to. */
+const CHANNEL_LISTS = { show: INBOX_SHOW.ALL, whose: EVERYONES } as const;
 
 /**
  * The tasks the list holds items of, in main's order: each holding one that
@@ -83,18 +86,78 @@ function listedHoldings(
   return holdings.filter((holding) => ids.has(holding.taskId));
 }
 
-/** The Inbox's view choices, under the channels' scope where a channel is given; the Inbox's kept choices where none is. */
-function useScopedChoices(channelId: string | undefined): InboxViewChoices {
-  const kept = useInboxViewChoices();
-  const channels = useChannelScope();
-  return channelId === undefined ? kept : { ...kept, ...channels };
-}
-
 /** The choice that opens a listed item: by its task, and its agent, which its link names, or by its agent where it has none. */
 export function choiceOf({ holder, item }: InboxListed): InboxChoice {
   return holder.kind === INBOX_HOLDER.TASK
     ? { taskId: holder.task.id, itemAgentId: item.agentId, itemId: item.id }
     : { agentId: item.agentId, itemId: item.id };
+}
+
+/** A choice on its way to the window, and the window's choice it was made over. */
+interface ChoiceOnItsWay {
+  readonly choice: InboxChoice;
+  readonly over: InboxChoice | undefined;
+}
+
+/** Whether the window's choice stands where a choice on its way found it, or on one this Inbox handed on since. */
+function unmoved(
+  way: ChoiceOnItsWay,
+  now: InboxChoice | undefined,
+  handed: WeakSet<InboxChoice>,
+): boolean {
+  return now === way.over || (now !== undefined && handed.has(now));
+}
+
+/**
+ * The item the Inbox shows, as the reader chose it: a choice made here is
+ * drawn at once, and handed to the window (`onChoose`) once the frame that
+ * draws it has painted, in the order they were made, so every choice is a
+ * step of the window's history as it was. Until the window holds it, the
+ * newest choice made here stands for the window's (`chosen`), and
+ * `settling` says so. Note that a choice the window made meanwhile, a
+ * link's or Back's, stands over one still on its way, which is then
+ * dropped rather than handed on, and that `clear`, the Inbox's own way to
+ * choose nothing, drops every choice on its way before it clears the
+ * window's.
+ */
+function useChoiceFirst(
+  chosen: InboxChoice | undefined,
+  onChoose: (chosen: InboxChoice) => void,
+  onClear: () => void,
+): {
+  readonly chosen: InboxChoice | undefined;
+  readonly settling: boolean;
+  readonly choose: (chosen: InboxChoice) => void;
+  readonly clear: () => void;
+} {
+  const [held, setHeld] = useState<readonly ChoiceOnItsWay[]>([]);
+  const latest = useRef({ chosen, onChoose, onClear });
+  latest.current = { chosen, onChoose, onClear };
+  // The choices on their way, so one dropped by a clear is never handed on.
+  const waiting = useRef(new Set<ChoiceOnItsWay>());
+  // The choices handed to the window, so one handed on while another waits is known as this Inbox's own.
+  const handed = useRef(new WeakSet<InboxChoice>());
+  const choose = useCallback((choice: InboxChoice) => {
+    const way: ChoiceOnItsWay = { choice, over: latest.current.chosen };
+    waiting.current.add(way);
+    setHeld((was) => [...was, way]);
+    afterPaint(() => {
+      if (!waiting.current.delete(way)) return;
+      if (unmoved(way, latest.current.chosen, handed.current)) {
+        handed.current.add(choice);
+        latest.current.onChoose(choice);
+      }
+      setHeld((was) => was.filter((each) => each !== way));
+    });
+  }, []);
+  const clear = useCallback(() => {
+    waiting.current.clear();
+    setHeld([]);
+    latest.current.onClear();
+  }, []);
+  const newest = held.at(-1);
+  const stands = newest !== undefined && unmoved(newest, chosen, handed.current);
+  return { chosen: stands ? newest.choice : chosen, settling: stands, choose, clear };
 }
 
 /** What the window's Inbox is narrowed to: a channel, or a task, or neither; never both. */
@@ -112,8 +175,9 @@ export function useInboxListing(tasks: TasksControl, narrowing: InboxNarrowing =
   const { channelId, taskId: narrowedTask } = narrowing;
   const view = tasks.inboxView;
   const { act } = useAct();
-  const choices = useScopedChoices(channelId);
-  const folds = useInboxTaskFolds();
+  // Note that a channel lists everything, so the Inbox's kept choices stand only while it lists every channel.
+  const kept = useInboxViewChoices();
+  const choices = channelId === undefined ? kept : undefined;
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   // Note that the Inbox reads the automations whenever it stands, because the items of agents with no task it lists are every one an automation's.
   const openAutomation = useCallback(
@@ -140,19 +204,37 @@ export function useInboxListing(tasks: TasksControl, narrowing: InboxNarrowing =
     readTasks.has(id) && !read.feedHoldsNothing[INBOX_SCOPE_KIND.PLAN].has(id);
   const settlesAgent = (id: string) =>
     readAgents.has(id) && !read.feedHoldsNothing[INBOX_SCOPE_KIND.AGENT].has(id);
-  const asked = view.chosen;
+  const { onChoose, onClear } = view;
+  // Note that the item chosen here is drawn before the window holds it (`useChoiceFirst`).
+  const {
+    chosen: asked,
+    settling,
+    choose: chooseFirst,
+    clear,
+  } = useChoiceFirst(view.chosen, onChoose, onClear);
   const chosenTask =
     asked !== undefined && "taskId" in asked
       ? tasks.tasks.find((task) => task.id === asked.taskId)
       : undefined;
   const taskId = chosenTask?.id;
   const chosenAgentId = asked !== undefined && "agentId" in asked ? asked.agentId : undefined;
+  const { standing: listedStanding, archived: listedArchived } = tasks.listedAgents;
+  // Note that an agent with no task the list carries is drawn from its row, so choosing its item reads nothing of it.
+  const listedPage = useMemo(
+    () =>
+      chosenAgentId === undefined
+        ? undefined
+        : [...listedStanding, ...listedArchived].find((agent) => agent.id === chosenAgentId),
+    [chosenAgentId, listedStanding, listedArchived],
+  );
   const agents = useAgents({
     acts: { act },
     taskId,
     ...(chosenAgentId === undefined ? undefined : { agentId: chosenAgentId }),
     repository: chosenTask?.repository ?? null,
     listedAgents: tasks.liveAgents,
+    listedPage,
+    listedPullRequests: tasks.listedPullRequests,
     // The Inbox draws no agent's composer, so nothing here opens Settings.
     onOpenIntegrations: () => undefined,
     onOpenApiKeys: () => undefined,
@@ -247,12 +329,9 @@ export function useInboxListing(tasks: TasksControl, narrowing: InboxNarrowing =
   const [query, setQuery] = useState("");
   const search = useMemo(() => searchTokens(query), [query]);
   const me = tasks.me;
-  const { grouping, show, sort, whose } = choices;
+  const { show, whose } = choices ?? CHANNEL_LISTS;
   const counts = useMemo(() => inboxCounts(standing, me, whose), [standing, me, whose]);
-  const filter = useMemo(
-    () => ({ grouping, show, sort, whose, search, readerId: me }),
-    [grouping, show, sort, whose, search, me],
-  );
+  const filter = useMemo(() => ({ show, whose, search, readerId: me }), [show, whose, search, me]);
   // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its place,
   // both held still while the page stands: every row while the pointer is over the list, and the chosen row while it stays chosen.
   const { list, steps, onPointing } = useHeldInboxList(
@@ -272,7 +351,7 @@ export function useInboxListing(tasks: TasksControl, narrowing: InboxNarrowing =
   const filteredOut =
     searched === undefined &&
     listedRows.length === 0 &&
-    (choices.show !== INBOX_SHOW.ALL || choices.whose.kind !== INBOX_WHOSE.EVERYONE) &&
+    (show !== INBOX_SHOW.ALL || whose.kind !== INBOX_WHOSE.EVERYONE) &&
     standing.some(({ items }) => items.length > 0);
   // Note that a chosen item whose task or agent is listed but not read yet keeps its place, because
   // it may be listed once the read lands; one whose task left the list, deleted elsewhere, gives way.
@@ -326,8 +405,7 @@ export function useInboxListing(tasks: TasksControl, narrowing: InboxNarrowing =
     retryLive();
     retryAgents();
   }, [retryLive, retryAgents]);
-  const { onChoose } = view;
-  const choose = useCallback((listed: InboxListed) => onChoose(choiceOf(listed)), [onChoose]);
+  const choose = useCallback((listed: InboxListed) => chooseFirst(choiceOf(listed)), [chooseFirst]);
   // Note that a close the agent hears may open its turn, so its agents are read again once it is taken.
   const closeItem = useInboxCloser({ act, onHeard: agents.onRetryList });
   // Note that a task list that failed leaves the Inbox holding nothing to read, which would otherwise say it was empty.
@@ -340,10 +418,10 @@ export function useInboxListing(tasks: TasksControl, narrowing: InboxNarrowing =
     view,
     act,
     choices,
-    folds,
     openAutomation,
     read,
     asked,
+    settling,
     chosenTask,
     taskId,
     chosenAgentId,
@@ -368,6 +446,7 @@ export function useInboxListing(tasks: TasksControl, narrowing: InboxNarrowing =
     reading,
     failed,
     choose,
+    clear,
     closeItem,
     onRetry,
   };

@@ -33,6 +33,7 @@ import {
   listTasks,
   readTask,
   type StoredTask,
+  setTaskParent,
   type TaskChanges,
   updateTask,
 } from "@luke/database/models/task-store";
@@ -314,7 +315,7 @@ export const UPDATE_TASK_REFUSAL = {
     "repository as owner/name or null, pinned, a sectionId or null, a status " +
     `(${Object.values(TASK_STATUS).join(", ")}), a priority ` +
     `(${Object.values(TASK_PRIORITY).join(", ")}), an assignee as a member's mention link or ` +
-    "null, or tasks to add to or take away from its blockedBy or blocks.",
+    "null, a parentTaskId or null, or tasks to add to or take away from its blockedBy or blocks.",
   NO_TASK:
     "Not run: no task of your workspace has that id, so it is none you can change; " +
     `${AGENT_TOOL.LIST_TASKS} names them.`,
@@ -333,6 +334,15 @@ export const UPDATE_TASK_REFUSAL = {
   NO_SECTION:
     "Not run: the developer you work for keeps no section of this workspace under that id; " +
     `${AGENT_TOOL.LIST_TASKS} names the sections.`,
+  NO_PARENT:
+    "Not run: no task of your workspace has that id to be its parent; " +
+    `${AGENT_TOOL.LIST_TASKS} names them, or null takes it out from under its parent.`,
+  PARENT_REPOSITORY:
+    "Not run: a child task always works in its parent's repository, so a task cannot be put " +
+    "under a parent working in another; leave the parent as it is.",
+  PARENT_CYCLE:
+    "Not run: that parent is the task itself or one of its sub-tasks, under which the task " +
+    "would descend from itself; take that task out from under this one first.",
 } as const;
 
 /** Why a stop changed nothing, in words the model can act on. */
@@ -434,9 +444,6 @@ export const START_AGENT_REFUSAL = {
     "Not started: that task is worked in pilot mode and has no pilot, so this agent would be its " +
     "pilot, and Pilot is off for the member you start for. Ask them to turn it on in Settings › " +
     "Experimental.",
-  TREE_STOPPED:
-    "Not started: that task is a child task of a stopped pilot tree, so no agent starts or goes " +
-    "on there until someone presses Start on the top task.",
   STARTER_CONTINUE:
     "Not started: you can't continue an agent that started you, directly or through the agents " +
     "between you, since the agents it started would report to a pilot you started; tell its " +
@@ -474,7 +481,6 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING, START_AGENT_REFUSAL.CREDENTIAL_MISSING],
   [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE, START_AGENT_REFUSAL.API_KEY_UNREADABLE],
   [HOSTED_API_ERROR.DEVICE_REMOVED, START_AGENT_REFUSAL.DEVICE_REMOVED],
-  [HOSTED_API_ERROR.TREE_STOPPED, START_AGENT_REFUSAL.TREE_STOPPED],
 ]);
 
 /** Why a start on a device refused it, in words the calling model can act on: by what the device refused it for, bar another member's device, which names whose it is (`notOwnerWords`). */
@@ -740,6 +746,15 @@ const UPDATE_TASK_INPUT = Schema.Struct({
         "under Tasks.",
     ),
   ),
+  parentTaskId: Schema.optionalKey(
+    describeWire(
+      Schema.NullOr(wireUuidSchema),
+      `The task to make it a child of, by the id ${AGENT_TOOL.LIST_TASKS} answered: a task of ` +
+        "your workspace working in the same repository, and neither this task nor one of its " +
+        "sub-tasks; where its agents run stays its own. null takes it out from under its parent, " +
+        "to stand at the top.",
+    ),
+  ),
   blockedBy: Schema.optionalKey(BLOCKED_BY_INPUT),
   blocks: Schema.optionalKey(BLOCKS_INPUT),
 });
@@ -862,7 +877,8 @@ export const UPDATE_TASK_TOOL = {
     "Change a task of your workspace by its id, as the developer's own task menu would, on behalf " +
     "of the developer you work for: rename it, set or clear its repository, set where it stands " +
     "(its status) or how much it matters (its priority), assign it to a member of the " +
-    "workspace or to no one, pin or unpin it in their sidebar, or add and take away the tasks " +
+    "workspace or to no one, pin or unpin it in their sidebar, put it under a parent task or " +
+    "take it out from under one, or add and take away the tasks " +
     "it is blocked by and the tasks it blocks; name at least one change, " +
     "and several go in one call. Mark a task whose work is " +
     "done Done, with status done, as the menu's Mark done does, such as one whose pull requests " +
@@ -873,8 +889,10 @@ export const UPDATE_TASK_TOOL = {
     "Linear's: the blocker's work comes first and the task it blocks waits on it, as one child " +
     "task builds on another. It is advice, never a lock, so nothing refuses to start a blocked " +
     "task. Both tasks must be in your workspace, a task never blocks itself, and a block that " +
-    "would close a cycle is refused. Answers `accepted` with the task as it now stands, its " +
-    "blockedBy and blocks among it where the call changed them, `already` true where every " +
+    "would close a cycle is refused. A child task works in its parent's repository, so a " +
+    "parent working in another is refused, as is one under which the task would descend from " +
+    "itself. Answers `accepted` with the task as it now stands, its " +
+    "parentTaskId, blockedBy, and blocks among it where the call changed them, `already` true where every " +
     "change named already stood, or `rejected` and " +
     "why. Then say which tasks you changed and how.",
   inputSchema: UPDATE_TASK_INPUT,
@@ -1966,18 +1984,19 @@ export function taskStandingOf(
   };
 }
 
-/** What a task's answer says beside the task: whether every change named already stood, the section it was placed in, and whether the call named its blocks. */
+/** What a task's answer says beside the task: whether every change named already stood, the section it was placed in, whether the call named its parent, and whether it named its blocks. */
 interface TaskUpdateAnswered {
   readonly already: boolean;
   readonly section: TaskSectionReading | null | undefined;
+  readonly parentNamed: boolean;
   readonly blocksNamed: boolean;
 }
 
-/** A task's change as the model reads it: the task as it now stands, with its mention, its blocks where the call named them, and whether every change named already stood before the call. */
+/** A task's change as the model reads it: the task as it now stands, with its mention, its parent and its blocks where the call named them, and whether every change named already stood before the call. */
 const taskUpdateAnswer = (
   userId: string,
   task: StoredTask["task"],
-  { already, section, blocksNamed }: TaskUpdateAnswered,
+  { already, section, parentNamed, blocksNamed }: TaskUpdateAnswered,
 ) =>
   Effect.gen(function* () {
     const { step, name } = yield* workspaceNamingOf(userId, task.workspaceId);
@@ -1994,6 +2013,7 @@ const taskUpdateAnswer = (
         ...(section === undefined
           ? undefined
           : { section: section === null ? null : { ...section } }),
+        ...(parentNamed ? { parentTaskId: task.parentTaskId ?? null } : undefined),
         ...blocks,
       },
       already,
@@ -2110,7 +2130,8 @@ export function runUpdateTask(
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
   }
-  const { taskId, sectionId, assignee, archived, blockedBy, blocks, ...named } = asked.success;
+  const { taskId, sectionId, assignee, archived, parentTaskId, blockedBy, blocks, ...named } =
+    asked.success;
   const blockChanges = { ...(blockedBy && { blockedBy }), ...(blocks && { blocks }) };
   const assigneeId =
     assignee === undefined ? undefined : assignee === null ? null : assigneeIdOf(assignee);
@@ -2122,6 +2143,7 @@ export function runUpdateTask(
     Object.keys(changes).length === 0 &&
     archived === undefined &&
     sectionId === undefined &&
+    parentTaskId === undefined &&
     !blockChangesNamed(blockChanges)
   ) {
     return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
@@ -2189,13 +2211,15 @@ export function runUpdateTask(
             }),
       };
       const stands = changesStand(read.value, asWritten) && (placing?.success.stands ?? true);
-      // The task's change, its place in the sidebar, and its blocks are one transaction, so a place
-      // refused, its section deleted meanwhile, or a block refused takes the change back with it.
+      // The tasks the blocks name, and the parent, are locked before the task's change, so the change takes no lock first that another call's writes wait on.
+      const locking = [
+        ...(blocking === undefined ? [] : tasksOfWrites(blocking.success)),
+        ...(typeof parentTaskId === "string" ? [taskId, parentTaskId] : []),
+      ];
+      // The task's change, its place in the sidebar, its parent, and its blocks are one transaction, so a place
+      // refused, its section deleted meanwhile, a parent refused, or a block refused takes the change back with it.
       const writing = Effect.gen(function* () {
-        // Every task the blocks name is locked before the task's change, so the change takes no lock first that another call's blocks wait on.
-        if (blocking !== undefined) {
-          yield* lockTasksForBlocks(userId, tasksOfWrites(blocking.success));
-        }
+        if (locking.length > 0) yield* lockTasksForBlocks(userId, locking);
         const task =
           Object.keys(asWritten).length === 0
             ? Option.some(read.value.task)
@@ -2209,11 +2233,23 @@ export function runUpdateTask(
           });
           if (Option.isNone(placed)) return yield* Effect.fail(new TaskPlaceRefused());
         }
+        // The parent is written under the store's own rules, and the task answered as it then stands.
+        const parented =
+          Option.isSome(task) && parentTaskId !== undefined
+            ? yield* setTaskParent(userId, taskId, parentTaskId)
+            : undefined;
+        if (parented !== undefined && Option.isNone(parented)) {
+          return yield* Effect.fail(new TaskParentGone());
+        }
         const blocksChanged =
           Option.isSome(task) && blocking !== undefined
             ? yield* writeTaskBlocks(userId, blocking.success)
             : false;
-        return { task, blocksChanged };
+        return {
+          task: parented === undefined ? task : Option.map(parented, (written) => written.task),
+          parentChanged: parented !== undefined && Option.getOrThrow(parented).txid !== undefined,
+          blocksChanged,
+        };
       });
       const changed = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
         client.withTransaction(writing),
@@ -2222,7 +2258,11 @@ export function runUpdateTask(
           (
             written,
           ): Result.Result<
-            { task: Option.Option<StoredTask["task"]>; blocksChanged: boolean },
+            {
+              task: Option.Option<StoredTask["task"]>;
+              parentChanged: boolean;
+              blocksChanged: boolean;
+            },
             string
           > => Result.succeed(written),
         ),
@@ -2236,13 +2276,26 @@ export function runUpdateTask(
         Effect.catchTag("TaskTreeRepositoryLocked", () =>
           Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.TREE_REPOSITORY)),
         ),
+        Effect.catchTag("TaskParentGone", () =>
+          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_TASK)),
+        ),
+        Effect.catchTag("TaskParentUnreached", () =>
+          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_PARENT)),
+        ),
+        Effect.catchTag("TaskParentRepositoryDiffers", () =>
+          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.PARENT_REPOSITORY)),
+        ),
+        Effect.catchTag("TaskParentCycle", () =>
+          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.PARENT_CYCLE)),
+        ),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
-      const { task, blocksChanged } = changed.success;
+      const { task, parentChanged, blocksChanged } = changed.success;
       if (Option.isNone(task)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
       return yield* taskUpdateAnswer(userId, task.value, {
-        already: stands && !blocksChanged,
+        already: stands && !parentChanged && !blocksChanged,
         section: placing?.success.section,
+        parentNamed: parentTaskId !== undefined,
         blocksNamed: blocking !== undefined,
       });
     }),
@@ -2357,6 +2410,9 @@ class AgentChangeLost extends Data.TaggedError("AgentChangeLost") {}
 
 /** A task's place in a section refused inside its change's transaction, its section gone meanwhile, which takes the change back. */
 class TaskPlaceRefused extends Data.TaggedError("TaskPlaceRefused") {}
+
+/** The task a parent write named went out of reach meanwhile, so nothing was written; the call takes back its every change. */
+class TaskParentGone extends Data.TaggedError("TaskParentGone") {}
 
 /** An archive or an unarchive refused inside a change's transaction, its words for the model, which takes every change back. */
 class AgentChangeRefused extends Data.TaggedError("AgentChangeRefused")<{

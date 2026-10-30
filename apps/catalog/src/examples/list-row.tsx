@@ -3,6 +3,7 @@ import {
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
+  LIST_ROW_CURRENT_LOOK,
   LIST_ROW_INK,
   LIST_ROW_LEAD,
   LIST_ROW_META,
@@ -180,6 +181,46 @@ function NestedRows(): React.JSX.Element {
   );
 }
 
+/** Rows as an Inbox beside its page draws them: the open one, an unread one, a done one, and a plain one. */
+const INBOX_TINT_ROWS = [
+  {
+    title: "Review the migration plan",
+    lead: "Revert agent to the previous layout",
+    description: "Merge / Request changes",
+    meta: "1h",
+    current: true,
+    unread: false,
+    muted: false,
+  },
+  {
+    title: "Approve the release notes",
+    lead: "Board card overflow fix",
+    description: "Approve / Request changes",
+    meta: "5m",
+    current: false,
+    unread: true,
+    muted: false,
+  },
+  {
+    title: "Pick a name for the workspace",
+    lead: "Onboarding copy",
+    description: "Merged",
+    meta: "2d",
+    current: false,
+    unread: false,
+    muted: true,
+  },
+  {
+    title: "Rename the staging bucket",
+    lead: "Infra cleanup",
+    description: "Working",
+    meta: "3d",
+    current: false,
+    unread: false,
+    muted: false,
+  },
+] as const;
+
 function ListRows(): React.JSX.Element {
   return (
     <>
@@ -216,6 +257,7 @@ function ListRows(): React.JSX.Element {
               description="Merge / Request changes"
               meta="1h"
               metaAt={LIST_ROW_META.TITLE}
+              ink={LIST_ROW_INK.SIDEBAR}
               unread
               onPress={() => undefined}
               menu={{
@@ -230,12 +272,39 @@ function ListRows(): React.JSX.Element {
               description="Approve / Request changes"
               meta="2h"
               metaAt={LIST_ROW_META.TITLE}
+              ink={LIST_ROW_INK.SIDEBAR}
               onPress={() => undefined}
               menu={{
                 thing: "Inbox item",
                 groups: [[{ label: "Mark as unread", onSelect: ignore }]],
               }}
             />
+          </List>
+        </div>
+      </CatalogSection>
+      <CatalogSection
+        id="list-row-current-tint"
+        title="The open row filled with the accent's tint, beside unread, done, and plain rows"
+      >
+        <div className="catalog-column">
+          <List label="Inbox items">
+            {INBOX_TINT_ROWS.map((row) => (
+              <ListRow
+                key={row.title}
+                title={row.title}
+                lead={{ icon: <UserIcon />, label: row.lead }}
+                leadAt={LIST_ROW_LEAD.ABOVE}
+                description={row.description}
+                meta={row.meta}
+                metaAt={LIST_ROW_META.TITLE}
+                ink={LIST_ROW_INK.SIDEBAR}
+                current={row.current ? LIST_ROW_CURRENT.PAGE : undefined}
+                currentLook={LIST_ROW_CURRENT_LOOK.TINT}
+                unread={row.unread}
+                muted={row.muted}
+                onPress={() => undefined}
+              />
+            ))}
           </List>
         </div>
       </CatalogSection>

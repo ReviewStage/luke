@@ -1,5 +1,5 @@
 /**
- * host-install-script.test.ts -- the host's install script (`apps/web/install/install.sh`) as a shell runs it: the smolvm release, sandbox image and Mac paths it carries are the ones the daemon and the desktop app name, a computer it does not run on (an Intel Mac, an old macOS, WSL1, another kernel) is refused by name while an Apple silicon Mac and WSL2 are let through, a box without a usable `/dev/kvm` or systemd is refused with how to fix it, said for WSL under WSL alone, a download whose SHA-256 is not the one carried is refused, the boot check makes, starts, runs and always removes one throwaway VM, failing with smolvm's own words, and a Mac's install refuses a missing sudo user and a Mac the Luke app already runs agents on, writes its LaunchAgent, and starts it only where its user is logged in.
+ * host-install-script.test.ts -- the host's install script (`apps/web/install/install.sh`) as a shell runs it: the smolvm release, sandbox image and Mac paths it carries are the ones the daemon and the desktop app name, a computer it does not run on (an Intel Mac, an old macOS, WSL1, another kernel) is refused by name while an Apple silicon Mac and WSL2 are let through, a box without a usable `/dev/kvm` or systemd is refused with how to fix it, said for WSL under WSL alone, a download whose SHA-256 is not the one carried is refused, the boot check makes, starts, runs and always removes one throwaway VM, failing with smolvm's own words, and a Mac's install refuses a missing sudo user and a Mac the Luke app already runs agents on, writes its LaunchAgent, and starts it only where its user is logged in. Beside it, the host's own `luke-host uninstall` (`apps/host/scripts/luke-host.sh`) as an account install and a Mac's earlier install run it.
  *
  * The script is run by `sh` in a temporary folder; `LUKE_HOST_INSTALL_LIBRARY`
  * has it stop after it defines what it carries and its functions, which the
@@ -20,6 +20,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -43,6 +44,12 @@ const LINUX_PROC_VERSION = "Linux version 6.8.0-45-generic (buildd@ubuntu)";
 
 /** The last line smolvm prints where a VM will not boot, as the fake smolvm prints it. */
 const SMOLVM_FAILURE = "Error: failed to start machine: KVM_CREATE_VM: Operation not permitted";
+
+/**
+ * The origin a run of the whole script is handed, since the script as it
+ * stands here leaves its own to the route that serves it (`@@ORIGIN@@`).
+ */
+const ORIGIN_ARGS = ["--origin", "https://luke.test"] as const;
 
 /** The SHA-256 of the three bytes "abc", from FIPS 180-2's own examples. */
 const ABC_SHA256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
@@ -219,7 +226,7 @@ describe("the host's install script", () => {
   ] as const) {
     it(`refuses a box whose /dev/kvm ${found}, saying how to check it, before anything is changed`, () => {
       const root = folder();
-      const answer = sh([SCRIPT, "--token", "lkh_fixture"], {
+      const answer = sh([SCRIPT, "--token", "lkh_fixture", ...ORIGIN_ARGS], {
         LUKE_HOST_KVM_DEVICE: make(root),
         PATH: `${linuxUname()}:${process.env.PATH}`,
       });
@@ -288,7 +295,7 @@ describe("the host's install script", () => {
     ["an Intel Mac", "x86_64", "14.5", "Luke does not run agents on Intel Macs."],
   ] as const) {
     it(`${refusal === undefined ? "lets" : "refuses"} ${computer} ${refusal === undefined ? "through, past every check of the computer" : "by name"}, before anything is changed`, () => {
-      const answer = sh([SCRIPT, "--token", "lkh_fixture"], {
+      const answer = sh([SCRIPT, "--token", "lkh_fixture", ...ORIGIN_ARGS], {
         PATH: `${macBin(machine, macos)}:${process.env.PATH}`,
       });
       expect(answer.status).toBe(1);
@@ -615,6 +622,90 @@ describe("the host's install script", () => {
       expect(existsSync(join(home, ".luke/keep"))).toBe(true);
       expect(existsSync(join(rootHome, ".luke/agents/one"))).toBe(true);
       expect(existsSync(join(rootHome, ".luke/clones"))).toBe(true);
+    },
+  );
+
+  it.each([
+    { os: "Linux", stops: true },
+    { os: "Linux", stops: false },
+    { os: "Darwin", stops: true },
+    { os: "Darwin", stops: false },
+  ])(
+    "the account install's uninstall, run with no sudo on $os, stops its service through the account's own manager, warns of unpushed work, and removes the folders of the agents its daemon made, its state, its releases and its link, in that order, leaving another install's agents, the clones and a Linux account's lingering, said, unless its service will not stop (stops: $stops)",
+    ({ os, stops }) => {
+      const bin = folder();
+      const home = folder();
+      const asked = join(folder(), "asked.log");
+      // Note that systemctl answers is-active as systemd does, launchctl print finds the agent while it is loaded, and loginctl says the account lingers.
+      for (const [name, body] of Object.entries({
+        uname: `echo ${os}`,
+        systemctl: `printf '%s\\n' "$*" >>"${asked}"\n[ "$2" != is-active ] || echo ${stops ? "inactive" : "active"}`,
+        launchctl: `printf '%s\\n' "$*" >>"${asked}"\n[ "$1" != print ] || exit ${stops ? 1 : 0}`,
+        loginctl: "echo yes",
+      })) {
+        writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+      }
+      const releases = join(home, ".local/share/luke-host");
+      const release = join(releases, "versions/0.3.0");
+      mkdirSync(join(release, "bin"), { recursive: true });
+      writeFileSync(join(release, "bin/luke-host"), readFileSync(UNINSTALL_SCRIPT), {
+        mode: 0o755,
+      });
+      symlinkSync(release, join(releases, "current"));
+      const link = join(home, ".local/bin/luke-host");
+      mkdirSync(join(link, ".."), { recursive: true });
+      symlinkSync(join(releases, "current/bin/luke-host"), link);
+      const state = join(home, ".local/state/luke-host");
+      mkdirSync(join(state, "owned-agents"), { recursive: true });
+      writeFileSync(join(state, "owned-agents/one"), "");
+      writeFileSync(join(state, "device.json"), "{}");
+      // Note that agent one is this install's, by its daemon's record, and agent two another Luke install's.
+      for (const each of ["agents/one", "agents/two", "clones/acme"]) {
+        mkdirSync(join(home, ".luke", each), { recursive: true });
+      }
+      const service =
+        os === "Linux"
+          ? join(home, ".config/systemd/user/luke-host.service")
+          : join(home, "Library/LaunchAgents/dev.reviewstage.luke.host.standalone.plist");
+      mkdirSync(join(service, ".."), { recursive: true });
+      writeFileSync(service, `<string>${releases}/current/bin/luke-host</string>\n`);
+
+      const answer = spawnSync("sh", [link, "uninstall"], {
+        env: { PATH: `${bin}:${process.env.PATH}`, HOME: home },
+        encoding: "utf8",
+      });
+
+      expect(answer.status).toBe(stops ? 0 : 1);
+      expect(answer.stderr).toContain("Work in them that was not pushed goes with them.");
+      expect(answer.stdout.includes("Left lingering on")).toBe(stops && os === "Linux");
+      const commands = readFileSync(asked, "utf8").trim().split("\n");
+      const uid = spawnSync("id", ["-u"], { encoding: "utf8" }).stdout.trim();
+      expect(commands).toContain(
+        os === "Linux"
+          ? "--user disable --now luke-host.service"
+          : `bootout gui/${uid}/dev.reviewstage.luke.host.standalone`,
+      );
+      expect(answer.stdout.split("\n").filter((line) => line.startsWith("Removed "))).toEqual(
+        stops
+          ? [
+              `Removed ${join(home, ".luke/agents/one")}.`,
+              `Removed ${state}.`,
+              `Removed ${releases}.`,
+              `Removed ${link}.`,
+            ]
+          : [],
+      );
+      for (const [place, kept] of [
+        [service, !stops],
+        [join(home, ".luke/agents/one"), !stops],
+        [state, !stops],
+        [releases, !stops],
+        [link, !stops],
+        [join(home, ".luke/agents/two"), true],
+        [join(home, ".luke/clones/acme"), true],
+      ] as const) {
+        expect(existsSync(place)).toBe(kept);
+      }
     },
   );
 

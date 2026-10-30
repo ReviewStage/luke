@@ -4,6 +4,7 @@ import {
   AGENT_MACHINE,
   AGENT_STATUS,
   agentKindSchema,
+  agentPullRequestSchema,
   agentStartRequestFields,
   agentSummarySchema,
   CHECK_SUMMARY,
@@ -49,10 +50,6 @@ import { trimmedText } from "./text-schema.js";
  * by id.
  * A task is worked by its agents or by a pilot (`TASK_MODE`), which its
  * summary names.
- * A task's agents' pull requests merge on green or wait for a member's go
- * (`MERGE_POLICY`), which its summary names.
- * A task is running or stopped, the switch a pilot tree's agents follow from
- * its top task, which its summary names.
  * A task opened whole also names, by id, the tasks it waits on and the tasks
  * that wait on it, as Linear's blocked-by and blocks.
  * The starting account and the conversation a task resumes in are the
@@ -150,25 +147,11 @@ export const TASK_MODE = {
 
 export type TaskMode = (typeof TASK_MODE)[keyof typeof TASK_MODE];
 
-/**
- * What becomes of a pull request a task's agents open once its checks pass:
- * merged on green, or held for a member's go. A task starts at merge on
- * green.
- */
-export const MERGE_POLICY = {
-  MERGE_ON_GREEN: "merge-on-green",
-  HOLD: "hold",
-} as const;
-
-export type MergePolicy = (typeof MERGE_POLICY)[keyof typeof MERGE_POLICY];
-
 export const taskStatusSchema = EffectSchema.Literals(Object.values(TASK_STATUS));
 
 export const taskPrioritySchema = EffectSchema.Literals(Object.values(TASK_PRIORITY));
 
 export const taskModeSchema = EffectSchema.Literals(Object.values(TASK_MODE));
-
-export const mergePolicySchema = EffectSchema.Literals(Object.values(MERGE_POLICY));
 
 /**
  * The member a task is assigned to, by their account's id, as a start or a
@@ -327,8 +310,6 @@ function updateNamesAChange(update: {
   status?: TaskStatus;
   priority?: TaskPriority;
   assigneeId?: string | null;
-  mergePolicy?: MergePolicy;
-  running?: boolean;
   runsOn?: TaskRunsOnRequest;
 }): boolean {
   return Object.keys(update).length > 0;
@@ -344,9 +325,7 @@ function positionIsPinned(update: { pinned?: boolean; pinPosition?: string }): b
  * where its pin stands in the sidebar's Pinned section (`pin-order.ts`),
  * which comes only with `pinned: true` and pins a plan not yet pinned,
  * whether it is archived, the workspace it moves to, where it stands, how
- * much it matters, who it is assigned to, what becomes of its agents' pull
- * requests once their checks pass, whether a pilot tree's agents may work
- * (`running`, a top pilot task's alone), or any of them at once. A rename is one of these; a repository is confirmed reachable by the
+ * much it matters, who it is assigned to, or any of them at once. A rename is one of these; a repository is confirmed reachable by the
  * workspace before it is kept, and null clears it. An assignee is confirmed a
  * member of the task's workspace before it is kept, and null clears it. A move is the task's
  * owner's alone, into a workspace they are a member of whose GitHub reaches
@@ -366,18 +345,13 @@ export const taskUpdateRequestSchema = EffectSchema.Struct({
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
-  mergePolicy: EffectSchema.optionalKey(mergePolicySchema),
-  running: EffectSchema.optionalKey(EffectSchema.Boolean),
   runsOn: EffectSchema.optionalKey(taskRunsOnRequestSchema),
 }).check(EffectSchema.makeFilter(updateNamesAChange), EffectSchema.makeFilter(positionIsPinned));
 
 export type TaskUpdateRequest = typeof taskUpdateRequestSchema.Type;
 
-/** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), its merge policy, its running switch, or any of them. */
-export type TaskStanding = Pick<
-  TaskUpdateRequest,
-  "status" | "priority" | "assigneeId" | "mergePolicy" | "running"
->;
+/** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), or any of them. */
+export type TaskStanding = Pick<TaskUpdateRequest, "status" | "priority" | "assigneeId">;
 
 /** Which side of a block the other task stands on, as the task a change names reads it: one it waits on, or one that waits on it. */
 export const TASK_BLOCK_RELATION = {
@@ -409,6 +383,57 @@ export const taskBlockRequestSchema = EffectSchema.Struct({
 });
 
 export type TaskBlockRequest = typeof taskBlockRequestSchema.Type;
+
+/**
+ * Setting the parent of the task the path names (POST), or clearing it with
+ * null: the parent, a task of the same workspace the caller reaches and
+ * working in the task's own repository
+ * (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), and neither the task nor one
+ * of its descendants (`HOSTED_API_ERROR.TASK_PARENT_CYCLE`). Where the
+ * task's agents run stays its own. A parent that stands so already changes
+ * nothing, and clearing always lands.
+ */
+export const taskParentRequestSchema = EffectSchema.Struct({
+  parentTaskId: EffectSchema.NullOr(wireUuidSchema),
+});
+
+export type TaskParentRequest = typeof taskParentRequestSchema.Type;
+
+/**
+ * How another task stands to the task a change names: one it waits on, one
+ * that waits on it, its sub-task (a child of it), or its parent. The first
+ * two are a block's sides (`TASK_BLOCK_RELATION`), spelled the same.
+ */
+export const TASK_RELATION_KIND = {
+  ...TASK_BLOCK_RELATION,
+  SUB_TASK: "sub-task",
+  PARENT: "parent",
+} as const;
+
+export type TaskRelationKind = (typeof TASK_RELATION_KIND)[keyof typeof TASK_RELATION_KIND];
+
+/** A relation's kind change names two kinds, since one moved to where it stands is no change. */
+function kindsDiffer(change: { readonly from: TaskRelationKind; readonly to: TaskRelationKind }) {
+  return change.from !== change.to;
+}
+
+/**
+ * One relation of the task the path names moved to another kind (POST): the
+ * other task, the kind it stood in, and the kind it moves to, in one
+ * transaction, so taking the old away and adding the new either both land
+ * or neither does. A block added keeps the blocks' rules
+ * (`HOSTED_API_ERROR.TASK_BLOCK_CYCLE`), and a parent set, the other's or the
+ * task's own, keeps the parent's (`taskParentRequestSchema`). A relation that
+ * did not stand in the kind it leaves is left alone, and the new one is
+ * added still.
+ */
+export const taskRelationChangeRequestSchema = EffectSchema.Struct({
+  taskId: wireUuidSchema,
+  from: EffectSchema.Literals(Object.values(TASK_RELATION_KIND)),
+  to: EffectSchema.Literals(Object.values(TASK_RELATION_KIND)),
+}).check(EffectSchema.makeFilter(kindsDiffer));
+
+export type TaskRelationChangeRequest = typeof taskRelationChangeRequestSchema.Type;
 
 /**
  * A repository the account pinned in the sidebar, and the instant it was
@@ -588,10 +613,6 @@ const taskSummaryFields = {
   parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
   /** How the task is worked; absent from a service before modes, where every task is worked by its agents. */
   mode: EffectSchema.optionalKey(taskModeSchema),
-  /** What becomes of its agents' pull requests once their checks pass; absent from a service before it, where they merge on green. */
-  mergePolicy: EffectSchema.optionalKey(mergePolicySchema),
-  /** Whether a pilot tree's agents may work, set on its top task; absent from a service before it, read as stopped. */
-  running: EffectSchema.optionalKey(EffectSchema.Boolean),
   /**
    * True while a task it waits on (`blockedBy`) is neither done nor
    * canceled, as its sidebar row is marked; absent while none is, and from a
@@ -665,6 +686,21 @@ export const taskPullRequestsSchema = EffectSchema.Struct({
 });
 
 export type TaskPullRequests = typeof taskPullRequestsSchema.Type;
+
+/**
+ * The pull request one agent opened, as its row keeps what the service last
+ * read of it on GitHub, the agent on a plan or none, archived or not, and
+ * the plan it stands on: what a plan's or an agent's own tabs and summary
+ * offer the agent's Changes by.
+ */
+export const listedPullRequestSchema = EffectSchema.Struct({
+  agentId: EffectSchema.String,
+  /** The plan the agent stands on; null for one on none. */
+  taskId: EffectSchema.NullOr(EffectSchema.String),
+  pullRequest: agentPullRequestSchema,
+});
+
+export type ListedPullRequest = typeof listedPullRequestSchema.Type;
 
 /**
  * The reader's own pin of one agent on a plan (`agent_pin`), as a plan's

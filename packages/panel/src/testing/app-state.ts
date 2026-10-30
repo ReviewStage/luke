@@ -4,17 +4,22 @@
 
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { LIVE_READ } from "@luke/features/live-wire";
+import { PAGE_OWNER, type PageLine, type PagePlace } from "@luke/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import {
   type AppHolderInboxes,
   type AppHostRead,
   type AppInboxItems,
+  type AppPages,
   type AppStateDelivery,
   type AppStateSnapshot,
+  type AppWorkspaceChannels,
   NO_HOLDER_INBOXES,
+  NO_PAGES,
+  NO_WORKSPACE_CHANNELS,
   UNREAD,
 } from "@luke/host/app-state";
-import { SETTINGS_ACT_KIND } from "@luke/host/contract";
+import { SETTINGS_ACT_KIND, TASKS_ACT_KIND } from "@luke/host/contract";
 import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/settings/microphone";
 import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
@@ -22,7 +27,13 @@ import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import type { AppSettingsView } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { fakeActPort, fakeActPortCalls, fakeAppBridge, fakeAppBridgeCalls } from "./app-bridge.js";
+import {
+  fakeActPort,
+  fakeActPortCalls,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+  quietHold,
+} from "./app-bridge.js";
 
 /** What the desktop offers: every capability there is. */
 export const DESKTOP_CAPABILITIES: readonly HostCapability[] = Object.values(HOST_CAPABILITY);
@@ -61,6 +72,8 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], agents: [], failedRuns: [] },
     [LIVE_READ.INBOX_ITEMS]: UNREAD,
     [LIVE_READ.HOLDER_INBOX]: NO_HOLDER_INBOXES,
+    [LIVE_READ.PAGES]: NO_PAGES,
+    [LIVE_READ.CHANNELS]: NO_WORKSPACE_CHANNELS,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
@@ -150,17 +163,21 @@ export function handSettings(settings: Partial<AppSettingsView> = {}): void {
 export interface HostReadsHanded {
   readonly deliverItems: (next: AppHostRead<AppInboxItems>) => void;
   readonly deliverHolders: (next: AppHolderInboxes) => void;
+  readonly deliverPages: (next: AppPages) => void;
+  readonly deliverChannels: (next: AppWorkspaceChannels) => void;
 }
 
 /**
- * Lays the host's reads as given, the account's feed of every item and the
- * holders' own inboxes, over whatever document the window was handed, its
- * experiments and the reads handed before among it, and answers with how
- * each is delivered again as it moves, as the host tells it.
+ * Lays the host's reads as given, the account's feed of every item, the
+ * holders' own inboxes, and the workspaces' channels, over whatever
+ * document the window was handed, its experiments and the reads handed
+ * before among it, and answers with how each is delivered again as it
+ * moves, as the host tells it.
  */
 export function handHostReads(first: {
   readonly items?: AppHostRead<AppInboxItems>;
   readonly holders?: AppHolderInboxes;
+  readonly channels?: AppWorkspaceChannels;
 }): HostReadsHanded {
   const handed = fakeAppBridgeCalls().requestAppState;
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
@@ -172,6 +189,7 @@ export function handHostReads(first: {
       version,
       ...(first.items === undefined ? undefined : { [LIVE_READ.INBOX_ITEMS]: first.items }),
       ...(first.holders === undefined ? undefined : { [LIVE_READ.HOLDER_INBOX]: first.holders }),
+      ...(first.channels === undefined ? undefined : { [LIVE_READ.CHANNELS]: first.channels }),
     }),
     onAppState: (listener: (delivery: AppStateDelivery) => void) => {
       listeners.add(listener);
@@ -185,7 +203,40 @@ export function handHostReads(first: {
   return {
     deliverItems: (next) => deliver({ [LIVE_READ.INBOX_ITEMS]: next }),
     deliverHolders: (next) => deliver({ [LIVE_READ.HOLDER_INBOX]: next }),
+    deliverPages: (next) => deliver({ [LIVE_READ.PAGES]: next }),
+    deliverChannels: (next) => deliver({ [LIVE_READ.CHANNELS]: next }),
   };
+}
+
+/**
+ * Answers the window's holds on a task's or an agent's pages as the host
+ * does, beside whatever acts the test answers by now: what `pagesOf` holds
+ * of each is laid on the document through `deliver` as it is first held,
+ * and stays there once let go. Answers with every hold asked for, in order.
+ */
+export function holdPages(
+  deliver: HostReadsHanded["deliverPages"],
+  pagesOf: (place: PagePlace) => readonly PageLine[] | undefined,
+): readonly PagePlace[] {
+  const asked: PagePlace[] = [];
+  let held: AppPages = NO_PAGES;
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: (place) => {
+      asked.push(place);
+      const pages = pagesOf(place);
+      const kind = "taskId" in place ? PAGE_OWNER.TASK : PAGE_OWNER.AGENT;
+      const id = "taskId" in place ? place.taskId : place.agentId;
+      // Note that the host pushes what it read once the hold is taken, never inside it.
+      if (pages !== undefined && held[kind][id] === undefined) {
+        held = { ...held, [kind]: { ...held[kind], [id]: { rows: pages } } };
+        const laid = held;
+        void Promise.resolve().then(() => deliver(laid));
+      }
+      return quietHold();
+    },
+  });
+  return asked;
 }
 
 /** Lays the account's feed of every item as given over the window's document, and answers with how it is delivered again as it moves. */

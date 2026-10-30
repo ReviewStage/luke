@@ -2,9 +2,14 @@
    here: its inks at rest, under the pointer, open, and unread, which a
    strip's chosen tab is held to (`tabs-frame.test.ts`); its detail's
    ellipsis; and its end, whose count and chord trade places under the
-   pointer and the keyboard, through `:has()` and the pointer's media; and
-   its actions' ⋯, which comes in over that end the same way. The
-   keyboard's ring is the app's reset's, as it is for every control. */
+   pointer and the keyboard, through `:has()` and the pointer's media; a
+   step's meta line under its name, and its glyph and end level with the
+   name's first line; its actions' ⋯, which comes in over that end the same
+   way; and its fold's chevron, which comes in over its glyph. A row
+   standing in a frame is hovered while the pointer is anywhere on the
+   frame, its ⋯ and chevron included, so its fill and its chord hold as the
+   pointer moves onto either. The keyboard's ring is the app's reset's, as
+   it is for every control. */
 
 @layer components {
   /* Note that the rest ink is the sidebar's, a step under the primary, as
@@ -15,6 +20,7 @@
   }
 
   .luke-nav-item:hover:not(:disabled),
+  .luke-nav-item-frame:hover > .luke-nav-item:not(:disabled),
   .luke-nav-item[aria-expanded="true"][aria-haspopup="menu"] {
     background: var(--luke-color-fill-hover);
     color: var(--luke-color-text);
@@ -48,6 +54,18 @@
     font-size: var(--luke-type-caption-size);
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* A step's meta line stands whole under its name, in the caption's line,
+     rather than giving way beside it. */
+  .luke-nav-item[data-variant="step"] .luke-nav-item-detail {
+    flex: none;
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  /* A step's glyph and end stand level with its name's first line. */
+  .luke-nav-item[data-variant="step"] > :is(.luke-nav-item-glyph, .luke-nav-item-rest) {
+    height: var(--luke-type-label-leading);
   }
 
   /* A place's end stands at the row's end. */
@@ -117,17 +135,39 @@
   }
 
   @media (hover: hover) {
-    .luke-nav-item:hover:not(:disabled) > .luke-nav-item-shortcut {
+    .luke-nav-item:hover:not(:disabled) > .luke-nav-item-shortcut,
+    .luke-nav-item-frame:hover > .luke-nav-item:not(:disabled) > .luke-nav-item-shortcut {
       opacity: 1;
     }
 
-    .luke-nav-item:hover:not(:disabled) > .luke-nav-item-rest:has(+ .luke-nav-item-shortcut) {
+    .luke-nav-item:hover:not(:disabled) > .luke-nav-item-rest:has(+ .luke-nav-item-shortcut),
+    .luke-nav-item-frame:hover
+      > .luke-nav-item:not(:disabled)
+      > .luke-nav-item-rest:has(+ .luke-nav-item-shortcut) {
       display: none;
     }
 
-    .luke-nav-item:hover:not(:disabled) > .luke-nav-item-rest + .luke-nav-item-shortcut {
+    .luke-nav-item:hover:not(:disabled) > .luke-nav-item-rest + .luke-nav-item-shortcut,
+    .luke-nav-item-frame:hover
+      > .luke-nav-item:not(:disabled)
+      > .luke-nav-item-rest
+      + .luke-nav-item-shortcut {
       display: inline-flex;
     }
+  }
+
+  /* A row with a ⋯ draws its chord just before it rather than under it: the
+     ⋯'s compact width and its inset from the frame's end, a hairline gap,
+     less the row's own inset the chord already stands in. */
+  .luke-nav-item-frame[data-actions="true"] > .luke-nav-item > .luke-nav-item-shortcut {
+    margin-inline-end: calc(
+      var(--luke-control-height) -
+      2 *
+      var(--luke-space-2) +
+      2 *
+      var(--luke-space-4) -
+      var(--luke-row-inset)
+    );
   }
 
   /* Under a finger there is no keyboard to press the chord on, so the chord
@@ -166,7 +206,7 @@
   /* Note that the count gives way by its opacity, never its visibility,
      because a hidden one leaves the row's name, and a reader reaching the
      row would no longer hear what waits in it. */
-  .luke-nav-item-frame:focus-within .luke-nav-item-rest,
+  .luke-nav-item-frame[data-actions="true"]:focus-within .luke-nav-item-rest,
   .luke-nav-item-frame:has(.luke-nav-item-actions [aria-expanded="true"]) .luke-nav-item-rest {
     opacity: 0;
   }
@@ -177,7 +217,53 @@
       pointer-events: auto;
     }
 
-    .luke-nav-item-frame:hover .luke-nav-item-rest {
+    .luke-nav-item-frame[data-actions="true"]:hover .luke-nav-item-rest {
+      opacity: 0;
+    }
+  }
+
+  /* A row heading a fold wears the fold's chevron in its glyph's cell while
+     it is hovered or the keyboard reached it, its glyph giving way, as a
+     group's head's does, so a click on the row leaves its glyph standing;
+     an unseen chevron takes no press, so the row's lead goes
+     to its place at rest. A screen with no hover draws it at rest. */
+  .luke-nav-item-fold {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  .luke-nav-item-frame[data-folds="true"] .luke-nav-item-icon {
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  .luke-nav-item-frame:has(:focus-visible) > .luke-nav-item-fold {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .luke-nav-item-frame[data-folds="true"]:has(:focus-visible) .luke-nav-item-icon {
+    opacity: 0;
+  }
+
+  @media (hover: hover) {
+    .luke-nav-item-frame:hover > .luke-nav-item-fold {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .luke-nav-item-frame[data-folds="true"]:hover .luke-nav-item-icon {
+      opacity: 0;
+    }
+  }
+
+  @media (hover: none) {
+    .luke-nav-item-fold {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .luke-nav-item-frame[data-folds="true"] .luke-nav-item-icon {
       opacity: 0;
     }
   }

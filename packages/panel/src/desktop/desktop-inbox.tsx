@@ -16,7 +16,7 @@ import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { ERROR_STATE_PLACEMENT, ErrorState, STATUS_TONE, Toolbar } from "@luke/ui";
 import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
-import { memo, useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -43,7 +43,7 @@ import {
   INBOX_VIEW_ITEMS,
   useInboxColumns,
 } from "../tasks/inbox-columns.js";
-import { InboxList, InboxListNote, InboxPaneEmpty } from "../tasks/inbox-list.js";
+import { InboxList, InboxListNote, InboxPaneEmpty, NOTHING_HERE } from "../tasks/inbox-list.js";
 import {
   anyUnread,
   holderAutomationId,
@@ -52,7 +52,7 @@ import {
   type InboxListed,
   itemWorkspaceId,
 } from "../tasks/inbox-model.js";
-import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
+import { useInboxPager } from "../tasks/inbox-pager.js";
 import { type InboxNewThread, InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
 import { useMoveThreadDialog } from "../tasks/move-thread-dialog.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
@@ -156,8 +156,10 @@ import { taskCardOf } from "./task-card.js";
  *
  * With Channels on, a channel chosen from the sidebar narrows the page to
  * its own items, the same list, reading pane, and keys, under the channel's
- * name and purpose (`channel-head.tsx`), on a scope of the channel's own
- * that opens on All of everyone's (`use-inbox-listing.ts`); leaving it stamps the
+ * name and purpose (`channel-head.tsx`), every one of its items listed with no
+ * view's menu (`use-inbox-listing.ts`), and "Nothing here" where it holds
+ * none; Mark all as read, which ⌘K and a phone's ⋯ offer, marks its items
+ * alone; leaving it stamps the
  * reader's look at it; and a row's ⋯ moves its thread to another channel
  * (`move-thread-dialog.tsx`). An item opened into a channel from a link
  * narrows the page to its own channel once read, and a channel archived or
@@ -172,7 +174,10 @@ import { taskCardOf } from "./task-card.js";
  * the pointer: each row's time counts from the window's minute on its own,
  * and the list keeps the pointer where its next draw reads it; and the box's
  * drafts are read in the pane that draws it (`DraftedInboxPane`), so a word
- * typed there draws the pane alone.
+ * typed there draws the pane alone. A row chosen is drawn here first, the
+ * window holding the choice once that frame has painted
+ * (`use-inbox-listing.ts`), so the side panel, which follows the window's
+ * choice, stands as last drawn until then.
  */
 
 /** What the pane says where the item asked for could not be read, its holder's own read having failed. */
@@ -195,6 +200,20 @@ const NO_CHANNELS: readonly Channel[] = [];
 /** What heads the Inbox narrowed to no channel: nothing it draws. */
 const NO_CHANNEL: HeadedChannel = { id: "", name: "", purpose: "" };
 
+/**
+ * `drawn` as last drawn while `holding`, else as it is now. Note that what
+ * is handed back while holding is the element drawn before, which React
+ * draws nothing anew for.
+ */
+function useHeldWhile<Drawn>(holding: boolean, drawn: Drawn): Drawn {
+  const held = useRef(drawn);
+  const shown = holding ? held.current : drawn;
+  useLayoutEffect(() => {
+    held.current = shown;
+  });
+  return shown;
+}
+
 /** The window's Inbox, in the task's place: every task's items and every automation's, and the chosen one read beside them; a memo boundary, as the module's head says. */
 export const DesktopInbox = memo(function DesktopInbox({
   tasks,
@@ -210,11 +229,13 @@ export const DesktopInbox = memo(function DesktopInbox({
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const narrowed = useInboxNarrowed();
   const channelPlace = useChannelPlace();
-  // A task chosen narrows the Inbox to its own items, Channels on or off, which a chip over the list names and clears.
+  // The channel the list is narrowed to, chosen whether or not its channel is read yet.
+  const narrowedTo = narrowed ? channelPlace.channelId : undefined;
+  // A task chosen narrows the Inbox to its own items instead, Channels on or off, which a chip over the list names and clears.
   const narrowedTask = useInboxTask();
   const narrowedTaskName = tasks.tasks.find((task) => task.id === narrowedTask)?.name;
-  const channels = useChannels(channelsOn ? tasks.workspace?.id : undefined, tasks.shown);
-  // A channel chosen that is open no more is looked for among the archived ones, read only then, and shown to read where it is one.
+  const channels = useChannels(channelsOn ? tasks.workspace?.id : undefined);
+  // A channel chosen that is open no more is looked for among the archived ones, and shown to read where it is one.
   const chosenGone =
     narrowed &&
     channels.channels !== undefined &&
@@ -243,10 +264,10 @@ export const DesktopInbox = memo(function DesktopInbox({
     view,
     act,
     choices,
-    folds,
     openAutomation,
     failed,
     asked,
+    settling,
     chosenTask,
     taskId,
     chosenAgentId,
@@ -270,12 +291,10 @@ export const DesktopInbox = memo(function DesktopInbox({
     onRetryChosen,
     reading,
     choose,
+    clear,
     closeItem,
     onRetry,
-  } = useInboxListing(tasks, {
-    channelId: narrowed ? channelPlace.channelId : undefined,
-    taskId: narrowedTask,
-  });
+  } = useInboxListing(tasks, { channelId: narrowedTo, taskId: narrowedTask });
   // An item opened into a channel from a link, which names its item and not its channel, narrows the Inbox to its own channel once read.
   useThreadChannel(narrowed ? chosen?.item : undefined);
   // Leaving a channel is having looked at it, so its row no longer reads unread for what was posted before.
@@ -289,6 +308,14 @@ export const DesktopInbox = memo(function DesktopInbox({
   // Every item standing, which Mark all as read marks and a thread is moved among.
   const standingItems = useMemo(() => standing.flatMap(({ items }) => items), [standing]);
   const unread = useMemo(() => anyUnread(standing), [standing]);
+  // Mark all as read marks the listed workspace's items, or a channel's or a task's alone, each on its own, since the service marks a workspace's whole.
+  const { onMarkAll, onMarkEach } = marks;
+  // Note that it asks of the channel chosen rather than the channel read, as the list does, so a channel whose read is still out never marks the workspace's whole.
+  const markAll = () =>
+    (narrowedTo === undefined && narrowedTask === undefined ? onMarkAll : onMarkEach)(
+      standingItems,
+    );
+  useAppCommand(APP_COMMAND.MARK_INBOX_READ, tasks.shown && unread ? markAll : undefined);
   // An item's ⋯, its row's and its thread bar's, moves its thread to another open channel, which the channels' counts are read again for.
   const move = useMoveThreadDialog({
     channels: channels.channels ?? NO_CHANNELS,
@@ -330,14 +357,15 @@ export const DesktopInbox = memo(function DesktopInbox({
   // Note that a phone shows one thing at a time across the screen: the list, or the item in its place.
   const phone = room === SHELL_ROOM.NARROW;
   // A missing item's pane stands where its item would, and so does one whose read failed, so a narrow Inbox shows the notice rather than the list.
-  const { onClear, onSingle } = view;
+  // Note that the Inbox's own way back to its list chooses nothing through the listing, which drops a choice still on its way (`use-inbox-listing.ts`).
+  const { onSingle } = view;
   const columns = useInboxColumns(
     chosen?.item.id ?? (missing || chosenFailed ? asked?.itemId : undefined),
-    { onClear, onSingle },
+    { onClear: clear, onSingle },
   );
   const timeOpen = useInboxItemOpenSpan(chosen?.item.id, live.read);
   useInboxOpenSpan(listedRows.length);
-  // A row's press and Next's open their item alike, the keyboard following it.
+  // A row's press opens its item, the keyboard following it.
   const open = (listed: InboxListed) => {
     timeOpen(listed.item.id);
     choose(listed);
@@ -350,18 +378,7 @@ export const DesktopInbox = memo(function DesktopInbox({
     choose(listed);
     columns.onStep();
   };
-  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
-    shown: tasks.shown,
-    folded: folds.folded,
-  });
-  const next = inboxNext(
-    steps,
-    chosen,
-    { models: named.models, readerId: tasks.me },
-    open,
-    folds.folded,
-    direction,
-  );
+  const pager = useInboxPager(steps, list, chosen?.item.id, step, { shown: tasks.shown });
   // Where the chosen item's words are read: its plan's workspace and repository, or, with no plan, its agent's own.
   const place = chosen === undefined ? undefined : answerPlace(chosen, agents, tasks);
   // Where the chosen item's links are written: under its own workspace, by slug once the workspaces are read.
@@ -383,6 +400,11 @@ export const DesktopInbox = memo(function DesktopInbox({
     ? {
         channelOf: landsIn,
         workspaceId: tasks.workspace?.id,
+        // A channel's chip asks the route table first, as the item's other chips do, and opens the channel where it opens nothing beside the item.
+        onOpenChannel: (channelId) =>
+          openPlaceHere({ kind: LINK_PLACE.CHANNEL, channelId }, () =>
+            view.onOpenChannel(channelId),
+          ),
         onStart: (item, start) =>
           startInboxThread({
             agentId: item.agentId,
@@ -609,7 +631,6 @@ export const DesktopInbox = memo(function DesktopInbox({
               hidden={columns.shown === INBOX_COLUMNS.LIST}
               onBack={columns.onBack}
               pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
-              next={next}
               mentions={mentions}
               channelName={channel?.name}
               newThread={newThread}
@@ -632,6 +653,43 @@ export const DesktopInbox = memo(function DesktopInbox({
         </LinkWorkspaceProvider>
       </SkillFiles>
     </OpenAddressesHere>
+  );
+  // The panel stands for the chosen item's task, so its links are written under the item's own workspace, as its pane's are.
+  // Note that it follows the window's choice, so it stands as last drawn while a choice made here settles (`useChoiceFirst`).
+  const heldPanel = useHeldWhile(
+    settling,
+    drawing.panel ? (
+      // Note that the item's opener stands over the panel as over its pane, but not over the list, whose cards are other tasks'.
+      <OpenAddressesHere value={openHere}>
+        <LinkWorkspaceProvider value={chosenLinkWorkspace}>
+          <InboxSidePanel
+            tasks={tasks}
+            openPlace={openPlaceHere}
+            drawing={{ ...drawing, panel: drawing.panel }}
+            focused={sideFocused}
+            taskId={taskId}
+            panelFor={panelFor}
+            repository={
+              chosenTask?.repository ?? place?.repository ?? agents.agentRepository ?? null
+            }
+            repositoryPlace={
+              taskId === undefined && place !== undefined && place.repository !== null
+                ? { workspaceId: place.workspaceId, repository: place.repository }
+                : undefined
+            }
+            pages={pages}
+            agents={named}
+            views={views}
+            mentions={mentions}
+            phone={
+              room === SHELL_ROOM.NARROW && chosen !== undefined
+                ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
+                : undefined
+            }
+          />
+        </LinkWorkspaceProvider>
+      </OpenAddressesHere>
+    ) : null,
   );
   return (
     <LinkWorkspaceProvider value={listedWorkspace?.slug ?? listedWorkspace?.id}>
@@ -661,21 +719,20 @@ export const DesktopInbox = memo(function DesktopInbox({
                 ) : (
                   <InboxList
                     view={list}
+                    scene={narrowedTo ?? narrowedTask}
                     chosen={chosen?.item.id}
                     columns={columns.shown}
                     rows={columns.rows}
                     head={{
                       shown: tasks.shown,
-                      show: choices,
-                      view: { choices, folds },
-                      readAll: {
-                        unread,
-                        onMarkAll: () => marks.onMarkAll(standingItems),
-                      },
+                      view: choices,
                       search,
                       phone:
                         room === SHELL_ROOM.NARROW
-                          ? { start: <NewTaskButton tasks={tasks} /> }
+                          ? {
+                              start: <NewTaskButton tasks={tasks} />,
+                              readAll: { unread, onMarkAll: markAll },
+                            }
                           : undefined,
                       channel: channel === undefined ? undefined : channelHead,
                       task:
@@ -697,7 +754,8 @@ export const DesktopInbox = memo(function DesktopInbox({
                         onList={columns.onList}
                         onRetry={onRetry}
                         searched={searched}
-                        onNewTask={newTask}
+                        onNewTask={narrowedTo === undefined ? newTask : undefined}
+                        none={narrowedTo === undefined ? undefined : NOTHING_HERE}
                       />
                     }
                     onChoose={open}
@@ -736,7 +794,11 @@ export const DesktopInbox = memo(function DesktopInbox({
                       </ErrorState>
                     ) : failed || reading || filteredOut || searched !== undefined ? null : (
                       // Note that the list says the read failed, or what the filter or its search left out, so the pane beside it stands bare.
-                      <InboxPaneEmpty listed={listedRows.length} newTask={newTask} />
+                      <InboxPaneEmpty
+                        listed={listedRows.length}
+                        newTask={narrowedTo === undefined ? newTask : undefined}
+                        none={narrowedTo === undefined ? undefined : NOTHING_HERE}
+                      />
                     )}
                   </section>
                 ) : (
@@ -745,39 +807,7 @@ export const DesktopInbox = memo(function DesktopInbox({
               </div>
             </PageFind>
             {move.dialog}
-            {/* The panel stands for the chosen item's task, so its links are written under the item's own workspace, as its pane's are. */}
-            {drawing.panel ? (
-              // Note that the item's opener stands over the panel as over its pane, but not over the list, whose cards are other tasks'.
-              <OpenAddressesHere value={openHere}>
-                <LinkWorkspaceProvider value={chosenLinkWorkspace}>
-                  <InboxSidePanel
-                    tasks={tasks}
-                    openPlace={openPlaceHere}
-                    drawing={{ ...drawing, panel: drawing.panel }}
-                    focused={sideFocused}
-                    taskId={taskId}
-                    panelFor={panelFor}
-                    repository={
-                      chosenTask?.repository ?? place?.repository ?? agents.agentRepository ?? null
-                    }
-                    repositoryPlace={
-                      taskId === undefined && place !== undefined && place.repository !== null
-                        ? { workspaceId: place.workspaceId, repository: place.repository }
-                        : undefined
-                    }
-                    pages={pages}
-                    agents={named}
-                    views={views}
-                    mentions={mentions}
-                    phone={
-                      room === SHELL_ROOM.NARROW && chosen !== undefined
-                        ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
-                        : undefined
-                    }
-                  />
-                </LinkWorkspaceProvider>
-              </OpenAddressesHere>
-            ) : null}
+            {heldPanel}
           </div>
         </AutomationDirectory>
       </MemberDirectory>
@@ -1046,10 +1076,17 @@ function paneDoors(
       seams.openPlace({ kind: LINK_PLACE.AGENT, planId: taskId, agentId }, () =>
         tasks.onShowAgent(taskId, agentId),
       );
+    // A task the card names, its parent or a sub-task, opens as a link to it does.
+    const openTask = (taskId: string) =>
+      seams.openPlace({ kind: LINK_PLACE.TASK, planId: taskId }, () => tasks.onSelect(taskId));
     return {
       onOpenHolder: () => tasks.onShowTask(task.id),
       // Note that the card's times count from the window's minute, so the page reads no clock.
-      taskCard: taskCardOf({ ...tasks, onShowAgent: openAgent }, task, undefined),
+      taskCard: taskCardOf(
+        { ...tasks, onShowAgent: openAgent, onSelect: openTask },
+        task,
+        undefined,
+      ),
       onOpenAgent: (agentId) => openAgent(task.id, agentId),
       code: {
         repository: task.repository,

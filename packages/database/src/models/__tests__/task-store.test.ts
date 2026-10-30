@@ -5,7 +5,6 @@ import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import {
-  MERGE_POLICY,
   PLAN_ACTOR,
   TASK_MODE,
   TASK_PRIORITY,
@@ -46,8 +45,10 @@ import {
   readTaskPlan,
   readTaskWorkspace,
   savePlanText,
+  setTaskParent,
   TASK_RUNS_IN_CLOUD,
   TaskAssigneeNotMember,
+  TaskParentRepositoryDiffers,
   updateTask,
 } from "../task-store.js";
 
@@ -437,7 +438,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
   );
 
   it.effect(
-    "a plan's header names where it stands and whose it is to every member, follows its status, merge policy, and running switch, and names nothing to an account outside it or for a plan that is none",
+    "a plan's header names where it stands and whose it is to every member, follows its status, and names nothing to an account outside it or for a plan that is none",
     () =>
       Effect.gen(function* () {
         const { dean, charles, taskId } = yield* openSharedTask;
@@ -452,8 +453,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           runsOn: TASK_RUNS_IN_CLOUD,
           parentTaskId: null,
           mode: TASK_MODE.AGENT,
-          mergePolicy: MERGE_POLICY.MERGE_ON_GREEN,
-          running: false,
+          assigneeId: null,
         };
 
         assert.deepEqual(yield* readTaskHeader(dean, taskId), Option.some(started));
@@ -461,18 +461,10 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
         assert.deepEqual(yield* readTaskHeader(stranger, taskId), Option.none());
         assert.deepEqual(yield* readTaskHeader(dean, randomUUID()), Option.none());
 
-        yield* updateTask(dean, taskId, {
-          status: TASK_STATUS.IN_PROGRESS,
-          mergePolicy: MERGE_POLICY.HOLD,
-          running: true,
-        });
+        yield* updateTask(dean, taskId, { status: TASK_STATUS.IN_PROGRESS });
         const header = Option.getOrThrow(yield* readTaskHeader(charles, taskId));
-        assert.deepEqual(header, {
-          ...started,
-          status: TASK_STATUS.IN_PROGRESS,
-          mergePolicy: MERGE_POLICY.HOLD,
-          running: true,
-        });
+        // Starting a task assigns it to whoever started it.
+        assert.deepEqual(header, { ...started, status: TASK_STATUS.IN_PROGRESS, assigneeId: dean });
         // The header agrees with the whole read on everything it answers.
         const whole = Option.getOrThrow(yield* readTask(charles, taskId));
         assert.deepEqual(header, {
@@ -484,8 +476,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           runsOn: TASK_RUNS_IN_CLOUD,
           parentTaskId: null,
           mode: whole.task.mode,
-          mergePolicy: whole.task.mergePolicy,
-          running: whole.task.running,
+          assigneeId: whole.task.assignee?.userId ?? null,
         });
       }),
   );
@@ -521,6 +512,124 @@ const standingOf = (userId: string, taskId: string) =>
     ).task;
     return { number, status, priority };
   });
+
+/** The task's parent as the account reads it, failing the test where it reaches none. */
+const parentOf = (userId: string, taskId: string) =>
+  Effect.map(
+    readTaskHeader(userId, taskId),
+    (header) => Option.getOrElse(header, () => assert.fail("the task is not read")).parentTaskId,
+  );
+
+it.layer(getTestDB())("a task's parent", (it) => {
+  it.effect(
+    "is set after creation by any member, stands as set, and is cleared with null, each answered with the task as it then stands",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId: parent, workspace } = yield* openSharedTask;
+        const { id: child } = yield* createTask(dean, { name: "Child", organizationId: workspace });
+
+        const set = Option.getOrThrow(yield* setTaskParent(charles, child, parent));
+        const again = Option.getOrThrow(yield* setTaskParent(dean, child, parent));
+
+        assert.equal(set.task.parentTaskId, parent);
+        assert.notEqual(set.txid, undefined);
+        assert.equal(again.txid, undefined);
+        assert.equal(yield* parentOf(charles, child), parent);
+
+        const cleared = Option.getOrThrow(yield* setTaskParent(dean, child, null));
+
+        assert.equal(cleared.task.parentTaskId, undefined);
+        assert.notEqual(cleared.txid, undefined);
+        assert.equal(yield* parentOf(dean, child), null);
+      }),
+  );
+
+  it.effect(
+    "refuses a parent under which the task would descend from itself, through a task the writer does not reach among them, and the task itself",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, workspace } = yield* openSharedTask;
+        const tree = { organizationId: workspace, repository: "dean/side" };
+        const { id: top } = yield* createTask(dean, { ...tree, name: "Top" });
+        // Dean's own token reached this repository, which Charles's never read.
+        const { id: hidden } = yield* createTask(dean, {
+          ...tree,
+          name: "Hidden",
+          githubAccess: GITHUB_ACCESS.TOKEN,
+        });
+        const { id: leaf } = yield* createTask(dean, { ...tree, name: "Leaf" });
+        yield* setTaskParent(dean, hidden, top);
+        yield* setTaskParent(dean, leaf, hidden);
+
+        const closing = yield* Effect.flip(setTaskParent(charles, top, leaf));
+        const self = yield* Effect.flip(setTaskParent(dean, top, top));
+
+        assert.deepEqual([closing._tag, self._tag], ["TaskParentCycle", "TaskParentCycle"]);
+        assert.equal(yield* parentOf(dean, top), null);
+        assert.equal(yield* parentOf(dean, leaf), hidden);
+      }),
+  );
+
+  it.effect(
+    "refuses a parent working in another repository, spelled however GitHub spells it, and leaves the task's repository as it was",
+    () =>
+      Effect.gen(function* () {
+        const { dean, workspace } = yield* openSharedTask;
+        const { id: parent } = yield* createTask(dean, {
+          name: "Parent",
+          organizationId: workspace,
+          repository: "Acme/App",
+        });
+        const { id: unplaced } = yield* createTask(dean, {
+          name: "None",
+          organizationId: workspace,
+        });
+        const { id: sibling } = yield* createTask(dean, {
+          name: "Sibling",
+          organizationId: workspace,
+          repository: "acme/app",
+        });
+
+        const differs = yield* Effect.flip(setTaskParent(dean, unplaced, parent));
+        const spelled = yield* setTaskParent(dean, sibling, parent);
+
+        assert.deepEqual(differs, new TaskParentRepositoryDiffers({ repository: "Acme/App" }));
+        assert.equal(yield* parentOf(dean, unplaced), null);
+        assert.equal(Option.getOrThrow(spelled).task.repository, "acme/app");
+        assert.equal(yield* parentOf(dean, sibling), parent);
+      }),
+  );
+
+  it.effect(
+    "is set on no task the account does not reach, and to no parent it does not reach or of another workspace",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId, workspace } = yield* openSharedTask;
+        const outsider = yield* openAccount;
+        const elsewhere = yield* openWorkspace(dean);
+        const { id: other } = yield* createTask(dean, { name: "Other", organizationId: elsewhere });
+        // Dean's own token reached this repository, which Charles's never read.
+        const { id: hidden } = yield* createTask(dean, {
+          name: "Hidden",
+          organizationId: workspace,
+          githubAccess: GITHUB_ACCESS.TOKEN,
+        });
+
+        const byOutsider = yield* setTaskParent(outsider, taskId, other);
+        const across = yield* Effect.flip(setTaskParent(dean, taskId, other));
+        const toHidden = yield* Effect.flip(setTaskParent(charles, taskId, hidden));
+        const ofHidden = yield* setTaskParent(charles, hidden, taskId);
+
+        assert.deepEqual([byOutsider, ofHidden], [Option.none(), Option.none()]);
+        assert.deepEqual(
+          [across._tag, toHidden._tag],
+          ["TaskParentUnreached", "TaskParentUnreached"],
+        );
+        assert.equal(yield* parentOf(dean, taskId), null);
+        assert.equal(yield* parentOf(dean, hidden), null);
+      }),
+  );
+});
 
 it.layer(getTestDB())("a task's number", (it) => {
   it.effect("counts a workspace's tasks from one, apart from every other workspace's", () =>
@@ -563,29 +672,6 @@ it.layer(getTestDB())("a task's number", (it) => {
 
       assert.equal(Option.getOrUndefined(moved)?.number, 2);
       assert.equal(next.number, 4);
-    }),
-  );
-});
-
-it.layer(getTestDB())("a task's running switch", (it) => {
-  it.effect("a pilot task starts stopped, and every read follows its row once it runs", () =>
-    Effect.gen(function* () {
-      const dean = yield* openAccount;
-      const organizationId = yield* openWorkspace(dean);
-      const pilot = yield* createTask(dean, { organizationId, mode: TASK_MODE.PILOT });
-      const reads = Effect.gen(function* () {
-        const whole = Option.getOrThrow(yield* readTask(dean, pilot.id));
-        const listed = (yield* listTasks(dean)).find((row) => row.id === pilot.id);
-        return [whole.task.running, listed?.running];
-      });
-
-      assert.equal(pilot.running, false);
-      assert.deepEqual(yield* reads, [false, false]);
-
-      yield* Database.use((db) =>
-        db.update(task).set({ running: true }).where(eq(task.id, pilot.id)),
-      );
-      assert.deepEqual(yield* reads, [true, true]);
     }),
   );
 });

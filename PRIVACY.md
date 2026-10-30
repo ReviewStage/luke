@@ -476,9 +476,10 @@ earlier in its life is not tracked, and its snapshot stays until Vercel lets
 it expire. The sandbox of each session a task's own Luke ran, before tasks
 lost him, is deleted the same way, shortly after his conversation is removed.
 
-**A local agent on your Mac.** Once you turn on This Mac in Settings ›
-Hosts, an agent you start on This Mac runs Claude Code, or Codex for a
-GPT model, on your Mac, each in a virtual machine of its own (smolvm) that sees
+**A local agent on your Mac.** Once you turn on Bring your own host in
+Settings › Experimental and then This Mac in Settings › Hosts, an agent you
+start on This Mac runs Claude Code, or Codex for a GPT model, on your Mac,
+each in a virtual machine of its own (smolvm) that sees
 only that agent's folder, and its transcript, its events, and the files its
 tools read still reach our service as any agent's do. It runs on the
 plan or key you saved in Luke, never on the sign-in of Claude Code or Codex on
@@ -543,8 +544,8 @@ checksums again before each use, and pulls the public sandbox image our hosts
 run. An agent that ran directly on your Mac before this is not started again;
 continue it into a new agent.
 
-**A local agent on a host.** A host is your own Linux server that you add
-to Luke to run your agents, as This Mac does. It has no git login of yours, so
+**A local agent on a host.** A host is a Linux machine or Mac of your own
+that you add to Luke to run your agents, as This Mac does. It has no git login of yours, so
 for each agent on it that works in a repository, our service hands the host a
 short-lived GitHub token over HTTPS. It is a Luke GitHub App installation
 token cut to that one repository, good for an hour and renewed every 50
@@ -571,6 +572,19 @@ Its `git` and
 place of it only on HTTPS requests to GitHub. The token is never logged and
 never written to the conversation's record. As on This Mac, a Claude Code agent's plan
 token or key is handed into its machine, where a command it runs can read it.
+
+**Connecting a host with a code.** A host can also join your account with a
+code rather than an install token. The box asks our service for a code with no
+credential, and our service keeps, beside the code, the name, operating
+system, and processor the box gives, its version of Luke's host program, and
+the IP address it asked from, for the code's ten minutes. Anyone signed in to
+Luke who opens the code's link is shown them, so you can tell whether the box
+is yours before you approve it. Approving it adds the box to your hosts under
+that name; denying it, or letting the code lapse, adds nothing. What was kept
+with the code, its IP address included, is deleted once the box collects its
+secret, or within a few minutes of the code lapsing. To stop codes being
+guessed, our service also counts, for 15 minutes at a time, how many codes
+your account named that matched none.
 
 **An agent that runs on Claude Code.** For the accounts in the early
 test of Claude plans, an agent your Claude plan pays for runs on
@@ -989,8 +1003,8 @@ and asks Vercel Connect to revoke the grant; what agents already sent or
 changed in Slack, and the record of it, stays, and a grant Vercel Connect
 could not revoke stays until you remove Luke in Slack's own settings.
 
-**Granola, Mercury, Neon, PostHog, Supabase, Vercel, and Y Combinator, if you
-connect them.** Connecting one signs you in to it in your browser through
+**Granola, Mercury, Neon, PostHog, Stripe, Supabase, Vercel, and Y Combinator,
+if you connect them.** Connecting one signs you in to it in your browser through
 Vercel Connect, which stores its token for your account, encrypted, and renews
 it. Our service handles each token as it does Linear's, and keeps the same
 record of your connection. While you are connected, the agents, as for
@@ -1001,7 +1015,11 @@ cards, recipients, and statements, with account and routing numbers,
 categorize and annotate transactions, and request payments and transfers,
 which an approver still confirms in Mercury; manage your Neon and Supabase
 projects and databases and run SQL on them; query and change your PostHog
-analytics, feature flags, and experiments; manage your Vercel projects,
+analytics, feature flags, and experiments; read and change your Stripe
+customers, payments, subscriptions, invoices, products, prices, and payment
+links in the accounts and sandboxes you grant on Stripe's consent page, and
+request refunds and movements of money, which Stripe holds until you approve
+them in its Dashboard; manage your Vercel projects,
 deployments, domains, and environment variables; and use Y Combinator's
 Bookface as your YC account can. What a service answers can include a
 credential it hands out, such as a database connection string or password, a
@@ -1072,7 +1090,8 @@ email address and the UTC day it was last sent, and only the newest day; it is
 never sent anywhere. Nothing you type
 or say and nothing from a session can appear in one: no titles, branches, file
 paths, prompts, or error text. Each count also carries Luke's version, whether
-it is a released build or a development one, and which deployment of our
+it is a released build or a development one, whether it came from Luke for Mac
+or Luke in a browser tab (`platform`), and which deployment of our
 service recorded it. Settings › Account › "Share usage data" turns these
 counts off (see "Your choices").
 
@@ -1083,13 +1102,26 @@ it runs on, and whether an automation started it), a message you sent an agent
 work), each of an agent's turns ended (with how it ended: answered, failed,
 stopped, or given up on by our service, roughly how long it ran, and what
 kind of agent it is), an agent stopped or archived (with what kind of agent
-it is, and whether a task's Running switch stopped its whole tree), a pull
+it is), a pull
 request an agent opened (as you or as Luke's GitHub App, and whether as a
 draft) and one it opened merged, an Inbox item
-answered, an issue filed, an automation made (with
-what triggers it), an integration connected or disconnected (with which
+answered, an automation made (with
+what triggers it), a message handed to an agent's runner (with which harness it
+runs, how the message reached it, whether a turn was under way, and how long the
+agent had been idle), an integration connected or disconnected (with which
 provider), and a pull request's chapters generated (with how it came out, how
-many chapters and parts of the diff they hold, and how long it took). These counts are event names and values from a fixed list too, and
+many chapters and parts of the diff they hold, and how long it took). It
+counts how a team comes together and sets up the same way, each under the
+account that did it: an account's first sign-in (with whether it was through
+Google or GitHub), an invitation to a workspace sent (with the role it offers)
+and accepted, a post a member made on a thread (with whether it answered an ask
+and whether it carried a picture or a file), a plan a member edited, a comment
+a member wrote on one (with whether it replied on a thread or started one), an
+automation run started (with what fired it: its schedule, GitHub, a webhook, an
+integration, or Run now), counted under the automation's owner, the GitHub App
+connected to a workspace, and a Linux host or this Mac enrolled (with which).
+What an agent writes on a thread or in a plan is not counted among these. These counts are event names and values from a fixed list too, are labelled
+`platform: server`, and
 carry no titles, names, repositories, branches, prompts, messages, or the
 words of any of them. They go from our service to PostHog, so PostHog never
 sees your network address for them, and deleting your account erases them
@@ -1121,8 +1153,14 @@ masking cannot reach, so leaving it out is
 its only line, and recording what a canvas draws is switched off. A mention drawn as a chip carries what it names, such as a
 plan section's heading, only in its words, never in an attribute the masking
 leaves, so the recording keeps its shape alone. Luke does not report what you
-clicked. Each recording carries Luke's version and whether it is a released
-build or a development one; only a released build records at all.
+clicked. Luke records only while you are signed in: nothing is recorded
+before you sign in, a visit to the web app that never signs in records
+nothing, and signing out stops it. Each recording is filed under your
+account, which carries your name and email address as you are shown in
+Luke, so that we can find the recordings of a person who reports a problem;
+deleting your account erases them. Each recording carries Luke's version,
+whether it is a released build or a development one, and whether it came
+from the Mac app or the web app; only a released build records at all.
 
 **Tab switcher previews.** When you hold ⌃Tab in the Mac app, each card shows a
 small, downscaled still of a screen you visited, taken by the app as you
@@ -1179,13 +1217,6 @@ repository"; the pages open at a stop are not kept, and the browser reopens
 each tab at its last address on resume. No other agent reaches that profile;
 an agent's workers share its sandbox, so they share it. Deleting the task, or
 your account, deletes the sandbox and its snapshot as described there.
-
-Recording starts just after the panel first draws when Luke opens, before
-you sign in, so it covers the signed-out panel and the sign-in. A recording
-that begins before you sign in is attached to your account if you sign in
-while it runs; one that never reaches a sign-in belongs to nobody, so
-deleting your account does not reach it — we have no way to tell it was
-yours.
 
 **Crash and performance reports from the Mac app.** In ordinary runs, Luke
 sends Sentry reports of unhandled exceptions in its Electron main, preload,
@@ -1470,8 +1501,8 @@ only when you press Send.
   Executor's token, and our service sends each Executor call, with its input,
   to Executor's MCP server, which keeps it under Executor's own policy and
   passes it on to the app it names.
-- Vercel Connect and Granola, Mercury, Neon, PostHog, Supabase, Vercel, or Y
-  Combinator, for each you connect: Vercel Connect keeps its token, and our
+- Vercel Connect and Granola, Mercury, Neon, PostHog, Stripe, Supabase,
+  Vercel, or Y Combinator, for each you connect: Vercel Connect keeps its token, and our
   service sends each call, with its input, to that service's MCP server,
   which keeps it under that service's own policy.
 - Vercel, which runs our service and the sandboxes, and Neon, which hosts our
@@ -1532,9 +1563,9 @@ recordings", with every word masked and the same parts left out, and with
 the tab's address, which names the workspace and what it opens, and the
 address of the page that sent you there, replaced by the app's own; only the
 site's production deployment records, never a preview of it. A recording
-follows your account in that browser: signing out files what follows under
-nobody, and deleting your account in one tab stops the recording in every
-tab of that browser until you sign in again. It sends Sentry reports of the
+follows your account in that browser: a visit that never signs in records
+nothing, signing out stops it, and deleting your account in one tab stops
+the recording in every tab of that browser until you sign in again. It sends Sentry reports of the
 errors it did not handle and of a tab that could not draw, the errors it
 shows you, as described under "Errors Luke shows you", and performance
 traces for about one page load in ten, and a warning for each kind of request
@@ -1566,8 +1597,8 @@ are kept with that Mac's settings. Luke in a browser keeps your settings in
 that browser's own storage for the site, and no sign-in token at all: it is
 signed in by the site's session cookie, which only the browser holds. Its
 screen recording keeps, in that browser's storage for the site, the
-anonymous id it records under, the account id it files under once you sign
-in, and whether it may send, under `luke_app_replay` and
+account id it files under while you are signed in, an id of its own it
+keeps beside it, and whether it may send, under `luke_app_replay` and
 `luke_app_replay_consent`, apart from the site's own counting. A connect
 started there, such as connecting GitHub, keeps in its tab's session storage a
 random id naming the connect, or the address it left from, until the page it

@@ -51,28 +51,13 @@ export interface MarkdownMark extends MarkdownSpan {
 }
 
 /**
- * A message drawn mid-edit: a stretch of its words left undrawn (typed in
- * but not reached yet, or being erased), a stretch drawn selected, where the
- * caret stands, and the stretches marked as written in or struck out, which
- * do not overlap. Offsets are in the words.
+ * A message drawn with its changes marked: the stretches written in or
+ * struck out, and the words comment threads are anchored to. Offsets are in
+ * the words.
  */
 export interface MarkdownEdit {
-  hidden?: MarkdownSpan | undefined;
-  selection?: MarkdownSpan | undefined;
-  caret?: number | undefined;
   marks?: readonly MarkdownMark[] | undefined;
 }
-
-/** The caret a typed message ends in: a bar with no words of its own. */
-const CARET: HastChild = {
-  type: "element",
-  tagName: "span",
-  properties: { className: ["markdown-caret"], ariaHidden: "true" },
-  children: [],
-};
-
-/** The class the stretch being selected wears, drawn as an editor draws a selection. */
-const SELECTION_CLASS = "markdown-selection";
 
 /** The element and class each kind of change mark is drawn as, so it reads as a change without its colour. */
 const MARK_DRAWN = {
@@ -86,56 +71,22 @@ function isBlockBreak(node: HastNode): boolean {
   return node.type === "text" && node.value.trim() === "";
 }
 
-/** The innermost element the drawing ends in, past any block breaks, where the caret goes. */
-function lastParent(parent: HastParent): HastParent {
-  const last = parent.children.findLast((child) => !isBlockBreak(child));
-  return last?.type === "element" && last.children.length > 0 ? lastParent(last) : parent;
-}
-
-/** One walk's edit, with the caret's offset still to place and whether it has been placed. */
-interface EditWalk {
-  readonly edit: MarkdownEdit;
-  /** The words' length, where a stretch hidden to the end takes the breaks after it too. */
-  readonly end: number;
-  caretPlaced: boolean;
-}
-
-/** Whether the stretch from `start` to `end` lies wholly inside the hidden one; a point at the hidden end counts only at the words' end. */
-function insideHidden(walk: EditWalk, start: number, end: number): boolean {
-  const hidden = walk.edit.hidden;
-  if (hidden === undefined || hidden.from >= hidden.to) return false;
-  if (start === end) return start >= hidden.from && (start < hidden.to || hidden.to === walk.end);
-  return start >= hidden.from && end <= hidden.to;
-}
-
 /**
- * One run of text cut into what is drawn: the hidden stretch dropped, the
- * selected stretch and each change marked, and the caret set in where it falls. A run's
- * place in the words maps letter for letter onto its value, which an escaped
+ * One run of text cut into what is drawn, each change marked. A run's place
+ * in the words maps letter for letter onto its value, which an escaped
  * character puts one letter off, the same small error the cut always made.
  */
-function editedText(text: HastText, start: number, walk: EditWalk): readonly HastChild[] {
-  const { hidden, selection, caret, marks = [] } = walk.edit;
+function editedText(text: HastText, start: number, edit: MarkdownEdit): readonly HastChild[] {
+  const { marks = [] } = edit;
   const local = (offset: number) => Math.min(Math.max(offset - start, 0), text.value.length);
   const cuts = new Set([0, text.value.length]);
-  for (const span of [hidden, selection, ...marks]) {
-    if (span !== undefined) cuts.add(local(span.from)).add(local(span.to));
-  }
-  const caretAt = caret === undefined || walk.caretPlaced ? undefined : local(caret);
-  if (caretAt !== undefined) cuts.add(caretAt);
+  for (const span of marks) cuts.add(local(span.from)).add(local(span.to));
   const bounds = [...cuts].sort((left, right) => left - right);
   const parts: HastChild[] = [];
   bounds.forEach((from, index) => {
-    if (from === caretAt) {
-      parts.push(structuredClone(CARET));
-      walk.caretPlaced = true;
-    }
     const to = bounds[index + 1];
     if (to === undefined || to === from) return;
     const value = text.value.slice(from, to);
-    if (hidden !== undefined && from >= local(hidden.from) && to <= local(hidden.to)) return;
-    const selected =
-      selection !== undefined && from >= local(selection.from) && to <= local(selection.to);
     const covering = marks.filter((each) => from >= local(each.from) && to <= local(each.to));
     // Note that a change mark wins over a comment's, and words under several threads name every one of them.
     const mark = covering.find((each) => each.kind !== MARKDOWN_MARK.COMMENT) ?? covering[0];
@@ -144,27 +95,20 @@ function editedText(text: HastText, start: number, walk: EditWalk): readonly Has
     );
     const drawn = mark === undefined ? undefined : MARK_DRAWN[mark.kind];
     parts.push(
-      selected
+      drawn !== undefined
         ? {
             type: "element",
-            tagName: "mark",
-            properties: { className: [SELECTION_CLASS] },
+            tagName: drawn.tagName,
+            properties: {
+              className: [drawn.className],
+              ...(threads.length === 0 ? undefined : { dataThreads: threads.join(" ") }),
+              ...(covering.some((each) => each.active === true)
+                ? { dataActive: "true" }
+                : undefined),
+            },
             children: [{ type: "text", value }],
           }
-        : drawn !== undefined
-          ? {
-              type: "element",
-              tagName: drawn.tagName,
-              properties: {
-                className: [drawn.className],
-                ...(threads.length === 0 ? undefined : { dataThreads: threads.join(" ") }),
-                ...(covering.some((each) => each.active === true)
-                  ? { dataActive: "true" }
-                  : undefined),
-              },
-              children: [{ type: "text", value }],
-            }
-          : { type: "text", value },
+        : { type: "text", value },
     );
   });
   return parts;
@@ -175,8 +119,13 @@ function editedText(text: HastText, start: number, walk: EditWalk): readonly Has
  * written in or struck out reads as the change it is; one no mark covers is
  * left as it is, since a picture holds no words to cut.
  */
-function markedPicture(picture: HastNode, start: number, end: number, walk: EditWalk): HastNode {
-  const mark = walk.edit.marks?.find((each) => each.from <= start && end <= each.to);
+function markedPicture(
+  picture: HastNode,
+  start: number,
+  end: number,
+  edit: MarkdownEdit,
+): HastNode {
+  const mark = edit.marks?.find((each) => each.from <= start && end <= each.to);
   if (mark === undefined || picture.type !== "element") return picture;
   const drawn = MARK_DRAWN[mark.kind];
   return {
@@ -190,56 +139,32 @@ function markedPicture(picture: HastNode, start: number, end: number, walk: Edit
 /**
  * Draws an edit over a parent's children in place. Every node carries its
  * place in the words, so the edit is made on the drawn tree rather than on
- * the Markdown, and a half-typed emphasis or list is still drawn whole. The
- * breaks between blocks carry no place of their own and take the gap they
- * stand in. The caret goes in the first run of text that reaches its offset,
- * or into the innermost element holding it when no run does, as in a list
- * item typed as far as its marker.
+ * the Markdown. The breaks between blocks carry no place of their own and
+ * are kept as they stand.
  */
-function editChildren(
-  parent: HastParent,
-  parentStart: number,
-  parentEnd: number,
-  walk: EditWalk,
-): void {
+function editChildren(parent: HastParent, edit: MarkdownEdit): void {
   const original = [...parent.children];
   const kept: HastNode[] = [];
-  original.forEach((child, index) => {
+  for (const child of original) {
     const start = child.position?.start.offset;
     const end = child.position?.end.offset;
     if (start === undefined || end === undefined) {
-      const gapStart = original.slice(0, index).findLast((node) => node.position)?.position;
-      const gapEnd = original.slice(index + 1).find((node) => node.position)?.position;
-      const from = gapStart?.end.offset ?? parentStart;
-      const to = gapEnd?.start.offset ?? parentEnd;
-      if (!insideHidden(walk, from, Math.max(from, to))) kept.push(child);
-      return;
+      kept.push(child);
+      continue;
     }
-    if (end > start && insideHidden(walk, start, end)) return;
     if (child.type === "text") {
-      const reaches = walk.edit.caret !== undefined && walk.edit.caret <= end;
-      kept.push(
-        ...editedText(child, start, { ...walk, caretPlaced: walk.caretPlaced || !reaches }),
-      );
-      if (reaches) walk.caretPlaced = true;
-      return;
+      kept.push(...editedText(child, start, edit));
+      continue;
     }
     if (child.type === "element" && child.tagName === "img") {
-      kept.push(markedPicture(child, start, end, walk));
-      return;
+      kept.push(markedPicture(child, start, end, edit));
+      continue;
     }
-    if (child.type === "element") {
-      editChildren(child, start, end, walk);
-      const caret = walk.edit.caret;
-      if (!walk.caretPlaced && caret !== undefined && start <= caret && caret <= end) {
-        child.children.push(structuredClone(CARET));
-        walk.caretPlaced = true;
-      }
-    }
+    if (child.type === "element") editChildren(child, edit);
     kept.push(child);
-  });
+  }
   // SAFETY: every node kept is one of this parent's own children, or a run of
-  // text, a mark, or the caret cut from one, each a child any parent holds.
+  // text or a mark cut from one, each a child any parent holds.
   parent.children.splice(0, original.length, ...(kept as typeof parent.children));
 }
 
@@ -253,8 +178,8 @@ function isCodeOf(parent: HastParent, code: HastElement): boolean {
 
 /**
  * Gives each fenced block's code its place in the words, which the tree
- * leaves off the run of text the code is, so an edit marks, hides, and
- * places the caret inside code as it does anywhere else. A fence's code is
+ * leaves off the run of text the code is, so an edit marks inside code as it
+ * does anywhere else. A fence's code is
  * the words letter for letter from the line after its opening one, unless
  * it stands in a list or a quote, whose lines lose their indent; a code that
  * does not read back from there keeps no place, and is drawn whole.
@@ -284,17 +209,12 @@ function placeFencedCode(parent: HastParent, words: string): void {
   }
 }
 
-/** The rehype step that draws a message mid-edit, the caret at the end of the drawing when its offset falls past every run. */
+/** The rehype step that draws a message's changes marked. */
 const drawEdit =
   (edit: MarkdownEdit, words: string) =>
   (tree: HastParent): void => {
-    const end = words.length;
-    const walk: EditWalk = { edit, end, caretPlaced: false };
     placeFencedCode(tree, words);
-    editChildren(tree, 0, end, walk);
-    if (edit.caret !== undefined && !walk.caretPlaced) {
-      lastParent(tree).children.push(structuredClone(CARET));
-    }
+    editChildren(tree, edit);
   };
 
 /** An element of the tree, and what it may hold. */
@@ -598,7 +518,7 @@ const DIAGRAM_FENCE_CLASS = "language-mermaid";
 /**
  * A fence's code where it may be drawn as its diagram: a Mermaid fence whose
  * code holds its words alone. Nothing for any other fence, or for one whose
- * code wears a change mark, the caret, a selection, or a search's match,
+ * code wears a change mark or a search's match,
  * since a diagram drawn from marked words would hide what is marked, and
  * two diagrams side by side would hide what changed between them.
  */
@@ -612,25 +532,22 @@ function diagramCode(pre: HastElement | undefined): string | undefined {
   return wordsOf(code).replace(/\n$/u, "");
 }
 
-/** The edit the words are drawn partway through, which a fence reads to know whether it is being changed. */
+/** The edit the words are drawn with, which a fence reads to know whether it is marked. */
 const FenceEdit = createContext<MarkdownEdit | undefined>(undefined);
 
 /**
- * Whether an edit reaches into a block: a change mark, the caret, a
- * selection, or a stretch still hidden. Read off the block's own place, so
- * a fence whose code keeps no place of its own (`placeFencedCode`) is still
- * known to be changed.
+ * Whether an edit's marks reach into a block. Read off the block's own
+ * place, so a fence whose code keeps no place of its own (`placeFencedCode`)
+ * is still known to be marked.
  */
 function editReaches(edit: MarkdownEdit | undefined, block: HastElement | undefined): boolean {
   const from = block?.position?.start.offset;
   const to = block?.position?.end.offset;
   if (edit === undefined || from === undefined || to === undefined) return false;
-  if (edit.caret !== undefined && edit.caret >= from && edit.caret <= to) return true;
-  const spans = [edit.hidden, edit.selection, ...(edit.marks ?? [])];
-  return spans.some((span) => span !== undefined && span.from < to && span.to > from);
+  return (edit.marks ?? []).some((span) => span.from < to && span.to > from);
 }
 
-/** A fence drawn as its diagram where it may be, and as its code while an edit reaches into it. */
+/** A fence drawn as its diagram where it may be, and as its code while an edit's marks reach into it. */
 function DiagramFence({
   node,
   children,
@@ -660,8 +577,8 @@ function keptUrl(url: string): string {
  * in the words is text. Every size in the stylesheet is in `em`, so the same
  * component reads at the caption's ten pixels and the plan's own size. Note
  * that it is drawn again only when what it is handed changes, because the
- * engine parses the words afresh on every draw, and a plan drawing every
- * section on each frame of its typing would parse them all.
+ * engine parses the words afresh on every draw, and a plan redrawn on a save
+ * would parse every section.
  */
 export const MarkdownMessage = memo(function MarkdownMessage({
   words,
@@ -673,12 +590,11 @@ export const MarkdownMessage = memo(function MarkdownMessage({
   found,
   diagrams,
   onTask,
-  landed,
   inline,
 }: {
   words: string;
   className?: string;
-  /** The edit the words are drawn partway through; drawn whole without one. */
+  /** The changes and comments the words are drawn with marked; drawn plain without one. */
   edit?: MarkdownEdit | undefined;
   /** Draws the links the place knows better, a mention's chip say; every link is drawn as words without one. */
   link?: LinkDrawer | undefined;
@@ -692,8 +608,6 @@ export const MarkdownMessage = memo(function MarkdownMessage({
   diagrams?: boolean | undefined;
   /** Ticks or clears a task item pressed, as a plan the developer can edit does; every checkbox is read-only without it. */
   onTask?: MarkdownTaskToggler | undefined;
-  /** Whether the words were just landed on, lit once as every place landed on is. */
-  landed?: boolean | undefined;
   /** Whether the words are one line's, a to-do's step say: drawn in the place's own element as one run of inline words, with no root, its blocks' words run together. */
   inline?: boolean | undefined;
 }): React.JSX.Element {
@@ -752,7 +666,6 @@ export const MarkdownMessage = memo(function MarkdownMessage({
         components={components}
         urlTransform={link === undefined ? safeUrl : keptUrl}
         onTask={onTask}
-        landed={landed}
       />
     </FenceEdit.Provider>
   );

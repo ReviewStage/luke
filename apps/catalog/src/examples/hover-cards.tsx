@@ -1,6 +1,9 @@
+import { TASK_STATUS } from "@luke/features/task-wire";
 import {
   AVATAR_SIZE,
   Avatar,
+  BLOCKED_WORDS,
+  BlockedMark,
   BUTTON_VARIANT,
   Button,
   DocumentIcon,
@@ -17,11 +20,14 @@ import {
   HoverCardScroll,
   HoverCardSkeleton,
   Inline,
+  ListRowCount,
   PinIcon,
+  TaskStatusMark,
   Tooltip,
   TooltipCard,
   UserIcon,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -51,6 +57,15 @@ const CATALOG_AGENTS = [
   "Self-hosting guide",
   "Migrate auth SDK",
   "Old onboarding copy",
+] as const;
+
+/** A task's sub-tasks, each with its status, more than a card's list has height for. */
+const CATALOG_SUB_TASKS = [
+  { name: "Write the invitation email", key: "ACME-43", status: TASK_STATUS.DONE },
+  { name: "Expire invitations after a week", key: "ACME-44", status: TASK_STATUS.IN_PROGRESS },
+  { name: "Let a sender send it again", key: "ACME-45", status: TASK_STATUS.TODO },
+  { name: "Count accepted invitations", key: "ACME-46", status: TASK_STATUS.TODO },
+  { name: "Document the invite API", key: "ACME-47", status: TASK_STATUS.BACKLOG },
 ] as const;
 
 /** A server's tools, each hanging what it does from a row that opens nothing. */
@@ -225,6 +240,51 @@ function HoverCards(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="hover-card-rows" title="Rows under a rule">
         <Inline gap={GAP.CONTROL}>
+          <Carded
+            label="Task, among others"
+            card={
+              <HoverCard>
+                <HoverCardHead
+                  glyph={<TaskStatusMark status={TASK_STATUS.IN_PROGRESS} />}
+                  name="Invite flow"
+                  sub="ACME-42 · acme/relay · 3h"
+                />
+                <HoverCardRule />
+                <HoverCardRow
+                  glyph={<TaskStatusMark status={TASK_STATUS.TODO} />}
+                  label={
+                    <>
+                      <span className="text-muted-foreground">Part of </span>Ship invitations
+                    </>
+                  }
+                  end="ACME-1"
+                  onPress={() => undefined}
+                />
+                <HoverCardRow
+                  glyph={<GLYPH.TASK />}
+                  label="Sub-tasks"
+                  end={<ListRowCount settled={1} total={5} label="1 of 5 sub-tasks finished" />}
+                />
+                <HoverCardList label="Sub-tasks">
+                  {CATALOG_SUB_TASKS.map((subTask) => (
+                    <li key={subTask.key}>
+                      <HoverCardRow
+                        glyph={<TaskStatusMark status={subTask.status} />}
+                        label={subTask.name}
+                        end={subTask.key}
+                        onPress={() => undefined}
+                      />
+                    </li>
+                  ))}
+                </HoverCardList>
+                <HoverCardRow
+                  look={HOVER_CARD_ROW_LOOK.DETAIL}
+                  glyph={<BlockedMark aria-hidden="true" />}
+                  label={BLOCKED_WORDS}
+                />
+              </HoverCard>
+            }
+          />
           <Carded
             label="Agents"
             card={

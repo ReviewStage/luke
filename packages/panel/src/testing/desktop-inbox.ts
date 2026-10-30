@@ -53,6 +53,7 @@ import type {
   AppInboxTask,
   AppInboxTaskHolding,
   AppInboxTasklessItem,
+  AppWorkspaceChannels,
 } from "@luke/host/app-state";
 import { NO_HOLDER_INBOXES, UNREAD } from "@luke/host/app-state";
 import { AGENT_INBOX_ACT_KIND, type PortActResult } from "@luke/host/contract";
@@ -85,7 +86,7 @@ import {
   fakeActsAnswer,
 } from "./app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "./app-platform.js";
-import { handHostReads } from "./app-state.js";
+import { handHostReads, holdPages } from "./app-state.js";
 import { attachmentChipName } from "./attachment-chip.js";
 import {
   composerEditor,
@@ -95,6 +96,7 @@ import {
 } from "./composer.js";
 import { onRegistry } from "./copy-feedback.js";
 import { sidebarProps } from "./desktop-sidebar.js";
+import { holdFrames, settleFrames } from "./frames.js";
 import { restOn } from "./hint-rest.js";
 import { relayout } from "./resize-observer.js";
 import { installScrollIntoView } from "./scroll-into-view.js";
@@ -106,9 +108,8 @@ const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 /** Where the window's Inbox keeps the scope it shows. */
 export const SHOW_KEY = "luke.inboxShow";
 
-/** Where the window's Inbox keeps how it sorts, and how it groups. */
-export const SORT_KEY = "luke.inboxSort";
-export const GROUPING_KEY = "luke.inboxGrouping";
+/** Where the window's Inbox keeps whom the items it lists are addressed to. */
+export const WHOSE_KEY = "luke.inboxWhose";
 
 export const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
@@ -326,6 +327,10 @@ class InboxWorld {
   deliverFeed: (read: AppHostRead<AppInboxItems>) => void = () => undefined;
   /** Delivers the holders' own inboxes to the window as the host holds them, as main delivers a move of them; nothing before a mount. */
   deliverHolders: (held: AppHolderInboxes) => void = () => undefined;
+  /** Each workspace's channels as the host holds them when the window mounts. */
+  channels: AppWorkspaceChannels = {};
+  /** Delivers the workspaces' channels to the window as the host holds them, as main delivers a move of them; nothing before a mount. */
+  deliverChannels: (held: AppWorkspaceChannels) => void = () => undefined;
   /** Whether a read of a plan's agents is held open, never answering. */
   agentListHeld = false;
   /** Holds the next agent read's answer, handing the test what lands it, where a test asks. */
@@ -543,13 +548,13 @@ function deliverFeed(): void {
 beforeEach(() => {
   installEditorLayout();
   installScrollIntoView();
+  holdFrames();
   window.localStorage.clear();
-  // Note that the Inbox opens on All here, so the tests of what an item shows meet settled
-  // items too; the tests of the scopes clear it to meet the Inbox as a fresh profile opens it.
+  // Note that the Inbox opens on All addressed to anyone here, so the tests of what an item shows
+  // meet settled items and a teammate's too; the tests of the scopes clear it to meet the Inbox as
+  // a fresh profile opens it.
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
-  // Note that it groups by task here too, so the tests of a task's group meet its header; a
-  // fresh profile groups by nothing.
-  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("plan"));
+  window.localStorage.setItem(WHOSE_KEY, JSON.stringify({ kind: "everyone" }));
   world.inboxes = new Map([
     [BILLING.id, [THRESHOLD, RETRY]],
     [INVITES.id, [EXPIRY]],
@@ -579,6 +584,8 @@ beforeEach(() => {
   world.fileReads = [];
   world.main = heldInboxes();
   world.deliverHolders = () => undefined;
+  world.channels = {};
+  world.deliverChannels = () => undefined;
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.AGENTS_INBOX_ITEMS_RETRY) {
@@ -788,9 +795,20 @@ export function mount(
   // Note that the host's inbox holds are answered beside whatever acts the test answers by now.
   fakeActPort({ ...fakeActPortCalls(), ...world.main.procedures });
   // Note that the host's reads are laid over whatever document the test handed the window, its experiments among it.
-  const reads = handHostReads({ items: feedNow(), holders: world.main.now() });
+  const reads = handHostReads({
+    items: feedNow(),
+    holders: world.main.now(),
+    channels: world.channels,
+  });
   world.deliverFeed = reads.deliverItems;
   world.deliverHolders = reads.deliverHolders;
+  world.deliverChannels = reads.deliverChannels;
+  // Note that a task's or an agent's pages are laid on the document as the window holds them, as the host lays them.
+  holdPages(reads.deliverPages, (place) =>
+    "taskId" in place
+      ? (world.taskPages.get(place.taskId) ?? [])
+      : (world.agentPages.get(place.agentId) ?? []),
+  );
   const asked: Asked = {
     shownTasks: [],
     shownAgents: [],
@@ -905,15 +923,44 @@ export function mount(
   return { page: container, asked };
 }
 
-/** Lets every promise settled so far run its continuations. */
+/** Lets every promise settled so far run its continuations, and the frames a paint takes pass (`settleFrames`). */
 export async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 40; tick += 1) await Promise.resolve();
-  });
+  await settleFrames();
 }
 
 /** A row's title, as its ListRow draws it. */
 export const ROW_TITLE = ".luke-list-row-title";
+
+/** A row's title as the eye reads it, the words it says to a reader alone ("Unread") left out. */
+export function titleOf(row: Element): string {
+  const title = row.querySelector(ROW_TITLE)?.cloneNode(true);
+  if (!(title instanceof Element)) return "";
+  for (const hidden of title.querySelectorAll(".luke-visually-hidden")) hidden.remove();
+  return title.textContent ?? "";
+}
+
+/**
+ * What a reader hears of the nodes an `aria-labelledby` or `aria-describedby`
+ * names: each one's words but what it hides from them, joined by spaces, and
+ * the words drawn for a reader alone heard apart from those beside them, as
+ * a browser hears a box of their own.
+ */
+export function heardOf(ids: string | null): string {
+  return (ids ?? "")
+    .split(" ")
+    .filter((id) => id !== "")
+    .map((id) => {
+      const copy = document.getElementById(id)?.cloneNode(true);
+      assert.ok(copy instanceof Element, `nothing is drawn as ${id}`);
+      for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
+      for (const apart of copy.querySelectorAll(".luke-visually-hidden")) {
+        apart.before(" ");
+        apart.after(" ");
+      }
+      return (copy.textContent ?? "").replace(/\s+/gu, " ").trim();
+    })
+    .join(" ");
+}
 
 /**
  * What marks a row as needing the developer: `*` where it says "Needs you"
@@ -930,22 +977,14 @@ export function needsYouMark(row: HTMLElement): string {
   return said ? "*" : "";
 }
 
-/** The first of a button's words a reader hears: a row's or a fold's name, before its count and its chord. */
-export function heardName(button: Element): string {
-  const heard = [...button.children].find((part) => part.getAttribute("aria-hidden") !== "true");
-  return heard?.textContent ?? "";
-}
-
-/** The list as a reader hears it: each group's name, then its rows, `▸ ` where chosen and `*` where marked as needing the developer. */
+/** The list as a reader hears it: its rows, `▸ ` where chosen and `*` where marked as needing the developer. */
 export function listed(page: HTMLElement): string[] {
   const list = page.querySelector(".inbox-tasks");
   assert.ok(list, "the list is drawn");
-  const fold = ".luke-group-header-head button[aria-expanded]:not([aria-haspopup])";
-  return [...list.querySelectorAll(`${fold}, li button.luke-list-row-main`)].map((node) => {
-    if (node.matches(fold) || !(node instanceof HTMLButtonElement)) return `# ${heardName(node)}`;
-    const name = node.querySelector(ROW_TITLE)?.textContent ?? "";
-    return `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${name}`;
-  });
+  return [...list.querySelectorAll<HTMLButtonElement>("li button.luke-list-row-main")].map(
+    (node) =>
+      `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${titleOf(node)}`,
+  );
 }
 
 /** What an element says to a reader, the discs beside the names in it left out; nothing for no element. */
@@ -960,7 +999,7 @@ export function wordsOf(element: Element | null | undefined): string | null {
 export function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
   const row = [
     ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),
-  ].find((each) => each.querySelector(ROW_TITLE)?.textContent === title);
+  ].find((each) => titleOf(each) === title);
   assert.ok(row, `no row for ${title}`);
   return row;
 }
@@ -973,7 +1012,7 @@ export function openViewOptions(page: HTMLElement): void {
 }
 
 /** The scopes the view's menu may offer, in their order, and Archived, which it offered while tasks were archived, so a menu offering it again is heard. */
-export const SCOPE_NAMES = ["Needs you", "All", "Archived"] as const;
+export const SCOPE_NAMES = ["Open", "Needs you", "All", "Archived"] as const;
 
 /** The Inbox's name as the list's head says it. */
 export function headTitle(page: HTMLElement): string | null | undefined {
@@ -1209,13 +1248,13 @@ export function pressKey(key: string, target: EventTarget = document.body): void
 /** The pager at the end of the item's bar, as it reads: "2 of 3", or none where it is not drawn. */
 export function pagerOf(page: HTMLElement): string | null {
   return (
-    page.querySelector(".inbox-view-items:not([hidden]) .inbox-pager-count")?.textContent ?? null
+    page.querySelector(".inbox-view-items:not([hidden]) .luke-pager-count")?.textContent ?? null
   );
 }
 
 /** One of the pager's arrows, by its name. */
 export function arrowNamed(page: HTMLElement, name: string): HTMLButtonElement {
-  const arrow = page.querySelector<HTMLButtonElement>(`.inbox-pager button[aria-label="${name}"]`);
+  const arrow = page.querySelector<HTMLButtonElement>(`.luke-pager button[aria-label="${name}"]`);
   assert.ok(arrow, `the pager offers ${name}`);
   return arrow;
 }
@@ -1301,17 +1340,6 @@ export const BUMP: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-00000000000c", "Bump the Node image?", 1_500),
   agentId: STRAY_AGENT,
 };
-
-/** The header of a group in the list, by its name. */
-export function headerNamed(page: HTMLElement, name: string): HTMLButtonElement {
-  const header = [
-    ...page.querySelectorAll<HTMLButtonElement>(
-      ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
-    ),
-  ].find((each) => heardName(each) === name);
-  assert.ok(header, `no header for ${name}`);
-  return header;
-}
 
 /** Hovers a control as a resting pointer does, and answers the words of the card it hangs, its discs left out. */
 export function hoveredCard(control: Element, card: string): string | null {
@@ -1414,7 +1442,7 @@ export function rowLines(page: HTMLElement, title: string): [boolean, string | n
   const row = rowNamed(page, title);
   const head = row.querySelector(".luke-list-row-head");
   const titled =
-    row.querySelector(ROW_TITLE)?.textContent === title &&
+    titleOf(row) === title &&
     head?.querySelector(ROW_TITLE) === null &&
     head.querySelector("time") !== null;
   return [titled, row.querySelector(".luke-list-row-description")?.textContent];
@@ -1497,21 +1525,6 @@ export function gatedAnswers(): GatedAnswers {
     },
   });
   return { sent, answer: (view) => waiting.shift()?.(view) };
-}
-
-/** Each plan's header as the list folds it: its name and what in it needs you. */
-export function foldedCounts(page: HTMLElement): (string | null)[] {
-  const headers = () => [
-    ...page.querySelectorAll<HTMLButtonElement>(
-      ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
-    ),
-  ];
-  for (const header of headers()) {
-    if (header.getAttribute("aria-expanded") === "true") act(() => header.click());
-  }
-  const counts = headers().map((header) => header.textContent);
-  for (const header of headers()) act(() => header.click());
-  return counts;
 }
 
 /** Sends a reply from the open item's box carrying its first option as its answer, with the words given. */

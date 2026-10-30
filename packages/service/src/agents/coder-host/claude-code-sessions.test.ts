@@ -10,6 +10,8 @@ import {
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
+import { queueAgentMessage, readAgentQueue } from "@luke/database/models/agent-queue-store";
 import {
   claimAgentRunnerLease,
   releaseAgentRunnerLease,
@@ -33,6 +35,7 @@ import {
   setPlanStatus,
   setProviderKeyForAgents,
 } from "@luke/database/models/provider-key-store";
+import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { runnerLinesPast } from "@luke/database/models/runner-line-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@luke/database/models/writer";
@@ -47,6 +50,7 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
@@ -105,6 +109,7 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { REPOSITORY_SNAPSHOT } from "../repository-snapshot.js";
 import { deploymentOidcToken, SESSION_TAG } from "../vercel-sandbox-api.js";
+import { handOnQueue } from "./agent-queue.js";
 import { CODER } from "./bounds.js";
 import { claudeCodeSessions } from "./claude-code-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
@@ -604,6 +609,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
         const { userId, agent } = yield* openAgent;
+        // An installed skill is handed only to a member with the Skills experiment on.
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.SKILLS]: true } });
         const skillFile =
           "---\nname: sentry-triage\ndescription: Triage a Sentry issue.\nallowed-tools: Bash\n---\nRun `scripts/triage.sh`.\n";
         yield* installSkill(userId, {
@@ -2401,6 +2408,88 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual(retiredWith, { type: INPUT_LINE.RETIRE });
         assert.ok(!JSON.stringify(yield* launchLines(first)).includes("Now the emails."));
         assert.ok(JSON.stringify(yield* launchLines(second)).includes("Now the emails."));
+      }),
+  );
+
+  it.effect(
+    "a message queued behind the turn reaches the runner relaunched once the warm one retired at the turn's IDLE",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId } = yield* openAgent;
+        // A Claude Code agent, as a queued message's send checks its credential as any message's.
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const agent = Option.getOrThrow(
+          yield* createAgent(userId, {
+            taskId: task.id,
+            idempotencyKey: "start-queue",
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            planSnapshot: "# Teammate invitations\n",
+            prompt: null,
+            repository: null,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          }),
+        ).agent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const [sandbox] = api.sandboxes;
+        assert.ok(sandbox !== undefined);
+        // The agent's record names its session, as its start claims it, which the hand-off's send reads.
+        assert.equal(
+          yield* claimRuntimeSession(
+            { userId, conversationId: agent.conversationId },
+            opened.sessionId,
+            new Date(),
+          ),
+          true,
+        );
+        // The first turn took the opening line and settled, as its IDLE's batch writes it.
+        const db = yield* Database;
+        const target = { userId, conversationId: agent.conversationId };
+        const [settled] = yield* db
+          .insert(turns)
+          .values({
+            ...target,
+            origin: TURN_ORIGIN.TYPED,
+            status: TURN_STATUS.SETTLED,
+            queuedAt: new Date(0),
+            settledAt: new Date(0),
+          })
+          .returning({ id: turns.id });
+        yield* db
+          .update(messages)
+          .set({ turnId: settled?.id })
+          .where(eq(messages.conversationId, agent.conversationId));
+        yield* queueAgentMessage(userId, agent.id, {
+          id: randomUUID(),
+          text: "Then open a pull request.",
+        });
+        // The turn's IDLE retires the warm runner before its queue is handed on, as the events route runs them.
+        const retired = yield* retireWarmRunner({
+          sessionId: opened.sessionId,
+          userId,
+          agentId: agent.id,
+          running: sandbox.currentSessionId,
+        }).pipe(Effect.provide(api.layer));
+        assert.equal(retired, true);
+        sequence.next = 5;
+
+        yield* handOnQueue(() => Effect.succeed(sessions), agent).pipe(
+          Effect.provide(services(api)),
+        );
+
+        const [first, second] = api.commands;
+        assert.ok(
+          first !== undefined && second !== undefined,
+          "the hand-off relaunched the runner",
+        );
+        assert.ok(!JSON.stringify(yield* launchLines(first)).includes("Then open a pull request."));
+        assert.ok(JSON.stringify(yield* launchLines(second)).includes("Then open a pull request."));
+        assert.deepEqual(Option.getOrThrow(yield* readAgentQueue(userId, agent.id)).messages, []);
       }),
   );
 

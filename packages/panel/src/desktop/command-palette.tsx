@@ -139,7 +139,6 @@ import {
   agentRow,
   orderTaskRows,
   repositoryLabel,
-  TASK_ORDER,
   TASK_ROW,
   type TaskRow,
   taskRow,
@@ -920,16 +919,13 @@ function taskRows(
   // activity, as the sidebar, Home's Recent, and the row's time read it.
   const pinnedFirst = (rows: readonly TaskRow[]) => [
     ...rows.filter((row) => taskRowPinnedAt(row) !== undefined),
-    ...orderTaskRows(
-      rows.filter((row) => taskRowPinnedAt(row) === undefined),
-      TASK_ORDER.UPDATED,
-    ),
+    ...orderTaskRows(rows.filter((row) => taskRowPinnedAt(row) === undefined)),
   ];
   const { standing: agents, archived: archivedAgents } = tasks.listedAgents;
   const here = [...tasks.tasks.filter(listed).map(taskRow), ...agents.map(agentRow)];
   const elsewhere = tasks.tasks.filter((task) => !listed(task)).map(taskRow);
   // The listed workspace's archived agents, by their last activity.
-  const archived = orderTaskRows(archivedAgents.map(agentRow), TASK_ORDER.UPDATED);
+  const archived = orderTaskRows(archivedAgents.map(agentRow));
   return [
     ...pinnedFirst(here).map((row) => rowOf(row, false)),
     ...pinnedFirst(elsewhere).map((row) => rowOf(row, false)),
@@ -2236,12 +2232,9 @@ export function CommandPalette({
       inboxAsked ? inboxSearch.items.map((listed) => ({ listed, words: inboxWords(listed) })) : [],
     [inboxAsked, inboxSearch.items],
   );
-  // Note that the channels are those the window holds, read again as the palette opens, as the sidebar reads them as it is shown.
+  // Note that the channels are those the host holds for the window, as the sidebar draws them.
   const channelsOn = filters.includes(PALETTE_FILTER.CHANNELS);
-  const channels = useChannels(
-    channelsOn && tasks.signedIn ? tasks.workspace?.id : undefined,
-    open,
-  );
+  const channels = useChannels(channelsOn && tasks.signedIn ? tasks.workspace?.id : undefined);
   // Note that the automations are followed the first time they are searched, on the Inbox's terms.
   const automationsAsked =
     open && tasks.signedIn && (filter === PALETTE_FILTER.AUTOMATIONS || tokens.length > 0);

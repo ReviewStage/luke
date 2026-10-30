@@ -18,7 +18,6 @@ import { agentBrowserTabsAnswerSchema } from "@luke/features/agent-browser-tab-w
 import {
   codeLinesSchema,
   type TasksBrowserTabsAnswer,
-  type TasksPagesAnswer,
   type TasksRevisionsAnswer,
   taskBrowserTabsFollowSchema,
   taskHistoryFollowSchema,
@@ -28,6 +27,8 @@ import {
   tasksBrowserTabOpenAnswerSchema,
   tasksBrowserTabOpenParamsSchema,
   tasksBrowserTabsParamsSchema,
+  tasksChangeRelationAnswerSchema,
+  tasksChangeRelationParamsSchema,
   tasksCommentActParamsSchema,
   tasksCommentAnswerSchema,
   tasksCommentStartParamsSchema,
@@ -60,6 +61,8 @@ import {
   tasksRevisionParamsSchema,
   tasksRevisionsAnswerSchema,
   tasksRevisionsParamsSchema,
+  tasksSetParentAnswerSchema,
+  tasksSetParentParamsSchema,
   tasksSetRepositoryAnswerSchema,
   tasksSetRepositoryParamsSchema,
   tasksSetStandingParamsSchema,
@@ -150,6 +153,16 @@ export const tasksActsContract = {
   )
     .input(exactInput(tasksBlockParamsSchema))
     .output(EffectSchema.flip(tasksBlockAnswerSchema)),
+  [TASKS_ACT_KIND.TASKS_SET_PARENT]: actProcedure(
+    "Could not change that task's parent on this system.",
+  )
+    .input(exactInput(tasksSetParentParamsSchema))
+    .output(EffectSchema.flip(tasksSetParentAnswerSchema)),
+  [TASKS_ACT_KIND.TASKS_CHANGE_RELATION]: actProcedure(
+    "Could not change that relation on this system.",
+  )
+    .input(exactInput(tasksChangeRelationParamsSchema))
+    .output(EffectSchema.flip(tasksChangeRelationAnswerSchema)),
   [TASKS_ACT_KIND.TASKS_EDIT]: actProcedure("Could not save that edit on this system.")
     .input(exactInput(tasksEditParamsSchema))
     .output(EffectSchema.flip(tasksEditAnswerSchema)),
@@ -235,11 +248,12 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_PAGES]: actProcedure("Could not read that plan's pages on this system.")
     .input(exactInput(tasksPagesParamsSchema))
     .output(EffectSchema.flip(tasksPagesAnswerSchema)),
+  // Note that the hold's stream carries nothing: the held pages reach the panel on app state, and the stream is the window's hold on them.
   [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: actProcedure(
     "Could not follow that plan's pages on this system.",
   )
     .input(exactInput(taskPagesFollowSchema))
-    .output(eventIterator(type<TasksPagesAnswer>())),
+    .output(eventIterator(type<never>())),
   [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actProcedure(
     "Could not follow that plan's history on this system.",
   )

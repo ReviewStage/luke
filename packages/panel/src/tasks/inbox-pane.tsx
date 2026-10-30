@@ -65,7 +65,7 @@ import {
 import { GLYPH } from "@luke/ui/icons";
 import { isWireString } from "@luke/wire";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ACTOR_SIZE,
   ActorLine,
@@ -84,6 +84,7 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { PhoneHead } from "../desktop/phone-head.js";
 import { unreadShown } from "../failure-report.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
+import { useSteadyDoor } from "../steady-door.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
@@ -132,16 +133,18 @@ import {
   holderName,
   INBOX_HOLDER,
   INBOX_NOT_READ,
+  INBOX_SETTLED_STANDING,
   type InboxDraft,
   type InboxHolder,
   type InboxKnownAsk,
+  inboxSettledStanding,
   itemWorkspaceId,
   knownAsk,
   operatorHolder,
   readersItem,
   sentStamp,
 } from "./inbox-model.js";
-import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager.js";
+import { type InboxPager, InboxPagerControls } from "./inbox-pager.js";
 import { InboxStamp } from "./inbox-stamp.js";
 import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
@@ -151,7 +154,12 @@ import { cardTitle } from "./tool-call-model.js";
 import { INERT_LINK_CLASS, TranscriptWords } from "./transcript-blocks.js";
 import type { AgentsControl } from "./use-agents.js";
 import { opensAsLink } from "./use-open-link.js";
-import { type PendingInboxReply, pendingReplyOn, type TaskInboxControl } from "./use-task-inbox.js";
+import {
+  type InboxImageReads,
+  type PendingInboxReply,
+  pendingRepliesOn,
+  type TaskInboxControl,
+} from "./use-task-inbox.js";
 
 /**
  * inbox-pane.tsx -- one inbox item at reading size: a comment thread under the item's title, the agent's messages and what they ask, and the answers given in place or as they were given.
@@ -195,8 +203,7 @@ import { type PendingInboxReply, pendingReplyOn, type TaskInboxControl } from ".
  * its skills, and its microphone (`inbox-answer-box.tsx`), flowing at the
  * thread's end rather than docked under it, and a notice's Send reads "Got
  * it" until a word is written. The draft reply ends a settled item's
- * thread too, the next item that needs the developer docked under the
- * board. The board is a log, as an agent's transcript is: each item opens
+ * thread too. The board is a log, as an agent's transcript is: each item opens
  * at its newest message, the draft reply just over the board's foot, and
  * keeps to it as messages land while the reader is there; scrolled up, the
  * transcript's way back to the newest line floats over the foot; and the
@@ -359,10 +366,11 @@ function DraftReply({
 const SENDING = "Sending";
 
 /**
- * The reader's plain reply on its way, as the thread's last message before
- * the draft reply: drawn as the reader's own message is, its files going
- * up, and "Sending" at its head's end, until the item holds it, when the
- * message it became stands in its place.
+ * One of the reader's plain replies on their way, which stand as the
+ * thread's last messages before the draft reply, in the order sent: drawn
+ * as the reader's own message is, its files going up, and "Sending" at its
+ * head's end, until the item holds it, when the message it became stands in
+ * its place.
  */
 function PendingReply({
   readerId,
@@ -560,7 +568,7 @@ function AnsweredMarker(): React.JSX.Element {
  * controls as it offered them (`HeldControls`), stepped back to the muted
  * ink (`SteppedBack`), nothing picked and taking nothing, so what it used to
  * ask still reads in the thread and never as an answer, then `marker`, the
- * small pill saying what became of it. An `answer` of words
+ * small pill saying what became of it, where one says it. An `answer` of words
  * alone, which has no controls, ends with the pill alone, as does a to-do
  * naming no steps, whose one step was the item's title as it stood then,
  * which a later post may have renamed.
@@ -573,8 +581,9 @@ function HeldAsk({
   ask: InboxKnownAsk;
   /** The item's title, which stands as the one step of a to-do that names none. */
   title: string;
-  marker: React.JSX.Element;
-}): React.JSX.Element {
+  /** What became of it; none where the thread says so in a line of its own (`ResolvedEvent`). */
+  marker: React.JSX.Element | null;
+}): React.JSX.Element | null {
   // A to-do naming no steps draws the item's title as its one step, and a later post may have renamed the item since, so the title it drew then is not known.
   if (!hasControls(ask) || (ask.type === INBOX_ASK.DO && ask.steps.length === 0)) return marker;
   return (
@@ -619,29 +628,77 @@ function ReplacedMarker({
 }
 
 /**
- * What ends a withdrawn ask's message: the pill saying it was withdrawn, or
- * who closed the item without answering while the close stands, and why its
- * agent took it back as a muted sentence under the pill, so a long why
- * reads as words rather than wrapping inside it.
+ * Whether a member resolved the item without an answer while that close
+ * stands, as its row's card says it (`inboxSettledStanding`), which the
+ * thread says in a line of its own among its messages (`ResolvedEvent`).
+ */
+function resolvedByMember(item: InboxItem): boolean {
+  return inboxSettledStanding(item) === INBOX_SETTLED_STANDING.RESOLVED;
+}
+
+/**
+ * What ends a withdrawn ask's message: the pill saying it was withdrawn,
+ * and why its agent took it back as a muted sentence under the pill, so a
+ * long why reads as words rather than wrapping inside it. Where no reason
+ * was said a member closed the item without answering, which the thread's
+ * own line says while the close stands (`ResolvedEvent`), so the pill says
+ * so only where that line is not drawn.
  */
 function WithdrawnMarker({
-  item,
+  resolved,
   reason,
 }: {
-  item: InboxItem;
+  /** Whether a member resolved the item without an answer while that close stands (`resolvedByMember`). */
+  resolved: boolean;
   reason: string | undefined;
-}): React.JSX.Element {
-  const closer = usePerson(item.closedBy);
+}): React.JSX.Element | null {
+  if (reason === undefined && resolved) return null;
   return (
     <div
       className="inbox-ask-withdrawn flex min-w-0 flex-col items-start gap-tight-gap"
       data-inbox-settled="withdrawn"
     >
       <Badge>
-        <WithdrawnWords reason={reason} closer={item.closedBy === undefined ? undefined : closer} />
+        <WithdrawnWords reason={reason} />
       </Badge>
       <WithdrawnWhy reason={reason} />
     </div>
+  );
+}
+
+/**
+ * Where the line saying a member resolved the item stands among its
+ * messages: after the last one written by the time of the close, since a
+ * settled item still takes messages, or at the thread's end where that time
+ * is not known; -1 before every message read, and none where no member's
+ * close stands.
+ */
+function resolvedAfter(item: InboxItem, thread: readonly InboxMessage[]): number | undefined {
+  if (!resolvedByMember(item)) return undefined;
+  const settled = item.settledAt;
+  if (settled === undefined) return thread.length - 1;
+  return thread.findLastIndex((message) => message.createdAt <= settled);
+}
+
+/** What a member resolving the item says after their name. */
+const RESOLVED_IT = "resolved this without an answer";
+
+/**
+ * A member resolving the item without an answer, as a line of the thread
+ * where they did (`resolvedAfter`), drawn as a plan comment's "resolved this" is: their
+ * face on the gutter's line, their name, what they did, and when.
+ */
+function ResolvedEvent({ item, now }: { item: InboxItem; now: number }): React.JSX.Element {
+  const closer = usePerson(item.closedBy);
+  return (
+    <InboxComment
+      kind={COMMENT.CLOSED}
+      author={commentAuthor(closer)}
+      nameRef={<ActorRef actor={closer} nameOnly />}
+      said={RESOLVED_IT}
+      at={item.settledAt}
+      now={now}
+    />
   );
 }
 
@@ -668,17 +725,22 @@ function AskMarker({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element | 
  * a replaced ask, no card, its controls as it offered them, stepped back,
  * over a small marker saying a newer question, or message, replaced it
  * (`HeldAsk`); for a withdrawn one the same, over a marker saying so and
- * why, or who closed the item; and an ask this build does not know a card naming a
- * newer Luke.
+ * why, or with none where a member's close stands, which the thread's own
+ * line says (`ResolvedEvent`); and an ask this build does not know a card
+ * naming a newer Luke.
  */
 function AskBox({
-  item,
+  title,
+  resolved,
   message,
   ask,
   thread,
   waitingOn,
 }: {
-  item: InboxItem;
+  /** The item's title, as `cardTitle` reads it. */
+  title: string;
+  /** Whether a member resolved the item without an answer while that close stands (`resolvedByMember`). */
+  resolved: boolean;
   message: InboxMessage;
   ask: InboxReadAsk;
   thread: readonly InboxMessage[];
@@ -701,7 +763,7 @@ function AskBox({
     return (
       <HeldAsk
         ask={ask}
-        title={cardTitle(item.title)}
+        title={title}
         marker={<ReplacedMarker message={message} thread={thread} />}
       />
     );
@@ -710,8 +772,8 @@ function AskBox({
     return (
       <HeldAsk
         ask={ask}
-        title={cardTitle(item.title)}
-        marker={<WithdrawnMarker item={item} reason={ask.withdrawnReason} />}
+        title={title}
+        marker={<WithdrawnMarker resolved={resolved} reason={ask.withdrawnReason} />}
       />
     );
   }
@@ -760,23 +822,35 @@ const NO_TEXT_LABELS: ReadonlySet<string> = new Set();
  * question's are and a member's as a sent message's, and the files it
  * carried after them, a picture its words draw standing there alone;
  * an agent's message that asks ends with its ask's box, a marker alone
- * while it waits, until it is answered.
+ * while it waits, until it is answered. It is drawn again only where it is
+ * handed another prop (`memo`), each the part of the item it draws, so a
+ * change to the item that leaves the message as it was, as marking it read
+ * does, draws none of the thread's messages again.
  */
-function ThreadMessage({
-  item,
+const ThreadMessage = memo(function ThreadMessage({
+  itemId,
+  title,
+  threadAddressedTo,
+  resolved,
   message,
   thread,
   by,
   now,
-  control,
+  images,
   waitingOn,
 }: {
-  item: InboxItem;
+  itemId: string;
+  /** The item's title, as `cardTitle` reads it. */
+  title: string;
+  /** The member the item's agent addressed its thread to (`inboxAddressedTo`), which an open ask from before messages kept their own addressee is addressed to. */
+  threadAddressedTo: InboxItem["waitsOn"];
+  /** Whether a member resolved the item without an answer while that close stands (`resolvedByMember`). */
+  resolved: boolean;
   message: InboxMessage;
   thread: readonly InboxMessage[];
   by: ItemAgent;
   now: number;
-  control: TaskInboxControl;
+  images: InboxImageReads;
   waitingOn: InboxItem["startedBy"];
 }): React.JSX.Element {
   const writer = useMessageWriter(message, by);
@@ -784,7 +858,7 @@ function ThreadMessage({
   // Note that an open ask from before messages kept their own addressee is addressed as its thread is.
   const addressedTo =
     message.addressedTo ??
-    (message.ask?.status === INBOX_ASK_STATUS.OPEN ? inboxAddressedTo(item) : undefined);
+    (message.ask?.status === INBOX_ASK_STATUS.OPEN ? threadAddressedTo : undefined);
   const answered = answers === undefined ? undefined : answeredAsk(thread, answers);
   return (
     <InboxComment
@@ -797,7 +871,7 @@ function ThreadMessage({
       trailing={addressedTo === undefined ? undefined : <AddressedTo to={addressedTo} />}
     >
       {answers === undefined ? null : answered !== undefined && knownAsk(answered) ? (
-        <AnsweredCard ask={answered} title={cardTitle(item.title)} answers={answers} />
+        <AnsweredCard ask={answered} title={title} answers={answers} />
       ) : (
         <>
           {/* Where the thread read no longer carries the ask, or this build does not know it, the answer is its stamp and its values listed. */}
@@ -805,10 +879,11 @@ function ThreadMessage({
           <AnswerValues values={answers.values ?? []} texts={NO_TEXT_LABELS} />
         </>
       )}
-      <MessageWords itemId={item.id} message={message} images={control} />
+      <MessageWords itemId={itemId} message={message} images={images} />
       {message.ask === undefined ? null : (
         <AskBox
-          item={item}
+          title={title}
+          resolved={resolved}
           message={message}
           ask={message.ask}
           thread={thread}
@@ -817,7 +892,7 @@ function ThreadMessage({
       )}
     </InboxComment>
   );
-}
+});
 
 /** No groups over the item's own. */
 const NO_LEAD: readonly MenuAction[][] = [];
@@ -1111,6 +1186,8 @@ export interface InboxNewThread {
   readonly channelOf: (item: InboxItem) => Channel | undefined;
   /** The workspace whose channels those are, whose members name a channel's maker on its card. */
   readonly workspaceId: string | undefined;
+  /** Opens a channel, as its row in the sidebar does, from its chip. */
+  readonly onOpenChannel: (channelId: string) => void;
   /** Starts a thread with the item's agent, in the item's channel, and opens it; answers why it did not start, or nothing once it did. */
   readonly onStart: (item: InboxItem, start: NewThreadStart) => Promise<string | undefined>;
 }
@@ -1118,7 +1195,9 @@ export interface InboxNewThread {
 /**
  * The box's new thread for one item: the item's agent's chip, wearing its
  * tile as a mention of the agent does, and its channel's chip, each hanging
- * its card and opening nothing, since a press on the checkbox's words ticks it.
+ * its card and opening what it names, as a chip does elsewhere. Note that a
+ * chip is a button, so its press opens it rather than ticking the checkbox
+ * whose words it stands in.
  */
 function answerNewThread(offer: InboxNewThread, item: InboxItem, by: ItemAgent): AnswerNewThread {
   const { name, tile } = by.subject;
@@ -1130,6 +1209,7 @@ function answerNewThread(offer: InboxNewThread, item: InboxItem, by: ItemAgent):
         glyph={<ActorMark actor={tile} size={ACTOR_SIZE.INLINE} />}
         label={name}
         card={<AgentCard subject={by.subject} models={by.models} />}
+        onPress={by.onOpen}
       />
     ),
     channel:
@@ -1139,6 +1219,7 @@ function answerNewThread(offer: InboxNewThread, item: InboxItem, by: ItemAgent):
           glyph={<GLYPH.CHANNEL />}
           label={channel.name}
           card={<ChannelCard channel={channel} workspaceId={offer.workspaceId} />}
+          onPress={() => offer.onOpenChannel(channel.id)}
         />
       ),
     onStart: (start) => offer.onStart(item, start),
@@ -1267,11 +1348,9 @@ function PhoneHolder({
 /**
  * One item at reading size, as a comment thread: under the pane's crumbs,
  * the item's title alone as the thread's subject, then every message of
- * its thread, oldest first, a plain reply of the reader's on its way after
- * them (`PendingReply`), and the reader's draft reply at its end, the
- * open ask's controls standing in it. Once the item is settled, the next
- * item that needs the developer is offered under the board
- * (`inbox-pager.tsx`).
+ * its thread, oldest first, the reader's plain replies on their way after
+ * them, in the order sent (`PendingReply`), and the reader's draft reply at
+ * its end, the open ask's controls standing in it.
  * Where the item stands alone, the whole Inbox wide, the crumbs follow a
  * way back to the list (`inbox-columns.ts`), its tooltip naming Back's
  * chord, which goes back as Escape does, and the bar ends in the pager,
@@ -1286,7 +1365,6 @@ export function InboxPane({
   hidden,
   onBack,
   pager,
-  next,
   mentions,
   phone,
   channelName,
@@ -1305,8 +1383,6 @@ export function InboxPane({
   onBack: (() => void) | undefined;
   /** Where the item stands in the list and the steps either side, drawn at the bar's end where the item stands alone among others. */
   pager: InboxPager | undefined;
-  /** The next item that needs the developer, offered over the box once the item is settled. */
-  next: InboxNext | undefined;
   /** What the box's `@` offers where the page around the pane hands nothing, as the window's Inbox does; the page's own otherwise. */
   mentions?: TaskMentionsValue | undefined;
   /**
@@ -1333,15 +1409,32 @@ export function InboxPane({
   const phoneHead = phone !== undefined && onBack !== undefined;
   // An open ask waits on its task's assignee, else whoever started its agent, as the list says, though any member may answer it.
   const waitingOn = readersItem(item, readerId) ? undefined : inboxWaitsOn(item);
-  const by: ItemAgent = {
-    subject: agentSubject(agents, item.agentId, NOTHING_HELD, false),
-    models: agents.models,
-    onOpen: () => doors.onOpenAgent(item.agentId),
-  };
+  // Note that the agent and the pictures are handed to the thread's messages as the same objects while they say the same, so a message is drawn again only where it moved (`ThreadMessage`).
+  const onOpenAgent = useSteadyDoor(() => doors.onOpenAgent(item.agentId));
+  const { agents: listedAgents, archived, models, me, pullRequests } = agents;
+  const by: ItemAgent = useMemo(
+    () => ({
+      subject: agentSubject(
+        { agents: listedAgents, archived, models, me, pullRequests },
+        item.agentId,
+        NOTHING_HELD,
+        false,
+      ),
+      models,
+      onOpen: onOpenAgent,
+    }),
+    [listedAgents, archived, models, me, pullRequests, item.agentId, onOpenAgent],
+  );
+  const { images: pictures, onImage, onRetryImage } = control;
+  const images: InboxImageReads = useMemo(
+    () => ({ images: pictures, onImage, onRetryImage }),
+    [pictures, onImage, onRetryImage],
+  );
   const open = item.status === INBOX_STATUS.OPEN;
   const draft = control.draftOf(item);
   const thread = item.thread ?? NO_MESSAGES;
-  const pending = pendingReplyOn(control.pendingReplies, item);
+  const pending = pendingRepliesOn(control.pendingReplies, item);
+  const resolved = resolvedAfter(item, thread);
   useOptionNumbers(pane, item, draft, control, open ? numberedPickOf(thread) : undefined);
   const formText: FormTextDoors = {
     self: item.agentId,
@@ -1471,12 +1564,7 @@ export function InboxPane({
             className={`inbox-board ${LOG_OVER_COMPOSER_CLASS} ph-no-capture flex flex-col pt-section-gap`}
           >
             {/* The item's words are drawn as documents: its own pictures read through the Inbox, and a link alone on its line as its card. */}
-            <ItemWords
-              itemId={item.id}
-              workspaceId={workspaceId}
-              images={control}
-              code={doors.code}
-            >
+            <ItemWords itemId={item.id} workspaceId={workspaceId} images={images} code={doors.code}>
               <Subject item={item} heading={setHeading} first={phoneHead} />
               <Stack
                 as={LAYOUT_ELEMENT.OL}
@@ -1484,26 +1572,31 @@ export function InboxPane({
                 className={INBOX_THREAD}
                 aria-label="Messages"
               >
+                {resolved === -1 ? <ResolvedEvent item={item} now={now} /> : null}
                 {thread.map((message, at) => (
                   <Fragment key={message.id}>
                     <ThreadMessage
-                      item={item}
+                      itemId={item.id}
+                      title={cardTitle(item.title)}
+                      threadAddressedTo={inboxAddressedTo(item)}
+                      resolved={resolved !== undefined}
                       message={message}
                       thread={thread}
                       by={by}
                       now={now}
-                      control={control}
+                      images={images}
                       waitingOn={waitingOn}
                     />
                     {/* The first message always stands, so the line saying earlier ones are cut follows it. */}
                     {at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ ? (
                       <EarlierMessages by={by} />
                     ) : null}
+                    {at === resolved ? <ResolvedEvent item={item} now={now} /> : null}
                   </Fragment>
                 ))}
-                {pending === undefined ? null : (
-                  <PendingReply readerId={readerId} reply={pending} now={now} />
-                )}
+                {pending.map((reply) => (
+                  <PendingReply key={reply.key} readerId={readerId} reply={reply} now={now} />
+                ))}
                 {draftReply}
               </Stack>
             </ItemWords>
@@ -1518,7 +1611,6 @@ export function InboxPane({
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
-        {open || next === undefined ? null : <InboxNextUp next={next} />}
       </Fill>
     </section>
   );

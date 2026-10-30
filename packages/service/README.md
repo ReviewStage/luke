@@ -569,8 +569,8 @@ GitHub (`https://api.githubcopilot.com/mcp/x/all`, every toolset), Granola
 (`https://mcp.notion.com/mcp`), PostHog (`https://mcp.posthog.com/mcp?mode=tools`, each tool by its own
 name rather than its default single `exec`),
 Sentry (`https://mcp.sentry.dev/mcp`), Slack (`https://mcp.slack.com/mcp`),
-Supabase (`https://mcp.supabase.com/mcp`), Vercel (`https://mcp.vercel.com`),
-and Y Combinator's Bookface (`https://api.ycombinator.com/v1/mcp`). What a
+Stripe (`https://mcp.stripe.com`), Supabase (`https://mcp.supabase.com/mcp`),
+Vercel (`https://mcp.vercel.com`), and Y Combinator's Bookface (`https://api.ycombinator.com/v1/mcp`). What a
 grant can do is still the provider's to bound: the scopes its connector asks
 for, and the boxes the developer leaves ticked on the provider's own consent
 page. Executor bounds it further by its own policy on each app's tools: a
@@ -811,6 +811,7 @@ vercel connect create mcp.executor.sh --name executor          # Executor; corre
 vercel connect create mcp.linear.app --name linear             # Linear; prints the connector UID
 vercel connect create mcp.notion.com --name notion             # Notion
 vercel connect create mcp.sentry.dev --name sentry             # Sentry
+vercel connect create mcp.stripe.com --name stripe             # Stripe; asks for its scope below
 vercel connect create granola --name granola                   # Granola
 vercel connect create mcp.mercury.com --name luke-mercury      # Mercury, whose clients' names may not begin with "Mercury"
 # Neon: an OAuth connector over a client registered by hand, below
@@ -831,8 +832,9 @@ target rather than by address. A connector created this way asks for no
 scopes, and the provider grants its own default, which is enough for
 Linear, Notion, Sentry, Granola, and Vercel. Mercury grants a write scope,
 and a refresh token (`offline_access`), only when asked; Y Combinator's
-server asks for `mcp:access`; and PostHog's and Supabase's granular scopes
-are better asked for in full than left to a default. Those four connectors
+server asks for `mcp:access` and Stripe's for `mcp`; and PostHog's and
+Supabase's granular scopes are better asked for in full than left to a
+default. Those five connectors
 ask for every scope their server publishes (`scopes_supported` in its
 `/.well-known/oauth-protected-resource`), set on the connector's
 `data.userAuthorization.scopes`:
@@ -856,7 +858,17 @@ A grant is then bounded by what the developer allows on the provider's
 consent page alone. Mercury's `transactions:request` and `transfers:request`
 scopes request a payment or transfer that an approver still confirms in
 Mercury. Y Combinator's server serves only accounts YC has enabled MCP
-access for.
+access for. Stripe's consent page grants one or more live accounts and
+sandboxes, each with its own permissions, and an administrator can turn MCP
+access off for the whole Stripe team; a refund or a movement of money
+answers the agent with a link for the developer to approve it in Stripe's
+Dashboard first (https://docs.stripe.com/mcp). Stripe's authorization
+server (`https://access.stripe.com/mcp`) takes public clients alone
+(`token_endpoint_auth_method` `none`, PKCE with S256) and publishes no
+client ID metadata document support; should the client Connect registers
+fail there, a public client is registered by hand at
+`https://access.stripe.com/mcp/oauth2/register` and the connector PATCHed to
+it, as Granola's is below.
 
 **Neon's connector.** Neon's registration endpoint refuses a client that
 does not name its `response_types`, which Connect's registration leaves
@@ -950,8 +962,8 @@ again straight through connects.
 Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GRANOLA_CONNECTOR_UID`,
 `LINEAR_CONNECTOR_UID`, `MERCURY_CONNECTOR_UID`, `NEON_CONNECTOR_UID`,
 `NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
-`SLACK_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`, `VERCEL_CONNECTOR_UID`,
-`YCOMBINATOR_CONNECTOR_UID`) to that UID in the `luke-web` project for
+`SLACK_CONNECTOR_UID`, `STRIPE_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`,
+`VERCEL_CONNECTOR_UID`, `YCOMBINATOR_CONNECTOR_UID`) to that UID in the `luke-web` project for
 production, preview, and development. The web and `dev` are services of that
 one project (the root `vercel.json`'s `services`), so its variables and the
 connector's link reach both, which matters because the agents read
@@ -1047,8 +1059,8 @@ allowlist variable beside its connector's (`<PROVIDER>_ALLOWED_ACCOUNTS`:
 `MERCURY_ALLOWED_ACCOUNTS`, `NEON_ALLOWED_ACCOUNTS`,
 `NOTION_ALLOWED_ACCOUNTS`, `POSTHOG_ALLOWED_ACCOUNTS`,
 `SENTRY_ALLOWED_ACCOUNTS`, `SLACK_ALLOWED_ACCOUNTS`,
-`SUPABASE_ALLOWED_ACCOUNTS`, `VERCEL_ALLOWED_ACCOUNTS`,
-`YCOMBINATOR_ALLOWED_ACCOUNTS`): comma-separated entries, each `@domain.com` for
+`STRIPE_ALLOWED_ACCOUNTS`, `SUPABASE_ALLOWED_ACCOUNTS`,
+`VERCEL_ALLOWED_ACCOUNTS`, `YCOMBINATOR_ALLOWED_ACCOUNTS`): comma-separated entries, each `@domain.com` for
 every account whose email is at that domain, or one exact email, matched
 without regard to case against the email on the account's user row.
 Unset or empty, the provider is offered to every account. The list fails
@@ -1113,18 +1125,20 @@ call and so on its own key), Luke's own `read_web_page`
 (`public-research.ts`: refusing any address off the public internet), and two of Luke's own: `delegate`, the hand-off to a worker (below), and
 `edit_plan` (`src/agents/coder-host/plan-edit.ts`), which takes notes
 (`@luke/features/plan-template`'s `planNotesSchema`)
-into the agent's plan through the plan's one write (`plan-notes.ts`): an open
+into the plan of the task the call names, the agent's own or any other of
+its workspace, through the plan's one write (`plan-notes.ts`): an open
 question the agent met with the assumption it goes on under, a fact it
 corrected in the code, a decision it made. The save is journaled on the task's
 row (`task.agent_edits`, the last fifty, the agent's id and its notes as
 taken) and named from the agent's row at read time, so the window's "Updated
 by" line and the "recent edits by agents" every agent on the task
 is handed say what the row says now, and a turn may take only so many
-notes. `edit_plan` and
-`show_page` resolve at each turn's start (`tool-set.ts`'s `taskToolsOf`):
-an agent on no plan, as an automation's run starts one, is offered
-neither, and one handed a prompt on a plan only `show_page`, so no agent is
-offered a tool its every call would refuse.
+notes. Every agent is offered `edit_plan`, `show_page`, `look_at_picture`,
+and the comment tools, one on no task among them, as an automation's run
+starts one: its pages stand on the agent itself, a look names its plan by
+the picture's address, and every `edit_plan` and comment call names its
+task, any of its workspace, an operator's change held to its member's own
+tasks (`steward.ts`).
 Beside them stand
 the agent tools (`src/agents/agent-tools.ts`): `list_agents`, every other agent on
 any task and by any member, each with its task, narrowed to one task or its

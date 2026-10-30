@@ -4,6 +4,8 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import {
   AttentionMark,
   AVATAR_SIZE,
+  BLOCKED_WORDS,
+  BlockedMark,
   CountParts,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -11,6 +13,7 @@ import {
   HoverCardList,
   HoverCardRow,
   HoverCardRule,
+  ListRowCount,
   linesCount,
   TaskAgentsMark,
   TaskPriorityMark,
@@ -20,7 +23,8 @@ import {
   Tooltip,
 } from "@luke/ui";
 import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
-import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
+import { GLYPH } from "@luke/ui/icons";
+import { subTaskCount, subTasksOf, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { repositoryPageUrl } from "@luke/ui/tasks-model";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { useCreator, useMemberDirectory, usePerson } from "../member-directory.js";
@@ -54,7 +58,9 @@ import { WorkspaceRef } from "./workspace-ref.js";
  * repository, and how long ago it was updated under the name, and its
  * priority's mark and its assignee's face in the corner, icons alone, each
  * saying its words to a screen reader and to a pointer resting on it; it
- * only says where the task stands, so none of them is a picker. Then a row for each of its
+ * only says where the task stands, so none of them is a picker. Then where it
+ * stands among other tasks (`TaskRelations`): the task it is part of, its
+ * sub-tasks, and that it is blocked. Then a row for each of its
  * agents, drawn as its tab draws it: its harness's mark wearing where it
  * stands, its tab's label, and a failure's mark at its end, with no word for where it stands, since no
  * agent anywhere else in the window says one. Then a row for each of its
@@ -232,6 +238,111 @@ export function PullRequestLine({
   );
 }
 
+/** The tasks a card reads its relations from where none are handed. */
+const NO_TASKS: readonly TaskSummary[] = [];
+
+/** One task of the card's relations, as a row: its status's mark, its name, and its key, which opens it. */
+function RelatedTaskLine({
+  task,
+  workspaceName,
+  prefix,
+  onOpen,
+}: {
+  task: TaskSummary;
+  workspaceName: string | undefined;
+  /** What the row says before the name, muted: "Part of". */
+  prefix?: string | undefined;
+  onOpen: (() => void) | undefined;
+}): React.JSX.Element {
+  return (
+    <HoverCardRow
+      glyph={<TaskStatusMark status={statusOf(task)} />}
+      label={
+        <>
+          {prefix === undefined ? null : <span className="text-muted-foreground">{prefix} </span>}
+          {task.name}
+        </>
+      }
+      end={<TaskKey workspaceName={workspaceName} number={task.number} />}
+      onPress={onOpen}
+    />
+  );
+}
+
+/**
+ * What a card says of the task's place among others: the task it is part of,
+ * a header with how many of its sub-tasks are finished over a row for each,
+ * scrolling past a few rows' height, and, while another task it waits on is
+ * still open, that it is blocked. Each task named opens as a press on it
+ * does. Note that the summaries carry that a task is blocked and not which
+ * tasks block it, so the row says no blocker: naming one is a read the card
+ * does not make.
+ */
+function TaskRelations({
+  task,
+  parent,
+  subTasks,
+  workspaceName,
+  onOpenTask,
+}: {
+  task: TaskSummary;
+  parent: TaskSummary | undefined;
+  subTasks: readonly TaskSummary[];
+  workspaceName: string | undefined;
+  onOpenTask: ((taskId: string) => void) | undefined;
+}): React.JSX.Element {
+  const count = subTaskCount(subTasks);
+  return (
+    <>
+      {parent === undefined ? null : (
+        <div data-task-card-parent="">
+          <RelatedTaskLine
+            task={parent}
+            workspaceName={workspaceName}
+            prefix="Part of"
+            onOpen={onOpenTask === undefined ? undefined : () => onOpenTask(parent.id)}
+          />
+        </div>
+      )}
+      {subTasks.length === 0 ? null : (
+        <>
+          <HoverCardRow
+            glyph={<GLYPH.TASK />}
+            label="Sub-tasks"
+            end={
+              <ListRowCount
+                settled={count.finished}
+                total={count.total}
+                label={`${count.finished} of ${count.total} sub-tasks finished`}
+              />
+            }
+          />
+          <HoverCardList label="Sub-tasks">
+            {subTasks.map((subTask) => (
+              <li key={subTask.id} data-task-card-sub-task="">
+                <RelatedTaskLine
+                  task={subTask}
+                  workspaceName={workspaceName}
+                  onOpen={onOpenTask === undefined ? undefined : () => onOpenTask(subTask.id)}
+                />
+              </li>
+            ))}
+          </HoverCardList>
+        </>
+      )}
+      {task.blocked === true ? (
+        <div data-task-card-blocked="">
+          <HoverCardRow
+            look={HOVER_CARD_ROW_LOOK.DETAIL}
+            glyph={<BlockedMark aria-hidden="true" />}
+            label={BLOCKED_WORDS}
+          />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 /**
  * The card a sidebar task hangs: its status's mark and its name, wrapped to
  * two lines, its key, its repository, and how long ago it was updated under
@@ -255,6 +366,8 @@ export function TaskCard({
   readerId,
   focus,
   workspaceName,
+  related = NO_TASKS,
+  onOpenTask,
 }: {
   task: TaskSummary;
   /** The name of the task's workspace, which its key is read under; none where the window holds no such workspace, and the card's sub says no key. */
@@ -275,11 +388,21 @@ export function TaskCard({
   now: number | undefined;
   /** Opens the task on one of its agents' tabs. */
   onShowAgent: (agentId: string) => void;
+  /** Every task the window holds, which the card reads its parent and its sub-tasks from (`parentTaskId`). */
+  related?: readonly TaskSummary[];
+  /** Opens a task the card names, its parent or one of its sub-tasks; where none is handed they stand as text. */
+  onOpenTask?: ((taskId: string) => void) | undefined;
   /** The workspace the task's repository belongs to, where the reader may move it there, which the card names at its foot. */
   stranded?: Workspace | undefined;
 }): React.JSX.Element {
   const { members } = useMemberDirectory();
   const { agents: agentRows, pullRequests: pullRequestRows } = useTaskWork(task);
+  const parent =
+    task.parentTaskId === undefined || task.parentTaskId === task.id
+      ? undefined
+      : related.find((each) => each.id === task.parentTaskId);
+  const subTasks = subTasksOf(related, task.id);
+  const placed = parent !== undefined || subTasks.length > 0 || task.blocked === true;
   // Note that a task Luke or an agent made says so in a workspace of one too, where its member's own needs no saying.
   const creatorShown =
     (task.origin !== undefined || (shared ?? (members !== undefined && members.length > 1))) &&
@@ -302,6 +425,18 @@ export function TaskCard({
           <div data-task-card-focus="">
             <HoverCardRow glyph={focus.glyph} label={focus.words} />
           </div>
+        </>
+      )}
+      {focus !== undefined || !placed ? null : (
+        <>
+          <HoverCardRule />
+          <TaskRelations
+            task={task}
+            parent={parent}
+            subTasks={subTasks}
+            workspaceName={workspaceName}
+            onOpenTask={onOpenTask}
+          />
         </>
       )}
       {focus !== undefined || agentRows.length === 0 ? null : (
@@ -335,7 +470,7 @@ export function TaskCard({
       {/* Who made the task, and where its repository belongs, stand at the card's foot, under what is moving on it. */}
       {!creatorShown && stranded === undefined ? null : (
         <>
-          {focus !== undefined || agentRows.length > 0 || pullRequestRows.length > 0 ? (
+          {focus !== undefined || placed || agentRows.length > 0 || pullRequestRows.length > 0 ? (
             <HoverCardRule />
           ) : null}
           {creatorShown ? <CreatorDetail task={task} readerId={readerId} now={now} /> : null}
@@ -457,7 +592,10 @@ function sharedWorkspace(
  * Inbox's crumb. An agent's line opens the task on that agent's tab.
  */
 export function taskCardOf(
-  tasks: Pick<TasksControl, "repositories" | "onShowAgent" | "me" | "workspaces"> & {
+  tasks: Pick<
+    TasksControl,
+    "repositories" | "onShowAgent" | "onSelect" | "me" | "workspaces" | "tasks"
+  > & {
     readonly agents: Pick<TasksControl["agents"], "models">;
   },
   task: TaskSummary,
@@ -475,6 +613,8 @@ export function taskCardOf(
       models={tasks.agents.models ?? []}
       now={now}
       onShowAgent={(agentId) => tasks.onShowAgent(task.id, agentId)}
+      related={tasks.tasks}
+      onOpenTask={tasks.onSelect}
     />
   );
 }

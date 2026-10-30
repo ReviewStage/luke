@@ -28,8 +28,9 @@ import { beginTaskWork, createTask, finishTaskWork, updateTask } from "../task-s
  * An inbox item settles on its own once its reason is gone: its task moved
  * to Done or Canceled, by hand or by the finish, or its agent archived,
  * through the stores' public writes over a real dialect. Every open item of
- * the task or the agent closes with why and its ask stands withdrawn with
- * the same why; an item of another task, agent, or account stands open. The
+ * the task or the agent that holds an ask closes with why and its ask stands
+ * withdrawn with the same why; a notice of theirs, and an item of another
+ * task, agent, or account, stands open. The
  * act's opposite, the agent brought back or a member moving the task off
  * Done or Canceled, opens again exactly the items that act settled, its asks
  * open again; Luke reopening the task as a turn starts on it opens nothing.
@@ -44,14 +45,14 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A member's task with an agent on it holding a question and a notice open. */
+/** A member's task with an agent on it holding a question and a notice open: the question as its items, which a settle closes, and the notice beside them, which it leaves. */
 const openTaskWithItems = (userId: string, organizationId: string) =>
   Effect.gen(function* () {
     const { id: taskId } = yield* createTask(userId, { organizationId });
     const agentId = yield* openTaskAgent(userId, organizationId, taskId);
     const question = yield* openInboxItem(userId, organizationId, taskId, agentId, true);
     const notice = yield* openInboxItem(userId, organizationId, taskId, agentId, false);
-    return { taskId, agentId, items: [question, notice] };
+    return { taskId, agentId, items: [question], notice };
   });
 
 /** Where the item stands: its status, who closed it and why, and how each ask of its thread stands. */
@@ -106,7 +107,7 @@ const assertSettled = (itemIds: readonly string[], reason: string) =>
 
 it.layer(getTestDB())("an inbox item settling with its task", (it) => {
   it.effect(
-    "closes a task's open items when a member moves it to done or canceled, and no other task's or account's",
+    "closes a task's open questions when a member moves it to done or canceled, and no notice of its own or other task's or account's item",
     () =>
       Effect.gen(function* () {
         const dean = yield* openAccount;
@@ -125,6 +126,7 @@ it.layer(getTestDB())("an inbox item settling with its task", (it) => {
         yield* assertSettled(shipped.items, "Its task is done.");
         yield* assertSettled(dropped.items, "Its task was canceled.");
         yield* assertOpen([...working.items, ...theirs.items]);
+        yield* assertOpen([shipped.notice, dropped.notice]);
       }),
   );
 
@@ -157,7 +159,7 @@ it.layer(getTestDB())("an inbox item settling with its task", (it) => {
       }),
   );
 
-  it.effect("closes a task's open notices when Luke finishes its work", () =>
+  it.effect("leaves a task's open notices open when Luke finishes its work", () =>
     Effect.gen(function* () {
       const dean = yield* openAccount;
       const workspace = yield* openWorkspace(dean);
@@ -176,7 +178,7 @@ it.layer(getTestDB())("an inbox item settling with its task", (it) => {
       const notice = yield* openInboxItem(dean, workspace, taskId, agentId, false);
 
       assert.equal(yield* finishTaskWork(dean, taskId, () => Effect.succeed(true)), true);
-      yield* assertSettled([notice], "Its task is done.");
+      yield* assertOpen([notice]);
     }),
   );
 });
@@ -215,7 +217,7 @@ const ARCHIVES = [
 
 it.layer(getTestDB())("an inbox item settling with its agent", (it) => {
   it.effect.each(ARCHIVES)(
-    "$name closes the agent's open items and opens again only those, and no other agent's or account's",
+    "$name closes the agent's open questions and opens again only those, and no notice of its own or other agent's or account's item",
     ({ archive, unarchive }) =>
       Effect.gen(function* () {
         const dean = yield* openAccount;
@@ -232,7 +234,7 @@ it.layer(getTestDB())("an inbox item settling with its agent", (it) => {
 
         yield* archive(dean, archived.agentId);
         yield* assertSettled(archived.items, "Its agent was archived.");
-        yield* assertOpen([besides, ...theirs.items]);
+        yield* assertOpen([archived.notice, besides, ...theirs.items]);
 
         yield* unarchive(dean, archived.agentId);
         yield* assertOpen(archived.items);

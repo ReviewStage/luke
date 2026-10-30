@@ -417,10 +417,16 @@ test("the bar's buttons are one Tab stop, ←→ walking them", () => {
 function ChoosingCards({
   runs = false,
   off = [],
+  undrawn = [],
+  broughtIn = [],
 }: {
   runs?: boolean;
   /** The places whose cards are unavailable. */
   off?: readonly string[];
+  /** The places the region lists but draws no card for, as a run drawing only the rows near the view leaves them; the region is handed every place's order where any is. */
+  undrawn?: readonly string[];
+  /** Hears each place the region asks to be brought into view, which draws nothing here. */
+  broughtIn?: string[];
 }): React.JSX.Element {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [opened, setOpened] = useState<string[]>([]);
@@ -428,19 +434,21 @@ function ChoosingCards({
     createElement(
       "ul",
       runs ? selectionRun() : null,
-      names.map((name) =>
-        createElement(
-          "li",
-          { key: name },
-          createElement(CardPress, {
-            selectKey: name,
-            selectBox: SELECT_BOX_PLACE.GUTTER,
-            disabled: off.includes(name),
-            onPress: () => setOpened((held) => [...held, name]),
-            children: name,
-          }),
+      names
+        .filter((name) => !undrawn.includes(name))
+        .map((name) =>
+          createElement(
+            "li",
+            { key: name },
+            createElement(CardPress, {
+              selectKey: name,
+              selectBox: SELECT_BOX_PLACE.GUTTER,
+              disabled: off.includes(name),
+              onPress: () => setOpened((held) => [...held, name]),
+              children: name,
+            }),
+          ),
         ),
-      ),
     );
   return createElement(
     Fragment,
@@ -454,6 +462,11 @@ function ChoosingCards({
     createElement(SelectionRegion, {
       id: "places",
       selection: { selected, onChange: setSelected },
+      order: undrawn.length === 0 ? undefined : PLACES,
+      bringIn: (key: string) => {
+        broughtIn.push(key);
+        return true;
+      },
       children: [
         createElement(Fragment, { key: "first" }, list(PLACES.slice(0, 2))),
         createElement(Fragment, { key: "rest" }, list(PLACES.slice(2))),
@@ -493,6 +506,52 @@ test("a region chooses its card presses across its lists: ⌘-click one, ⇧-cli
   expect(chosen()).toBe("");
   click("Inbox");
   expect(page.querySelector("[data-opened]")?.textContent).toBe("Inbox");
+});
+
+test("a region handed its order reaches the rows it draws no card for: ⇧-click runs across them, ⇧↓ brings one in, ⌘A chooses them", () => {
+  const broughtIn: string[] = [];
+  const page = draw(createElement(ChoosingCards, { undrawn: ["Board"], broughtIn }));
+  const card = (name: string) => {
+    const press = [...page.querySelectorAll<HTMLButtonElement>("[data-card-press]")].find(
+      (each) => each.textContent === name,
+    );
+    if (press === undefined) throw new Error(`no card for ${name}`);
+    return press;
+  };
+  const chosen = () => page.querySelector("[data-chosen]")?.textContent;
+
+  act(() => {
+    card("Tasks").dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }));
+  });
+  act(() => {
+    card("Automations").dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
+  });
+  expect(chosen()).toBe("Tasks,Board,Automations");
+
+  act(() => {
+    card("Tasks").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  act(() => {
+    card("Tasks").dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "ArrowDown",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+  expect(chosen()).toBe("Tasks,Board");
+  expect(broughtIn).toEqual(["Board"]);
+
+  act(() => {
+    card("Tasks").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "a", metaKey: true, bubbles: true, cancelable: true }),
+    );
+  });
+  expect(chosen()).toBe(PLACES.join(","));
 });
 
 test("a card's box and X on the card in hand each put it in and take it out, opening nothing", () => {

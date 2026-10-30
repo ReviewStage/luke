@@ -96,16 +96,28 @@ function rowChanges<Row extends object, Key extends string>(
   return [...gone, ...moved];
 }
 
+/** Each row `rowOf` read, by the stored row TanStack handed out, which it hands out again until the row moves. */
+const readRows = new WeakMap<object, object>();
+
 /**
  * A row as the collection holds it, without the virtual fields TanStack
  * reads it out with (`$synced`, `$origin`, and the rest) and without a key a
  * whole-row change left undefined, so it is the row as the read answered it.
+ * Note that a row read again while it stands is the very object read
+ * before, so a reader of a row that did not move holds the same object.
  */
 function rowOf<Row extends object>(stored: object): Row {
+  let read = readRows.get(stored);
+  if (read === undefined) {
+    read = Object.fromEntries(
+      Object.entries(stored).filter(
+        ([name, value]) => !name.startsWith("$") && value !== undefined,
+      ),
+    );
+    readRows.set(stored, read);
+  }
   // SAFETY: only the virtual fields and keys left undefined are dropped, neither of which a row of ours carries.
-  return Object.fromEntries(
-    Object.entries(stored).filter(([name, value]) => !name.startsWith("$") && value !== undefined),
-  ) as Row;
+  return read as Row;
 }
 
 /** Every row a collection, or a live query, shows now, what a standing write drew among them. */
@@ -113,6 +125,15 @@ export function rowsOf<Row extends object>(collection: {
   readonly toArray: readonly Row[];
 }): WithoutVirtualProps<Row>[] {
   return collection.toArray.map((stored) => rowOf<WithoutVirtualProps<Row>>(stored));
+}
+
+/** The row a collection shows under `key` now, what a standing write drew among them; none where it shows none. */
+export function rowAt<Row extends object, Key extends string>(
+  collection: RowCollection<Row, Key>,
+  key: Key,
+): WithoutVirtualProps<Row> | undefined {
+  const stored = collection.get(key);
+  return stored === undefined ? undefined : rowOf<WithoutVirtualProps<Row>>(stored);
 }
 
 /**
@@ -186,10 +207,11 @@ export interface AnsweredCollection<Row extends object, Key extends string> {
   readonly collection: RowCollection<Row, Key>;
   /**
    * Takes the rows the read answered, whole: one sync transaction writing
-   * each that moved, or none where nothing did. While a write on the
-   * collection stands, the transaction is held, and lands with its drop.
+   * each that moved, or none where nothing did, answering the keys it wrote.
+   * While a write on the collection stands, the transaction is held, and
+   * lands with its drop.
    */
-  readonly answer: (rows: readonly Row[]) => void;
+  readonly answer: (rows: readonly Row[]) => readonly Key[];
   /**
    * Takes what a write's own answer says of one row in the read's place,
    * where the read can confirm no write yet: the row as the read last
@@ -249,15 +271,18 @@ export function answeredCollection<Row extends object, Key extends string>(optio
       const key = options.getKey(row);
       if (!held.has(key)) taken(new Map(held).set(key, row));
     };
-    /** Takes the rows `next` holds as the synced ones, one transaction writing each that moved. */
-    function taken(next: ReadonlyMap<Key, Row>): void {
+    /** Takes the rows `next` holds as the synced ones, one transaction writing each that moved, answering their keys. */
+    function taken(next: ReadonlyMap<Key, Row>): readonly Key[] {
       const changes = rowChanges(held, next);
-      if (writer === undefined || changes.length === 0) return;
+      if (writer === undefined || changes.length === 0) return [];
       writer.begin();
       for (const change of changes) writer.write(change);
       // Note that the receipt is never awaited, since a commit held behind a standing write lands only once that write settles.
       writer.commit();
       held = next;
+      return changes.map((change) =>
+        change.type === "delete" ? change.key : options.getKey(change.value),
+      );
     }
     return { collection, answer, confirmRow, confirmGone, confirmNew };
   });

@@ -55,6 +55,8 @@ import {
   type AgentPullRequestReadParams,
   type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
+  type AgentQueueAnswerView,
+  type AgentQueueParams,
   type AgentRenameParams,
   type AgentReviewOptionsAnswerView,
   type AgentRewindParams,
@@ -90,6 +92,7 @@ import {
   agentPullRequestAnswerViewSchema,
   agentPullRequestViewedAnswerViewSchema,
   agentPullRequestWriteAnswerViewSchema,
+  agentQueueAnswerViewSchema,
   agentReviewOptionsAnswerViewSchema,
   agentTranscriptChangedSchema,
   agentTranscriptOlderAnswerSchema,
@@ -150,8 +153,6 @@ import {
   browserLiveMessageEventSchema,
 } from "@luke/features/browser-live-acts";
 import {
-  type ArchivedChannelsView,
-  archivedChannelsViewSchema,
   CHANNEL_CALL_FAILURE,
   type ChannelArchiveParams,
   type ChannelCreateParams,
@@ -159,19 +160,24 @@ import {
   type ChannelLookParams,
   type ChannelMoveParams,
   type ChannelMoveView,
-  type ChannelsArchivedParams,
-  type ChannelsChanged,
   type ChannelsFollowParams,
-  type ChannelsListParams,
   type ChannelsView,
   type ChannelThreadsParams,
   type ChannelThreadsView,
   type ChannelUnarchiveParams,
   channelMoveViewSchema,
-  channelsChangedSchema,
   channelsViewSchema,
   channelThreadsViewSchema,
 } from "@luke/features/channel-view";
+import {
+  HOST_PAIRING_CALL_FAILURE,
+  type HostPairingApproveView,
+  type HostPairingDenyView,
+  type HostPairingView,
+  hostPairingApproveViewSchema,
+  hostPairingDenyViewSchema,
+  hostPairingViewSchema,
+} from "@luke/features/host-pairing-view";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillContentView,
@@ -239,13 +245,14 @@ import {
   type TaskHistoryFollow,
   type TaskHistoryFollowed,
   type TaskPagesFollow,
-  type TaskPagesFollowed,
   type TasksBlockAnswer,
   type TasksBlockParams,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
   type TasksBrowserTabsParams,
+  type TasksChangeRelationAnswer,
+  type TasksChangeRelationParams,
   type TasksCommentActParams,
   type TasksCommentAnswer,
   type TasksCommentStartParams,
@@ -280,6 +287,8 @@ import {
   type TasksRevisionParams,
   type TasksRevisionsAnswer,
   type TasksRevisionsParams,
+  type TasksSetParentAnswer,
+  type TasksSetParentParams,
   type TasksSetRepositoryAnswer,
   type TasksSetRepositoryParams,
   type TasksSetStandingParams,
@@ -317,10 +326,10 @@ import {
   type TasksWriteSectionParams,
   taskBrowserTabsFollowedSchema,
   taskHistoryFollowedSchema,
-  taskPagesFollowedSchema,
   tasksBlockAnswerSchema,
   tasksBrowserTabOpenAnswerSchema,
   tasksBrowserTabsAnswerSchema,
+  tasksChangeRelationAnswerSchema,
   tasksCommentAnswerSchema,
   tasksCommentsAnswerSchema,
   tasksEditAnswerSchema,
@@ -337,6 +346,7 @@ import {
   tasksRepositoriesAnswerSchema,
   tasksRevisionAnswerSchema,
   tasksRevisionsAnswerSchema,
+  tasksSetParentAnswerSchema,
   tasksSetRepositoryAnswerSchema,
   tasksSkillsAnswerSchema,
   tasksStartAnswerSchema,
@@ -395,7 +405,15 @@ import {
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
-import type { AppAccessSlice, AppHolderInboxes, AppHostRead, AppInboxItems } from "./app-state.js";
+import type {
+  AppAccessSlice,
+  AppHolderInboxes,
+  AppHostRead,
+  AppInboxItems,
+  AppPages,
+  AppWorkspaceChannels,
+  SessionReplayState,
+} from "./app-state.js";
 import { type ThisMacHostStanding, thisMacHostStandingSchema } from "./contract/this-mac-host.js";
 import {
   type MacCommandAnswer,
@@ -417,7 +435,7 @@ import {
 export interface HostBootstrap {
   settings: AppSettings;
   account: AccountSnapshot;
-  sessionReplay: { permitted: boolean; accountId?: string };
+  sessionReplay: SessionReplayState;
   /** What the signed-in account may open in the app, as the host last read it. */
   access: AppAccessSlice;
 }
@@ -426,11 +444,6 @@ interface HostSettingsChange {
   settings: AppSettings;
   /** The opaque reporter whose write produced the change, so the relay can skip echoing it. */
   reporter?: string;
-}
-
-interface HostSessionReplay {
-  permitted: boolean;
-  accountId?: string;
 }
 
 export interface HostOperator {
@@ -506,6 +519,10 @@ export interface HostOperator {
   tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
   /** One block of a task added or taken away; the task's blocks as they then stand, or why they are unchanged. */
   tasksBlock(params: TasksBlockParams): Effect.Effect<TasksBlockAnswer>;
+  /** One task's parent set, or cleared with null; the parent as it then stands, or why it is unchanged. */
+  tasksSetParent(params: TasksSetParentParams): Effect.Effect<TasksSetParentAnswer>;
+  /** One relation of a task moved to another kind in one call; the task's relations as they then stand, or why they are unchanged. */
+  tasksChangeRelation(params: TasksChangeRelationParams): Effect.Effect<TasksChangeRelationAnswer>;
   /** The developer's edit of a task's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
   tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
   /** A window of a file of a task's repository, coloured; or why it is not shown. */
@@ -531,12 +548,12 @@ export interface HostOperator {
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
   /** One plan's pages, each by its newest version; or that the service did not answer. */
   tasksPages(params: TasksPagesParams): Effect.Effect<TasksPagesAnswer>;
-  /** One plan's pages followed from now until let go, heard through `onTaskPagesChanged`. */
+  /** One plan's or agent's pages held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onPagesChanged`. */
   tasksPagesFollow(scope: TaskPagesFollow): Effect.Effect<void>;
-  /** A followed plan's pages let go: nothing more is heard of them until they are followed again. */
+  /** One plan's or agent's pages let go by the windows: they stay followed among those let go lately until later ones push them out. */
   tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
-  /** A followed plan's pages as they now stand, each time they move while followed. */
-  onTaskPagesChanged(listener: (followed: TaskPagesFollowed) => void): () => void;
+  /** Every plan's or agent's pages the host holds for the windows, whole, each time any of them moves. */
+  onPagesChanged(listener: (held: AppPages) => void): () => void;
   /** One task's cloud Browser tabs followed from now until let go, heard through `onTaskBrowserTabsChanged`. */
   tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
   /** A followed task's Browser tabs let go: nothing more is heard of them until they are followed again. */
@@ -668,6 +685,12 @@ export interface HostOperator {
   hostsKeepInstallToken(tokenHash: string): Effect.Effect<HostInstallTokenAnswerView>;
   /** One of the account's install tokens revoked; done, or why not. */
   hostsRevokeInstallToken(id: string): Effect.Effect<HostDoneAnswerView>;
+  /** A box's pending pairing read by the code its link named; the box, or why not. */
+  hostsPairingRead(code: string): Effect.Effect<HostPairingView>;
+  /** A box's pending pairing approved by its code; the host it made, or why not. */
+  hostsPairingApprove(code: string): Effect.Effect<HostPairingApproveView>;
+  /** A box's pending pairing denied by its code; done, or why not. */
+  hostsPairingDeny(code: string): Effect.Effect<HostPairingDenyView>;
   /** One task's coding agents with their status; or why there is no list. */
   agentList(params: AgentListParams): Effect.Effect<AgentListAnswer>;
   /** One workspace's coding agents, newest started first, on one repository where one is named; or why there is no list. */
@@ -683,6 +706,7 @@ export interface HostOperator {
   /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
   agentRename(params: AgentRenameParams): Effect.Effect<AgentAgentAnswer>;
   agentServers(params: AgentServersParams): Effect.Effect<AgentAgentAnswer>;
+  agentQueue(params: AgentQueueParams): Effect.Effect<AgentQueueAnswerView>;
   /** One agent stopped; the agent as it then stands, or why it was not. */
   agentStop(params: AgentStopParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */
@@ -698,8 +722,6 @@ export interface HostOperator {
   ): Effect.Effect<AgentOperatorEnsureAnswerView>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   agentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
-  /** A workspace's open channels, each with what waits on the reader there and when they last looked; or why there are none. */
-  channelsList(params: ChannelsListParams): Effect.Effect<ChannelsView>;
   /** A channel made; the workspace's channels as they then stand, or why it was not made. */
   channelsCreate(params: ChannelCreateParams): Effect.Effect<ChannelsView>;
   /** A channel's name, purpose, or both edited; the workspace's channels as they then stand, or why it was not edited. */
@@ -708,20 +730,20 @@ export interface HostOperator {
   channelsArchive(params: ChannelArchiveParams): Effect.Effect<ChannelsView>;
   /** An archived channel opened again; the workspace's channels as they then stand, or why it stays archived. */
   channelsUnarchive(params: ChannelUnarchiveParams): Effect.Effect<ChannelsView>;
-  /** A workspace's archived channels, the latest archived first; or why there are none. */
-  channelsArchived(params: ChannelsArchivedParams): Effect.Effect<ArchivedChannelsView>;
   /** The reader's look at a channel stamped; the workspace's channels as they then stand. */
   channelsLook(params: ChannelLookParams): Effect.Effect<ChannelsView>;
   /** A page of a channel's threads the reader may read, oldest first; or why there are none. */
   channelsThreads(params: ChannelThreadsParams): Effect.Effect<ChannelThreadsView>;
   /** A thread moved into another open channel of its workspace; the thread as it then stands, or why it did not move. */
   channelsMove(params: ChannelMoveParams): Effect.Effect<ChannelMoveView>;
-  /** A workspace's channels followed from now until let go or signed out, heard through `onChannelsChanged`; following again starts over. */
+  /** A workspace's channels held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onWorkspaceChannelsChanged`. */
   channelsFollow(params: ChannelsFollowParams): Effect.Effect<void>;
-  /** A followed workspace's channels let go. */
+  /** A workspace's channels let go by the windows: they stay followed among those let go lately until later ones push them out. */
   channelsUnfollow(params: ChannelsFollowParams): Effect.Effect<void>;
-  /** Hears which of a followed workspace's channels moved, each time any does; answers the stop. */
-  onChannelsChanged(listener: (changed: ChannelsChanged) => void): () => void;
+  /** A held workspace's channels read again at once, as Try again asks. */
+  channelsRetry(params: ChannelsFollowParams): Effect.Effect<void>;
+  /** Every workspace's channels the host holds for the windows, whole, each time any of them moves. */
+  onWorkspaceChannelsChanged(listener: (held: AppWorkspaceChannels) => void): () => void;
   /** The account's automations, or one task's or one workspace's; or why there are none. */
   automationList(params: AutomationListParams): Effect.Effect<AutomationListView>;
   /** An automation made; the automation as the service kept it, or why it was not made. */
@@ -921,7 +943,7 @@ export interface HostOperator {
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onAccountAccessChanged(listener: (access: AppAccessSlice) => void): () => void;
-  onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
+  onSessionReplayChanged(listener: (replay: SessionReplayState) => void): () => void;
   onTasksChanged(listener: (view: TasksView) => void): () => void;
   /** The commands agents asked to run on this Mac that wait on the developer, whole, each time one is asked or answered. */
   onMacCommandAsksChanged(listener: (asks: readonly MacCommandAsk[]) => void): () => void;
@@ -1057,6 +1079,9 @@ function transcriptParams(transcript: AgentTranscriptKey): WireRecord {
 }
 
 const AGENT_UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
+
+/** A pairing's read, approve, or deny that reached no answer, as each of them answers one. */
+const PAIRING_UNANSWERED = { failure: HOST_PAIRING_CALL_FAILURE.UNANSWERED } as const;
 
 /** An automation call that reached no answer, as every automation method answers one. */
 const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
@@ -1451,13 +1476,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     tasksPagesFollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, scope)),
     tasksPagesUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, scope)),
-    onTaskPagesChanged: (listener) =>
+    onPagesChanged: (listener) =>
       on(
-        GATEWAY_EVENT.TASKS_PAGES_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(taskPagesFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
+        GATEWAY_EVENT.PAGES_CHANGED,
+        // Note that the held pages are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppPages>(payload) : undefined),
         listener,
       ),
     tasksBrowserTabsFollow: (scope) =>
@@ -1697,6 +1720,22 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.TASKS_BLOCK, { taskId: params.taskId, block: params.block }),
         answerOf(tasksBlockAnswerSchema, TASK_UNANSWERED),
       ),
+    tasksSetParent: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_SET_PARENT, {
+          taskId: params.taskId,
+          parentTaskId: params.parentTaskId,
+        }),
+        answerOf(tasksSetParentAnswerSchema, TASK_UNANSWERED),
+      ),
+    tasksChangeRelation: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_CHANGE_RELATION, {
+          taskId: params.taskId,
+          relation: params.relation,
+        }),
+        answerOf(tasksChangeRelationAnswerSchema, TASK_UNANSWERED),
+      ),
     tasksEdit: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_EDIT, { taskId: params.taskId, edit: params.edit }),
@@ -1755,6 +1794,21 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.HOSTS_REVOKE_INSTALL_TOKEN, { id }),
         answerOf(hostDoneAnswerViewSchema, AGENT_UNANSWERED),
+      ),
+    hostsPairingRead: (code) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.HOSTS_PAIRING_READ, { code }),
+        answerOf(hostPairingViewSchema, PAIRING_UNANSWERED),
+      ),
+    hostsPairingApprove: (code) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.HOSTS_PAIRING_APPROVE, { code }),
+        answerOf(hostPairingApproveViewSchema, PAIRING_UNANSWERED),
+      ),
+    hostsPairingDeny: (code) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.HOSTS_PAIRING_DENY, { code }),
+        answerOf(hostPairingDenyViewSchema, PAIRING_UNANSWERED),
       ),
     agentWorkspaceList: (params) =>
       Effect.map(
@@ -1824,6 +1878,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
       ),
+    agentQueue: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AGENTS_QUEUE, {
+          agentId: params.agentId,
+          change: params.change,
+        }),
+        answerOf(agentQueueAnswerViewSchema, AGENT_UNANSWERED),
+      ),
     agentStop: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_STOP, { agentId: params.agentId }),
@@ -1874,11 +1936,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_PAGE, { agentId: params.agentId }),
         answerOf(agentPageAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    channelsList: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHANNELS_LIST, params),
-        answerOf(channelsViewSchema, CHANNEL_UNANSWERED),
-      ),
     channelsCreate: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CHANNELS_CREATE, params),
@@ -1893,11 +1950,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CHANNELS_UNARCHIVE, params),
         answerOf(channelsViewSchema, CHANNEL_UNANSWERED),
-      ),
-    channelsArchived: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHANNELS_ARCHIVED, params),
-        answerOf(archivedChannelsViewSchema, CHANNEL_UNANSWERED),
       ),
     channelsArchive: (params) =>
       Effect.map(
@@ -1923,13 +1975,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       fire(client.call(GATEWAY_METHOD.CHANNELS_FOLLOW, { workspaceId: params.workspaceId })),
     channelsUnfollow: (params) =>
       fire(client.call(GATEWAY_METHOD.CHANNELS_UNFOLLOW, { workspaceId: params.workspaceId })),
-    onChannelsChanged: (listener) =>
+    channelsRetry: (params) =>
+      fire(client.call(GATEWAY_METHOD.CHANNELS_RETRY, { workspaceId: params.workspaceId })),
+    onWorkspaceChannelsChanged: (listener) =>
       on(
-        GATEWAY_EVENT.CHANNELS_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(channelsChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
+        GATEWAY_EVENT.WORKSPACE_CHANNELS_CHANGED,
+        // Note that the held channels are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppWorkspaceChannels>(payload) : undefined),
         listener,
       ),
     automationList: (params) =>
@@ -2550,11 +2602,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     onSessionReplayChanged: (listener) =>
       on(
         GATEWAY_EVENT.SESSION_REPLAY_CHANGED,
-        (payload): HostSessionReplay | undefined =>
+        (payload): SessionReplayState | undefined =>
           isRecord(payload) && isWireBoolean(payload.permitted)
             ? {
                 permitted: payload.permitted,
                 ...(isWireString(payload.accountId) ? { accountId: payload.accountId } : undefined),
+                ...(isWireString(payload.name) ? { name: payload.name } : undefined),
+                ...(isWireString(payload.email) ? { email: payload.email } : undefined),
               }
             : undefined,
         listener,

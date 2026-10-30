@@ -198,6 +198,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         credential: account.credential,
       }),
+      inbox: agents.inbox,
     });
     const integrations = yield* composeIntegrations({
       kernel,
@@ -289,7 +290,9 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       if (account.signedIn()) {
         yield* settings.reconcileAccountPreferences();
         yield* account.refreshAccess;
+        yield* tasks.open;
         yield* agents.open;
+        yield* channels.open;
       }
       yield* settings.emitSettings();
     });

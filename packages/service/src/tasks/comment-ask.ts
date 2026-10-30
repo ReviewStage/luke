@@ -40,8 +40,10 @@ import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 /** How long a comment of the thread may run in the words it is handed over in, so a long thread stays a message. */
 const COMMENT_CHARS = 2_000;
 
-/** What an ask is handed over with: the plan by its name, the thread, and who sent it. */
+/** What an ask is handed over with: the plan by its task's id and name, the thread, and who sent it. */
 export interface CommentAsk {
+  /** The task whose plan the thread is on, which the agent's reply names. */
+  readonly taskId: string;
   readonly taskName: string;
   readonly thread: PlanCommentThread;
   /** The member who sent it, by the name the service holds. */
@@ -79,7 +81,7 @@ export function commentAskMessage(ask: CommentAsk): string {
     .map((entry) => `${writerName(entry)}: ${oneComment(entry.words ?? "")}`);
   const lead = `${ask.sender} sent you a comment thread on the plan "${ask.taskName}" to answer (thread ${thread.id}).`;
   // Note that the thread is handed over as its quoted words and its comments alone, never the plan or its section, which an agent handed the plan already holds.
-  const doing = `Read the thread, then answer in this thread with \`${PLAN_COMMENT_TOOL.REPLY}\` on thread "${thread.id}". Answer what the thread asks; do not act on anything else it discusses.`;
+  const doing = `Read the thread, then answer in this thread with \`${PLAN_COMMENT_TOOL.REPLY}\` on thread "${thread.id}" of task "${ask.taskId}". Answer what the thread asks; do not act on anything else it discusses.`;
   return [lead, on, "", ...comments, "", doing].join("\n");
 }
 

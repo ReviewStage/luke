@@ -21,11 +21,13 @@ import {
   agentBrowserTabSync,
   agentDelegationSync,
   agentPinSync,
+  agentQueueSync,
   agentSectionEntrySync,
   agentSync,
   attachmentSync,
   automationRunSync,
   automationSync,
+  channelLookSync,
   channelSync,
   conversationsSync,
   deviceSync,
@@ -71,6 +73,7 @@ import {
   channelsLiveStatements,
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
+  workspaceChannelsLiveStatements,
 } from "../inbox/inbox-store.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListLiveStatements } from "../tasks/task-list-live.js";
@@ -310,7 +313,9 @@ export const agentInboxLive = defineLiveQuery({
 });
 
 /**
- * One workspace's channels and where each one's threads stand, woken by a
+ * One workspace's channels and where each one's threads stand, as released
+ * desktops follow it to hear which channels moved and list them again; a
+ * build since reads the list itself (`workspaceChannelsLive`). Woken by a
  * channel or an item written in any of the account's workspaces, both of
  * which name every member (`channelSync`, `inboxItemSync`), and by what
  * admits the account to a workspace or a repository. Note that an agent or
@@ -324,6 +329,26 @@ export const channelsLive = defineLiveQuery({
   reads: [channelSync, inboxItemSync, agentSync, taskSync, ...ITEM_GATES],
   topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
   statements: ({ userId, workspaceId }) => channelsLiveStatements(userId, workspaceId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * One workspace's channels list as its reader reads it, every channel open
+ * or archived with what each holds for the reader (`inbox-store.ts`'s
+ * `workspaceChannelsLiveStatements`), woken on the reader's topic as the
+ * released read is, and by the reader's own look at a channel
+ * (`channelLookSync`), which names only them. Note that it takes no
+ * workspace's topic, because every plan save names one: an item written
+ * anywhere in the account's workspaces wakes it, and one that moves nothing
+ * the list shows leaves its digest where it stood, so its poll answers
+ * nobody.
+ */
+export const workspaceChannelsLive = defineLiveQuery({
+  name: LIVE_READ.CHANNELS,
+  params: ["userId", "workspaceId"],
+  reads: [channelSync, channelLookSync, inboxItemSync, agentSync, taskSync, ...ITEM_GATES],
+  topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
+  statements: ({ userId, workspaceId }) => workspaceChannelsLiveStatements(userId, workspaceId),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -612,6 +637,7 @@ export const agentTranscriptLive = defineLiveQuery({
     memberSync,
     githubPersonalTokenSync,
     githubRepositoryReadSync,
+    agentQueueSync,
   ],
   topics: ({ conversationId, parentConversationId, agentId, readerId }) => {
     const parent: readonly SyncTopic[] =
@@ -655,6 +681,7 @@ export const LIVE_QUERIES = liveQueryRegistry([
   taskInboxLive,
   agentInboxLive,
   channelsLive,
+  workspaceChannelsLive,
   workspaceMembersLive,
   workspaceInvitationsLive,
   automationsLive,

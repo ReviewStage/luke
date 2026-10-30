@@ -1,17 +1,19 @@
 import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wire";
 import type { TasksSkillsAnswer } from "@luke/features/tasks-view";
+import { keepIdentity } from "@luke/wire";
 import type { SkillSource, SkillsRead } from "./skill-picker.js";
 
 /**
- * repository-skills.ts -- the skills of the open task's repository a `/` in an agent's box offers, read once for the task.
+ * repository-skills.ts -- the skills of the open task's repository a `/` in an agent's box offers, drawn at once as last read and read again behind.
  *
- * The skills are read the first time a box asks for them, and the read is
- * kept, the one in flight shared by every box that asks meanwhile, for as
- * long as the task stays open on the same repository, so opening the list
- * again reads nothing; opening the task again reads the repository as
- * GitHub holds it then. A read that did not land or that the service
- * refused is not kept, so the next `/` asks again, and says why in the
- * list's own words.
+ * Each ask goes to the host, which answers the skills it holds at once and
+ * reads them again behind the answer (`@luke/host`'s `compose-tasks.ts`),
+ * so a skill added on GitHub is offered the next time a box asks; one ask
+ * is out at a time, shared by every box that asks meanwhile. An answer
+ * naming the skills last read keeps their identity, so nothing drawn from
+ * them is drawn again, and one that did not land, or that the service
+ * refused, leaves the skills last read standing where there are any;
+ * where there are none it says why, in the list's own words.
  */
 
 /** Why a repository's skills were not read, in the list's words. */
@@ -31,22 +33,26 @@ function skillsReadOf(answer: TasksSkillsAnswer): SkillsRead {
   return { unread: SKILLS_REFUSAL_LINE[answer.refusal] };
 }
 
-/** A source over the read given that reads once and keeps what it read; a read that did not land, or was refused, is asked again next time. */
+/** A source over the read given: each ask reads again, an answer naming the skills last read keeping their identity, and one that did not land leaving them standing. */
 export function keptSkills(read: () => Promise<TasksSkillsAnswer>): SkillSource {
-  let kept: Promise<SkillsRead> | undefined;
+  let out: Promise<SkillsRead> | undefined;
+  let last: SkillsRead | undefined;
+  const settle = (next: SkillsRead): SkillsRead => {
+    if ("unread" in next && last !== undefined && "skills" in last) return last;
+    last = last === undefined ? next : keepIdentity(last, next);
+    return last;
+  };
   return () => {
-    if (kept !== undefined) return kept;
-    const reading = read().then(
-      (answer) => {
-        if (!("skills" in answer)) kept = undefined;
-        return skillsReadOf(answer);
-      },
-      (): SkillsRead => {
-        kept = undefined;
-        return { unread: SKILLS_REFUSAL_LINE[TASK_FILE_REFUSAL.UNAVAILABLE] };
-      },
-    );
-    kept = reading;
+    if (out !== undefined) return out;
+    const reading = read()
+      .then(
+        (answer) => settle(skillsReadOf(answer)),
+        () => settle({ unread: SKILLS_REFUSAL_LINE[TASK_FILE_REFUSAL.UNAVAILABLE] }),
+      )
+      .finally(() => {
+        out = undefined;
+      });
+    out = reading;
     return reading;
   };
 }

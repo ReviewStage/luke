@@ -10,6 +10,7 @@ import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import type { InboxItemPlace } from "@luke/features/inbox-attachment-link";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
+import { LIVE_READ } from "@luke/features/live-wire";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
@@ -19,11 +20,13 @@ import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
 import {
   type CodeRef,
+  type ListedPullRequest,
   type RepositoryPin,
   type Task,
   type TaskAgentPin,
   type TaskBlockRequest,
   type TaskMode,
+  type TaskRelationChangeRequest,
   type TaskRunsOnRequest,
   type TaskStanding,
   type TaskStatus,
@@ -31,8 +34,11 @@ import {
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
 import {
+  type ParentCallFailure,
+  type RelationCallFailure,
   TASK_BLOCK_FAILURE,
   TASK_CALL_FAILURE,
+  TASK_PARENT_FAILURE,
   TASKS_READ,
   type TasksEditAnswer,
   type TasksView,
@@ -123,6 +129,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { APP_SETTINGS_VIEW, useAppSlice, useExperiment } from "../use-app-state.js";
+import { useHostRead } from "../use-host-read.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
@@ -162,7 +169,6 @@ import {
   standInboxPlace,
 } from "./use-channels.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
-import { useInboxPages } from "./use-inbox-pages.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
 import { useLastTask } from "./use-last-task.js";
 import {
@@ -750,6 +756,10 @@ export interface TasksControl {
   ) => Promise<Kept>;
   /** Adds one block of a task or takes it away, which the open document draws as the service answers it; a refusal says why in a toast. */
   onSetTaskBlock: (taskId: string, block: TaskBlockRequest) => void;
+  /** Sets a task's parent, or clears it with null, which the sidebar and the open document draw as the service answers it; a refusal says why in a toast. */
+  onSetTaskParent: (taskId: string, parentTaskId: string | null) => void;
+  /** Moves one relation of a task to another kind in one call, drawn as the service answers it; a refusal says why in a toast. */
+  onChangeTaskRelation: (taskId: string, relation: TaskRelationChangeRequest) => void;
   /** Opens a task's repository on GitHub in the browser. */
   onOpenOnGitHub: (taskId: string) => void;
   /** Opens Settings › Workspace at its GitHub, for the workspace the task belongs to. */
@@ -862,6 +872,8 @@ export interface TasksControl {
   taskAgentPins: readonly TaskAgentPin[];
   /** Every agent the list followed live carries, on a plan or with none, the archived ones among them; none while it is not. */
   liveAgents: readonly AgentSummary[] | undefined;
+  /** The pull request of every agent the list followed live carries that opened one, as its row keeps it; none while it is not. */
+  listedPullRequests: readonly ListedPullRequest[] | undefined;
   /**
    * Gives the pins a drag in the sidebar's Pinned section moved their new
    * places, on the account: a plan's and an agent's, drawn
@@ -1095,6 +1107,28 @@ const BLOCK_REFUSED_NOTE = "That relation could not be changed. Try again.";
 
 /** What the toast says when a block would close a cycle, the other task already waiting on this one. */
 const BLOCK_CYCLE_NOTE = "That task already waits on this one, so it can't block it too.";
+
+/** What the toast says when a parent would put the task under itself, the other task already a sub-task of it. */
+const PARENT_CYCLE_NOTE =
+  "That task is already a sub-task of this one, so it can't be its parent too.";
+
+/** What the toast says when a parent works in another repository, which a sub-task always shares. */
+const PARENT_REPOSITORY_NOTE =
+  "A sub-task works in its parent's repository, so the two must share one.";
+
+/** What a relation's refusal says: its own reason where the service named one, and a plain refusal otherwise. */
+function relationRefusedNote(failure: RelationCallFailure | ParentCallFailure): string {
+  switch (failure) {
+    case TASK_BLOCK_FAILURE.CYCLE:
+      return BLOCK_CYCLE_NOTE;
+    case TASK_PARENT_FAILURE.CYCLE:
+      return PARENT_CYCLE_NOTE;
+    case TASK_PARENT_FAILURE.REPOSITORY_DIFFERS:
+      return PARENT_REPOSITORY_NOTE;
+    default:
+      return BLOCK_REFUSED_NOTE;
+  }
+}
 
 /** What the toast says when opening a task listed the workspace it is in. */
 function switchedNote(workspace: string): string {
@@ -1364,6 +1398,7 @@ export function useTasksTab(input: {
     listedAgents: tasks.tasks.some((task) => task.id === viewed.activeTaskId)
       ? liveAgents
       : undefined,
+    listedPullRequests: tasks.agentPullRequests,
     modeOf: (planId) => tasks.tasks.find((task) => task.id === planId)?.mode,
     onOpenIntegrations: input.onOpenIntegrations,
     onOpenApiKeys: input.onOpenApiKeys,
@@ -1476,8 +1511,10 @@ export function useTasksTab(input: {
     inboxChosen !== undefined && "taskId" in inboxChosen ? inboxChosen.taskId : undefined;
   const inboxAgent =
     inboxChosen !== undefined && "agentId" in inboxChosen ? inboxChosen.agentId : undefined;
-  // Note that an item of an agent on no task opens that agent's own pages beside it (`route.ts`).
-  const inboxPages = useInboxPages(
+  // Note that an item of an agent on no task opens that agent's own pages beside it (`route.ts`), and that the
+  // pages are held in the host while drawn and a while after, so choosing another item of the task, or the task again, reads none anew.
+  const inboxPages = useHostRead(
+    LIVE_READ.PAGES,
     inboxView === undefined
       ? undefined
       : inboxTask !== undefined
@@ -1485,19 +1522,14 @@ export function useTasksTab(input: {
         : inboxAgent !== undefined
           ? { agentId: inboxAgent }
           : undefined,
-  );
+  ).rows;
   // An agent on no task shows its pages on itself, which its page's panel draws as a task's draws its own.
-  const agentPages = useInboxPages(
+  const agentPages = useHostRead(
+    LIVE_READ.PAGES,
     inboxView !== undefined || pageAgent === undefined ? undefined : { agentId: pageAgent },
-  );
-  const agentPageIds = useMemo(
-    () => (agentPages.pages ?? NO_PAGES).map((page) => page.id),
-    [agentPages.pages],
-  );
-  const inboxPageIds = useMemo(
-    () => (inboxPages.pages ?? NO_PAGES).map((page) => page.id),
-    [inboxPages.pages],
-  );
+  ).rows;
+  const agentPageIds = useMemo(() => (agentPages ?? NO_PAGES).map((page) => page.id), [agentPages]);
+  const inboxPageIds = useMemo(() => (inboxPages ?? NO_PAGES).map((page) => page.id), [inboxPages]);
   const inboxAgents = useMemo(
     () => (inboxAgent === undefined ? NO_IDS : [inboxAgent]),
     [inboxAgent],
@@ -2373,13 +2405,46 @@ export function useTasksTab(input: {
       .catch(taskUnreached)
       .then((answer) => {
         if (!("failure" in answer)) return;
-        const words =
-          answer.failure === TASK_BLOCK_FAILURE.CYCLE ? BLOCK_CYCLE_NOTE : BLOCK_REFUSED_NOTE;
         toast({
-          words,
+          words: relationRefusedNote(answer.failure),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
           failure: { surface: FAILURE_SURFACE.TASK_BLOCK, cause: answer, about: { taskId } },
+        });
+      });
+  };
+
+  // A fixture's tasks are read from nowhere, so no parent of one is kept. The
+  // sidebar and the open document take the task the service answers, so a
+  // refusal is all there is to say, in a toast.
+  const setTaskParent = (taskId: string, parentTaskId: string | null) => {
+    if (fixture !== undefined) return;
+    void act(ACT_KIND.TASKS_SET_PARENT, { taskId, parentTaskId })
+      .catch(taskUnreached)
+      .then((answer) => {
+        if (!("failure" in answer)) return;
+        toast({
+          words: relationRefusedNote(answer.failure),
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.TASK_PARENT, cause: answer, about: { taskId } },
+        });
+      });
+  };
+
+  // A relation's kind moves in one call, so a refusal leaves it as it stood,
+  // and the sidebar and the open document take the task the service answers.
+  const changeTaskRelation = (taskId: string, relation: TaskRelationChangeRequest) => {
+    if (fixture !== undefined) return;
+    void act(ACT_KIND.TASKS_CHANGE_RELATION, { taskId, relation })
+      .catch(taskUnreached)
+      .then((answer) => {
+        if (!("failure" in answer)) return;
+        toast({
+          words: relationRefusedNote(answer.failure),
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.TASK_RELATION, cause: answer, about: { taskId } },
         });
       });
   };
@@ -3424,13 +3489,13 @@ export function useTasksTab(input: {
         ),
       single: inboxView !== undefined && inboxSingle,
       onSingle: setInboxSingle,
-      pages: inboxPages.pages,
+      pages: inboxPages,
       onTaskAgents: inboxTaskAgents.onRead,
     },
     // An agent's page stands over the task's place as the Inbox does, so a version history there gives way.
     agentView: {
       agentId: agentView?.agentId,
-      pages: agentPages.pages,
+      pages: agentPages,
       onOpen: guard((agentId: string) => {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.AGENT, agentId });
@@ -3558,6 +3623,8 @@ export function useTasksTab(input: {
     onSetRepository: setRepository,
     onSetTaskStanding: setTaskStanding,
     onSetTaskBlock: setTaskBlock,
+    onSetTaskParent: setTaskParent,
+    onChangeTaskRelation: changeTaskRelation,
     onMoveTask: moveTask,
     onOpenWorkspaceGitHub: (taskId) => {
       // The open document names its workspace where the list read did not land.
@@ -3630,6 +3697,7 @@ export function useTasksTab(input: {
     onPinAgent: pinAgent,
     taskAgentPins,
     liveAgents,
+    listedPullRequests: tasks.agentPullRequests,
     onMovePins: movePins,
     onDeleteTask: deleteTask,
     back,

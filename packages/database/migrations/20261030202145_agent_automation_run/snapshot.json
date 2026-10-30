@@ -1,10 +1,10 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "3c48fcc9-f34d-46f6-8249-869886b38f6a",
+  "id": "b2fc530a-5da2-4940-8f36-13a055b413f3",
   "prevIds": [
-    "b9a7d607-caa3-4146-8eea-db97c7465e9c",
-    "d321892c-6f9d-42a9-9e04-cafc4fa2ebd8"
+    "2c154521-bebd-47d4-921b-b278f943966f",
+    "bd691f14-bf62-4a9a-9d05-a3148c1c4a4f"
   ],
   "ddl": [
     {
@@ -40,6 +40,18 @@
     {
       "isRlsEnabled": false,
       "name": "agent_pin",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "agent_queue",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "queued_message",
       "entityType": "tables",
       "schema": "public"
     },
@@ -256,6 +268,18 @@
     {
       "isRlsEnabled": false,
       "name": "host_install_token",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "host_pairing",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "host_pairing_guess",
       "entityType": "tables",
       "schema": "public"
     },
@@ -1532,6 +1556,188 @@
       "entityType": "columns",
       "schema": "public",
       "table": "agent_pin"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_queue"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "revision",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_queue"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "paused_because",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_queue"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "paused_refusal",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_queue"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "queued_message"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "queued_message"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "queued_message"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "position",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "queued_message"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "text",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "queued_message"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "attachments",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "queued_message"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "editing",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "queued_message"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "claimed_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "queued_message"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "queued_message"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "queued_message"
     },
     {
       "type": "uuid",
@@ -5999,6 +6205,227 @@
       "name": "id",
       "entityType": "columns",
       "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "poll_secret_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_code",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "platform",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "arch",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "version",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ip",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "polled_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "device_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing_guess"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "misses",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing_guess"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "window_ends_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_pairing_guess"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
       "table": "inbox_item"
     },
     {
@@ -8128,6 +8555,19 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "name": "agent_enter",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_preference"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
       "name": "agent_model",
       "entityType": "columns",
       "schema": "public",
@@ -9589,19 +10029,6 @@
       "default": "false",
       "generated": null,
       "identity": null,
-      "name": "cancel_requested_for_running",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "turns"
-    },
-    {
-      "type": "boolean",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "false",
-      "generated": null,
-      "identity": null,
       "name": "fast_refused",
       "entityType": "columns",
       "schema": "public",
@@ -9707,32 +10134,6 @@
       "generated": null,
       "identity": null,
       "name": "mode",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "task"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'merge-on-green'",
-      "generated": null,
-      "identity": null,
-      "name": "merge_policy",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "task"
-    },
-    {
-      "type": "boolean",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "false",
-      "generated": null,
-      "identity": null,
-      "name": "running",
       "entityType": "columns",
       "schema": "public",
       "table": "task"
@@ -10825,6 +11226,34 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "agent_pin"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "position",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "queued_message_agent_position",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "queued_message"
     },
     {
       "nameExplicit": true,
@@ -12064,6 +12493,90 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "host_install_token"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "poll_secret_hash",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "host_pairing_poll_secret_hash",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_code",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "host_pairing_user_code",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "expires_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "host_pairing_expires_at",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "device_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "host_pairing_device",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "host_pairing"
     },
     {
       "nameExplicit": true,
@@ -14074,6 +14587,57 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
+      "name": "agent_queue_agent_id_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_queue"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "agent_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "agent",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "queued_message_agent_id_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "queued_message"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "queued_message_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "queued_message"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "agent_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "agent",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
       "name": "agent_runner_lease_agent_id_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
@@ -15013,6 +15577,57 @@
       "entityType": "fks",
       "schema": "public",
       "table": "host_install_token"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "host_pairing_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "device_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "device",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "host_pairing_device_id_device_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "host_pairing"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "host_pairing_guess_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "host_pairing_guess"
     },
     {
       "nameExplicit": false,
@@ -16677,6 +17292,26 @@
         "agent_id"
       ],
       "nameExplicit": false,
+      "name": "agent_queue_pkey",
+      "schema": "public",
+      "table": "agent_queue",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "queued_message_pkey",
+      "schema": "public",
+      "table": "queued_message",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "agent_id"
+      ],
+      "nameExplicit": false,
       "name": "agent_runner_lease_pkey",
       "schema": "public",
       "table": "agent_runner_lease",
@@ -17000,6 +17635,26 @@
       "name": "host_install_token_pkey",
       "schema": "public",
       "table": "host_install_token",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "host_pairing_pkey",
+      "schema": "public",
+      "table": "host_pairing",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "nameExplicit": false,
+      "name": "host_pairing_guess_pkey",
+      "schema": "public",
+      "table": "host_pairing_guess",
       "entityType": "pks"
     },
     {

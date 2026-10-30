@@ -14,6 +14,10 @@
  * - A transcript (`MARKDOWN_LOOK.TRANSCRIPT`) is Streamdown whole, read block
  *   by block while it streams, its HTML parsed and sanitised, its root and
  *   components the place's.
+ * - A transcript's line (`MARKDOWN_LOOK.TRANSCRIPT_LINE`) is a transcript
+ *   read as one block, its blocks' words run together into one line, its
+ *   line breaks spaces, so a row holding one line draws a message's words,
+ *   its chips among them, as its bubble does, as a queued message's row does.
  * - A document (`MARKDOWN_LOOK.DOCUMENT`) is parsed whole with real headings
  *   and no root of its own, because it is drawn into `Prose`'s, as the site
  *   renders its privacy policy and changelog at build time.
@@ -29,6 +33,7 @@
  */
 
 import type { ElementContent, Root } from "hast";
+import type { Root as MarkdownRoot, PhrasingContent, RootContent } from "mdast";
 import { memo, type ReactNode, useMemo, useRef } from "react";
 import remarkGfm from "remark-gfm";
 import {
@@ -42,7 +47,7 @@ import {
   type StreamdownProps,
   type UrlTransform,
 } from "streamdown";
-import { landedMark } from "../components/landed/landed.js";
+import { cn } from "../cn.js";
 import { QUOTE_CLASS } from "../quote-face.js";
 import { MARKDOWN_CLASS, markdownClass } from "./markdown-class.js";
 import {
@@ -58,6 +63,7 @@ export type { MarkdownTaskToggler } from "./markdown-tasks.js";
 export const MARKDOWN_LOOK = {
   NOTE: "note",
   TRANSCRIPT: "transcript",
+  TRANSCRIPT_LINE: "transcript-line",
   DOCUMENT: "document",
   INLINE: "inline",
 } as const;
@@ -172,6 +178,60 @@ const unwrapBlocks = () => (tree: Root) => {
   );
 };
 
+/** The space a line keeps between two blocks' words, and in a line break's place. */
+const LINE_SPACE: RootContent = { type: "text", value: " " };
+
+/** The nodes whose children are blocks, each read apart from the next by a space in a line. */
+const BLOCK_HOLDERS: ReadonlySet<string> = new Set([
+  "blockquote",
+  "list",
+  "listItem",
+  "table",
+  "tableRow",
+]);
+
+/** The nodes that mark words and are kept around them in a line. */
+const WORD_MARKS: ReadonlySet<string> = new Set(["emphasis", "strong", "delete"]);
+
+/** Blocks' words as one run, each apart from the next by a space. */
+function spaced(parts: readonly RootContent[][]): RootContent[] {
+  return parts.flatMap((part, at) => (at === 0 ? part : [LINE_SPACE, ...part]));
+}
+
+/** A node as a line draws it: a line break as a space, a rule as nothing, a fence as its code in a span, a link and a word's mark kept, and every other node as its words. */
+function lineContent(node: RootContent): RootContent[] {
+  if (node.type === "break") return [LINE_SPACE];
+  if (node.type === "thematicBreak") return [];
+  if (node.type === "code") {
+    return [{ type: "inlineCode", value: node.value.replaceAll("\n", " ") }];
+  }
+  if (!("children" in node) || node.type === "link" || node.type === "linkReference") return [node];
+  const parts = node.children.map((child) => lineContent(child));
+  const kept = BLOCK_HOLDERS.has(node.type) ? spaced(parts) : parts.flat();
+  return WORD_MARKS.has(node.type) ? [{ ...node, children: kept } as RootContent] : kept;
+}
+
+/**
+ * The remark step that draws a transcript's words as one line: a paragraph,
+ * a heading, a list, a quote, and a table each give way to their words, a
+ * fence to its code as a code span, and a line break to a space, each block
+ * apart from the next by a space, all in one paragraph. Note that a link is
+ * kept whole, a place's mark on it included, and a definition stays where it
+ * was, since a reference link is read through it.
+ */
+const runOnOneLine = () => (tree: MarkdownRoot) => {
+  const defines = (node: RootContent) =>
+    node.type === "definition" || node.type === "footnoteDefinition";
+  const definitions = tree.children.filter(defines);
+  const blocks = tree.children.filter((node) => !defines(node));
+  // Note that the words stand in one paragraph, because the root sets a line break between its children, which would space a word from its own mark.
+  const words = spaced(blocks.map(lineContent)) as PhrasingContent[];
+  tree.children = [{ type: "paragraph", children: words }, ...definitions];
+};
+
+/** A transcript's line read as the one block it is, so a reference link reads its definition wherever it stands. */
+const oneBlock = (markdown: string): string[] => [markdown];
+
 /** A serial for each value a step closes over, which Streamdown's processor cache cannot tell apart by itself. */
 const stepSerials = new WeakMap<object, number>();
 let nextStepSerial = 0;
@@ -236,8 +296,6 @@ export interface MarkdownProps {
   look: MarkdownLook;
   /** The place's own class on the root; a document and a line have none, being drawn into the place's own. */
   className?: string | undefined;
-  /** Whether a note was just landed on, lit once as every place landed on is (`landed.ts`). */
-  landed?: boolean | undefined;
   /** Whether a transcript's words are still arriving, read block by block, an unclosed fence or emphasis drawn as written so far. */
   streaming?: boolean | undefined;
   /** The elements the place draws its own way, over the look's own. */
@@ -312,14 +370,13 @@ function WholeWords({
 /**
  * Words drawn as the Markdown they were written in. A note and a document
  * are drawn again only when what they are handed changes, since the words
- * are parsed afresh on every draw, and a plan drawing every section on each
- * frame of its typing would parse them all; a place hands its components
- * and steps memoised for the same reason.
+ * are parsed afresh on every draw, and a plan redrawn on a save would parse
+ * every section; a place hands its components and steps memoised for the
+ * same reason.
  */
 export const Markdown = memo(function Markdown({
   className,
   streaming = false,
-  landed = false,
   ...whole
 }: MarkdownProps): React.JSX.Element {
   const {
@@ -339,17 +396,26 @@ export const Markdown = memo(function Markdown({
     () => (rehypePlugins === undefined ? undefined : [...rehypePlugins, placeTaskItems]),
     [rehypePlugins],
   );
+  const lineSteps = useMemo(
+    () => [...(remarkPlugins ?? TRANSCRIPT_REMARK_STEPS), runOnOneLine],
+    [remarkPlugins],
+  );
   const transcriptComponents = useMemo<Components>(
     () => ({ input: readTaskInput, ...components }),
     [components],
   );
-  if (look === MARKDOWN_LOOK.TRANSCRIPT) {
+  if (look === MARKDOWN_LOOK.TRANSCRIPT || look === MARKDOWN_LOOK.TRANSCRIPT_LINE) {
+    const line = look === MARKDOWN_LOOK.TRANSCRIPT_LINE;
+    const steps = line ? lineSteps : remarkPlugins;
+    // Note that a line's root keeps its words from wrapping, over Streamdown's own root, which wraps them.
+    const root = line ? cn(className, "whitespace-nowrap") : className;
     return (
       <Streamdown
         mode={streaming ? "streaming" : "static"}
-        {...(className === undefined ? {} : { className })}
+        {...(root === undefined ? {} : { className: root })}
         components={transcriptComponents}
-        {...(remarkPlugins === undefined ? {} : { remarkPlugins })}
+        {...(steps === undefined ? {} : { remarkPlugins: steps })}
+        {...(line ? { parseMarkdownIntoBlocksFn: oneBlock } : {})}
         {...(transcriptSteps === undefined ? {} : { rehypePlugins: transcriptSteps })}
         {...(allowedTags === undefined ? {} : { allowedTags })}
         {...(literalTagContent === undefined ? {} : { literalTagContent })}
@@ -364,7 +430,7 @@ export const Markdown = memo(function Markdown({
     return <WholeWords {...whole} />;
   }
   return (
-    <div className={markdownClass(className)} {...landedMark(landed)}>
+    <div className={markdownClass(className)}>
       <WholeWords {...whole} />
     </div>
   );

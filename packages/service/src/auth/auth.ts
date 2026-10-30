@@ -4,6 +4,7 @@ import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { bearer, jwt, lastLoginMethod, oAuthProxy, organization } from "better-auth/plugins";
 import { Redacted } from "effect";
+import { authDatabaseHooks, authOrganizationHooks } from "./auth-counts.js";
 import { authDatabase, authDatabaseAdapter } from "./auth-database.js";
 import {
   type AuthSecrets,
@@ -80,6 +81,7 @@ export const auth = betterAuth({
   secret: secrets.sessionSecret === undefined ? undefined : Redacted.value(secrets.sessionSecret),
   hooks: { before: refuseWithoutSessionSecret },
   database: authDatabaseAdapter(authDatabase),
+  databaseHooks: authDatabaseHooks,
   account: ACCOUNT_TOKEN_STORAGE,
   user: USER_FIELDS,
   session: SESSION_COOKIE_CACHE,
@@ -101,7 +103,7 @@ export const auth = betterAuth({
       accessTokenExpiresIn: 60 * 60,
     }),
     // A workspace is an organization: its members plan together.
-    organization(ORGANIZATION_OPTIONS),
+    organization({ ...ORGANIZATION_OPTIONS, organizationHooks: authOrganizationHooks }),
     // The Mac's own session beside its OAuth token, so the organization
     // endpoints that take a session answer it: minted from the signed-in
     // browser by the Electron plugin, carried as a signed bearer token.

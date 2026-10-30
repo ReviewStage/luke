@@ -66,7 +66,14 @@
  * two statements, its channels and where each one's threads stand
  * (`inbox-store.ts`'s `channelsLiveStatements`), after the account is read
  * as a member of it, so a workspace it is not in is not found, as its held
- * read answers; woken by Luke Sync (`channelsLive`).
+ * read answers; woken by Luke Sync (`channelsLive`). Released desktops follow
+ * it; a build since follows `GET /api/live/workspace-channels?workspaceId=`,
+ * which answers the list itself as four statements, every channel and, for
+ * the reader, each one's threads, its asks waiting on them, and their looks
+ * (`inbox-store.ts`'s `workspaceChannelsLiveStatements`), after the account
+ * is read as a member and the workspace's #general minted where it has none
+ * yet, as the held list mints it; woken by Luke Sync
+ * (`workspaceChannelsLive`).
  *
  * `GET /api/live/agent-transcript?id=` answers what one coding agent's
  * transcript is read from, or one of its workers' with `&call=` naming the
@@ -101,6 +108,7 @@
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { readVisibleAgent } from "@luke/database/models/agent-store";
 import { readAutomation } from "@luke/database/models/automation-store";
+import { ensureGeneralChannel } from "@luke/database/models/channel-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { readTaskHeader } from "@luke/database/models/task-store";
 import {
@@ -120,7 +128,7 @@ import {
 } from "@luke/features/live-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Duration, Effect, Option, Result } from "effect";
+import { Clock, DateTime, Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { reachedAgentById } from "../agents/agent-reach.js";
 import { unparsedWire } from "../core.js";
@@ -152,6 +160,7 @@ import {
   taskPagesLive,
   taskRecordLive,
   tasksLive,
+  workspaceChannelsLive,
   workspaceInvitationsLive,
   workspaceMembersLive,
   workspacesLive,
@@ -709,6 +718,21 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return yield* liveQueryParts(
         channelsLive,
+        { userId: context.userId, workspaceId: input.workspaceId },
+        input,
+      );
+    }),
+    workspaceChannels: signedIn.workspaceChannels.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const member = yield* hostedStoreOrUnavailable(
+        isWorkspaceMember(context.userId, input.workspaceId),
+      );
+      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      // Note that #general is minted before the read binds, so a workspace that never had a channel lists the one every thread goes to.
+      const now = yield* DateTime.nowAsDate;
+      yield* hostedStoreOrUnavailable(ensureGeneralChannel(input.workspaceId, now));
+      return yield* liveQueryParts(
+        workspaceChannelsLive,
         { userId: context.userId, workspaceId: input.workspaceId },
         input,
       );

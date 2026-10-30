@@ -49,8 +49,6 @@ import {
   repositoryToolsOf,
   type StarterTool,
   starterToolsOf,
-  type TaskTool,
-  taskToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
 import type { TurnHanded } from "@luke/service/agents/coder-host/turn-context";
 import {
@@ -193,26 +191,6 @@ export function relayChildEvent(
  */
 export function keepAgentSandboxAlive(agentSessionId: string): Promise<void> {
   return runAgent(keepSessionSandboxAlive(agentSessionId));
-}
-
-/**
- * The task's tools the session is offered for the turn it opens, for those
- * tools' own files (`taskToolsOf`): none for a session the host does not
- * admit or whose conversation is no agent's.
- */
-export function offeredTaskTools(
-  auth: SessionAuth,
-  sessionId: string,
-): Promise<ReadonlySet<TaskTool>> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return new Set<TaskTool>();
-      const agent = yield* host.agent(admitted.success);
-      if (Result.isFailure(agent)) return new Set<TaskTool>();
-      return taskToolsOf(agent.success);
-    }),
-  );
 }
 
 /**
@@ -360,7 +338,7 @@ function admitted<A, E>(
   );
 }
 
-/** One `edit_plan` call's notes taken into the agent's plan, its pictures read through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
+/** One `edit_plan` call's notes taken into the plan of the task it names, its pictures read through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
 export function editPlanNotes(
   auth: SessionAuth,
   sessionId: string,
@@ -419,12 +397,8 @@ export function lookAtPlanPicture(
   );
 }
 
-/**
- * One call of a comment tool, the planning model's tool too, one
- * implementation for both (`packages/service/src/tasks/comment-tools.ts`),
- * run here under the agent's session rather than at an edge of its own.
- */
-export function runCommentTool(
+/** One call of a comment tool (`packages/service/src/tasks/comment-tools.ts`), run here under the agent's session rather than at an edge of its own. */
+function runCommentTool(
   auth: SessionAuth,
   sessionId: string,
   name: CommentToolName,
@@ -433,6 +407,30 @@ export function runCommentTool(
   return admitted(auth, sessionId, commentToolRejected, (session) =>
     host.comment(session, name, input),
   );
+}
+
+/**
+ * One of the plan's comment tools (`packages/service/src/tasks/comment-tools.ts`),
+ * run through `runCommentTool` under the agent's session. Every agent is
+ * offered it, one on no task among them, since every call names its task.
+ */
+export function commentToolFor(spec: {
+  readonly name: CommentToolName;
+  readonly description: string;
+  readonly inputSchema: Schema.Top;
+}) {
+  return defineTool({
+    description: spec.description,
+    inputSchema: emitJsonSchema(spec.inputSchema),
+    execute: async (input, ctx) =>
+      // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
+      runCommentTool(
+        ctx.session.auth,
+        ctx.session.id,
+        spec.name,
+        unparsedWire(input as WireBoundaryInput),
+      ),
+  });
 }
 
 /** One call of the agent's tools about the workspace's coding agents, run under its session, for the tool, which runs here rather than at an edge of its own. */

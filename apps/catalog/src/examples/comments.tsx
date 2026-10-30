@@ -18,8 +18,9 @@ import { CatalogSection } from "../section";
 /**
  * comments.tsx -- a thread of comments: a person by their picture, a person
  * by their letter where no picture is given, an agent on its square, a
- * status and an action at a head's end, a draft not yet sent, which
- * says no time, and a comment while it is read.
+ * status and an action at a head's end, a line of what happened to the
+ * thread, said after its writer's name, a draft not yet sent, which says
+ * no time, and a comment while it is read.
  */
 
 /** A synthetic picture drawn in place, so the catalog renders offline. */
@@ -70,6 +71,13 @@ function Comments(): React.JSX.Element {
             >
               Nice, merging once CI is green.
             </Comment>
+            <Comment
+              as={COMMENT_ELEMENT.LI}
+              author={{ name: "Ada Lovelace", id: "user-ada", picture: PICTURE }}
+              said="resolved this"
+              at={now - 2 * MINUTE}
+              now={now}
+            />
           </Stack>
         </div>
       </CatalogSection>

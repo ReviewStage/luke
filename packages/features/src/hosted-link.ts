@@ -55,7 +55,7 @@ import {
 import { hostedContract } from "./contract/index.js";
 import { outputWireSchema } from "./contract/output-schema.js";
 import { FAILURE_FACT, type FailureFacts } from "./failure-facts.js";
-import { hostUpgradeNeededDataSchema } from "./host-wire.js";
+import { hostPairingHeldDataSchema, hostUpgradeNeededDataSchema } from "./host-wire.js";
 import { installedSkillRefusedDataSchema } from "./installed-skill-route-wire.js";
 import { SENTRY_TRACES_SAMPLE_RATE } from "./sentry-tracing.js";
 import {
@@ -126,7 +126,8 @@ type HostedRefusalData = typeof repositoryNotReachableDataSchema.Type &
   typeof credentialMissingDataSchema.Type &
   typeof installedSkillRefusedDataSchema.Type &
   typeof localAgentRefusedDataSchema.Type &
-  typeof hostUpgradeNeededDataSchema.Type;
+  typeof hostUpgradeNeededDataSchema.Type &
+  typeof hostPairingHeldDataSchema.Type;
 
 /** The service refused the procedure: its slug, and the fields its declared error carries where they read. */
 export class HostedRefused extends Data.TaggedError("HostedRefused")<{
@@ -274,7 +275,9 @@ function refusalOf(payload: UnparsedWireValue): HostedRefused | undefined {
               ? localAgentRefusedDataSchema
               : refusal === HOSTED_API_ERROR.HOST_UPGRADE_NEEDED
                 ? hostUpgradeNeededDataSchema
-                : undefined;
+                : refusal === HOSTED_API_ERROR.HOST_PAIRING_HELD
+                  ? hostPairingHeldDataSchema
+                  : undefined;
   if (schema === undefined) return new HostedRefused({ refusal });
   const data = Result.getOrUndefined(readServiceAnswer(schema)(payload));
   return new HostedRefused({ refusal, ...(data === undefined ? undefined : { data }) });

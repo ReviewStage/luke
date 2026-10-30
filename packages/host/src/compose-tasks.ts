@@ -26,8 +26,8 @@ import {
   taskHistoryLiveRowsSchema,
   taskPagesLiveRowsSchema,
 } from "@luke/features/live-wire";
-import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
-import { TASK_STATUS, type Task } from "@luke/features/task-wire";
+import { PAGE_OWNER, type PageOwner, type PagePlace } from "@luke/features/page-wire";
+import { TASK_STATUS, type Task, type TaskSkillsAnswer } from "@luke/features/task-wire";
 import {
   HOST_LIVE,
   IDLE_TASKS_VIEW,
@@ -37,6 +37,7 @@ import {
   type TasksBlockAnswer,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabsAnswer,
+  type TasksChangeRelationAnswer,
   type TasksCommentAnswer,
   type TasksCommentsAnswer,
   type TasksDocument,
@@ -54,6 +55,7 @@ import {
   type TasksRepositoriesAnswer,
   type TasksRevisionAnswer,
   type TasksRevisionsAnswer,
+  type TasksSetParentAnswer,
   type TasksSetRepositoryAnswer,
   type TasksSkillsAnswer,
   type TasksStartAnswer,
@@ -74,6 +76,7 @@ import {
   tasksBlockParamsSchema,
   tasksBrowserTabOpenParamsSchema,
   tasksBrowserTabsParamsSchema,
+  tasksChangeRelationParamsSchema,
   tasksCommentActParamsSchema,
   tasksCommentStartParamsSchema,
   tasksCommentsParamsSchema,
@@ -92,6 +95,7 @@ import {
   tasksRepositoriesParamsSchema,
   tasksRevisionParamsSchema,
   tasksRevisionsParamsSchema,
+  tasksSetParentParamsSchema,
   tasksSetRepositoryParamsSchema,
   tasksSetStandingParamsSchema,
   tasksSkillsParamsSchema,
@@ -130,10 +134,12 @@ import {
   Data,
   Duration,
   Effect,
+  Equal,
   Exit,
   Fiber,
   FiberHandle,
   FiberMap,
+  MutableHashMap,
   Option,
   Queue,
   Schedule,
@@ -143,11 +149,12 @@ import {
   Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
+import { type AppHolderPages, type AppPages, NO_PAGES } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { fixturePage } from "./fixture-stage.js";
 import type { HostKernel } from "./host-kernel.js";
-import { ROW_GONE, type RowWrite } from "./live-collection.js";
+import { heldReads, ROW_GONE, type RowWrite } from "./live-collection.js";
 import {
   confirmWrite,
   LIVE_GONE,
@@ -263,6 +270,40 @@ function linkReadKept(exit: Exit.Exit<unknown>): Duration.Duration {
 /** A call on a task's Browser tabs behind a closed gate, or of a service that did not answer. */
 const BROWSER_TABS_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
+/** A plan's skills, by its id and the workspace and repository the list names it in, so a plan moved to another of either is another key, its workspace's installed skills among what is read. */
+class PlanSkillsKey extends Data.Class<{
+  readonly planId: string;
+  readonly workspaceId: string | undefined;
+  readonly repository: string | undefined;
+}> {}
+
+/** A workspace's repository's skills, where no plan names it, or the workspace's alone for an agent with no repository. */
+class RepositorySkillsKey extends Data.Class<{
+  readonly workspaceId: string;
+  readonly repository: string | undefined;
+}> {}
+
+/** Whose skills: a plan's, or a workspace's repository's no plan names. */
+type SkillsKey = PlanSkillsKey | RepositorySkillsKey;
+
+/** Whose pages: one task's, or one agent's on no task, by what they stand on and then its id. */
+class PageOwnerKey extends Data.Class<{
+  readonly kind: PageOwner["kind"];
+  readonly id: string;
+}> {}
+
+/** The owner a window names pages by, as their key. */
+function pageOwnerOf(place: PagePlace): PageOwnerKey {
+  return "taskId" in place
+    ? new PageOwnerKey({ kind: PAGE_OWNER.TASK, id: place.taskId })
+    : new PageOwnerKey({ kind: PAGE_OWNER.AGENT, id: place.agentId });
+}
+
+/** The place the service names an owner's pages by. */
+function pagePlaceOf(owner: PageOwnerKey): PagePlace {
+  return owner.kind === PAGE_OWNER.TASK ? { taskId: owner.id } : { agentId: owner.id };
+}
+
 /** A workspace call behind a closed gate, which never reaches the service. */
 const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
 
@@ -279,6 +320,8 @@ export type TasksClient = Pick<
   | "rename"
   | "mark"
   | "block"
+  | "setParent"
+  | "changeRelation"
   | "pinRepository"
   | "sidebarLive"
   | "writeTaskSection"
@@ -357,6 +400,8 @@ export interface TasksComposer extends Composer {
   snapshot: () => TasksView;
   /** Drops everything held, for a sign-out, and tells every client the panel has nothing. */
   reset: Effect.Effect<void>;
+  /** Follows every read a window holds anew, as the account gate opening asks, so a hold taken while nobody was signed in reads now. */
+  open: Effect.Effect<void>;
   /**
    * Waits for a write's transaction to arrive on the task list followed
    * live, which holds every task and agent row, so a write is confirmed once
@@ -445,6 +490,48 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ),
     { capacity: LINK_READ_KEPT.CAPACITY, timeToLive: linkReadKept },
   );
+  /**
+   * Each plan's skills, and each repository's no plan names, as the service
+   * last read them: answered at once each time they are asked, a `/` opening
+   * or a holder chosen, and read again behind the answer, so a skill added on
+   * GitHub is offered the next time they are asked. A read that is refused or
+   * not answered leaves what is held, and one answering what is held already
+   * leaves it as it stood.
+   */
+  const heldSkills = MutableHashMap.empty<SkillsKey, TaskSkillsAnswer>();
+  /** Each holder's read of the service out now, one at a time, every ask meanwhile joining it. */
+  const skillsReads = yield* FiberMap.make<SkillsKey, TaskSkillsAnswer | undefined, never>();
+
+  /** Reads `key`'s skills of the service, holding what it read where it read skills that differ from those held. */
+  function readSkillsOf(key: SkillsKey) {
+    return Effect.map(
+      served(
+        key instanceof PlanSkillsKey
+          ? client.readSkills(key.planId)
+          : client.readRepositorySkills(
+              key.repository === undefined
+                ? { workspaceId: key.workspaceId }
+                : { workspaceId: key.workspaceId, repository: key.repository },
+            ),
+      ),
+      (answer) => {
+        const held = MutableHashMap.get(heldSkills, key);
+        if (answer === undefined || !("skills" in answer)) return answer;
+        if (Option.isSome(held) && Equal.equals(held.value, answer)) return held.value;
+        MutableHashMap.set(heldSkills, key, answer);
+        return answer;
+      },
+    );
+  }
+
+  /** The read of `key`'s skills out now, or one started, which every ask meanwhile joins. */
+  const skillsRead = (key: SkillsKey) =>
+    Effect.gen(function* () {
+      const out = yield* FiberMap.get(skillsReads, key);
+      return Option.isSome(out)
+        ? out.value
+        : yield* FiberMap.run(skillsReads, key, readSkillsOf(key));
+    });
   const issueReads = yield* Cache.makeWith(
     (key: LinkReadKey) =>
       served(
@@ -617,12 +704,26 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     );
   }
 
-  /** The pages of each task a window's Inbox follows, and of each agent on no task whose page a window draws, by the task's or the agent's id, which never collide. */
-  const pagesFollows = yield* FiberMap.make<string>();
+  /**
+   * The pages each window holds, a task's or an agent's on no task, and the
+   * few let go latest, each as its read stands, told whole on the app state
+   * every window draws (`LIVE_READ.PAGES`).
+   */
+  let heldPages: AppPages = NO_PAGES;
   const decodePages = Schema.decodeUnknownOption(taskPagesLiveRowsSchema);
 
-  /** Follows the pages of `place`, a task or an agent on no task, live until let go, each change emitted as `TASKS_PAGES_CHANGED`. */
-  function followPages(place: PagePlace) {
+  /** Lays `read` as where `owner`'s pages stand, or lets them go where it is none, and tells every window. */
+  function layPages(owner: PageOwnerKey, read: AppHolderPages | undefined) {
+    const ofKind = { ...heldPages[owner.kind] };
+    if (read === undefined) Reflect.deleteProperty(ofKind, owner.id);
+    else ofKind[owner.id] = read;
+    heldPages = { ...heldPages, [owner.kind]: ofKind };
+    kernel.emit(GATEWAY_EVENT.PAGES_CHANGED, carried(heldPages));
+  }
+
+  /** Follows the pages of `owner`, a task or an agent on no task, live until let go, each change laid on the held pages. */
+  function followPages(owner: PageOwnerKey) {
+    const place = pagePlaceOf(owner);
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
     const userId = dependencies.accountId();
     return pushLive({
@@ -640,16 +741,31 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             )
           : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
       decode: (rows) => Option.map(decodePages(rows), pagesOfLiveRows),
-      publish: (pages) =>
-        kernel.emit(
-          GATEWAY_EVENT.TASKS_PAGES_CHANGED,
-          carried({
-            ...place,
-            view: pages === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { pages },
-          }),
-        ),
+      publish: (pages) => {
+        if (pages !== undefined) return layPages(owner, { rows: pages });
+        // Note that a read that stops answering keeps its pages, since its next answer brings them up to date.
+        if (heldPages[owner.kind][owner.id]?.rows === undefined) layPages(owner, { failed: true });
+      },
     });
   }
+
+  /**
+   * The held lifetime over every owner's pages (`heldReads`): followed from
+   * the first window's hold, and kept among the few let go latest after the
+   * last lets go, so a window choosing a task again draws its pages from
+   * where they stand. Behind a closed gate a held owner is followed only
+   * once the gate opens (`open`).
+   */
+  const heldPageReads = yield* heldReads<PageOwnerKey>(
+    (owner) => Effect.suspend(() => (gate() ? followPages(owner) : Effect.void)),
+    (owner) => Effect.sync(() => layPages(owner, undefined)),
+    Effect.sync(() => {
+      heldPages = NO_PAGES;
+      kernel.emit(GATEWAY_EVENT.PAGES_CHANGED, carried(heldPages));
+    }),
+  );
+  /** The windows' hold on each owner's pages, one fiber standing until let go. */
+  const pageHolds = yield* FiberMap.make<PageOwnerKey>();
 
   /** The document of `taskId` as held now, if the held one is that task's. */
   function heldTaskOf(taskId: string): TasksDocument["task"] {
@@ -689,7 +805,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const scope = yield* Scope.make();
     const collections = yield* Scope.provide(scope)(
       taskListCollections({
-        draw: ({ list, taskAgents, taskPullRequests, taskAgentPins, pendingTasks }) => {
+        draw: ({
+          list,
+          taskAgents,
+          taskPullRequests,
+          agentPullRequests,
+          taskAgentPins,
+          pendingTasks,
+        }) => {
           const { pendingTasks: _held, ...rest } = view;
           view = pendingTasks.length === 0 ? rest : { ...rest, pendingTasks };
           write({
@@ -697,6 +820,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             tasklessAgents: list.planlessAgents ?? [],
             taskAgents,
             taskPullRequests,
+            agentPullRequests,
             taskAgentPins,
           });
           if (view.activeTaskId !== undefined) heldAsListed(view.activeTaskId);
@@ -1364,10 +1488,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ...(task.status === undefined ? undefined : { status: task.status }),
       ...(task.priority === undefined ? undefined : { priority: task.priority }),
       ...(task.number === undefined ? undefined : { number: task.number }),
-      ...(task.mergePolicy === undefined ? undefined : { mergePolicy: task.mergePolicy }),
-      ...(task.running === undefined ? undefined : { running: task.running }),
       assigneeId: task.assignee?.userId ?? null,
       assigneeName: task.assignee?.name ?? null,
+      parentTaskId: task.parentTaskId ?? null,
       pinnedAt: task.pinnedAt ?? null,
       pinPosition: task.pinPosition ?? null,
       completedAt: task.completedAt ?? null,
@@ -1646,11 +1769,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksTreeAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
-    // The repository's skills are answered to the window that asked and held
-    // nowhere: a skill added on GitHub is chosen on the next read.
+    // The repository's skills are held for every window and read again behind
+    // each answer (`heldSkills`), a plan's under the repository the list
+    // names it on, so a plan moved to another repository reads that one's.
     [GATEWAY_METHOD.TASKS_SKILLS]: (params) =>
       Effect.gen(function* () {
-        const read = yield* readParams(
+        const asked = yield* readParams(
           tasksSkillsParamsSchema,
           params,
           "reading a repository's skills names the task, or a workspace and its repository",
@@ -1658,10 +1782,23 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) {
           return carried<TasksSkillsAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const asked = read;
-        const answer = yield* served(
-          "planId" in asked ? client.readSkills(asked.planId) : client.readRepositorySkills(asked),
-        );
+        const listed =
+          "planId" in asked ? view.tasks.find((each) => each.id === asked.planId) : undefined;
+        const key: SkillsKey =
+          "planId" in asked
+            ? new PlanSkillsKey({
+                planId: asked.planId,
+                workspaceId: listed?.workspaceId,
+                repository: listed?.repository ?? undefined,
+              })
+            : new RepositorySkillsKey({
+                workspaceId: asked.workspaceId,
+                repository: asked.repository,
+              });
+        // Note that skills held are answered as they stood when asked, the read behind them landing for the next ask.
+        const held = MutableHashMap.get(heldSkills, key);
+        const read = yield* skillsRead(key);
+        const answer = Option.isSome(held) ? held.value : yield* Fiber.join(read);
         return carried<TasksSkillsAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     // A pull request is answered to the link that asked, and kept for every
@@ -1822,10 +1959,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* FiberMap.remove(browserTabsFollows, browserTabsPlaceId(read));
         return {};
       }),
-    // A plan's pages are followed for a window's Inbox while it draws an item
-    // of that plan, and an agent's on no task while its page is drawn, and
-    // told only as `TASKS_PAGES_CHANGED`; a follow of what is already
-    // followed does nothing.
+    // A plan's pages are held for a window's Inbox while it draws an item of
+    // that plan, and an agent's on no task while its page is drawn, and told
+    // only on the app state (`PAGES_CHANGED`). Note that the windows' hold is
+    // one fiber standing until let go, so a window holding it again holds
+    // nothing anew.
     [GATEWAY_METHOD.TASKS_PAGES_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -1833,10 +1971,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           params,
           "following pages names the task or the agent",
         );
-        if (!gate()) return {};
-        yield* FiberMap.run(pagesFollows, pagePlaceId(read), followPages(read), {
-          onlyIfMissing: true,
-        });
+        const owner = pageOwnerOf(read);
+        yield* FiberMap.run(
+          pageHolds,
+          owner,
+          Effect.scoped(Effect.andThen(heldPageReads.hold(owner), Effect.never)),
+          { onlyIfMissing: true },
+        );
         return {};
       }),
     [GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW]: (params) =>
@@ -1846,7 +1987,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           params,
           "letting pages go names the task or the agent",
         );
-        yield* FiberMap.remove(pagesFollows, pagePlaceId(read));
+        yield* FiberMap.remove(pageHolds, pageOwnerOf(read));
         return {};
       }),
     [GATEWAY_METHOD.TASKS_PAGES]: (params) =>
@@ -2106,7 +2247,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           tasksSetStandingParamsSchema,
           params,
-          "setting where a task stands names it and its status, priority, assignee, merge policy, or running switch",
+          "setting where a task stands names it and its status, priority, or assignee",
         );
         if (!gate()) return { changed: false };
         const { taskId, assigneeName, ...standing } = read;
@@ -2126,10 +2267,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                         : null,
                 }),
             ...(standing.priority === undefined ? undefined : { priority: standing.priority }),
-            ...(standing.mergePolicy === undefined
-              ? undefined
-              : { mergePolicy: standing.mergePolicy }),
-            ...(standing.running === undefined ? undefined : { running: standing.running }),
             ...(standing.assigneeId === undefined
               ? undefined
               : {
@@ -2301,6 +2438,74 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               carried<TasksBlockAnswer>({
                 blockedBy: task.blockedBy ?? [],
                 blocks: task.blocks ?? [],
+              }),
+              changed.answer.txid,
+              takeAnswered(task),
+            ] as const;
+          }),
+        );
+      }),
+    // The service answers the task with its parent as it then stands, so the
+    // list's row re-nests it and the open document takes it in place, and
+    // nothing is read again.
+    [GATEWAY_METHOD.TASKS_SET_PARENT]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksSetParentParamsSchema,
+          params,
+          "a parent change names the task and its parent, or null for none",
+        );
+        if (!gate()) {
+          return carried<TasksSetParentAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        }
+        return yield* writtenThenListed(
+          Effect.gen(function* () {
+            const changed = yield* served(
+              client.setParent(read.taskId, { parentTaskId: read.parentTaskId }),
+            );
+            if (!changed.ok) {
+              return [
+                carried<TasksSetParentAnswer>({ failure: changed.failure }),
+                undefined,
+              ] as const;
+            }
+            const { task } = changed.answer;
+            return [
+              carried<TasksSetParentAnswer>({ parentTaskId: task.parentTaskId ?? null }),
+              changed.answer.txid,
+              takeAnswered(task),
+            ] as const;
+          }),
+        );
+      }),
+    // The service answers the task with its relations as they then stand, so
+    // the list's row and the open document take them in place and nothing is
+    // read again.
+    [GATEWAY_METHOD.TASKS_CHANGE_RELATION]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksChangeRelationParamsSchema,
+          params,
+          "a relation change names the task, the other task, and the kinds it moves between",
+        );
+        if (!gate()) {
+          return carried<TasksChangeRelationAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        }
+        return yield* writtenThenListed(
+          Effect.gen(function* () {
+            const changed = yield* served(client.changeRelation(read.taskId, read.relation));
+            if (!changed.ok) {
+              return [
+                carried<TasksChangeRelationAnswer>({ failure: changed.failure }),
+                undefined,
+              ] as const;
+            }
+            const { task } = changed.answer;
+            return [
+              carried<TasksChangeRelationAnswer>({
+                blockedBy: task.blockedBy ?? [],
+                blocks: task.blocks ?? [],
+                parentTaskId: task.parentTaskId ?? null,
               }),
               changed.answer.txid,
               takeAnswered(task),
@@ -2759,14 +2964,18 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   return {
     methods,
     snapshot: () => view,
+    open: heldPageReads.reopenHeld,
     listed,
     writeAgent: (agentId, change, written) =>
       Effect.suspend(() => taskList.collections.writeAgent(agentId, change, written)),
     reset: Effect.gen(function* () {
       yield* Cache.invalidateAll(pullRequestReads);
       yield* Cache.invalidateAll(issueReads);
+      yield* FiberMap.clear(skillsReads);
+      MutableHashMap.clear(heldSkills);
       yield* FiberHandle.clear(openedRead);
-      yield* FiberMap.clear(pagesFollows);
+      // Note that the windows' holds on pages stand through a sign-out, so a session signing in follows them anew (`open`).
+      yield* heldPageReads.end;
       yield* FiberMap.clear(browserTabsFollows);
       yield* FiberMap.clear(historyFollows);
       yield* FiberHandle.clear(recordFollow);

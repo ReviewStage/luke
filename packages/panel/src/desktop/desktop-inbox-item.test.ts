@@ -31,7 +31,9 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { pasteCutWords } from "@luke/features/words";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/settings/microphone";
+import { experimentsOn } from "@luke/settings/testing";
 import { DocumentIcon } from "@luke/ui";
 import { Effect } from "effect";
 import { act, createElement } from "react";
@@ -76,7 +78,6 @@ import {
   faceKind,
   footWords,
   handFiles,
-  headerNamed,
   heldMessages,
   hoveredCard,
   INVITES,
@@ -802,20 +803,20 @@ test("split, K and J move the chosen row and the item beside it, which draws no 
   const keys = standKeymap();
   assert.equal(pagerOf(page), null, "the list beside the item says where it stands");
 
-  pressKey("j");
+  pressKey("k");
   assert.deepEqual(
     listed(page).filter((row) => row.startsWith("▸")),
     ["▸ *Expire after 7 days?"],
   );
   assert.equal(readTitle(page), "Expire after 7 days?");
-  pressKey("k");
+  pressKey("j");
   assert.equal(readTitle(page), "Alert at 80%?");
 
   const box = composerEditor(page.querySelector(".inbox-view-items") ?? page);
   // Note that jsdom computes no `isContentEditable`, which a browser answers for the editor.
   Object.defineProperty(box, "isContentEditable", { value: true });
   box.focus();
-  pressKey("j", box);
+  pressKey("k", box);
   assert.equal(readTitle(page), "Alert at 80%?", "the letter is the box's");
   act(() => keys.unmount());
 });
@@ -826,25 +827,25 @@ test("split, K and J hand the keyboard to the row they choose, so the arrows go 
   const keys = standKeymap();
   act(() => rowNamed(page, "Alert at 80%?").focus());
 
-  pressKey("j", document.activeElement ?? document.body);
+  pressKey("k", document.activeElement ?? document.body);
   assert.equal(readTitle(page), "Expire after 7 days?");
   assert.equal(
     document.activeElement,
     rowNamed(page, "Expire after 7 days?"),
-    "J's row holds the keyboard",
+    "K's row holds the keyboard",
   );
-  pressKey("k", document.activeElement ?? document.body);
+  pressKey("j", document.activeElement ?? document.body);
   assert.equal(readTitle(page), "Alert at 80%?");
   assert.equal(
     document.activeElement,
     rowNamed(page, "Alert at 80%?"),
-    "K's row holds the keyboard",
+    "J's row holds the keyboard",
   );
   pressKey("ArrowUp", document.activeElement ?? document.body);
   assert.equal(
     document.activeElement,
-    rowNamed(page, "How is a failed email retried?"),
-    "↑ goes on from the row K reached",
+    rowNamed(page, "Expire after 7 days?"),
+    "↑ goes on from the row J reached",
   );
   act(() => keys.unmount());
 });
@@ -856,7 +857,7 @@ function rowTabStops(page: HTMLElement): (string | null | undefined)[] {
     .map((row) => row.querySelector(ROW_TITLE)?.textContent);
 }
 
-test("the list's rows are one Tab stop, across its plans, that ↓ walks and End ends, the walk wrapping and the stop following the row last focused", async () => {
+test("the list's rows are one Tab stop, across its tasks, that ↓ walks and End ends, the walk wrapping and the stop following the row last focused", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   assert.deepEqual(rowTabStops(page), ["Alert at 80%?"], "Tab lands on the open row, one stop");
@@ -866,10 +867,10 @@ test("the list's rows are one Tab stop, across its plans, that ↓ walks and End
   pressKey("ArrowDown", document.activeElement ?? document.body);
   assert.equal(
     document.activeElement,
-    rowNamed(page, "Expire after 7 days?"),
-    "↓↓ goes two rows on, into the next plan",
+    rowNamed(page, "Alert at 80%?"),
+    "↓↓ goes two rows on, across tasks",
   );
-  assert.deepEqual(rowTabStops(page), ["Expire after 7 days?"], "Tab comes back to the row left");
+  assert.deepEqual(rowTabStops(page), ["Alert at 80%?"], "Tab comes back to the row left");
   pressKey("ArrowDown", document.activeElement ?? document.body);
   assert.equal(
     document.activeElement,
@@ -877,138 +878,7 @@ test("the list's rows are one Tab stop, across its plans, that ↓ walks and End
     "it wraps",
   );
   pressKey("End", document.activeElement ?? document.body);
-  assert.equal(document.activeElement, rowNamed(page, "Expire after 7 days?"));
-});
-
-test("↓ passes over a folded plan's rows", async () => {
-  const { page } = mount();
-  await settle();
-  act(() => headerNamed(page, "Invites").click());
-  act(() => rowNamed(page, "Alert at 80%?").focus());
-  pressKey("ArrowDown", document.activeElement ?? document.body);
-  assert.equal(
-    document.activeElement,
-    rowNamed(page, "How is a failed email retried?"),
-    "Invites' row is passed over, the walk wrapping to the first",
-  );
-});
-
-test("a folded plan's items have no row, so K and J pass over them and the pager counts the rows a reader finds", async () => {
-  const { page } = mount([], { chosen: ON_THRESHOLD });
-  await settle();
-  const keys = standKeymap();
-  act(() => headerNamed(page, "Invites").click());
-  pressKey("j");
-  assert.equal(readTitle(page), "Alert at 80%?", "nothing below the last row");
-  layOut(page, 800);
-  assert.equal(pagerOf(page), "2 of 2");
-  act(() => keys.unmount());
-});
-
-test("the chosen item keeps its place when its own plan folds, so J still reaches the rows below, and once left the folded rows are passed over", async () => {
-  const { page } = mount([], { chosen: ON_THRESHOLD });
-  await settle();
-  const keys = standKeymap();
-  act(() => headerNamed(page, "Billing usage alerts").click());
-  pressKey("j");
-  assert.equal(readTitle(page), "Expire after 7 days?");
-  pressKey("k");
-  assert.equal(readTitle(page), "Expire after 7 days?", "the folded plan holds no row above");
-  act(() => keys.unmount());
-});
-
-test("a settled item offers, over its box, the next item that needs you as the Inbox draws it: its agent's tile, its title, the attention mark at its end and J where J reaches it, and its card hung beside it, a press opening it; an item that waits offers none", async () => {
-  const { page } = mount();
-  await settle();
-  const offered = () =>
-    page.querySelector<HTMLButtonElement>('.inbox-view-items [aria-label="Next item"] button');
-  assert.equal(offered(), null, "the item chosen waits on its box");
-
-  act(() => rowNamed(page, "How is a failed email retried?").click());
-  const next = offered();
-  assert.ok(next, "the settled item offers the next");
-  assert.equal(next.querySelector(".inbox-next-title")?.textContent, "Alert at 80%?");
-  assert.ok(next.querySelector(".inbox-row-attention"), "it needs you, as its row says");
-  assert.ok(wordsOf(next)?.endsWith("J"), "the key stands last");
-  assert.ok(wearsAgentTile(next), "the next item's agent stands by its tile");
-  assert.equal(next.querySelector("[data-agent-ref]"), null, "the tile hangs no card of its own");
-  assert.match(
-    hoveredCard(next, "[data-inbox-item-card]") ?? "",
-    /^Alert at 80%\?Needs you.*Billing usage alerts/u,
-    "the card is the item's own",
-  );
-  act(() => next.click());
-  assert.equal(readTitle(page), "Alert at 80%?");
-  assert.equal(offered(), null);
-});
-
-test("Next follows the way the keys last went: after K it offers the nearest item above that needs you, by an arrow up and K, a press opening it; after J the one below, by J", async () => {
-  world.inboxes.set(BILLING.id, [
-    { ...THRESHOLD, updatedAt: 4_500 },
-    { ...RETRY, updatedAt: 2_000, settledAt: 2_000 },
-  ]);
-  const { page } = mount([], { chosen: ON_THRESHOLD });
-  await settle();
-  const keys = standKeymap();
-  const offered = () =>
-    page.querySelector<HTMLButtonElement>('.inbox-view-items [aria-label="Next item"] button');
-  assert.deepEqual(listed(page), [
-    "# Billing usage alerts",
-    "▸ *Alert at 80%?",
-    "How is a failed email retried?",
-    "# Invites",
-    "*Expire after 7 days?",
-  ]);
-
-  pressKey("j");
-  assert.equal(readTitle(page), "How is a failed email retried?");
-  assert.equal(offered()?.querySelector(".inbox-next-title")?.textContent, "Expire after 7 days?");
-  assert.ok(wordsOf(offered())?.endsWith("J"));
-  assert.equal(offered()?.getAttribute("aria-keyshortcuts"), "J");
-
-  pressKey("j");
-  pressKey("k");
-  assert.equal(readTitle(page), "How is a failed email retried?");
-  const next = offered();
-  assert.ok(next, "the settled item offers the next");
-  assert.equal(next.querySelector(".inbox-next-lead")?.textContent, "Next ↑");
-  assert.equal(next.querySelector(".inbox-next-title")?.textContent, "Alert at 80%?");
-  assert.ok(wordsOf(next)?.endsWith("K"));
-  assert.equal(next.getAttribute("aria-keyshortcuts"), "K");
-  act(() => next.click());
-  assert.equal(readTitle(page), "Alert at 80%?");
-  act(() => keys.unmount());
-});
-
-test("Next hands the keyboard to the item it opens, its way back one column wide and its row split, and the item opens at its thread's newest message, wherever the last was scrolled", async () => {
-  layOutBoards({ height: 1200 });
-  const { page } = mount();
-  await settle();
-  const next = () =>
-    page.querySelector<HTMLButtonElement>('.inbox-view-items [aria-label="Next item"] button');
-  act(() => rowNamed(page, "How is a failed email retried?").click());
-  const board = boardOf(itemPane(page));
-  scrollBoard(board, 200);
-  next()?.focus();
-  act(() => next()?.click());
-  assert.equal(readTitle(page), "Alert at 80%?");
-  assert.ok(
-    document.activeElement === rowNamed(page, "Alert at 80%?"),
-    "split, the keyboard is on its row",
-  );
-  assert.equal(board.scrollTop, 800, "the next item opens at its newest message");
-  assert.equal(scrollButton(itemPane(page)), null, "at its end, no way back is offered");
-
-  layOut(page, 800);
-  act(() => backToList(page).click());
-  act(() => rowNamed(page, "How is a failed email retried?").click());
-  next()?.focus();
-  act(() => next()?.click());
-  assert.equal(readTitle(page), "Alert at 80%?");
-  assert.ok(
-    document.activeElement === backToList(page),
-    "one column wide, the keyboard is on its way back",
-  );
+  assert.equal(document.activeElement, rowNamed(page, "Alert at 80%?"));
 });
 
 test("a press on the row already chosen hands the keyboard nowhere, so a later narrowing leaves it where the developer put it", async () => {
@@ -1325,6 +1195,7 @@ test("in the window's Inbox a skill an answer's words name is the chip a sent me
     "Run /release first.",
     5_000,
   );
+  handState(experimentsOn(EXPERIMENT.SKILLS));
   world.inboxes = new Map([
     [BILLING.id, [THRESHOLD, answered]],
     [INVITES.id, [EXPIRY]],
@@ -1346,6 +1217,7 @@ test("in the window's Inbox a skill an answer's words name is the chip a sent me
 
 test("a skill named by a settled item of an agent with no plan that a link reached opens beside the Inbox, in the agent's own repository, which its group names none of", async () => {
   const settled = answeredBy(BUMP, READER, "Retry once", "Run /release first.", 2_000);
+  handState(experimentsOn(EXPERIMENT.SKILLS));
   world.agentInboxes = new Map([[STRAY_AGENT, [settled]]]);
   world.pageAgents = new Map([
     [STRAY_AGENT, { ...AGENT, id: STRAY_AGENT, planId: null, title: "Bump" }],
@@ -1559,7 +1431,7 @@ test("words selected in a thread stand Reply over them, which quotes them into t
   );
 });
 
-test("words selected in an open item's question quote into its box, its reply carries the quote, and Reply stands down while the reply is out", async () => {
+test("words selected in an open item's question quote into its box, its reply carries the quote, and Reply stands still while the reply is out, since the box takes the next", async () => {
   const asked = saying(THRESHOLD, "Usage alerts fire at 80% of the plan's quota.");
   world.inboxes = new Map([
     [BILLING.id, [asked]],
@@ -1591,7 +1463,14 @@ test("words selected in an open item's question quote into its box, its reply ca
   await settle();
 
   selectInPane(page, "Usage alerts fire", "Usage", "quota.");
-  assert.equal(replyPress(), undefined, "no quote is offered while the reply is out");
+  const again = replyPress() ?? assert.fail("Reply stands while the reply is out");
+  act(() => again.click());
+  await settle();
+  assert.equal(
+    pane.querySelector(".composer-quote-words")?.textContent,
+    "Usage alerts fire at 80% of the plan's quota.",
+    "the quote lands in the box behind the reply on its way",
+  );
   assert.deepEqual(
     sent.map(({ itemId, text }) => ({ itemId, text })),
     [
@@ -2417,9 +2296,10 @@ test("a teammate's notice is left open as it is opened, since acknowledging it s
   assert.deepEqual(messaged, []);
 });
 
-test("a reply leaves its box the moment it is sent, the box and the ask standing empty and open while it is out, so a second Enter sends nothing; refused, its words and files come back into the box, which says why", async () => {
+test("a reply leaves its box the moment it is sent, the box and the ask standing empty and open while it is out, so the next reply goes once it answers, in order; refused, its words and files come back into the box, which says why, those of every reply behind it after them, none of which goes", async () => {
   const shown = threadItem([askingMessage(EXPIRY_ASK)]);
   const pane = await mountThread(shown);
+  const page = pane.ownerDocument.body;
   const sent: AgentInboxMessageParams[] = [];
   const answers: ((answer: AgentInboxMessagedView) => void)[] = [];
   const bridge = appBridge();
@@ -2435,15 +2315,36 @@ test("a reply leaves its box the moment it is sent, the box and the ask standing
       );
     },
   });
+  const texts = () => sent.map(({ text }) => text);
 
-  await handFiles(pane.ownerDocument.body, [new File(["# Notes"], "notes.md")], "pick");
   typeInComposer(pane, "Does it matter for SSO teams?");
   composerEditor(pane).focus();
   pressInComposer(pane, "Enter");
   await settle();
 
   assert.equal(composerEditor(pane).textContent, "", "the box lets its words go at once");
-  assert.deepEqual(attachedNames(draftReplyIn(pane)), [], "and its files");
+  assert.equal(composerEditor(pane).getAttribute("aria-disabled"), null, "and stands open");
+  assert.equal(sendWords(pane), "Send", "its Send never busy");
+  assert.ok(
+    openOptions(pane).every((option) => !option.disabled),
+    "the ask still takes a pick",
+  );
+
+  await handFiles(page, [new File(["# Notes"], "notes.md")], "pick");
+  typeInComposer(pane, "And for guests?");
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(
+    texts(),
+    ["Does it matter for SSO teams?"],
+    "the second waits for the first's answer",
+  );
+  assert.deepEqual(
+    sendingMarks(page),
+    ["Sending", "Sending"],
+    "both stand on the thread meanwhile",
+  );
+  assert.deepEqual(attachedNames(draftReplyIn(pane)), [], "the box let its files go too");
   assert.deepEqual(
     [...pane.querySelectorAll('.inbox-thread > li:not([data-inbox-comment="draft"])')].flatMap(
       attachedNames,
@@ -2451,28 +2352,183 @@ test("a reply leaves its box the moment it is sent, the box and the ask standing
     ["notes.md"],
     "which go up with the reply on the thread",
   );
-  assert.equal(composerEditor(pane).getAttribute("aria-disabled"), null, "and stands open");
-  assert.ok(
-    openOptions(pane).every((option) => !option.disabled),
-    "the ask still takes a pick",
+
+  const first = sent[0] ?? assert.fail("the first went");
+  await act(async () =>
+    answers[0]?.(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000021")(first)),
   );
-  pressInComposer(pane, "Enter");
   await settle();
   assert.deepEqual(
-    sent.map(({ text }) => text),
-    ["Does it matter for SSO teams?"],
-    "a second Enter sends nothing again",
+    texts(),
+    ["Does it matter for SSO teams?", "And for guests?"],
+    "the second goes once the first answered",
   );
+  assert.notEqual(sent[0]?.clientKey, sent[1]?.clientKey, "each under a key of its own");
 
-  await act(async () => answers[0]?.({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }));
+  typeInComposer(pane, "Never mind.");
+  pressInComposer(pane, "Enter");
+  await settle();
+  await act(async () => answers[1]?.({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }));
   await settle();
 
-  assert.equal(composerEditor(pane).textContent, "Does it matter for SSO teams?");
+  assert.deepEqual(
+    texts(),
+    ["Does it matter for SSO teams?", "And for guests?"],
+    "the reply behind the one refused never goes",
+  );
+  assert.deepEqual(sendingMarks(page), [], "both leave the thread");
+  assert.equal(
+    composerEditor(pane).textContent,
+    "And for guests?Never mind.",
+    "their words come back into the box, in order, a line each read without its break",
+  );
   assert.deepEqual(attachedNames(pane), ["notes.md"]);
   assert.equal(
     pane.querySelector('.agent-composer [role="alert"]')?.textContent,
     "Only the member who started this agent can do this.",
   );
+});
+
+test("a second reply in the same words as one on its way stays marked Sending once the first lands, until its own answer does", async () => {
+  const shown = threadItem([askingMessage(EXPIRY_ASK)]);
+  const pane = await mountThread(shown);
+  const page = pane.ownerDocument.body;
+  const sent: AgentInboxMessageParams[] = [];
+  const answers: ((answer: AgentInboxMessagedView) => void)[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
+      sent.push(request.payload);
+      return new Promise((resolve) =>
+        answers.push((value) => resolve({ status: FAKE_ANSWER.DONE, value })),
+      );
+    },
+  });
+
+  typeInComposer(pane, "Thanks.");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  typeInComposer(pane, "Thanks.");
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(sendingMarks(page), ["Sending", "Sending"]);
+
+  const first = sent[0] ?? assert.fail("the first went");
+  const landed = repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000021")(first);
+  await act(async () => answers[0]?.(landed));
+  await settle();
+  assert.deepEqual(
+    sendingMarks(page),
+    ["Sending"],
+    "the message the first became never stands for the second",
+  );
+  assert.equal(threadOf(page).filter(([, , , words]) => words === "Thanks.").length, 2);
+
+  const second = sent[1] ?? assert.fail("the second went");
+  assert.ok(!("failure" in landed));
+  await act(async () =>
+    answers[1]?.(repliedOn(landed.item, "e1b2c3d4-0000-4000-8000-000000000022")(second)),
+  );
+  await settle();
+  assert.deepEqual(sendingMarks(page), []);
+  assert.equal(threadOf(page).filter(([, , , words]) => words === "Thanks.").length, 2);
+});
+
+test("an answer queued behind a note on the open question keeps its pick once the note is refused, back in the box beside the note's words, and never goes", async () => {
+  const shown = threadItem([askingMessage(EXPIRY_ASK)]);
+  const pane = await mountThread(shown);
+  const sent: AgentInboxMessageParams[] = [];
+  const answers: ((answer: AgentInboxMessagedView) => void)[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
+      sent.push(request.payload);
+      return new Promise((resolve) =>
+        answers.push((value) => resolve({ status: FAKE_ANSWER.DONE, value })),
+      );
+    },
+  });
+
+  typeInComposer(pane, "Checking this.");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  act(() => openOptions(pane)[1]?.click());
+  act(() =>
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+  assert.deepEqual(
+    sent.map(({ text }) => text),
+    ["Checking this."],
+    "the answer waits behind the note",
+  );
+  assert.deepEqual(checkedOptions(pane), [], "and left the box");
+
+  await act(async () => answers[0]?.({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }));
+  await settle();
+  assert.deepEqual(
+    sent.map(({ text }) => text),
+    ["Checking this."],
+    "the answer never goes once the note is refused",
+  );
+  assert.equal(composerEditor(pane).textContent, "Checking this.");
+  assert.deepEqual(checkedOptions(pane), ["7 days"], "its pick is back in the box");
+});
+
+test("Got it pressed while a reply that settles the notice is out goes nowhere once the reply lands, the box released and saying nothing", async () => {
+  const notice = noticeItem({ startedBy: TEAMMATE });
+  const pane = await mountThread(notice);
+  const answered: AgentInboxAnswerParams[] = [];
+  const lands: (() => void)[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.AGENTS_INBOX_ANSWER) {
+        answered.push(request.payload);
+        return new Promise(() => undefined);
+      }
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
+      const landed = repliedOn(notice, "e1b2c3d4-0000-4000-8000-000000000021")(request.payload);
+      assert.ok(!("failure" in landed));
+      // The reply settles the notice, as one naming its revision does.
+      const settled: InboxItem = {
+        ...landed.item,
+        status: INBOX_STATUS.ANSWERED,
+        answeredBy: READER,
+        settledAt: 9_000,
+      };
+      return new Promise((resolve) =>
+        lands.push(() => resolve({ status: FAKE_ANSWER.DONE, value: { item: settled } })),
+      );
+    },
+  });
+
+  typeInComposer(pane, "Looks good.");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.equal(sendWords(pane), "Got it", "the emptied box offers the nod while the reply is out");
+  act(() =>
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+  assert.deepEqual(answered, [], "the nod waits behind the reply");
+
+  await act(async () => lands[0]?.());
+  await settle();
+  assert.deepEqual(answered, [], "and goes nowhere, since the reply settled the notice");
+  assert.equal(pane.querySelector('.agent-composer [role="alert"]'), null, "the box says nothing");
+  assert.equal(sendWords(pane), "Send", "and is released");
 });
 
 /** The reader's draft reply at the thread's end, which holds the box. */
@@ -2606,8 +2662,8 @@ test("words written in a reply's box while the reply is out stay there, whether 
   await settle();
   assert.equal(
     composerEditor(pane).textContent,
-    "Never mind.",
-    "a refusal puts nothing back over them",
+    "And for guests?Never mind.",
+    "a refusal puts its words back ahead of them, a line each read without its break",
   );
 });
 

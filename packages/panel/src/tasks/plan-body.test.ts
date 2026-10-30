@@ -147,11 +147,11 @@ function shownWords(line: Element | null): string | undefined {
   return lineWords(copy);
 }
 
-/** The card hung once the first of `selector` in the line over the document, or in `line`, is hovered. */
+/** The card hung once the first of `selector` in the Goal section's byline, or in `line`, is hovered. */
 function cardOf(
   view: HTMLElement,
   selector = "[data-actor-ref]",
-  line = ".plan-byline-edited",
+  line = ".plan-unit-byline",
 ): HTMLElement {
   const anchor = view.querySelector(`${line} ${selector}`) ?? assert.fail("the ref stands");
   restOn(anchor);
@@ -165,7 +165,7 @@ test("the saved body is drawn as Markdown", () => {
   assert.match(markup, /Invite a teammate by email\./u);
 });
 
-test("under its title the plan says who created the task and when, then who last edited it and when, and a plan nobody edited says only who created it", async () => {
+test("under its title the plan says who created the task and when, then when it was last edited, and a plan nobody edited says only who created it", async () => {
   // Note that only the date is fixed, so the plan's minute reads `now` and nothing waits on a timer.
   const now = Date.UTC(2026, 9, 14, 12);
   vi.useFakeTimers({ now, toFake: ["Date"] });
@@ -191,7 +191,7 @@ test("under its title the plan says who created the task and when, then who last
   );
   assert.deepEqual([...(byline?.querySelectorAll(".actor-line") ?? [])].map(lineWords), [
     "Created by Charles Pan · 3d ago",
-    "Last edited by you · now",
+    "Edited now",
   ]);
   assert.deepEqual([...unedited.querySelectorAll(".plan-byline .actor-line")].map(lineWords), [
     "Created by Charles Pan · 3d ago",
@@ -208,15 +208,15 @@ test("two members each see the other's edits under the other's name on their fac
   const byCharles = { ...byDean, by: CHARLES };
 
   const charles = await draw(editedAs(byCharles), { readerId: DEAN.userId });
-  assert.deepEqual(editedLines(charles), ["Last edited by Charles Pan · now", "Charles Pan now"]);
-  assert.equal(charles.querySelector(".plan-byline-edited .actor-mark")?.textContent, "C");
+  assert.deepEqual(editedLines(charles), ["Edited now", "Charles Pan now"]);
+  assert.equal(charles.querySelector(".plan-unit-byline .actor-mark")?.textContent, "C");
 
   assert.deepEqual(editedLines(await draw(editedAs(byDean), { readerId: CHARLES.userId })), [
-    "Last edited by Dean Stratakos · now",
+    "Edited now",
     "Dean Stratakos now",
   ]);
   assert.deepEqual(editedLines(await draw(editedAs(byDean), { readerId: DEAN.userId })), [
-    "Last edited by you · now",
+    "Edited now",
     "You now",
   ]);
 });
@@ -225,16 +225,16 @@ test("an edit the service names no member for, or read without an account id, is
   const unnamed = { actor: PLAN_ACTOR.DEVELOPER, duringCall: false };
 
   assert.equal(
-    editedLines(await draw(editedAs(unnamed), { readerId: DEAN.userId }))[0],
-    "Last edited by someone · now",
+    editedLines(await draw(editedAs(unnamed), { readerId: DEAN.userId }))[1],
+    "Someone now",
   );
   assert.equal(
-    editedLines(await draw(editedAs({ ...unnamed, by: DEAN })))[0],
-    "Last edited by Dean Stratakos · now",
+    editedLines(await draw(editedAs({ ...unnamed, by: DEAN })))[1],
+    "Dean Stratakos now",
   );
   const former = await draw(editedAs({ ...unnamed, by: LEE }), { readerId: DEAN.userId });
-  assert.equal(editedLines(former)[0], "Last edited by Lee Park (former member) · now");
-  const mark = former.querySelector(".plan-byline-edited .actor-mark");
+  assert.equal(editedLines(former)[1], "Lee Park (former member) now");
+  const mark = former.querySelector(".plan-unit-byline .actor-mark");
   assert.equal(mark?.querySelector("img")?.getAttribute("src"), LEE_PICTURE);
 });
 
@@ -256,7 +256,7 @@ test("the time opens the version history, on the plan as it stands or on the sec
       ["2h", "Goal: edited 2h ago. Show version history"],
     ],
   );
-  assert.equal(view.querySelector(".plan-byline-edited [data-actor-ref]")?.tagName, "SPAN");
+  assert.equal(view.querySelector(".plan-unit-byline [data-actor-ref]")?.tagName, "SPAN");
   for (const time of times) act(() => time.click());
   assert.deepEqual(shown, [undefined, at]);
 });
@@ -330,11 +330,11 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
     onOpen: (agentId) => opened.push(agentId),
   };
   const view = await draw(byAgent, { readerId: DEAN.userId, agents });
-  const ref = view.querySelector<HTMLElement>(".plan-byline-edited [data-actor-ref]");
+  const ref = view.querySelector<HTMLElement>(".plan-unit-byline [data-actor-ref]");
 
-  assert.equal(editedLines(view)[0], "Last edited by Fix auth flow · now");
+  assert.equal(editedLines(view)[1], "Fix auth flow now");
   assert.equal(ref?.tagName, "BUTTON");
-  assert.ok(view.querySelector('.plan-byline-edited .actor-mark[data-kind="agent"] .state-glyph'));
+  assert.ok(view.querySelector('.plan-unit-byline .actor-mark[data-kind="agent"] .state-glyph'));
   assert.equal(cardOf(view).querySelector(".luke-hover-card-name")?.textContent, "Fix auth flow");
   act(() => ref?.click());
   assert.deepEqual(opened, [AGENT.id]);
@@ -343,7 +343,7 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
     readerId: DEAN.userId,
     agents: { ...agents, control: agentsControl() },
   });
-  assert.equal(unlisted.querySelector(".plan-byline-edited [data-actor-ref]")?.tagName, "SPAN");
+  assert.equal(unlisted.querySelector(".plan-unit-byline [data-actor-ref]")?.tagName, "SPAN");
 });
 
 test("the sections changed since the last look are counted beside a face for each who changed them", async () => {
@@ -402,4 +402,55 @@ test("an empty plan that cannot be edited draws no line saying to write it", asy
   const view = await draw({ ...TASK, document: { body: "", assumptions: [] } });
 
   assert.ok(!view.textContent?.includes("Write the plan"), "no line under the byline");
+});
+
+test("a save that writes a section above the one the keyboard stands on leaves Tab entering at that section", async () => {
+  const opened: Task = {
+    ...TASK,
+    document: {
+      body: "## Goal\nInvite a teammate by email.\n\n## Approach\nModel an invite as a pending membership.",
+      assumptions: [],
+    },
+  };
+  const saved: Task = {
+    ...opened,
+    document: {
+      ...opened.document,
+      body: `## Context\nIt came up in support.\n\n${opened.document.body}`,
+    },
+  };
+  fakeAppBridge({});
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  const registry = AtomRegistry.make();
+  const drawPlan = (task: Task) =>
+    act(() =>
+      root?.render(
+        onRegistry(
+          registry,
+          createElement(MemberDirectory, {
+            workspace: ACME,
+            readerId: undefined,
+            children: createElement(PlanBody, {
+              task,
+              onEdit: () => Promise.reject(new Error("Nothing is saved here.")),
+            }),
+          }),
+        ),
+      ),
+    );
+  const entered = () =>
+    [...container.querySelectorAll<HTMLElement>("[role='group'][aria-label]")]
+      .filter((block) => block.tabIndex === 0)
+      .map((block) => block.getAttribute("aria-label"));
+  drawPlan(opened);
+  await settle();
+  const approach = container.querySelector<HTMLElement>("[aria-label='Approach']");
+  act(() => approach?.focus());
+
+  drawPlan(saved);
+  await settle();
+
+  assert.deepEqual(entered(), ["Approach"]);
 });

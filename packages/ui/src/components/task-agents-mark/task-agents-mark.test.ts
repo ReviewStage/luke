@@ -74,6 +74,11 @@ it.each([
     agents({}, [CLOSED, MERGED]),
     "Pull request merged",
   ],
+  [
+    "an open pull request in the merge queue is said queued",
+    agents({}, [MERGED, { ...pullRequest(5, PULL_REQUEST_STATE.OPEN), queued: true }]),
+    "Pull request queued",
+  ],
   ["a closed pull request still shows", agents({}, [CLOSED]), "Pull request closed"],
   ["agents done with nothing published show nothing", agents({}), undefined],
   ["a task with no agents shows nothing", undefined, undefined],

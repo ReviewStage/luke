@@ -80,19 +80,24 @@ export const AUTOMATION_ACT_KIND = {
   AUTOMATIONS_FOLLOW: "automations.follow",
 } as const;
 
-/** The Channels view's asks: a workspace's channels listed, made, edited, archived, unarchived, and looked at, its archived ones read, a page of one's threads read, a thread moved, and the channels followed. */
+/** The Channels view's asks: a workspace's channels made, edited, archived, unarchived, and looked at, a page of one's threads read, a thread moved, and the channels held and read again. */
 export const CHANNEL_ACT_KIND = {
-  CHANNELS_LIST: "channels.list",
   CHANNELS_CREATE: "channels.create",
   CHANNELS_EDIT: "channels.edit",
   CHANNELS_ARCHIVE: "channels.archive",
   CHANNELS_UNARCHIVE: "channels.unarchive",
-  CHANNELS_ARCHIVED: "channels.archived",
   CHANNELS_LOOK: "channels.look",
   CHANNELS_THREADS: "channels.threads",
   CHANNELS_MOVE: "channels.move",
-  /** Which of a workspace's channels moved, pushed to the window while it holds the stream open. */
+  /**
+   * A workspace's channels, open and archived, held followed while the
+   * window holds the stream open, and a while after among those let go
+   * lately: what they hold reaches the panel on app state
+   * (`LIVE_READ.CHANNELS`), so the stream carries nothing.
+   */
   CHANNELS_FOLLOW: "channels.follow",
+  /** A held workspace's channels, which the panel reads on app state, read again at once, as Try again asks. */
+  CHANNELS_RETRY: "channels.retry",
 } as const;
 
 /**
@@ -119,13 +124,17 @@ export const AGENT_ACT_KIND = {
   /**
    * The account's hosts as Settings › Hosts reads and changes
    * them: listed, the beats of the account's devices read, one removed, an install token kept by its hash alone (the
-   * window that minted the token keeps it and shows it once), and one revoked.
+   * window that minted the token keeps it and shows it once), and one revoked; and a box's pairing, by the code its
+   * link named, read, approved, or denied.
    */
   HOSTS_LIST: "hosts.list",
   HOSTS_PRESENCE: "hosts.presence",
   HOSTS_REMOVE: "hosts.remove",
   HOSTS_KEEP_INSTALL_TOKEN: "hosts.keepInstallToken",
   HOSTS_REVOKE_INSTALL_TOKEN: "hosts.revokeInstallToken",
+  HOSTS_PAIRING_READ: "hosts.pairingRead",
+  HOSTS_PAIRING_APPROVE: "hosts.pairingApprove",
+  HOSTS_PAIRING_DENY: "hosts.pairingDeny",
   AGENTS_LIST: "agents.list",
   /** One workspace's agents, newest started first: what an automation's Same agent is chosen from. */
   AGENTS_WORKSPACE_LIST: "agents.workspaceList",
@@ -145,6 +154,7 @@ export const AGENT_ACT_KIND = {
   AGENTS_CHOOSE: "agents.choose",
   AGENTS_RENAME: "agents.rename",
   AGENTS_SERVERS: "agents.servers",
+  AGENTS_QUEUE: "agents.queue",
   AGENTS_STOP: "agents.stop",
   AGENTS_REWIND: "agents.rewind",
   AGENTS_ARCHIVE: "agents.archive",
@@ -331,6 +341,10 @@ export const TASKS_ACT_KIND = {
   TASKS_MOVE: "tasks.move",
   /** One block of a task added or taken away on the service; answers the task's blocks as they then stand, or why they are unchanged. */
   TASKS_BLOCK: "tasks.block",
+  /** One task's parent set on the service, or cleared with null; answers the parent as it then stands, or why it is unchanged. */
+  TASKS_SET_PARENT: "tasks.setParent",
+  /** One relation of a task moved to another kind on the service, in one call; answers the task's relations as they then stand, or why they are unchanged. */
+  TASKS_CHANGE_RELATION: "tasks.changeRelation",
   /** The developer's edit of the open task's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
   TASKS_EDIT: "tasks.edit",
   /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
@@ -383,9 +397,11 @@ export const TASKS_ACT_KIND = {
   /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
   TASKS_PAGES: "tasks.pages",
   /**
-   * One plan's pages, followed while the window holds the stream open for
-   * the Inbox's panel beside an item of that plan: each time they move, over
-   * Neon Realtime, never on the document.
+   * One plan's pages, or one agent's on no task, held followed while the
+   * window holds the stream open for the panel beside an Inbox item or an
+   * agent's page, and a while after among those let go lately: what they
+   * hold reaches the panel on app state (`LIVE_READ.PAGES`), so the stream
+   * carries nothing.
    */
   TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
   /**

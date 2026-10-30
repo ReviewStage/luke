@@ -15,7 +15,7 @@ import type { Directory } from "./member-directory.js";
  * everyone else as the detail, found by their name and their email, and
  * their card hung beside the row. The `@` menu, ⌘K, the assignee picker, the
  * Tasks page's filters, and the new-owner picker each map these rows onto
- * their own engine's; a filter by person, the Inbox's Whose and the
+ * their own engine's; a filter by person, the Inbox's Addressed to and the
  * sidebar's Assigned to and Created by, leads with Anyone and the reader as
  * Me (`peopleFilterActions`), so every filter says the same two words.
  */
@@ -118,7 +118,9 @@ export type PeopleFilter =
  * their card beside the row, the one chosen checked, a teammate by their id
  * alone. Me stands where the reader's id is known, or where the caller keeps
  * the reader's own apart from any id (`meWithoutId`), as the Inbox reads an
- * item waiting on nobody it can name as the reader's.
+ * item waiting on nobody it can name as the reader's. Me leads where the
+ * filter keeps the reader's own until told otherwise (`meFirst`), as the
+ * sidebar's Assigned to does.
  */
 export function peopleFilterActions({
   members,
@@ -126,12 +128,14 @@ export function peopleFilterActions({
   chosen,
   onChoose,
   meWithoutId = false,
+  meFirst = false,
 }: {
   members: readonly WorkspaceMember[] | undefined;
   readerId: string | undefined;
   chosen: PeopleFilter | { readonly kind: typeof PEOPLE_FILTER.PERSON; readonly userId: string };
   onChoose: (filter: PeopleFilter) => void;
   meWithoutId?: boolean;
+  meFirst?: boolean;
 }): MenuAction[] {
   const rows = memberRows(members, readerId);
   const mine = rows.find((row) => row.actor.you);
@@ -147,14 +151,14 @@ export function peopleFilterActions({
             onSelect: () => onChoose({ kind: PEOPLE_FILTER.ME }),
           },
         ];
+  const anyone: MenuAction = {
+    label: PEOPLE_FILTER_WORDS.ANYONE,
+    icon: <UsersIcon />,
+    checked: chosen.kind === PEOPLE_FILTER.ANYONE,
+    onSelect: () => onChoose({ kind: PEOPLE_FILTER.ANYONE }),
+  };
   return [
-    {
-      label: PEOPLE_FILTER_WORDS.ANYONE,
-      icon: <UsersIcon />,
-      checked: chosen.kind === PEOPLE_FILTER.ANYONE,
-      onSelect: () => onChoose({ kind: PEOPLE_FILTER.ANYONE }),
-    },
-    ...me,
+    ...(meFirst ? [...me, anyone] : [anyone, ...me]),
     ...rows
       .filter((row) => !row.actor.you)
       .map((row) => ({

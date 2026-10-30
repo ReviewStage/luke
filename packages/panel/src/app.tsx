@@ -2,7 +2,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
-import type { ReadLink } from "@luke/features/link-grammar";
+import type { AccountLink, ReadLink } from "@luke/features/link-grammar";
 import type { ModelProvider } from "@luke/features/models-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
@@ -13,8 +13,18 @@ import {
   type AppInboxTasklessItem,
   RUN_PROFILE,
 } from "@luke/host/app-state";
-import { APP_SETTING_SCHEMA, type Experiment, type HostCapability } from "@luke/settings";
-import { agentKeyLink, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import {
+  APP_SETTING_SCHEMA,
+  EXPERIMENT,
+  type Experiment,
+  type HostCapability,
+} from "@luke/settings";
+import {
+  agentKeyLink,
+  SETTINGS_SECTION,
+  SETTINGS_VIEW,
+  type SettingsLink,
+} from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { cssCustomProperties } from "@luke/ui";
 import { isComposingKey } from "@luke/ui/composing-key";
@@ -50,6 +60,7 @@ import { OpenSettingsProvider } from "./open-settings.js";
 import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
+import { useOpenHostConnect } from "./settings/host-connect-dialog.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
 import { ShellRoomContext, useStageRoom } from "./stage-room.js";
@@ -67,6 +78,7 @@ import { useUpdatedToast } from "./update-toast.js";
 import {
   APP_SETTINGS_VIEW,
   APP_SLICE,
+  experimentOnNow,
   SETTINGS_HELD,
   useAdminAccess,
   useAdminAccessPending,
@@ -261,6 +273,14 @@ function AppWindow(): React.JSX.Element {
   // Where a link's workspace is handed, read through a ref, because the
   // workspace Settings shows is held beside the Tasks tab, built after the opener.
   const linkWorkspace = useRef<(workspaceId: string) => void>(() => undefined);
+  const settingsLinkDoors = useMemo(
+    () => ({
+      changeTab,
+      changeView: chooseSettingsView,
+      chooseWorkspace: (workspaceId: string) => linkWorkspace.current(workspaceId),
+    }),
+    [changeTab, chooseSettingsView],
+  );
   /**
    * Opens Settings at the place a link names: the workspace it names, which
    * the Workspace page shows while Settings stays open; its page; and its
@@ -268,16 +288,26 @@ function AppWindow(): React.JSX.Element {
    */
   // Note that the link asks once, as a whole, so its page, workspace, and section all wait on the ask with its tab.
   const openSettings = useCallback(
-    (link: SettingsLink) =>
-      guardLeave(() =>
-        followSettingsLink(link, {
-          changeTab,
-          changeView: chooseSettingsView,
-          chooseWorkspace: (workspaceId) => linkWorkspace.current(workspaceId),
-        }),
-      )(),
-    [changeTab, guardLeave, chooseSettingsView],
+    (link: SettingsLink) => guardLeave(() => followSettingsLink(link, settingsLinkDoors))(),
+    [guardLeave, settingsLinkDoors],
   );
+  // A pairing's link opens Settings › Hosts with its code, for the page to ask over itself; while
+  // Bring your own host is off, which stands nowhere then, it lands on that experiment's row alone.
+  const openHostConnect = useOpenHostConnect();
+  const openAccountLink = useSteadyDoor(({ place }: AccountLink) => {
+    if (!experimentOnNow(EXPERIMENT.BRING_YOUR_OWN_HOST)) {
+      openSettings({
+        page: SETTINGS_VIEW.EXPERIMENTAL,
+        section: SETTINGS_SECTION.BRING_YOUR_OWN_HOST,
+      });
+      return;
+    }
+    // Note that the code is handed only once the leave is let go, so a page kept for a draft is not asked over later.
+    guardLeave(() => {
+      openHostConnect(place.code);
+      followSettingsLink({ page: SETTINGS_VIEW.HOSTS }, settingsLinkDoors);
+    })();
+  });
 
   const openIntegrations = useCallback(
     () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
@@ -410,7 +440,13 @@ function AppWindow(): React.JSX.Element {
   // holds its own workspace, so none read means none read yet).
   const workspacesUnread = tasks.workspaces.length === 0 && !tasks.listFailed;
   const openLink = useLinkOpener(accountGated || workspacesUnread, openLukeLink);
-  useEffect(() => appBridge().onShowLink(openLink), [openLink]);
+  // A link of the account's own names no workspace, so it waits on the sign-in alone.
+  const openAccount = useLinkOpener(accountGated, openAccountLink);
+  useEffect(
+    () =>
+      appBridge().onShowLink((link) => ("workspace" in link ? openLink(link) : openAccount(link))),
+    [openLink, openAccount],
+  );
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({

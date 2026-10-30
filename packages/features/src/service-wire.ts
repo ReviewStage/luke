@@ -169,10 +169,12 @@ export const HOSTED_API_ERROR = {
   CHILD_REPOSITORY_LOCKED: "child-repository-locked",
   /** A block asked for would close a cycle: the task it blocks already blocks it, itself or through others. Nothing was written. */
   TASK_BLOCK_CYCLE: "task-block-cycle",
+  /** A parent asked for is the task itself or one of its descendants, under which the task would descend from itself. Nothing was written. */
+  TASK_PARENT_CYCLE: "task-parent-cycle",
   /** A device agent's save named a generation that is no longer the agent's newest, since a newer save landed; nothing was granted or committed. */
   AGENT_STATE_STALE: "agent-state-stale",
-  /** An agent was asked to start on a child task of a pilot tree whose Running switch is off, which no agent may work in until it is switched on; nothing was written. */
-  TREE_STOPPED: "tree-stopped",
+  /** The account named too many pairing codes that no pending pairing has, so its reads, approves, and denies by code are refused until the time the refusal names; nothing was read or written. */
+  HOST_PAIRING_HELD: "host-pairing-held",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

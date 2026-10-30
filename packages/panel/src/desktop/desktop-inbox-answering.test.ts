@@ -58,9 +58,7 @@ import {
   EXPIRY,
   EXPIRY_ASK,
   faceKind,
-  foldedCounts,
   footWords,
-  GROUPING_KEY,
   gatedAnswers,
   heldMessages,
   hoveredCard,
@@ -89,7 +87,6 @@ import {
   rowMenu,
   rowNamed,
   SHOW_KEY,
-  SORT_KEY,
   sendHeld,
   sendWords,
   settle,
@@ -101,6 +98,7 @@ import {
   takenCloses,
   threadItem,
   threadMessage,
+  WHOSE_KEY,
   wordsOf,
   world,
   writtenOn,
@@ -154,7 +152,7 @@ function optionHeads(page: HTMLElement): (string | null)[] {
   return openOptions(pane).map((each) => wordsOf(each));
 }
 
-test("an open item's ⋯ menu in the pane's bar, and the × on its question's card, offer Resolve without answering, the menu beside Mark as read or unread and Copy link, which asks first and then settles it at the revision drawn, its ask saying who resolved it; a settled item's menu offers Copy link alone", async () => {
+test("an open item's ⋯ menu in the pane's bar, and the × on its question's card, offer Resolve without answering, the menu beside Mark as read or unread and Copy link, which asks first and then settles it at the revision drawn, the thread saying who resolved it; a settled item's menu offers Copy link alone", async () => {
   world.listedWorkspace = ACME;
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
@@ -193,10 +191,10 @@ test("an open item's ⋯ menu in the pane's bar, and the × on its question's ca
   await confirmClose();
 
   assert.deepEqual(sent, [{ itemId: THRESHOLD.id, revision: THRESHOLD.revision }]);
-  assert.match(
-    wordsOf(itemPane(page).querySelector('[data-inbox-settled="withdrawn"]')) ?? "",
-    /Resolved without an answer$/u,
-    "the ask it left open says it was resolved",
+  assert.equal(
+    wordsOf(itemPane(page).querySelector('[data-inbox-comment="closed"] .luke-comment-name')),
+    "You resolved this without an answer",
+    "the thread says the reader resolved it, in a line of its own",
   );
   act(() => ellipsis().click());
   assert.deepEqual(
@@ -323,7 +321,7 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
   assert.deepEqual(optionHeads(again.page), ["Retry 3 times over an hour1", "Retry once2"]);
 });
 
-test("a waiting choice of one is a radio list, each option led by its radio and numbered at its right: a number key picks its option from the list's row and takes the keyboard there, Space picks the focused one, a number typed in the box picks nothing, and J still steps the list", async () => {
+test("a waiting choice of one is a radio list, each option led by its radio and numbered at its right: a number key picks its option from the list's row and takes the keyboard there, Space picks the focused one, a number typed in the box picks nothing, and K still steps the list", async () => {
   const keys = standKeymap();
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
@@ -360,7 +358,7 @@ test("a waiting choice of one is a radio list, each option led by its radio and 
   );
 
   act(() => first.focus());
-  pressKey("j", first);
+  pressKey("k", first);
   assert.equal(readTitle(page), "Expire after 7 days?");
   act(() => keys.unmount());
 });
@@ -713,44 +711,34 @@ const THRESHOLD_ANSWERED: InboxItem = {
   updatedAt: 6_000,
 };
 
-test("an answer leaves Needs you the moment it is sent, its row staying where it stood and its plan's count dropping with it", async () => {
+test("an answer leaves Needs you the moment it is sent, its row staying where it stood", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const { sent } = gatedAnswers();
-  assert.deepEqual(foldedCounts(page), ["Billing usage alerts1 needs you", "Invites1 needs you"]);
 
   answerWithNote(page, "Use 90%");
   await settle();
   assert.equal(sent.length, 1, "the answer is on its way, the service not answering yet");
   assert.deepEqual(
     listed(page),
-    [
-      "# Billing usage alerts",
-      "How is a failed email retried?",
-      "▸ Alert at 80%?",
-      "# Invites",
-      "*Expire after 7 days?",
-    ],
+    ["How is a failed email retried?", "*Expire after 7 days?", "▸ Alert at 80%?"],
     "the answered row stays where it stood",
   );
   assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
-  assert.deepEqual(foldedCounts(page), ["Billing usage alerts", "Invites1 needs you"]);
 });
 
-/** The list as drawn, each row by its title alone and each group by its name, what marks a row and what a group counts left out, so a row that moves or changes group is told from one that only changes its marks. */
+/** The list as drawn, each row by its title alone, what marks a row left out, so a row that moves is told from one that only changes its marks. */
 function placesOf(page: HTMLElement): string[] {
-  return listed(page).map((line) =>
-    line.startsWith("# ") ? line.replace(/\d+ needs? you$/u, "") : line.replace(/^(▸ )?\*?/u, ""),
-  );
+  return listed(page).map((line) => line.replace(/^(▸ )?\*?/u, ""));
 }
 
 test("on To do, answering the chosen item draws its row gray where it stood, and choosing another row clears it", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
-  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
+  window.localStorage.removeItem(WHOSE_KEY);
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   const { answer } = gatedAnswers();
-  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["▸ Expire after 7 days?", "Alert at 80%?"]);
   assert.equal(rowMuted(page, "Expire after 7 days?"), false);
 
   answerWithNote(page, "Keep 7 days");
@@ -766,27 +754,23 @@ test("on To do, answering the chosen item draws its row gray where it stood, and
   await settle();
   assert.deepEqual(
     listed(page),
-    ["▸ Expire after 7 days?", "*Alert at 80%?"],
-    "the answered row stays where it stood, needing nobody",
+    ["▸ Expire after 7 days?", "Alert at 80%?"],
+    "the answered row stays where it stood",
   );
   assert.equal(rowMuted(page, "Expire after 7 days?"), true, "drawn gray");
   assert.equal(rowMuted(page, "Alert at 80%?"), false);
 
   act(() => rowNamed(page, "Alert at 80%?").click());
   await settle();
-  assert.deepEqual(
-    listed(page),
-    ["▸ *Alert at 80%?"],
-    "the gray row clears once another is chosen",
-  );
+  assert.deepEqual(listed(page), ["▸ Alert at 80%?"], "the gray row clears once another is chosen");
 });
 
 test("on To do, the chosen row is let go once the Inbox is left, so an item answered while it was hidden is gone when it is come back to", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
-  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
+  window.localStorage.removeItem(WHOSE_KEY);
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
-  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["▸ Expire after 7 days?", "Alert at 80%?"]);
 
   act(() => world.setInboxOpen(false));
   await settle();
@@ -801,43 +785,32 @@ test("on To do, the chosen row is let go once the Inbox is left, so an item answ
   await settle();
   assert.deepEqual(
     listed(page),
-    ["*Alert at 80%?"],
+    ["Alert at 80%?"],
     "the item answered while the Inbox was hidden no longer needs you, so it has no row",
   );
 });
 
-// One test per grouping and sort, each mounting the Inbox once, so a loaded shard times a
-// quarter-second mount rather than the eight of them together.
-const ANSWER_VIEWS = ["plan", "person", "status", "newest"].flatMap((grouping) =>
-  ["latest", "oldest"].map((sort) => ({ grouping, sort })),
-);
+test("an answer moves no row while the list is shown, and the list sorts anew once the Inbox is left and come back to", async () => {
+  window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
+  const { page } = mount();
+  await settle();
+  const { answer } = gatedAnswers();
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  const before = placesOf(page);
 
-test.for(ANSWER_VIEWS)(
-  "an answer moves no row while the list is shown, under $grouping grouping and $sort sort, and the list sorts anew once the Inbox is left and come back to",
-  async ({ grouping, sort }) => {
-    window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
-    window.localStorage.setItem(GROUPING_KEY, JSON.stringify(grouping));
-    window.localStorage.setItem(SORT_KEY, JSON.stringify(sort));
-    const { page } = mount();
-    await settle();
-    const { answer } = gatedAnswers();
-    act(() => rowNamed(page, "Alert at 80%?").click());
-    await settle();
-    const before = placesOf(page);
+  answerWithNote(page, "Use 90%");
+  await settle();
+  assert.deepEqual(placesOf(page), before, "as the answer is sent");
+  await act(async () => answer({ item: THRESHOLD_ANSWERED }));
+  await settle();
+  assert.deepEqual(placesOf(page), before, "once it is taken");
 
-    answerWithNote(page, "Use 90%");
-    await settle();
-    assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: as the answer is sent`);
-    await act(async () => answer({ item: THRESHOLD_ANSWERED }));
-    await settle();
-    assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: once it is taken`);
-
-    act(() => world.setInboxOpen(false));
-    act(() => world.setInboxOpen(true));
-    await settle();
-    assert.notDeepEqual(placesOf(page), before, `${grouping}, ${sort}: sorted anew`);
-  },
-);
+  act(() => world.setInboxOpen(false));
+  act(() => world.setInboxOpen(true));
+  await settle();
+  assert.notDeepEqual(placesOf(page), before, "sorted anew");
+});
 
 test("an answer the service refuses brings its item back as it was, needing you, with its box's words and why it did not go", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
@@ -851,12 +824,44 @@ test("an answer the service refuses brings its item back as it was, needing you,
   await settle();
   const pane = itemPane(page);
   assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*");
-  assert.deepEqual(foldedCounts(page), ["Billing usage alerts1 needs you", "Invites1 needs you"]);
   assert.equal(composerEditor(pane).textContent, "Use 90%", "the box keeps its words");
   assert.ok(
     pane.querySelector('.agent-composer [role="alert"]')?.textContent,
     "the box says why the answer did not go",
   );
+});
+
+test("an answer no reply came back for is taken as sent once its thread holds a message under its key: its box empties and says nothing", async () => {
+  const { page } = mount([], { chosen: ON_THRESHOLD });
+  await settle();
+  const { answer, sent } = gatedAnswers();
+  answerWithNote(page, "Use 90%");
+  await settle();
+  await act(async () => answer({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
+  await settle();
+  assert.equal(composerEditor(itemPane(page)).textContent, "Use 90%");
+
+  // A message in the same words under no key of this send's is not its answer, which may not have landed.
+  const [reply, ...rest] = THRESHOLD_ANSWERED.thread ?? [];
+  const lookalike = rest.at(-1) ?? assert.fail("the answered item ends with its answer");
+  world.main.push(
+    { kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id },
+    { items: [THRESHOLD_ANSWERED, RETRY] },
+  );
+  await settle();
+  assert.equal(composerEditor(itemPane(page)).textContent, "Use 90%");
+
+  // The service wrote the answer and handed it on all the same, and the plan's push names it by its key.
+  const clientKey = sent[0]?.clientKey ?? assert.fail("the answer went under a key");
+  const landed: InboxItem = {
+    ...THRESHOLD_ANSWERED,
+    thread: [...(reply === undefined ? [] : [reply]), { ...lookalike, clientKey }],
+  };
+  world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, { items: [landed, RETRY] });
+  await settle();
+  const pane = itemPane(page);
+  assert.equal(composerEditor(pane).textContent, "", "the words that went back are let go");
+  assert.equal(pane.querySelector('.agent-composer [role="alert"]'), null);
 });
 
 test("a nod on a notice the agent posted over first is not taken: the notice stands open again, and the box says so", async () => {
@@ -1318,9 +1323,10 @@ test("a to-do with every step ticked by hand stands marked done and Send sends i
   );
 });
 
-test("a replaced or withdrawn ask draws no card: its controls as it offered them, stepped back, nothing picked and taking nothing, over a quiet marker saying a newer question replaced it, or a newer message where none asks, or that it was withdrawn with why under it, or the member who closed the item where no reason was said", async () => {
+test("a replaced or withdrawn ask draws no card: its controls as it offered them, stepped back, nothing picked and taking nothing, over a quiet marker saying a newer question replaced it, or a newer message where none asks, or that it was withdrawn with why under it, or, where a member closed the item, none, the thread ending in a line saying who resolved it", async () => {
   const withdrawnId = "e1b2c3d4-0000-4000-8000-000000000020";
   const closedId = "e1b2c3d4-0000-4000-8000-000000000021";
+  const laterId = "e1b2c3d4-0000-4000-8000-000000000023";
   const shown = threadItem(
     [
       askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.REPLACED }),
@@ -1335,6 +1341,7 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
         status: INBOX_ASK_STATUS.WITHDRAWN,
         createdAt: 3_000,
       }),
+      threadMessage(laterId, { member: READER }, "Picked 7 days after all.", 4_000),
     ],
     { status: INBOX_STATUS.CLOSED, closedBy: TEAMMATE, settledAt: 3_500 },
   );
@@ -1345,7 +1352,7 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
   for (const [id, settled, words, why] of [
     [ASKING_ID, "replaced", "Replaced by a newer question", null],
     [withdrawnId, "withdrawn", "Withdrawn", "Product picked 14 days."],
-    [closedId, "withdrawn", "Charles Pan · Resolved without an answer", null],
+    [closedId, null, null, null],
   ] as const) {
     const message =
       pane.querySelector(`[data-message-id="${id}"]`) ??
@@ -1382,8 +1389,8 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
         marker.dataset.inboxSettled,
         wordsOf(marker.querySelector(".luke-badge")),
       ]),
-      [[settled, words]],
-      "the agent's message ends with the marker saying so",
+      settled === null ? [] : [[settled, words]],
+      "the agent's message ends with the marker saying so, or none where the thread's own line says who closed it",
     );
     assert.equal(
       wordsOf(message.querySelector("[data-inbox-settled] [data-inbox-withdrawn-why]")),
@@ -1391,6 +1398,19 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
       "with why it was withdrawn under the pill, where its agent said",
     );
   }
+  assert.deepEqual(
+    [...pane.querySelectorAll(".inbox-thread > li:not([data-inbox-comment='draft'])")]
+      .slice(-2)
+      .map((line) => [
+        line.getAttribute("data-inbox-comment"),
+        wordsOf(line.querySelector(".luke-comment-name")),
+      ]),
+    [
+      ["closed", "Charles Pan resolved this without an answer"],
+      ["message", "You"],
+    ],
+    "a line saying who resolved it stands where they did, before a message written since",
+  );
 
   act(() => world.root?.unmount());
   world.root = undefined;

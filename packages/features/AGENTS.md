@@ -69,19 +69,19 @@ allowlist, so a compromised renderer reaches none of the actions.
 ## Everything outside this package has no such guarantee
 
 The session-replay client in each app runs on its library's own configuration, and
-nothing here governs a byte of it. Three things leave that way, none validated
+nothing here governs a byte of it. Two things leave that way, neither validated
 here:
 
-- **The recording** — the rendered panel. The account's name and address, and
-  a screenshot attached to the feedback composer travel because they are
-  drawn. Only typed-into fields are masked, and that is the library's
-  default rather than a posture the app keeps.
-- **Autocaptured events** — the text of whatever was clicked. Pressing a row
-  sends that row's words.
-- **Unhandled exceptions**, with their message and stack.
+- **The recording** — the rendered panel's layout, with every word masked
+  and the surfaces that hold the most words left out whole
+  (`packages/panel/src/session-replay.ts`). Autocapture and exception capture
+  are off.
+- **The person** — a recording is made only while an account is signed in,
+  and is filed under it with the account's name and email as person
+  properties.
 
-`productEventFromWire` never sees any of them, so a change here cannot make them
+`productEventFromWire` never sees either of them, so a change here cannot make them
 safer and a change there cannot make them unsafe.
 
-`PRIVACY.md` is the whole of what a user is told, since none of the three has a
-switch. It moves when any of them stops being true, not when an event is added.
+`PRIVACY.md` is the whole of what a user is told, since neither has a
+switch. It moves when either stops being true, not when an event is added.

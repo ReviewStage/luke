@@ -31,7 +31,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { useAppKeymap } from "../app-commands.js";
 import { useInboxTaskAgents } from "../tasks/use-inbox-task-agents.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
@@ -48,6 +48,7 @@ import {
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handInboxItems, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { holdFrames, settleFrames } from "../testing/frames.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
@@ -108,6 +109,18 @@ const ARCHIVED: AgentSummary = {
 };
 
 const PULL = "https://github.com/acme/relay/pull/42";
+
+/** The pull request the task's agents opened, as GitHub last answered the service. */
+const BATCHED = {
+  number: 42,
+  title: "Send invitations in batches",
+  url: PULL,
+  state: PULL_REQUEST_STATE.OPEN,
+  checks: CHECK_SUMMARY.PASSING,
+  additions: 12,
+  deletions: 3,
+  changedFiles: 2,
+} as const;
 
 const FUNNEL: PageLine = {
   id: "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b",
@@ -178,12 +191,14 @@ let root: Root | undefined;
 beforeEach(() => {
   window.localStorage.clear();
   readMarks = [];
+  holdFrames();
 });
 
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  vi.restoreAllMocks();
 });
 
 /** Answers each act as the service would for the plan, its agent, and the pull request it opened. */
@@ -201,20 +216,7 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
     case ACT_KIND.AGENTS_PULL_REQUEST:
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
-        value: {
-          repository: REPOSITORY,
-          branch: "luke/batch-invitations",
-          pullRequest: {
-            number: 42,
-            title: "Send invitations in batches",
-            url: PULL,
-            state: PULL_REQUEST_STATE.OPEN,
-            checks: CHECK_SUMMARY.PASSING,
-            additions: 12,
-            deletions: 3,
-            changedFiles: 2,
-          },
-        },
+        value: { repository: REPOSITORY, branch: "luke/batch-invitations", pullRequest: BATCHED },
       });
     case ACT_KIND.AGENTS_TRANSCRIPT:
       // SAFETY: the window reads oRPC's stream as an async iterator alone, which a generator is.
@@ -285,6 +287,12 @@ async function inbox(
           workspace: ACME,
           tasks: [TASK],
           liveAgents: [ARCHIVED, AGENT],
+          // Both agents' rows keep the pull request they opened, which the list carries beside them.
+          listedPullRequests: [ARCHIVED, AGENT].map((agent) => ({
+            agentId: agent.id,
+            taskId: TASK.id,
+            pullRequest: BATCHED,
+          })),
           inbox: [{ taskId: TASK.id, items: [waitingOf(ITEM)] }],
           inboxTasks: [{ taskId: TASK.id, items: 1, updatedAt: 2_000 }],
           inboxView: {
@@ -318,11 +326,9 @@ async function inbox(
   return { container, left, panel };
 }
 
-/** Lets every promise settled so far run its continuations. */
+/** Lets every promise settled so far run its continuations, and the frames a paint takes pass. */
 async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 16; tick += 1) await Promise.resolve();
-  });
+  await settleFrames();
 }
 
 /** Presses the chip of the item's words that says the name given. */

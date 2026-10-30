@@ -20,6 +20,8 @@ import {
   agentPartAnswerSchema,
   agentPinRequestSchema,
   agentPullRequestAnswerSchema,
+  agentQueueAnswerSchema,
+  agentQueueChangeSchema,
   agentRenameRequestSchema,
   agentReviewOptionsAnswerSchema,
   agentServersRequestSchema,
@@ -146,8 +148,6 @@ export const AGENT_CALL_FAILURE = {
   OPENAI_KEY_MISSING: "openai-key-missing",
   /** The task runs its agents on a device that would not take this one, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
-  /** The task is a child task of a stopped pilot tree, so no agent starts on it until someone presses Start on the top task. */
-  TREE_STOPPED: "tree-stopped",
 } as const;
 
 export type AgentCallFailure = (typeof AGENT_CALL_FAILURE)[keyof typeof AGENT_CALL_FAILURE];
@@ -347,6 +347,22 @@ export type AgentAgentAnswer = typeof agentAgentAnswerSchema.Type;
 const agentMessageAnswerViewSchema = EffectSchema.Union([agentMessageAnswerSchema, failedReaching]);
 
 export type AgentMessageAnswerView = typeof agentMessageAnswerViewSchema.Type;
+
+/** One change of an agent's queue, as the window asks it: the agent and the change. */
+export const agentQueueParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  change: agentQueueChangeSchema,
+});
+
+export type AgentQueueParams = typeof agentQueueParamsSchema.Type;
+
+/** A change of an agent's queue, as the window hears the service answer it: the queue as it then stands, or why it did not change. */
+export const agentQueueAnswerViewSchema = EffectSchema.Union([
+  agentQueueAnswerSchema,
+  failedReaching,
+]);
+
+export type AgentQueueAnswerView = typeof agentQueueAnswerViewSchema.Type;
 
 /** An agent deleted for good, as the window hears it: that it was, or why it was not. */
 export const agentDeleteAnswerViewSchema = EffectSchema.Union([agentDeleteAnswerSchema, failed]);

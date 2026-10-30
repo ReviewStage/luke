@@ -25,6 +25,7 @@ import {
   type AgentPullRequestAnswerView,
   type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
+  type AgentQueueAnswerView,
   type AgentReviewOptionsAnswerView,
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptPage,
@@ -52,6 +53,7 @@ import {
   agentPullRequestActionParamsSchema,
   agentPullRequestParamsSchema,
   agentPullRequestReadParamsSchema,
+  agentQueueParamsSchema,
   agentRenameParamsSchema,
   agentRewindParamsSchema,
   agentServersParamsSchema,
@@ -85,6 +87,12 @@ import {
 } from "@luke/features/agent-view";
 import { AGENT_ARCHIVER, CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import { FAILURE_FACT, type FailureFacts, GATE_CLOSED_BY } from "@luke/features/failure-facts";
+import {
+  type HostPairingApproveView,
+  type HostPairingDenyView,
+  type HostPairingView,
+  hostPairingParamsSchema,
+} from "@luke/features/host-pairing-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import {
   acknowledgedNow,
@@ -193,6 +201,9 @@ export type AgentClient = Pick<
   | "removeHost"
   | "keepHostInstallToken"
   | "revokeHostInstallToken"
+  | "readHostPairing"
+  | "approveHostPairing"
+  | "denyHostPairing"
   | "list"
   | "listWorkspace"
   | "start"
@@ -206,6 +217,7 @@ export type AgentClient = Pick<
   | "choose"
   | "rename"
   | "switchServers"
+  | "changeQueue"
   | "archive"
   | "pin"
   | "ensureOperator"
@@ -284,6 +296,8 @@ export interface AgentsDependencies {
 export interface AgentsComposer extends Composer {
   /** The session's account reads opened for the account signed in, as the gate opening opens them. */
   readonly open: Effect.Effect<void>;
+  /** The inbox reads every write on an item is drawn over, which a thread moved between channels is drawn over too (`compose-channels.ts`). */
+  readonly inbox: Pick<InboxReads, "write">;
   /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
 }
@@ -347,7 +361,7 @@ export function composeAgents(
       accountId: dependencies.accountId,
     });
     const followed = yield* FiberMap.make<TranscriptKey>();
-    const reads = inboxReads();
+    const reads = yield* inboxReads();
     const held = yield* transcriptHeld<TranscriptKey>();
     const inboxes = yield* scopeInboxes({
       seal: (scope, poll, userId, after) =>
@@ -564,6 +578,25 @@ function composed(
           "a revoke names an install token",
         );
         return carried<HostDoneAnswerView>(yield* asked(client.revokeHostInstallToken(id)));
+      }),
+    [GATEWAY_METHOD.HOSTS_PAIRING_READ]: (params) =>
+      Effect.gen(function* () {
+        const { code } = yield* readParams(hostPairingParamsSchema, params, "a read names a code");
+        return carried<HostPairingView>(yield* asked(client.readHostPairing(code)));
+      }),
+    [GATEWAY_METHOD.HOSTS_PAIRING_APPROVE]: (params) =>
+      Effect.gen(function* () {
+        const { code } = yield* readParams(
+          hostPairingParamsSchema,
+          params,
+          "an approve names a code",
+        );
+        return carried<HostPairingApproveView>(yield* asked(client.approveHostPairing(code)));
+      }),
+    [GATEWAY_METHOD.HOSTS_PAIRING_DENY]: (params) =>
+      Effect.gen(function* () {
+        const { code } = yield* readParams(hostPairingParamsSchema, params, "a deny names a code");
+        return carried<HostPairingDenyView>(yield* asked(client.denyHostPairing(code)));
       }),
     [GATEWAY_METHOD.PROVIDER_KEYS_READ]: () =>
       Effect.map(asked(client.readProviderKeys()), (answer) =>
@@ -794,6 +827,16 @@ function composed(
           agentWritten(asked(client.switchServers(agentId, request))),
         );
         return carried<AgentAgentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.AGENTS_QUEUE]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, change } = yield* readParams(
+          agentQueueParamsSchema,
+          params,
+          "changing an agent's queue names the agent and the change",
+        );
+        const answer = yield* asked(client.changeQueue(agentId, change));
+        return carried<AgentQueueAnswerView>(answer);
       }),
     [GATEWAY_METHOD.AGENTS_ARCHIVE]: (params) =>
       Effect.gen(function* () {
@@ -1140,12 +1183,10 @@ function composed(
           params,
           "acknowledging an inbox notice names the item, the revision it acknowledges, the acknowledgement, and the nod's key",
         );
+        // Note that who and when are read once, since the change is drawn again over each answer a read takes while it stands.
+        const [by, at] = [reader(), kernel.now()];
         const answer = yield* reads.write(
-          {
-            kind: INBOX_CHANGE.SETTLED,
-            itemId,
-            item: (item) => acknowledgedNow(item, reader(), kernel.now()),
-          },
+          { kind: INBOX_CHANGE.SETTLED, itemId, item: (item) => acknowledgedNow(item, by, at) },
           asked(client.answerInbox(itemId, request)),
           writtenOf,
         );
@@ -1158,12 +1199,9 @@ function composed(
           params,
           "closing an inbox item names the item, the revision it closes, and the close's key",
         );
+        const [by, at] = [reader(), kernel.now()];
         const answer = yield* reads.write(
-          {
-            kind: INBOX_CHANGE.SETTLED,
-            itemId,
-            item: (item) => closedNow(item, reader(), kernel.now()),
-          },
+          { kind: INBOX_CHANGE.SETTLED, itemId, item: (item) => closedNow(item, by, at) },
           asked(client.closeInbox(itemId, request)),
           writtenOf,
         );
@@ -1178,13 +1216,14 @@ function composed(
         );
         // Note that a reply carrying an answer settles the ask, where a plain one only leaves the item read, its words drawn by the window's own box while they go.
         const { answers, clientKey: key, text } = request;
+        const [by, at] = [reader(), kernel.now()];
         const answer = yield* reads.write(
           answers === undefined
             ? { kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread: false }
             : {
                 kind: INBOX_CHANGE.SETTLED,
                 itemId,
-                item: (item) => answeredNow(item, { key, text, answers }, reader(), kernel.now()),
+                item: (item) => answeredNow(item, { key, text, answers }, by, at),
               },
           asked(client.messageInbox(itemId, request)),
           writtenOf,
@@ -1266,6 +1305,7 @@ function composed(
     methods,
     lifetime: Effect.void,
     open: Effect.andThen(sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems), holders.open),
+    inbox: { write: reads.write },
     reset,
   };
 }

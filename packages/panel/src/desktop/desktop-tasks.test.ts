@@ -60,6 +60,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { holdFrames, settleFrames } from "../testing/frames.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
 import { ToastHost } from "../toast.js";
@@ -196,7 +197,7 @@ test("the panel's tab panel is labelled by its chosen tab, which controls it", (
   assert.equal(others?.length, 0, "a tab with no panel standing names none");
 });
 
-test("a plan's Inbox tab whose read holds nothing says nothing needs you under the Inbox's glyph, or under its list where the list stands alone, rather than standing blank", async () => {
+test("a plan's Inbox tab whose read holds nothing says Nothing here under the Inbox's glyph, with no press, or under its list where the list stands alone, rather than standing blank", async () => {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -241,7 +242,8 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
   });
   const tab = container.querySelector<HTMLElement>('section.inbox-view[aria-label="Inbox"]');
   assert.ok(tab, "the plan's Inbox tab");
-  assert.match(tab.textContent ?? "", /Nothing needs you/u);
+  assert.match(tab.textContent ?? "", /Nothing here/u);
+  assert.equal(tab.querySelector(".luke-empty-state button"), null, "it offers no press");
   // Too narrow for the pane beside it, the list standing alone says so.
   vi.spyOn(tab, "getBoundingClientRect").mockReturnValue(
     DOMRect.fromRect({ width: 700, height: 800 }),
@@ -250,12 +252,12 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
   const shown = [...tab.querySelectorAll(".inbox-tasks, .inbox-view-items")].filter(
     (column) => !column.hasAttribute("hidden"),
   );
-  assert.match(shown.map((column) => column.textContent).join(""), /Nothing needs you/u);
+  assert.match(shown.map((column) => column.textContent).join(""), /Nothing here/u);
   assert.equal(
     shown
       .find((column) => column.classList.contains("inbox-tasks"))
       ?.querySelector(".luke-empty-state")?.textContent,
-    "Nothing needs you",
+    "Nothing here",
     "the list standing alone stands the Inbox's empty state",
   );
   act(() => root.unmount());
@@ -396,46 +398,14 @@ async function narrowTaskInbox(
         : "",
     ],
     title: () => tab.querySelector("[data-inbox-title]")?.textContent,
-    /** The list's head as a reader meets it: its name, then each scope its view's menu offers, the one shown in brackets; the menu is closed again on the scope shown. */
-    head: async () => {
-      const offered = await taskInboxScopes(tab);
-      const shown = offered.find((each) => each.getAttribute("aria-checked") === "true");
-      const words = offered.map((each) =>
-        each === shown ? `[${each.textContent}]` : (each.textContent ?? ""),
-      );
-      act(() => shown?.click());
-      return [tab.querySelector(".inbox-tasks .luke-pane-bar-title")?.textContent, ...words];
-    },
-    /** Shows the scope named `name` from the view's menu. */
-    pressScope: async (name: string) => {
-      const offered = await taskInboxScopes(tab);
-      act(() => offered.find((each) => each.textContent === name)?.click());
-    },
+    /** The list's head as a reader meets it: its name, and whether it offers a view's menu. */
+    head: () => [
+      tab.querySelector(".inbox-tasks .luke-pane-bar-title")?.textContent,
+      tab.querySelector('button[aria-label="View options"]') !== null,
+    ],
     rows: () =>
       [...tab.querySelectorAll(".inbox-tasks .luke-list-row-title")].map((row) => row.textContent),
-    /** The list's empty state as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
-    filteredOut: () => {
-      const empty = tab.querySelector(".inbox-tasks:not([hidden]) .luke-empty-state");
-      if (empty === null) return null;
-      return [
-        empty.querySelector("h3")?.textContent,
-        empty.querySelector("p")?.textContent,
-        empty.querySelector("button")?.textContent,
-      ];
-    },
-    showAll: () =>
-      act(() =>
-        tab.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button")?.click(),
-      ),
-    pager: () => tab.querySelector(".inbox-pager-count")?.textContent ?? null,
-    /** What the list says of a read that did not land, and whether it offers Retry. */
-    failure: () => {
-      const alert = tab.querySelector('.inbox-tasks [role="alert"]');
-      const retry = [...tab.querySelectorAll(".inbox-tasks button")].some((button) =>
-        button.textContent?.includes("Retry"),
-      );
-      return [alert?.textContent?.includes("The inbox could not be read.") ?? false, retry];
-    },
+    pager: () => tab.querySelector(".luke-pager-count")?.textContent ?? null,
     /** What the list's foot says of a refresh that did not land, and whether it offers Retry. */
     refreshFailure: () => {
       const alert = tab.querySelector('.inbox-tasks [role="alert"]');
@@ -457,27 +427,6 @@ async function narrowTaskInbox(
       container.remove();
     },
   };
-}
-
-/** The scopes a task's Inbox's view's menu offers, the menu opened from its head's View options and let settle, as a menu just closed hands the keyboard back first. */
-async function taskInboxScopes(tab: HTMLElement): Promise<HTMLElement[]> {
-  const options = tab.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
-  assert.ok(options, "the head offers the view's menu");
-  await act(async () => {
-    options.click();
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
-  const menu = [...document.querySelectorAll<HTMLElement>('[role="menu"]')].at(-1);
-  return [...(menu?.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]') ?? [])];
-}
-
-/** Where a task's own Inbox keeps the scope it shows, apart from the window's, and where its Needs you kept its press before the tabs that stood before its scopes. */
-const TASK_SHOW_KEY = "luke.taskInboxShow";
-const TASK_EARLIER_SHOW_KEY = "luke.taskInboxWaitingOnly";
-
-/** Opens every task's own Inbox on All, as a test of what it pages through over settled items asks. */
-function showEverything(): void {
-  window.localStorage.setItem(TASK_SHOW_KEY, JSON.stringify("all"));
 }
 
 test("a task's Inbox tab too narrow for its list and the item side by side opens on its list though it holds one item, whose row opens it under a way back to the list", async () => {
@@ -510,32 +459,18 @@ function approvedItem(id: string, title: string, at: number): InboxItem {
   };
 }
 
-test("a task's Inbox heads its list with the Inbox's name and a view's menu offering To do and All alone, opening on To do with no tab bar; All lists everything, the head naming it, and the scope chosen is kept across a relaunch apart from the window's", async () => {
-  window.localStorage.clear();
-  window.localStorage.setItem("luke.inboxShow", JSON.stringify("all"));
-  const items = [
-    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
-    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
-  ];
-  let inbox = await narrowTaskInbox(items, 1_200);
+test("a task's Inbox heads its list with the Inbox's name, no view's menu, and no tab bar, and lists every item it holds, settled ones among them, the latest first", async () => {
+  const inbox = await narrowTaskInbox(
+    [
+      approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+      approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+    ],
+    1_200,
+  );
   assert.equal(document.querySelector('.inbox-tasks [role="tab"]'), null, "no tab bar stands");
-  assert.deepEqual(await inbox.head(), ["Inbox", "[Needs you]", "All"]);
-  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
-  await inbox.pressScope("All");
-  assert.deepEqual(await inbox.head(), ["Inbox · All", "Needs you", "[All]"]);
+  assert.deepEqual(inbox.head(), ["Inbox", false]);
   assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   inbox.unmount();
-
-  inbox = await narrowTaskInbox(items, 1_200);
-  assert.deepEqual(
-    await inbox.head(),
-    ["Inbox · All", "Needs you", "[All]"],
-    "the scope outlives a relaunch",
-  );
-  await inbox.pressScope("Needs you");
-  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
-  inbox.unmount();
-  window.localStorage.clear();
 });
 
 test("a task's Inbox stands the window's Inbox's search under its head, which narrows its list to the items saying every word typed and says when none does, the item shown keeping its place", async () => {
@@ -566,35 +501,10 @@ test("a task's Inbox stands the window's Inbox's search under its head, which na
   type("zzz");
   assert.deepEqual(inbox.rows(), []);
   assert.ok(tab.querySelector(".inbox-tasks")?.textContent?.includes("No items match “zzz”."));
-  assert.equal(inbox.filteredOut(), null, "a search found nothing is not a scope left empty");
   inbox.unmount();
 });
 
-test("a task's Inbox whose Needs you was pressed before the tabs opens on To do, and one left off on All; a tab kept before the scopes opens on the scope that lists what it did", async () => {
-  const items = [
-    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
-  ];
-  for (const [key, kept, shown] of [
-    [TASK_EARLIER_SHOW_KEY, true, "[Needs you]"],
-    [TASK_EARLIER_SHOW_KEY, false, "[All]"],
-    [TASK_SHOW_KEY, "unread", "[Needs you]"],
-    [TASK_SHOW_KEY, "open", "[All]"],
-  ] as const) {
-    window.localStorage.clear();
-    window.localStorage.setItem(key, JSON.stringify(kept));
-    const inbox = await narrowTaskInbox(items, 1_200);
-    assert.ok(
-      (await inbox.head()).includes(shown),
-      `${key} kept as ${String(kept)} shows ${shown}`,
-    );
-    inbox.unmount();
-  }
-  window.localStorage.clear();
-});
-
-test("one column wide, a task's Inbox on To do pages through only what it lists", async () => {
-  window.localStorage.clear();
-  showEverything();
+test("one column wide, a task's Inbox pages through every item it lists, settled ones among them", async () => {
   const inbox = await narrowTaskInbox([
     approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
@@ -603,28 +513,6 @@ test("one column wide, a task's Inbox on To do pages through only what it lists"
   assert.deepEqual(inbox.standing(), ["list", ""]);
   act(() => inbox.row("Alert at 80%?")?.click());
   assert.equal(inbox.pager(), "1 of 3");
-
-  act(() => inbox.back()?.click());
-  await inbox.pressScope("Needs you");
-  act(() => inbox.row("Alert at 80%?")?.click());
-  assert.equal(inbox.pager(), "1 of 2", "the settled item is passed over");
-  window.localStorage.clear();
-  inbox.unmount();
-});
-
-test("one column wide, a task's Inbox filtered down to one item still offers its way back, to the list that holds the view's menu", async () => {
-  window.localStorage.clear();
-  showEverything();
-  const inbox = await narrowTaskInbox([
-    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
-    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
-  ]);
-  await inbox.pressScope("Needs you");
-  act(() => inbox.row("Expire after 7 days?")?.click());
-  assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
-  act(() => inbox.back()?.click());
-  assert.deepEqual(await inbox.head(), ["Inbox", "[Needs you]", "All"]);
-  window.localStorage.clear();
   inbox.unmount();
 });
 
@@ -671,80 +559,8 @@ test("while a task's Inbox is first read, its list stands placeholder rows under
   inbox.unmount();
 });
 
-test("on To do, the item opened in a task's Inbox stays shown once it is answered, and its row stays where it stood, gray, so the list says nothing of there being nothing to do while it is chosen", async () => {
-  window.localStorage.clear();
-  const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
-  const read = heldAnswer();
-  const inbox = await narrowTaskInbox([asked], 1_200, read.promise);
-  await act(async () => inbox.row("Expire after 7 days?")?.click());
-  await inbox.pressScope("Needs you");
-  assert.equal(inbox.title(), "Expire after 7 days?");
-  await read.settle({ items: [approvedItem(asked.id, asked.title, 1_000)], cursor: "2" });
-  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"], "the answered row stays while chosen");
-  assert.equal(inbox.filteredOut(), null);
-  assert.equal(inbox.title(), "Expire after 7 days?", "the answer is seen landing");
-  window.localStorage.clear();
-  inbox.unmount();
-});
-
-test("a task's Inbox holding only settled items, read, on To do lists no row and says there is nothing to do with Show all, wide or one column wide, whose press shows All", async () => {
-  window.localStorage.clear();
-  showEverything();
-  const items = [
-    approvedItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
-    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
-  ];
-  const wide = await narrowTaskInbox(items, 1_200);
-  assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
-  await act(async () => wide.row("Resend on bounce?")?.click());
-  await wide.pressScope("Needs you");
-  assert.deepEqual(await wide.head(), ["Inbox", "[Needs you]", "All"]);
-  assert.deepEqual(wide.rows(), [], "the item read is not listed under a filter leaving it out");
-  assert.deepEqual(wide.filteredOut(), [undefined, "Nothing needs you", "Show all"]);
-  assert.equal(wide.title(), "Resend on bounce?", "the item read stays shown beside the list");
-  wide.showAll();
-  assert.deepEqual(await wide.head(), ["Inbox · All", "Needs you", "[All]"]);
-  assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
-  await wide.pressScope("Needs you");
-  wide.unmount();
-
-  // Opened again one column wide, Needs you kept, nothing stands chosen, so the list stands alone and says so.
-  const narrow = await narrowTaskInbox(items);
-  assert.deepEqual(narrow.standing(), ["list", ""]);
-  assert.equal(narrow.filteredOut()?.[2], "Show all");
-  narrow.showAll();
-  assert.deepEqual(
-    narrow.standing(),
-    ["list", ""],
-    "Show all leaves the rows it brings back standing",
-  );
-  assert.deepEqual(await narrow.head(), ["Inbox · All", "Needs you", "[All]"]);
-  assert.deepEqual(narrow.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
-  window.localStorage.clear();
-  narrow.unmount();
-});
-
-test("a task's Inbox whose read failed offers Retry though To do lists nothing it still holds", async () => {
-  window.localStorage.clear();
-  const settled = [
-    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
-  ];
-  const first = await narrowTaskInbox(settled, 1_200);
-  await first.pressScope("Needs you");
-  first.unmount();
-
-  const read = heldAnswer();
-  const inbox = await narrowTaskInbox(settled, 1_200, undefined, read.promise);
-  await read.settle({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-  assert.deepEqual(inbox.rows(), [], "Needs you, kept from before, lists nothing");
-  assert.deepEqual(inbox.failure(), [true, true]);
-  window.localStorage.clear();
-  inbox.unmount();
-});
-
 test("a task's Inbox whose own read failed keeps the rows the account's feed holds, drawn before the read answers, and says Could not refresh with Retry at their foot", async () => {
   window.localStorage.clear();
-  showEverything();
   const items = [
     approvedItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
@@ -786,7 +602,7 @@ test("a plan's Inbox tab too narrow for its list and the item side by side shows
   inbox.unmount();
 });
 
-test("a plan's document opens on its title, with who created it and last edited it under the title, and no crumb over it", () => {
+test("a plan's document opens on its path, then its title, with who created it and when it was last edited under the title, and no other crumb over it", () => {
   const home = {
     id: TASK.workspaceId,
     name: "Personal",
@@ -825,18 +641,18 @@ test("a plan's document opens on its title, with who created it and last edited 
     ),
   );
   const body = container.querySelector(".desktop-document .plan-document-body .plan-body");
-  const first = body?.firstElementChild;
-  // A task from before statuses draws no standing chip, and still its repository's, under the title.
-  const chips = first?.nextElementSibling;
-  const byline = chips?.nextElementSibling;
+  const path = body?.firstElementChild;
+  // A task from before statuses draws no standing chip, and still its repository's crumb, over the title.
+  const first = path?.nextElementSibling;
+  const byline = first?.nextElementSibling;
 
   assert.equal(container.querySelector('nav[aria-label="Where this task is"]'), null);
-  assert.equal(body?.previousElementSibling, null, "nothing stands over the document's title");
-  assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title leads the document");
-  assert.ok(chips?.classList.contains("plan-task-standing"), "the repository chip stands under it");
-  assert.match(chips?.textContent ?? "", /acme\/web/u);
-  assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the chips");
-  assert.match(byline?.textContent ?? "", /^Created by .*Last edited by .*Lee Park/u);
+  assert.equal(body?.previousElementSibling, null, "nothing stands over the document's path");
+  assert.ok(path?.classList.contains("plan-task-path"), "the task's path leads the document");
+  assert.match(path?.textContent ?? "", /acme\/web/u);
+  assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title stands under it");
+  assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
+  assert.match(byline?.textContent ?? "", /^Created by .*Edited /u);
   act(() => root.unmount());
   container.remove();
 });
@@ -970,6 +786,8 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
 });
 
 test("a plan's own Inbox marks the item it shows read as it opens it, and its rows offer to mark an item read or unread as the window's Inbox does", async () => {
+  // Note that a mark on opening goes once the frame that drew the item has painted.
+  holdFrames();
   const marked: string[] = [];
   fakeAppBridge({});
   fakeActPort({
@@ -993,6 +811,8 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
   assert.deepEqual(marked, [], "nothing is read before it is opened");
   await act(async () => inbox.row("Ship it?")?.click());
   assert.equal(inbox.title(), "Ship it?");
+  assert.deepEqual(marked, [], "the mark waits on the paint");
+  await settleFrames();
   assert.deepEqual(marked, [`read:${SHIP.id}`]);
   act(() => {
     inbox
@@ -1009,9 +829,10 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
 });
 
 test("a plan's own Inbox acknowledges the reader's own notice as it opens it, and leaves a teammate's open", async () => {
+  // Note that a nod on opening goes once the frame that drew the item has painted.
+  holdFrames();
   // Note that the Inbox opens on All, since Needs you leaves the teammate's notice out.
   window.localStorage.clear();
-  showEverything();
   fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) =>
@@ -1042,12 +863,14 @@ test("a plan's own Inbox acknowledges the reader's own notice as it opens it, an
   assert.equal(answered.length, 0, "nothing is acknowledged before it is opened");
   await act(async () => inbox.row("The preview is up")?.click());
   assert.equal(inbox.title(), "The preview is up");
+  await settleFrames();
   // Note that a nod carries its item, the revision shown, and the nod alone, under a key of the window's own.
   const sent = () => answered.map(({ clientKey: _key, ...nod }) => nod);
   assert.deepEqual(sent(), [{ itemId: OWN.id, revision: 3, reply: INBOX_REPLY.ACKNOWLEDGED }]);
 
   await act(async () => inbox.row("The migration ran")?.click());
   assert.equal(inbox.title(), "The migration ran");
+  await settleFrames();
   assert.deepEqual(sent(), [{ itemId: OWN.id, revision: 3, reply: INBOX_REPLY.ACKNOWLEDGED }]);
   window.localStorage.clear();
   inbox.unmount();

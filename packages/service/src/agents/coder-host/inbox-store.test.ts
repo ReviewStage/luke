@@ -46,6 +46,7 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
+  type InboxMessage,
   threadNeedsReader,
 } from "@luke/features/inbox-wire";
 import {
@@ -207,6 +208,10 @@ const answerDone = (
 /** The member's messages on an item's thread, oldest first: the agent's left out. */
 const memberMessages = (item: Pick<InboxItem, "thread">) =>
   (item.thread ?? []).filter((message) => message.author === INBOX_MESSAGE_AUTHOR.MEMBER);
+
+/** Messages as a reader who wrote none of them is handed them: none carrying the key it was sent under. */
+const unkeyed = (messages: readonly InboxMessage[] | undefined) =>
+  messages?.map(({ clientKey: _clientKey, ...message }) => message);
 
 /** The member's message on an item's thread that carries an answer. */
 const answeringOf = (item: Pick<InboxItem, "thread">) =>
@@ -1201,15 +1206,28 @@ it.layer(getTestDB())("the inbox store", (it) => {
             answeringOf(onSettled.item),
             onSettled.item.answeredBy,
           ],
-          [answered.status, answered.revision, answeringOf(answered), answered.answeredBy],
+          [
+            answered.status,
+            answered.revision,
+            answeringOf({ thread: unkeyed(answered.thread) ?? [] }),
+            answered.answeredBy,
+          ],
         );
         assert.ok(onSettled.item.updatedAt > answered.updatedAt, "the message moves the item");
         assert.equal(onSettled.item.updatedAt, onSettled.item.thread?.at(-1)?.createdAt);
         const byStarter = yield* readInboxItem(agent.userId, settled.id);
         const byTeammate = yield* readInboxItem(teammate, settled.id);
+        const [starterThread, teammateThread] = [byStarter, byTeammate].map(
+          (read) => Option.getOrThrow(read).item.thread,
+        );
+        assert.deepEqual(teammateThread, onSettled.item.thread);
+        assert.deepEqual(unkeyed(starterThread), unkeyed(onSettled.item.thread));
+        // Note that the key a message was sent under is handed to its writer alone.
         assert.deepEqual(
-          [byStarter, byTeammate].map((read) => Option.getOrThrow(read).item.thread),
-          [onSettled.item.thread, onSettled.item.thread],
+          starterThread
+            ?.filter((message) => message.clientKey !== undefined)
+            .map((message) => message.member?.userId),
+          [agent.userId],
         );
         const after = yield* taskInboxPast(agent.userId, agent.taskId, INBOX_CURSOR_START);
         assert.notEqual(after.cursor, before.cursor, "a holder of the cursor before hears it");
@@ -1269,7 +1287,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.deepEqual(new Uint8Array(Option.getOrThrow(served).bytes), TRACE);
 
         const askedAgain = yield* post(agent, { ...SETTINGS, title: "Require two reviews" });
-        assert.deepEqual(memberMessages(askedAgain), memberMessages(first.item));
+        // Note that the agent is handed no member's key.
+        assert.deepEqual(memberMessages(askedAgain), unkeyed(memberMessages(first.item)));
         assert.ok(Option.isSome(yield* readInboxAttachment(agent.userId, id, trace.attachmentId)));
 
         yield* withdrawInboxMessage(agent.userId, id, key);
@@ -2367,7 +2386,7 @@ it.layer(getTestDB())("a thread's channel", (it) => {
         ]);
         assert.deepEqual(unmoved, [item.id]);
         assert.deepEqual(
-          Result.map(moved, (thread) => [thread.id, thread.channelId]),
+          Result.map(moved, ({ thread }) => [thread.id, thread.channelId]),
           Result.succeed([item.id, web]),
         );
         assert.deepEqual([yield* idsIn(app), yield* idsIn(web)], [[], [item.id]]);

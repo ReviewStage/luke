@@ -13,11 +13,12 @@
  * because a glide behind a gesture would trail it. Once the picture has
  * loaded it says its own pixels as `--luke-zoom-natural-width` and
  * `--luke-zoom-natural-height`, plain numbers a frame may fit it by, as
- * large as the frame and no larger than a set multiple of them; one opened
- * at its own pixels says none, and stands no larger than they are.
+ * large as the frame and no larger than a set multiple of them, and the last
+ * picture's stand while the next one loads; one opened at its own pixels says
+ * none, and stands no larger than they are.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
 import {
   FITTED_VIEW,
@@ -197,8 +198,11 @@ export function useImageZoom(
     : { subject: { name, url }, view: FITTED_VIEW, glide: false };
   const frame = useRef<HTMLDivElement | null>(null);
   const image = useRef<HTMLImageElement | null>(null);
-  // The picture's own pixels once it has loaded, which a frame may fit it by (`--luke-zoom-natural-*`).
-  const [loaded, setLoaded] = useState<{ url: string; width: number; height: number }>();
+  // The picture's own pixels once it has loaded, which a frame may fit it by
+  // (`--luke-zoom-natural-*`). Note that the last picture's stand until the
+  // next one's are read, because the browser draws the last picture until the
+  // next has loaded, and a frame left to guess between them draws it too large.
+  const [loaded, setLoaded] = useState<ImageSize>();
   const press = useRef<Press | undefined>(undefined);
   // Every pointer down on the frame, by its id, where it stood last.
   const fingers = useRef(new Map<number, Spot>());
@@ -286,6 +290,15 @@ export function useImageZoom(
     [change],
   );
 
+  // Note that a picture the browser already holds, as one walked back to, is
+  // drawn as soon as its address is set but says it loaded only later, so its
+  // pixels are read here, before it is painted at the last picture's.
+  useLayoutEffect(() => {
+    const element = image.current;
+    if (element === null || !element.complete || element.naturalWidth === 0) return;
+    setLoaded({ width: element.naturalWidth, height: element.naturalHeight });
+  }, [url]);
+
   const step = (direction: 1 | -1) =>
     change(true, (view, sizes) => zoomedByStep(view, sizes, direction));
 
@@ -308,7 +321,7 @@ export function useImageZoom(
       style: {
         transform: `translate(${String(view.x)}px, ${String(view.y)}px) scale(${String(view.scale)})`,
         // Note that a picture opened at its own pixels says none, because a fit grown past them would undo the scale its opening set.
-        ...(loaded?.url === url && opening === IMAGE_OPENING.FITTED
+        ...(loaded !== undefined && opening === IMAGE_OPENING.FITTED
           ? cssCustomProperties({
               "--luke-zoom-natural-width": loaded.width,
               "--luke-zoom-natural-height": loaded.height,
@@ -322,7 +335,7 @@ export function useImageZoom(
           width: event.currentTarget.naturalWidth,
           height: event.currentTarget.naturalHeight,
         };
-        setLoaded({ url, ...natural });
+        setLoaded(natural);
         if (opening !== IMAGE_OPENING.OWN_PIXELS) return;
         change(false, (view, sizes) => (isZoomed(view) ? view : ownPixels(view, sizes, natural)));
       },

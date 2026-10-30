@@ -638,10 +638,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const stopped = yield* stoppedTurn(seams, writer, context.request, userId, agent);
       // Counted only where the Stop stopped a turn, under the member who pressed it.
       if (stopped) {
-        yield* recordServerEvent(SERVER_EVENT.AGENT_STOP, userId, {
-          agent_kind: agent.kind,
-          stopped_tree: false,
-        });
+        yield* recordServerEvent(SERVER_EVENT.AGENT_STOP, userId, { agent_kind: agent.kind });
       }
       return { agent: yield* summaryOf(userId, agent) };
     }),

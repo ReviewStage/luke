@@ -11,8 +11,6 @@ import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
 import { type PlanAgentEdit, planAgentEditSchema } from "@luke/features/plan-template";
 import {
-  type MergePolicy,
-  mergePolicySchema,
   PLAN_ACTOR,
   type PlanLastEdit,
   type PlanSectionEdit,
@@ -108,6 +106,18 @@ export class TaskAssigneeNotMember extends Data.TaggedError("TaskAssigneeNotMemb
 
 /** The change named another repository for a task that has a parent or children, which work in their tree's repository; nothing was written. */
 export class TaskTreeRepositoryLocked extends Data.TaggedError("TaskTreeRepositoryLocked") {}
+
+/** The parent named is none the account reaches in the child's workspace; nothing was written. */
+export class TaskParentUnreached extends Data.TaggedError("TaskParentUnreached") {}
+
+/** The child and the parent named work in two repositories, where a child always works in its parent's; nothing was written. */
+export class TaskParentRepositoryDiffers extends Data.TaggedError("TaskParentRepositoryDiffers")<{
+  /** The parent's repository, which the child does not hold. */
+  readonly repository: string | null;
+}> {}
+
+/** The parent named is the task itself or one of its descendants, under which the task would descend from itself; nothing was written. */
+export class TaskParentCycle extends Data.TaggedError("TaskParentCycle") {}
 
 /** A coding agent stands at work that a delete was not told was stopped: one started on the task, or handed a message, while it or the others were stopped. */
 export class TaskAgentUnstopped extends Data.TaggedError("TaskAgentUnstopped") {}
@@ -236,10 +246,6 @@ export interface TaskChanges {
   readonly priority?: TaskPriority;
   /** The member the task is assigned to, who must be a member of its workspace, or of the one it moves to; null for no one. */
   readonly assigneeId?: string | null;
-  /** What becomes of its agents' pull requests once their checks pass. */
-  readonly mergePolicy?: MergePolicy;
-  /** Whether a pilot tree's agents may work, set on its top task. */
-  readonly running?: boolean;
 }
 
 /** How a task's repository was reached, as a write takes it. */
@@ -279,8 +285,6 @@ const TASK_SUMMARY_COLUMNS = {
   deviceId: task.deviceId,
   parentTaskId: task.parentTaskId,
   mode: task.mode,
-  mergePolicy: task.mergePolicy,
-  running: task.running,
   completedAt: task.completedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -311,8 +315,6 @@ const TaskSummaryRowSchema = Schema.Struct({
   deviceId: Schema.NullOr(Schema.String),
   parentTaskId: Schema.NullOr(Schema.String),
   mode: taskModeSchema,
-  mergePolicy: mergePolicySchema,
-  running: Schema.Boolean,
   completedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -428,7 +430,7 @@ const removePin = SqlSchema.findOneOption({
 
 /** The agents the journal names, as their rows name them now; a row that is gone names nothing. */
 const findAgentLabels = SqlSchema.findAll({
-  Request: Schema.Struct({ taskId: Schema.String, agentIds: Schema.Array(Schema.String) }),
+  Request: Schema.Struct({ agentIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({
     id: Schema.String,
     kind: Schema.Literals(Object.values(AGENT_KIND)),
@@ -436,7 +438,7 @@ const findAgentLabels = SqlSchema.findAll({
     title: Schema.NullOr(Schema.String),
     automationName: Schema.NullOr(Schema.String),
   }),
-  execute: ({ taskId, agentIds }) =>
+  execute: ({ agentIds }) =>
     Database.use((db) =>
       db
         .select({
@@ -447,7 +449,7 @@ const findAgentLabels = SqlSchema.findAll({
           automationName: agentAutomationNameSql(agentTable),
         })
         .from(agentTable)
-        .where(and(eq(agentTable.taskId, taskId), inArray(agentTable.id, agentIds))),
+        .where(inArray(agentTable.id, agentIds)),
     ),
 });
 
@@ -455,7 +457,11 @@ const findAgentLabels = SqlSchema.findAll({
  * The agents the journal and the sections' writers name, by id, as their rows
  * name them now, so a renamed agent reads renamed everywhere: the label is
  * the name its tab shows (`agentName`), Luke for an operator. The row's own
- * account is the one they are read under.
+ * account is the one they are read under. Note that an agent is found by
+ * its id alone, wherever it works now, because an agent edits any plan of
+ * its workspace by naming the task (`edit_plan`), and the task may move to
+ * another workspace after while the agent stays with its own. The ids are
+ * the service's own, written by the save, never a caller's.
  */
 function agentLabelsOf(
   row: TaskRow,
@@ -468,7 +474,7 @@ function agentLabelsOf(
   const agentIds = [...new Set(named)];
   if (agentIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
-    findAgentLabels({ taskId: row.id, agentIds }),
+    findAgentLabels({ agentIds }),
     (agents) => new Map(agents.map((agent) => [agent.id, agentName(agent)])),
   );
 }
@@ -670,8 +676,6 @@ function summaryOf(
     ...runsOnOf(row, names, devices),
     ...(row.parentTaskId === null ? undefined : { parentTaskId: row.parentTaskId }),
     mode: row.mode,
-    mergePolicy: row.mergePolicy,
-    running: row.running,
   };
 }
 
@@ -849,8 +853,7 @@ const findTaskHeader = SqlSchema.findOneOption({
     deviceId: Schema.NullOr(Schema.String),
     parentTaskId: Schema.NullOr(Schema.String),
     mode: taskModeSchema,
-    mergePolicy: mergePolicySchema,
-    running: Schema.Boolean,
+    assigneeId: Schema.NullOr(Schema.String),
   }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
@@ -865,8 +868,7 @@ const findTaskHeader = SqlSchema.findOneOption({
           deviceId: task.deviceId,
           parentTaskId: task.parentTaskId,
           mode: task.mode,
-          mergePolicy: task.mergePolicy,
-          running: task.running,
+          assigneeId: task.assigneeId,
         })
         .from(task)
         .where(reachableTask(userId, taskId))
@@ -917,6 +919,12 @@ const hasChildren = SqlSchema.findOneOption({
     ),
 });
 
+/** Whether two repositories are one: GitHub's names match whatever their case, and none matches none. */
+function sameRepository(one: string | null, other: string | null): boolean {
+  if (one === null || other === null) return one === other;
+  return one.toLowerCase() === other.toLowerCase();
+}
+
 /**
  * Refuses a change that names another repository for a task in a tree: one
  * with a parent, or with children, works in its tree's repository, so only
@@ -926,12 +934,53 @@ const treeRepositoryHeld = Effect.fnUntraced(function* (
   locked: Pick<TaskRow, "id" | "repository" | "parentTaskId">,
   asked: string | null,
 ): Effect.fn.Return<void, TaskStoreFailure | TaskTreeRepositoryLocked, DatabaseServices> {
-  const held = locked.repository;
-  if (asked === held) return;
-  if (asked !== null && held !== null && asked.toLowerCase() === held.toLowerCase()) return;
+  if (sameRepository(asked, locked.repository)) return;
   const inTree =
     locked.parentTaskId !== null || Option.isSome(yield* hasChildren({ taskId: locked.id }));
   if (inTree) return yield* new TaskTreeRepositoryLocked();
+});
+
+/**
+ * The child and the parent a parent write names, each where the account
+ * reaches it, under an update lock taken in id order, so two writes joining
+ * the same two tasks never wait on each other crosswise, and neither task
+ * moves to another workspace while the write stands on what it read.
+ */
+const lockTaskPair = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, taskIds: Schema.Array(Schema.String) }),
+  Result: TaskRowSchema,
+  execute: ({ userId, taskIds }) =>
+    Database.use((db) =>
+      db
+        .select(TASK_COLUMNS)
+        .from(task)
+        .where(and(inArray(task.id, taskIds), taskReachableBy(userId)))
+        .orderBy(task.id)
+        .for("update"),
+    ),
+});
+
+/**
+ * The task, where it stands among the proposed parent's ancestors, the
+ * parent itself first. Note that the walk follows every row, a task the
+ * account does not reach among them, because a loop through a hidden task
+ * is a loop still; `union` drops a task already walked, so a walk ends.
+ */
+const findAmongAncestors = SqlSchema.findOneOption({
+  Request: Schema.Struct({ taskId: Schema.String, parentTaskId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ taskId, parentTaskId }) =>
+    Effect.flatMap(
+      SqlClient.SqlClient,
+      (client) => client`
+        with recursive upward(id, parent_task_id) as (
+          select id, parent_task_id from task where id = ${parentTaskId}
+          union
+          select task.id, task.parent_task_id from task
+            join upward on task.id = upward.parent_task_id
+        )
+        select id::text as id from upward where id = ${taskId} limit 1`,
+    ),
 });
 
 /** The task row as it stands, unlocked: what a caller reads to refuse a change before it stops anything. */
@@ -970,15 +1019,14 @@ const TaskColumnChangesSchema = Schema.Struct({
   completedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
   priority: Schema.optionalKey(taskPrioritySchema),
   assigneeId: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  mergePolicy: Schema.optionalKey(mergePolicySchema),
-  running: Schema.optionalKey(Schema.Boolean),
+  parentTaskId: Schema.optionalKey(Schema.NullOr(Schema.String)),
   machine: Schema.optionalKey(MachineSchema),
   deviceId: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
 type TaskColumnChanges = typeof TaskColumnChangesSchema.Type;
 
-/** The row changed: whichever of the name, the workspace and its number there, the repository, the status, the priority, the assignee, the merge policy, and the running switch the change names, in one statement. */
+/** The row changed: whichever of the name, the workspace and its number there, the repository, the status, the priority, and the assignee the change names, in one statement. */
 const applyChanges = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -1087,12 +1135,6 @@ function assigneeAdmitted(
 export interface TaskCommitted<A> {
   readonly task: A;
   readonly txid?: string;
-}
-
-/** A task changed, as `updateTaskCommitted` answers it: whether its merge policy and its running switch moved, judged under the row's lock, beside what `TaskCommitted` carries. */
-export interface TaskUpdated<A> extends TaskCommitted<A> {
-  readonly mergePolicyMoved: boolean;
-  readonly runningMoved: boolean;
 }
 
 /**
@@ -1231,10 +1273,8 @@ export interface TaskHeader {
   readonly parentTaskId: string | null;
   /** How the task is worked. */
   readonly mode: TaskMode;
-  /** What becomes of its agents' pull requests once their checks pass. */
-  readonly mergePolicy: MergePolicy;
-  /** Whether a pilot tree's agents may work, as its own column holds it; a child's is its top task's (`readEffectiveRunning`). */
-  readonly running: boolean;
+  /** The member it is assigned to; null for none. */
+  readonly assigneeId: string | null;
 }
 
 /**
@@ -1258,150 +1298,8 @@ export function readTaskHeader(
       runsOn: { machine: row.machine, deviceId: row.deviceId },
       parentTaskId: row.parentTaskId,
       mode: row.mode,
-      mergePolicy: row.mergePolicy,
-      running: row.running,
+      assigneeId: row.assigneeId,
     })),
-  );
-}
-
-/** A task's tree-wide switches, its mode, its parent, and its workspace, which is all the walk up to its top task reads. */
-const TopTaskRowSchema = Schema.Struct({
-  organizationId: Schema.String,
-  parentTaskId: Schema.NullOr(Schema.String),
-  mode: taskModeSchema,
-  mergePolicy: mergePolicySchema,
-  running: Schema.Boolean,
-});
-
-type TopTaskRow = typeof TopTaskRowSchema.Type;
-
-/** A task's own row and its top task's, which is its own where it stands at the top. */
-interface TreeRows {
-  readonly own: TopTaskRow;
-  readonly top: TopTaskRow;
-}
-
-const TOP_TASK_COLUMNS = {
-  organizationId: task.organizationId,
-  parentTaskId: task.parentTaskId,
-  mode: task.mode,
-  mergePolicy: task.mergePolicy,
-  running: task.running,
-};
-
-const findTopTaskRow = SqlSchema.findOneOption({
-  Request: TaskKeySchema,
-  Result: TopTaskRowSchema,
-  execute: ({ userId, taskId }) =>
-    Database.use((db) =>
-      db.select(TOP_TASK_COLUMNS).from(task).where(reachableTask(userId, taskId)).limit(1),
-    ),
-});
-
-const findAncestorTopTaskRow = SqlSchema.findOneOption({
-  Request: Schema.Struct({ taskId: Schema.String, organizationId: Schema.String }),
-  Result: TopTaskRowSchema,
-  execute: ({ taskId, organizationId }) =>
-    Database.use((db) =>
-      db
-        .select(TOP_TASK_COLUMNS)
-        .from(task)
-        .where(and(eq(task.id, taskId), eq(task.organizationId, organizationId)))
-        .limit(1),
-    ),
-});
-
-/**
- * The row of a task, and of its top task, found by walking `parent_task_id` up to the
- * root, so one switch on the top task governs the whole tree and a child's
- * own columns are never read once it has a parent. Nothing for a task the
- * account does not reach. The parents above it are read without a second
- * reach check, but only within its workspace: a child is made under a
- * parent of its own workspace, and one moved away since leaves the walk, and
- * the switches of a task the account may not read, behind. A walk that meets
- * a task it has already seen stops there, with that task's own row, since
- * the row constraint only refuses a task its own parent.
- */
-function readTopTaskRow(userId: string, taskId: string): TaskStoreEffect<Option.Option<TreeRows>> {
-  return Effect.gen(function* () {
-    const first = yield* findTopTaskRow({ userId, taskId });
-    if (Option.isNone(first)) return Option.none();
-    const seen = new Set([taskId]);
-    let top = first.value;
-    while (top.parentTaskId !== null && !seen.has(top.parentTaskId)) {
-      seen.add(top.parentTaskId);
-      const parent = yield* findAncestorTopTaskRow({
-        taskId: top.parentTaskId,
-        organizationId: first.value.organizationId,
-      });
-      // A parent whose row is gone, or in another workspace, leaves this one the top.
-      if (Option.isNone(parent)) break;
-      top = parent.value;
-    }
-    return Option.some({ own: first.value, top });
-  });
-}
-
-/**
- * What becomes of the pull requests of a task's agents once their checks
- * pass (`MERGE_POLICY`): the policy of the task's top task
- * (`readTopTaskRow`). Nothing for a task the account does not reach.
- */
-export function readEffectiveMergePolicy(
-  userId: string,
-  taskId: string,
-): TaskStoreEffect<Option.Option<MergePolicy>> {
-  return Effect.map(
-    readTopTaskRow(userId, taskId),
-    Option.map(({ top }) => top.mergePolicy),
-  );
-}
-
-/**
- * Whether a task's tree may work: the running switch of the task's top task
- * (`readTopTaskRow`). Nothing for a task the account does not reach.
- */
-export function readEffectiveRunning(
-  userId: string,
-  taskId: string,
-): TaskStoreEffect<Option.Option<boolean>> {
-  return Effect.map(
-    readTopTaskRow(userId, taskId),
-    Option.map(({ top }) => top.running),
-  );
-}
-
-/**
- * Whether a task's agents are held still: it is a child task, and its top
- * task (`readTopTaskRow`) is worked in pilot mode with its running switch
- * off. A top task never is, since its pilot plans and talks to the developer
- * while its tree is stopped, nor is a child of a tree worked any other way,
- * whose switch nothing sets. False for a task the account does not reach.
- */
-export function readTreeStopped(userId: string, taskId: string): TaskStoreEffect<boolean> {
-  return Effect.map(readTopTaskRow(userId, taskId), (rows) =>
-    Option.match(rows, {
-      onNone: () => false,
-      // Note that a child whose parent left the walk is its own top, and so is held by nothing.
-      onSome: ({ own, top }) => top !== own && top.mode === TASK_MODE.PILOT && !top.running,
-    }),
-  );
-}
-
-/**
- * Whether nothing automated may wake a task's agents: its top task
- * (`readTopTaskRow`), itself where it stands at the top, is worked in pilot
- * mode with its running switch off. Unlike `readTreeStopped`, the top task
- * counts, since Running off stops its pilot too; a member's own message
- * still wakes the pilot, and a member's Start still lands there, so only the
- * automated doors read this one. False for a task the account does not reach.
- */
-export function readTreeHeld(userId: string, taskId: string): TaskStoreEffect<boolean> {
-  return Effect.map(readTopTaskRow(userId, taskId), (rows) =>
-    Option.match(rows, {
-      onNone: () => false,
-      onSome: ({ top }) => top.mode === TASK_MODE.PILOT && !top.running,
-    }),
   );
 }
 
@@ -1475,12 +1373,6 @@ function columnChangesOf(
       : { status: changes.status, completedAt: completedAtOf(changes.status, now) }),
     ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
     ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
-    ...(changes.mergePolicy === undefined || changes.mergePolicy === standing.mergePolicy
-      ? undefined
-      : { mergePolicy: changes.mergePolicy }),
-    ...(changes.running === undefined || changes.running === standing.running
-      ? undefined
-      : { running: changes.running }),
   };
 }
 
@@ -1608,10 +1500,7 @@ export function updateTask<E = never, R = never>(
 /**
  * A task changed, as `updateTask` changes one, and the transaction the change
  * committed in, read from the write that changed the row or the reader's pin;
- * none where the change wrote neither. Whether the merge policy or the
- * running switch moved is judged against the row as it stood under the lock,
- * so of two switches racing, the one that lands second is the one that moved
- * it.
+ * none where the change wrote neither.
  */
 export function updateTaskCommitted<E = never, R = never>(
   userId: string,
@@ -1619,7 +1508,7 @@ export function updateTaskCommitted<E = never, R = never>(
   changes: TaskChanges,
   moveGuard?: TaskMoveGuard<E, R>,
 ): Effect.Effect<
-  Option.Option<TaskUpdated<Task>>,
+  Option.Option<TaskCommitted<Task>>,
   TaskStoreFailure | TaskAssigneeNotMember | TaskTreeRepositoryLocked | E,
   DatabaseServices | R
 > {
@@ -1688,8 +1577,8 @@ export function updateTaskCommitted<E = never, R = never>(
             yield* leaveTaskBlocks(taskId);
           }
         }
-        // A task moved to Done or Canceled settles its open inbox items, and one moved off them to work
-        // again opens again the items that move settled, by its stamp. Note that this runs after its
+        // A task moved to Done or Canceled settles its open inbox items that ask, and one moved off them
+        // to work again opens again the items that move settled, by its stamp. Note that this runs after its
         // agents moved, so the write locks agent rows before item rows, in the order an archive does.
         if (columns.status !== undefined) {
           yield* settleTaskInboxItems(taskId, columns.status, now);
@@ -1699,15 +1588,74 @@ export function updateTaskCommitted<E = never, R = never>(
           }
         }
         const changed = yield* taskOf(userId, row);
-        const switched = {
-          mergePolicyMoved: columns.mergePolicy !== undefined,
-          runningMoved: columns.running !== undefined,
-        };
-        return Option.some(
-          txid === undefined
-            ? { task: changed, ...switched }
-            : { task: changed, txid, ...switched },
-        );
+        return Option.some(txid === undefined ? { task: changed } : { task: changed, txid });
+      }),
+    ),
+  );
+}
+
+/** The row's parent column written as asked, and the row answered as changed; the row as it stands, with no transaction, where the parent stood so already. */
+const parentWritten = (
+  userId: string,
+  row: TaskRow,
+  parentTaskId: string | null,
+): TaskStoreEffect<TaskCommitted<Task>> =>
+  Effect.gen(function* () {
+    if (row.parentTaskId === parentTaskId) return { task: yield* taskOf(userId, row) };
+    const { txid, ...changed } = yield* applyChanges({ userId, taskId: row.id, parentTaskId }).pipe(
+      // The row is held under this transaction's lock, so an update that missed it is the database breaking its own contract.
+      Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+    );
+    return { task: yield* taskOf(userId, changed), txid };
+  });
+
+/**
+ * Makes the task the child of the parent named, or a task at the top with
+ * null, and answers it as changed with the transaction the change committed
+ * in, none where the parent stood so already; nothing where the account
+ * reaches no such task. The parent must be one the account reaches in the
+ * child's workspace (`TaskParentUnreached`), work in the child's repository
+ * (`TaskParentRepositoryDiffers`), since a child always works in its
+ * parent's, and be neither the task nor one of its descendants
+ * (`TaskParentCycle`); where its agents run stays the child's own. Both
+ * rows are held for update, in id order, and the workspace's parent writes
+ * take turns on the lock its block writes take, so no two writes close a
+ * loop between them. Clearing the parent always lands for a task reached.
+ */
+export function setTaskParent(
+  userId: string,
+  taskId: string,
+  parentTaskId: string | null,
+): Effect.Effect<
+  Option.Option<TaskCommitted<Task>>,
+  TaskStoreFailure | TaskParentUnreached | TaskParentRepositoryDiffers | TaskParentCycle,
+  DatabaseServices
+> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        if (parentTaskId === null) {
+          const locked = yield* lockTask({ userId, taskId });
+          if (Option.isNone(locked)) return Option.none();
+          return Option.some(yield* parentWritten(userId, locked.value, null));
+        }
+        if (parentTaskId === taskId) return yield* new TaskParentCycle();
+        const rows = yield* lockTaskPair({ userId, taskIds: [taskId, parentTaskId] });
+        const child = rows.find((row) => row.id === taskId);
+        if (child === undefined) return Option.none();
+        const parent = rows.find((row) => row.id === parentTaskId);
+        if (parent === undefined || parent.organizationId !== child.organizationId) {
+          return yield* new TaskParentUnreached();
+        }
+        if (!sameRepository(child.repository, parent.repository)) {
+          return yield* new TaskParentRepositoryDiffers({ repository: parent.repository });
+        }
+        // Note that the workspace's parent writes take turns, because two that each close half a loop would each walk past the other's unwritten row.
+        yield* client`select pg_advisory_xact_lock(hashtextextended(${child.organizationId}, 0))`;
+        if (Option.isSome(yield* findAmongAncestors({ taskId, parentTaskId }))) {
+          return yield* new TaskParentCycle();
+        }
+        return Option.some(yield* parentWritten(userId, child, parentTaskId));
       }),
     ),
   );
@@ -1876,8 +1824,8 @@ const finishTask = SqlSchema.findOneOption({
  * so a start or a turn racing the finish either landed before the read,
  * which then refuses, or waits on the lock and reopens the task after.
  * Like any change it is not a save, so the list's order stands. A finish
- * settles the task's open inbox items, notices among them
- * (`inbox-settle.ts`).
+ * settles the task's open inbox items that still ask, and leaves its
+ * notices open until a member opens them (`inbox-settle.ts`).
  */
 export function finishTaskWork<R = never>(
   userId: string,

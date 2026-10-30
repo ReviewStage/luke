@@ -61,6 +61,7 @@ import {
   personPageEmpty,
   personRef,
 } from "@luke/ui/person-page-model";
+import { ASSIGNED_TO } from "@luke/ui/task-list-model";
 import { ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -575,7 +576,8 @@ function PersonTasks({
   now: number;
   /** Whether a task is unread, as the sidebar's rows count it. */
   unread: (task: TaskSummary) => boolean;
-  onShowAll: (() => void) | undefined;
+  /** Lists every one in the sidebar, which filters by assignee alone, so a section of what they created offers none. */
+  onShowAll?: (() => void) | undefined;
 }): React.JSX.Element | null {
   if (listed.length === 0) return null;
   // Note that the section and its foot are one block of the page, so the page's gap between sections stands above both and the foot stands close under the rows.
@@ -657,12 +659,14 @@ function PersonColumn({
   const left = former?.find((each) => each.userId === userId);
   const ref = personRef(userId, listed) ?? member ?? known ?? left;
   const person = personActor(ref, members, readerId, former);
-  // The sidebar's own view, so their tasks are listed there as its Assigned to lists them, whoever created them, and those they created as its Created by does.
+  // The sidebar's own view, so their tasks are listed there as its Assigned to lists them, whoever created them.
   const taskView = useTaskListView(tasks.workspace?.id, staged);
   const memberCount = tasks.workspace?.memberCount;
   const shared = memberCount === undefined ? (members?.length ?? 0) > 1 : memberCount > 1;
-  const showTasks = () => taskView.onAssignedToAlone(userId);
-  const showCreated = () => taskView.onCreatedByAlone(userId);
+  const showTasks = () =>
+    taskView.onAssignedTo(
+      userId === tasks.me ? { kind: ASSIGNED_TO.ME } : { kind: ASSIGNED_TO.MEMBER, userId },
+    );
   // Note that the page keeps one identity while the list stands, because each of its lists follows its rows (`useLeaving`).
   const page = useMemo(() => personPage(userId, listed), [userId, listed]);
   // A task's row is unread as its sidebar row is, so its weight and its menu's Mark as read agree with the sidebar's.
@@ -796,6 +800,7 @@ function PersonColumn({
                 {...inboxRowDraft(drafts.get(listed.item.id), listed.item, false)}
                 models={tasks.agents.models}
                 readerId={tasks.me}
+                needsYouShown={you}
                 onChoose={openItem}
               />
             ))}
@@ -815,7 +820,6 @@ function PersonColumn({
           tasks={tasks}
           now={now}
           unread={unread}
-          onShowAll={shared ? showCreated : undefined}
         />
         {page.agents.length === 0 ? null : (
           <PersonSection title="Agents" count={page.agents.length}>

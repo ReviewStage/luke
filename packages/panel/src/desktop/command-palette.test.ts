@@ -23,6 +23,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
 import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@luke/features/task-wire";
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
@@ -306,14 +307,12 @@ function press(listed: string): void {
   act(() => row.click());
 }
 
-/** The Settings pages by their names, in the order the palette lists them: Account's own page is Account, and the Workspace page, whose head names the listed workspace, is Workspace here. */
+/** The Settings pages by their names, in the order the palette lists them with no experiment on: Account's own page is Account, and the Workspace page, whose head names the listed workspace, is Workspace here. */
 const SETTINGS_PAGES = [
   "Account",
   "Workspace",
   "Agents",
-  "Hosts",
   "Integrations",
-  "Skills",
   "Appearance",
   "This Mac",
   "Experimental",
@@ -2929,8 +2928,8 @@ test("with Channels on, ⌘K's Channels lists the workspace's channels by name a
     createdAt: 1,
     waiting: 0,
   };
-  fakeActPort({ [ACT_KIND.CHANNELS_LIST]: () => Promise.resolve({ channels: [app] }) });
-  handState({});
+  const held = { [LIVE_READ.CHANNELS]: { [ACME.id]: { rows: { open: [app], archived: [] } } } };
+  handState({}, held);
   await paletteUnderState(tasksControl({ workspace: ACME }));
   await settle();
   const offWithout = filterOptions().every((option) => option.textContent !== "Channels");
@@ -2938,7 +2937,7 @@ test("with Channels on, ⌘K's Channels lists the workspace's channels by name a
     for (const root of roots.splice(0)) root.unmount();
   });
   document.body.innerHTML = "";
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  handState(experimentsOn(EXPERIMENT.CHANNELS), held);
   const opened: string[] = [];
   const base = tasksControl({ workspace: ACME });
   await paletteUnderState(
@@ -3131,7 +3130,7 @@ test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its I
 test("an Inbox item is found under All by words its thread says, which its row says beside its task", async () => {
   paletteOverInbox({ items: [PREVIEWS, ROTATE] });
 
-  type("stripe");
+  type("signing");
   await settle();
 
   assert.deepEqual(rows(), [

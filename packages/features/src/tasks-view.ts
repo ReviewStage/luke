@@ -37,9 +37,10 @@ import {
   workspaceSentryAnswerSchema,
   workspaceSentryDisconnectRequestSchema,
 } from "./sentry-install-wire.js";
+import { wireUuidSchema } from "./service-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
-  mergePolicySchema,
+  listedPullRequestSchema,
   planRevisionAnswerSchema,
   planRevisionSeqSchema,
   planRevisionsAnswerSchema,
@@ -55,6 +56,7 @@ import {
   taskFileWindowSchema,
   taskPrioritySchema,
   taskPullRequestsSchema,
+  taskRelationChangeRequestSchema,
   taskRenameRequestSchema,
   taskSchema,
   taskSkillsSchema,
@@ -190,6 +192,13 @@ export const tasksViewSchema = EffectSchema.Struct({
    */
   taskPullRequests: EffectSchema.optionalKey(EffectSchema.Array(taskPullRequestsSchema)),
   /**
+   * The pull request of every agent that opened one, on a plan or none, the
+   * archived among them, as its row keeps it: present only while the list
+   * is followed live, when it is what a plan's or an agent's tabs offer each
+   * agent's Changes by, in place of reading each agent of it apart.
+   */
+  agentPullRequests: EffectSchema.optionalKey(EffectSchema.Array(listedPullRequestSchema)),
+  /**
    * The reader's pins of agents on a plan, the archived ones left out: present
    * only while the list is followed live, when the sidebar's Pinned section
    * draws each beside the pinned tasks.
@@ -299,31 +308,23 @@ export const tasksSetRepositoryParamsSchema = EffectSchema.Struct({
 
 export type TasksSetRepositoryParams = typeof tasksSetRepositoryParamsSchema.Type;
 
-/** Whether a change of where a task stands names its status, its priority, its assignee, its merge policy, its running switch, or any of them. */
+/** Whether a change of where a task stands names its status, its priority, its assignee, or any of them. */
 function namesAStanding(params: {
   status?: unknown;
   priority?: unknown;
   assigneeId?: unknown;
-  mergePolicy?: unknown;
-  running?: unknown;
 }): boolean {
   return (
-    params.status !== undefined ||
-    params.priority !== undefined ||
-    params.assigneeId !== undefined ||
-    params.mergePolicy !== undefined ||
-    params.running !== undefined
+    params.status !== undefined || params.priority !== undefined || params.assigneeId !== undefined
   );
 }
 
-/** Setting where a task stands, how much it matters, who it is assigned to (null for no one), its merge policy, its running switch, or any of them, as the window asks it. */
+/** Setting where a task stands, how much it matters, who it is assigned to (null for no one), or any of them, as the window asks it. */
 export const tasksSetStandingParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
-  mergePolicy: EffectSchema.optionalKey(mergePolicySchema),
-  running: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** The name the window knows the member assigned by, which the host draws them by until the list carries them; never sent to the service. */
   assigneeName: EffectSchema.optionalKey(EffectSchema.String),
 }).check(EffectSchema.makeFilter(namesAStanding));
@@ -345,6 +346,22 @@ export const tasksBlockParamsSchema = EffectSchema.Struct({
 });
 
 export type TasksBlockParams = typeof tasksBlockParamsSchema.Type;
+
+/** A task's parent set or cleared, as the window asks it: the task, and the parent the service takes, null for none. */
+export const tasksSetParentParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  parentTaskId: EffectSchema.NullOr(wireUuidSchema),
+});
+
+export type TasksSetParentParams = typeof tasksSetParentParamsSchema.Type;
+
+/** One relation of a task moved to another kind, as the window asks it: the task, and the change the service takes. */
+export const tasksChangeRelationParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  relation: taskRelationChangeRequestSchema,
+});
+
+export type TasksChangeRelationParams = typeof tasksChangeRelationParamsSchema.Type;
 
 /** Why a task call answered nothing a window can draw. */
 export const TASK_CALL_FAILURE = {
@@ -450,6 +467,47 @@ export const tasksBlockAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksBlockAnswer = typeof tasksBlockAnswerSchema.Type;
+
+/** Why a parent write wrote nothing a call's other reasons do not say: the task would descend from itself, or the parent works in another repository. */
+export const TASK_PARENT_FAILURE = {
+  CYCLE: "parent-cycle",
+  REPOSITORY_DIFFERS: "parent-repository-differs",
+} as const;
+
+/** Why a parent write wrote nothing: the service did not answer, a task is not the account's or not of the workspace, or the parent's own reasons. */
+const PARENT_CALL_FAILURES = [
+  TASK_CALL_FAILURE.UNANSWERED,
+  TASK_CALL_FAILURE.NOT_FOUND,
+  TASK_PARENT_FAILURE.CYCLE,
+  TASK_PARENT_FAILURE.REPOSITORY_DIFFERS,
+] as const;
+
+export type ParentCallFailure = (typeof PARENT_CALL_FAILURES)[number];
+
+/** A task's parent set or cleared, as the window hears it: the parent as it then stands, null for none, or why it is unchanged. */
+export const tasksSetParentAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ parentTaskId: EffectSchema.NullOr(EffectSchema.String) }),
+  EffectSchema.Struct({ failure: EffectSchema.Literals(PARENT_CALL_FAILURES) }),
+]);
+
+export type TasksSetParentAnswer = typeof tasksSetParentAnswerSchema.Type;
+
+/** Why a relation's move wrote nothing: a block's reasons, or a parent's. */
+const RELATION_CALL_FAILURES = [...BLOCK_CALL_FAILURES, ...PARENT_CALL_FAILURES] as const;
+
+export type RelationCallFailure = (typeof RELATION_CALL_FAILURES)[number];
+
+/** One relation of a task moved, as the window hears it: the task's relations as they then stand, or why they are unchanged. */
+export const tasksChangeRelationAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    blockedBy: EffectSchema.Array(EffectSchema.String),
+    blocks: EffectSchema.Array(EffectSchema.String),
+    parentTaskId: EffectSchema.NullOr(EffectSchema.String),
+  }),
+  EffectSchema.Struct({ failure: EffectSchema.Literals(RELATION_CALL_FAILURES) }),
+]);
+
+export type TasksChangeRelationAnswer = typeof tasksChangeRelationAnswerSchema.Type;
 
 /** The developer's edit of a task's document, as the window asks it saved: the task, and the edit as the service takes it. */
 export const tasksEditParamsSchema = EffectSchema.Struct({
@@ -797,21 +855,10 @@ export const tasksPagesAnswerSchema = EffectSchema.Union([
 
 export type TasksPagesAnswer = typeof tasksPagesAnswerSchema.Type;
 
-/** One plan's pages, followed by a window while its Inbox draws an item of that plan, or one coding agent's on no task while its page is drawn. */
+/** One plan's pages, held by a window while its Inbox draws an item of that plan, or one coding agent's on no task while its page is drawn. */
 export const taskPagesFollowSchema = pagePlaceSchema;
 
 export type TaskPagesFollow = typeof taskPagesFollowSchema.Type;
-
-/**
- * A followed plan's or agent's pages as they now stand, each by its newest version,
- * told each time they move while followed, or why there are none.
- */
-export const taskPagesFollowedSchema = EffectSchema.Union([
-  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString, view: tasksPagesAnswerSchema }),
-  EffectSchema.Struct({ agentId: EffectSchema.NonEmptyString, view: tasksPagesAnswerSchema }),
-]);
-
-export type TaskPagesFollowed = typeof taskPagesFollowedSchema.Type;
 
 /** A page tab's read of one version's source, as the window hears it: its HTML line by line, coloured as HTML, or that the service did not answer. */
 export const tasksPageSourceAnswerSchema = EffectSchema.Union([

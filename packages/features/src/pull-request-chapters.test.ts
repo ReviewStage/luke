@@ -116,7 +116,7 @@ test("every hunk is named by its file and old-side start, and a file with none, 
   );
 });
 
-test("lockfiles, folder metadata, minified files, maps, snapshots, images, fonts, video, and documents are left out of the chapters, whatever their case or folder", () => {
+test("lockfiles, folder metadata, minified files, maps, snapshots, images, fonts, video, documents, and Drizzle's migration snapshots are left out of the chapters, whatever their case or folder", () => {
   for (const path of [
     "pnpm-lock.yaml",
     "apps/web/package-lock.json",
@@ -133,6 +133,8 @@ test("lockfiles, folder metadata, minified files, maps, snapshots, images, fonts
     "docs/guide.pdf",
     "public/icon.svg",
     "assets/raw.png/notes.txt",
+    "packages/database/migrations/20261030154518_agent_queue/snapshot.json",
+    "drizzle/meta/0007_snapshot.json",
   ]) {
     assert.equal(ignoredForChapters(path), true, path);
   }
@@ -142,6 +144,8 @@ test("lockfiles, folder metadata, minified files, maps, snapshots, images, fonts
     "src/map.ts",
     "src/lockfile.ts",
     "docs/pdf-export.md",
+    "src/snapshot.json",
+    "packages/database/migrations/20261030154518_agent_queue/migration.sql",
   ]) {
     assert.equal(ignoredForChapters(path), false, path);
   }
@@ -330,9 +334,19 @@ test("a thread on a whole file stands in every chapter holding a hunk of it, and
 
 test("a chapter's lines are what its own hunks add and remove, each counted once", () => {
   assert.deepEqual(
-    chapterLineCounts(story("Most", [seatsFirst, seatsSecond, added, seatsFirst, logo]), HUNKS),
-    { additions: 4, deletions: 1 },
+    chapterLineCounts(story("Most", [seatsFirst, seatsSecond, added, seatsFirst, logo]), FILES),
+    { additions: 4, deletions: 1, files: 3 },
   );
+});
+
+test("a chapter's file with no hunks counts the lines GitHub says it changes, as Files changed sums them", () => {
+  const huge = changed("pnpm-lock.yaml", null, {
+    omitted: PATCH_OMITTED.TOO_LARGE,
+    additions: 120,
+    deletions: 30,
+  });
+  const other = otherChangesChapter([{ path: "pnpm-lock.yaml", oldStart: HEADER_ONLY_OLD_START }]);
+  assert.deepEqual(chapterLineCounts(other, [huge]), { additions: 120, deletions: 30, files: 1 });
 });
 
 test("a literal \\n a model escaped twice is a newline in prose and in a fenced block, never in inline code", () => {

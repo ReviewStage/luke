@@ -23,7 +23,6 @@ import {
   beginTaskWorkCommitted,
   readTask,
   readTaskWorkspace,
-  readTreeStopped,
   type StoredTask,
 } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
@@ -228,10 +227,6 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * coding agent's `start_agent`, which is how a pilot gives a child task its
  * sub-pilot; every later one makes a coder, as every Start on any other task
  * does. A pilot is refused for an account with the Pilot experiment off.
- * Any Start on a child task of a pilot tree whose Running switch is off
- * (`readTreeStopped`) is refused, a member's or a coding agent's, fresh or
- * from another agent, until the switch is on; the top task's own pilot
- * never is, since it plans and talks while its tree is stopped.
  * The member's operator is the one blank Start with no task: in a workspace
  * the account is a member of, on no repository, from no other agent and
  * with no prompt or note, and no other Start is an operator's. Every other
@@ -594,10 +589,6 @@ const landingOf = Effect.fnUntraced(function* (
       : yield* hostedStoreOrUnavailable(readTask(userId, place.taskId));
   if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { task, ownerId } = read.value;
-  // A child task of a stopped pilot tree takes no agent, fresh or continued, until Running is on.
-  if (yield* hostedStoreOrUnavailable(readTreeStopped(userId, task.id))) {
-    return yield* Effect.fail(HOSTED_REFUSAL.TREE_STOPPED);
-  }
   const mover = ownerId === userId ? userId : undefined;
   // A Start from another agent goes its source's way; only a fresh one can make the task's pilot.
   const kind = place.from === undefined ? yield* freshKindOn(userId, task) : AGENT_KIND.CODER;

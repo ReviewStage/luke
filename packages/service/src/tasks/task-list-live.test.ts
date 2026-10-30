@@ -59,6 +59,7 @@ import {
 } from "@luke/features/automation-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import {
+  agentPullRequestsOfLiveRows,
   taskAgentPinsOfLiveRows,
   taskAgentsOfLiveRows,
   taskListLiveRowsSchema,
@@ -623,7 +624,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
   );
 
   it.effect(
-    "a plan's row names its first few pull requests and counts them all, and every one stands beside the list in the row's order",
+    "a plan's row names its first few pull requests and counts them all, every one stands beside the list in the row's order, and each agent's own beside it, an archived agent's among them",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
@@ -638,6 +639,13 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
             url: `https://github.com/acme/relay/pull/${number}`,
           });
         }
+        const archived = yield* openAgent(owner, { taskId: plan.id }, 6 * 60_000);
+        yield* recordAgentPublished(owner, archived.id, {
+          ...published,
+          number: 40,
+          url: "https://github.com/acme/relay/pull/40",
+        });
+        yield* archiveAgent(owner, archived.id, true);
 
         const rows = yield* liveRowsOf(owner);
         const row = taskListOfLiveRows(rows, NOW).plans.find((each) => each.id === plan.id);
@@ -652,6 +660,14 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           row?.agents?.pullRequests,
           every?.pullRequests.slice(0, 3),
           "the row names the first few of them",
+        );
+        assert.deepEqual(
+          agentPullRequestsOfLiveRows(rows)
+            .filter((each) => each.taskId === plan.id)
+            .map((each) => each.pullRequest.number)
+            .toSorted(),
+          [40, 41, 42, 43, 44, 45],
+          "each agent's own, the archived agent's among them",
         );
       }),
   );

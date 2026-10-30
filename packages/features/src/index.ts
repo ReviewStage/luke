@@ -35,11 +35,15 @@ export {
   type DeviceAgentStateRefused,
   enrollHost,
   HOST_ENROLL_OUTCOME,
+  HOST_PAIRING_OUTCOME,
   type HostEnrollOutcome,
   HostedDeviceAgentClient,
   type HostedDeviceAgentClientOptions,
+  type HostPairingOutcome,
   OWN_ENROLL_OUTCOME,
   type OwnEnrollOutcome,
+  pollHostPairing,
+  startHostPairing,
 } from "./device-agent-client.js";
 export {
   GITHUB_CONNECTION_CALL_FAILURE,

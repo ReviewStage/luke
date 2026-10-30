@@ -129,7 +129,6 @@ import {
   type OfferedBeside,
   repositoryToolsOf,
   starterToolsOf,
-  taskToolsOf,
 } from "../coder-host/tool-set.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
@@ -436,15 +435,14 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
 ]);
 
 /** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
-export type LukeMcpOfferedTo = Pick<Agent, "taskId" | "repository" | "kind" | "machine">;
+export type LukeMcpOfferedTo = Pick<Agent, "repository" | "kind" | "machine">;
 
 /** The workspace's shared memory, which eve offers only where the agent's starter turned Memory on (`apps/dev/tools/remember.ts`'s `memoryOffered`). */
 const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL];
 
-/** The tools eve offers some agents and not others: each one some agent's task, repository, kind, starter, or starter's Memory withholds. */
+/** The tools eve offers some agents and not others: each one some agent's repository, kind, starter, or starter's Memory withholds. */
 const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...MEMORY_TOOLS,
-  ...taskToolsOf({ taskId: "any" }),
   ...repositoryToolsOf({ repository: "any" }),
   ...kindToolsOf({ kind: AGENT_KIND.OPERATOR }),
   ...kindToolsOf({ kind: AGENT_KIND.CODER }),
@@ -455,7 +453,7 @@ const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
 /**
  * Whether the server lists a tool to an agent: every tool eve offers every
  * agent, and each narrowed one where eve offers it to this agent, by its
- * task, its repository, its kind, whether a pilot started it, and whether
+ * repository, its kind, whether a pilot started it, and whether
  * its starter has Memory on (`beside`), the same rules eve's tool files read
  * at each turn. Note that a harness reads the list as its launch begins, so
  * an agent is narrowed launch by launch, as eve's is turn by turn, and that
@@ -468,7 +466,6 @@ export function offeredLukeMcpTool(
 ): (name: string) => boolean {
   const offered: ReadonlySet<string> = new Set<string>([
     ...(beside.memoryOn ? MEMORY_TOOLS : []),
-    ...taskToolsOf(agent),
     ...repositoryToolsOf(agent),
     ...kindToolsOf(agent),
     ...starterToolsOf(beside),

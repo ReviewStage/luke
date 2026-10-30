@@ -569,7 +569,7 @@ test("a section's Move all to section puts every task in it on top of the sectio
   act(() => item("Someday").click());
   const moved = writes.reduce((held, write) => applySectionWrite(held, write, 10), BOTH_IN_LAUNCH);
 
-  assert.deepEqual(offered, ["Someday", "New section…"]);
+  assert.deepEqual(offered, ["Someday", "New section"]);
   assert.deepEqual(sectionTaskIds(moved, SOMEDAY), [INVITES.id, RETRIES.id]);
   assert.deepEqual(sectionTaskIds(moved, LAUNCH), []);
 });
@@ -694,7 +694,7 @@ test("a new section starts with no icon and is made without one", async () => {
   const sidebar = await mountSidebar(writes);
 
   openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section…").click());
+  act(() => item("New section").click());
   assert.equal(dialogButton("No icon").getAttribute("aria-pressed"), "true");
   const title = dialogField("Section title");
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
@@ -715,7 +715,7 @@ test("New section waits on a title, and Enter in it makes the section", async ()
   const sidebar = await mountSidebar(writes);
 
   openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section…").click());
+  act(() => item("New section").click());
   assert.equal(dialogButton("Create section").disabled, true, "a blank title is not offered");
   const title = dialogField("Section title");
   assert.ok(title.closest('[role="dialog"]'), "a form is a dialog, not an alert");
@@ -738,7 +738,7 @@ test("New section's field is labelled, and Enter on a blank title marks it inval
   const sidebar = await mountSidebar(writes);
 
   openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section…").click());
+  act(() => item("New section").click());
   const title = dialogField("Section title");
   assert.equal(title.getAttribute("aria-label"), null, "the visible label names the field");
   assert.notEqual(title.placeholder, "Section title", "the placeholder is not the label again");
@@ -1051,7 +1051,7 @@ test("an icon found by searching, in a color chosen, is the new section's", asyn
   const sidebar = await mountSidebar(writes);
 
   openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section…").click());
+  act(() => item("New section").click());
   typeInto(dialogField("Section title"), "Stars");
   await settleLoaded();
   act(() => dialogButton("Teal").click());
@@ -1096,7 +1096,7 @@ test("Enter in the Emoji tab's search chooses the first emoji it found", async (
   const sidebar = await mountSidebar(writes);
 
   openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section…").click());
+  act(() => item("New section").click());
   typeInto(dialogField("Section title"), "Errands");
   act(() => dialogButton("Emoji").click());
   await settleLoaded();
@@ -1116,7 +1116,7 @@ test("Icons and Emoji are tabs over the picker's panel, which the tab shown name
   const sidebar = await mountSidebar([]);
 
   openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section…").click());
+  act(() => item("New section").click());
   await settleLoaded();
   const kinds =
     document.querySelector<HTMLElement>('[role="tablist"][aria-label="Icon kind"]') ??
@@ -1155,7 +1155,7 @@ test("Shift-Enter in the icon search chooses the first glyph it found, as Enter 
   const sidebar = await mountSidebar(writes);
 
   openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section…").click());
+  act(() => item("New section").click());
   typeInto(dialogField("Section title"), "Stars");
   await settleLoaded();
   const search = dialogField("Search icons");
@@ -1177,7 +1177,7 @@ test("Clear search empties the icon search, every glyph is offered again, and th
   const sidebar = await mountSidebar([]);
 
   openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section…").click());
+  act(() => item("New section").click());
   await settleLoaded();
   const search = dialogField("Search icons");
   typeInto(search, "telescope");
@@ -1193,7 +1193,7 @@ test("ArrowDown in the icon search hands the focus to the grid's tab stop", asyn
   const sidebar = await mountSidebar([]);
 
   openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section…").click());
+  act(() => item("New section").click());
   await settleLoaded();
   const search = dialogField("Search icons");
   typeInto(search, "telescope");
@@ -1208,7 +1208,7 @@ test("the arrows move the grid's one tab stop with the focus", async () => {
   const sidebar = await mountSidebar([]);
 
   openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section…").click());
+  act(() => item("New section").click());
   await settleLoaded();
   const folder = dialogButton("Folder");
   act(() => folder.focus());
@@ -1582,4 +1582,18 @@ test("an agent dragged from a section onto Tasks leaves every section", async ()
   assert.deepEqual(asked.writes, [
     { kind: TASK_SECTION_WRITE.PLACE_AGENT, agentId: SWEEP.id, sectionId: null },
   ]);
+});
+
+test("in a shared workspace, your one task standing in a section leaves Tasks saying nothing of a view that matches none", async () => {
+  const shared = { ...WORKSPACE, memberCount: 2 };
+  const ada = { userId: "user-ada", name: "Ada Lovelace" };
+  const sidebar = await mountSidebar([], SECTIONS, {
+    tasks: [{ ...INVITES, assignee: ada }, RETRIES],
+    workspace: shared,
+    workspaces: [shared],
+    me: ada.userId,
+  });
+
+  assert.match(sidebar.textContent ?? "", /Invite expiry/u);
+  assert.doesNotMatch(sidebar.textContent ?? "", /No tasks match this view\./u);
 });

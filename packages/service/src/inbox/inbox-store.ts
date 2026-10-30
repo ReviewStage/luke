@@ -30,7 +30,7 @@ import { agentTable } from "@luke/database/schemas/agent";
 import { attachment } from "@luke/database/schemas/attachment";
 import { organization, user } from "@luke/database/schemas/auth";
 import { automation } from "@luke/database/schemas/automation";
-import { channel } from "@luke/database/schemas/channel";
+import { channel, channelLook } from "@luke/database/schemas/channel";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
 import { inboxMessage } from "@luke/database/schemas/inbox-message";
@@ -292,6 +292,7 @@ const MESSAGE = {
   ask: qualified(inboxMessage, inboxMessage.ask),
   answers: qualified(inboxMessage, inboxMessage.answers),
   addresseeId: qualified(inboxMessage, inboxMessage.addresseeId),
+  clientKey: qualified(inboxMessage, inboxMessage.clientKey),
   createdAt: qualified(inboxMessage, inboxMessage.createdAt),
 };
 
@@ -320,11 +321,11 @@ const THREAD_MESSAGES = messagesAs(
  * Messages oldest first, each with its author, the member's name as their
  * account holds it now, its words, its files, the ask it ends with and the
  * answer it carries as they were kept, the member an agent's message was
- * addressed to and their name, and when it was written in epoch
- * milliseconds.
+ * addressed to and their name, the key a member's was sent under, and
+ * when it was written in epoch milliseconds.
  */
 function messagesOf(source: SQL): SQL<unknown> {
-  return sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('id', ${MESSAGE.id}, 'author', ${MESSAGE.author}, 'userId', ${MESSAGE.userId}, 'name', (select "name" from ${user} where ${user.id} = ${MESSAGE.userId}), 'text', ${MESSAGE.text}, 'files', ${MESSAGE_FILES}, 'ask', ${MESSAGE.ask}, 'answers', ${MESSAGE.answers}, 'addresseeId', ${MESSAGE.addresseeId}, 'addresseeName', (select "name" from ${user} where ${user.id} = ${MESSAGE.addresseeId}), 'createdAt', floor(extract(epoch from ${MESSAGE.createdAt}) * 1000)::bigint) order by ${MESSAGE.createdAt}, ${MESSAGE.id}), '[]'::jsonb) from ${source})`;
+  return sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('id', ${MESSAGE.id}, 'author', ${MESSAGE.author}, 'userId', ${MESSAGE.userId}, 'name', (select "name" from ${user} where ${user.id} = ${MESSAGE.userId}), 'text', ${MESSAGE.text}, 'files', ${MESSAGE_FILES}, 'ask', ${MESSAGE.ask}, 'answers', ${MESSAGE.answers}, 'addresseeId', ${MESSAGE.addresseeId}, 'addresseeName', (select "name" from ${user} where ${user.id} = ${MESSAGE.addresseeId}), 'clientKey', ${MESSAGE.clientKey}, 'createdAt', floor(extract(epoch from ${MESSAGE.createdAt}) * 1000)::bigint) order by ${MESSAGE.createdAt}, ${MESSAGE.id}), '[]'::jsonb) from ${source})`;
 }
 
 /** Whether the item is settled: answered, or closed by its agent. */
@@ -452,13 +453,18 @@ const MessageRowSchema = Schema.Struct({
   answers: Schema.NullOr(inboxAnswersSchema),
   addresseeId: Schema.NullOr(Schema.String),
   addresseeName: Schema.NullOr(Schema.String),
+  clientKey: Schema.NullOr(Schema.String),
   createdAt: Schema.Number,
 });
 
 type MessageRow = typeof MessageRowSchema.Type;
 
-/** A message as the wire carries it: the member named where their account stands, no files where it carried none, its ask as it stands on the item, and whom it was addressed to where their account stands. */
-function storedMessage(row: MessageRow, item: InboxAskStanding): InboxMessage {
+/** A message as the wire carries it: the member named where their account stands, no files where it carried none, its ask as it stands on the item, whom it was addressed to where their account stands, and the key it was sent under where `keysFor` names the member who sent it. */
+function storedMessage(
+  row: MessageRow,
+  item: InboxAskStanding,
+  keysFor: string | undefined,
+): InboxMessage {
   return {
     id: row.id,
     author: row.author,
@@ -472,6 +478,9 @@ function storedMessage(row: MessageRow, item: InboxAskStanding): InboxMessage {
     ...(row.addresseeId === null || row.addresseeName === null
       ? undefined
       : { addressedTo: { userId: row.addresseeId, name: row.addresseeName } }),
+    ...(keysFor === undefined || row.userId !== keysFor || row.clientKey === null
+      ? undefined
+      : { clientKey: row.clientKey }),
     createdAt: row.createdAt,
   };
 }
@@ -507,9 +516,14 @@ const InboxRowSchema = Schema.Struct({
 
 type InboxRow = typeof InboxRowSchema.Type;
 
-/** A row as the wire carries it, each absent field left out rather than null. */
-function storedItem(row: InboxRow): StoredInboxItem {
-  const message = (each: MessageRow) => storedMessage(each, row);
+/**
+ * A row as the wire carries it, each absent field left out rather than
+ * null. Note that a member's message carries the key it was sent under to
+ * that member alone, named by `keysFor` on a read answering their own
+ * write, so no other member, and no agent, is ever handed one.
+ */
+function storedItem(row: InboxRow, keysFor?: string): StoredInboxItem {
+  const message = (each: MessageRow) => storedMessage(each, row, keysFor);
   return {
     item: {
       id: row.id,
@@ -1680,6 +1694,8 @@ function itemsLiveStatements(
             text: MESSAGE.text,
             ask: MESSAGE.ask,
             answers: MESSAGE.answers,
+            // The key a member's message was sent under, to that member alone, as `storedItem` hands it.
+            clientKey: sql`case when ${MESSAGE.userId} = ${readerId} then ${MESSAGE.clientKey} end`,
           },
           { createdAt: MESSAGE.createdAt },
         ),
@@ -1783,16 +1799,17 @@ export function memberAgentInboxLiveStatements(
   return scopeLiveStatements({ userId, scope: INBOX_SCOPE.AGENT_OF_WORKSPACE, id: agentId });
 }
 
-/** The scope's items: every open one, then the latest settled ones up to the limit, the two read at once. */
+/** The scope's items: every open one, then the latest settled ones up to the limit, the two read at once, each of the member `keysFor` names carrying the key it was sent under (`storedItem`). */
 function scopeItems(
   scope: InboxScope,
   settledLimit: number,
+  keysFor?: string,
 ): InboxStoreEffect<readonly InboxItem[]> {
   return Effect.map(
     Effect.all([findOpenItems(scope), findSettledItems({ ...scope, limit: settledLimit })], {
       concurrency: 2,
     }),
-    ([open, settled]) => [...open, ...settled].map((row) => storedItem(row).item),
+    ([open, settled]) => [...open, ...settled].map((row) => storedItem(row, keysFor).item),
   );
 }
 
@@ -2059,11 +2076,15 @@ const acknowledgeNotice = SqlSchema.findOneOption({
 });
 
 /** The item as the reader named reads it, by its id alone, where the caller has just written it, so a missing row is a broken contract. */
-function itemAsWritten(readerId: string, itemId: string): InboxStoreEffect<InboxItem> {
+function itemAsWritten(
+  readerId: string,
+  itemId: string,
+  keysFor?: string,
+): InboxStoreEffect<InboxItem> {
   return findItemOf({ readerId, itemId }).pipe(
     Effect.flatMap(Effect.fromOption),
     Effect.catchTag("NoSuchElementError", Effect.die),
-    Effect.map((row) => storedItem(row).item),
+    Effect.map((row) => storedItem(row, keysFor).item),
   );
 }
 
@@ -2393,14 +2414,15 @@ function placeOf(
 
 /**
  * The thread moved into the channel, where that is an open channel of the
- * thread's own workspace; its id, nothing where the channel is no such one.
- * Note that the channel is checked in the statement itself, so one archived
- * since its caller chose it takes nothing, and that a move changes the
- * thread's place alone, neither its last change nor anyone's unread.
+ * thread's own workspace; its id and the transaction it moved in, nothing
+ * where the channel is no such one. Note that the channel is checked in the
+ * statement itself, so one archived since its caller chose it takes
+ * nothing, and that a move changes the thread's place alone, neither its
+ * last change nor anyone's unread.
  */
 const updateItemChannel = SqlSchema.findOneOption({
   Request: Schema.Struct({ itemId: Schema.String, channelId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, txid: Schema.String }),
   execute: ({ itemId, channelId }) =>
     Database.use((db) =>
       db
@@ -2423,7 +2445,7 @@ const updateItemChannel = SqlSchema.findOneOption({
             ),
           ),
         )
-        .returning({ id: inboxItem.id }),
+        .returning({ id: inboxItem.id, txid: TXID }),
     ),
 });
 
@@ -2436,12 +2458,19 @@ const updateItemAddressee = SqlSchema.void({
 
 /**
  * The thread moved into the channel, where that is an open channel of the
- * thread's own workspace; whether it moved. The one move every caller
- * makes, a member's (`moveChannelThread`) and an agent's follow-up alike,
- * once it has reached the thread.
+ * thread's own workspace; the transaction it moved in, nothing where it did
+ * not move. The one move every caller makes, a member's
+ * (`moveChannelThread`) and an agent's follow-up alike, once it has reached
+ * the thread.
  */
-function moveItemToChannel(itemId: string, channelId: string): InboxStoreEffect<boolean> {
-  return Effect.map(updateItemChannel({ itemId, channelId }), Option.isSome);
+function moveItemToChannel(
+  itemId: string,
+  channelId: string,
+): InboxStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    updateItemChannel({ itemId, channelId }),
+    Option.map((moved) => moved.txid),
+  );
 }
 
 /**
@@ -2456,7 +2485,10 @@ function replaceItem(
   place: { readonly channelId: string | null; readonly addresseeId: string | null },
 ): InboxStoreEffect<void> {
   return Effect.gen(function* () {
-    if (place.channelId !== null && !(yield* moveItemToChannel(itemId, place.channelId))) {
+    if (
+      place.channelId !== null &&
+      Option.isNone(yield* moveItemToChannel(itemId, place.channelId))
+    ) {
       return yield* Effect.die(new Error("a channel found open refused a move"));
     }
     if (place.addresseeId !== null) {
@@ -2610,6 +2642,7 @@ export function closeInboxItem(
 export function agentInboxItems(
   agent: Pick<InboxAgent, "userId" | "agentId">,
 ): InboxStoreEffect<readonly InboxItem[]> {
+  // Note that the agent's own read names no member, so it is handed no member's key.
   return scopeItems(
     { userId: agent.userId, scope: INBOX_SCOPE.AGENT, id: agent.agentId },
     INBOX_BOUNDS.MAX_SETTLED_TOLD,
@@ -2626,7 +2659,11 @@ export function taskInboxItems(
   userId: string,
   taskId: string,
 ): InboxStoreEffect<readonly InboxItem[]> {
-  return scopeItems({ userId, scope: INBOX_SCOPE.TASK, id: taskId }, INBOX_BOUNDS.MAX_ITEMS_READ);
+  return scopeItems(
+    { userId, scope: INBOX_SCOPE.TASK, id: taskId },
+    INBOX_BOUNDS.MAX_ITEMS_READ,
+    userId,
+  );
 }
 
 /** One agent's items as any member of its workspace reads them, an agent with no task as much as one on a task: every open one, then the latest settled. */
@@ -2637,6 +2674,7 @@ export function memberAgentInboxItems(
   return scopeItems(
     { userId, scope: INBOX_SCOPE.AGENT_OF_WORKSPACE, id: agentId },
     INBOX_BOUNDS.MAX_ITEMS_READ,
+    userId,
   );
 }
 
@@ -2885,6 +2923,12 @@ export function channelPostTallies(
   );
 }
 
+/** A thread a move left in its channel, and the transaction it moved in. */
+export interface ChannelThreadMoved {
+  readonly thread: ChannelThreadItem;
+  readonly txid: string;
+}
+
 /** Why a member's move of a thread took nothing. Nothing was written. */
 export const CHANNEL_MOVE_REFUSAL = {
   /** No thread the member may read goes by that id. */
@@ -2926,7 +2970,8 @@ const findChannelThread = SqlSchema.findOneOption({
  * The thread the member may read moved into another open channel of its
  * own workspace, as a member moves one or an agent on its starter's
  * behalf, the agent moving its own thread as it acts as itself
- * (`ownAgentId`); the thread as it then stands. Refused where they may not
+ * (`ownAgentId`); the thread as it then stands, and the transaction it
+ * moved in. Refused where they may not
  * read it, or the channel is unknown, archived, or another workspace's.
  */
 export function moveChannelThread(
@@ -2934,13 +2979,12 @@ export function moveChannelThread(
   itemId: string,
   channelId: string,
   ownAgentId: string | null = null,
-): InboxStoreEffect<Result.Result<ChannelThreadItem, ChannelMoveRefusal>> {
+): InboxStoreEffect<Result.Result<ChannelThreadMoved, ChannelMoveRefusal>> {
   return Effect.gen(function* () {
     const standing = yield* findChannelThread({ userId, itemId, ownAgentId });
     if (Option.isNone(standing)) return Result.fail(CHANNEL_MOVE_REFUSAL.NO_THREAD);
-    if (!(yield* moveItemToChannel(itemId, channelId))) {
-      return Result.fail(CHANNEL_MOVE_REFUSAL.NO_CHANNEL);
-    }
+    const txid = yield* moveItemToChannel(itemId, channelId);
+    if (Option.isNone(txid)) return Result.fail(CHANNEL_MOVE_REFUSAL.NO_CHANNEL);
     const moved = Option.getOrElse(
       yield* findChannelThread({ userId, itemId, ownAgentId }),
       () => ({
@@ -2948,11 +2992,12 @@ export function moveChannelThread(
         channelId,
       }),
     );
-    return Result.succeed({
+    const thread: ChannelThreadItem = {
       ...storedItem(moved).item,
       channelId: moved.channelId,
       ...threadAgent(moved),
-    });
+    };
+    return Result.succeed({ thread, txid: txid.value });
   });
 }
 
@@ -3020,6 +3065,81 @@ export function channelsLiveStatements(
   return Option.all({ channels: liveStatementOf(channels), threads: liveStatementOf(threads) });
 }
 
+/** The statements a workspace's channels list is followed by live, one per part of what each channel shows its reader. */
+export interface WorkspaceChannelsLiveStatements {
+  readonly channels: LiveStatement;
+  readonly tallies: LiveStatement;
+  readonly waiting: LiveStatement;
+  readonly looks: LiveStatement;
+}
+
+/**
+ * A workspace's channels list as its reader reads it, written for Luke
+ * Sync, each column under the key `channel-live.ts` reads it by and each
+ * instant in epoch milliseconds: every channel of it, open or archived, as
+ * its row holds it; how many threads of each the reader may read and when
+ * the latest was posted; how many of those hold an ask open that waits on
+ * the reader; and when the reader last looked at each. Note that nothing
+ * here moves with a thread's last change, so an item written that changes
+ * no count, no post, and no ask leaves the read's digest where it stood,
+ * and its held poll answers nobody. The rule of who may read the threads
+ * is the held list's (`itemVisibleTo`). None where a statement names a
+ * value a live statement cannot carry.
+ */
+export function workspaceChannelsLiveStatements(
+  userId: string,
+  organizationId: string,
+): Option.Option<WorkspaceChannelsLiveStatements> {
+  const ofWorkspace = and(
+    eq(channel.organizationId, organizationId),
+    workspaceReachableBy(userId, channel.organizationId),
+  );
+  const channels = queryBuilder
+    .select(
+      liveSelection(
+        {
+          id: channel.id,
+          name: channel.name,
+          purpose: channel.purpose,
+          project: channel.project,
+          createdBy: channel.createdBy,
+        },
+        { createdAt: channel.createdAt, archivedAt: channel.archivedAt },
+      ),
+    )
+    .from(channel)
+    .where(ofWorkspace);
+  const visibleThreads = and(eq(inboxItem.organizationId, organizationId), itemVisibleTo(userId));
+  const tallies = queryBuilder
+    .select({
+      ...liveSelection({ channelId: inboxItem.channelId }),
+      threads: LIVE_COUNT.as("threads"),
+      latestPostedAt: liveLatest(inboxItem.postedAt).as("latestPostedAt"),
+    })
+    .from(inboxItem)
+    .where(visibleThreads)
+    .groupBy(inboxItem.channelId);
+  const waiting = queryBuilder
+    .select({
+      ...liveSelection({ channelId: inboxItem.channelId }),
+      waiting: LIVE_COUNT.as("waiting"),
+    })
+    .from(inboxItem)
+    .where(and(visibleThreads, askingReader(userId)))
+    .groupBy(inboxItem.channelId);
+  const looks = queryBuilder
+    .select(liveSelection({ channelId: channelLook.channelId }, { lookedAt: channelLook.lookedAt }))
+    .from(channelLook)
+    .innerJoin(channel, eq(channel.id, channelLook.channelId))
+    .where(and(eq(channelLook.userId, userId), ofWorkspace));
+  return Option.all({
+    channels: liveStatementOf(channels),
+    tallies: liveStatementOf(tallies),
+    waiting: liveStatementOf(waiting),
+    looks: liveStatementOf(looks),
+  });
+}
+
 /** How many threads of each channel of the workspace hold an ask open that waits on the reader, by channel; a channel where none waits is left out, and every one for a workspace the account is not in. */
 export function channelWaitingCounts(
   userId: string,
@@ -3036,7 +3156,10 @@ export function readInboxItem(
   userId: string,
   itemId: string,
 ): InboxStoreEffect<Option.Option<StoredInboxItem>> {
-  return Effect.map(findItem({ userId, itemId }), Option.map(storedItem));
+  return Effect.map(
+    findItem({ userId, itemId }),
+    Option.map((row) => storedItem(row, userId)),
+  );
 }
 
 /**
@@ -3160,7 +3283,10 @@ export function withdrawInboxAnswer(
         }
         // The answer taken back is the member's own, so it leaves the item read for them as the answer did.
         yield* upsertRead({ userId, itemId });
-        return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
+        return Option.map(
+          yield* findItem({ userId, itemId }),
+          (row) => storedItem(row, userId).item,
+        );
       }),
     ),
   );
@@ -3197,7 +3323,7 @@ export function closeInboxItemAsMember(
         yield* upsertRead({ userId, itemId });
         const { txid } = closed.value;
         return Option.map(yield* findItem({ userId, itemId }), (row) => ({
-          ...storedItem(row).item,
+          ...storedItem(row, userId).item,
           txid,
         }));
       }),
@@ -3297,7 +3423,10 @@ export function withdrawInboxClose(
           });
         }
         yield* upsertRead({ userId, itemId });
-        return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
+        return Option.map(
+          yield* findItem({ userId, itemId }),
+          (row) => storedItem(row, userId).item,
+        );
       }),
     ),
   );
@@ -3411,7 +3540,7 @@ export function acknowledgeInboxItem(
         yield* upsertRead({ userId, itemId });
         const { txid } = nodded.value;
         return Option.map(yield* findItem({ userId, itemId }), (row) => ({
-          ...storedItem(row).item,
+          ...storedItem(row, userId).item,
           txid,
         }));
       }),
@@ -3477,7 +3606,7 @@ export function answerInboxAsk(
         if (Option.isNone(found)) return Option.none();
         const standing = (outcome: InboxAskAnswer, refusal?: string) =>
           Option.some({
-            item: storedItem(found.value).item,
+            item: storedItem(found.value, userId).item,
             outcome,
             ...(refusal === undefined ? undefined : { refusal }),
           });
@@ -3531,7 +3660,7 @@ export function answerInboxAsk(
           answers: sent.answers,
           now,
         });
-        const item = yield* itemAsWritten(userId, itemId);
+        const item = yield* itemAsWritten(userId, itemId, userId);
         return Option.some({
           item,
           outcome: INBOX_ASK_ANSWER.TAKEN,
@@ -3719,7 +3848,10 @@ function writeInboxMessage(
           ? INBOX_MESSAGE_OUTCOME.WRITTEN
           : yield* repeatOutcome(itemId, member, text, files);
         const found = yield* findItemOf({ readerId, itemId });
-        return Option.map(found, (row) => ({ item: storedItem(row).item, outcome }));
+        return Option.map(found, (row) => ({
+          item: storedItem(row, member?.userId).item,
+          outcome,
+        }));
       }),
     ),
   );
@@ -3959,7 +4091,7 @@ export function startInboxThread(
         }));
         const started = yield* findStartedThread({ userId, agentId: agent.agentId, clientKey });
         if (Option.isSome(started)) {
-          const item = yield* itemAsWritten(userId, started.value.id);
+          const item = yield* itemAsWritten(userId, started.value.id, userId);
           const first = yield* findKeyedMessage({ itemId: item.id, clientKey });
           // Note that other words or files under a key taken are refused, so the agent never hears what the thread does not show; the subject is not compared, since the agent may retitle the thread and the agent hears it as the thread stands.
           const same = Option.isSome(first) && sameMessage(first.value, { userId, text, files });
@@ -4004,7 +4136,7 @@ export function startInboxThread(
           }),
         );
         yield* upsertRead({ userId, itemId });
-        const item = yield* itemAsWritten(userId, itemId);
+        const item = yield* itemAsWritten(userId, itemId, userId);
         return Option.some({ item, outcome: INBOX_MESSAGE_OUTCOME.WRITTEN });
       }),
     ),

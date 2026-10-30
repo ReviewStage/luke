@@ -243,6 +243,8 @@ export const APP_SLICE = {
   INBOX: sliceAtom("inbox"),
   INBOX_ITEMS: sliceAtom(LIVE_READ.INBOX_ITEMS),
   HOLDER_INBOX: sliceAtom(LIVE_READ.HOLDER_INBOX),
+  PAGES: sliceAtom(LIVE_READ.PAGES),
+  CHANNELS: sliceAtom(LIVE_READ.CHANNELS),
   MAC_COMMANDS: sliceAtom("macCommands"),
   NOTIFICATIONS: sliceAtom("notifications"),
   NETWORK: sliceAtom("network"),
@@ -321,11 +323,7 @@ export function useExperimentChoices(): ExperimentChoices {
   return useAtomValue(experimentChoicesAtom);
 }
 
-/**
- * The same answer for a callback that cannot wait a render.
- *
- * @public The door `AGENTS.md`'s "Experiments" names for a gated callback, kept for the next one.
- */
+/** The same answer for a callback that cannot wait a render. */
 export function experimentOnNow(experiment: Experiment): boolean {
   return experimentOn(appStateNow()?.settings?.experiments ?? NO_EXPERIMENTS, experiment);
 }

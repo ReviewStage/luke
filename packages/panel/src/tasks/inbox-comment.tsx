@@ -51,6 +51,7 @@ export function InboxComment({
   kind,
   author,
   nameRef,
+  said,
   at,
   now,
   trailing,
@@ -61,6 +62,8 @@ export function InboxComment({
   author: CommentAuthor;
   /** The writer's name as the window names anyone, hanging their card. */
   nameRef: React.ReactNode;
+  /** What they did, after their name, for a line of what happened to the thread: a member resolving it. */
+  said?: string | undefined;
   /** When they wrote it; none for the reader's draft reply. */
   at?: number | undefined;
   now?: number | undefined;
@@ -72,7 +75,7 @@ export function InboxComment({
 }): React.JSX.Element {
   return (
     <li className={INBOX_COMMENT} data-inbox-comment={kind} data-message-id={messageId}>
-      <Comment author={author} nameRef={nameRef} at={at} now={now} trailing={trailing}>
+      <Comment author={author} nameRef={nameRef} said={said} at={at} now={now} trailing={trailing}>
         {children === undefined ? undefined : (
           // Note that the reader's draft reply lets what stands over its box's field, its @ and / lists, run past the comment.
           <div

@@ -80,19 +80,31 @@ it.layer(getTestDB())("the comment tools", (it) => {
         const replied = yield* runCommentTool(
           AGENT_TOOL.REPLY_TO_COMMENT,
           writer,
-          unparsedWire({ thread: thread.id, words: "Not in v1; the page does not exist yet." }),
+          unparsedWire({
+            taskId,
+            thread: thread.id,
+            words: "Not in v1; the page does not exist yet.",
+          }),
         );
-        const read = yield* runCommentTool(AGENT_TOOL.READ_COMMENTS, writer, unparsedWire({}));
+        const read = yield* runCommentTool(
+          AGENT_TOOL.READ_COMMENTS,
+          writer,
+          unparsedWire({ taskId }),
+        );
         yield* runCommentTool(
           AGENT_TOOL.RESOLVE_THREAD,
           writer,
-          unparsedWire({ thread: thread.id }),
+          unparsedWire({ taskId, thread: thread.id }),
         );
-        const openAfter = yield* runCommentTool(AGENT_TOOL.READ_COMMENTS, writer, unparsedWire({}));
+        const openAfter = yield* runCommentTool(
+          AGENT_TOOL.READ_COMMENTS,
+          writer,
+          unparsedWire({ taskId }),
+        );
         const resolved = yield* runCommentTool(
           AGENT_TOOL.READ_COMMENTS,
           writer,
-          unparsedWire({ status: PLAN_COMMENT_STATUS.RESOLVED }),
+          unparsedWire({ taskId, status: PLAN_COMMENT_STATUS.RESOLVED }),
         );
 
         assert.equal(replied.status, ACTION_RESULT_STATUS.ACCEPTED);
@@ -132,28 +144,28 @@ it.layer(getTestDB())("the comment tools", (it) => {
         yield* runCommentTool(
           AGENT_TOOL.RESOLVE_THREAD,
           writer,
-          unparsedWire({ thread: thread.id }),
+          unparsedWire({ taskId, thread: thread.id }),
         );
 
         const refused = yield* runCommentTool(
           AGENT_TOOL.REPLY_TO_COMMENT,
           writer,
-          unparsedWire({ thread: thread.id, words: "Still here." }),
+          unparsedWire({ taskId, thread: thread.id, words: "Still here." }),
         );
         yield* runCommentTool(
           AGENT_TOOL.REOPEN_THREAD,
           writer,
-          unparsedWire({ thread: thread.id }),
+          unparsedWire({ taskId, thread: thread.id }),
         );
         const taken = yield* runCommentTool(
           AGENT_TOOL.REPLY_TO_COMMENT,
           writer,
-          unparsedWire({ thread: thread.id, words: "Still here." }),
+          unparsedWire({ taskId, thread: thread.id, words: "Still here." }),
         );
         const elsewhere = yield* runCommentTool(
           AGENT_TOOL.RESOLVE_THREAD,
           writer,
-          unparsedWire({ thread: other.thread.id }),
+          unparsedWire({ taskId, thread: other.thread.id }),
         );
 
         assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);

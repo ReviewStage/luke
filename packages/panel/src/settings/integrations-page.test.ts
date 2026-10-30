@@ -418,6 +418,7 @@ test("a provider the deployment does not offer the account has no row, and every
     "Notion",
     "PostHog",
     "Sentry",
+    "Stripe",
     "Supabase",
     "Vercel",
     "Y Combinator",
@@ -425,7 +426,7 @@ test("a provider the deployment does not offer the account has no row, and every
   assert.equal(
     [...page.querySelectorAll("button")].filter((button) => button.textContent === "Connect")
       .length,
-    12,
+    13,
   );
 });
 

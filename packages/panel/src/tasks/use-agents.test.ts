@@ -7,6 +7,7 @@ import {
   AGENT_RUNTIME,
   AGENT_STATUS,
   type AgentSummary,
+  type TasklessAgent,
 } from "@luke/features/agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
@@ -14,13 +15,17 @@ import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@luke/features/pull-request-
 import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActPayload } from "@luke/host/contract";
+import { EXPERIMENT } from "@luke/settings";
+import { experimentsOn } from "@luke/settings/testing";
 import { ACTION_RESULT_STATUS, type WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test, vi } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
+import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { holdFrames, settleFrames } from "../testing/frames.js";
 import { ToastHost } from "../toast.js";
 import { type AgentsControl, MODELS_READ, useAgents } from "./use-agents.js";
 
@@ -43,6 +48,7 @@ interface Standing {
   agentId?: string;
   repository: string | null;
   listedAgents?: readonly AgentSummary[];
+  listedPage?: Pick<TasklessAgent, "id" | "workspaceId" | "repository">;
 }
 
 /** Any kind the hook asks. */
@@ -56,16 +62,17 @@ interface Asked {
 
 const roots: Root[] = [];
 
+beforeEach(() => holdFrames());
+
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   window.localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  await settleFrames();
 }
 
 /**
@@ -105,6 +112,7 @@ function mount(
       agentId: held.agentId,
       repository: held.repository,
       listedAgents: held.listedAgents,
+      listedPage: held.listedPage,
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
       onStarted: (agentId) => started.push(agentId),
@@ -437,6 +445,7 @@ test("with no plan open, the agent named is read as its page and held as a list 
 });
 
 test("with no plan open, a / reads the agent's own repository's skills through the workspace its page names, there being no plan to read them by", async () => {
+  handState(experimentsOn(EXPERIMENT.SKILLS));
   const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
   tab.answer(ACT_KIND.AGENTS_PAGE, {
     agent: {
@@ -464,6 +473,35 @@ test("with no plan open, a / reads the agent's own repository's skills through t
         payload: { workspaceId: "workspace-1", repository: "acme/relay" },
       },
     ],
+  );
+});
+
+test("with no plan open, an agent the list carries with its workspace is not read as a page, and a / reads its repository's skills through the workspace the list names", async () => {
+  handState(experimentsOn(EXPERIMENT.SKILLS));
+  const taskless = { ...STARTED, planId: null };
+  const tab = mount({
+    taskId: undefined,
+    agentId: AGENT,
+    repository: null,
+    listedAgents: [taskless],
+    listedPage: { id: AGENT, workspaceId: "workspace-1", repository: "acme/relay" },
+  });
+  tab.answer(ACT_KIND.TASKS_SKILLS, {
+    skills: { repository: "acme/relay", branch: "main", skills: [] },
+  });
+  await tab.mount();
+
+  const read = tab.control().readSkills ?? assert.fail("the agent's box offers its skills");
+  await read();
+  assert.deepEqual(tab.asked, [
+    {
+      kind: ACT_KIND.TASKS_SKILLS,
+      payload: { workspaceId: "workspace-1", repository: "acme/relay" },
+    },
+  ]);
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => agent.id),
+    [AGENT],
   );
 });
 

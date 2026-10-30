@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, KeyboardEvent, MouseEvent, ReactNode, Ref } from "react";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { STATUS_TONE } from "../../status-tone.js";
+import { DisclosureChevron, type DisclosureState } from "../disclosure/disclosure.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 import { rovingItem } from "../roving-keys/roving-keys.js";
@@ -21,6 +22,11 @@ import { Skeleton } from "../skeleton/skeleton.js";
  *   hovered or shown.
  * - `identity`, who or where: an account's picture and name, a
  *   workspace's tile and who shares it, a row tall enough for a face.
+ * - `step`, a step of something read in order, a pull request's chapter:
+ *   its name on up to two lines, cut short with an ellipsis past them, and
+ *   its `detail` under it as a muted meta line rather than after it, so
+ *   neither gives way to the other; its glyph and its end stand level with
+ *   the name's first line.
  *
  * Its end holds, at rest, a `mark` (a failed run's glyph, a pin) and a
  * `count`, read with its noun ("3 waiting on you") and left out at none,
@@ -44,15 +50,27 @@ import { Skeleton } from "../skeleton/skeleton.js";
  * its own takes their ⋯ as `actions`, which stands beside the press rather
  * than inside it, over the row's end: hidden at rest, it comes in while the
  * row is hovered, holds the keyboard, or the menu it dropped stands, and
- * takes the count's and the mark's place then, as a task row's ⋯ does. It takes an app's hint's
+ * takes the count's and the mark's place then, as a task row's ⋯ does; a
+ * right-click on the ⋯ opens the row's menu as one on the row does. A
+ * row with both a chord and a ⋯ draws the chord beside the ⋯ rather than
+ * under it, so a hover shows the row's chord and its acts together. It takes an app's hint's
  * handlers and chord as a Button does, and keeps the focus where it is
  * under a pointer's press (`keepFocus`) as a Button does too. It takes no
  * class or style; its outer spacing is its column's.
  *
+ * A row heading rows that fold under it, as the Inbox heads its channels,
+ * takes that fold (`fold`): its glyph gives way to the fold's chevron while
+ * the row is hovered or holds the keyboard, as a group's head's does
+ * (`group-header.tsx`), and a press on the chevron folds or unfolds the rows
+ * while a press on the rest of the row still goes to its place. The chevron
+ * is a press of its own beside the row's, named for what it folds and saying
+ * whether it stands open, and on a screen with no hover it stands in the
+ * glyph's place at rest.
+ *
  * A NavItemSkeleton stands a row while the places it lists are read: the
  * row's own box, its glyph's cell holding the glyph every row of the list
  * wears, and a block where its name will stand, so the rows land where the
- * blocks stood. It is no press; the region around it says what is read.
+ * blocks stood; a step's stands a second block where its meta line will. It is no press; the region around it says what is read.
  */
 
 /**
@@ -65,11 +83,17 @@ import { Skeleton } from "../skeleton/skeleton.js";
  * and chord trade places under the pointer and the keyboard.
  */
 const ROW =
-  "luke-nav-item group/nav m-0 flex h-control w-full min-w-0 cursor-press items-center gap-icon-gap rounded-control border-0 px-row-inset text-left font-sans text-body-size leading-label font-text no-underline transition-[background-color,color] duration-(--luke-duration-hover) ease-plain disabled:cursor-default disabled:opacity-disabled data-[variant=identity]:h-auto data-[variant=identity]:min-h-nav-identity data-[variant=identity]:py-luke-6";
+  "luke-nav-item group/nav m-0 flex h-control w-full min-w-0 cursor-press items-center gap-icon-gap rounded-control border-0 px-row-inset text-left font-sans text-body-size leading-label font-text no-underline transition-[background-color,color] duration-(--luke-duration-hover) ease-plain disabled:cursor-default disabled:opacity-disabled data-[variant=identity]:h-auto data-[variant=identity]:min-h-nav-identity data-[variant=identity]:py-luke-6 data-[variant=step]:h-auto data-[variant=step]:items-start data-[variant=step]:py-luke-6";
 
 /** A name cut short fades out over its last few pixels, as a browser's tab ends a long title; unread, or naming who or where, it reads in the heavier weight. */
 const NAME =
   "luke-nav-item-name min-w-0 flex-initial overflow-hidden whitespace-nowrap group-data-[unread=true]/nav:font-emphasis group-data-[variant=identity]/nav:font-emphasis";
+
+/** A step's name wraps to two lines and ends in an ellipsis past them, breaking a word too long for its line. */
+const STEP_NAME = "luke-nav-item-name min-w-0 line-clamp-2 wrap-break-word";
+
+/** A step's name and its meta line, one over the other in the room the glyph and the end leave. */
+const STEP_WORDS = "luke-nav-item-words flex min-w-0 flex-1 flex-col";
 
 /** A menu's chevron at the end is the small, muted one a chip's is. */
 const MARK =
@@ -79,6 +103,7 @@ const MARK =
 export const NAV_ITEM_VARIANT = {
   ROW: "row",
   IDENTITY: "identity",
+  STEP: "step",
 } as const;
 
 export type NavItemVariant = (typeof NAV_ITEM_VARIANT)[keyof typeof NAV_ITEM_VARIANT];
@@ -124,6 +149,15 @@ export interface NavMenuTrigger {
   readonly onClick: (event: MouseEvent<HTMLElement>) => void;
 }
 
+/** The rows a row heads that fold under it: the fold's state (`useDisclosureFold`), and what it folds as a reader hears it. */
+export interface NavFold {
+  readonly state: DisclosureState;
+  /** What the chevron folds, "Channels", which names it. */
+  readonly label: string;
+  /** The id of the rows it folds, while they are drawn. */
+  readonly controls?: string | undefined;
+}
+
 /** What an app's hint hands the item it wraps: when to show and go, and the chord it names. */
 type HintProps = Pick<
   ButtonHTMLAttributes<HTMLButtonElement>,
@@ -136,7 +170,7 @@ export type NavItemProps = HintProps & {
   icon?: ReactNode;
   /** Its name. */
   children: ReactNode;
-  /** Quieter words after its name, which give way first. */
+  /** Quieter words after its name, which give way first; a step's meta line, under its name. */
   detail?: ReactNode;
   /** Whether, and as what, it is the place shown. */
   current?: NavCurrent | undefined;
@@ -155,6 +189,8 @@ export type NavItemProps = HintProps & {
   contextMenu?: ContextMenuProps | undefined;
   /** Its place's own acts, a `MoreButton`, standing over its end while it is hovered or reached for. */
   actions?: ReactNode;
+  /** The rows it heads that fold under it, whose chevron takes its glyph's place while it is hovered or reached for. */
+  fold?: NavFold | undefined;
   onKeyDown?: ((event: KeyboardEvent<HTMLButtonElement>) => void) | undefined;
   disabled?: boolean | undefined;
   /** Whether a pointer's press leaves the focus where it is. */
@@ -223,30 +259,85 @@ function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined 
   );
 }
 
-/** A row's box with nothing to press, which a skeleton stands its blocks in. */
-function StillRow({ children }: { children: ReactNode }): React.JSX.Element {
+/**
+ * The fold's chevron, standing over the glyph's cell and the row's inset
+ * before it, so the whole lead of the row is the press that folds. Note that
+ * it is the row's sibling, never inside it, because a press inside a press
+ * is no control a reader can reach.
+ */
+const FOLD =
+  "luke-nav-item-fold absolute inset-y-0 start-0 m-0 flex cursor-press items-center border-0 bg-transparent p-0 ps-row-inset pe-icon-gap";
+
+/** The chevron that folds and unfolds the rows a row heads. */
+function FoldToggle({ fold }: { fold: NavFold }): React.JSX.Element {
   return (
-    <div className={ROW} data-variant={NAV_ITEM_VARIANT.ROW} aria-hidden="true">
+    <button
+      type="button"
+      className={FOLD}
+      aria-label={fold.label}
+      aria-expanded={fold.state.open}
+      aria-controls={fold.controls}
+      // Note that a pointer's press leaves the focus where it was, so the chevron and the ⋯ go with the pointer rather than standing on a focus the press left behind.
+      onMouseDown={preventFocusMove}
+      onClick={pulseOnPress(fold.state.toggle, PRESS_PULSE.QUIET)}
+    >
+      <DisclosureChevron open={fold.state.open} />
+    </button>
+  );
+}
+
+/** A row's box of `variant` with nothing to press, which a skeleton stands its blocks in. */
+function StillRow({
+  variant,
+  children,
+}: {
+  variant: NavItemVariant;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className={ROW} data-variant={variant} aria-hidden="true">
       {children}
     </div>
   );
 }
 
-/** A row while its place is read: `icon`, the glyph its list's rows wear, and a block `width` wide where its name will stand. */
+/** A step's name over its meta line, the meta line left out where it says nothing. */
+function StepWords({ name, detail }: { name: ReactNode; detail: ReactNode }): React.JSX.Element {
+  return (
+    <span className={STEP_WORDS}>
+      <span className={STEP_NAME}>{name}</span>
+      {said(detail) ? <span className="luke-nav-item-detail">{detail}</span> : null}
+    </span>
+  );
+}
+
+/** A row while its place is read: `icon`, the glyph its list's rows wear, and a block `width` wide where its name will stand; a step's, a block `detailWidth` wide under it where its meta line will. */
 export function NavItemSkeleton({
+  variant = NAV_ITEM_VARIANT.ROW,
   icon,
   width,
+  detailWidth,
 }: {
+  variant?: NavItemVariant | undefined;
   icon?: ReactNode;
   /** How wide its name's block stands, a share of the row's room. */
   width: string;
+  /** How wide a step's meta line's block stands, a share of the row's room; none where its rows draw no meta line. */
+  detailWidth?: string | undefined;
 }): React.JSX.Element {
   return (
-    <StillRow>
+    <StillRow variant={variant}>
       {said(icon) ? <Glyph icon={icon} /> : null}
-      <Name>
-        <Skeleton width={width} />
-      </Name>
+      {variant === NAV_ITEM_VARIANT.STEP ? (
+        <StepWords
+          name={<Skeleton width={width} />}
+          detail={detailWidth === undefined ? undefined : <Skeleton width={detailWidth} />}
+        />
+      ) : (
+        <Name>
+          <Skeleton width={width} />
+        </Name>
+      )}
     </StillRow>
   );
 }
@@ -312,8 +403,11 @@ export function NavItem({
   keepFocus,
   roving,
   actions,
+  fold,
   ...props
 }: NavItemProps): React.JSX.Element {
+  // Note that a row standing in a frame beside its ⋯ or its chevron carries its menu on the frame, so a right-click on either opens it too.
+  const framed = said(actions) || fold !== undefined;
   const press = (
     <button
       type="button"
@@ -336,24 +430,40 @@ export function NavItem({
       onFocus={props.onFocus}
       onBlur={props.onBlur}
       onClick={pulseOnPress(menu?.onClick ?? onClick, PRESS_PULSE.QUIET)}
-      {...withContextMenu(props.contextMenu, { onPointerDown: props.onPointerDown })}
+      {...withContextMenu(framed ? undefined : props.contextMenu, {
+        onPointerDown: props.onPointerDown,
+      })}
       onKeyDown={props.onKeyDown}
       {...(roving === true ? rovingItem() : undefined)}
     >
       {said(icon) ? <Glyph icon={icon} /> : null}
-      <Name>{children}</Name>
-      {said(detail) ? <span className="luke-nav-item-detail">{detail}</span> : null}
+      {variant === NAV_ITEM_VARIANT.STEP ? (
+        <StepWords name={children} detail={detail} />
+      ) : (
+        <>
+          <Name>{children}</Name>
+          {said(detail) ? <span className="luke-nav-item-detail">{detail}</span> : null}
+        </>
+      )}
       <AtRest mark={mark} count={count} />
       {said(shortcut) ? <span className="luke-nav-item-shortcut ml-auto">{shortcut}</span> : null}
     </button>
   );
-  if (!said(actions)) return press;
+  if (!framed) return press;
   return (
-    <div className="luke-nav-item-frame relative flex min-w-0">
+    <div
+      className="luke-nav-item-frame relative flex min-w-0"
+      data-folds={fold === undefined ? undefined : "true"}
+      data-actions={said(actions) ? "true" : undefined}
+      {...withContextMenu<HTMLDivElement>(props.contextMenu, {})}
+    >
       {press}
-      <span className="luke-nav-item-actions absolute inset-y-0 end-luke-4 flex items-center">
-        {actions}
-      </span>
+      {fold === undefined ? null : <FoldToggle fold={fold} />}
+      {said(actions) ? (
+        <span className="luke-nav-item-actions absolute inset-y-0 end-luke-4 flex items-center">
+          {actions}
+        </span>
+      ) : null}
     </div>
   );
 }

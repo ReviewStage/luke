@@ -25,6 +25,8 @@ import {
   agentNewestAnswerSchema,
   agentOlderAnswerSchema,
   agentPartAnswerSchema,
+  agentQueueAnswerSchema,
+  agentQueueChangeSchema,
   MAXIMUM_ATTACHMENTS_BODY_BYTES,
 } from "../agent-wire.js";
 import { transcriptNowAnswerSchema } from "../live-wire.js";
@@ -87,6 +89,18 @@ export const messagesContract = {
     )
     .input(exactBodyInput(EffectSchema.Struct(byId), agentMessageRequestSchema))
     .output(EffectSchema.flip(agentMessageAnswerSchema)),
+  /** One change of an agent's queue of messages waiting behind its turn, answering the queue as it then stands. */
+  queue: hostedProcedure
+    .meta(bodyCap(MESSAGE_BODY_BYTES))
+    .meta(
+      openapi({
+        method: HTTP_METHOD.POST,
+        path: "/api/agents/{id}/queue",
+        inputStructure: "detailed",
+      }),
+    )
+    .input(exactBodyInput(EffectSchema.Struct(byId), agentQueueChangeSchema))
+    .output(EffectSchema.flip(agentQueueAnswerSchema)),
   /** One agent's worker's transcript past the cursor, held while it runs, or read at once where `wait=none` asks. */
   agentWorker: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/agents/{id}/subagents/{call}/messages" }))

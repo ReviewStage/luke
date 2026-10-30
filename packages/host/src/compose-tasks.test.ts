@@ -17,6 +17,7 @@ import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
 import {
+  PAGE_OWNER,
   PAGE_SHOWER,
   type PageLine,
   type PageVersion,
@@ -58,7 +59,9 @@ import {
   BROWSER_TAB_OPEN_FAILURE,
   GITHUB_DISCONNECT_FAILURE,
   HOST_LIVE,
+  type ParentCallFailure,
   PICTURE_KEEP_FAILURE,
+  type RelationCallFailure,
   type RepositoryCallFailure,
   TASK_CALL_FAILURE,
   TASKS_READ,
@@ -836,7 +839,11 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     readFile: (_taskId, window) => Effect.sync(() => service.files[window.path]),
     readTree: (_taskId, folder) => Effect.sync(() => service.folders[folder.path]),
-    readSkills: (taskId) => Effect.sync(() => service.skills[taskId]),
+    readSkills: (taskId) =>
+      Effect.sync(() => {
+        service.reads.push(`skills:${taskId}`);
+        return service.skills[taskId];
+      }),
     readRepositoryFile: (place, window) =>
       Effect.sync(() => service.places[place.workspaceId]?.[place.repository]?.files[window.path]),
     readRepositoryTree: (place, folder) =>
@@ -955,6 +962,33 @@ function fakeService(tasks: Task[]): FakeService {
           candidate.id === taskId ? blocked : candidate,
         );
         return { ok: true, answer: { task: blocked } };
+      }),
+    // The service sets the task's parent, or clears it, as the store does, and answers the task whole.
+    setParent: (taskId, { parentTaskId }) =>
+      Effect.sync((): TaskCallResult<TaskWritten, ParentCallFailure> => {
+        const found = service.tasks.find((candidate) => candidate.id === taskId);
+        if (found === undefined) return { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND };
+        const { parentTaskId: _standingParent, ...rest } = found;
+        const parented = parentTaskId === null ? rest : { ...rest, parentTaskId };
+        service.tasks = service.tasks.map((candidate) =>
+          candidate.id === taskId ? parented : candidate,
+        );
+        return { ok: true, answer: { task: parented } };
+      }),
+    // The service moves the relation to the kind named, as the store does: the other made the parent here, and answers the task whole.
+    changeRelation: (taskId, { taskId: otherId }) =>
+      Effect.sync((): TaskCallResult<TaskWritten, RelationCallFailure> => {
+        const found = service.tasks.find((candidate) => candidate.id === taskId);
+        if (found === undefined) return { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND };
+        const moved = {
+          ...found,
+          blockedBy: (found.blockedBy ?? []).filter((id) => id !== otherId),
+          parentTaskId: otherId,
+        };
+        service.tasks = service.tasks.map((candidate) =>
+          candidate.id === taskId ? moved : candidate,
+        );
+        return { ok: true, answer: { task: moved } };
       }),
     // The service re-titles the document with the name, as the store does.
     rename: (taskId, { name }) =>
@@ -2062,6 +2096,36 @@ it.effect("a block the service answered stands on the open task through the list
   }),
 );
 
+it.effect(
+  "a parent the service answered stands on the open task and nests the list's row at once, through the list's next draw",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([
+        task(INVITES, "Teammate invitations", "# Draft", 10),
+        task(BILLING, "Billing", "# Draft", 11),
+      ]);
+      const { call, last, listed, openTask } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      yield* openTask(INVITES);
+      const parentOf = () => {
+        const document = last()?.document;
+        return document?.status === TASKS_READ.READY ? document.task?.parentTaskId : undefined;
+      };
+      const nestedUnder = () => last()?.tasks.find((row) => row.id === INVITES)?.parentTaskId;
+
+      const answered = yield* call(GATEWAY_METHOD.TASKS_SET_PARENT, {
+        taskId: INVITES,
+        parentTaskId: BILLING,
+      });
+      yield* listed();
+
+      assert.deepEqual(answered, { parentTaskId: BILLING });
+      assert.equal(parentOf(), BILLING);
+      assert.equal(nestedUnder(), BILLING);
+    }),
+);
+
 it.effect("a task marked done here is drawn finished now, so the recently finished find it", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
@@ -3018,6 +3082,81 @@ it.effect(
 );
 
 it.effect(
+  "a plan's skills are answered at once from what was read and read again behind the answer, so a skill added lands on the next ask; a read that does not answer keeps them, and a sign-out lets them go",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const skillsNamed = (...names: string[]): TaskSkillsAnswer => ({
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: names.map((name) => ({
+            name,
+            description: "",
+            source: TASK_SKILL_SOURCE.REPOSITORY,
+            path: `.agents/skills/${name}/SKILL.md`,
+          })),
+        },
+      });
+      const { tasks, call, settled } = yield* subject(service);
+      const asked = () => call(GATEWAY_METHOD.TASKS_SKILLS, { planId: INVITES });
+
+      assert.deepEqual(yield* asked(), { failure: TASK_CALL_FAILURE.UNANSWERED });
+      service.skills[INVITES] = skillsNamed("review");
+      assert.deepEqual(yield* asked(), skillsNamed("review"), "none held, the read is waited on");
+
+      // A skill added on GitHub: the next ask answers what is held, and the one after what was read behind it.
+      service.skills[INVITES] = skillsNamed("review", "release");
+      assert.deepEqual(yield* asked(), skillsNamed("review"));
+      yield* settled;
+      assert.deepEqual(yield* asked(), skillsNamed("review", "release"));
+
+      Reflect.deleteProperty(service.skills, INVITES);
+      yield* asked();
+      yield* settled;
+      assert.deepEqual(
+        yield* asked(),
+        skillsNamed("review", "release"),
+        "kept past a read unanswered",
+      );
+
+      yield* tasks.reset;
+      assert.deepEqual(yield* asked(), { failure: TASK_CALL_FAILURE.UNANSWERED });
+    }),
+);
+
+it.effect(
+  "a plan moved to another workspace on the same repository has its skills read there, never answered with the last workspace's",
+  () =>
+    Effect.gen(function* () {
+      const invites = {
+        ...task(INVITES, "Teammate invitations", "# Invites", 10),
+        repository: "acme/relay",
+      };
+      const service = fakeService([invites]);
+      const installed = (name: string): TaskSkillsAnswer => ({
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [{ name, description: "", source: TASK_SKILL_SOURCE.WORKSPACE }],
+        },
+      });
+      const { call, listed } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      const asked = () => call(GATEWAY_METHOD.TASKS_SKILLS, { planId: INVITES });
+      service.skills[INVITES] = installed("review");
+      assert.deepEqual(yield* asked(), installed("review"));
+
+      // Moved to another workspace, the plan offers that workspace's installed skills.
+      service.tasks = [{ ...invites, workspaceId: "workspace-acme" }];
+      service.skills[INVITES] = installed("release");
+      yield* listed();
+      assert.deepEqual(yield* asked(), installed("release"));
+    }),
+);
+
+it.effect(
   "a pull request is read by its workspace, its repository, and its number, none is answered as none, a service that did not answer as unanswered, and a number off the wire is refused before the service",
   () =>
     Effect.gen(function* () {
@@ -3287,7 +3426,7 @@ it.effect(
 );
 
 it.effect(
-  "a plan's status, priority, and running switch set on the service land in the list and the open document in place, and a change naming neither never travels",
+  "a plan's status and priority set on the service land in the list and the open document in place, and a change naming neither never travels",
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
@@ -3301,15 +3440,14 @@ it.effect(
         taskId: INVITES,
         status: TASK_STATUS.DONE,
         priority: TASK_PRIORITY.HIGH,
-        running: true,
       });
       const bare = yield* Effect.exit(call(GATEWAY_METHOD.TASKS_SET_STANDING, { taskId: INVITES }));
 
       assert.deepEqual(changed, { changed: true });
       assert.ok(Exit.isFailure(bare));
       assert.deepEqual(
-        last()?.tasks.map((each) => [each.status, each.priority, each.running]),
-        [[TASK_STATUS.DONE, TASK_PRIORITY.HIGH, true]],
+        last()?.tasks.map((each) => [each.status, each.priority]),
+        [[TASK_STATUS.DONE, TASK_PRIORITY.HIGH]],
       );
       const open = last()?.document;
       assert.equal(
@@ -3535,19 +3673,19 @@ const FUNNEL = {
 };
 
 it.effect(
-  "a plan's pages followed for the Inbox are told as they move, never in the view, a read the service did not answer is told as unanswered and read again, and let go they stop",
+  "a plan's pages held for the Inbox are laid on the app state as they move, never in the view, a read that never answered as failed, kept followed once let go, and dropped with the session",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      const { call, told, pushed } = yield* subject(service);
-      const changed = (view: WireValue) => [
-        GATEWAY_EVENT.TASKS_PAGES_CHANGED,
-        { taskId: INVITES, view },
+      const { tasks, call, told, pushed } = yield* subject(service);
+      const held = (read: WireValue) => [
+        GATEWAY_EVENT.PAGES_CHANGED,
+        { [PAGE_OWNER.TASK]: { [INVITES]: read }, [PAGE_OWNER.AGENT]: {} },
       ];
 
       yield* call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, { taskId: INVITES });
       yield* followSettled;
-      assert.deepEqual(pushed, [changed({ failure: TASK_CALL_FAILURE.UNANSWERED })]);
+      assert.deepEqual(pushed, [held({ failed: true })]);
 
       const pages = polledLive<"pages", typeof NOT_FOUND_LIVE>(["pages"]);
       service.pageLives[INVITES] = pages;
@@ -3556,19 +3694,24 @@ it.effect(
       yield* answered(() => pages.set({ pages: [{ ...FUNNEL, shownBy: null }] }));
       const shown = { ...FUNNEL, version: 2, at: 2_500, shownBy: { kind: PAGE_SHOWER.LUKE } };
       yield* answered(() => pages.set({ pages: [shown] }));
-      assert.deepEqual(pushed.slice(1), [
-        changed({ pages: [FUNNEL] }),
-        changed({ pages: [shown] }),
-      ]);
-      assert.equal(
-        told.length,
-        0,
-        "a plan's pages followed for the Inbox are never told in the view",
-      );
+      assert.deepEqual(pushed.slice(1), [held({ rows: [FUNNEL] }), held({ rows: [shown] })]);
+      assert.equal(told.length, 0, "a plan's pages held for the Inbox are never told in the view");
 
+      // Let go, the pages stay followed among those let go lately, so choosing the plan again reads nothing anew.
       yield* call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, { taskId: INVITES });
       yield* followSettled;
+      assert.equal(pages.held(), 1);
+      yield* call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, { taskId: INVITES });
+      yield* followSettled;
+      assert.equal(pushed.length, 3, "a plan held again is drawn from where its pages stand");
+
+      yield* tasks.reset;
+      yield* followSettled;
       assert.equal(pages.held(), 0);
+      assert.deepEqual(pushed.at(-1), [
+        GATEWAY_EVENT.PAGES_CHANGED,
+        { [PAGE_OWNER.TASK]: {}, [PAGE_OWNER.AGENT]: {} },
+      ]);
     }),
 );
 
@@ -3755,6 +3898,7 @@ function rowOfTask(each: Task) {
     updatedAt: each.updatedAt,
     status: each.status ?? TASK_STATUS.TODO,
     priority: each.priority ?? TASK_PRIORITY.NONE,
+    parentTaskId: each.parentTaskId ?? null,
   };
 }
 

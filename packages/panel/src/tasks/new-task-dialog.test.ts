@@ -15,12 +15,14 @@ import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/featu
 import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import {
   agentKeyLink,
   SETTINGS_SECTION,
   SETTINGS_VIEW,
   type SettingsLink,
 } from "@luke/settings/settings-views";
+import { experimentsOn } from "@luke/settings/testing";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -36,6 +38,7 @@ import {
   fakeAppBridge,
 } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
+import { handState } from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -477,6 +480,7 @@ test("once a repository is chosen, an @ offers its files, read through the works
 test("a skill chosen from the / list is its chip, which opens its SKILL.md in the chosen repository on GitHub", async () => {
   const onGitHub: string[] = [];
   fakeAppPlatform(DESKTOP_LINKS);
+  handState(experimentsOn(EXPERIMENT.SKILLS));
   fakeActPort({
     [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
       onGitHub.push(url);
@@ -505,14 +509,17 @@ test("a skill chosen from the / list is its chip, which opens its SKILL.md in th
   const control = tasksControl();
   act(() =>
     root.render(
-      createElement(NewTaskDialog, {
-        newTask: {
-          ...control.newTask,
-          open: true,
-          workspaceId: "workspace-acme",
-          repositoriesIn: () => ({ ...control.repositories, recent: ["acme/web"] }),
-        },
-      }),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(NewTaskDialog, {
+          newTask: {
+            ...control.newTask,
+            open: true,
+            workspaceId: "workspace-acme",
+            repositoriesIn: () => ({ ...control.repositories, recent: ["acme/web"] }),
+          },
+        }),
+      ),
     ),
   );
   await settle();

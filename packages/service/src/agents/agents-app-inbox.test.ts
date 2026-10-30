@@ -79,6 +79,7 @@ import {
   ACCOUNT_INBOX,
   AGENT_MESSAGES,
   countedFor,
+  countedProperties,
   deploymentFor,
   fakeEve,
   INBOX_ATTACHMENT,
@@ -515,7 +516,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
 
   it.effect("an answer in the developer's own words may be a file alone", () =>
     Effect.gen(function* () {
-      const { post, message } = yield* openInbox();
+      const { owner, post, message } = yield* openInbox();
       const asked = yield* post(QUESTION);
       assert.ok(Result.isSuccess(asked));
       const shot = {
@@ -543,6 +544,9 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           .map((each) => each.files?.map((file) => file.name)),
         [[shot.name]],
       );
+      assert.deepEqual(countedProperties(owner, SERVER_EVENT.THREAD_POST), [
+        { answered_ask: true, has_media: true },
+      ]);
     }),
   );
 
@@ -644,6 +648,14 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         yield* message(id, body);
         assert.equal(eve.sent.length, before + 1, "a repeat under the key reaches the agent once");
         assert.deepEqual(
+          countedProperties(owner, SERVER_EVENT.THREAD_POST),
+          [
+            { answered_ask: true, has_media: false },
+            { answered_ask: false, has_media: true },
+          ],
+          "the answer and the reply are each a post, and the repeat is not another",
+        );
+        assert.deepEqual(
           yield* message(id, { ...body, text: "Something else." }),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
           "other words under a key already taken are refused, so the agent never hears what the thread does not show",
@@ -702,6 +714,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         });
         assert.equal(withdrawn.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
         assert.equal(countedFor(refused.owner, SERVER_EVENT.INBOX_ANSWER_SEND), 0);
+        assert.equal(countedFor(refused.owner, SERVER_EVENT.THREAD_POST), 0);
 
         const { owner, post, message } = yield* openInbox();
         const asked = yield* post(QUESTION);
@@ -714,6 +727,9 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.equal((yield* message(asked.success.id, body)).status, HOSTED_HTTP_STATUS.OK);
         assert.equal((yield* message(asked.success.id, body)).status, HOSTED_HTTP_STATUS.OK);
         assert.equal(countedFor(owner, SERVER_EVENT.INBOX_ANSWER_SEND), 1);
+        assert.deepEqual(countedProperties(owner, SERVER_EVENT.THREAD_POST), [
+          { answered_ask: true, has_media: false },
+        ]);
       }),
   );
 
@@ -878,6 +894,9 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const again = readAnswer(inboxMessagedSchema, HOSTED_HTTP_STATUS.OK, yield* start(body));
         assert.equal(again.item.id, started.item.id);
         assert.equal(eve.sent.length, before + 1, "a repeat under the key reaches the agent once");
+        assert.deepEqual(countedProperties(owner, SERVER_EVENT.THREAD_POST), [
+          { answered_ask: false, has_media: false },
+        ]);
         assert.deepEqual(
           yield* start({ ...body, text: "Something else." }),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),

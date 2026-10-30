@@ -7,7 +7,8 @@
  * row's value into what crosses the port, as every act contract's does. What an
  * agent published is read here too: its pull request, its changes, its Pull
  * request tab's overview, an image that overview names, and a change made to
- * the pull request on GitHub.
+ * the pull request on GitHub. A box's pairing is read, approved, and denied
+ * here too, by the code its link named, as Settings › Hosts asks.
  */
 
 import {
@@ -44,6 +45,8 @@ import {
   agentPullRequestReadParamsSchema,
   agentPullRequestViewedAnswerViewSchema,
   agentPullRequestWriteAnswerViewSchema,
+  agentQueueAnswerViewSchema,
+  agentQueueParamsSchema,
   agentRenameParamsSchema,
   agentReviewOptionsAnswerViewSchema,
   agentRewindParamsSchema,
@@ -61,6 +64,12 @@ import {
   hostInstallTokenParamsSchema,
   hostsAnswerViewSchema,
 } from "@luke/features/agent-view";
+import {
+  hostPairingApproveViewSchema,
+  hostPairingDenyViewSchema,
+  hostPairingParamsSchema,
+  hostPairingViewSchema,
+} from "@luke/features/host-pairing-view";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
@@ -116,6 +125,15 @@ export const agentActsContract = {
   )
     .input(exactInput(hostIdParamsSchema))
     .output(EffectSchema.flip(hostDoneAnswerViewSchema)),
+  [AGENT_ACT_KIND.HOSTS_PAIRING_READ]: actProcedure("Could not read the code on this system.")
+    .input(exactInput(hostPairingParamsSchema))
+    .output(EffectSchema.flip(hostPairingViewSchema)),
+  [AGENT_ACT_KIND.HOSTS_PAIRING_APPROVE]: actProcedure("Could not connect the host on this system.")
+    .input(exactInput(hostPairingParamsSchema))
+    .output(EffectSchema.flip(hostPairingApproveViewSchema)),
+  [AGENT_ACT_KIND.HOSTS_PAIRING_DENY]: actProcedure("Could not deny the host on this system.")
+    .input(exactInput(hostPairingParamsSchema))
+    .output(EffectSchema.flip(hostPairingDenyViewSchema)),
   [AGENT_ACT_KIND.AGENTS_LIST]: actProcedure("Could not read the task's agents on this system.")
     .input(exactInput(agentListParamsSchema))
     .output(EffectSchema.flip(agentListAnswerViewSchema)),
@@ -159,6 +177,9 @@ export const agentActsContract = {
   )
     .input(exactInput(agentServersParamsSchema))
     .output(EffectSchema.flip(agentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.AGENTS_QUEUE]: actProcedure("Could not change the agent's queue on this system.")
+    .input(exactInput(agentQueueParamsSchema))
+    .output(EffectSchema.flip(agentQueueAnswerViewSchema)),
   [AGENT_ACT_KIND.AGENTS_STOP]: actProcedure("Could not stop the agent on this system.")
     .input(exactInput(agentStopParamsSchema))
     .output(EffectSchema.flip(agentAgentAnswerSchema)),

@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { AGENT_STATUS, type AgentSummary, type TasklessAgent } from "@luke/features/agent-wire";
 import type { Channel } from "@luke/features/channel-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
@@ -17,7 +18,7 @@ import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB } from "../panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
-import { chooseChannel, leaveChannel, useChannels } from "../tasks/use-channels.js";
+import { chooseChannel, leaveChannel } from "../tasks/use-channels.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -403,43 +404,25 @@ function channelNamed(name: string, id: string): Channel {
   return { id, name, purpose: "", project: false, createdAt: 1, waiting: 0 };
 }
 
-/** What reads the workspace's channels as the window's sidebar does, so the window holds them. */
-function ChannelsRead({ workspaceId }: { workspaceId: string }): null {
-  useChannels(workspaceId, true);
-  return null;
-}
-
 /** The general channel the workspace's channels hold. */
 const GENERAL_ID = "a1000001-6d9f-4ab7-92df-000000000002";
 
-/** The cards' names with Channels on and the workspace's channels read, held over a task with the Inbox's place the stop behind, the channel `chosen` shown in it, or none. */
+/** The cards' names with Channels on and the workspace's channels held by the host, over a task with the Inbox's place the stop behind, the channel `chosen` shown in it, or none. */
 async function channelCardNames(chosen: string | undefined): Promise<string[]> {
   const base = stateWith({}, {});
-  handState(experimentsOn(EXPERIMENT.CHANNELS), {
-    run: { ...base.run, capabilities: DESKTOP_CAPABILITIES },
-  });
-  fakeActPort({
-    [ACT_KIND.CHANNELS_LIST]: () =>
-      Promise.resolve({
-        channels: [
-          channelNamed("app", "a1000001-6d9f-4ab7-92df-000000000001"),
-          channelNamed("general", GENERAL_ID),
-        ],
-      }),
-  });
   const workspace = {
     id: "workspace-acme",
     name: "Acme",
     role: WORKSPACE_ROLE.MEMBER,
     github: null,
   };
-  const reader = createRoot(document.body.appendChild(document.createElement("div")));
-  roots.push(reader);
-  await act(async () => {
-    reader.render(
-      onRegistry(AtomRegistry.make(), createElement(ChannelsRead, { workspaceId: workspace.id })),
-    );
-    for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  const open = [
+    channelNamed("app", "a1000001-6d9f-4ab7-92df-000000000001"),
+    channelNamed("general", GENERAL_ID),
+  ];
+  handState(experimentsOn(EXPERIMENT.CHANNELS), {
+    run: { ...base.run, capabilities: DESKTOP_CAPABILITIES },
+    [LIVE_READ.CHANNELS]: { [workspace.id]: { rows: { open, archived: [] } } },
   });
   if (chosen === undefined) leaveChannel();
   else chooseChannel(chosen);

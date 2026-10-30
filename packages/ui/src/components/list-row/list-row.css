@@ -15,8 +15,16 @@
    Each part's own box is drawn in utilities (`list-row.tsx`); what stays
    here is what a row's state restyles: its fill and ring, the press's
    insets and height, the words' type and ink, the hover acts and the room
-   they take, the swipe's slide, and every reveal, through `:has()`, the
-   pointer's media, and custom properties set on the row. */
+   they take, and every reveal, through `:has()`, the pointer's media, and
+   custom properties set on the row. */
+
+/* The cap height of a lead line's name, registered as a length so it is
+   read in the name's size where it is set, then handed down (`ListRow`). */
+@property --luke-list-row-cap {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
 
 @layer components {
   /* A list's own box is drawn in utilities (`list-row.tsx`) but for its
@@ -54,16 +62,25 @@
 
   /* The open row is drawn in the work sheet's ground, lifted by a hairline
      and a soft shadow, as the sheet itself is. */
-  .luke-list-row[data-current="true"] {
+  .luke-list-row[data-current="true"][data-current-look="sheet"] {
     background: var(--luke-color-ground);
     box-shadow:
       0 0 0 1px var(--luke-color-border),
       0 1px 2px var(--luke-color-shadow-soft);
   }
 
+  /* A list standing beside the page it opens fills its open row with the
+     accent's tint instead, so it reads on the list's own ground in either
+     theme; it sets no shadow, so a row whose menu is open keeps its ring. */
+  .luke-list-row[data-current="true"][data-current-look="tint"] {
+    background: var(--luke-color-fill-current);
+  }
+
   /* A row chosen in its list's selection is filled as a Mac's list fills
-     the rows chosen, over the open row's ground where it is both. */
-  .luke-list-row[data-selected="true"] {
+     the rows chosen, over the open row's fill where it is both. Note that
+     it names the look too, so it matches the open row's rules in weight and
+     wins by standing after them. */
+  .luke-list-row[data-selected="true"][data-current-look] {
     background: var(--luke-color-fill-selected);
   }
 
@@ -121,11 +138,7 @@
     contain: layout style;
   }
 
-  /* Note that a swipe row's press stands in its slide, so it is reached through it, or that row stands shorter than the rows around it. */
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
-  > .luke-list-row-main,
-  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
-    > .luke-list-row-slide
     > .luke-list-row-main {
     min-height: var(--luke-control-height);
   }
@@ -176,6 +189,30 @@
     white-space: normal;
   }
 
+  /* A dense row's attachments take a line of their own over its title, as
+     a roomier row's do, rather than standing beside it. */
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+  .luke-list-row-text:has(> .luke-list-row-attachments) {
+    flex-wrap: wrap;
+    padding-block: var(--luke-space-6);
+  }
+
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    .luke-list-row-attachments {
+    flex-basis: 100%;
+    margin-block-end: 0;
+  }
+
+  /* Its leading mark stands level with the row's first line. */
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    :has(> .luke-list-row-text > .luke-list-row-attachments)
+    > .luke-list-row-leading {
+    height: var(--luke-type-body-leading);
+    align-items: center;
+    align-self: start;
+    margin-block-start: var(--luke-space-6);
+  }
+
   /* An unread dense row's title steps up to the semibold, enough beside
      the regular a dense row reads in. */
   :is(
@@ -185,9 +222,10 @@
     font-weight: var(--luke-type-emphasis-weight);
   }
 
-  /* A sidebar's row rests its title in the sidebar's quieter ink, lifted to
-     the text's own while it is reached for, open, unread, or its menu is. */
-  .luke-list-row[data-ink="sidebar"] .luke-list-row-title {
+  /* A sidebar's row rests its title and lead in the sidebar's quieter ink,
+     lifted to the text's own while it is reached for, open, unread, or its menu is. */
+  .luke-list-row[data-ink="sidebar"]
+  :is(.luke-list-row-title, .luke-list-row-lead[data-at="above"]) {
     color: var(--luke-color-sidebar-ink);
     transition: color var(--luke-duration-hover) var(--luke-motion-exit);
   }
@@ -198,24 +236,20 @@
       [data-unread="true"],
       [data-menu-open="true"]
     )
-    .luke-list-row-title {
+    :is(.luke-list-row-title, .luke-list-row-lead[data-at="above"]) {
     color: var(--luke-color-text);
   }
 
   /* Beside its acts, the row's press gives its end inset to the acts,
      whatever its list's variant or density set it (so this rule stays below
      theirs); acts standing in its end's track on hover take none of it. */
-  .luke-list-row:not([data-actions="hover"]):has(> .luke-list-row-actions) > .luke-list-row-main,
-  .luke-list-row:not([data-actions="hover"])
-    > .luke-list-row-slide:has(> .luke-list-row-actions)
-    > .luke-list-row-main {
+  .luke-list-row:not([data-actions="hover"]):has(> .luke-list-row-actions) > .luke-list-row-main {
     padding-inline-end: 0;
   }
 
   /* Beside its ⋯, the row's press gives its end inset to the ⋯ too, its
      acts on hover or none, since the ⋯ stands in a track of its own. */
-  .luke-list-row:has(> .luke-list-row-more) > .luke-list-row-main,
-  .luke-list-row > .luke-list-row-slide:has(> .luke-list-row-more) > .luke-list-row-main {
+  .luke-list-row:has(> .luke-list-row-more) > .luke-list-row-main {
     padding-inline-end: 0;
   }
 
@@ -225,6 +259,12 @@
     display: flex;
     flex-direction: column;
     gap: var(--luke-space-2);
+  }
+
+  /* A row's attachments stand on a line of their own over its words, in a
+     run that is cut at the row's end rather than wrapping. */
+  .luke-list-row-attachments {
+    margin-block-end: var(--luke-space-4);
   }
 
   .luke-list-row-title,
@@ -238,6 +278,19 @@
     font-size: var(--luke-type-label-size);
     line-height: var(--luke-type-label-leading);
     font-weight: var(--luke-type-label-weight);
+  }
+
+  /* A lead over the title reads as a mail app's sender, the row's largest
+     words, and the title under it steps down to the body's weight, keeping
+     a label's size, under the lead's on the web too, where the body's is not. */
+  .luke-list-row-lead[data-at="above"] {
+    font-size: var(--luke-type-toolbar-title-size);
+    line-height: var(--luke-type-toolbar-title-leading);
+    font-weight: var(--luke-type-emphasis-weight);
+  }
+
+  .luke-list-row[data-lead="above"]:not([data-unread="true"]) .luke-list-row-title {
+    font-weight: var(--luke-type-body-weight);
   }
 
   /* A title fades rather than ending in an ellipsis, as a browser's tab
@@ -265,16 +318,18 @@
 
   /* A row whose thing is done with stands back in the palette's quieter
      inks rather than by fading its words, which still name what it opens
-     and so read at AA (`docs/DESIGN.md`): its title takes the muted ink
-     its description and metadata already wear. Only its mark,
-     the leading glyph its words already say, fades.
+     and so read at AA (`docs/DESIGN.md`): its title and lead take the muted
+     ink its description and metadata already wear. Only its mark,
+     the leading glyph its words already say, and its attachments fade.
      Its fill, which says it is open or in hand, and its acts stay as they
      are. */
-  .luke-list-row[data-muted="true"] .luke-list-row-title {
+  .luke-list-row[data-muted="true"]
+  :is(.luke-list-row-title, .luke-list-row-lead[data-at="above"]) {
     color: var(--luke-color-text-muted);
   }
 
-  .luke-list-row[data-muted="true"] .luke-list-row-leading {
+  .luke-list-row[data-muted="true"] .luke-list-row-leading,
+  .luke-list-row[data-muted="true"] .luke-list-row-attachments {
     opacity: 0.45;
   }
 
@@ -304,18 +359,24 @@
      the description runs the words' and the end's tracks
      whole under both; the row's marks stand level with the title's line
      rather than the row's middle. A lead on a line of its own over the title
-     takes the title's place on that first line, as tall as the title's so
-     the marks still stand level with it, and the title runs whole under it.
+     takes the title's place on that first line, the marks level with its
+     larger words, and the title runs whole under it.
      The words and the first line lend their parts to the press's tracks, so
      each lands in its own. */
-  /* Note that a swiped row holds its press inside its slide, so the press is
-     matched wherever it stands in the row. */
+  .luke-list-row[data-meta="title"] {
+    --luke-list-row-head-leading: var(--luke-type-label-leading);
+  }
+
+  .luke-list-row[data-meta="title"][data-lead="above"] {
+    --luke-list-row-head-leading: var(--luke-type-toolbar-title-leading);
+  }
+
   .luke-list-row[data-meta="title"] :is(.luke-list-row-text, .luke-list-row-head) {
     display: contents;
   }
 
   .luke-list-row[data-meta="title"] .luke-list-row-leading {
-    height: var(--luke-type-label-leading);
+    height: var(--luke-list-row-head-leading);
     align-items: center;
     align-self: start;
   }
@@ -326,14 +387,73 @@
   }
 
   .luke-list-row[data-meta="title"] .luke-list-row-lead[data-at="above"] {
-    height: var(--luke-type-label-leading);
+    height: var(--luke-list-row-head-leading);
+  }
+
+  /* A lead line's first line is drawn exactly, in any face: every part of
+     it stands on the name's baseline, the time's words included, and every
+     mark, which keeps no baseline of its own (`contain: layout`), stands on
+     it by its bottom edge and is carried to the name's cap-height centre,
+     half its own height less half the name's cap height. The name's cap
+     height is read once where each part's box takes the name's size, and
+     handed to the marks as `--luke-mark-cap`, as the unread dot reads it. */
+  .luke-list-row[data-meta="title"][data-lead="above"]
+  :is(.luke-list-row-leading, .luke-list-row-end, .luke-list-row-more) {
+    font-size: var(--luke-type-toolbar-title-size);
+  }
+
+  .luke-list-row[data-meta="title"][data-lead="above"]
+    :is(
+      .luke-list-row-leading,
+      .luke-list-row-lead[data-at="above"],
+      .luke-list-row-end,
+      .luke-list-row-more
+    ) {
+    --luke-list-row-cap: 1cap;
+    --luke-mark-cap: var(--luke-list-row-cap);
+  }
+
+  .luke-list-row[data-meta="title"][data-lead="above"]
+    :is(
+      .luke-list-row-main,
+      .luke-list-row-more,
+      .luke-list-row-lead[data-at="above"],
+      .luke-list-row-lead-icon,
+      .luke-list-row-lead-label,
+      .luke-list-row-end,
+      .luke-list-row-end > .luke-list-row-meta,
+      .luke-list-row-meta > * > *
+    ) {
+    align-self: baseline;
+  }
+
+  /* Note that a leading column with no dot keeps its place, since an empty
+     column has no baseline to stand on and nothing in it to align, and one
+     with a dot stands as tall as its own line, so it reaches no lower than
+     the name's and the row keeps its height. */
+  .luke-list-row[data-meta="title"][data-lead="above"]
+  .luke-list-row-leading:has(.luke-unread-dot) {
+    height: auto;
+    align-self: baseline;
+  }
+
+  /* Note that in a lead line's metadata the time is the one word, so
+     whatever else stands there is a mark. */
+  .luke-list-row[data-meta="title"][data-lead="above"]
+  :is(.luke-list-row-more, .luke-list-row-lead-icon, .luke-list-row-meta > * > :not(time)) {
+    contain: layout;
+    translate: 0 calc(50% - var(--luke-mark-cap) / 2);
+  }
+
+  .luke-list-row[data-meta="title"][data-lead="above"] .luke-list-row-more {
+    margin-block-start: 0;
   }
 
   .luke-list-row[data-meta="title"] .luke-list-row-description {
     grid-column: text-start / end-end;
   }
 
-  .luke-list-row[data-meta="title"]:has(.luke-list-row-lead[data-at="above"]) .luke-list-row-title {
+  .luke-list-row[data-meta="title"][data-lead="above"] .luke-list-row-title {
     grid-column: text-start / end-end;
   }
 
@@ -367,7 +487,7 @@
      ⋯ on that line too, level with the metadata and the acts beside it. */
   .luke-list-row[data-meta="title"] .luke-list-row-more {
     align-self: start;
-    height: var(--luke-type-label-leading);
+    height: var(--luke-list-row-head-leading);
     margin-block-start: var(--luke-list-row-inset-block);
   }
 
@@ -463,7 +583,7 @@
 
   .luke-list-row[data-actions="hover"][data-meta="title"] .luke-list-row-actions {
     align-self: start;
-    height: var(--luke-type-label-leading);
+    height: var(--luke-list-row-head-leading);
     margin-block-start: var(--luke-list-row-inset-block);
   }
 
@@ -573,10 +693,7 @@
       );
     }
 
-    .luke-list-row[data-actions="hover"]:has(> .luke-list-row-more) > .luke-list-row-main,
-    .luke-list-row[data-actions="hover"]
-      > .luke-list-row-slide:has(> .luke-list-row-more)
-      > .luke-list-row-main {
+    .luke-list-row[data-actions="hover"]:has(> .luke-list-row-more) > .luke-list-row-main {
       padding-inline-end: var(--luke-list-row-inset-inline);
     }
 
@@ -628,100 +745,6 @@
     z-index: 1;
   }
 
-  /* A row swiped right to its one act (`use-row-swipe.ts`): its face slides
-     on its `transform` over the act's button in the accent, which a short
-     swipe leaves showing and a long one arms, brighter, its label riding
-     the face's edge. While it is out, the face is drawn on the row's own
-     ground, its fill over it, so it hides the button wherever it stands; at
-     rest it is drawn in its fill alone, so a row on a ground the window
-     frosts through (the Mac's sidebar) is as clear as the rows around it
-     that do not swipe. It settles on the motion tokens, so reduced motion
-     and a capture run hold it still, and follows the pointer or the wheel
-     with no lag while it moves. */
-  .luke-list-row[data-swipe] {
-    --luke-list-row-fill: transparent;
-
-    position: relative;
-    overflow: clip;
-    touch-action: pan-y;
-  }
-
-  .luke-list-row[data-swipe]:has(button.luke-list-row-main):hover:not(
-    [data-current="true"],
-    [data-selected="true"]
-  ) {
-    --luke-list-row-fill: var(--luke-color-fill-hover);
-
-    background: none;
-  }
-
-  .luke-list-row[data-swipe][data-current="true"] {
-    --luke-list-row-fill: var(--luke-color-ground);
-
-    background: none;
-  }
-
-  .luke-list-row[data-swipe][data-selected="true"] {
-    --luke-list-row-fill: var(--luke-color-fill-selected);
-
-    background: none;
-  }
-
-  .luke-list-row-slide {
-    background-color: var(--luke-list-row-ground, var(--luke-color-ground));
-    background-image: linear-gradient(var(--luke-list-row-fill), var(--luke-list-row-fill));
-    transform: translateX(var(--luke-list-row-swipe, 0px));
-    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
-  }
-
-  /* Note that the ground goes only once the face has slid home, as the
-     button under it does, so a face settling back never shows the button
-     through its words. */
-  .luke-list-row[data-swipe="rest"] > .luke-list-row-slide {
-    background-color: transparent;
-    transition:
-      transform var(--luke-duration-fast) var(--luke-spring-fast),
-      background-color 0s linear var(--luke-duration-fast);
-  }
-
-  .luke-list-row[data-swipe="moving"] > .luke-list-row-slide {
-    transition: none;
-  }
-
-  /* The button stands hidden at rest, so its edge never shows round the
-     face's corners; it comes in at once as a swipe begins, and goes only
-     once the face has slid home over it. */
-  .luke-list-row-swipe {
-    background: var(--luke-color-accent);
-    opacity: 1;
-  }
-
-  .luke-list-row[data-swipe="rest"] > .luke-list-row-swipe {
-    opacity: 0;
-    transition: opacity 0s linear var(--luke-duration-fast);
-  }
-
-  .luke-list-row[data-swipe="moving"] > .luke-list-row-swipe {
-    transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
-  }
-
-  .luke-list-row[data-armed="true"] > .luke-list-row-swipe {
-    background: color-mix(in srgb, var(--luke-color-accent) 82%, var(--luke-color-on-accent));
-  }
-
-  .luke-list-row-swipe-label {
-    opacity: var(--luke-list-row-swipe-shown, 0);
-    transform: translateX(var(--luke-list-row-swipe-label, 0px));
-    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
-  }
-
-  /* While the row follows the hand, its label follows a beat behind, so
-     the jump from the button's middle to the face's edge as the row arms
-     glides rather than snaps. */
-  .luke-list-row[data-swipe="moving"] .luke-list-row-swipe-label {
-    transition: transform var(--luke-duration-hover) var(--luke-motion-exit);
-  }
-
   /* A row folding the rows nested under it stands its chevron over its
      leading mark's cell, past the press's inset, so the two share one place
      and the title never moves. The mark gives way to the chevron while the
@@ -742,7 +765,7 @@
 
   .luke-list-row[data-meta="title"] .luke-list-row-fold {
     align-self: start;
-    height: var(--luke-type-label-leading);
+    height: var(--luke-list-row-head-leading);
     margin-block-start: var(--luke-list-row-inset-block);
   }
 

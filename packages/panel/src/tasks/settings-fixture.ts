@@ -34,6 +34,7 @@ import {
   adminMetricsWindow,
 } from "@luke/features/admin-wire";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
+import { DEVICE_ARCH, DEVICE_PLATFORM, DEVICE_SETUP } from "@luke/features/device-agent-wire";
 import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
 import { INSTALLED_SKILL_CALL_FAILURE } from "@luke/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
@@ -78,8 +79,10 @@ const ACCOUNT: AccountSnapshot = {
 /** An admin of Luke, read, so Admin stands rather than waiting on the read. */
 const ADMIN_ACCESS = { admin: true } as const;
 
-/** The experiments the staged pages stand behind: Memory's page. */
+/** The experiments the staged pages stand behind: Hosts' page, Skills', and Memory's. */
 const STAGED_EXPERIMENTS = {
+  [EXPERIMENT.BRING_YOUR_OWN_HOST]: true,
+  [EXPERIMENT.SKILLS]: true,
   [EXPERIMENT.MEMORY]: true,
 } as const;
 
@@ -89,7 +92,17 @@ const FIXTURE_HOST = {
   OLD: "7d3c2a10-0000-4000-8000-000000000002",
   OFFLINE: "7d3c2a10-0000-4000-8000-000000000003",
   TOKEN: "7d3c2a10-0000-4000-8000-000000000004",
+  MAC: "7d3c2a10-0000-4000-8000-000000000005",
+  SETUP_FAILED: "7d3c2a10-0000-4000-8000-000000000006",
 } as const;
+
+/** The staged hosts that beat just now, so they read online: every one but the one staged offline. */
+const BEATING_HOSTS = [
+  FIXTURE_HOST.ONLINE,
+  FIXTURE_HOST.OLD,
+  FIXTURE_HOST.MAC,
+  FIXTURE_HOST.SETUP_FAILED,
+] as const;
 
 /** Where the staged install commands fetch their script. */
 const STAGED_INSTALL_SCRIPT = "https://luke.test/install.sh";
@@ -577,7 +590,9 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   }),
   [ACT_KIND.CHAPTERS_MODEL_READ]: () => ({ model: CHAPTERS_MODEL.SONNET }),
   // Note that a kept install token is answered without one, since the window mints the token and only its hash travels.
-  [ACT_KIND.HOSTS_PRESENCE]: () => ({ devices: [] }),
+  [ACT_KIND.HOSTS_PRESENCE]: () => ({
+    devices: BEATING_HOSTS.map((deviceId) => ({ deviceId, ageMs: 0 })),
+  }),
   [ACT_KIND.HOSTS_LIST]: () => ({
     hosts: [
       {
@@ -586,6 +601,25 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
         seenAt: NOW,
         version: "0.1.0",
         upgradeNeeded: false,
+      },
+      {
+        id: FIXTURE_HOST.MAC,
+        name: "studio-mini",
+        platform: DEVICE_PLATFORM.DARWIN,
+        seenAt: NOW,
+        version: "0.1.0",
+        upgradeNeeded: false,
+        setup: DEVICE_SETUP.PREPARING,
+        loginName: "charles",
+      },
+      {
+        id: FIXTURE_HOST.SETUP_FAILED,
+        name: "hel-01",
+        seenAt: NOW,
+        version: "0.1.0",
+        upgradeNeeded: false,
+        setup: DEVICE_SETUP.FAILED,
+        setupFailure: "Claude Code could not be installed: no space left on device",
       },
       {
         id: FIXTURE_HOST.OLD,
@@ -603,6 +637,14 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
       },
     ],
     installScriptUrl: STAGED_INSTALL_SCRIPT,
+  }),
+  // A box waiting on its code, as a pairing's link opened over Settings › Hosts reads it.
+  [ACT_KIND.HOSTS_PAIRING_READ]: () => ({
+    name: "fra-02",
+    platform: DEVICE_PLATFORM.LINUX,
+    arch: DEVICE_ARCH.X64,
+    ip: "203.0.113.24",
+    expiresAt: NOW + 15 * MINUTE,
   }),
   [ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN]: () => ({
     id: FIXTURE_HOST.TOKEN,

@@ -36,7 +36,6 @@ import {
   TASK_CALL_FAILURE,
   type TaskBrowserTabsFollowed,
   type TaskHistoryFollowed,
-  type TaskPagesFollowed,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksPageSourceAnswer,
@@ -284,7 +283,6 @@ function windowPort(
 ) {
   const asked: string[] = [];
   const browsed: string[] = [];
-  const pagesListeners = new Set<(followed: TaskPagesFollowed) => void>();
   const historyListeners = new Set<(followed: TaskHistoryFollowed) => void>();
   const browserTabsListeners = new Set<(followed: TaskBrowserTabsFollowed) => void>();
   const script: Script = {
@@ -330,6 +328,16 @@ function windowPort(
       })),
     tasksBlock: (params) =>
       ask(`block:${params.taskId}:${params.block.taskId}`, () => ({ blockedBy: [], blocks: [] })),
+    tasksSetParent: (params) =>
+      ask(`parent:${params.taskId}:${params.parentTaskId}`, () => ({
+        parentTaskId: params.parentTaskId,
+      })),
+    tasksChangeRelation: (params) =>
+      ask(`relation:${params.taskId}:${params.relation.taskId}`, () => ({
+        blockedBy: [],
+        blocks: [],
+        parentTaskId: null,
+      })),
     tasksEdit: (params) =>
       ask(
         `edit:${params.taskId}:${"document" in params.edit ? params.edit.document.value : ""}`,
@@ -434,10 +442,6 @@ function windowPort(
       })),
     tasksPagesFollow: (scope) => ask(`pages-follow:${pagePlaceId(scope)}`, () => undefined),
     tasksPagesUnfollow: (scope) => ask(`pages-unfollow:${pagePlaceId(scope)}`, () => undefined),
-    onTaskPagesChanged: (listener) => {
-      pagesListeners.add(listener);
-      return () => pagesListeners.delete(listener);
-    },
     tasksBrowserTabsFollow: (scope) =>
       ask(`tabs-follow:${browserTabsPlaceId(scope)}`, () => undefined),
     tasksBrowserTabsUnfollow: (scope) =>
@@ -466,10 +470,6 @@ function windowPort(
   );
   ports.push(port);
   const client = port.as(actor, options);
-  /** A plan's pages as the host tells them moved. */
-  const pagesMoved = (followed: TaskPagesFollowed) => {
-    for (const listener of pagesListeners) listener(followed);
-  };
   /** A plan's newest page of history as the host tells it moved. */
   const historyMoved = (followed: TaskHistoryFollowed) => {
     for (const listener of historyListeners) listener(followed);
@@ -478,7 +478,7 @@ function windowPort(
   const browserTabsMoved = (followed: TaskBrowserTabsFollowed) => {
     for (const listener of browserTabsListeners) listener(followed);
   };
-  return { client, asked, browsed, script, pagesMoved, historyMoved, browserTabsMoved };
+  return { client, asked, browsed, script, historyMoved, browserTabsMoved };
 }
 
 /** Any port kind's procedure, erased to the union of what every one takes and answers. */
@@ -990,24 +990,15 @@ it("a content act's payload carrying a key its schema does not name, or past its
   assert.deepEqual(asked, []);
 });
 
-it("a plan's pages are followed at the host once for every stream a panel holds open, each change reaches the streams of that plan, a late stream hears the last at once, and the last one closed lets them go", async () => {
-  const { client, asked, pagesMoved } = windowPort(PANEL);
-  const funnel = { id: PAGE_LINE_ID, title: "Invite funnel", version: 2, at: 0 };
+it("a panel's hold on a plan's pages follows them at the host once for every stream of them, and the last one closed lets them go", async () => {
+  const { client, asked } = windowPort(PANEL);
 
   const one = await client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK);
   const other = await client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK);
-  const heardOne = one.next();
-  const heardOther = other.next();
+  // Note that a stream is read so its hold opens, though nothing is ever heard down it.
+  void one.next();
+  void other.next();
   await vi.waitFor(() => assert.deepEqual(asked, [`pages-follow:${TASK_ID}`]));
-
-  pagesMoved({ taskId: "another-task", view: { pages: [] } });
-  pagesMoved({ taskId: TASK_ID, view: { pages: [funnel] } });
-  assert.deepEqual(await heardOne, { done: false, value: { pages: [funnel] } });
-  assert.deepEqual(await heardOther, { done: false, value: { pages: [funnel] } });
-  // A stream opened on pages already followed is told them as they last stood, and follows nothing more.
-  const late = await client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK);
-  assert.deepEqual(await late.next(), { done: false, value: { pages: [funnel] } });
-  await late.return?.(undefined);
 
   await one.return?.(undefined);
   await vi.waitFor(() => assert.equal(asked.length, 1, "the other stream still holds it"));

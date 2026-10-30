@@ -22,7 +22,11 @@ import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxTask, AppInboxTasklessItem } from "@luke/host/app-state";
+import type {
+  AppInboxTask,
+  AppInboxTasklessItem,
+  AppWorkspaceChannels,
+} from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -32,7 +36,7 @@ import { beforeAll, test } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
-import { chooseChannel, chooseInboxTask, leaveChannel } from "../tasks/use-channels.js";
+import { chooseChannel, chooseInboxTask } from "../tasks/use-channels.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import {
   type AnyAct,
@@ -54,9 +58,7 @@ import {
   columnsShown,
   EXPIRY,
   GENERAL,
-  headerNamed,
   headTitle,
-  heardName,
   hoveredCard,
   INVITES,
   item,
@@ -68,7 +70,6 @@ import {
   mount,
   noticeOf,
   ON_THRESHOLD,
-  openings,
   pagerOf,
   pressKey,
   pushAgain,
@@ -283,9 +284,18 @@ test("one column wide, the item's bar says where it stands in the list, and its 
   await settle();
   const keys = standKeymap();
   layOut(page, 800);
-  assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "2 of 3"]);
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "3 of 3"]);
+  assert.equal(
+    arrowNamed(page, "Next item").getAttribute("aria-disabled"),
+    "true",
+    "nothing below the last, the arrow keeping the keyboard",
+  );
+  pressKey("j");
+  assert.equal(readTitle(page), "Alert at 80%?");
 
   act(() => arrowNamed(page, "Previous item").click());
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["Expire after 7 days?", "2 of 3"]);
+  pressKey("k");
   assert.deepEqual([readTitle(page), pagerOf(page)], ["How is a failed email retried?", "1 of 3"]);
   assert.equal(
     arrowNamed(page, "Previous item").getAttribute("aria-disabled"),
@@ -296,16 +306,7 @@ test("one column wide, the item's bar says where it stands in the list, and its 
   assert.equal(readTitle(page), "How is a failed email retried?");
 
   pressKey("j");
-  assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "2 of 3"]);
-  act(() => arrowNamed(page, "Next item").click());
-  assert.deepEqual([readTitle(page), pagerOf(page)], ["Expire after 7 days?", "3 of 3"]);
-  assert.equal(
-    arrowNamed(page, "Next item").getAttribute("aria-disabled"),
-    "true",
-    "nothing below the last, the arrow keeping the keyboard",
-  );
-  pressKey("j");
-  assert.equal(readTitle(page), "Expire after 7 days?");
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["Expire after 7 days?", "2 of 3"]);
   act(() => keys.unmount());
 });
 
@@ -332,7 +333,7 @@ test("a chosen item whose plan leaves the account's list, deleted on another Mac
     world.setHolding([{ taskId: INVITES.id, items: 1, updatedAt: 4_000 }]);
   });
   await settle();
-  assert.deepEqual(listed(page), ["# Invites", "*Expire after 7 days?"]);
+  assert.deepEqual(listed(page), ["*Expire after 7 days?"]);
   assert.equal(page.querySelector(".inbox-view-items [data-inbox-title]"), null);
   assert.equal(
     page.querySelector(".inbox-view-items")?.textContent,
@@ -340,7 +341,7 @@ test("a chosen item whose plan leaves the account's list, deleted on another Mac
   );
 });
 
-test("an item of an agent with no plan stands under the automation that started it, and opens on its agent's own read under the automation's crumb", async () => {
+test("an item of an agent with no plan is listed, and opens on its agent's own read under the crumb of the automation that started it", async () => {
   world.agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
   const { page, asked } = mount([
     {
@@ -359,8 +360,7 @@ test("an item of an agent with no plan stands under the automation that started 
   await settle();
 
   const rows = listed(page);
-  assert.ok(rows.includes("# Nightly flake sweep"), rows.join(" | "));
-  assert.equal(rows[rows.indexOf("# Nightly flake sweep") + 1], "*Quarantine the flaky test?");
+  assert.ok(rows.includes("*Quarantine the flaky test?"), rows.join(" | "));
 
   act(() => rowNamed(page, "Quarantine the flaky test?").click());
   await settle();
@@ -458,16 +458,6 @@ const SWEEP: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-test("a task's group header hangs the task's card, as the automation's does its own", async () => {
-  const { page } = mount();
-  await settle();
-  const header = headerNamed(page, "Invites");
-  restOn(header);
-  // Note that this window stands no chip cards, so the header hangs the card's fallback: the task's head.
-  const name = document.querySelector(".luke-tooltip-card .luke-hover-card-name");
-  assert.equal(name?.textContent, "Invites", "the header hangs a card named for its task");
-});
-
 const LUKE_AGENT = "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e";
 const DOMAIN: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-00000000000d", "Name a domain?", 1_200),
@@ -492,7 +482,7 @@ function lukeTaskless(asked: InboxItem): AppInboxTasklessItem {
   };
 }
 
-test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor; the member's operator stands under Luke, by his face", async () => {
+test("an agent's row hangs a card naming the agent and the automation that started it; its crumb wears the automation's clock tile and hangs its card, opening its page; the agents no automation names stand under no actor; the member's operator stands under Luke, by his face", async () => {
   handState({});
   world.listedWorkspace = {
     id: "workspace-acme",
@@ -512,28 +502,6 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     lukeTaskless(DOMAIN),
   ]);
   await settle();
-
-  const sweep = headerNamed(page, "Nightly flake sweep");
-  assert.ok(
-    sweep.querySelector(':scope > [aria-hidden="true"] .actor-mark[data-kind="automation"]'),
-    "the automation's group wears its clock tile",
-  );
-  assert.match(hoveredCard(sweep, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
-  assert.deepEqual(openings('[data-actor-card="automation"]'), [], "no Open automation");
-  const name = document.querySelector<HTMLButtonElement>(
-    '.luke-tooltip-card [data-actor-card="automation"] .luke-hover-card-name button',
-  );
-  assert.equal(name?.textContent, "Nightly flake sweep", "the card's name is a button");
-  act(() => name?.click());
-  assert.deepEqual(asked.shownAutomations, [SWEEP.id]);
-  assert.equal(sweep.getAttribute("aria-expanded"), "true", "the header itself still only folds");
-
-  const others = headerNamed(page, "Other agents");
-  assert.ok(others.querySelector(".actor-mark") === null, "a group of agents names no actor");
-  assert.ok(
-    others.querySelector(':scope > [aria-hidden="true"] .lucide-zap'),
-    "a group of agents wears the automation glyph, naming no one actor",
-  );
 
   const mark = rowNamed(page, "Quarantine the flaky test?");
   assert.equal(
@@ -561,7 +529,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     "the crumb's card offers nothing to press, since the crumb opens the automation",
   );
   act(() => crumb.click());
-  assert.deepEqual(asked.shownAutomations, [SWEEP.id, SWEEP.id]);
+  assert.deepEqual(asked.shownAutomations, [SWEEP.id]);
 
   act(() => rowNamed(page, "Bump the Node image?").click());
   await settle();
@@ -578,9 +546,6 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     "it wears the automation glyph, as its group does",
   );
 
-  const luke = headerNamed(page, "Luke");
-  assert.ok(luke.querySelector(".luke-face"), "Luke's group wears his face");
-  assert.ok(luke.querySelector(".lucide-zap") === null, "and no automation glyph");
   act(() => rowNamed(page, "Name a domain?").click());
   await settle();
   // Note that the title joins the path only once the heading scrolls away, so his own crumb stands alone.
@@ -676,7 +641,7 @@ test("an agent with no plan whose waiting items move, one answered on another Ma
   assert.ok(listed(page).includes("Skip the slow suite?"), listed(page).join(" | "));
 });
 
-test("an agent with no plan whose items are all settled stays listed under the automation that started it, as main lists it holding them", async () => {
+test("an agent with no plan whose items are all settled stays listed, as main lists it holding them", async () => {
   const settled = { ...SECOND_ASK, status: INBOX_STATUS.ANSWERED };
   world.agentInboxes = new Map([[SECOND_AGENT, [settled]]]);
   const { id: _id, title: _title, postedAt: _postedAt, ...agent } = waitingTaskless(settled);
@@ -684,11 +649,7 @@ test("an agent with no plan whose items are all settled stays listed under the a
   await settle();
 
   const rows = listed(page);
-  assert.equal(
-    rows[rows.indexOf("# Nightly flake sweep") + 1],
-    "Skip the slow suite?",
-    rows.join(" | "),
-  );
+  assert.ok(rows.includes("Skip the slow suite?"), rows.join(" | "));
 });
 
 test("an item chosen by a notification's click, in an Inbox showing its list alone, is shown itself, and Back stands on the list again, the notification's ask taken once", async () => {
@@ -1000,52 +961,27 @@ test("an item a link names under an agent nothing waits on any more, read before
   assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
 });
 
-test("a teammate's open item of an agent with no plan is listed under the automation that started it, wearing the teammate's face with no attention mark; To do leaves it out, and Group by person lists it under the teammate, whose header hangs their card", async () => {
+test("a teammate's open item of an agent with no plan is listed, wearing the teammate's face with no attention mark; Needs you leaves it out", async () => {
   world.agentInboxes = new Map([[SWEEP_AGENT, [{ ...QUARANTINE, startedBy: TEAMMATE }]]]);
   const { page } = mount([{ ...waitingTaskless(QUARANTINE), startedBy: TEAMMATE.userId }]);
   await settle();
   const rows = listed(page);
-  assert.equal(
-    rows[rows.indexOf("# Nightly flake sweep") + 1],
-    "Quarantine the flaky test?",
-    rows.join(" | "),
-  );
+  assert.ok(rows.includes("Quarantine the flaky test?"), rows.join(" | "));
   const meta = rowNamed(page, "Quarantine the flaky test?").querySelector(".luke-list-row-meta");
   assert.equal(meta?.querySelector(".attention-mark"), null);
   assert.equal(meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
   assert.equal(meta?.querySelector(".luke-visually-hidden")?.textContent, "Waiting on Charles Pan");
 
-  showScope(page, "Needs you");
+  showScope(page, "Open");
+  chooseView(page, "Addressed to", "Me");
   assert.equal(
     listed(page).includes("Quarantine the flaky test?"),
     false,
     listed(page).join(" | "),
   );
-
-  showScope(page, "All");
-  chooseView(page, "Group by", "Person");
-  const byPerson = listed(page);
-  assert.equal(
-    byPerson[byPerson.indexOf("# Charles Pan") + 1],
-    "Quarantine the flaky test?",
-    byPerson.join(" | "),
-  );
-  const header = [
-    ...page.querySelectorAll<HTMLButtonElement>(
-      ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
-    ),
-  ].find((each) => heardName(each) === "Charles Pan");
-  assert.ok(header, "Charles Pan heads a group");
-  restOn(header);
-  assert.equal(
-    document.querySelector(".luke-tooltip-card [data-actor-card='person'] .luke-hover-card-name")
-      ?.textContent,
-    "Charles Pan",
-    "a person's group header hangs their card",
-  );
 });
 
-test("on a phone the Inbox's list is headed by New task and one ⋯, its title centred between them, the ⋯ opening View options' own menu, and the search standing under the head", async () => {
+test("on a phone the Inbox's list is headed by New task and one ⋯, its title centred between them, the ⋯ opening View options' own menu and offering Mark all as read, and the search standing under the head", async () => {
   const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
   await settle();
   const head = page.querySelector<HTMLElement>(".inbox-head");
@@ -1077,8 +1013,8 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
     [...document.querySelectorAll('[role="menu"] .luke-menu-item-label')].map(
       (each) => each.textContent,
     ),
-    ["View options"],
-    "the ⋯ holds what the wide head draws as buttons",
+    ["View options", "Mark all as read"],
+    "the ⋯ holds what the wide head draws as buttons, and what a right-click offers",
   );
   act(() => more().click());
   pick("View options");
@@ -1241,57 +1177,31 @@ const APP_CHANNEL: Channel = {
   waiting: 0,
 };
 
-/** A follow of the channels a test pushes on: each word pushed is handed to the window as the host hands it. */
-function channelFollow() {
-  const queue: unknown[] = [];
-  let wake: (() => void) | undefined;
-  let closed = false;
-  const stream: AsyncIterableIterator<unknown> = {
-    [Symbol.asyncIterator]: () => stream,
-    next: async () => {
-      while (queue.length === 0 && !closed) {
-        await new Promise<void>((resolve) => {
-          wake = resolve;
-        });
-      }
-      return closed ? { done: true, value: undefined } : { done: false, value: queue.shift() };
-    },
-    return: async () => {
-      closed = true;
-      wake?.();
-      return { done: true, value: undefined };
-    },
-  };
-  return {
-    stream,
-    push: (word: unknown) => {
-      queue.push(word);
-      wake?.();
-    },
-  };
-}
-
 /**
- * Answers the channels' acts as a test says, every other act as before:
- * the channels listed, a thread moved, and the follow where one is given.
+ * Hands the listed workspace's channels as the host holds them, open and
+ * archived, and answers the channels' writes as the host does: each made,
+ * archived, unarchived, or looked at delivers the channels as they then
+ * stand to the window, and every other act is answered as before.
  */
 function answerChannels(answers: {
   channels?: () => readonly Channel[];
-  follow?: AsyncIterableIterator<unknown>;
   /** A channel made, archived, or unarchived, or a thread moved, before the service answers it. */
   onWrite?: (write: AnyAct) => void;
-  /** The workspace's archived channels, or why their read fails; the read is refused where none are given. */
-  archived?: () => readonly ArchivedChannel[] | { readonly failure: string };
+  archived?: () => readonly ArchivedChannel[];
 }): void {
   const previous = fakeActsAnswer();
+  const workspaceId = world.listedWorkspace?.id ?? ACME.id;
+  const held = (): AppWorkspaceChannels => ({
+    [workspaceId]: {
+      rows: { open: answers.channels?.() ?? [GENERAL], archived: answers.archived?.() ?? [] },
+    },
+  });
+  world.channels = held();
   const done = (value: unknown): Promise<FakeActAnswer> =>
     Promise.resolve({ status: FAKE_ANSWER.DONE, value } as FakeActAnswer);
   fakeActs({
     ...appBridge(),
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CHANNELS_LIST) {
-        return done({ channels: answers.channels?.() ?? [GENERAL] });
-      }
       if (
         request.kind === ACT_KIND.CHANNELS_LOOK ||
         request.kind === ACT_KIND.CHANNELS_CREATE ||
@@ -1299,18 +1209,12 @@ function answerChannels(answers: {
         request.kind === ACT_KIND.CHANNELS_UNARCHIVE
       ) {
         answers.onWrite?.(request);
+        world.deliverChannels(held());
         return done({ channels: answers.channels?.() ?? [GENERAL] });
       }
       if (request.kind === ACT_KIND.CHANNELS_MOVE) {
         answers.onWrite?.(request);
         return done({ thread: { ...THRESHOLD, channelId: request.payload.channelId } });
-      }
-      if (request.kind === ACT_KIND.CHANNELS_ARCHIVED && answers.archived !== undefined) {
-        const archived = answers.archived();
-        return done("failure" in archived ? archived : { channels: archived });
-      }
-      if (request.kind === ACT_KIND.CHANNELS_FOLLOW && answers.follow !== undefined) {
-        return done(answers.follow);
       }
       return previous(request);
     },
@@ -1355,7 +1259,7 @@ function buttonSaying(words: string): HTMLButtonElement {
   );
 }
 
-test("a channel narrows the Inbox to its own threads, everyone's, under its name and purpose", async () => {
+test("a channel narrows the Inbox to its own threads, everyone's, under its name and purpose, with no view's menu", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
   answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
@@ -1379,6 +1283,7 @@ test("a channel narrows the Inbox to its own threads, everyone's, under its name
     [EXPIRY.title, THRESHOLD.title],
     "#general's threads alone, a teammate's among them, the latest first",
   );
+  assert.equal(page.querySelector('button[aria-label="View options"]'), null);
 });
 
 test("a task chosen narrows the Inbox to its own items under a chip naming it, whose × lists every task's items again", async () => {
@@ -1408,59 +1313,28 @@ test("a task chosen narrows the Inbox to its own items under a chip naming it, w
   );
 });
 
-test("a scope turned in one channel stands in every channel, and when the reader comes back", async () => {
+test("a channel chosen while the workspace's channels could not be read says so with Retry, and ⌘K's Mark all as read marks the chosen channel's threads alone", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = ACME;
-  answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
+  world.listedWorkspace = { ...ACME, id: "workspace-channels-unread" };
+  world.channels = { [world.listedWorkspace.id]: { failed: true } };
   world.inboxes = new Map([
     [
       BILLING.id,
       [
-        { ...THRESHOLD, channelId: GENERAL.id, startedBy: TEAMMATE },
-        { ...RETRY, channelId: APP_CHANNEL.id, startedBy: TEAMMATE },
+        { ...THRESHOLD, channelId: GENERAL.id, unread: true },
+        { ...RETRY, channelId: APP_CHANNEL.id, unread: true },
       ],
     ],
   ]);
-  const { page } = mount([], { channels: true });
-  await settle();
-  showScope(page, "Needs you");
-  await settle();
-  assert.deepEqual(rowTitles(page), [], "Needs you leaves out the teammate's thread");
-
-  act(() => chooseChannel(APP_CHANNEL.id));
-  await settle();
-  assert.equal(headTitle(page), `#${APP_CHANNEL.name} · Needs you`);
-  assert.deepEqual(rowTitles(page), [], "another channel opens on Needs you too");
-
-  act(() => leaveChannel());
-  await settle();
-  act(() => chooseChannel(GENERAL.id));
-  await settle();
-  assert.equal(headTitle(page), "#general · Needs you");
-  assert.deepEqual(rowTitles(page), [], "#general is still on Needs you");
-});
-
-test("a channel chosen while the workspace's channels could not be read says so with Retry", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  // Note that the window holds each workspace's channels across reads, a failed one keeping them, so this workspace is one no test read before.
-  world.listedWorkspace = { ...ACME, id: "workspace-channels-unread" };
-  const previous = fakeActsAnswer();
-  fakeActs({
-    ...appBridge(),
-    act: (request: AnyAct): Promise<FakeActAnswer> =>
-      request.kind === ACT_KIND.CHANNELS_LIST
-        ? Promise.resolve({
-            status: FAKE_ANSWER.DONE,
-            value: { failure: "unanswered" },
-          } as FakeActAnswer)
-        : previous(request),
-  });
   const { page } = mount([], { channels: true });
   await settle();
   const notRead =
     page.querySelector<HTMLElement>('section[aria-label="Channels not read"]') ??
     assert.fail("the failed read is said");
   assert.match(notRead.textContent ?? "", /Could not read this workspace's channels\./u);
+  assert.equal(runAppCommand(APP_COMMAND.MARK_INBOX_READ), true);
+  await settle();
+  assert.deepEqual(world.readMarks, [`read:${THRESHOLD.id}`], "never the workspace's whole");
 });
 
 test("ticking the box's checkbox under an open question sets its options aside and sends its words as a new thread to the item's agent in the item's channel, which the Inbox then opens, the box a reply again", async () => {
@@ -1510,6 +1384,28 @@ test("ticking the box's checkbox under an open question sets its options aside a
     "the thread it started opens",
   );
   assert.equal(box().getAttribute("aria-checked"), "false", "its box is a reply again");
+});
+
+test("a press on the channel's chip beside the box's checkbox opens the channel and leaves the box unticked", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  world.listedWorkspace = ACME;
+  answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
+  world.inboxes = new Map([[BILLING.id, [{ ...noticeOf(THRESHOLD), channelId: APP_CHANNEL.id }]]]);
+  const { page } = mount([], { chosen: ON_THRESHOLD });
+  await settle();
+
+  const box =
+    itemPane(page).querySelector<HTMLElement>('[role="checkbox"]') ??
+    assert.fail("the box offers a new thread");
+  const chip =
+    [...(box.closest("label")?.querySelectorAll("button") ?? [])].find(
+      (each) => each.textContent === APP_CHANNEL.name,
+    ) ?? assert.fail("the channel's chip is a button");
+  act(() => chip.click());
+  await settle();
+
+  assert.equal(box.getAttribute("aria-checked"), "false");
+  assert.equal(headTitle(page), `#${APP_CHANNEL.name}`);
 });
 
 test("words written in the box while its new thread starts stay in it once the thread has started", async () => {
@@ -1633,7 +1529,7 @@ test("the sidebar lists the channels under the Inbox's row, each with what waits
   const { page } = mount([], { withSidebar: true, waiting });
   await settle();
 
-  assert.deepEqual(sidebarChannels(page), ["general2 need you", "app", "launch", "Add channel"]);
+  assert.deepEqual(sidebarChannels(page), ["general2 need you", "app", "launch"]);
   act(() =>
     (
       [...page.querySelectorAll<HTMLButtonElement>('[aria-label="Channels"] .luke-nav-item')].find(
@@ -1645,7 +1541,7 @@ test("the sidebar lists the channels under the Inbox's row, each with what waits
   assert.equal(headTitle(page), "#app");
 });
 
-test("a channel made from the sidebar's Add channel narrows the Inbox to it once the service has made it", async () => {
+test("a channel made from the Inbox row's ⋯ narrows the Inbox to it once the service has made it", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
   let standing: readonly Channel[] = [GENERAL];
@@ -1657,7 +1553,12 @@ test("a channel made from the sidebar's Add channel narrows the Inbox to it once
   });
   const { page } = mount([], { withSidebar: true });
   await settle();
-  act(() => buttonSaying("Add channel").click());
+  act(() =>
+    (
+      document.querySelector<HTMLButtonElement>('[aria-label="Inbox actions"]') ??
+      assert.fail("the Inbox's row wears its ⋯")
+    ).click(),
+  );
   act(() => menuItem("New channel").click());
   const dialog = document.querySelector('[role="dialog"]') ?? assert.fail("the dialog stands");
   const [name, purpose] = dialog.querySelectorAll<HTMLInputElement>("input");
@@ -1719,38 +1620,6 @@ test("an archived channel narrows the Inbox under its name and when it was archi
   act(() => buttonSaying("Unarchive").click());
   await settle();
   assert.deepEqual(unarchived, [old.id]);
-});
-
-test("an archived channel shown stays shown when a later read of the archived channels fails", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = ACME;
-  const old: ArchivedChannel = {
-    id: "c0ffee00-0000-4000-8000-0000000000ac",
-    name: "old-app",
-    purpose: "The apps, before the split",
-    project: false,
-    createdAt: 1,
-    archivedAt: 2,
-  };
-  let archivedReads = 0;
-  const follow = channelFollow();
-  answerChannels({
-    follow: follow.stream,
-    archived: () => {
-      archivedReads += 1;
-      return archivedReads === 1 ? [old] : { failure: "unanswered" };
-    },
-  });
-  const { page } = mount([], { channels: true });
-  await settle();
-  act(() => chooseChannel(old.id));
-  await settle();
-  assert.equal(headTitle(page), "#old-app");
-
-  act(() => follow.push({ moved: [GENERAL.id] }));
-  await settle();
-  assert.ok(archivedReads > 1, "the archived channels were read again");
-  assert.equal(headTitle(page), "#old-app", "a failed read kept it shown");
 });
 
 test("archiving the channel shown moves the window to #general and says so", async () => {
@@ -1817,17 +1686,9 @@ function sidebarRowCount(page: HTMLElement, name: string): number | undefined {
 test("the channels' counts add up to the Inbox's, Luke's question among them, but for one in an archived channel, which has no row, and neither counts another workspace's", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
-  const previous = fakeActsAnswer();
-  fakeActs({
-    ...appBridge(),
-    act: (request: AnyAct): Promise<FakeActAnswer> =>
-      request.kind === ACT_KIND.CHANNELS_LIST
-        ? // Note that the service's own tally of each channel is not what a row counts, so it is set wrong here.
-          Promise.resolve({
-            status: FAKE_ANSWER.DONE,
-            value: { channels: [GENERAL, APP_CHANNEL].map((each) => ({ ...each, waiting: 5 })) },
-          } as FakeActAnswer)
-        : previous(request),
+  // Note that the service's own tally of each channel is not what a row counts, so it is set wrong here.
+  answerChannels({
+    channels: () => [GENERAL, APP_CHANNEL].map((each) => ({ ...each, waiting: 5 })),
   });
   world.agentInboxes = new Map([[LUKE_AGENT, [DOMAIN]]]);
   const waiting: readonly AppInboxTask[] = [

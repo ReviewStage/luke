@@ -1,5 +1,4 @@
 import { type Agent, readTakeoverPilot } from "@luke/database/models/agent-store";
-import { readTreeHeld } from "@luke/database/models/task-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
 import {
@@ -50,9 +49,8 @@ import { agentLineSender, steerAgent } from "./steer.js";
  * them as a colleague's word, never the developer's or Luke's. The message
  * stands in the two transcripts and nowhere else. It reaches any agent of the sender's
  * workspace, on any task, held to what a steer into it is held to; an
- * archived agent, one whose starter has left the workspace, one on a task
- * of a pilot tree whose Running switch is off, its top task's pilot among
- * them (`readTreeHeld`), whose resume the service sends itself, or the sender itself takes none, but that a message to a pilot a continue took over
+ * archived agent, one whose starter has left the workspace, or the sender
+ * itself takes none, but that a message to a pilot a continue took over
  * reaches the pilot that took over from it, where the agents it started
  * now report.
  */
@@ -76,9 +74,6 @@ export const MESSAGE_AGENT_REFUSAL = {
   NO_AGENT: `Not sent: no agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   ARCHIVED:
     "Not sent: that agent is archived, so it takes no message and is not woken until a member unarchives it.",
-  TREE_STOPPED:
-    "Not sent: that agent works on a task of a stopped pilot tree, so no agent's message " +
-    "reaches it until someone presses Start on the top task.",
   STARTER_LEFT:
     "Not sent: the member who started that agent has left your workspace, so nothing reaches it.",
   NO_SERVICE: "Not sent: this deployment cannot reach the agents' service.",
@@ -198,10 +193,6 @@ export function runMessageAgent(
       const receiving = yield* receivingAgent(userId, workspace.value, found.value, sender.id);
       if (Option.isNone(receiving)) return agentToolRejected(MESSAGE_AGENT_REFUSAL.ARCHIVED);
       const target = receiving.value;
-      // A stopped tree's agents, its top task's pilot among them, hear no agent until Start is pressed.
-      if (target.taskId !== null && (yield* readTreeHeld(target.userId, target.taskId))) {
-        return agentToolRejected(MESSAGE_AGENT_REFUSAL.TREE_STOPPED);
-      }
       // An agent runs as its starter, so one whose starter left the workspace hears nothing of it.
       if (!(yield* isWorkspaceMember(target.userId, workspace.value))) {
         return agentToolRejected(MESSAGE_AGENT_REFUSAL.STARTER_LEFT);

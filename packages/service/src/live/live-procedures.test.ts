@@ -8,9 +8,14 @@ import { createChannel } from "@luke/database/models/channel-store";
 import { queueMacCommand } from "@luke/database/models/mac-command-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
+import { inboxItem } from "@luke/database/schemas/inbox";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
 import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
+import {
+  workspaceChannelsLiveAnswerSchema,
+  workspaceChannelsLiveRowsSchema,
+} from "@luke/features/channel-live";
 import { INBOX_ASK } from "@luke/features/inbox-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
@@ -45,7 +50,7 @@ import {
   workspacesLiveRowsSchema,
 } from "@luke/features/workspace-live";
 import type { WireBoundaryInput } from "@luke/wire";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Clock, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -664,6 +669,99 @@ it.layer(getTestDB())("the account's inbox items' live read", (it) => {
   );
 });
 
+it.layer(getTestDB())("a workspace's channels list's live read", (it) => {
+  it.effect(
+    "the list carries each channel with what it holds for the reader, a write to a thread that moves nothing it shows answers no held poll, and a channel made does",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const task = yield* startTask(dana, { name: "Teammate invitations" });
+        const started = yield* createAgent(dana, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+        });
+        assert.ok(Option.isSome(started));
+        const posted = yield* postInboxThread(
+          { userId: dana, taskId: task.id, agentId: started.value.agent.id },
+          { key: "review", title: "Review the invite flow", body: "It is up." },
+        );
+        const channelsPath = (query: Readonly<Record<string, string>>) =>
+          `/api/live/workspace-channels?${new URLSearchParams({ workspaceId: task.workspaceId, ...query })}`;
+        const polled = (after: string) =>
+          Effect.gen(function* () {
+            const poll = yield* Effect.forkChild(
+              ask({
+                bearer: dana,
+                path: channelsPath({ [LIVE_POLL.QUERY]: LIVE_POLL.ON, [LIVE_POLL.AFTER]: after }),
+              }),
+            );
+            yield* TestClock.adjust(Duration.seconds(25));
+            return Schema.decodeUnknownSync(workspaceChannelsLiveAnswerSchema)(
+              (yield* Fiber.join(poll)).body,
+            );
+          });
+
+        const first = yield* ask({
+          bearer: dana,
+          path: channelsPath({ [LIVE_POLL.QUERY]: LIVE_POLL.ON }),
+        });
+        assert.equal(first.status, HOSTED_HTTP_STATUS.OK);
+        const seen = Schema.decodeUnknownSync(workspaceChannelsLiveAnswerSchema)(first.body);
+        const rows = Schema.decodeUnknownSync(workspaceChannelsLiveRowsSchema)(
+          Object.fromEntries(
+            Object.entries(seen.queries).map(([part, query]) => [part, query.rows]),
+          ),
+        );
+        assert.deepEqual(
+          rows.channels.map((channel) => channel.name),
+          ["general"],
+          "#general is minted for the read",
+        );
+        assert.deepEqual(
+          rows.tallies.map((tally) => tally.threads),
+          [1],
+          "the thread posted is counted",
+        );
+        const after = liveDigestOf(seen.queries);
+        assert.ok(after !== undefined);
+
+        // A thread's last change moving, as a message on it does, moves no count, no post, and no ask.
+        const db = yield* Database;
+        yield* db
+          .update(inboxItem)
+          .set({ updatedAt: new Date((yield* Clock.currentTimeMillis) + 1000) })
+          .where(eq(inboxItem.id, Result.getOrThrow(posted).id));
+        const held = yield* polled(after);
+        assert.equal(held.queries.channels.rows, undefined, "the poll was held to its end");
+        assert.equal(liveDigestOf(held.queries), after);
+
+        yield* createChannel(
+          dana,
+          task.workspaceId,
+          { name: "reviews", purpose: "Where reviews wait.", project: false },
+          new Date(yield* Clock.currentTimeMillis),
+        );
+        const made = yield* polled(after);
+        assert.deepEqual(
+          made.queries.channels.rows === undefined
+            ? undefined
+            : Schema.decodeUnknownSync(workspaceChannelsLiveRowsSchema.fields.channels)(
+                made.queries.channels.rows,
+              )
+                .map((channel) => channel.name)
+                .toSorted(),
+          ["general", "reviews"],
+          "the channel made is answered",
+        );
+      }),
+  );
+});
+
 /** The procedures answering an agent's transcript's live read as `bearer`, the worker's where `call` names one. */
 const askTranscript = (options: {
   readonly bearer: string;
@@ -727,6 +825,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
           "agent",
           "conversation",
           "messages",
+          "queueRevision",
           "turns",
           "window",
           "windowParts",

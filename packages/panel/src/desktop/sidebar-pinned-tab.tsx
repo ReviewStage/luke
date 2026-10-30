@@ -260,7 +260,7 @@ const PIN_PULL_REQUEST_KEPT = Duration.seconds(30);
  * card is mounted only once the pointer has rested (`@luke/ui`'s `Tooltip`), and
  * shared by every card of it while one stands and for
  * `PIN_PULL_REQUEST_KEPT` after. Note that it is the pin's own, apart from
- * the open task's pull requests (`useTaskPullRequests`), so a pin's card
+ * the open task's pull requests (`useListedPullRequests`), so a pin's card
  * landing an answer redraws the card alone, never the task's control and
  * the sidebar with it. A read the service refused, or did not answer, is
  * kept as the failure it is, which the next card asks again over

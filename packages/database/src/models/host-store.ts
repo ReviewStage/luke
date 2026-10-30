@@ -15,7 +15,9 @@
  * install token, and a member's own desktop converted in place by its
  * signed-in session (`enrollOwnDevice`), or created by it where the
  * account never registered the id, are read, listed, refused below the
- * floor, and removed alike.
+ * floor, and removed alike. A host a pairing's approve made is listed and
+ * removed as one from its approve, before its box collects its secret
+ * (`listed`, `./host-pairing-store.ts`).
  */
 
 import {
@@ -24,14 +26,16 @@ import {
   DEVICE_PLATFORM,
   type DeviceArch,
   type DevicePlatform,
+  deviceSetupSchema,
 } from "@luke/features/device-agent-wire";
-import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, exists, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { Data, DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
+import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { agentTable } from "../schemas/agent.js";
 import { device } from "../schemas/device.js";
 import { hostInstallToken } from "../schemas/host-install-token.js";
+import { hostPairing } from "../schemas/host-pairing.js";
 
 type HostEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
@@ -54,13 +58,16 @@ const HostCallerSchema = Schema.Struct({
 
 export type HostCaller = typeof HostCallerSchema.Type;
 
-/** One of the account's enrolled machines, as Settings lists it. */
+/** One of the account's enrolled machines, as Settings lists it: beside its name and beat, its home folder, none before it first registered, and where its setup stands and why it failed, none once it is ready. */
 const HostRowSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   platform: Schema.Literals(Object.values(DEVICE_PLATFORM)),
   lastSeenAt: Schema.Date,
   version: Schema.NullOr(Schema.String),
+  home: Schema.NullOr(Schema.String),
+  setup: Schema.NullOr(deviceSetupSchema),
+  setupFailure: Schema.NullOr(Schema.String),
 });
 
 export type HostRow = typeof HostRowSchema.Type;
@@ -80,6 +87,26 @@ const KeptSchema = Schema.Struct({ id: Schema.String });
 /** Whether a device row is enrolled: it holds a secret and was not removed, whatever its kind. */
 function enrolled() {
   return and(isNotNull(device.secretHash), isNull(device.removedAt));
+}
+
+/**
+ * Whether a device row is one of the account's hosts as Settings lists and
+ * removes them: enrolled, or made by a pairing's approve and not removed
+ * while its box has yet to collect its secret (`./host-pairing-store.ts`).
+ */
+function listed() {
+  return and(
+    isNull(device.removedAt),
+    or(
+      isNotNull(device.secretHash),
+      exists(
+        queryBuilder
+          .select({ id: hostPairing.id })
+          .from(hostPairing)
+          .where(eq(hostPairing.deviceId, device.id)),
+      ),
+    ),
+  );
 }
 
 /** Why an enroll wrote nothing. */
@@ -329,9 +356,12 @@ const findHosts = SqlSchema.findAll({
           platform: device.platform,
           lastSeenAt: device.lastSeenAt,
           version: device.version,
+          home: device.home,
+          setup: device.setup,
+          setupFailure: device.setupFailure,
         })
         .from(device)
-        .where(and(eq(device.userId, userId), enrolled()))
+        .where(and(eq(device.userId, userId), listed()))
         .orderBy(asc(device.name), asc(device.id)),
     ),
 });
@@ -344,7 +374,7 @@ const stampRemoved = SqlSchema.findAll({
       db
         .update(device)
         .set({ removedAt: now, secretHash: null })
-        .where(and(eq(device.id, id), eq(device.userId, userId), enrolled()))
+        .where(and(eq(device.id, id), eq(device.userId, userId), listed()))
         .returning({ id: device.id }),
     ),
 });
@@ -454,12 +484,12 @@ export function recordHostVersion(id: string, version: string): HostEffect<void>
   return writeVersion({ id, version });
 }
 
-/** The account's enrolled machines, of every kind and platform, by name. */
+/** The account's enrolled machines, of every kind and platform, and the hosts its approves made whose boxes have yet to collect their secret, by name. */
 export function hostsOf(userId: string): HostEffect<readonly HostRow[]> {
   return findHosts({ userId });
 }
 
-/** Removes the account's enrolled machine and refuses its secret from now on; false where the account holds no such enrolled machine. */
+/** Removes the account's enrolled machine, or a host its approve made, and refuses its secret from now on; false where the account lists no such machine. */
 export function removeHost(userId: string, id: string): HostEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(stampRemoved({ userId, id, now }), (rows) => rows.length > 0),

@@ -13,6 +13,7 @@ import {
   AGENT_STATUS,
   type AgentNewestAnswer,
   type AgentPage,
+  type AgentStatus,
   type AgentSummary,
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
@@ -295,6 +296,9 @@ function fakeService() {
     removeHost: () => Effect.succeed({ failure: "unanswered" }),
     keepHostInstallToken: () => Effect.succeed({ failure: "unanswered" }),
     revokeHostInstallToken: () => Effect.succeed({ failure: "unanswered" }),
+    readHostPairing: () => Effect.succeed({ failure: "unanswered" }),
+    approveHostPairing: () => Effect.succeed({ failure: "unanswered" }),
+    denyHostPairing: () => Effect.succeed({ failure: "unanswered" }),
     list: (taskId, includeArchived) =>
       Effect.sync(() => {
         asked.push(includeArchived === true ? `list:${taskId}:archived` : `list:${taskId}`);
@@ -387,6 +391,11 @@ function fakeService() {
       Effect.map(changeGate, () => {
         asked.push(`servers:${agentId}:${request.disabledServers.join(",")}`);
         return { agent: { ...AGENT, disabledServers: request.disabledServers } };
+      }),
+    changeQueue: (agentId, change) =>
+      Effect.sync(() => {
+        asked.push(`queue:${agentId}:${change.change}`);
+        return { queue: { messages: [], revision: 1 } };
       }),
     stop: (agentId) =>
       Effect.sync(() => {
@@ -750,6 +759,7 @@ const TRANSCRIPT_PARTS = [
   "workers",
   "window",
   "windowParts",
+  "queueRevision",
 ] as const;
 const SCOPE_PARTS = ["items", "messages", "files"] as const;
 const ACCOUNT_PARTS = ["items", "planless", "plans", "automations", "failedRuns"] as const;
@@ -1339,6 +1349,7 @@ function transcriptRows(live: { readonly transcript: TranscriptLive }, seq: numb
     workers: [],
     window: [],
     windowParts: [],
+    queueRevision: [],
   });
 }
 
@@ -1389,7 +1400,7 @@ function windowRow(seq: number, text: string) {
 /** A page the service answers read at once: its messages, its cursor, its status, and whether its held read would have held. */
 function pageNow(
   cursor: string,
-  options: { holds: boolean; text?: string; status?: typeof AGENT_STATUS.RUNNING },
+  options: { holds: boolean; text?: string; status?: AgentStatus },
 ): TranscriptNowAnswer {
   return {
     messages:
@@ -1550,6 +1561,77 @@ it.effect(
       transcriptRows(live, 3, 2);
       yield* nextPoll;
       assert.equal(asked.at(-1), `messages-now:${AGENT_ID}:3:0`);
+    }),
+);
+
+it.effect(
+  "a line of the developer's that lands awaiting its turn after a stopped turn is told with the agent at work, never under the stopped turn's word",
+  () =>
+    Effect.gen(function* () {
+      const { call, pages, sealTranscript, pageNow: script, pageNewest, live } = yield* subject();
+      sealTranscript(LIVE_ANSWERED);
+      pageNewest(newestPage("1:0", "Reading the invites.", "40"));
+      script(
+        pageNow("1:0", {
+          holds: false,
+          text: "Reading the invites.",
+          status: AGENT_STATUS.CANCELLED,
+        }),
+      );
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      transcriptRows(live, 1);
+      yield* nextPoll;
+
+      // A queue's Resume hands on the member's line, which lands before any turn takes it.
+      const line = windowRow(2, "Open the pull request.");
+      live.transcript.set({
+        window: [{ ...line.row, role: "user", turnStatus: null }],
+        windowParts: [line.part],
+      });
+      yield* nextPoll;
+
+      const told = pages().find(
+        (each) =>
+          isRecord(each) &&
+          isRecord(each.page) &&
+          Array.isArray(each.page.messages) &&
+          each.page.messages.some((message) => isRecord(message) && message.id === "m-2"),
+      );
+      assert.ok(isRecord(told) && isRecord(told.page), "the line was told");
+      assert.equal(told.page.status, AGENT_STATUS.RUNNING);
+    }),
+);
+
+it.effect(
+  "a followed transcript reads its page again when only the agent's queue moves, or a line of the developer's lands awaiting its turn, whoever wrote it",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealTranscript, pageNow: script, pageNewest, live } = yield* subject();
+      sealTranscript(LIVE_ANSWERED);
+      pageNewest(newestPage("1:0", "Reading the invites.", "40"));
+      script(pageNow("1:0", { holds: false, text: "Reading the invites." }));
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      transcriptRows(live, 1);
+      yield* settled;
+      const reads = () => asked.filter((ask) => ask.startsWith("messages-now")).length;
+
+      // A message queued, edited, sent, or the queue paused: nothing but its revision moves.
+      const beforeQueue = reads();
+      live.transcript.set({ queueRevision: [{ revision: 1 }] });
+      yield* nextPoll;
+      assert.equal(reads(), beforeQueue + 1, "the queue moving reads the page");
+
+      // A queue's hand-off writes the member's line before its turn is opened; the page says the agent runs.
+      const beforeLine = reads();
+      const line = windowRow(2, "Open the pull request.");
+      live.transcript.set({
+        window: [{ ...line.row, role: "user", turnStatus: null }],
+        windowParts: [line.part],
+      });
+      yield* nextPoll;
+      assert.equal(reads(), beforeLine + 1, "a line awaiting its turn reads the page");
     }),
 );
 
@@ -2456,7 +2538,7 @@ function byPlan(plans: Readonly<Record<string, readonly InboxItem[]>>) {
 }
 
 it.effect(
-  "the account's items are told whole by plan once the gate opens and their rows land, and whole again as an item moves",
+  "the account's items are told whole by plan once the gate opens and their rows land, and again as an item moves, each plan it did not move on told as the very list told before",
   () =>
     Effect.gen(function* () {
       const { open, sealItems, live, accountItems } = yield* subject();
@@ -2476,6 +2558,13 @@ it.effect(
         byPlan({ [TASK_ID]: [HELD_ITEM], [OTHER_TASK_ID]: [OTHER_ITEM] }),
         byPlan({ [TASK_ID]: [moved], [OTHER_TASK_ID]: [OTHER_ITEM] }),
       ]);
+      const otherPlanOf = (told: WireValue | undefined) => {
+        const rows = isRecord(told) ? told.rows : undefined;
+        const plans = isRecord(rows) ? rows[INBOX_SCOPE_KIND.PLAN] : undefined;
+        return isRecord(plans) ? plans[OTHER_TASK_ID] : undefined;
+      };
+      const [first, second] = accountItems();
+      assert.equal(otherPlanOf(second), otherPlanOf(first));
     }),
 );
 
@@ -2623,7 +2712,7 @@ function bothHold(
 }
 
 it.effect(
-  "a mark on an item a plan's inbox and the account's items both hold draws in both at once and holds there until each carries its transaction, and a close the agent overtook lands on the service's word in both",
+  "a mark on an item a plan's inbox and the account's items both hold draws in both at once, answers once the service takes it, and holds there until each carries its transaction, and a close the agent overtook lands on the service's word in both",
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
@@ -2649,10 +2738,12 @@ it.effect(
       const unread = (item: InboxItem) => item.unread === true;
 
       commitIn("9200");
-      const marking = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: true }),
-      );
+      const marked = yield* call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, {
+        itemId: ITEM.id,
+        unread: true,
+      });
       yield* settled;
+      assert.deepEqual(marked, { id: ITEM.id, unread: true, txid: "9200" });
       assert.deepEqual(bothHold(harness, unread), [true, true]);
 
       // The account's items carry the mark first, and the plan's inbox answers once more from before it.
@@ -2662,11 +2753,9 @@ it.effect(
       live.scope.set({ items: [ITEM_ROW] });
       yield* nextPoll;
       assert.deepEqual(bothHold(harness, unread), [true, true]);
-      assert.equal(marking.pollUnsafe(), undefined);
 
       live.scope.set({ items: [{ ...ITEM_ROW, unread: true }] }, ["9200"]);
       yield* nextPoll;
-      assert.deepEqual(yield* Fiber.join(marking), { id: ITEM.id, unread: true, txid: "9200" });
       assert.deepEqual(bothHold(harness, unread), [true, true]);
 
       const overtaken = { ...LIVE_ITEM, revision: 3, title: "Push to main instead?" };
@@ -2685,6 +2774,76 @@ it.effect(
         bothHold(harness, (item) => item.status === INBOX_STATUS.OPEN && item.revision === 3),
         [true, true],
       );
+    }),
+);
+
+/** The plan's inbox as one telling of the held inboxes holds it, by id; none where it holds none. */
+function planInboxOf(told: WireValue | undefined): ReadonlyMap<string, InboxItem> {
+  const plans = isRecord(told) ? told[PLAN_SCOPE.kind] : undefined;
+  const read = isRecord(plans) ? plans[PLAN_SCOPE.id] : undefined;
+  const rows = isRecord(read) ? read.rows : undefined;
+  // SAFETY: a telling's rows are inbox items, as the window is told them.
+  return new Map(((Array.isArray(rows) ? rows : []) as InboxItem[]).map((item) => [item.id, item]));
+}
+
+it.effect(
+  "ten marks asked in a row each draw at once and answer once the service takes them, an item arriving meanwhile draws at once, and no mark is taken back on the way to the read carrying them",
+  () =>
+    Effect.gen(function* () {
+      const { call, sealScope, live, commitIn, told } = yield* subject();
+      sealScope(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* settled;
+      const unread = Array.from({ length: 10 }, (_, n) => ({
+        ...ITEM_ROW,
+        id: `${ITEM.id.slice(0, -2)}${String(n).padStart(2, "0")}`,
+        key: `step-${n}`,
+        unread: true,
+        updatedAt: ITEM.updatedAt - n * 1_000,
+      }));
+      const arrived = { ...ITEM_ROW, id: OTHER_ITEM.id, key: OTHER_ITEM.key };
+      // The read is woken by a write once, so it hands a wait for the marks.
+      live.scope.set({ items: unread, messages: [], files: [] }, ["9100"]);
+      yield* toldTimes(told, 1);
+      const toldBefore = told().length;
+
+      commitIn("9200");
+      const marking = yield* Effect.forkChild(
+        Effect.forEach(
+          unread,
+          (item) =>
+            call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, { itemId: item.id, unread: false }),
+          { concurrency: "unbounded" },
+        ),
+      );
+      yield* settled;
+      assert.notEqual(
+        marking.pollUnsafe(),
+        undefined,
+        "every mark answers before the read carries it",
+      );
+
+      // An item arrives while every mark stands, the read still holding them unread.
+      live.scope.set({ items: [...unread, arrived] });
+      yield* nextPoll;
+      const meanwhile = planInboxOf(told().at(-1));
+
+      live.scope.set({ items: [...unread, arrived].map((item) => ({ ...item, unread: false })) }, [
+        "9200",
+      ]);
+      yield* nextPoll;
+
+      assert.equal(meanwhile.has(arrived.id), true, "the arrival draws while the marks stand");
+      assert.equal(planInboxOf(told().at(-1)).has(arrived.id), true);
+      const stillUnread = told()
+        .slice(toldBefore)
+        .map((each) => unread.filter((item) => planInboxOf(each).get(item.id)?.unread).length);
+      assert.deepEqual(
+        stillUnread,
+        [...stillUnread].sort((one, other) => other - one),
+        "no mark is taken back",
+      );
+      assert.equal(stillUnread.at(-1), 0);
     }),
 );
 
@@ -2717,7 +2876,7 @@ it.effect(
 );
 
 it.effect(
-  "a close drops its question from what waits across the account, its task counting one fewer, the moment it is asked and before the account's read carries it",
+  "a close drops its question from what waits across the account, its task counting one fewer, the moment it is asked, answers once the service takes it, and stands over the account's read until it carries it",
   () =>
     Effect.gen(function* () {
       const { call, sealAccount, live, commitIn, accountInboxes } = yield* subject();
@@ -2740,20 +2899,21 @@ it.effect(
       assert.deepEqual(waiting(), { items: 1, toDo: [1] });
 
       commitIn("9300");
-      const closing = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
-          itemId: ITEM.id,
-          revision: ITEM.revision,
-          clientKey: "close-1",
-        }),
-      );
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
+        itemId: ITEM.id,
+        revision: ITEM.revision,
+        clientKey: "close-1",
+      });
       yield* settled;
       assert.deepEqual(waiting(), { items: 0, toDo: [0] });
-      assert.equal(closing.pollUnsafe(), undefined);
+
+      // The read answers once more from before the close, which still stands over it.
+      live.account.set({ ...parts, items: [WAITING], plans: [{ ...plan, updatedAt: NOW }] });
+      yield* nextPoll;
+      assert.deepEqual(waiting(), { items: 0, toDo: [0] });
 
       live.account.set({ ...parts, items: [], plans: [{ ...plan, toDo: 0 }] }, ["9300"]);
       yield* nextPoll;
-      yield* Fiber.join(closing);
       assert.deepEqual(waiting(), { items: 0, toDo: [0] });
     }),
 );

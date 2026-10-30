@@ -24,6 +24,7 @@ import { LIST_DENSITY, List, ListRow } from "../list-row/list-row.js";
 import { MENU_ITEM_MARK, MenuItem } from "../menu/menu.js";
 import { inNarrowRoom, MenuSheetFrame } from "../menu/menu-sheet.js";
 import { MENU_SURFACE_INSET, MenuSurface } from "../menu/menu-surface.js";
+import { useSubmenuAim } from "../menu/submenu-aim.js";
 import { SEARCH_FIELD_LOOK, SearchField } from "../search-field/search-field.js";
 import { SearchMatch } from "../search-match/search-match.js";
 import { Shortcut } from "../shortcut/shortcut.js";
@@ -847,6 +848,11 @@ export function SearchableMenu(
     keys.onKeyDown(event);
   };
 
+  // A move onto another row waits while the pointer heads for the submenu
+  // standing beside its row, as `Menu`'s submenus do, so crossing rows on
+  // the way into it leaves it standing; a sheet stands nothing beside.
+  const aim = useSubmenuAim(panel, !sheet && open !== undefined);
+
   // The pointer over a listed row highlights it, and opens its submenu where
   // it has one, or closes the one standing beside another row. Note that in
   // a sheet it only highlights, because a submenu there stands in the
@@ -928,7 +934,7 @@ export function SearchableMenu(
       label={props.label}
       groups={optionGroups(matches, value, answered ? "" : query)}
       active={at}
-      onActiveChange={hoverRow}
+      onActiveChange={(index) => aim(() => hoverRow(index))}
       onChoose={(index) => {
         const row = matches[index];
         if (row !== undefined) chooseRow(row, index);
@@ -961,7 +967,7 @@ export function SearchableMenu(
               id: footRowId(index),
               highlighted: index === footAt,
               expanded: index === footAt && beside !== undefined,
-              onHover: () => hoverFoot(row, index),
+              onHover: () => aim(() => hoverFoot(row, index)),
             }}
             onChoose={() => pressFoot(row, index)}
           />

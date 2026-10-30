@@ -216,10 +216,10 @@ shadcn's item is a flex row, where a list row is the grid of tracks its
 press lays out by subgrid; and the sidebar's menu parts need the sidebar's
 provider. Each part keeps its `luke-*` class, which other sheets and the
 tests find it by. What a row's or a fold's state restyles stays in its
-sheet: a list row's fill and ring, its insets, the hover acts' crossfade
-and the swipe's slide, through `:has()` and the pointer's media; a nav
-item's inks, which a strip's chosen tab is held to; a fold's frame and
-chevron; a toolbar's row, which the window's custom properties and a style
+sheet: a list row's fill and ring, its insets, and the hover acts'
+crossfade, through `:has()` and the pointer's media; a nav item's inks,
+which a strip's chosen tab is held to; a fold's frame and chevron; a
+toolbar's row, which the window's custom properties and a style
 query restyle; and every keyframe. A fold's summary takes its classes from
 its look in React, trimmed where a `DisclosureFrame` lays it out. The
 combobox's field wears shadcn's input classes (`INPUT_FIELD`,
