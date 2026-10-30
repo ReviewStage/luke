@@ -603,7 +603,7 @@ test("a plan's Inbox tab too narrow for its list and the item side by side shows
   inbox.unmount();
 });
 
-test("a plan's document opens on its path, then its title, with who created it and when it was last edited under the title, and no other crumb over it", () => {
+test("a plan's document opens on its title, with who created it and when it was last edited under the title, the task's path standing in the title bar alone", () => {
   const home = {
     id: TASK.workspaceId,
     name: "Personal",
@@ -642,16 +642,19 @@ test("a plan's document opens on its path, then its title, with who created it a
     ),
   );
   const body = container.querySelector(".desktop-document .plan-document-body .plan-body");
-  const path = body?.firstElementChild;
-  // A task from before statuses draws no standing chip, and still its repository's crumb, over the title.
-  const first = path?.nextElementSibling;
+  // A task from before statuses draws no standing chip.
+  const first = body?.firstElementChild;
   const byline = first?.nextElementSibling;
 
   assert.equal(container.querySelector('nav[aria-label="Where this task is"]'), null);
-  assert.equal(body?.previousElementSibling, null, "nothing stands over the document's path");
-  assert.ok(path?.classList.contains("plan-task-path"), "the task's path leads the document");
-  assert.match(path?.textContent ?? "", /acme\/web/u);
-  assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title stands under it");
+  assert.equal(body?.previousElementSibling, null, "nothing stands over the document");
+  assert.equal(container.querySelector(".plan-task-path"), null, "the document draws no path");
+  assert.match(
+    container.querySelector(".luke-frame-head")?.textContent ?? "",
+    /acme\/web/u,
+    "the title bar names the repository",
+  );
+  assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title leads the document");
   assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
   assert.match(byline?.textContent ?? "", /^Created by .*Edited /u);
   act(() => root.unmount());

@@ -1082,6 +1082,8 @@ function PlanDocument({
       },
     },
   };
+  // A phone heads the task with one row in place of the side panel's bar and toggle: the way back, what is on screen, and one ⋯.
+  const switched = room === SHELL_ROOM.NARROW;
   // Note that the document stays laid out while another tab of the column is
   // shown, so coming back to Overview finds it where it was left.
   const overviewShown = isOverviewTab(tab);
@@ -1107,7 +1109,9 @@ function PlanDocument({
         sectionLinks={sectionLinks}
         standing={standing}
         head={planHead}
-        titleActions={room !== SHELL_ROOM.NARROW}
+        // Note that the title bar names the task (`TaskFrameHead`) wherever the task has one, so only a phone's plan draws the path.
+        path={switched}
+        titleActions={!switched}
       />
     </Fill>
   );
@@ -1136,8 +1140,6 @@ function PlanDocument({
       }}
     />
   );
-  // A phone heads the task with one row in place of the side panel's bar and toggle: the way back, what is on screen, and one ⋯.
-  const switched = room === SHELL_ROOM.NARROW;
   const onListed = (asked: boolean) =>
     setActivityAsked(
       asked ? { taskId: task.id, tab: sidePanel.tab, opening: !sidePanel.open } : undefined,

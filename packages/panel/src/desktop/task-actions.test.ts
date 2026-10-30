@@ -314,7 +314,7 @@ test("a question asked of one task does not outlive it: the delete the Plan tab'
   assert.equal(asking(), false, "the question went with the task it was asked of");
 });
 
-test("⌘K's Change repository shows Overview where an agent's tab hides the plan, and the repository crumb in the plan opens its menu for the ask once, not again on a later draw", () => {
+test("⌘K's Change repository shows Overview where an agent's tab hides the plan, and the title bar's repository crumb opens its menu for the ask once, not again on a later draw", () => {
   const told: string[] = [];
   const { tasks } = openTab({ [TASK.id]: "acme/app" });
   const asked = (overview: boolean): TasksControl => ({
@@ -341,7 +341,7 @@ test("⌘K's Change repository shows Overview where an agent's tab hides the pla
 
   draw(asked(true));
   const chip = () =>
-    [...container.querySelectorAll<HTMLButtonElement>(".plan-task-path button")].find((each) =>
+    [...container.querySelectorAll<HTMLButtonElement>(".luke-frame-head button")].find((each) =>
       each.textContent?.includes("acme/app"),
     );
   assert.equal(
