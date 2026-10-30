@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
-import { DEVICE_PLATFORM, DEVICE_SETUP } from "@luke/features/device-agent-wire";
+import { DEVICE_ARCH, DEVICE_PLATFORM, DEVICE_SETUP } from "@luke/features/device-agent-wire";
 import type { Host } from "@luke/features/host-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { THIS_MAC_HOST_STANDING, type ThisMacHostStanding } from "@luke/host/contract";
@@ -12,20 +11,22 @@ import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
-import { act, createElement } from "react";
+import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import { useOpenHostConnect } from "./host-connect-dialog.js";
 import { HostsSection } from "./hosts-section.js";
 
 /**
- * hosts-section.test.ts -- Add hosts mints the install token in the window
- * and sends the service its SHA-256 alone: the token stands in the command
- * the dialog shows, and nothing the window sent carries it. Synthetic ids
- * and addresses.
+ * hosts-section.test.ts -- Settings › Hosts: Add hosts shows the public
+ * install command and follows each host that joins while it stands, one
+ * approved from its link in the same window among them, a host that joins
+ * is listed, and This Mac stands first. Synthetic ids, codes, and
+ * addresses.
  */
 
 declare global {
@@ -39,9 +40,12 @@ beforeAll(() => {
 });
 
 const roots: Root[] = [];
+const registries: AtomRegistry.AtomRegistry[] = [];
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
+  // Note that the sections let go of the shared presence on a registry as they unmount, so they unmount before it goes.
+  for (const registry of registries.splice(0)) registry.dispose();
   document.body.replaceChildren();
 });
 
@@ -54,37 +58,162 @@ async function settle(): Promise<void> {
   });
 }
 
-test("Add hosts shows the token in its command and sends the service only the token's SHA-256", async () => {
-  const sent: unknown[] = [];
-  fakeActPort({
-    [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [], installScriptUrl: SCRIPT }),
-    [ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN]: (payload) => {
-      sent.push(payload);
-      return Promise.resolve({
-        id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d13",
-        expiresAt: 1_000,
-        installScriptUrl: SCRIPT,
-      });
-    },
-  });
+/**
+ * Hosts drawn signed in, on a registry of the test's own, so the window's
+ * shared presence is read afresh rather than standing as an earlier test
+ * left it.
+ */
+function drawHosts(registry: AtomRegistry.AtomRegistry = AtomRegistry.make()): void {
+  registries.push(registry);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(HostsSection, { signedIn: true })));
+  act(() => root.render(onRegistry(registry, createElement(HostsSection, { signedIn: true }))));
+}
+
+/** A registry whose clock is the test's, so the reads that wait on the minute or the second wait on `TestClock`. */
+const onTestClock = Effect.gen(function* () {
+  const clock = yield* Clock.Clock;
+  return AtomRegistry.make({
+    initialValues: [[timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+  });
+});
+
+/** The open dialog's words, apart from the list behind it, which names a host's setup too. */
+function dialogText(): string {
+  return document.querySelector('[role="dialog"]')?.textContent ?? "";
+}
+
+test("Add hosts shows the public install command, with no secret in it, waits for a host it has not seen, and Close puts it away with the list read again", async () => {
+  const hosts: Host[] = [
+    {
+      id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14",
+      name: "fra-03",
+      seenAt: 0,
+      version: "0.1.0",
+      upgradeNeeded: false,
+    },
+  ];
+  fakeActPort({
+    [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
+    [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
+  });
+  drawHosts();
   await settle();
 
-  const add = [...document.querySelectorAll("button")].find(
-    (each) => each.textContent === "Add hosts",
-  );
-  assert.ok(add !== undefined, "Add hosts is drawn");
-  await act(async () => add.click());
-  await settle();
+  await press("Add hosts");
 
-  const token = document.body.textContent?.match(/--token (lkh_[A-Za-z0-9_-]{43})/u)?.[1];
-  assert.ok(token !== undefined, "the dialog's command carries the token");
-  assert.deepEqual(sent, [{ tokenHash: createHash("sha256").update(token).digest("hex") }]);
-  assert.ok(!JSON.stringify(sent).includes(token), "nothing sent carries the token");
+  assert.ok(dialogText().includes(`curl -fsSL ${SCRIPT} | sh`), "the command is the public one");
+  assert.ok(!/lkh_|--token|sudo/u.test(dialogText()), "the command carries no secret");
+  assert.ok(dialogText().includes("Waiting for approval"));
+  assert.ok(!dialogText().includes("fra-03"), "a host the account had already is not named");
+  // Note that the host is approved after the dialog's last read, and the minute has not turned.
+  hosts.push({
+    id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31",
+    name: "hel-02",
+    seenAt: 0,
+    version: "0.1.0",
+    upgradeNeeded: false,
+  });
+  await press("Close");
+  assert.equal(document.querySelector('[role="dialog"]'), null, "Close puts the dialog away");
+  assert.ok(document.body.textContent?.includes("hel-02"), "the host approved meanwhile is listed");
+});
+
+it.effect(
+  "the dialog names a host that joins while it stands within seconds, and moves on by itself from connecting through getting ready to why its setup failed",
+  () =>
+    Effect.gen(function* () {
+      const id = "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31";
+      const joined: Host = {
+        id,
+        name: "hel-02",
+        seenAt: Date.now(),
+        version: "0.1.0",
+        upgradeNeeded: false,
+      };
+      const hosts: Host[] = [];
+      fakeActPort({
+        [ACT_KIND.HOSTS_LIST]: () =>
+          Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
+        [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [{ deviceId: id, ageMs: 0 }] }),
+      });
+      drawHosts(yield* onTestClock);
+      yield* Effect.promise(settle);
+      yield* Effect.promise(() => press("Add hosts"));
+      /** Lists the host as given, and lets the dialog's next read land. */
+      const listed = (host: Host) =>
+        Effect.gen(function* () {
+          hosts.splice(0, hosts.length, host);
+          yield* TestClock.adjust("5 seconds");
+          yield* Effect.promise(settle);
+          return dialogText();
+        });
+
+      const approved = yield* listed({ ...joined, calledIn: false });
+      const preparing = yield* listed({ ...joined, calledIn: true, setup: DEVICE_SETUP.PREPARING });
+      const failed = yield* listed({
+        ...joined,
+        calledIn: true,
+        setup: DEVICE_SETUP.FAILED,
+        setupFailure: "Claude Code could not be installed",
+      });
+
+      assert.ok(approved.includes("hel-02") && approved.includes("Connecting…"), approved);
+      assert.ok(!approved.includes("Waiting for approval"));
+      assert.ok(preparing.includes("Getting ready…"), preparing);
+      assert.ok(failed.includes("Couldn't set up: Claude Code could not be installed"), failed);
+    }),
+);
+
+/** What a pairing's link does as it lands in the window: opens its dialog for the code. */
+function OpenLink({ code }: { code: string }): null {
+  const open = useOpenHostConnect();
+  useEffect(() => open(code), [open, code]);
+  return null;
+}
+
+test("a code approved from its link in the same window lets Add hosts, open beneath it, name the host and move on", async () => {
+  const hosts: Host[] = [];
+  fakeActPort({
+    [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
+    [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
+    [ACT_KIND.HOSTS_PAIRING_READ]: () =>
+      Promise.resolve({
+        name: "hel-02",
+        platform: DEVICE_PLATFORM.LINUX,
+        arch: DEVICE_ARCH.X64,
+        ip: "203.0.113.7",
+        expiresAt: 1_800_000_000_000,
+      }),
+    [ACT_KIND.HOSTS_PAIRING_APPROVE]: () => {
+      const id = "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31";
+      hosts.push({
+        id,
+        name: "hel-02",
+        seenAt: 0,
+        version: "0.1.0",
+        upgradeNeeded: false,
+        calledIn: false,
+      });
+      return Promise.resolve({ deviceId: id });
+    },
+  });
+  const registry = AtomRegistry.make();
+  drawHosts(registry);
+  await settle();
+  await press("Add hosts");
+
+  const link = document.createElement("div");
+  document.body.append(link);
+  const root = createRoot(link);
+  roots.push(root);
+  act(() => root.render(onRegistry(registry, createElement(OpenLink, { code: "BCDFGHJK" }))));
+  await settle();
+  await press("Connect");
+
+  assert.ok(dialogText().includes("hel-02") && dialogText().includes("Connecting…"), dialogText());
 });
 
 it.effect(
@@ -97,16 +226,7 @@ it.effect(
           Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
         [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
       });
-      const registry = AtomRegistry.make({
-        initialValues: [
-          [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, yield* Clock.Clock))],
-        ],
-      });
-      const container = document.createElement("div");
-      document.body.append(container);
-      const root = createRoot(container);
-      roots.push(root);
-      act(() => root.render(onRegistry(registry, createElement(HostsSection, { signedIn: true }))));
+      drawHosts(yield* onTestClock);
       yield* Effect.promise(settle);
       assert.ok(!document.body.textContent?.includes("fra-03"), "no server has joined yet");
 
@@ -132,10 +252,6 @@ it.effect(
         document.body.textContent?.includes("Mac · Offline"),
         "a Mac its desktop enrolled is listed as a Mac",
       );
-      // Note that the section lets go of the shared presence on the registry as it unmounts, so it unmounts before the registry goes.
-      act(() => root.unmount());
-      roots.splice(roots.indexOf(root), 1);
-      registry.dispose();
     }),
 );
 
@@ -155,11 +271,7 @@ async function machinesWithThisMac(
       return Promise.resolve(standing);
     },
   });
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  act(() => root.render(createElement(HostsSection, { signedIn: true })));
+  drawHosts();
   await settle();
   return { turnOns: () => turnOns };
 }

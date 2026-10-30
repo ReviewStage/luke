@@ -86,12 +86,11 @@ const STAGED_EXPERIMENTS = {
   [EXPERIMENT.MEMORY]: true,
 } as const;
 
-/** The staged hosts and install token, by id. */
+/** The staged hosts, by id. */
 const FIXTURE_HOST = {
   ONLINE: "7d3c2a10-0000-4000-8000-000000000001",
   OLD: "7d3c2a10-0000-4000-8000-000000000002",
   OFFLINE: "7d3c2a10-0000-4000-8000-000000000003",
-  TOKEN: "7d3c2a10-0000-4000-8000-000000000004",
   MAC: "7d3c2a10-0000-4000-8000-000000000005",
   SETUP_FAILED: "7d3c2a10-0000-4000-8000-000000000006",
 } as const;
@@ -589,7 +588,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
   }),
   [ACT_KIND.CHAPTERS_MODEL_READ]: () => ({ model: CHAPTERS_MODEL.SONNET }),
-  // Note that a kept install token is answered without one, since the window mints the token and only its hash travels.
   [ACT_KIND.HOSTS_PRESENCE]: () => ({
     devices: BEATING_HOSTS.map((deviceId) => ({ deviceId, ageMs: 0 })),
   }),
@@ -645,11 +643,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     arch: DEVICE_ARCH.X64,
     ip: "203.0.113.24",
     expiresAt: NOW + 15 * MINUTE,
-  }),
-  [ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN]: () => ({
-    id: FIXTURE_HOST.TOKEN,
-    expiresAt: NOW + 24 * HOUR,
-    installScriptUrl: STAGED_INSTALL_SCRIPT,
   }),
   [ACT_KIND.INTEGRATIONS_STATUS]: () => ({
     integrations: integrationStatuses(),

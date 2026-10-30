@@ -328,8 +328,10 @@ export const hostUpgradeNeededDataSchema = EffectSchema.Struct({
  * it does (`macOfferSchema`); both are absent for a ready one. A Mac names
  * the user it runs as (`loginName`), by its home folder's name under
  * `/Users`, since a Mac's host runs only while that user is logged in;
- * absent for a Linux machine. All three are absent from a service older
- * than them.
+ * absent for a Linux machine. A machine whose host program has not
+ * called in since it joined says so (`calledIn`): a host an approve made,
+ * or one whose box collected its secret, until its program first
+ * registers. All four are absent from a service older than them.
  */
 const hostSchema = EffectSchema.Struct({
   id: wireUuidSchema,
@@ -343,6 +345,7 @@ const hostSchema = EffectSchema.Struct({
     EffectSchema.String.check(EffectSchema.isMaxLength(DEVICE_SETUP_FAILURE_MAX_CHARS)),
   ),
   loginName: EffectSchema.optionalKey(EffectSchema.String),
+  calledIn: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type Host = typeof hostSchema.Type;
@@ -398,9 +401,9 @@ export const hostIdRequestSchema = EffectSchema.Struct({ id: wireUuidSchema });
 /** What a revoke or a remove answers. */
 export const hostDoneAnswerSchema = EffectSchema.Struct({ done: EffectSchema.Literal(true) });
 
-/** The command that installs and enrolls a box as root, the install token in it. */
-export function hostInstallCommand(installScriptUrl: string, installToken: string): string {
-  return `curl -fsSL ${installScriptUrl} | sudo sh -s -- --token ${installToken}`;
+/** The command that installs the host program on a box and pairs it, which prints the link and the code a member approves: public, with no secret in it. */
+export function hostInstallCommand(installScriptUrl: string): string {
+  return `curl -fsSL ${installScriptUrl} | sh`;
 }
 
 /** The command that upgrades a connected box in place, keeping its pairing: the install script run again in the account it installed into, with no sudo. */

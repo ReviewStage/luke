@@ -16,7 +16,8 @@
  * agents' running turns are settled lost with it; a token
  * revoked enrolls no box again and touches none it already enrolled. Each
  * host is listed with whether its daemon is below the floor, where its
- * setup stands, and, for a Mac, the user it runs as, and every
+ * setup stands, whether its program has called in since it joined, and,
+ * for a Mac, the user it runs as, and every
  * answer names the install script on the service's own origin, which the
  * install and upgrade commands name (`@luke/features/host-wire`).
  *
@@ -164,6 +165,8 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
             ...(row.setup === null ? undefined : { setup: row.setup }),
             ...(row.setupFailure === null ? undefined : { setupFailure: row.setupFailure }),
             ...(loginName === undefined ? undefined : { loginName }),
+            // Note that a register always writes the home folder and nothing else does, so a host with none has not called in since it joined.
+            calledIn: row.home !== null,
           };
         }),
         installScriptUrl: installScriptUrlOf(context.request),
