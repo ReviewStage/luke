@@ -839,10 +839,10 @@ function subject(
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.INBOX_ITEMS_CHANGED ? [event.payload] : [],
         ),
-      /** Every followed plan's or agent's inbox the host told, in order. */
+      /** Every telling of the inboxes the host holds for the windows, whole, in order. */
       told: () =>
         events.flatMap((event) =>
-          event.kind === GATEWAY_EVENT.INBOX_CHANGED ? [event.payload] : [],
+          event.kind === GATEWAY_EVENT.HOLDER_INBOXES_CHANGED ? [event.payload] : [],
         ),
       open: composer.open,
       reset: composer.reset,
@@ -2102,8 +2102,18 @@ const toldTimes = (told: () => readonly unknown[], times: number) =>
   Effect.repeat(Effect.yieldNow, { until: () => told().length >= times, times: 10_000 });
 const AGENT_SCOPE = { kind: "agent", id: AGENT_ID } as const;
 
+/** One scope's read as the host last told the held inboxes, as a wire value; none where it holds none of the scope. */
+function heldOf(
+  told: () => readonly WireValue[],
+  scope: { readonly kind: string; readonly id: string },
+): WireValue | undefined {
+  const last = told().at(-1);
+  const ofKind = isRecord(last) ? last[scope.kind] : undefined;
+  return isRecord(ofKind) ? ofKind[scope.id] : undefined;
+}
+
 it.effect(
-  "a followed plan's inbox is told from its live read once its rows land, again each time they move and never when an answer moved nothing; letting it go ends the telling",
+  "a held plan's inbox is told on the held inboxes from its live read once its rows land, again each time they move and never when an answer moved nothing; let go, it stays told among the holders let go lately",
   () =>
     Effect.gen(function* () {
       const { call, asked, sealScope, live, told } = yield* subject();
@@ -2125,24 +2135,74 @@ it.effect(
       live.scope.set({ items: [closed] });
       yield* nextPoll;
       yield* toldTimes(told, 2);
-      assert.deepEqual(told(), [
-        { scope: PLAN_SCOPE, inbox: { items: [LIVE_ITEM] } },
-        {
-          scope: PLAN_SCOPE,
-          inbox: {
-            items: [
+      assert.deepEqual(
+        told().map((held) => heldOf(() => [held], PLAN_SCOPE)),
+        [
+          { rows: [LIVE_ITEM] },
+          {
+            rows: [
               { ...LIVE_ITEM, revision: 3, status: INBOX_STATUS.CLOSED, closedReason: "Done" },
             ],
           },
-        },
-      ]);
+        ],
+      );
       assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`]);
 
+      // Let go, the plan stays held among those let go lately, so a change still tells it.
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
       yield* settled;
       live.scope.set({ items: [ITEM_ROW] });
       yield* nextPoll;
-      assert.equal(told().length, 2);
+      yield* toldTimes(told, 3);
+      assert.deepEqual(heldOf(told, PLAN_SCOPE), { rows: [LIVE_ITEM] });
+    }),
+);
+
+it.effect(
+  "a holder let go and held again draws from where its read stands, nothing read from cold, until later holders let go push it out, when it is read anew",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealScope, live, told } = yield* subject();
+      sealScope(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* settled;
+      live.scope.set({ messages: [], files: [], items: [ITEM_ROW] });
+      yield* toldTimes(told, 1);
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
+      yield* settled;
+
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* settled;
+      assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`], "nothing is read from cold");
+      assert.deepEqual(heldOf(told, PLAN_SCOPE), { rows: [LIVE_ITEM] });
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
+      yield* settled;
+
+      // Eight other holders held and let go push the plan out, and its read is let go with its rows.
+      const others = Array.from({ length: 8 }, (_, at) => ({
+        kind: "agent",
+        id: `0000000${at}-1111-4a6b-9c33-0d1e2f3a4b5c`,
+      }));
+      for (const scope of others) {
+        yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, scope);
+        yield* settled;
+        yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, scope);
+        yield* settled;
+      }
+      assert.equal(heldOf(told, PLAN_SCOPE), undefined, "the plan is told no more");
+      assert.equal(
+        asked.filter((read) => read === `plan-inbox-live:${TASK_ID}`).length,
+        1,
+        "letting it go reads nothing",
+      );
+
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* settled;
+      assert.equal(
+        asked.filter((read) => read === `plan-inbox-live:${TASK_ID}`).length,
+        2,
+        "held again past the bound, it is read anew",
+      );
     }),
 );
 
@@ -2171,49 +2231,61 @@ it.effect(
       yield* nextPoll;
       yield* toldTimes(told, 2);
       assert.equal(told().length, 2);
-      assert.ok(JSON.stringify(told()[1]).includes("Also the staging branch?"));
+      assert.ok(JSON.stringify(heldOf(told, PLAN_SCOPE)).includes("Also the staging branch?"));
     }),
 );
 
 it.effect(
-  "an agent's inbox the account does not reach is told not found, one the service answers nothing for is told unanswered, and behind a closed gate every follow is told unanswered",
+  "an agent's inbox the account does not reach is told failed, as is one the service answers nothing for, Try again reads it anew telling nothing meanwhile, and behind a closed gate a hold reads nothing until the gate opens",
   () =>
     Effect.gen(function* () {
       const refused = yield* subject();
       refused.sealScope({ failure: AGENT_CALL_FAILURE.NOT_FOUND });
       yield* refused.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
       yield* settled;
-      assert.deepEqual(refused.told(), [
-        { scope: AGENT_SCOPE, inbox: { failure: AGENT_CALL_FAILURE.NOT_FOUND } },
-      ]);
+      assert.deepEqual(heldOf(refused.told, AGENT_SCOPE), { failed: true });
 
       const unsealed = yield* subject();
       yield* unsealed.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
       yield* settled;
-      assert.deepEqual(unsealed.told(), [
-        { scope: AGENT_SCOPE, inbox: { failure: AGENT_CALL_FAILURE.UNANSWERED } },
+      assert.deepEqual(heldOf(unsealed.told, AGENT_SCOPE), { failed: true });
+      assert.deepEqual(unsealed.asked, [`agent-inbox-live:${AGENT_ID}`]);
+      unsealed.sealScope(LIVE_ANSWERED);
+      yield* unsealed.call(GATEWAY_METHOD.AGENTS_INBOX_RETRY, AGENT_SCOPE);
+      yield* settled;
+      assert.deepEqual(heldOf(unsealed.told, AGENT_SCOPE), {});
+      assert.deepEqual(unsealed.asked, [
+        `agent-inbox-live:${AGENT_ID}`,
+        `agent-inbox-live:${AGENT_ID}`,
       ]);
 
       const signedOut = yield* subject({ signedIn: false });
       yield* signedOut.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* settled;
-      assert.deepEqual(signedOut.told(), [{ scope: PLAN_SCOPE, inbox: GATE_CLOSED_SIGNED_OUT }]);
+      assert.deepEqual(signedOut.told(), []);
       assert.deepEqual(signedOut.asked, []);
     }),
 );
 
-it.effect("a sign-out lets every followed inbox go", () =>
-  Effect.gen(function* () {
-    const { call, sealScope, live, told, reset } = yield* subject();
-    sealScope(LIVE_ANSWERED);
-    yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
-    yield* settled;
-    assert.equal(live.scope.held(), 1, "its poll is held while nothing moves");
-    yield* reset;
-    yield* settled;
-    assert.equal(live.scope.held(), 0, "a sign-out lets its poll go");
-    assert.deepEqual(told(), []);
-  }),
+it.effect(
+  "a sign-out lets every held inbox go and tells none held, and the gate opening again reads what the windows still hold",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealScope, live, told, reset, open } = yield* subject();
+      sealScope(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* settled;
+      assert.equal(live.scope.held(), 1, "its poll is held while nothing moves");
+      yield* reset;
+      yield* settled;
+      assert.equal(live.scope.held(), 0, "a sign-out lets its poll go");
+      assert.deepEqual(told().at(-1), { plan: {}, agent: {} });
+
+      yield* open;
+      yield* settled;
+      assert.equal(live.scope.held(), 1, "the window's hold reads again");
+      assert.equal(asked.filter((read) => read === `plan-inbox-live:${TASK_ID}`).length, 2);
+    }),
 );
 
 /** A run of the account's own automation that failed a second short of a week before now. */
@@ -2528,13 +2600,13 @@ function bothHold(
     // SAFETY: a telling's items are inbox items, as the window is told them.
     return first === undefined ? false : holds(first as InboxItem);
   };
-  const plan = harness.told().at(-1);
+  const plan = heldOf(harness.told, PLAN_SCOPE);
   // SAFETY: the account's items are told as wire values.
   const account = harness.accountItems().at(-1) as WireValue | undefined;
   const plans =
     isRecord(account) && isRecord(account.rows) ? account.rows[INBOX_SCOPE_KIND.PLAN] : undefined;
   return [
-    firstOf(isRecord(plan) && isRecord(plan.inbox) ? plan.inbox.items : undefined),
+    firstOf(isRecord(plan) ? plan.rows : undefined),
     firstOf(isRecord(plans) ? plans[TASK_ID] : undefined),
   ];
 }

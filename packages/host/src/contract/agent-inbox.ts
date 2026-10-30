@@ -2,7 +2,7 @@
  * agent-inbox.ts -- the Inbox's asks of the host, as procedures.
  *
  * What a task's coding agents need of the developer: a task's or an agent's
- * inbox followed, and every item the account reaches read again; one item answered,
+ * inbox held followed, and read again, and every item the account reaches read again; one item answered,
  * closed, messaged, or marked, a thread started, every item marked read, and
  * an item's image and an agent's picture.
  *
@@ -18,7 +18,6 @@
  */
 
 import {
-  type AgentInboxChanged,
   agentInboxAnsweredViewSchema,
   agentInboxAnswerParamsSchema,
   agentInboxAttachmentParamsSchema,
@@ -40,11 +39,17 @@ import { actProcedure, exactInput } from "./base.js";
 import { AGENT_INBOX_ACT_KIND } from "./kinds.js";
 
 export const agentInboxActsContract = {
+  // Note that the hold's stream carries nothing: the held inbox reaches the panel on app state, and the stream is the window's hold on it.
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: actProcedure(
     "Could not follow the inbox on this system.",
   )
     .input(exactInput(agentInboxScopeSchema))
-    .output(eventIterator(type<AgentInboxChanged["inbox"]>())),
+    .output(eventIterator(type<never>())),
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_RETRY]: actProcedure(
+    "Could not read the inbox again on this system.",
+  )
+    .input(exactInput(agentInboxScopeSchema))
+    .output(EffectSchema.Void),
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEMS_RETRY]: actProcedure(
     "Could not read the inbox again on this system.",
   )

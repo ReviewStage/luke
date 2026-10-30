@@ -19,6 +19,8 @@ import {
   INBOX_STATUS,
   type InboxItem,
 } from "@luke/features/inbox-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
+import type { AppInboxItems } from "@luke/host/app-state";
 import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -32,6 +34,7 @@ import {
   useInboxDrafts,
   withoutPicks,
 } from "../composer-drafts.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { messageFailureWords } from "./agent-model.js";
 import { useInboxArrivals } from "./inbox-arrivals.js";
 import {
@@ -43,19 +46,22 @@ import {
   inboxBoard,
   inboxThreadSend,
 } from "./inbox-model.js";
-import { type InboxFollower, useFollowedInboxes } from "./use-followed-inboxes.js";
 
 /**
- * use-task-inbox.ts -- the open task's inbox as one control: its items, followed while the window shows the tasks and pushed as they change, and the answers on their way back.
+ * use-task-inbox.ts -- the open task's inbox as one control: its items, drawn from the account's feed at once and from the holder's own read as the host holds it, and the answers on their way back.
  *
- * The inbox is followed (`use-followed-inboxes.ts`) while the window shows
- * the tasks and a task with an agent, or one main says an item waits on,
- * is open, so the tab's count stands whichever tab is chosen, and another
- * task starts from nothing of this one's. Each push is the inbox whole,
- * which replaces what was held; nothing here asks again or holds a cursor.
- * An item marked read or unread is pushed as any change is, so nothing
- * reads it again. An inbox that could not be read is let go and says so,
- * with Try again, rather than following it again at once.
+ * The holder's own read, a task's by its plan or an agent's by its own id,
+ * is held (`use-host-read.ts`) while the window shows the tasks and a task
+ * with an agent, or one main says an item waits on, is open, so the tab's
+ * count stands whichever tab is chosen; the host keeps it followed a while
+ * after, so a task taken up again draws from where its read stands. The
+ * account's feed of every item draws first, in the first frame, since it
+ * holds the holder's items already, and the holder's read fills in what
+ * the feed leaves out, such as settled items past its bound. Each read is
+ * the inbox whole, which replaces what was held; nothing here asks again
+ * or holds a cursor. An item marked read or unread reaches both reads as
+ * any change does, so nothing reads it again. A holder's read that could
+ * not be read says so, with Try again.
  *
  * A message on an item's thread goes under a key minted here and kept with
  * its words, open or settled, so the same message sent again after a lost
@@ -170,10 +176,12 @@ export function pendingReplyOn(
 /** What the tab draws and presses. */
 export interface TaskInboxControl {
   readonly board: InboxBoardView;
-  /** Whether a read is out, with nothing held yet to draw. */
+  /** Whether a read is out, with nothing held yet to draw: neither the account's feed nor the holder's own read holds the holder. */
   readonly reading: boolean;
-  /** Whether a read of the task's inbox has answered, so the board is what it holds rather than nothing yet. */
+  /** Whether the holder's own read has answered, so the board holds what the feed leaves out, such as a settled item past its bound. */
   readonly read: boolean;
+  /** Whether the board draws the holder's items, from the account's feed or the holder's own read, so an item opened is as the service holds it. */
+  readonly drawn: boolean;
   /** Whether the last read did not answer, so the tab offers to try again. */
   readonly failed: boolean;
   readonly onRetry: () => void;
@@ -243,18 +251,35 @@ interface Attempt {
 interface Held {
   readonly taskId: string | undefined;
   readonly items: readonly InboxItem[];
-  readonly read: boolean;
-  readonly failed: boolean;
+  /** Whether the items are a read's, the feed's or the holder's own, rather than nothing yet. */
+  readonly drawn: boolean;
 }
 
-function fresh(taskId: string | undefined): Held {
-  return { taskId, items: [], read: false, failed: false };
+/** The holder's items as its reads first stand: those read already, so a holder drawn again draws them in its first frame. */
+function fresh(taskId: string | undefined, read: readonly InboxItem[] | undefined): Held {
+  return { taskId, items: read ?? [], drawn: read !== undefined };
 }
 
 const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** The open task's inbox is let go with its items, so another task's, or a later look at this one, never starts from them. */
-const FORGET_LET_GO = { forget: true } as const;
+/**
+ * The holder's items as the account's feed holds them: a plan's whole, an
+ * agent's with no plan its own, and an agent's on a plan its own among
+ * that plan's; none where the feed has not answered, or holds nothing of
+ * the holder, whose own read may still hold a settled item past the feed's
+ * bound.
+ */
+function fedItemsOf(
+  fed: AppInboxItems | undefined,
+  kind: AgentInboxScope["kind"],
+  id: string | undefined,
+  planId: string | null | undefined,
+): readonly InboxItem[] | undefined {
+  if (fed === undefined || id === undefined) return undefined;
+  if (kind === INBOX_SCOPE_KIND.PLAN) return fed[INBOX_SCOPE_KIND.PLAN][id];
+  if (planId == null) return fed[INBOX_SCOPE_KIND.AGENT][id];
+  return fed[INBOX_SCOPE_KIND.PLAN][planId]?.filter((item) => item.agentId === id);
+}
 
 /**
  * Every attachment the items name: the files their threads' messages
@@ -415,7 +440,7 @@ export function useTaskInbox(input: {
   taskId: string | undefined;
   /** Whose inbox `taskId` names: a task's, unless it is one agent's with no task. */
   kind?: AgentInboxScope["kind"] | undefined;
-  /** The task an agent's inbox keeps its cards' drafts under, where the agent works on one, so its task's own Inbox reads the same drafts; none for a task's inbox, which keeps them under its own. */
+  /** The task an agent's inbox keeps its cards' drafts under, where the agent works on one, so its task's own Inbox reads the same drafts, and under which the feed holds the agent's items; none for a task's inbox, which keeps them under its own. */
   draftTask?: string | null | undefined;
   /** Whether the window shows the tasks. */
   shown: boolean;
@@ -428,8 +453,6 @@ export function useTaskInbox(input: {
   agents: {
     /** Every agent of the task by id, an archived one among them, whose items still stand. */
     readonly heldIds: readonly string[] | undefined;
-    /** How the inbox is followed and heard pushed. */
-    readonly inboxFollower: InboxFollower;
     readonly answerInbox: InboxAnswerer;
     readonly messageInbox: InboxMessenger;
     readonly readInboxImage: InboxImageReader;
@@ -439,15 +462,49 @@ export function useTaskInbox(input: {
 }): TaskInboxControl {
   const { taskId, shown, waiting, readerId, agents } = input;
   const kind = input.kind ?? INBOX_SCOPE_KIND.PLAN;
-  const [held, setHeld] = useState<Held>(() => fresh(taskId));
-  if (held.taskId !== taskId) setHeld(fresh(taskId));
-  useInboxArrivals(held, input.onScreen === true);
+
+  // A task with no agent, standing or archived, has no Inbox tab and nothing
+  // to read, unless an item waits on it, which an agent this window has not
+  // listed, one started on another Mac, posted.
+  const readable = (agents.heldIds?.length ?? 0) > 0 || waiting;
+  const active = shown && taskId !== undefined && readable;
+  const holder = useHostRead(
+    LIVE_READ.HOLDER_INBOX,
+    useMemo(
+      () => (active && taskId !== undefined ? { kind, id: taskId } : undefined),
+      [active, kind, taskId],
+    ),
+  );
+  const feed = useHostRead(LIVE_READ.INBOX_ITEMS);
+  // Note that an agent on a plan draws its own items among the plan's, which keep their identity while the plan's list stands.
+  const planItems =
+    kind === INBOX_SCOPE_KIND.AGENT && input.draftTask != null
+      ? feed.rows?.[INBOX_SCOPE_KIND.PLAN][input.draftTask]
+      : undefined;
+  const fedRows = feed.rows;
+  const fed = useMemo(
+    () =>
+      planItems === undefined
+        ? fedItemsOf(fedRows, kind, taskId, input.draftTask)
+        : planItems.filter((item) => item.agentId === taskId),
+    [fedRows, planItems, kind, taskId, input.draftTask],
+  );
+  // The holder's own read stands in for the feed's once it answered, since it holds what the feed leaves out.
+  const pushed = holder.rows ?? fed;
+  const read = holder.status === HOST_READ_STATUS.READY;
+  const failed = holder.status === HOST_READ_STATUS.FAILED;
+  const [held, setHeld] = useState<Held>(() => fresh(taskId, pushed));
+  if (held.taskId !== taskId) setHeld(fresh(taskId, pushed));
+  useInboxArrivals(
+    { taskId: held.taskId, items: held.items, read: held.drawn },
+    input.onScreen === true,
+  );
   // Note that a read that failed is drawn no longer, since the Inbox falls back to its list's read, whose pictures this hook's reads still hold.
   const { images, onImage, onRetryImage } = useInboxImageReads({
     read: input.agents.readInboxImage,
     scope: taskId,
     items: held.items,
-    drawn: held.read && !held.failed,
+    drawn: held.drawn && !failed,
   });
   const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
   const [pendingReplies, setPendingReplies] = useState<ReadonlyMap<string, PendingInboxReply>>(
@@ -470,34 +527,17 @@ export function useTaskInbox(input: {
   const latest = useRef({ ...agents, taskId });
   latest.current = { ...agents, taskId };
 
-  // A task with no agent, standing or archived, has no Inbox tab and nothing
-  // to follow, unless an item waits on it, which an agent this window has not
-  // listed, one started on another Mac, posted.
-  const readable = (agents.heldIds?.length ?? 0) > 0 || waiting;
-  const active = shown && taskId !== undefined && readable;
-  // Note that a task taken up again holds nothing until its follow pushes anew, since the push kept
-  // from before lacks every item posted since, and the Inbox would draw it over its list's fresh read.
-  const followed = useFollowedInboxes(
-    kind,
-    useMemo(() => (active && taskId !== undefined ? [taskId] : []), [active, taskId]),
-    agents.inboxFollower,
-    FORGET_LET_GO,
-  );
-  const pushed = taskId === undefined ? undefined : followed.items.get(taskId);
-  const notRead = taskId !== undefined && followed.failed.has(taskId);
-  // Each push is the inbox whole, which replaces what was held, an answer's own patch among it.
+  // Each read is the inbox whole, which replaces what was held, an answer's own patch among it.
+  // Note that a holder neither read holds any more, as after a sign-out, is let go with its items, so nothing of the last account stands drawn.
   useEffect(() => {
-    if (pushed !== undefined) setHeld((was) => ({ ...was, items: pushed, read: true }));
+    if (pushed === undefined) {
+      setHeld((was) => (was.drawn ? fresh(was.taskId, undefined) : was));
+      return;
+    }
+    setHeld((was) =>
+      was.drawn && was.items === pushed ? was : { ...was, items: pushed, drawn: true },
+    );
   }, [pushed]);
-  useEffect(() => {
-    setHeld((was) => (was.failed === notRead ? was : { ...was, failed: notRead }));
-  }, [notRead]);
-
-  const { onRetry: retryFollow } = followed;
-  const onRetry = useCallback(() => {
-    setHeld((was) => ({ ...was, failed: false }));
-    retryFollow();
-  }, [retryFollow]);
 
   const note = useCallback((itemId: string, said: InboxNote | undefined) => {
     setNotes((was) => {
@@ -656,25 +696,28 @@ export function useTaskInbox(input: {
   }, [held.items, ids]);
 
   // A read lets go of the drafts of the items it covers that it no longer holds: a plan's, or, for
-  // an agent with no plan, that agent's alone.
+  // an agent with no plan, that agent's alone. Note that only the holder's own read says an item is
+  // gone, since the feed leaves out a settled item past its bound whose draft still stands.
   // Note that the agent posting on the item again, or a teammate settling it, lets only the picks go,
   // which stand on the ask as it was, while the words and files being written stay as they are.
   const { drop, update } = writer;
+  const whole = holder.rows;
   useEffect(() => {
-    if (!held.read || (ownTask === undefined && readAgent === undefined)) return;
+    if (!held.drawn || (ownTask === undefined && readAgent === undefined)) return;
     const covered = drafts.filter(
       (kept) => ownTask !== undefined || kept.place.agentId === readAgent,
     );
-    const gone = covered.filter(
-      (kept) => !held.items.some((item) => item.id === kept.place.itemId),
-    );
+    const gone =
+      whole === undefined
+        ? []
+        : covered.filter((kept) => !whole.some((item) => item.id === kept.place.itemId));
     const lapsed = covered.filter((kept) => {
       const item = held.items.find((each) => each.id === kept.place.itemId);
       return item !== undefined && caughtUp(item, kept) && draftOfItem(kept, item) !== kept;
     });
     for (const kept of lapsed) update(kept.place, withoutPicks);
     if (gone.length > 0) drop((place) => gone.some((kept) => Equal.equals(kept.place, place)));
-  }, [held.read, held.items, ownTask, readAgent, drafts, drop, update]);
+  }, [held.drawn, held.items, whole, ownTask, readAgent, drafts, drop, update]);
 
   const board = useMemo(() => inboxBoard(held.items, readerId), [held.items, readerId]);
   const draftOf = useCallback(
@@ -729,10 +772,11 @@ export function useTaskInbox(input: {
     drafted,
     onDraft,
     onAttachments,
-    reading: active && !held.read && !held.failed,
-    read: held.read,
-    failed: held.failed,
-    onRetry,
+    reading: active && !held.drawn && !failed,
+    read,
+    drawn: held.drawn,
+    failed,
+    onRetry: holder.retry,
     sending,
     pendingReplies,
     notes,

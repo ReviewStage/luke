@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentSummary,
@@ -25,8 +26,8 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
+import { handInboxItems } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { followedInboxes } from "../testing/followed-inboxes.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import {
   agentsControl,
@@ -145,7 +146,10 @@ async function mount(onOpen: (link: ReadLink) => void): Promise<HTMLElement> {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
     DOMRect.fromRect({ width: 1200, height: 800 }),
   );
-  const inboxes = followedInboxes(() => ({ items: ITEMS }));
+  // The account's feed holds the task's items, which its Inbox tab draws from.
+  handInboxItems({
+    rows: { [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: ITEMS }, [INBOX_SCOPE_KIND.AGENT]: {} },
+  });
   const control = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: TASK.id,
@@ -166,7 +170,6 @@ async function mount(onOpen: (link: ReadLink) => void): Promise<HTMLElement> {
     agents: agentsControl({
       agents: [AGENT],
       agentIds: [AGENT.id, OTHER_AGENT],
-      inboxFollower: inboxes.follower,
       transcripts: pushedTranscripts(() => [
         { messages: [POSTED], cursor: "1:0", status: AGENT_STATUS.COMPLETED, title: null },
       ]),

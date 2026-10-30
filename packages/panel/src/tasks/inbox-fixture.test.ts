@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { type AgentInboxChanged, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import {
   INBOX_APPROVAL_OPTION,
   INBOX_ASK,
@@ -11,6 +11,7 @@ import {
   type InboxItem,
   inboxItemSchema,
 } from "@luke/features/inbox-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { type AppStateSnapshot, NO_ACCESS, RUN_PROFILE } from "@luke/host/app-state";
@@ -23,19 +24,16 @@ import { fakeActPortAnswering, refusedOnPort } from "../testing/app-bridge.js";
 import { handState, stateWith } from "../testing/app-state.js";
 import { appStateFirstRead } from "../use-app-state.js";
 import { loadedTasksFixture, loadTasksFixture } from "./tasks-fixture-loader.js";
-import { windowInboxFollower } from "./use-followed-inboxes.js";
 
 /**
  * inbox-fixture.test.ts -- a fixture run's Inbox and person profiles sign
  * the window in as a synthetic account whose tasks hold Inbox items, which
- * the window's own follower hears from the act door in place of main: an
- * ask of each kind, a form, a notice with code, a long thread, an answered
- * item and a closed one, every item one the wire carries; and the list holds
- * the account's own tasks, which its page lists. Any other profile leaves
- * main's document as it is.
+ * the account's feed on the window's document holds whole in place of
+ * main's read: an ask of each kind, a form, a notice with code, a long
+ * thread, an answered item and a closed one, every item one the wire
+ * carries; and the list holds the account's own tasks, which its page
+ * lists. Any other profile leaves main's document as it is.
  */
-
-type Heard = AgentInboxChanged["inbox"];
 
 afterEach(() => {
   // The window's one registry holds the document it read, so the next test's window reads its own.
@@ -67,24 +65,15 @@ function standFixtureRun(profile: string): Effect.Effect<void> {
   });
 }
 
-/** The first word the window's follower hears of a task's inbox. */
-function firstHeard(taskId: string): Effect.Effect<Heard> {
-  return Effect.callback<Heard>((resume) => {
-    const stop = windowInboxFollower.follow({ kind: INBOX_SCOPE_KIND.PLAN, id: taskId }, (heard) =>
-      resume(Effect.succeed(heard)),
-    );
-    return Effect.sync(stop);
-  });
-}
-
-/** The items a heard inbox holds, which must be items rather than a failure. */
-function itemsOf(heard: Heard): readonly InboxItem[] {
-  assert.ok("items" in heard, `pushed items, not ${JSON.stringify(heard)}`);
-  return heard.items;
+/** The items the account's feed holds of a task on the staged document, which must hold the task. */
+function fedItems(state: AppStateSnapshot, taskId: string): readonly InboxItem[] {
+  const items = state[LIVE_READ.INBOX_ITEMS].rows?.[INBOX_SCOPE_KIND.PLAN][taskId];
+  assert.ok(items !== undefined, `the feed holds ${taskId}`);
+  return items;
 }
 
 it.effect(
-  "the Inbox profile signs in and its follower hears every task main names: an ask of each kind, a form, code, a long thread, answered and closed",
+  "the Inbox profile signs in and its feed holds every task main names: an ask of each kind, a form, code, a long thread, answered and closed",
   () =>
     Effect.gen(function* () {
       yield* standFixtureRun(RUN_PROFILE.INBOX);
@@ -96,7 +85,7 @@ it.effect(
 
       const items: InboxItem[] = [];
       for (const holding of state.inbox.tasks) {
-        const held = itemsOf(yield* firstHeard(holding.taskId));
+        const held = fedItems(state, holding.taskId);
         assert.equal(held.length, holding.items, `${holding.taskId} holds what main counts`);
         // Note that a task main says changed later than its newest item stands as still being read.
         assert.ok(Math.max(...held.map((each) => each.updatedAt)) >= holding.updatedAt);
@@ -157,7 +146,7 @@ it.effect(
       );
       assert.ok(page.assigned.length > 1, "tasks assigned to them");
       assert.ok(page.working.length > 0, "agents of theirs at work");
-      assert.ok(itemsOf(yield* firstHeard(FIXTURE_IDS.TASK)).length > 0);
+      assert.ok(fedItems(state, FIXTURE_IDS.TASK).length > 0);
     }),
 );
 
@@ -193,10 +182,7 @@ it.effect("any other profile leaves main's document as it is, and stages no Inbo
 
     assert.equal(fixture.fixtureAppState(tasks), tasks);
     assert.equal(
-      fixture.fixtureActAnswer(tasks.run, ACT_KIND.AGENTS_INBOX_FOLLOW, {
-        kind: INBOX_SCOPE_KIND.PLAN,
-        id: FIXTURE_IDS.TASK,
-      }),
+      fixture.fixtureActAnswer(tasks.run, ACT_KIND.AGENTS_INBOX_READ_ALL, { itemIds: [] }),
       undefined,
     );
   }),

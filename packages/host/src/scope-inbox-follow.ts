@@ -1,8 +1,4 @@
-import {
-  AGENT_CALL_FAILURE,
-  type AgentInboxChanged,
-  type INBOX_SCOPE_KIND,
-} from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE, type INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import {
   inboxOfLiveRows,
@@ -10,24 +6,31 @@ import {
   type ScopeInboxLiveAnswer,
   scopeInboxLiveRowsSchema,
 } from "@luke/features/live-wire";
-import { Data, Duration, Effect, Equal, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
+import { Data, Effect, Equal, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
+import {
+  type AppHolderInbox,
+  type AppHolderInboxes,
+  NO_HOLDER_INBOXES,
+  UNREAD,
+} from "./app-state.js";
 import { type InboxReads, itemsRead } from "./inbox-collections.js";
+import { type HeldReads, heldReads } from "./live-collection.js";
 import { followTakingRows, LIVE_STATE, restarting, type TxWait } from "./live-follow.js";
 
 /**
- * scope-inbox-follow.ts -- a plan's inbox, or one agent's, followed for main over the service's held poll while it is followed, and told whole as it changes.
+ * scope-inbox-follow.ts -- a plan's inbox, or one agent's, followed for main over the service's held poll while a window holds it, and told whole on the app state as it changes.
  *
  * The host follows the scope's live read (`live-follow.ts`) the first time
- * the scope is followed, keeps its items in a collection that stands among
- * the reads an inbox write reaches (`inbox-collections.ts`), takes each
- * answer's rows as its poll answers, tells the items as they stand after
- * each answer and each write drawn over them, and lets the follow go a
- * while after the last reader let go of it. One the account does not reach
- * is not found, as the held read said.
+ * the scope is held, keeps its items in a collection that stands among the
+ * reads an inbox write reaches (`inbox-collections.ts`), takes each
+ * answer's rows as its poll answers, and tells the items as they stand
+ * after each answer and each write drawn over them. One the account does
+ * not reach is not found, as the held read said. A window holds the scopes
+ * it chose (`holderInboxes`, on `live-collection.ts`'s `heldReads`), and
+ * the host keeps the few let go latest followed, so a window stepping back
+ * to one draws it from where it stands; every held scope is told whole on
+ * the one slice the windows draw (`LIVE_READ.HOLDER_INBOX`).
  */
-
-/** How long a follow no reader holds is kept, so a window coming back finds it standing. */
-const IDLE = Duration.seconds(30);
 
 /** Which inbox: one plan's, or one agent's, by its id. */
 export class InboxScopeKey extends Data.Class<{
@@ -74,12 +77,11 @@ export interface ScopeInboxDependencies {
 /** The follows the windows' reads share, each held while read and a while after. */
 export type ScopeInboxes = RcMap.RcMap<InboxScopeKey, Standing>;
 
-/** The map a composer holds for as long as it stands. */
+/** The map a composer holds for as long as it stands. Note that a scope's follow goes with its last reader, since what keeps one standing for a window coming back is the held lifetime (`holderInboxes`). */
 export function scopeInboxes(
   dependencies: ScopeInboxDependencies,
 ): Effect.Effect<ScopeInboxes, never, Scope.Scope> {
   return RcMap.make({
-    idleTimeToLive: IDLE,
     lookup: (scope: InboxScopeKey) =>
       Effect.gen(function* () {
         // The account the follow starts for, which every renewal and poll names, so one under another's session is refused as signed out.
@@ -140,8 +142,8 @@ export function scopeInboxes(
   });
 }
 
-/** A followed inbox as the window is told it: its items whole, or why there are none. */
-type Told = AgentInboxChanged["inbox"];
+/** A followed inbox as its follow tells it: its items whole, or why there are none. */
+type Told = { readonly items: readonly InboxItem[] } | { readonly failure: AgentCallFailure };
 
 /**
  * The scope's inbox followed until interrupted, each change told whole from
@@ -179,4 +181,72 @@ export function followInbox(
       ended ? Effect.succeed(false) : Effect.as(RcMap.invalidate(inboxes, scope), true),
     ),
   );
+}
+
+/** The scopes the windows hold, and what the host does for them. */
+export interface HolderInboxes {
+  /** Holds `scope`'s read for the caller's scope, following it unless it stands. */
+  readonly hold: HeldReads<InboxScopeKey>["hold"];
+  /** Reads `scope` again at once, as Try again asks, telling nothing of it meanwhile where it had failed. */
+  readonly retry: (scope: InboxScopeKey) => Effect.Effect<void>;
+  /** Follows every held scope anew, as the account gate opening asks. */
+  readonly open: Effect.Effect<void>;
+  /** Lets every follow go and tells no scope held: the session ended. */
+  readonly end: Effect.Effect<void>;
+}
+
+/**
+ * The held lifetime over every scope's follow, told whole on one slice:
+ * each scope's read as its follow last told it, kept where a later read
+ * does not answer, and failed where it never answered; one let go for good
+ * is told no more. Behind a closed gate a held scope is followed only once
+ * the gate opens (`open`).
+ */
+export function holderInboxes(
+  inboxes: ScopeInboxes,
+  dependencies: {
+    /** Whether the account gate stands open, so a follow may read. */
+    readonly gate: () => boolean;
+    readonly tell: (held: AppHolderInboxes) => Effect.Effect<void>;
+  },
+): Effect.Effect<HolderInboxes, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    let held: AppHolderInboxes = NO_HOLDER_INBOXES;
+    const readOf = (scope: InboxScopeKey): AppHolderInbox | undefined => held[scope.kind][scope.id];
+    const set = (scope: InboxScopeKey, read: AppHolderInbox | undefined) => {
+      const ofKind = { ...held[scope.kind] };
+      if (read === undefined) Reflect.deleteProperty(ofKind, scope.id);
+      else ofKind[scope.id] = read;
+      held = { ...held, [scope.kind]: ofKind };
+      return dependencies.tell(held);
+    };
+    const tellScope = (scope: InboxScopeKey) => (told: Told) =>
+      Effect.suspend(() => {
+        if (!("failure" in told)) return set(scope, { rows: told.items });
+        // Note that a read that stops answering keeps its rows, since its next answer brings them up to date.
+        return readOf(scope)?.rows === undefined ? set(scope, { failed: true }) : Effect.void;
+      });
+    const follow = (scope: InboxScopeKey) =>
+      Effect.suspend(() =>
+        dependencies.gate() ? followInbox(inboxes, scope, tellScope(scope)) : Effect.void,
+      );
+    const reads = yield* heldReads<InboxScopeKey>(
+      follow,
+      (scope) => set(scope, undefined),
+      Effect.suspend(() => {
+        held = NO_HOLDER_INBOXES;
+        return dependencies.tell(held);
+      }),
+    );
+    return {
+      hold: reads.hold,
+      retry: (scope) =>
+        Effect.andThen(
+          readOf(scope)?.failed === true ? set(scope, UNREAD) : Effect.void,
+          reads.reopen(scope),
+        ),
+      open: reads.reopenHeld,
+      end: reads.end,
+    };
+  });
 }

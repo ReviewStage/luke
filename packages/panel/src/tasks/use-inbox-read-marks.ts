@@ -153,11 +153,12 @@ export function useReadOnOpen({
  * (`inbox-model.ts`'s `acknowledgedOnOpen`): the reader's own, messaging
  * nobody, and its box holding no words or files, which stay a reply to send. `shown` is the item the pane
  * draws, none while the Inbox is hidden or shows its list alone; `control`
- * is the held read of its holder, which the item is waited on until it
- * holds, so the answer names the revision the service holds rather than an
- * older list's. An item opened while it cannot be acknowledged is left as
- * it is until it is opened again, so a box emptied of its draft does not
- * settle it under the reader's hands.
+ * is its holder's control, which the item is waited on until its board
+ * draws it from a read of the service's, the account's feed or the
+ * holder's own, so the answer names the revision the service holds. An
+ * item opened while it cannot be acknowledged is left as it is until it is
+ * opened again, so a box emptied of its draft does not settle it under the
+ * reader's hands.
  */
 export function useNodOnOpen({
   shown,
@@ -166,18 +167,18 @@ export function useNodOnOpen({
 }: {
   shown: InboxListed | undefined;
   readerId: string | undefined;
-  control: Pick<TaskInboxControl, "read" | "failed" | "draftOf" | "onAcknowledge">;
+  control: Pick<TaskInboxControl, "drawn" | "failed" | "draftOf" | "onAcknowledge">;
 }): void {
   const nodded = useRef<{ readonly id: string; readonly revision: number } | undefined>(undefined);
-  const { read, failed, draftOf, onAcknowledge } = control;
+  const { drawn, failed, draftOf, onAcknowledge } = control;
   const channels = useExperiment(EXPERIMENT.CHANNELS);
   useEffect(() => {
     if (shown === undefined) {
       nodded.current = undefined;
       return;
     }
-    // Note that nothing is settled until the holder's held read and the reader's id stand, so neither an older revision nor a teammate's notice is acknowledged.
-    if (!read || failed || readerId === undefined) return;
+    // Note that nothing is settled until a read of the holder and the reader's id stand, so neither an older revision nor a teammate's notice is acknowledged.
+    if (!drawn || failed || readerId === undefined) return;
     const { item } = shown;
     const was = nodded.current;
     if (was !== undefined && was.id === item.id && was.revision === item.revision) return;
@@ -186,5 +187,5 @@ export function useNodOnOpen({
     const draft = draftOf(item);
     if (draft.note.trim() !== "" || draft.attachments.length > 0) return;
     onAcknowledge(item);
-  }, [shown, readerId, read, failed, draftOf, onAcknowledge, channels]);
+  }, [shown, readerId, drawn, failed, draftOf, onAcknowledge, channels]);
 }

@@ -30,7 +30,6 @@ import { handInboxItems } from "./testing/app-state.js";
 import { ChangesTabReading } from "./testing/changes-tab.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
-import { followedInboxes } from "./testing/followed-inboxes.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
 import { agentsControl, tasksControl } from "./testing/tasks-control.js";
 
@@ -57,9 +56,6 @@ const TASK: TaskSummary = {
 /** Whether the service answers a read, rather than failing it, as a Retry finds it once it is back. */
 let answering = false;
 
-/** The host's inbox streams: a followed inbox could not be read until the service answers again, then holds nothing. */
-const host = followedInboxes(() => (answering ? { items: [] } : UNANSWERED));
-
 beforeEach(() => {
   installScrollIntoView();
   fakeAppPlatform(QUIET_PANEL);
@@ -72,8 +68,6 @@ beforeEach(() => {
   });
   fakeAppBridge({});
   fakeActPort({
-    // Every followed inbox could not be read until the service answers again, then holds nothing.
-    ...host.procedures,
     [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
     [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.resolve(answering ? { keys: [] } : UNANSWERED),
   });

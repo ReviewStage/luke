@@ -6,10 +6,12 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { LIVE_READ } from "@luke/features/live-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import {
+  type AppHolderInboxes,
   type AppHostRead,
   type AppInboxItems,
   type AppStateDelivery,
   type AppStateSnapshot,
+  NO_HOLDER_INBOXES,
   UNREAD,
 } from "@luke/host/app-state";
 import { SETTINGS_ACT_KIND } from "@luke/host/contract";
@@ -58,6 +60,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     agents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], agents: [], failedRuns: [] },
     [LIVE_READ.INBOX_ITEMS]: UNREAD,
+    [LIVE_READ.HOLDER_INBOX]: NO_HOLDER_INBOXES,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
@@ -143,14 +146,22 @@ export function handSettings(settings: Partial<AppSettingsView> = {}): void {
   });
 }
 
+/** How the host's reads are delivered again as each moves, as the host tells them. */
+export interface HostReadsHanded {
+  readonly deliverItems: (next: AppHostRead<AppInboxItems>) => void;
+  readonly deliverHolders: (next: AppHolderInboxes) => void;
+}
+
 /**
- * Lays the account's feed of every item as given over whatever document
- * the window was handed, its experiments among it, and answers with how the
- * feed is delivered again as it moves, as the host tells it.
+ * Lays the host's reads as given, the account's feed of every item and the
+ * holders' own inboxes, over whatever document the window was handed, its
+ * experiments and the reads handed before among it, and answers with how
+ * each is delivered again as it moves, as the host tells it.
  */
-export function handInboxItems(
-  first: AppHostRead<AppInboxItems>,
-): (next: AppHostRead<AppInboxItems>) => void {
+export function handHostReads(first: {
+  readonly items?: AppHostRead<AppInboxItems>;
+  readonly holders?: AppHolderInboxes;
+}): HostReadsHanded {
   const handed = fakeAppBridgeCalls().requestAppState;
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
   let version = 1;
@@ -159,17 +170,27 @@ export function handInboxItems(
     requestAppState: async () => ({
       ...(handed === undefined ? snapshotWith({}) : await handed()),
       version,
-      [LIVE_READ.INBOX_ITEMS]: first,
+      ...(first.items === undefined ? undefined : { [LIVE_READ.INBOX_ITEMS]: first.items }),
+      ...(first.holders === undefined ? undefined : { [LIVE_READ.HOLDER_INBOX]: first.holders }),
     }),
     onAppState: (listener: (delivery: AppStateDelivery) => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
   });
-  return (next) => {
+  const deliver = (entries: AppStateDelivery["entries"]) => {
     version += 1;
-    for (const listener of [...listeners]) {
-      listener({ version, entries: { [LIVE_READ.INBOX_ITEMS]: next } });
-    }
+    for (const listener of [...listeners]) listener({ version, entries });
   };
+  return {
+    deliverItems: (next) => deliver({ [LIVE_READ.INBOX_ITEMS]: next }),
+    deliverHolders: (next) => deliver({ [LIVE_READ.HOLDER_INBOX]: next }),
+  };
+}
+
+/** Lays the account's feed of every item as given over the window's document, and answers with how it is delivered again as it moves. */
+export function handInboxItems(
+  first: AppHostRead<AppInboxItems>,
+): (next: AppHostRead<AppInboxItems>) => void {
+  return handHostReads({ items: first }).deliverItems;
 }
