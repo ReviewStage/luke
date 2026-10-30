@@ -508,15 +508,14 @@ export function TaskStandingChips({
       <TaskRelationAsked task={task} door={blocks} ask={blocks.ask} onAsked={blocks.onAsked} />
     );
   if (status === undefined || priority === undefined) {
-    return asked === null ? (
-      lines
-    ) : (
-      <div className="plan-task-standing">
+    return (
+      <>
         {asked}
         {lines}
-      </div>
+      </>
     );
   }
+
   return (
     <div className="plan-task-standing">
       {/* Note that the line is pulled back by a chip's inset, so the status's mark stands on the title's edge. */}

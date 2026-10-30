@@ -301,7 +301,7 @@ export function TaskRelationMenu({
 /**
  * The add menu as the task's head holds it for the task's menus and ⌘K: no
  * control of its own, only a box at the end of the properties line the menu
- * hangs from while an ask stands. Each ask opens it afresh on its kind, and
+ * hangs from while an ask stands, and nothing drawn while none does. Each ask opens it afresh on its kind, and
  * is handed back through `onAsked` so the asker can let it go; closing it
  * hands focus back to wherever it came from.
  */
@@ -315,7 +315,7 @@ export function TaskRelationAsked({
   door: TaskRelationDoor;
   ask: TaskRelationAsk | undefined;
   onAsked?: ((request: number) => void) | undefined;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const [open, setOpen] = useState<TaskRelationAsk | undefined>(undefined);
   // The ask last drawn, kept while the menu fades out after it closed.
   const [shown, setShown] = useState<TaskRelationAsk | undefined>(undefined);
@@ -344,24 +344,24 @@ export function TaskRelationAsked({
     setOpen(undefined);
     opener.current?.focus();
   };
+  // Nothing is drawn while the menu is closed, so the box adds nothing to the head until an ask opens it.
+  if (!drawn.mounted || shown === undefined) return null;
   return (
     <span className="task-relation-asked relative inline-flex" ref={box}>
-      {drawn.mounted && shown !== undefined ? (
-        <TaskRelationMenu
-          // Keyed by the ask, so each opens on its own kind and search.
-          key={shown.request}
-          id={menuId}
-          task={task}
-          door={door}
-          kind={shown.kind}
-          leaving={drawn.leaving}
-          menuRef={drawn.ref}
-          onClose={close}
-          onLeave={(left) => {
-            if (!(left instanceof Node && box.current?.contains(left))) close();
-          }}
-        />
-      ) : null}
+      <TaskRelationMenu
+        // Keyed by the ask, so each opens on its own kind and search.
+        key={shown.request}
+        id={menuId}
+        task={task}
+        door={door}
+        kind={shown.kind}
+        leaving={drawn.leaving}
+        menuRef={drawn.ref}
+        onClose={close}
+        onLeave={(left) => {
+          if (!(left instanceof Node && box.current?.contains(left))) close();
+        }}
+      />
     </span>
   );
 }
