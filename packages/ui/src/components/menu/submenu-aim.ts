@@ -69,8 +69,8 @@ function headsInto(from: Point, to: Point, box: DOMRectReadOnly): boolean {
  * The gate a menu hands each move of the pointer onto one of its rows
  * through while a submenu stands (`standing`) on `submenu`: taken at once,
  * unless the pointer's last move heads into the submenu, when it is put off
- * until the pointer rests. A key, or the pointer reaching the submenu, drops
- * a move put off.
+ * until the pointer rests. A key, the pointer reaching the submenu, or the
+ * submenu going drops a move put off.
  */
 export function useSubmenuAim(
   submenu: React.RefObject<HTMLElement | null>,
@@ -78,9 +78,11 @@ export function useSubmenuAim(
 ): (take: () => void) => void {
   const trail = useRef<Trail>(NO_TRAIL);
   const wait = useAtomSet(aimRestAtom);
-  // Note that the window's moves are heard before a row's own, so a row reads the move that brought the pointer onto it.
+  // Note that the pointer is followed for as long as the menu stands, a
+  // submenu or none, so the first move after the one that opened a submenu
+  // already has where it came from; and that the window's moves are heard
+  // before a row's own, so a row reads the move that brought the pointer onto it.
   useEffect(() => {
-    if (!standing) return undefined;
     const moved = (event: MouseEvent) => {
       const to = { x: event.clientX, y: event.clientY };
       trail.current = { from: trail.current.to, to };
@@ -93,10 +95,12 @@ export function useSubmenuAim(
     return () => {
       document.removeEventListener("mousemove", moved, true);
       document.removeEventListener("keydown", keyed, true);
-      trail.current = NO_TRAIL;
       wait(Atom.Interrupt);
     };
-  }, [standing, submenu, wait]);
+  }, [submenu, wait]);
+  useEffect(() => {
+    if (!standing) wait(Atom.Interrupt);
+  }, [standing, wait]);
   return useCallback(
     (take: () => void) => {
       const { from, to } = trail.current;

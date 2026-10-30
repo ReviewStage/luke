@@ -505,10 +505,9 @@ test("the pointer crossing a pinned row on its way into the submenu beside anoth
   const effortOpen = () => document.querySelector('[aria-label="Effort"][role="listbox"]') !== null;
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
-    mouseOver(pinned("Effort"), 100, 116);
     mouseOver(pinned("Effort"), 300, 116);
     const opened = effortOpen();
-    // The pointer heads down and right for the submenu's lower rows, over the next row's end.
+    // Straight from the move that opened it, the pointer heads down and right for the submenu's lower rows, over the next row's end.
     mouseOver(pinned("Open on GitHub"), 310, 140);
     const crossed = effortOpen();
     act(() => {
