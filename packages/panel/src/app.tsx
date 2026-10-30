@@ -2,7 +2,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
-import type { AccountLink, ReadLink } from "@luke/features/link-grammar";
+import type { AccountLink, ReadLink, ShownLink } from "@luke/features/link-grammar";
 import type { ModelProvider } from "@luke/features/models-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
@@ -79,7 +79,6 @@ import { useUpdatedToast } from "./update-toast.js";
 import {
   APP_SETTINGS_VIEW,
   APP_SLICE,
-  EXPERIMENTS_UNREAD,
   experimentOnNow,
   SETTINGS_HELD,
   useAdminAccess,
@@ -215,7 +214,6 @@ function AppWindow(): React.JSX.Element {
   const inbox = useAppSlice(APP_SLICE.INBOX);
   const unseenAgents = useAppSlice(UNSEEN_AGENTS);
   const settingsHeld = useAppSlice(SETTINGS_HELD);
-  const experimentsUnread = useAppSlice(EXPERIMENTS_UNREAD);
   // A picture, and a link's answer, is read as the account signed in, so the window lets go of every one it read once that account changes.
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
@@ -442,15 +440,11 @@ function AppWindow(): React.JSX.Element {
   // the account's workspaces are read, since a link's slug is read against them (every account
   // holds its own workspace, so none read means none read yet).
   const workspacesUnread = tasks.workspaces.length === 0 && !tasks.listFailed;
-  const openLink = useLinkOpener(accountGated || workspacesUnread, openLukeLink);
-  // A link of the account's own waits instead for its experiments, since whether Bring your own
-  // host is on decides where a pairing's lands, and a first sign-in holds none until they are read.
-  const openAccount = useLinkOpener(accountGated || experimentsUnread, openAccountLink);
-  useEffect(
-    () =>
-      appBridge().onShowLink((link) => ("workspace" in link ? openLink(link) : openAccount(link))),
-    [openLink, openAccount],
+  const openShownLink = useSteadyDoor((link: ShownLink) =>
+    "workspace" in link ? openLukeLink(link) : openAccountLink(link),
   );
+  const openLink = useLinkOpener(accountGated || workspacesUnread, openShownLink);
+  useEffect(() => appBridge().onShowLink(openLink), [openLink]);
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({

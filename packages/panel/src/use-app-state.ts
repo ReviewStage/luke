@@ -267,12 +267,6 @@ export const SETTINGS_HELD: Atom.Atom<boolean> = Atom.map(
   (settings) => settings !== undefined,
 );
 
-/** Whether the signed-in account's experiments are yet to be answered by the service, so one it turned on elsewhere may still arrive. */
-export const EXPERIMENTS_UNREAD: Atom.Atom<boolean> = Atom.map(
-  APP_SLICE.SETTINGS,
-  (settings) => settings?.experimentsUnread === true,
-);
-
 /** The settings as the panel draws them, made once per change to the settings slice for every reader. */
 export const APP_SETTINGS_VIEW: Atom.Atom<AppSettingsView | undefined> = Atom.map(
   APP_SLICE.SETTINGS,
