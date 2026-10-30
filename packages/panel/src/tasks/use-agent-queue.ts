@@ -1,6 +1,4 @@
-import { useAtomValue } from "@effect/atom-react";
 import type { AgentQueue, QueuedMessage } from "@luke/features/agent-queue-wire";
-import { LINE_GRACE_MILLIS } from "@luke/features/agent-status";
 import { AGENT_CALL_FAILURE, type AgentQueueAnswerView } from "@luke/features/agent-view";
 import {
   type AgentAttachment,
@@ -12,12 +10,9 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import { keepPictureRead, PICTURE_STATE, pictureNow } from "@luke/ui/picture-cache";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { Clock, Duration, Option, Schedule, Schema, Stream } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
+import { Option, Schema } from "effect";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import type { AgentPictureDoor } from "./agent-pictures.js";
 import type { HeldComposer } from "./use-agent-composer.js";
 
@@ -31,12 +26,15 @@ import type { HeldComposer } from "./use-agent-composer.js";
  * message queued, as the box empties at once, and a new order, as a drag
  * drops it, are drawn before their answer, keyed to their own request and
  * let go as it answers; every other change waits its round trip. A message
- * queued is drawn at the queue's end as it goes, as it will stand once
- * landed, taking no press until it has, since the service knows it by no id
- * before; its files are drawn from the bytes the box held, kept in the
- * window's pictures under an id of the tab's own and, before the row that
- * names them by the service's ids is painted, under those, so its thumbnails
- * never give way to a read of what the window already holds.
+ * is queued under an id the tab mints (`crypto.randomUUID`), so it is drawn
+ * at the queue's end as it goes, under the id it keeps, and takes presses at
+ * once: every change goes after every change asked before it, as a drag's
+ * section writes do (the host's `sidebar-collections.ts`), so a press on a
+ * message still landing reaches the service after its add. Its files are
+ * drawn from the bytes the box held, kept in the window's pictures under ids
+ * of the tab's own and, before the row naming them by the service's ids is
+ * painted, under those, so its thumbnails never give way to a read of what
+ * the window already holds.
  */
 
 /** What a change answered where the act itself failed. */
@@ -44,20 +42,6 @@ const UNANSWERED: AgentQueueAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERE
 
 /** What a refused delete says in its dialog. */
 const DELETE_REFUSED = "Luke could not delete the message. Try again.";
-
-/** How often an open edit's hold is sent again: within the grace it lapses after (`LINE_GRACE_MILLIS`). */
-const HOLD_RENEWAL = Duration.millis(LINE_GRACE_MILLIS / 2);
-
-/** The renderer clock read each `HOLD_RENEWAL`, which an open edit renews its hold on. */
-const holdRenewalAtom = rendererRuntime.atom(
-  // Note that its first reading, as the edit opens, is dropped, since the edit's own hold has just gone.
-  Stream.fromEffectSchedule(Clock.currentTimeMillis, Schedule.spaced(HOLD_RENEWAL)).pipe(
-    Stream.drop(1),
-  ),
-);
-
-/** No reading, while no edit stands open. */
-const NO_RENEWAL = Atom.make(AsyncResult.initial<number>());
 
 /** A queue with nothing in it, as an agent's page before its first change carries none. */
 const EMPTY: AgentQueue = { messages: [], revision: 0 };
@@ -93,7 +77,7 @@ function fileUrl(file: AgentAttachment): string {
 function keepLandedFiles(owner: string, queue: AgentQueue, out: readonly Out[]): void {
   for (const { change } of out) {
     if (change.change !== QUEUE_CHANGE.ADD || change.attachments === undefined) continue;
-    const landed = queue.messages.find((message) => message.clientKey === change.clientKey);
+    const landed = queue.messages.find((message) => message.id === change.id);
     for (const [index, file] of (landed?.files ?? []).entries()) {
       const held = change.attachments[index];
       if (file.id === undefined || held === undefined) continue;
@@ -111,14 +95,14 @@ function drawnWith(queue: AgentQueue, { change, files }: Out): AgentQueue {
     const placed = (message: QueuedMessage) => at.get(message.id) ?? change.order.length;
     return { ...queue, messages: queue.messages.toSorted((a, b) => placed(a) - placed(b)) };
   }
-  // A message the queue lists under its key has landed, and is drawn as the queue draws it.
-  if (queue.messages.some((message) => message.clientKey === change.clientKey)) return queue;
+  // A message the queue lists has landed, and is drawn as the queue draws it.
+  if (queue.messages.some((message) => message.id === change.id)) return queue;
   return {
     ...queue,
     messages: [
       ...queue.messages,
       {
-        id: change.clientKey,
+        id: change.id,
         text: change.text,
         queuedBy: "",
         ...(change.attachments === undefined || change.attachments.length === 0
@@ -139,12 +123,10 @@ function drawnWith(queue: AgentQueue, { change, files }: Out): AgentQueue {
 export interface AgentQueueControl {
   /** Its messages in the order they go, the tab's own changes still out drawn over the page. */
   readonly messages: readonly QueuedMessage[];
-  /** The messages queued from this tab that have not landed yet, by the id they are drawn under, which take no press. */
-  readonly landing: ReadonlySet<string>;
   /** The messages the service's queue lists now, by id, whatever this tab's changes still out draw over them. */
   readonly listed: ReadonlySet<string>;
   readonly paused: AgentQueue["paused"];
-  /** One change, answered as the service answered it, sent once `after` settles where one is given. */
+  /** One change, answered as the service answered it, sent after every change asked before it and once `after` settles where one is given. */
   readonly change: (
     change: AgentQueueChange,
     after?: Promise<unknown>,
@@ -160,21 +142,14 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
   const [out, setOut] = useState<readonly Out[]>([]);
   const [answered, setAnswered] = useState<AgentQueue | undefined>();
   const counter = useRef(0);
+  // The change asked last, settled or not, which the next one goes after.
+  const asked = useRef<Promise<unknown>>(Promise.resolve());
   const page = queue ?? EMPTY;
   // The queue as the service last said it, by whichever of the page and a change's answer stands at the higher revision.
   const standing = answered !== undefined && answered.revision > page.revision ? answered : page;
   const drawn = out.reduce(drawnWith, standing);
   // The files of a message queued from here are kept under the service's ids before the row naming them is painted.
   useLayoutEffect(() => keepLandedFiles(agentId, standing, out), [agentId, standing, out]);
-  const landing = new Set(
-    out.flatMap(({ change: each }) =>
-      each.change === QUEUE_CHANGE.ADD &&
-      !standing.messages.some((message) => message.clientKey === each.clientKey)
-        ? [each.clientKey]
-        : [],
-    ),
-  );
-
   const listed = new Set(page.messages.map((message) => message.id));
   const change = (next: AgentQueueChange, after?: Promise<unknown>) => {
     counter.current += 1;
@@ -193,24 +168,24 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
         { id, change: next, ...(files === undefined ? undefined : { files }) },
       ]);
     }
-    return (after ?? Promise.resolve())
+    const sent = Promise.all([asked.current, after])
       .then(() => act(ACT_KIND.AGENTS_QUEUE, { agentId, change: next }))
-      .catch(() => UNANSWERED)
-      .then((answer) => {
-        // Note that a change answered is drawn as the queue its answer names, and one refused springs back.
-        if ("queue" in answer) keepLandedFiles(agentId, answer.queue, out);
-        setOut((was) => was.filter((each) => each.id !== id));
-        if ("queue" in answer) {
-          setAnswered((was) =>
-            was === undefined || answer.queue.revision > was.revision ? answer.queue : was,
-          );
-        }
-        return answer;
-      });
+      .catch(() => UNANSWERED);
+    asked.current = sent;
+    return sent.then((answer) => {
+      // Note that a change answered is drawn as the queue its answer names, and one refused springs back.
+      if ("queue" in answer) keepLandedFiles(agentId, answer.queue, out);
+      setOut((was) => was.filter((each) => each.id !== id));
+      if ("queue" in answer) {
+        setAnswered((was) =>
+          was === undefined || answer.queue.revision > was.revision ? answer.queue : was,
+        );
+      }
+      return answer;
+    });
   };
   const move = (from: number, to: number) => {
-    // Note that a message still landing has no id the service knows, so no order names it.
-    const ids = drawn.messages.map((message) => message.id).filter((id) => !landing.has(id));
+    const ids = drawn.messages.map((message) => message.id);
     const [taken] = ids.splice(from, 1);
     if (taken === undefined) return;
     ids.splice(to, 0, taken);
@@ -223,7 +198,7 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
           ? { status: ACTION_RESULT_STATUS.REJECTED, reason: DELETE_REFUSED }
           : { status: ACTION_RESULT_STATUS.ACCEPTED },
     );
-  return { messages: drawn.messages, landing, listed, paused: drawn.paused, change, move, remove };
+  return { messages: drawn.messages, listed, paused: drawn.paused, change, move, remove };
 }
 
 /** A queued message's files whole, read through the agent's pictures by the ids the queue names them under; none where any did not read. */
@@ -233,17 +208,21 @@ function readQueuedFiles(
 ): Promise<readonly AgentAttachment[] | undefined> {
   const files = message.files ?? [];
   return Promise.all(
-    files.map(({ name, id }) =>
-      id === undefined
-        ? undefined
-        : door
-            .read(door.owner, id)
-            .then((answer) =>
-              "base64" in answer
-                ? { name, mediaType: answer.contentType, data: answer.base64 }
-                : undefined,
-            ),
-    ),
+    files.map(({ name, mediaType, id }) => {
+      if (id === undefined) return undefined;
+      // Note that a file the window holds already, one of a message queued here, is taken as it stands.
+      const held = pictureNow(door.owner, id);
+      if (held.kind === PICTURE_STATE.READY) {
+        return { name, mediaType, data: held.url.slice(held.url.indexOf(",") + 1) };
+      }
+      return door
+        .read(door.owner, id)
+        .then((answer) =>
+          "base64" in answer
+            ? { name, mediaType: answer.contentType, data: answer.base64 }
+            : undefined,
+        );
+    }),
   ).then((read) => Option.getOrUndefined(Schema.decodeUnknownOption(agentAttachmentsSchema)(read)));
 }
 
@@ -260,7 +239,7 @@ export interface QueueEditing {
   readonly editing: string | undefined;
   /** The box's message queued behind the turn, after every line the box sent before it, the box emptied for the next. */
   readonly queue: () => void;
-  /** The message's words taken into the box to edit, the box's own kept aside, and the message held out of the hand-off. */
+  /** The message's words and files taken into the box to edit, the box's own kept aside, and the message marked, which stops the hand-off at it. */
   readonly edit: (message: QueuedMessage) => void;
   /** The box's words saved back into the message's place, and the box given back what it held. */
   readonly save: () => void;
@@ -268,22 +247,25 @@ export interface QueueEditing {
   readonly steer: () => void;
   /** The edit given up, the message left as it was, and the box given back what it held. */
   readonly cancel: () => void;
+  /** The edit of `message` given up from its row: this box's own, as `cancel`, or one another window left standing, its mark cleared. */
+  readonly cancelRow: (message: QueuedMessage) => void;
 }
 
 /**
  * The box's part in the queue. An edit moves the queued message's words into
- * the box, keeping what the box held aside, and holds the message out of the
- * hand-off, which passes over it meanwhile; Save writes the words back in its
+ * the box, keeping what the box held aside, and marks the message as being
+ * edited, which stops the hand-off at it; Save writes the words back in its
  * place, and Steer sends them now as that message, each closing the edit once
  * the queue took it, so a refusal leaves the words where they are. Cancel,
- * Escape, Save with the box emptied, or the tab closing lets it go as it was,
- * and a message the queue would not hold, already on its way, closes the
- * edit. Its files come into the box beside its words, read whole through the
+ * Escape, or Save with the box emptied lets it go as it was, and a message
+ * the queue would not mark, already on its way, closes the edit. The mark
+ * has no time to it: an edit left standing, its window closed, stays until
+ * any of the member's windows cancels it from its row. Its files come into the box beside its words, read whole through the
  * agent's pictures as its row reads them (`readQueuedFiles`), where they are
  * taken off or joined as any message's are, and Save and Steer send the
  * box's files with its words; neither goes while they are still read, and an
  * edit whose files did not read closes, the message left as it was. A
- * message the queue did not take comes back into the box under the key it
+ * message the queue did not take comes back into the box under the id it
  * went under, so queueing it again can never queue it twice.
  */
 export function useQueueEditing(
@@ -308,53 +290,26 @@ export function useQueueEditing(
   useEffect(() => {
     if (left) setStashed(undefined);
   }, [left]);
-  // The hold renewed while the edit stands open, before it lapses, so the hand-off never sends the words it replaces.
-  const renewal = Option.getOrUndefined(
-    AsyncResult.value(useAtomValue(stashed === undefined ? NO_RENEWAL : holdRenewalAtom)),
-  );
   // The box's words as they stand now, which an answer that lands later reads rather than those of the draw that asked.
   const draft = useRef(composer.draft);
   draft.current = composer.draft;
-  // The words a refused queue gave back, and the key they went under, which queueing them again reuses.
-  const refused = useRef<{ readonly text: string; readonly clientKey: string } | undefined>(
-    undefined,
-  );
-  // The message whose edit is being saved or steered, by id, which its hold is no longer renewed for.
-  const settling = useRef<string | undefined>(undefined);
+  // The words a refused queue gave back, and the id they went under, which queueing them again reuses.
+  const refused = useRef<{ readonly text: string; readonly id: string } | undefined>(undefined);
   // The message whose files are still being read into the box, by id, which no Save or Steer sends meanwhile.
   const reading = useRef<string | undefined>(undefined);
   const { change } = queue;
-  const latestChange = useRef(change);
-  latestChange.current = change;
-  // An edit open as the tab closes is let go, so the message goes on as it was.
-  useEffect(
-    () => () => {
-      const id = held.current;
-      if (id !== undefined)
-        void latestChange.current({ change: QUEUE_CHANGE.HOLD, messageId: id, held: false });
-    },
-    [],
-  );
-  useEffect(() => {
-    const id = held.current;
-    // Note that an edit being saved or steered renews nothing, so a renewal that lands after it holds no message.
-    if (renewal === undefined || id === undefined || settling.current === id) return;
-    void latestChange.current({ change: QUEUE_CHANGE.HOLD, messageId: id, held: true });
-  }, [renewal]);
   const giveBack = (stash: Stashed) => {
     composer.setDraft(stash.text);
     composer.setAttachments(() => stash.attachments);
     setStashed(undefined);
   };
-  /** The edit closed once the queue took `edit`, where it is still this message's; left open, its hold renewed again, where it was refused. */
+  /** The edit closed once the queue took `edit`, where it is still this message's; left open where it was refused. */
   const closing = (stash: Stashed, edit: AgentQueueChange) => {
-    settling.current = stash.id;
     void change(edit).then((answer) => {
-      settling.current = undefined;
       if (!("failure" in answer) && held.current === stash.id) giveBack(stash);
     });
   };
-  /** The edit of `stash` given up, its hold let go and the box given back what it held. */
+  /** The edit of `stash` given up, its mark cleared and the box given back what it held. */
   const cancelOf = (stash: Stashed) => {
     void change({ change: QUEUE_CHANGE.HOLD, messageId: stash.id, held: false });
     giveBack(stash);
@@ -369,23 +324,22 @@ export function useQueueEditing(
       const { attachments } = composer;
       if (!hasWordsOrFiles(text, attachments)) return;
       const again = refused.current;
-      const clientKey =
-        again !== undefined && again.text === text ? again.clientKey : crypto.randomUUID();
+      const id = again !== undefined && again.text === text ? again.id : crypto.randomUUID();
       refused.current = undefined;
       composer.setDraft("");
       composer.setAttachments(() => []);
       void change(
         {
           change: QUEUE_CHANGE.ADD,
+          id,
           text,
-          clientKey,
           ...(attachments.length === 0 ? undefined : { attachments }),
         },
         composer.sendsSettled(),
       ).then((answer) => {
         // A message the queue did not take comes back into the box, where the box holds nothing newer.
         if ("failure" in answer && draft.current === "") {
-          refused.current = { text, clientKey };
+          refused.current = { text, id };
           composer.setDraft(text);
           composer.setAttachments(() => attachments);
         }
@@ -403,7 +357,7 @@ export function useQueueEditing(
       setStashed(stash);
       composer.setDraft(message.text);
       composer.setAttachments(() => []);
-      // A message the queue would not hold, already on its way, is no longer the box's to edit.
+      // A message the queue would not mark, already on its way, is no longer the box's to edit.
       void change({ change: QUEUE_CHANGE.HOLD, messageId: message.id, held: true }).then(
         (answer) => {
           if ("failure" in answer && held.current === message.id) giveBack(stash);
@@ -444,5 +398,9 @@ export function useQueueEditing(
       });
     },
     cancel,
+    cancelRow: (message) => {
+      if (message.id === stashed?.id) return cancel();
+      void change({ change: QUEUE_CHANGE.HOLD, messageId: message.id, held: false });
+    },
   };
 }

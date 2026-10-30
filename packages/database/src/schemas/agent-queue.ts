@@ -10,29 +10,29 @@
 import type { HostedApiError } from "@luke/features";
 import type { QueuePause } from "@luke/features/agent-queue-wire";
 import type { AgentAttachment } from "@luke/features/agent-wire";
-import { index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
 import { agentTable } from "./agent.js";
 import { user } from "./auth.js";
 
 /**
- * One queued message. `position` is its place in the agent's queue, the
- * lowest going first, minted past the highest as it is queued and written
- * again for every row when the queue is put in a new order. `client_key` is
- * the send's own key, which the message goes under when it is sent, so a
- * hand-off repeated sends it once, and a queue repeated under it queues it
- * once. `user_id` is the member who queued it, whose message it goes as.
- * `held_until` is how long a member's edit of it holds it out of the
- * hand-off, which passes over it meanwhile; null while nobody edits it, and
- * lapsed once an edit left open has stood that long. `claimed_at` is when
+ * One queued message. `id` is minted by the window that queued it, and is
+ * the key the message goes under when it is sent, so a hand-off repeated
+ * sends it once, and a queue repeated under it queues it once. `position` is
+ * its place in the agent's queue, the lowest going first, minted past the
+ * highest as it is queued and written again for every row when the queue is
+ * put in a new order. `user_id` is the member who queued it, whose message
+ * it goes as. `editing` is whether a member is editing it, which stops the
+ * hand-off at it until the edit is saved or cancelled. `claimed_at` is when
  * the hand-off took it to send, after which no member's edit, delete, or
  * new order reaches it and no window lists it; null until then, and lapsed
- * as a hold does, so a send cut off is sent again under its key.
+ * once a line's grace has passed, so a send cut off is sent again under its
+ * id.
  */
 export const queuedMessage = pgTable(
   "queued_message",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: uuid("id").primaryKey(),
     agentId: uuid("agent_id")
       .notNull()
       .references(() => agentTable.id, { onDelete: "cascade" }),
@@ -40,20 +40,16 @@ export const queuedMessage = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     position: integer("position").notNull(),
-    clientKey: text("client_key").notNull(),
     text: text("text").notNull(),
     /** The files that go with the words, as the queue change carried them, each beside the id it was minted as it was written, by which a window reads its bytes; null where none did. */
     attachments:
       jsonb("attachments").$type<readonly (AgentAttachment & { readonly id: string })[]>(),
-    heldUntil: timestamptz("held_until"),
+    editing: boolean("editing").notNull().default(false),
     claimedAt: timestamptz("claimed_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (table) => [
-    index("queued_message_agent_position").on(table.agentId, table.position),
-    uniqueIndex("queued_message_agent_key").on(table.agentId, table.clientKey),
-  ],
+  (table) => [index("queued_message_agent_position").on(table.agentId, table.position)],
 );
 
 /**

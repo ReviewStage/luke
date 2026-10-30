@@ -93,7 +93,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
           yield* queueChanged(ask, owner, agent.id, {
             change: QUEUE_CHANGE.ADD,
             text,
-            clientKey: randomUUID(),
+            id: randomUUID(),
           });
         }
         const [first, second, third] = (yield* queueChanged(ask, owner, agent.id, {
@@ -158,7 +158,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
       const [message] = (yield* queueChanged(ask, owner, agent.id, {
         change: QUEUE_CHANGE.ADD,
         text: "Match this.",
-        clientKey: randomUUID(),
+        id: randomUUID(),
         attachments: [SHOT],
       })).messages;
       assert.ok(message !== undefined);
@@ -250,21 +250,18 @@ it.layer(getTestDB())("an agent's queue", (it) => {
       Effect.gen(function* () {
         const eve = fakeEve();
         const { agent, ask, owner, target } = yield* messagedAgent(eve, { running: false });
-        const clientKey = randomUUID();
+        const id = randomUUID();
         const queue = yield* queueChanged(ask, owner, agent.id, {
           change: QUEUE_CHANGE.ADD,
           text: "Now the dark variant.",
-          clientKey,
+          id,
         });
 
         assert.deepEqual(queue.messages, []);
         assert.ok(
           JSON.stringify(eve.sent.at(-1)?.message.message).includes("Now the dark variant."),
         );
-        assert.equal(
-          yield* sentLineStands(owner, target.conversationId, sentLineId(clientKey)),
-          true,
-        );
+        assert.equal(yield* sentLineStands(owner, target.conversationId, sentLineId(id)), true);
       }),
   );
 
@@ -282,7 +279,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         const [queued] = (yield* changed({
           change: QUEUE_CHANGE.ADD,
           text: "Run tests",
-          clientKey: randomUUID(),
+          id: randomUUID(),
         })).messages;
         assert.ok(queued !== undefined);
         yield* changed({ change: QUEUE_CHANGE.EDIT, messageId: queued.id, text: "Run the tests" });
@@ -321,7 +318,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         const [queued] = (yield* queueChanged(ask, owner, agent.id, {
           change: QUEUE_CHANGE.ADD,
           text: "Run tests",
-          clientKey: randomUUID(),
+          id: randomUUID(),
         })).messages;
         assert.ok(queued !== undefined);
         yield* queueChanged(ask, owner, agent.id, {
@@ -355,11 +352,11 @@ it.layer(getTestDB())("an agent's queue", (it) => {
     Effect.gen(function* () {
       const eve = fakeEve();
       const { agent, ask, owner, target } = yield* messagedAgent(eve, { running: true });
-      const clientKey = randomUUID();
+      const id = randomUUID();
       const [queued] = (yield* queueChanged(ask, owner, agent.id, {
         change: QUEUE_CHANGE.ADD,
         text: "Also the emails.",
-        clientKey,
+        id,
       })).messages;
       assert.ok(queued !== undefined);
       const queue = yield* queueChanged(ask, owner, agent.id, {
@@ -368,10 +365,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
       });
 
       assert.deepEqual(queue.messages, []);
-      assert.equal(
-        yield* sentLineStands(owner, target.conversationId, sentLineId(clientKey)),
-        true,
-      );
+      assert.equal(yield* sentLineStands(owner, target.conversationId, sentLineId(id)), true);
     }),
   );
 
@@ -393,7 +387,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         yield* queueChanged(ask, owner, agent.id, {
           change: QUEUE_CHANGE.ADD,
           text,
-          clientKey: randomUUID(),
+          id: randomUUID(),
         });
       }
       yield* writer.consume(target, {
@@ -433,7 +427,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         Effect.flatMap(eveFor(message.userId), (eveAs) =>
           steerAgentWritten(eveAs, storeWriter({ tools: CODER_TOOL_SET }), message.userId, stored, {
             text: message.text,
-            clientKey: message.clientKey,
+            clientKey: message.id,
             sender: { kind: MESSAGE_SENDER.MEMBER, userId: message.userId },
           }),
         ).pipe(Effect.provide(reach));
@@ -465,34 +459,33 @@ it.layer(getTestDB())("an agent's queue", (it) => {
   );
 
   it.effect(
-    "a message an edit held past its turn's end is passed over, keeps its place, and goes once its hold lapses",
+    "the turn's end stops at a message being edited, sending nothing past it, and Cancel lets the queue go on with it",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { agent, ask, owner, turnEnded, swept, queued } = yield* queuedBehindEndedTurn(eve, [
+        const { agent, ask, owner, turnEnded, queued } = yield* queuedBehindEndedTurn(eve, [
           "Edited",
+          "After",
         ]);
         const [edited] = (yield* queued)?.messages ?? [];
         assert.ok(edited !== undefined);
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.HOLD,
-          messageId: edited.id,
-          held: true,
-        });
+        const marked = (editing: boolean) =>
+          queueChanged(ask, owner, agent.id, {
+            change: QUEUE_CHANGE.HOLD,
+            messageId: edited.id,
+            held: editing,
+          });
 
+        yield* marked(true);
         yield* turnEnded;
-        assert.equal(
-          handedCount(eve, "Edited"),
-          0,
-          "the turn's end passes over a message being edited",
+        assert.deepEqual(
+          [handedCount(eve, "Edited"), handedCount(eve, "After")],
+          [0, 0],
+          "nothing past a message being edited goes",
         );
 
-        // The edit's window closed without letting go: its hold lapses, and the sweep hands it on.
-        yield* TestClock.adjust(Duration.millis(LINE_GRACE_MILLIS + 1));
-        yield* swept;
-        yield* swept;
-        assert.equal(handedCount(eve, "Edited"), 1);
-        assert.deepEqual((yield* queued)?.messages ?? [], []);
+        yield* marked(false);
+        assert.deepEqual([handedCount(eve, "Edited"), handedCount(eve, "After")], [1, 0]);
       }),
   );
 
@@ -520,29 +513,6 @@ it.layer(getTestDB())("an agent's queue", (it) => {
           [],
           "the message left the queue rather than standing claimed",
         );
-      }),
-  );
-
-  it.effect(
-    "an idle agent's page names when a queued message's edit lapses, which moves the queue with no row written",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { agent, ask, owner, queued } = yield* queuedBehindEndedTurn(eve, ["Edited"]);
-        const [edited] = (yield* queued)?.messages ?? [];
-        assert.ok(edited !== undefined);
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.HOLD,
-          messageId: edited.id,
-          held: true,
-        });
-
-        const read = yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, wait: "none" }));
-
-        // SAFETY: the route answers a page as a JSON object.
-        const body = read.body as Record<string, WireBoundaryInput>;
-        assert.equal(body.holds, false, "nothing runs, so the read would not hold");
-        assert.equal(body.wakeIn, LINE_GRACE_MILLIS);
       }),
   );
 
@@ -625,7 +595,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         const queue = yield* queueChanged(ask, owner, agent.id, {
           change: QUEUE_CHANGE.ADD,
           text: "Then open the pull request.",
-          clientKey: randomUUID(),
+          id: randomUUID(),
         });
         assert.deepEqual(
           queue.messages.map((message) => message.text),
@@ -684,7 +654,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         yield* queueChanged(ask, owner, agent.id, {
           change: QUEUE_CHANGE.ADD,
           text: "Open the pull request.",
-          clientKey: randomUUID(),
+          id: randomUUID(),
         });
         yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
         yield* kept.run;
@@ -713,7 +683,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         const [queued] = (yield* queueChanged(ask, owner, agent.id, {
           change: QUEUE_CHANGE.ADD,
           text: "Open the pull request.",
-          clientKey: randomUUID(),
+          id: randomUUID(),
         })).messages;
         assert.ok(queued !== undefined);
         // Held by an edit, so the Resume hands nothing on and the queue's pause alone is at stake.
@@ -756,7 +726,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
       const [queued] = (yield* queueChanged(ask, owner, agent.id, {
         change: QUEUE_CHANGE.ADD,
         text: "Open the pull request.",
-        clientKey: randomUUID(),
+        id: randomUUID(),
       })).messages;
       assert.ok(queued !== undefined);
       yield* claimQueueHead(agent.id);
@@ -784,7 +754,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         yield* queueChanged(ask, owner, agent.id, {
           change: QUEUE_CHANGE.ADD,
           text: "Late",
-          clientKey: randomUUID(),
+          id: randomUUID(),
         });
 
         assert.equal(handedCount(eve, "Late"), 1);
@@ -801,7 +771,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         yield* queueChanged(ask, owner, agent.id, {
           change: QUEUE_CHANGE.ADD,
           text: "Then open a pull request.",
-          clientKey: randomUUID(),
+          id: randomUUID(),
         });
         yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
         const page = readAnswer(
@@ -826,7 +796,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         yield* queueChanged(ask, owner, agent.id, {
           change: QUEUE_CHANGE.ADD,
           text: "Open the pull request.",
-          clientKey: randomUUID(),
+          id: randomUUID(),
         });
 
         const changed = yield* ask(
@@ -834,7 +804,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
             method: "POST",
             id: agent.id,
             cookie: sessionCookieOf(other),
-            body: { change: QUEUE_CHANGE.ADD, text: "Also the docs.", clientKey: randomUUID() },
+            body: { change: QUEUE_CHANGE.ADD, text: "Also the docs.", id: randomUUID() },
           }),
         );
 
@@ -865,7 +835,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         yield* queueChanged(ask, owner, agent.id, {
           change: QUEUE_CHANGE.ADD,
           text: "Open the pull request.",
-          clientKey: randomUUID(),
+          id: randomUUID(),
         });
         const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
         const eveFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
@@ -907,7 +877,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         yield* queueChanged(ask, owner, agent.id, {
           change: QUEUE_CHANGE.ADD,
           text: "Open the pull request.",
-          clientKey: randomUUID(),
+          id: randomUUID(),
         });
         const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
 

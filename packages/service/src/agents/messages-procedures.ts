@@ -436,7 +436,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
         case QUEUE_CHANGE.ADD: {
           const outcome = yield* found(
             queueAgentMessage(userId, agent.id, {
-              clientKey: body.clientKey,
+              id: body.id,
               text: body.text,
               attachments: body.attachments,
             }),

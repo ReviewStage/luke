@@ -133,7 +133,7 @@ it.layer(getTestDB())("what moves a coding agent's transcript notifies", (it) =>
           liveCursorParts(agentTranscriptLive, params, {}),
           ({ queries }) => JSON.stringify(queries.queueRevision?.rows ?? []),
         );
-        yield* queueAgentMessage(userId, agentId, { clientKey: randomUUID(), text: "First" });
+        yield* queueAgentMessage(userId, agentId, { id: randomUUID(), text: "First" });
         const [queued] = Option.getOrThrow(yield* readAgentQueue(userId, agentId)).messages;
         assert.ok(queued !== undefined);
         const before = yield* queuePart;

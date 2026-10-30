@@ -239,7 +239,7 @@ test("a message queued is drawn once, never beside its own row on a page that li
 
   act(() =>
     now().page({
-      messages: [{ ...message("m1", "Hello"), clientKey: added.clientKey }],
+      messages: [message(added.id, "Hello")],
       revision: 2,
     }),
   );
@@ -301,8 +301,7 @@ test("a message queued with an image draws its thumbnail at once and as it lands
     now().page({
       messages: [
         {
-          ...message("m1", ""),
-          clientKey: queued.clientKey,
+          ...message(queued.id, ""),
           files: [{ name: SHOT.name, mediaType: SHOT.mediaType, id: landed }],
         },
       ],
@@ -311,4 +310,22 @@ test("a message queued with an image draws its thumbnail at once and as it lands
   );
 
   assert.equal(ready(landed), url);
+});
+
+test("a change pressed on a message before its add has answered waits for the add, then goes under the message's own id", async () => {
+  act(() => now().page({ messages: [], revision: 1 }));
+  act(() => now().composer.setDraft("Hello"));
+  act(() => now().editing.queue());
+  await settle();
+  const [added] = sent;
+  assert.ok(added?.change === QUEUE_CHANGE.ADD);
+  const [drawn] = now().queue.messages;
+  assert.equal(drawn?.id, added.id, "the row is drawn under the id it is queued under");
+
+  act(() => void now().queue.remove(drawn));
+  await settle();
+  assert.equal(sent.length, 1, "the delete waits for the add");
+
+  await answer({ queue: { messages: [message(added.id, "Hello")], revision: 2 } });
+  assert.deepEqual(sent[1], { change: QUEUE_CHANGE.DELETE, messageId: added.id });
 });

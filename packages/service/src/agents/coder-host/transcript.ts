@@ -1,5 +1,4 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { type AgentQueueRead, agentQueueNow } from "@luke/database/models/agent-queue-store";
 import {
   type Agent,
   type AgentDelegation,
@@ -55,7 +54,7 @@ import {
 } from "@luke/features/agent-wire";
 import { turnRecordOf } from "@luke/features/turn-record";
 import type { ToolSet } from "ai";
-import { Clock, DateTime, Duration, Effect, Option, type Schema } from "effect";
+import { Clock, Duration, Effect, Option, type Schema } from "effect";
 import {
   isSettledToolPartState,
   isStoredToolPart,
@@ -67,7 +66,7 @@ import {
 } from "../../core.js";
 import { heldUntil } from "../../http/held-read.js";
 import { ModelCatalog, type OfferedModel } from "../../providers/model-catalog.js";
-import { queueLapseOf, queueOnPage, wireQueue } from "./agent-queue.js";
+import { queueOnPage } from "./agent-queue.js";
 import { CODER } from "./bounds.js";
 import { agentContextOf, contextWindowOf } from "./context.js";
 import {
@@ -472,8 +471,6 @@ const withUsage = (
   page: TranscriptPage,
   turn: NewestTurn,
   own: OwnAgent | undefined,
-  /** The agent's queue where its caller read it already, as a read at once does for when it lapses; read here otherwise. */
-  queueRead?: AgentQueueRead,
 ): TranscriptEffect<TranscriptPage, ModelCatalog> =>
   Effect.gen(function* () {
     const catalog = yield* ModelCatalog;
@@ -498,12 +495,7 @@ const withUsage = (
               ? Effect.succeed<readonly AgentSubagentStanding[]>([])
               : subagentStandingsOf(target),
           // Note that the queue is read after the page's messages, so a message the page lists as sent has left it.
-          queue:
-            own === undefined
-              ? Effect.succeed(undefined)
-              : queueRead === undefined
-                ? queueOnPage(own.id)
-                : Effect.map(DateTime.nowAsDate, (now) => wireQueue(queueRead, now)),
+          queue: own === undefined ? Effect.succeed(undefined) : queueOnPage(own.id),
         },
         { concurrency: CODER.READ_CONCURRENCY },
       );
@@ -816,7 +808,7 @@ export function transcriptPast(
 export interface TranscriptNow {
   readonly page: TranscriptPage;
   readonly holds: boolean;
-  /** Milliseconds from now until an agent past its grace or a title's window closing may end the hold, or a queued message's edit or send lapses, which no row changing says; absent where nothing but a row may. */
+  /** Milliseconds from now until an agent past its grace or a title's window closing may end the hold, which no row changing says; absent where nothing but a row may. */
   readonly wakeIn?: number;
 }
 
@@ -841,16 +833,12 @@ export function transcriptNow(
   return Effect.gen(function* () {
     const { page, turn, graceEdge } = yield* pagePast(target, tools, after, agent);
     const holds = yield* holdsFor(page, titleAwaited);
-    // The queue read once, for the page and for when its next edit or send lapses, which moves it with no row written.
-    const queueRead = own === undefined ? undefined : yield* agentQueueNow(own.id);
-    const read = { page: yield* withUsage(target, tools, page, turn, own, queueRead), holds };
-    const holdEdge = holds ? yield* holdEdgeOf(page, graceEdge, titleEdge) : undefined;
-    const queueEdge =
-      queueRead === undefined ? undefined : queueLapseOf(queueRead, yield* DateTime.nowAsDate);
-    const edges = [holdEdge, queueEdge].filter((edge) => edge !== undefined);
-    if (edges.length === 0) return read;
+    const read = { page: yield* withUsage(target, tools, page, turn, own), holds };
+    if (!holds) return read;
+    const edge = yield* holdEdgeOf(page, graceEdge, titleEdge);
+    if (edge === undefined) return read;
     const now = yield* Clock.currentTimeMillis;
-    return { ...read, wakeIn: Math.max(1, Math.min(...edges) - now) };
+    return { ...read, wakeIn: Math.max(1, edge - now) };
   });
 }
 

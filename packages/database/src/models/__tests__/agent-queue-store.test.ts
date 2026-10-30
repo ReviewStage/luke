@@ -72,10 +72,10 @@ it.layer(getTestDB())("an agent's queue", (it) => {
       Effect.gen(function* () {
         const { userId, agentId } = yield* openAccount;
         const key = randomUUID();
-        yield* queueAgentMessage(userId, agentId, { clientKey: key, text: "First" });
-        yield* queueAgentMessage(userId, agentId, { clientKey: randomUUID(), text: "Second" });
-        yield* queueAgentMessage(userId, agentId, { clientKey: key, text: "First again" });
-        yield* queueAgentMessage(userId, agentId, { clientKey: randomUUID(), text: "Third" });
+        yield* queueAgentMessage(userId, agentId, { id: key, text: "First" });
+        yield* queueAgentMessage(userId, agentId, { id: randomUUID(), text: "Second" });
+        yield* queueAgentMessage(userId, agentId, { id: key, text: "First again" });
+        yield* queueAgentMessage(userId, agentId, { id: randomUUID(), text: "Third" });
         assert.deepEqual(yield* wordsOf(userId, agentId), ["First", "Second", "Third"]);
 
         const [first, second, third] = Option.getOrThrow(
@@ -92,7 +92,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         assert.deepEqual(yield* wordsOf(userId, agentId), ["Third", "First", "Second, reworded"]);
 
         const taken = Option.getOrThrow(yield* takeQueuedMessage(userId, agentId, first.id));
-        assert.equal(Option.getOrThrow(taken).clientKey, key);
+        assert.equal(Option.getOrThrow(taken).id, key);
         assert.deepEqual(yield* wordsOf(userId, agentId), ["Third", "Second, reworded"]);
       }),
   );
@@ -105,8 +105,8 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         yield* pauseAgentQueue(agentId, QUEUE_PAUSE.STOPPED);
         assert.equal(Option.getOrThrow(yield* readAgentQueue(userId, agentId)).paused, undefined);
 
-        yield* queueAgentMessage(userId, agentId, { clientKey: randomUUID(), text: "First" });
-        yield* queueAgentMessage(userId, agentId, { clientKey: randomUUID(), text: "Second" });
+        yield* queueAgentMessage(userId, agentId, { id: randomUUID(), text: "First" });
+        yield* queueAgentMessage(userId, agentId, { id: randomUUID(), text: "Second" });
         yield* pauseAgentQueue(agentId, QUEUE_PAUSE.REFUSED, "agent-plan-limit-reached");
         yield* pauseAgentQueue(agentId, QUEUE_PAUSE.STOPPED);
         assert.deepEqual(Option.getOrThrow(yield* readAgentQueue(userId, agentId)).paused, {
@@ -124,14 +124,17 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         });
         const head = yield* claimed();
         assert.equal(head.text, "First");
-        // A message being edited is passed over, keeping its place, until its edit ends or lapses.
-        yield* holdQueuedMessage(userId, agentId, head.id, true);
-        assert.equal((yield* claimed()).text, "Second");
-        yield* holdQueuedMessage(userId, agentId, head.id, false);
-        assert.equal((yield* claimed()).text, "First");
+        // A message being edited stops the hand-off at it, however long it stands: those ahead of it still go, and
+        // nothing past it does, until its mark is cleared.
+        const [, second] = Option.getOrThrow(yield* readAgentQueue(userId, agentId)).messages;
+        assert.ok(second !== undefined);
         yield* holdQueuedMessage(userId, agentId, head.id, true);
         yield* TestClock.adjust(Duration.millis(LINE_GRACE_MILLIS));
-        assert.equal((yield* claimed()).text, "First");
+        assert.ok(Option.isNone(yield* claimQueueHead(agentId)), "nothing past it goes");
+        yield* holdQueuedMessage(userId, agentId, head.id, false);
+        yield* holdQueuedMessage(userId, agentId, second.id, true);
+        assert.equal((yield* claimed()).text, "First", "a message ahead of it goes");
+        yield* holdQueuedMessage(userId, agentId, second.id, false);
         yield* dropQueuedMessage(agentId, Option.getOrThrow(yield* claimQueueHead(agentId)));
         yield* pauseAgentQueue(agentId, QUEUE_PAUSE.TURN_FAILED);
         const [last] = Option.getOrThrow(yield* readAgentQueue(userId, agentId)).messages;
@@ -148,8 +151,8 @@ it.layer(getTestDB())("an agent's queue", (it) => {
     () =>
       Effect.gen(function* () {
         const { userId, agentId } = yield* openAccount;
-        yield* queueAgentMessage(userId, agentId, { clientKey: randomUUID(), text: "First" });
-        yield* queueAgentMessage(userId, agentId, { clientKey: randomUUID(), text: "Second" });
+        yield* queueAgentMessage(userId, agentId, { id: randomUUID(), text: "First" });
+        yield* queueAgentMessage(userId, agentId, { id: randomUUID(), text: "Second" });
         const sending = Option.getOrThrow(yield* claimQueueHead(agentId));
         assert.equal(sending.text, "First");
         assert.ok(Option.isNone(yield* claimQueueHead(agentId)), "one message goes at a time");
@@ -203,7 +206,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
       const idle = yield* openAccount;
       for (const each of [busy, idle]) {
         yield* queueAgentMessage(each.userId, each.agentId, {
-          clientKey: randomUUID(),
+          id: randomUUID(),
           text: "Next",
         });
       }
@@ -233,7 +236,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
       const owner = yield* openAccount;
       const other = yield* openAccount;
       yield* queueAgentMessage(owner.userId, owner.agentId, {
-        clientKey: randomUUID(),
+        id: randomUUID(),
         text: "Theirs",
       });
       yield* pauseAgentQueue(owner.agentId, QUEUE_PAUSE.STOPPED);
@@ -246,7 +249,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
       assert.ok(
         Option.isNone(
           yield* queueAgentMessage(other.userId, owner.agentId, {
-            clientKey: randomUUID(),
+            id: randomUUID(),
             text: "Intruder",
           }),
         ),

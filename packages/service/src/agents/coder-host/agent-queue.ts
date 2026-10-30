@@ -29,7 +29,6 @@ import {
   claimedAt,
   claimQueueHead,
   dropQueuedMessage,
-  heldAt,
   pauseAgentQueue,
   type QueuedMessageRow,
   refuseQueuedMessage,
@@ -41,7 +40,6 @@ import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import type { HostedApiError } from "@luke/features";
 import { type AgentQueue, QUEUE_PAUSE, type QueuePause } from "@luke/features/agent-queue-wire";
-import { LINE_GRACE_MILLIS } from "@luke/features/agent-status";
 import { AGENT_STATUS } from "@luke/features/agent-wire";
 import { TURN_STATUS } from "@luke/wire";
 import { Clock, DateTime, Effect, Option } from "effect";
@@ -85,8 +83,8 @@ export function queueEveFor(reach: EveReach, request: Request, requester: string
 
 /**
  * The queue as the agent's own transcript carries it at `now`, on every
- * page, empty or not: its messages but one being sent, which of them an edit
- * holds, its pause, and its revision, which a window's change still out is
+ * page, empty or not: its messages but one being sent, which of them a
+ * member is editing, its pause, and its revision, which a window's change still out is
  * drawn over until a page stands at.
  */
 export function wireQueue(read: AgentQueueRead, now: Date): AgentQueue {
@@ -96,8 +94,7 @@ export function wireQueue(read: AgentQueueRead, now: Date): AgentQueue {
       id: message.id,
       text: message.text,
       queuedBy: message.userId,
-      clientKey: message.clientKey,
-      ...(heldAt(message, now) ? { editing: true as const } : undefined),
+      ...(message.editing ? { editing: true as const } : undefined),
       ...(message.attachments.length === 0
         ? undefined
         : {
@@ -129,19 +126,6 @@ export function queueOnPage(agentId: string) {
   });
 }
 
-/** When the next of the queue's edits or sends lapses after `now`, in epoch milliseconds, which moves it with no row written; none where none stands. */
-export function queueLapseOf(read: AgentQueueRead, now: Date): number | undefined {
-  const lapses = read.messages.flatMap((message) => [
-    ...(heldAt(message, now) && message.heldUntil !== undefined
-      ? [message.heldUntil.getTime()]
-      : []),
-    ...(claimedAt(message, now) && message.claimedAt !== undefined
-      ? [message.claimedAt.getTime() + LINE_GRACE_MILLIS]
-      : []),
-  ]);
-  return lapses.length === 0 ? undefined : Math.min(...lapses);
-}
-
 /** Whether the agent is at work, as its status reads: starting, a turn running, or a message sent to it awaiting its turn. */
 const atWork = Effect.fn("web/queueAtWork")(function* (agent: Agent) {
   const turn = (yield* latestTurnsOfReached([agent.conversationId])).get(agent.conversationId);
@@ -171,7 +155,7 @@ export const sendQueued = Effect.fn("web/sendQueued")(function* (
   const eve = yield* eveFor(message.userId);
   yield* steerAgentWritten(eve, storeWriter({ tools: CODER_TOOL_SET }), message.userId, agent, {
     text: message.text,
-    clientKey: message.clientKey,
+    clientKey: message.id,
     // Note that each file goes as it came, without the id the queue read its bytes by.
     ...(message.attachments.length === 0
       ? undefined
@@ -185,7 +169,7 @@ export const sendQueued = Effect.fn("web/sendQueued")(function* (
     sender: { kind: MESSAGE_SENDER.MEMBER, userId: message.userId },
   });
   // Note that the message went, so a failure to take it out of the queue is no refusal of it: it is logged, and
-  // its claim left to lapse, after which the next hand-off sends it again under its key, answered as a repeat.
+  // its claim left to lapse, after which the next hand-off sends it again under its id, answered as a repeat.
   yield* dropQueuedMessage(agent.id, message).pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("agent-queue: a sent message's drop failed", cause),
@@ -218,7 +202,7 @@ export const claimNext = Effect.fn("web/claimNextQueued")(function* (agent: Agen
  * A message the hand-off claimed, sent. A refusal lets it go back to its
  * place and pauses the queue under the refusal; any other failure is logged,
  * its claim left to lapse, after which the next hand-off sends it again
- * under its key. Nobody's answer waits on it.
+ * under its id. Nobody's answer waits on it.
  */
 export const sendClaimed = Effect.fn("web/sendClaimedQueued")(function* (
   eveFor: QueueEve,
@@ -294,9 +278,10 @@ const QUEUE_SWEEP_LIMIT = 50;
 /**
  * The maintenance sweep's pass over the queues standing unpaused: each
  * handed on where its agent idles, as a turn's end would, so a queue whose
- * turn's end found nothing to hand on (its only message held by an edit
- * since let go of, a send cut off whose claim lapsed, or a turn ended
- * outside the runner's events) still goes. Answers how many queues it
+ * turn's end found nothing to hand on (a send cut off whose claim lapsed,
+ * or a turn ended outside the runner's events) still goes. Note that an
+ * edit's mark cleared hands on in its own request, as every member's change
+ * does. Answers how many queues it
  * looked at.
  */
 export const sweepAgentQueues = Effect.fn("web/sweepAgentQueues")(function* (eveFor: QueueEve) {

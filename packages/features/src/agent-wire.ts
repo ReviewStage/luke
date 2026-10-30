@@ -663,11 +663,11 @@ export type AgentMessageRequest = typeof agentMessageRequestSchema.Type;
 
 /** What a member asks of an agent's queue (`agent-queue-wire.ts`). */
 export const QUEUE_CHANGE = {
-  /** A message queued at the end, under the key this one send is known by, which a retry carries again. */
+  /** A message queued at the end, under the id its window minted, which a retry carries again. */
   ADD: "add",
   /** A queued message written again in its place, its words and files those the edit saved, its edit over. */
   EDIT: "edit",
-  /** A queued message taken into a member's composer to edit, held out of the hand-off until the edit ends or lapses; or, `held` false, the edit cancelled. */
+  /** A queued message taken into a member's composer to edit, which stops the hand-off at it until the edit is saved or cancelled; or, `held` false, the edit cancelled. */
   HOLD: "hold",
   DELETE: "delete",
   /** A queued message sent now, steering the turn under way, and taken out of the queue. */
@@ -684,8 +684,9 @@ const queuedMessageIdSchema = wireUuidSchema;
 export const agentQueueChangeSchema = EffectSchema.Union([
   EffectSchema.Struct({
     change: EffectSchema.Literal(QUEUE_CHANGE.ADD),
+    /** The message's id, minted by the window that queues it, which a retry carries again. */
+    id: queuedMessageIdSchema,
     text: messageWordsSchema,
-    clientKey: trimmedText(AGENT_BOUNDS.MAX_KEY_CHARS),
     attachments: EffectSchema.optionalKey(agentAttachmentsSchema),
   }).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments))),
   EffectSchema.Struct({

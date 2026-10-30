@@ -16,10 +16,11 @@ import { AgentPicturesProvider } from "./agent-pictures.js";
 import { AgentQueueDock } from "./agent-queue-dock.js";
 
 /**
- * The queue's presses as a reader finds them: a message still landing, queued
- * from this tab and not yet the service's, offers none, and a reader who did
- * not start the agent finds none at all, Resume among them, since the
- * service lets its starter alone change the queue. A row's words are drawn
+ * The queue's presses as a reader finds them: a message offers Steer, Edit,
+ * and Delete, one being edited Cancel alone, in any of the starter's
+ * windows, and a reader who did not start the agent finds none at all,
+ * Resume among them, since the service lets its starter alone change the
+ * queue. A row's words are drawn
  * as a sent message's are, a mention as its chip, and its files as a sent
  * message's, an image as its thumbnail, read through the agent's pictures.
  */
@@ -59,12 +60,8 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The dock drawn over `messages`, `landing` still on its way, for a reader who `controls` the queue or not; answers its presses by name, and its words, row by row. */
-function drawn(
-  controls: boolean,
-  landing: ReadonlySet<string>,
-  messages: readonly QueuedMessage[] = TWO,
-) {
+/** The dock drawn over `messages` for a reader who `controls` the queue or not; answers its presses by name, and its words, row by row. */
+function drawn(controls: boolean, messages: readonly QueuedMessage[] = TWO) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -78,7 +75,6 @@ function drawn(
           { value: PICTURES },
           createElement(AgentQueueDock, {
             messages,
-            landing,
             controls,
             paused: { because: QUEUE_PAUSE.STOPPED },
             editing: undefined,
@@ -119,21 +115,23 @@ function drawn(
   };
 }
 
-test("a message still landing offers no press, and one the service holds offers Steer, Edit, and Delete", () => {
-  const dock = drawn(true, new Set(["k2"]));
+test("a message offers Steer, Edit, and Delete, and one an edit left standing in another window offers Cancel alone", () => {
+  const [first, second] = TWO;
+  assert.ok(first !== undefined && second !== undefined);
+  const dock = drawn(true, [first, { ...second, editing: true }]);
 
   assert.deepEqual(dock.row(0), ["Steer", "Edit", "Delete"]);
-  assert.deepEqual(dock.row(1), []);
+  assert.deepEqual(dock.row(1), ["Cancel"]);
 });
 
 test("a reader who did not start the agent finds no press on the queue, Resume among them", () => {
-  const dock = drawn(false, new Set());
+  const dock = drawn(false);
 
   assert.deepEqual(dock.all(), []);
 });
 
 test("a queued message naming a mention draws the mention's chip, not its link's markdown", () => {
-  const dock = drawn(true, new Set(), [
+  const dock = drawn(true, [
     {
       id: "m1",
       text: "Wait 102 seconds [@Goal](https://tryluke.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b#goal)",
@@ -147,7 +145,7 @@ test("a queued message naming a mention draws the mention's chip, not its link's
 });
 
 test("a queued image is drawn on its row as a sent message's is, its thumbnail read through the agent's pictures", async () => {
-  const dock = drawn(true, new Set(), [
+  const dock = drawn(true, [
     {
       id: "m1",
       text: "Match this.",

@@ -2465,7 +2465,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           .set({ turnId: settled?.id })
           .where(eq(messages.conversationId, agent.conversationId));
         yield* queueAgentMessage(userId, agent.id, {
-          clientKey: randomUUID(),
+          id: randomUUID(),
           text: "Then open a pull request.",
         });
         // The turn's IDLE retires the warm runner before its queue is handed on, as the events route runs them.

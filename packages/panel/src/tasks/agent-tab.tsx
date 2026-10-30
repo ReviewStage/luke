@@ -2800,7 +2800,6 @@ function AgentTabView({
         <AgentPicturesProvider value={pictures}>
           <AgentQueueDock
             messages={queue.messages}
-            landing={queue.landing}
             controls={controlsQueue}
             paused={queue.paused}
             editing={queueEditing.editing}
@@ -2809,7 +2808,7 @@ function AgentTabView({
               queue.change({ change: QUEUE_CHANGE.STEER, messageId: message.id })
             }
             onEdit={queueEditing.edit}
-            onCancelEdit={queueEditing.cancel}
+            onCancelEdit={queueEditing.cancelRow}
             onDelete={queue.remove}
             onResume={() => queue.change({ change: QUEUE_CHANGE.RESUME })}
           />
