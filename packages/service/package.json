@@ -99,6 +99,7 @@
     "./agents/eve-host/pinned-state": "./src/agents/eve-host/pinned-state.js",
     "./agents/eve-host/relay": "./src/agents/eve-host/relay.js",
     "./agents/eve-host/seed": "./src/agents/eve-host/seed.js",
+    "./agents/host-install-script-app": "./src/agents/host-install-script-app.js",
     "./agents/luke-mcp/app": "./src/agents/luke-mcp/app.js",
     "./agents/luke-mcp/sandbox-door": "./src/agents/luke-mcp/sandbox-door.js",
     "./agents/native-events/native-title": "./src/agents/native-events/native-title.js",

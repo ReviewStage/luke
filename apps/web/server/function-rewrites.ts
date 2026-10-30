@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { HOST_WIRE } from "@luke/features/host-wire";
 import { isRecord, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Schema } from "effect";
 import { functionAliasPath, HAND_WRITTEN_FUNCTIONS } from "./build-output.js";
@@ -8,12 +9,13 @@ import type { FunctionDefinition } from "./function-durations.js";
 import { functionPublicPath, webFunctions } from "./function-layout.js";
 
 /**
- * The `/api/` entries of the web service's `routes` in `vercel.json`,
- * generated from the function table so a client path lands on the function
- * that groups its route. A route with no rewrite would 404 on production
+ * The `/api/` entries of the web service's `routes` in `vercel.json`, and the
+ * few public paths outside `/api/` a route answers, generated from the
+ * function table so a client path lands on the function that groups its
+ * route. A route with no rewrite would 404 on production
  * while every check stayed green, so the generation is committed and checked
  * in two steps: the table itself, `server/api-rewrites.json`, must be what
- * the routes generate, and the web service's `/api/` entries must be the
+ * the routes generate, and the web service's generated entries must be the
  * table, in its order. The table is its own file so the configuration can
  * one day be assembled by a `vercel.ts` that imports it: Vercel bundles a
  * config module's relative imports and evaluates it in plain Node, which can
@@ -86,6 +88,21 @@ const LITERAL_ROUTE_KEY = /^[a-z0-9/-]+$/;
 
 const API_ROUTE_PREFIX = "/api/";
 
+/**
+ * The routes answered at a public path outside `/api/` as well as at their
+ * own, each by an exact rule onto its route: the host's install script, which
+ * a member's install command fetches from `/install.sh` at whichever address
+ * of the deployment Settings showed it on, so the route can name that address
+ * as the script's origin. Vercel runs these rules before it looks at the
+ * built site's files, and the build writes no file at such a path besides.
+ */
+const PUBLIC_REWRITES: readonly { readonly path: string; readonly route: string }[] = [
+  {
+    path: HOST_WIRE.INSTALL_SCRIPT_PATH,
+    route: HOST_WIRE.INSTALL_SCRIPT_ROUTE.slice(API_ROUTE_PREFIX.length),
+  },
+];
+
 /** The fallback's pattern: every `/api/` path no rule above it took, its path after `/api/` captured. */
 export const ORPC_FALLBACK_SRC = `${API_ROUTE_PREFIX}(.*)`;
 
@@ -119,7 +136,8 @@ function passThroughPaths(definitions: readonly FunctionDefinition[]): readonly 
 }
 
 /**
- * The `/api/` rewrites, in the order they must stand: the segment rewrites,
+ * The generated rewrites, in the order they must stand: the public paths
+ * outside `/api/`, the segment rewrites,
  * one exact rule per route file a dispatcher holds, the pass-through rules of
  * the functions that answer by their own name, and last the fallback, which
  * lands every other `/api/` path on the hosted oRPC route with its path in
@@ -138,6 +156,11 @@ export function apiRewrites(
   const orpc = functionOf.get(ORPC_ROUTE_KEY);
   if (orpc === undefined) throw new Error("no function holds the hosted oRPC route");
   const rewrites: Rewrite[] = [];
+  for (const { path, route } of PUBLIC_REWRITES) {
+    const definition = functionOf.get(route);
+    if (definition === undefined) throw new Error(`no route behind the public path ${path}`);
+    rewrites.push({ src: exactPattern(path), dest: dest(definition, route) });
+  }
   const rewritten = new Set<string>([ORPC_ROUTE_KEY]);
   for (const segment of segments) {
     const definition = functionOf.get(segment.route);
@@ -318,8 +341,13 @@ export async function readVercelConfig(web: string): Promise<VercelConfig> {
   return decodeVercelConfig(source);
 }
 
-const isApiRewrite = (rewrite: { readonly src: string }) =>
-  rewrite.src.startsWith(API_ROUTE_PREFIX);
+const PUBLIC_REWRITE_SOURCES: ReadonlySet<string> = new Set(
+  PUBLIC_REWRITES.map(({ path }) => exactPattern(path)),
+);
+
+/** Whether a route of the web service is one the table generates: an `/api/` rewrite, or a public path's. */
+const isTableRewrite = (rewrite: { readonly src: string }) =>
+  rewrite.src.startsWith(API_ROUTE_PREFIX) || PUBLIC_REWRITE_SOURCES.has(rewrite.src);
 
 const sameRewrites = (a: readonly { readonly src: string }[], b: readonly Rewrite[]) =>
   JSON.stringify(a) === JSON.stringify(b);
@@ -332,16 +360,16 @@ const sameRewrites = (a: readonly { readonly src: string }[], b: readonly Rewrit
  */
 export async function rewritesDrifted(web: string): Promise<boolean> {
   // The file's shape is refused ahead of anything else being read, so the refusal names where the routes belong.
-  const committed = (await readVercelConfig(web)).services.web.routes.filter(isApiRewrite);
+  const committed = (await readVercelConfig(web)).services.web.routes.filter(isTableRewrite);
   const table = await readApiRewritesTable(web);
   const generated = apiRewrites(await webFunctions(web));
   return !sameRewrites(table, generated) || !sameRewrites(committed, table);
 }
 
-/** `vercel.json` with the web service's `/api/` rewrites replaced by the committed table, ahead of every other route of that service. */
+/** `vercel.json` with the web service's generated rewrites replaced by the committed table, ahead of every other route of that service. */
 export async function vercelConfigSource(web: string): Promise<string> {
   const config = await readVercelConfig(web);
-  const others = config.services.web.routes.filter((rewrite) => !isApiRewrite(rewrite));
+  const others = config.services.web.routes.filter((rewrite) => !isTableRewrite(rewrite));
   const routes = [...(await readApiRewritesTable(web)), ...others];
   const services = { ...config.services, web: { ...config.services.web, routes } };
   return `${JSON.stringify({ ...config, services }, null, 2)}\n`;
