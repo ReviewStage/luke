@@ -20,6 +20,7 @@ import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
 import {
   type CodeRef,
+  type ListedPullRequest,
   type RepositoryPin,
   type Task,
   type TaskAgentPin,
@@ -844,6 +845,8 @@ export interface TasksControl {
   taskAgentPins: readonly TaskAgentPin[];
   /** Every agent the list followed live carries, on a plan or with none, the archived ones among them; none while it is not. */
   liveAgents: readonly AgentSummary[] | undefined;
+  /** The pull request of every agent the list followed live carries that opened one, as its row keeps it; none while it is not. */
+  listedPullRequests: readonly ListedPullRequest[] | undefined;
   /**
    * Gives the pins a drag in the sidebar's Pinned section moved their new
    * places, on the account: a plan's and an agent's, drawn
@@ -1346,6 +1349,7 @@ export function useTasksTab(input: {
     listedAgents: tasks.tasks.some((task) => task.id === viewed.activeTaskId)
       ? liveAgents
       : undefined,
+    listedPullRequests: tasks.agentPullRequests,
     modeOf: (planId) => tasks.tasks.find((task) => task.id === planId)?.mode,
     onOpenIntegrations: input.onOpenIntegrations,
     onOpenApiKeys: input.onOpenApiKeys,
@@ -3584,6 +3588,7 @@ export function useTasksTab(input: {
     onPinAgent: pinAgent,
     taskAgentPins,
     liveAgents,
+    listedPullRequests: tasks.agentPullRequests,
     onMovePins: movePins,
     onDeleteTask: deleteTask,
     back,

@@ -39,6 +39,7 @@ import {
 } from "./sentry-install-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
+  listedPullRequestSchema,
   mergePolicySchema,
   planRevisionAnswerSchema,
   planRevisionSeqSchema,
@@ -189,6 +190,13 @@ export const tasksViewSchema = EffectSchema.Struct({
    * Tasks page's cards name each one rather than a count of the rest.
    */
   taskPullRequests: EffectSchema.optionalKey(EffectSchema.Array(taskPullRequestsSchema)),
+  /**
+   * The pull request of every agent that opened one, on a plan or none, the
+   * archived among them, as its row keeps it: present only while the list
+   * is followed live, when it is what a plan's or an agent's tabs offer each
+   * agent's Changes by, in place of reading each agent of it apart.
+   */
+  agentPullRequests: EffectSchema.optionalKey(EffectSchema.Array(listedPullRequestSchema)),
   /**
    * The reader's pins of agents on a plan, the archived ones left out: present
    * only while the list is followed live, when the sidebar's Pinned section

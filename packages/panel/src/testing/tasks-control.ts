@@ -449,6 +449,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onPinAgent: ignore,
     taskAgentPins: [],
     liveAgents: [],
+    listedPullRequests: undefined,
     onMovePins: ignore,
     onDeleteTask: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     back: () => false,

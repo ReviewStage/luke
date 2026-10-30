@@ -104,6 +104,18 @@ const ARCHIVED: AgentSummary = {
 
 const PULL = "https://github.com/acme/relay/pull/42";
 
+/** The pull request the task's agents opened, as GitHub last answered the service. */
+const BATCHED = {
+  number: 42,
+  title: "Send invitations in batches",
+  url: PULL,
+  state: PULL_REQUEST_STATE.OPEN,
+  checks: CHECK_SUMMARY.PASSING,
+  additions: 12,
+  deletions: 3,
+  changedFiles: 2,
+} as const;
+
 const FUNNEL: PageLine = {
   id: "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b",
   title: "Invite funnel",
@@ -169,20 +181,7 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
     case ACT_KIND.AGENTS_PULL_REQUEST:
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
-        value: {
-          repository: REPOSITORY,
-          branch: "luke/batch-invitations",
-          pullRequest: {
-            number: 42,
-            title: "Send invitations in batches",
-            url: PULL,
-            state: PULL_REQUEST_STATE.OPEN,
-            checks: CHECK_SUMMARY.PASSING,
-            additions: 12,
-            deletions: 3,
-            changedFiles: 2,
-          },
-        },
+        value: { repository: REPOSITORY, branch: "luke/batch-invitations", pullRequest: BATCHED },
       });
     default:
       return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
@@ -240,6 +239,12 @@ async function inbox(
           workspace: ACME,
           tasks: [TASK],
           liveAgents: [ARCHIVED, AGENT],
+          // Both agents' rows keep the pull request they opened, which the list carries beside them.
+          listedPullRequests: [ARCHIVED, AGENT].map((agent) => ({
+            agentId: agent.id,
+            taskId: TASK.id,
+            pullRequest: BATCHED,
+          })),
           inbox: [{ taskId: TASK.id, items: [waitingOf(ITEM)] }],
           inboxTasks: [{ taskId: TASK.id, items: 1, updatedAt: 2_000 }],
           inboxView: {

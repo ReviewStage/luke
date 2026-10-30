@@ -28,6 +28,7 @@ import { integrationConnectionOf } from "./integration-wire.js";
 import { sealedLiveQuerySchema } from "./live-wire.js";
 import { countedNumber } from "./service-wire.js";
 import {
+  type ListedPullRequest,
   PLAN_ACTOR,
   TASK_AGENTS_BOUNDS,
   type TaskAgentLine,
@@ -587,6 +588,19 @@ export function taskPullRequestsOfLiveRows(rows: TaskListLiveRows): readonly Tas
     const pullRequests = pullRequestLinesOf(agents);
     return pullRequests.length === 0 ? [] : [{ taskId, pullRequests }];
   });
+}
+
+/**
+ * The pull request of every agent whose row keeps one, on a plan or none,
+ * the archived among them, as the service last read it on GitHub: what a
+ * plan's or an agent's tabs offer each agent's Changes by.
+ */
+export function agentPullRequestsOfLiveRows(rows: TaskListLiveRows): readonly ListedPullRequest[] {
+  return rows.agents.flatMap((row) =>
+    row.published === null
+      ? []
+      : [{ agentId: row.id, taskId: row.planId, pullRequest: row.published }],
+  );
 }
 
 /**
