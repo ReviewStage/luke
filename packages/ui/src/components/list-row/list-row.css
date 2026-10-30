@@ -18,6 +18,14 @@
    they take, the swipe's slide, and every reveal, through `:has()`, the
    pointer's media, and custom properties set on the row. */
 
+/* The cap height of a lead line's name, registered as a length so it is
+   read in the name's size where it is set, then handed down (`ListRow`). */
+@property --luke-list-row-cap {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
 @layer components {
   /* A list's own box is drawn in utilities (`list-row.tsx`) but for its
      margin, which a page pulls out past its column by from this layer
@@ -352,28 +360,63 @@
     height: var(--luke-list-row-head-leading);
   }
 
-  /* Note that the metadata beside a lead line sits on the lead's baseline,
-     its smaller words level with the name's, because centring the two boxes
-     leaves the smaller words high. Its line stands at the top of the meta,
-     so the meta's baseline is its words' whatever mark leads it, and its
-     marks stand at the top of that line, where a face centres on the name's
-     cap height rather than on the smaller words' middle. */
+  /* A lead line's first line is drawn exactly, in any face: every part of
+     it stands on the name's baseline, the time's words included, and every
+     mark, which keeps no baseline of its own (`contain: layout`), stands on
+     it by its bottom edge and is carried to the name's cap-height centre,
+     half its own height less half the name's cap height. The name's cap
+     height is read once where each part's box takes the name's size, and
+     handed to the marks as `--luke-mark-cap`, as the unread dot reads it. */
   .luke-list-row[data-meta="title"][data-lead="above"]
-  :is(
-    .luke-list-row-lead[data-at="above"],
-    .luke-list-row-lead-label,
-    .luke-list-row-end,
-    .luke-list-row-end > .luke-list-row-meta
-  ) {
+  :is(.luke-list-row-leading, .luke-list-row-end, .luke-list-row-more) {
+    font-size: var(--luke-type-toolbar-title-size);
+  }
+
+  .luke-list-row[data-meta="title"][data-lead="above"]
+    :is(
+      .luke-list-row-leading,
+      .luke-list-row-lead[data-at="above"],
+      .luke-list-row-end,
+      .luke-list-row-more
+    ) {
+    --luke-list-row-cap: 1cap;
+    --luke-mark-cap: var(--luke-list-row-cap);
+  }
+
+  .luke-list-row[data-meta="title"][data-lead="above"]
+    :is(
+      .luke-list-row-main,
+      .luke-list-row-more,
+      .luke-list-row-lead[data-at="above"],
+      .luke-list-row-lead-icon,
+      .luke-list-row-lead-label,
+      .luke-list-row-end,
+      .luke-list-row-end > .luke-list-row-meta,
+      .luke-list-row-meta > * > *
+    ) {
     align-self: baseline;
   }
 
-  .luke-list-row[data-meta="title"][data-lead="above"] .luke-list-row-meta > * {
-    vertical-align: top;
+  /* Note that a leading column with no dot keeps its place, since an empty
+     column has no baseline to stand on and nothing in it to align, and one
+     with a dot stands as tall as its own line, so it reaches no lower than
+     the name's and the row keeps its height. */
+  .luke-list-row[data-meta="title"][data-lead="above"]
+  .luke-list-row-leading:has(.luke-unread-dot) {
+    height: auto;
+    align-self: baseline;
   }
 
-  .luke-list-row[data-meta="title"][data-lead="above"] .luke-list-row-meta > * > * {
-    align-self: flex-start;
+  /* Note that in a lead line's metadata the time is the one word, so
+     whatever else stands there is a mark. */
+  .luke-list-row[data-meta="title"][data-lead="above"]
+  :is(.luke-list-row-more, .luke-list-row-lead-icon, .luke-list-row-meta > * > :not(time)) {
+    contain: layout;
+    translate: 0 calc(50% - var(--luke-mark-cap) / 2);
+  }
+
+  .luke-list-row[data-meta="title"][data-lead="above"] .luke-list-row-more {
+    margin-block-start: 0;
   }
 
   .luke-list-row[data-meta="title"] .luke-list-row-description {
