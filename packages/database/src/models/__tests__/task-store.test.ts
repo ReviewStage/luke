@@ -49,7 +49,6 @@ import {
   setTaskParent,
   TASK_RUNS_IN_CLOUD,
   TaskAssigneeNotMember,
-  type TaskFinishGuard,
   TaskParentRepositoryDiffers,
   type TaskStandingAgent,
   updateTask,
@@ -955,10 +954,6 @@ const idleBut =
   (agents: readonly TaskStandingAgent[]): Effect.Effect<ReadonlySet<string>> =>
     Effect.succeed(new Set(agents.map(({ id }) => id).filter((id) => id !== busy)));
 
-/** Whether the finish moved the task to done. */
-const finished = (userId: string, taskId: string, idle: TaskFinishGuard<never>) =>
-  Effect.map(finishTaskWork(userId, taskId, idle, idleBut("")), Option.isSome);
-
 /** Who archived the agent, as Dean reads it: none while it stands unarchived. */
 const archiveOf = (dean: string, agentId: string) =>
   Effect.map(readAgent(dean, agentId), (agent) =>
@@ -980,7 +975,7 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
 
         // No merged pull request yet: the reader's row keeps none, the other's is still open.
         yield* recordAgentPublished(dean, merged, pullRequestIn(PULL_REQUEST_STATE.OPEN));
-        assert.equal(yield* finished(dean, taskId, everyoneIdle), false);
+        assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.IN_PROGRESS);
 
         // Merged, but the guard reads one standing agent at work, and sees only the standing ones.
@@ -991,32 +986,19 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
             seen.push(...agents.map(({ id }) => id));
             return !agents.some(({ id }) => id === reader);
           });
-        assert.equal(yield* finished(dean, taskId, readerBusy), false);
+        assert.equal(yield* finishTaskWork(dean, taskId, readerBusy), false);
         assert.deepEqual(seen.toSorted(), [merged, reader].toSorted());
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.IN_PROGRESS);
 
         // Everyone idle: done, and done once, stamped when it finished; the work taken up again clears the stamp.
         yield* TestClock.adjust("1 minute");
         const finishedAt = yield* Clock.currentTimeMillis;
-        const archived = yield* finishTaskWork(charles, taskId, everyoneIdle, idleBut(""));
-        assert.deepEqual(
-          Option.getOrThrow(archived)
-            .map(({ id }) => id)
-            .toSorted(),
-          [merged, reader].toSorted(),
-        );
+        assert.equal(yield* finishTaskWork(charles, taskId, everyoneIdle), true);
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.DONE);
         assert.equal((yield* listedTask(dean, taskId)).completedAt, finishedAt);
-        assert.deepEqual(yield* archiveOf(dean, reader), {
-          by: AGENT_ARCHIVER.LUKE,
-          userId: charles,
-          withTask: true,
-        });
-        assert.equal(yield* finished(dean, taskId, everyoneIdle), false);
-        // Luke's own reopen, as a turn or a Start takes the task up, brings back no agent the finish archived.
+        assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
         assert.equal(yield* beginTaskWork(dean, taskId), true);
         assert.equal((yield* listedTask(dean, taskId)).completedAt, undefined);
-        assert.notEqual(yield* archiveOf(dean, reader), undefined);
       }),
   );
 
@@ -1030,20 +1012,20 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         yield* recordAgentPublished(dean, merged, pullRequestIn(PULL_REQUEST_STATE.MERGED));
         yield* recordAgentPublished(dean, drafting, pullRequestIn(PULL_REQUEST_STATE.DRAFT));
 
-        assert.equal(yield* finished(dean, taskId, everyoneIdle), false);
+        assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
         yield* recordAgentPublished(dean, drafting, pullRequestIn(PULL_REQUEST_STATE.OPEN));
-        assert.equal(yield* finished(dean, taskId, everyoneIdle), false);
+        assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
 
         // Archived, the draft's agent is left out, and so would the merged one be.
         yield* archiveAgent(dean, drafting, true);
         yield* archiveAgent(dean, merged, true);
-        assert.equal(yield* finished(dean, taskId, everyoneIdle), false);
+        assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
         yield* archiveAgent(dean, merged, false);
 
         // A question open for the developer holds the task; a notice does not.
         const question = yield* openInboxItem(dean, workspace, taskId, merged, true);
         yield* openInboxItem(dean, workspace, taskId, merged, false);
-        assert.equal(yield* finished(dean, taskId, everyoneIdle), false);
+        assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.TODO);
         yield* Database.use((db) =>
           db
@@ -1051,7 +1033,7 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
             .set({ status: INBOX_STATUS.ANSWERED })
             .where(eq(inboxItem.id, question)),
         );
-        assert.equal(yield* finished(dean, taskId, everyoneIdle), true);
+        assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), true);
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.DONE);
       }),
   );
@@ -1065,9 +1047,9 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         const merged = yield* openTaskAgent(dean, workspace, taskId);
         yield* recordAgentPublished(dean, merged, pullRequestIn(PULL_REQUEST_STATE.MERGED));
 
-        assert.equal(yield* finished(outsider, taskId, everyoneIdle), false);
+        assert.equal(yield* finishTaskWork(outsider, taskId, everyoneIdle), false);
         yield* updateTask(dean, taskId, { status: TASK_STATUS.CANCELED });
-        assert.equal(yield* finished(dean, taskId, everyoneIdle), false);
+        assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.CANCELED);
       }),
   );
@@ -1094,16 +1076,13 @@ it.layer(getTestDB())("a task's move to Done", (it) => {
         assert.deepEqual(yield* archiveOf(dean, idle), { ...asDean, withTask: true });
         assert.equal(yield* archiveOf(dean, running), undefined);
 
-        // Its turn ends while the task stands Done: archived then.
-        const ended = yield* archiveAgentOfDoneTask(charles, taskId, running, {
-          archivedBy: { by: AGENT_ARCHIVER.LUKE, userId: charles },
-          idle: idleBut(""),
-        });
+        // Its turn ends while the task stands Done by Dean's move: archived then, as Dean.
+        const ended = yield* archiveAgentOfDoneTask(charles, taskId, running, idleBut(""));
         assert.deepEqual(
           ended.map(({ id }) => id),
           [running],
         );
-        assert.equal((yield* archiveOf(dean, running))?.withTask, true);
+        assert.deepEqual(yield* archiveOf(dean, running), { ...asDean, withTask: true });
 
         // Moved off Done, the task brings back what its Done archived, and the agent archived by hand stays.
         yield* updateTask(dean, taskId, { status: TASK_STATUS.IN_PROGRESS });
@@ -1112,10 +1091,7 @@ it.layer(getTestDB())("a task's move to Done", (it) => {
         assert.notEqual(yield* archiveOf(dean, byHand), undefined);
 
         // A turn ending on a task no longer Done archives nothing.
-        const after = yield* archiveAgentOfDoneTask(charles, taskId, running, {
-          archivedBy: { by: AGENT_ARCHIVER.LUKE, userId: charles },
-          idle: idleBut(""),
-        });
+        const after = yield* archiveAgentOfDoneTask(charles, taskId, running, idleBut(""));
         assert.deepEqual(after, []);
         assert.equal(yield* archiveOf(dean, running), undefined);
       }),

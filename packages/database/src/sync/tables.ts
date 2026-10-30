@@ -53,13 +53,15 @@ import { defineSyncTable, type SyncTable } from "./sync-table.js";
  * and the agents' journal of saves are ignored, because every save rewrites
  * both and no view reads them live: a save moves `updated_at` beside them,
  * which the task list and the task's record read, so a save still notifies.
+ * Who moved it to Done is ignored too, since no view reads it and it moves
+ * only with the status, which notifies.
  */
 export const taskSync = defineSyncTable(task, {
   topics: [
     { kind: TOPIC.TASK, column: task.id },
     { kind: TOPIC.WORKSPACE, column: task.organizationId },
   ],
-  ignore: [task.document, task.agentEdits],
+  ignore: [task.document, task.agentEdits, task.doneBy],
 });
 
 /**

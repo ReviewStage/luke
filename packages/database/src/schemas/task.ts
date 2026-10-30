@@ -24,7 +24,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
-import { agentTable } from "./agent.js";
+import { agentTable, type StoredArchive } from "./agent.js";
 import { organization, user } from "./auth.js";
 import { device } from "./device.js";
 
@@ -154,6 +154,15 @@ export const task = pgTable(
      * it stood leaves this as it stood too (`task-store.ts`).
      */
     completedAt: timestamptz("completed_at"),
+    /**
+     * Who moved the task to Done by hand, which archived its idle agents with
+     * it (`StoredArchive`): a member, or a coding agent for its member; null
+     * while it stands in any other status, and for a Done Luke's own finish
+     * made, which archives nothing. An agent still at work as it moved is
+     * archived as its turn ends, as this archiver, while the task still stands
+     * so (`task-store.ts`'s `archiveAgentOfDoneTask`).
+     */
+    doneBy: jsonb("done_by").$type<StoredArchive>(),
     createdAt: createdAt(),
     /** The last save of the document; the start, before any. */
     updatedAt: updatedAt(),

@@ -1,5 +1,4 @@
 import {
-  AGENT_ARCHIVER,
   AGENT_KIND,
   AGENT_MACHINE,
   type AgentMachineKind,
@@ -1046,6 +1045,7 @@ const TaskColumnChangesSchema = Schema.Struct({
   number: Schema.optionalKey(Schema.Number),
   status: Schema.optionalKey(taskStatusSchema),
   completedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
+  doneBy: Schema.optionalKey(ArchivedByColumnSchema),
   priority: Schema.optionalKey(taskPrioritySchema),
   assigneeId: Schema.optionalKey(Schema.NullOr(Schema.String)),
   parentTaskId: Schema.optionalKey(Schema.NullOr(Schema.String)),
@@ -1382,14 +1382,16 @@ export function savePlanText(
  * The columns of the row the change names; none where it names only a pin.
  * A move takes `movedNumber`, the
  * next number of the workspace it moves to. A status that moves stamps when
- * the task was finished (`completedAtOf`); one asked for as it already stands
- * leaves that stamp where it was.
+ * the task was finished (`completedAtOf`), and who moved it to Done where
+ * `doneBy` names an archiver and none otherwise; one asked for as it already
+ * stands leaves both where they were.
  */
 function columnChangesOf(
   changes: TaskChanges,
   standing: TaskRow,
   now: Date,
   movedNumber: number | undefined,
+  doneBy: StoredArchive | undefined,
 ): TaskColumnChanges {
   return {
     ...(changes.name === undefined ? undefined : { name: changes.name }),
@@ -1404,7 +1406,11 @@ function columnChangesOf(
         }),
     ...(changes.status === undefined || changes.status === standing.status
       ? undefined
-      : { status: changes.status, completedAt: completedAtOf(changes.status, now) }),
+      : {
+          status: changes.status,
+          completedAt: completedAtOf(changes.status, now),
+          doneBy: changes.status === TASK_STATUS.DONE ? (doneBy ?? null) : null,
+        }),
     ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
     ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
   };
@@ -1571,8 +1577,11 @@ const clearArchives = SqlSchema.void({
  * The task's standing agents, or the one named among them, that the guard
  * reads idle under their conversations' locks, archived with the task at
  * `now` by the archiver given, marked `withTask` so the task's move off
- * Done brings them back; who they are. The caller settles their open asks
- * once the task's own are settled, so those read as the task's.
+ * Done brings them back; who they are. An agent that is the archiver itself
+ * stands: one moving its own task to Done is still answering whoever asked,
+ * and is never archived by that move, at once or as its turn ends. The caller
+ * settles their open asks once the task's own are settled, so those read as
+ * the task's.
  */
 const archivedIdleWithTask = Effect.fnUntraced(function* <R>(
   taskId: string,
@@ -1585,7 +1594,9 @@ const archivedIdleWithTask = Effect.fnUntraced(function* <R>(
   );
   if (agents.length === 0) return [];
   const idle = yield* archive.idle(agents);
-  const agentIds = agents.filter(({ id }) => idle.has(id)).map(({ id }) => id);
+  const agentIds = agents
+    .filter(({ id }) => idle.has(id) && id !== archive.archivedBy.agentId)
+    .map(({ id }) => id);
   if (agentIds.length === 0) return [];
   return yield* stampArchivedWithTask({
     agentIds,
@@ -1624,11 +1635,13 @@ const broughtBackWithTask = Effect.fnUntraced(function* (taskId: string, complet
  * to work again opens again the items that move settled (`inbox-settle.ts`).
  *
  * Where the caller hands `doneArchive`, a change that moves the task to Done
- * archives with it, at its finish's stamp, every standing agent the guard
- * reads idle, as the archiver given; one still at work stands, and is
- * archived as its turn ends while the task still stands Done
- * (`archiveAgentOfDoneTask`). Any change that moves the task off Done brings
- * back every agent that Done archived with it, and no other.
+ * records the archiver given as who moved it there, and archives with it, at
+ * its finish's stamp, every standing agent the guard reads idle, as that
+ * archiver, the archiving agent itself left standing; one still at work
+ * stands, and is archived as its turn ends while the task still stands Done
+ * (`archiveAgentOfDoneTask`). A move to Done without one records no one, and
+ * archives nothing then or later. Any change that moves the task off Done
+ * brings back every agent that Done archived with it, and no other.
  */
 export function updateTask<E = never, R = never, RA = never>(
   userId: string,
@@ -1712,6 +1725,7 @@ export function updateTaskCommitted<E = never, R = never, RA = never>(
           locked.value,
           now,
           movedNumber,
+          doneArchive?.archivedBy,
         );
         // A change that names only a pin writes nothing of the row, and an update with nothing to set is no statement.
         const { txid: written, ...row } =
@@ -1889,7 +1903,7 @@ const beginTask = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .update(task)
-        .set({ status: TASK_STATUS.IN_PROGRESS, completedAt: null })
+        .set({ status: TASK_STATUS.IN_PROGRESS, completedAt: null, doneBy: null })
         .where(and(reachableTask(userId, taskId), ne(task.status, TASK_STATUS.IN_PROGRESS)))
         .returning({ txid: TXID }),
     ),
@@ -1969,7 +1983,7 @@ const findOpenQuestion = SqlSchema.findOneOption({
     ),
 });
 
-/** The one write that settles a task done: the status, and when it was finished, under the lock the finish holds, on a task not settled already. */
+/** The one write that settles a task done: the status, and when it was finished, by no one by hand, under the lock the finish holds, on a task not settled already. */
 const finishTask = SqlSchema.findOneOption({
   Request: Schema.Struct({ taskId: Schema.String, now: Schema.Date }),
   Result: TaskIdRowSchema,
@@ -1977,16 +1991,19 @@ const finishTask = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .update(task)
-        .set({ status: TASK_STATUS.DONE, completedAt: completedAtOf(TASK_STATUS.DONE, now) })
+        .set({
+          status: TASK_STATUS.DONE,
+          completedAt: completedAtOf(TASK_STATUS.DONE, now),
+          doneBy: null,
+        })
         .where(and(eq(task.id, taskId), notInArray(task.status, [...SETTLED])))
         .returning({ id: task.id }),
     ),
 });
 
 /**
- * Moves a task whose work is finished to done, and answers the agents it
- * archived with it, or none where it did not move. The work is finished
- * where every standing agent of the task, the archived
+ * Moves a task whose work is finished to done, and answers whether it moved.
+ * The work is finished where every standing agent of the task, the archived
  * left out, stands idle by the caller's guard, none of them has a pull
  * request still open or a draft, at least one of them has a merged one, and
  * no inbox item of the task holds a question open for the developer. A task
@@ -2000,80 +2017,79 @@ const finishTask = SqlSchema.findOneOption({
  * Like any change it is not a save, so the list's order stands. A finish
  * settles the task's open inbox items that still ask, and leaves its
  * notices open until a member opens them (`inbox-settle.ts`). It archives
- * with the task, as Luke for the account, every standing agent `archiveIdle`
- * reads idle, as a member's move to Done archives the idle ones
- * (`updateTaskCommitted`); one whose Stop is still on its way is archived as
- * its turn ends instead.
+ * no agent, then or as a turn ends, since someone may be talking to one:
+ * only a member's or an agent's move to Done does (`updateTaskCommitted`).
  */
 export function finishTaskWork<R = never>(
   userId: string,
   taskId: string,
   idle: TaskFinishGuard<R>,
-  archiveIdle: TaskIdleGuard<R>,
-): Effect.Effect<
-  Option.Option<readonly TaskArchivedAgent[]>,
-  TaskStoreFailure,
-  DatabaseServices | R
-> {
+): Effect.Effect<boolean, TaskStoreFailure, DatabaseServices | R> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        const unfinished = Option.none<readonly TaskArchivedAgent[]>();
         const locked = yield* lockTask({ userId, taskId });
-        if (Option.isNone(locked)) return unfinished;
-        if (SETTLED.includes(locked.value.status)) return unfinished;
+        if (Option.isNone(locked)) return false;
+        if (SETTLED.includes(locked.value.status)) return false;
         const pullRequests = yield* findStandingPullRequestStates({ taskId });
         if (pullRequests.some(({ state }) => OPEN_PULL_REQUEST_STATES.includes(state)))
-          return unfinished;
-        if (!pullRequests.some(({ state }) => state === PULL_REQUEST_STATE.MERGED))
-          return unfinished;
-        if (Option.isSome(yield* findOpenQuestion({ taskId }))) return unfinished;
+          return false;
+        if (!pullRequests.some(({ state }) => state === PULL_REQUEST_STATE.MERGED)) return false;
+        if (Option.isSome(yield* findOpenQuestion({ taskId }))) return false;
         const agents = yield* lockStandingAgents({ taskId });
-        if (!(yield* idle(agents))) return unfinished;
+        if (!(yield* idle(agents))) return false;
         const now = yield* DateTime.nowAsDate;
         const finished = yield* finishTask({ taskId, now });
-        if (Option.isNone(finished)) return unfinished;
-        const archived = yield* archivedIdleWithTask(
-          taskId,
-          undefined,
-          { archivedBy: { by: AGENT_ARCHIVER.LUKE, userId }, idle: archiveIdle },
-          now,
-        );
+        if (Option.isNone(finished)) return false;
         yield* settleTaskInboxItems(taskId, TASK_STATUS.DONE, now);
-        yield* settleAgentInboxItems(
-          archived.map(({ id }) => id),
-          now,
-        );
-        return Option.some(archived);
+        return true;
       }),
     ),
   );
 }
 
+/** Where the task stands and who moved it to Done by hand, its row locked until the caller commits; none where the account reaches no such task. */
+const lockDoneBy = SqlSchema.findOneOption({
+  Request: TaskKeySchema,
+  Result: Schema.Struct({ status: taskStatusSchema, doneBy: ArchivedByColumnSchema }),
+  execute: ({ userId, taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ status: task.status, doneBy: task.doneBy })
+        .from(task)
+        .where(reachableTask(userId, taskId))
+        .for("update"),
+    ),
+});
+
 /**
- * Archives the agent with its task where the task stands Done and the guard
- * reads the agent idle under its conversation's lock, as the task's move to
- * Done archives its idle agents, at this moment and as the archiver given:
- * what a turn's end asks of an agent still at work when its task moved to
- * Done. The task is read under its row's lock first, so a move off Done at
- * once either lands before, and nothing is archived, or waits and brings the
- * agent back. Answers the agent where it was archived; none where the task
- * stands in any other status, the account reaches no such task, or the agent
- * is archived already or still at work.
+ * Archives the agent with its task where a member or an agent moved the task
+ * to Done and the guard reads the agent idle under its conversation's lock,
+ * as that move archived the task's idle agents, at this moment and as whoever
+ * moved it: what a turn's end asks of an agent still at work when its task
+ * moved to Done. A Done Luke's own finish made archives nothing, and neither
+ * does one the agent made itself (`archivedIdleWithTask`). A turn's start
+ * takes the task up again (`beginTaskWork`), which clears who moved it, so a
+ * Done this reads was made while the agent's turn ran. The task is read under
+ * its row's lock first, so a move off Done at once either lands before, and
+ * nothing is archived, or waits and brings the agent back. Answers the agent
+ * where it was archived; none otherwise.
  */
 export function archiveAgentOfDoneTask<R = never>(
   userId: string,
   taskId: string,
   agentId: string,
-  archive: TaskDoneArchive<R>,
+  idle: TaskIdleGuard<R>,
 ): Effect.Effect<readonly TaskArchivedAgent[], TaskStoreFailure, DatabaseServices | R> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        const locked = yield* lockTask({ userId, taskId });
+        const locked = yield* lockDoneBy({ userId, taskId });
         if (Option.isNone(locked) || locked.value.status !== TASK_STATUS.DONE) return [];
+        const archivedBy = locked.value.doneBy;
+        if (archivedBy === null) return [];
         const now = yield* DateTime.nowAsDate;
-        const archived = yield* archivedIdleWithTask(taskId, agentId, archive, now);
+        const archived = yield* archivedIdleWithTask(taskId, agentId, { archivedBy, idle }, now);
         yield* settleAgentInboxItems(
           archived.map(({ id }) => id),
           now,
