@@ -6,10 +6,9 @@
  * `codex-sessions.ts`) point the runner at the paths, the runner bundles
  * the same Agent SDK (this package's `package.json`), and Codex's
  * app-server protocol types are generated from the same Codex
- * (`scripts/generate-codex-protocol.mjs`). A bump moves them together. A
- * local agent runs in a VM booted from that same image (`SANDBOX_IMAGE`);
- * what a device fetches or carries of its own, smolvm, a host's Node, and
- * the Claude Code, Codex, and GitHub CLI every host keeps for its agents to
+ * (`scripts/generate-codex-protocol.mjs`). A bump moves them together.
+ * What a device fetches or carries of its own, a host's Node, and the
+ * Claude Code, Codex, and GitHub CLI every host keeps for its agents to
  * run on the box itself, is an `AgentToolPin` checked by size, digest, and
  * signature where it has one before it is kept (`@luke/host`'s
  * `localAgentTool`). Erasable syntax alone, so Node runs the generator over
@@ -33,8 +32,8 @@ export const SHARED_FILES_DIRECTORY = "/tmp/luke";
  * reaches it: the package and its `playwright` command under `/usr/local`,
  * on every PATH and in `NODE_PATH`'s usual root, and its browsers inside its
  * own playwright-core, Playwright's hermetic install, rather than in the
- * cache of the user who built the image, whose home neither the cloud's
- * `agent` nor a device's own uid in its VM reads. Each Playwright looks in
+ * cache of the user who built the image, whose home the cloud's `agent`
+ * does not read. Each Playwright looks in
  * its own package for its browsers only where `PLAYWRIGHT_BROWSERS_PATH` is
  * `0`, so the runner hands both harnesses' commands that (`SANDBOX_TOOL_ENV`),
  * which also has a repository's own Playwright install its browsers in its
@@ -48,7 +47,7 @@ export const PLAYWRIGHT_PIN = {
   BROWSERS: "/usr/local/lib/node_modules/playwright/node_modules/playwright-core/.local-browsers",
 } as const;
 
-/** What every command a harness runs is handed of the image's tools, in the cloud and in a device's VM alike: each Playwright's browsers in its own package (`PLAYWRIGHT_PIN`). */
+/** What every command a harness runs in the cloud is handed of the image's tools: each Playwright's browsers in its own package (`PLAYWRIGHT_PIN`). */
 export const SANDBOX_TOOL_ENV = { PLAYWRIGHT_BROWSERS_PATH: "0" } as const;
 
 /** Where each launch installs the runner's bundle: a directory the image makes root-owned, so no Terminal's shell, the default user's, can swap what runs as `agent`. */
@@ -67,7 +66,7 @@ export const CLAUDE_CODE_PIN = {
   DIRECTORY: "/opt/luke/claude-agent-sdk",
   /** The binary, under `DIRECTORY`. */
   BINARY: "node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude",
-  /** The Linux arm64 build's binary, under `DIRECTORY`, which the OCI image built for arm64 links as `claude` instead. */
+  /** The Linux arm64 build's binary, under `DIRECTORY`, which the image's setup links as `claude` instead where it runs on arm64. */
   ARM64_BINARY: "node_modules/@anthropic-ai/claude-agent-sdk-linux-arm64/claude",
   /** Where the image links the binary as `claude`. */
   LINK: "/usr/local/bin/claude",
@@ -130,48 +129,6 @@ export interface AgentToolPin {
    */
   readonly FILES?: Readonly<Record<string, string>>;
 }
-
-/**
- * smolvm on a Mac whose local agents run sandboxed, one VM each: the
- * release step 0 and the launcher's hand test passed on, as its GitHub
- * release keeps the macOS arm64 build. The whole folder is kept, since the
- * `smolvm` wrapper runs `smolvm-bin` beside it with the `lib/` it links, the
- * `agent-rootfs/` it boots, and the disk templates it copies. Its binary is
- * signed ad hoc with the hypervisor entitlement and no Developer ID team,
- * so its archive's digest decides, and the digests of what of it runs on the Mac, the
- * wrapper, the binary, and the libraries it loads, as the release's own
- * `checksums.txt` lists them, are checked again before every use. The same
- * release as a host's (`SMOLVM_LINUX_PIN`).
- */
-export const SMOLVM_MAC_PIN: AgentToolPin = {
-  NAME: "smolvm",
-  VERSION: "1.32.3",
-  ARCHIVE:
-    "https://github.com/smol-machines/smolvm/releases/download/v1.32.3/smolvm-1.32.3-darwin-arm64.tar.gz",
-  SHA256: "5d307f7df82886ccb48f3a3b3c77ff35dbeb00fc7dcdde8aa0d1d8b6fdb2d7f6",
-  BYTES: 41_229_365,
-  ROOT: "smolvm-1.32.3-darwin-arm64",
-  MEMBERS: [
-    "smolvm",
-    "smolvm-bin",
-    "lib",
-    "agent-rootfs",
-    "storage-template.ext4.zst",
-    "overlay-template.ext4.zst",
-  ],
-  BINARY: "smolvm",
-  FILES: {
-    smolvm: "b67b25f363403e19deceb6897e5a4d94be30a079f8cb751372782f17fc99003a",
-    "smolvm-bin": "f7540c75f4fe166a6932d84d0ddb7f94e2ebc4100d0994c9dca41084149e88d9",
-    "lib/libMoltenVK.dylib": "945c9d86e886edc19a9cc3975336f4c67279d3ca884bf55638b041d8921fd16f",
-    "lib/libepoxy.0.dylib": "4907b7a0cf4ef3515bde843dc187f22482d142898f6c44f2859b59c6298e3324",
-    "lib/libkrun.dylib": "cdda50c3e92462f853cef0f4392ddbb957f7f6edd5c3632ae7d8c93c4dd58cd5",
-    "lib/libkrunfw.5.dylib": "b83f38cceb26893d67d6d531550e3d3072e216d996b44cae9daa5507688889cd",
-    "lib/libkrunfw.dylib": "b83f38cceb26893d67d6d531550e3d3072e216d996b44cae9daa5507688889cd",
-    "lib/libvirglrenderer.1.dylib":
-      "6ad956b217da875edd64a25f799f3d2036c611626053d39b2cc4e36577645205",
-  },
-};
 
 /**
  * A tool's builds for a host (`apps/host`), one per architecture it runs on,
@@ -388,43 +345,3 @@ export const GH_LINUX_PINS: LinuxToolPins = {
     FILES: { "bin/gh": "a82a52e1bbe05bcd485f8cbbd5aa67e11a76fce6bdad394a2d179e1c24cfe367" },
   },
 };
-
-/**
- * smolvm on a host (`apps/host`), which runs every agent in a VM of its own: the
- * release an earlier install script fetched and checked, by the SHA-256 of each
- * architecture's tarball as smolvm's own release lists them
- * (`checksums.sha256`), and the version the daemon requires the box's
- * `smolvm` to answer `--version` with.
- */
-export const SMOLVM_LINUX_PIN = {
-  VERSION: "1.32.3",
-  ARCHIVE: {
-    x64: "https://github.com/smol-machines/smolvm/releases/download/v1.32.3/smolvm-1.32.3-linux-x86_64.tar.gz",
-    arm64:
-      "https://github.com/smol-machines/smolvm/releases/download/v1.32.3/smolvm-1.32.3-linux-arm64.tar.gz",
-  },
-  SHA256: {
-    x64: "82b50f55b35828efbf02ec84c22274780be109c7f424a24646390abc44506afe",
-    arm64: "baea200aea86c405e31afd3a6f278b3bcf6370ea252d35e66b90ba3e849b9721",
-  },
-} as const;
-
-/**
- * The most smolvm's seed folder (`image-seeds/`) may hold, handed to every
- * `smolvm` Luke runs, on a Mac and a host alike, under smolvm's own
- * variable: about three seeds of the sandbox image (2.8 GB each), the pin,
- * the one before it, and a second install's sharing the user's store. smolvm
- * holds it only right after it builds a seed, which is when the pin moves,
- * by evicting the least recently used seeds no machine's disk backs onto
- * until the folder fits. It caps the whole folder, not Luke's image alone:
- * a seed of another image the user ran can go, and is pulled again on its
- * next use.
- */
-export const SMOLVM_SEED_CAP = {
-  VARIABLE: "SMOLVM_IMAGE_SEED_MAX_BYTES",
-  BYTES: 9 * 1024 ** 3,
-} as const;
-
-/** Luke's sandbox image, as CI publishes it from the cloud's own setup script, pinned by digest: what every host agent's VM boots. */
-export const SANDBOX_IMAGE =
-  "ghcr.io/reviewstage/luke-sandbox:ea78580d96ce7256@sha256:f6ff07bdc663c9173a856a713e4caa02a725eedd3da4aed0029c662e3b0b33a5";

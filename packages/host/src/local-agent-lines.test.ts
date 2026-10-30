@@ -32,7 +32,7 @@ import * as FileSystem from "effect/FileSystem";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
 import { LAUNCH_NOTE } from "./local-agent-first-lines.js";
-import { fakeClis, fakeSandbox } from "./testing/fake-sandbox.js";
+import { fakeClis } from "./testing/fake-clis.js";
 import { type Script, type ScriptedSpawner, scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const SERVICE = "https://luke.test";
@@ -90,7 +90,6 @@ const directMac = (unsavedWork: Script | undefined) => ({
     claude: "/opt/luke/agent-tools/claude",
     codex: "/opt/luke/agent-tools/codex",
   },
-  sandbox: fakeSandbox().sandbox,
   clis: fakeClis(),
   formerlyDirect: true,
   storesOwned: false,

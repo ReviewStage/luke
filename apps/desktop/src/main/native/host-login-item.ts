@@ -107,7 +107,7 @@ const developmentHost = (stateRoot: string) =>
     const daemon = Effect.scoped(
       Effect.flatMap(
         ChildProcess.make(node, [bundle, "run"], {
-          // Note that the runner is the one the development build's own VMs mount, as a packaged app's is its own.
+          // Note that the runner is the development build's own, as a packaged app's is its own.
           env: {
             [DEVELOPMENT_VARIABLE.STATE_ROOT]: stateRoot,
             [DEVELOPMENT_VARIABLE.RUNNER_FOLDER]: path.resolve(

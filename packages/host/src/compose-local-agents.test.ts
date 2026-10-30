@@ -1,9 +1,8 @@
 /**
  * compose-local-agents.test.ts -- the follower as the operating system sees it run agents straight on the box: a device registered as direct, signed in to nothing, getting ready while it fetches its CLIs and ready to take an agent only once it has them, or why it could not have them, an agent launched on the box with a GitHub token from Luke in gh's config in its home, a launch whose claim's answer was lost claimed again and launched once, and, on This Mac alone, an agent that ran on the developer's own logins before refused with why.
  *
- * The follower runs over a scripted spawner, a fake sandbox for the VMs a
- * run from before left, a file system that holds nothing but what a test
- * names, and a fake service that hands one launch line and a new GitHub
+ * The follower runs over a scripted spawner, a file system that holds
+ * nothing but what a test names, and a fake service that hands one launch line and a new GitHub
  * token at each ask, answers each claim as a test says, its first answer
  * lost where it says, and whose beat answers the launches it holds the
  * device to, on the test's clock. The device converges to that answer on
@@ -11,8 +10,7 @@
  * is asked again, a runner whose launch is no longer named is stopped as a
  * stop line stops it, its process group killed, and neither a launch
  * claimed after the beat was sent nor one still starting is touched; a
- * launch kept from a run that ended has any VM it left deleted and is
- * settled; and a runner's GitHub token is renewed by its age on the wall
+ * launch kept from a run that ended is settled; and a runner's GitHub token is renewed by its age on the wall
  * clock. Synthetic ids and tokens throughout.
  */
 
@@ -43,10 +41,9 @@ import {
   type LocalAgentClis,
   LocalAgentClisUnavailable,
   LocalAgentPlatform,
-  type LocalAgentSandbox,
   Reporter,
 } from "./effect/seams.js";
-import { fakeClis, fakeSandbox } from "./testing/fake-sandbox.js";
+import { fakeClis } from "./testing/fake-clis.js";
 import { type Script, scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const HOME = "/Users/dev";
@@ -100,8 +97,7 @@ const until = (holds: () => boolean) =>
  * unless `formerlyDirect` says it is a host, with its CLIs ready once
  * `ready` succeeds; one launch line is handed. `madeBare` says the agent's
  * checkout already stands, as a launch from before the record left it.
- * With what it registered, spawned, asked, settled, and reported, and the
- * VMs of runs from before it deleted.
+ * With what it registered, spawned, asked, settled, and reported.
  */
 const followingDevice = (
   ready: LocalAgentClis["ready"],
@@ -129,8 +125,6 @@ const followingDevice = (
     readonly listsNoLaunches?: boolean;
     /** The clock the follower reads, the test's own where none is named. */
     readonly clock?: Clock.Clock;
-    /** How many of the first deletes of a VM a run from before left fail, as smolvm's can. */
-    readonly vmDeleteFails?: number;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -236,19 +230,6 @@ const followingDevice = (
           return `ghs_fixture_${asked.length}`;
         }),
     };
-    const vm = fakeSandbox(() => Effect.die("a device whose agents run on the box readies no VM"));
-    let deleteFails = options.vmDeleteFails ?? 0;
-    const sandbox: LocalAgentSandbox = {
-      ...vm.sandbox,
-      deleted: (agentId) =>
-        deleteFails > 0
-          ? Effect.sync(() => {
-              deleteFails -= 1;
-              return false;
-            })
-          : vm.sandbox.deleted(agentId),
-      started: () => Effect.die("a device whose agents run on the box starts no VM"),
-    };
     const services = Layer.mergeAll(
       spawner.layer,
       NodePath.layer,
@@ -297,7 +278,6 @@ const followingDevice = (
       Layer.succeed(LocalAgentPlatform, {
         launch: ({ node, env }) => ({ command: node, args: [], env }),
         tools: { node: RUNNER, claude: CLIS.paths.claude, codex: CLIS.paths.codex },
-        sandbox,
         clis: fakeClis(ready),
         formerlyDirect: options.formerlyDirect ?? true,
         storesOwned: false,
@@ -330,7 +310,6 @@ const followingDevice = (
       beats,
       spawned: spawner.spawned,
       asked,
-      vm,
       settled,
       service,
       files,
@@ -737,10 +716,9 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { service, settled, spawned, vm, reported } = yield* followingDevice(
-          () => Effect.void,
-          { runsUntilSignalled: true },
-        );
+        const { service, settled, spawned, reported } = yield* followingDevice(() => Effect.void, {
+          runsUntilSignalled: true,
+        });
         yield* until(() => spawned.some((each) => each.program === RUNNER));
         yield* beatsOn(1);
         const runner = spawned.find((each) => each.program === RUNNER);
@@ -751,11 +729,6 @@ it.effect(
         yield* until(() => settled.length > 0);
 
         assert.deepEqual(runner?.killed, { killSignal: "SIGTERM", forceKillAfterMillis: 3_000 });
-        assert.deepEqual(
-          vm.signalled,
-          [],
-          "no VM of the agent's is signalled, nor any process but its group",
-        );
         assert.equal(runner?.ended, "exited");
         assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 143 }]);
         assert.deepEqual(reported, [
@@ -808,28 +781,25 @@ it.effect(
     ),
 );
 
-it.effect(
-  "after a restart, a launch kept from the run before has any VM its agent's run from before left deleted and is settled as a runner gone",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const files = new Map([
-          [
-            `${STATE_ROOT}/local-agents.json`,
-            `${JSON.stringify({
-              devices: { [USER_ID]: "device-1" },
-              launches: [{ userId: USER_ID, id: GONE_LINE_ID, agentId: GONE_AGENT_ID }],
-            })}\n`,
-          ],
-        ]);
-        const { settled, vm } = yield* followingDevice(() => Effect.void, { files, lines: [] });
-        yield* until(() => settled.length > 0);
+it.effect("after a restart, a launch kept from the run before is settled as a runner gone", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const files = new Map([
+        [
+          `${STATE_ROOT}/local-agents.json`,
+          `${JSON.stringify({
+            devices: { [USER_ID]: "device-1" },
+            launches: [{ userId: USER_ID, id: GONE_LINE_ID, agentId: GONE_AGENT_ID }],
+          })}\n`,
+        ],
+      ]);
+      const { settled } = yield* followingDevice(() => Effect.void, { files, lines: [] });
+      yield* until(() => settled.length > 0);
 
-        assert.deepEqual(vm.deleted, [GONE_AGENT_ID]);
-        assert.deepEqual(settled, [{ id: GONE_LINE_ID }]);
-        assert.deepEqual(keptLaunches(files), []);
-      }),
-    ),
+      assert.deepEqual(settled, [{ id: GONE_LINE_ID }]);
+      assert.deepEqual(keptLaunches(files), []);
+    }),
+  ),
 );
 
 it.effect(
@@ -905,36 +875,6 @@ it.effect(
         yield* until(() => settled.length > 0);
 
         assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
-      }),
-    ),
-);
-
-it.effect(
-  "after a restart, a kept launch whose agent's VM from before could not be deleted is settled only once a beat has deleted it",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const files = new Map([
-          [
-            `${STATE_ROOT}/local-agents.json`,
-            `${JSON.stringify({
-              devices: { [USER_ID]: "device-1" },
-              launches: [{ userId: USER_ID, id: GONE_LINE_ID, agentId: GONE_AGENT_ID }],
-            })}\n`,
-          ],
-        ]);
-        const { settled, vm, beats } = yield* followingDevice(() => Effect.void, {
-          files,
-          lines: [],
-          vmDeleteFails: 2,
-        });
-        yield* until(() => beats.length > 0);
-
-        assert.deepEqual([settled, keptLaunches(files)], [[], [GONE_LINE_ID]]);
-        yield* beatsOn(1);
-        yield* until(() => settled.length > 0);
-        assert.deepEqual(vm.deleted, [GONE_AGENT_ID]);
-        assert.deepEqual(settled, [{ id: GONE_LINE_ID }]);
       }),
     ),
 );

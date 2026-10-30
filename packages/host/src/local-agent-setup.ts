@@ -20,9 +20,7 @@ import { keptToolBinary, localAgentTool } from "./local-agent-tools.js";
  * (`DEVICE_SETUP.FAILED`): words of Luke's own, never a tool's, so none
  * names a secret.
  */
-export const SETUP_FAILURE = {
-  SMOLVM: "smolvm couldn't be downloaded or didn't pass its check",
-  IMAGE: "the sandbox image couldn't be downloaded",
+const SETUP_FAILURE = {
   CLAUDE_CODE: "Claude Code couldn't be downloaded or didn't pass its check",
   CODEX: "Codex couldn't be downloaded or didn't pass its check",
   GH: "GitHub's CLI couldn't be downloaded or didn't pass its check",

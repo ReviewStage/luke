@@ -27,7 +27,7 @@ MAC_LABEL="dev.reviewstage.luke.host.standalone"
 MAC_LOG_FOLDER="Library/Logs/Luke Host"
 # Where a Mac's install that came before put Luke host, under the home of the user it ran as.
 MAC_APP_FOLDER="Library/Application Support/Luke Host"
-# The daemon's record of the agents whose folder and VM it made, an empty file named for each, in its state root (OWNED_FOLDER in packages/host/src/local-agent-state.ts).
+# The daemon's record of the agents whose folder it made, an empty file named for each, in its state root (OWNED_FOLDER in packages/host/src/local-agent-state.ts).
 OWNED_AGENTS="owned-agents"
 # Every agent's folder, one per agent under its id, under the home (DEVICE_AGENT_FOLDER.ROOT in packages/features/src/device-agent-wire.ts).
 AGENTS_FOLDER=".luke/agents"
@@ -173,15 +173,16 @@ uninstall_account() {
 }
 
 # Removes a Mac's install for the user who ran the command under sudo: its
-# LaunchAgent booted out, which stops the daemon and every agent's VM with it,
-# then each of its agents' machine deleted and folder (~/.luke/agents/<id>)
-# removed, and its LaunchAgent, folder (the release and the Mac's secret) and
-# logs removed. Note that ~/.luke/clones and ~/.luke/worktrees stay, since every
+# LaunchAgent booted out, which stops the daemon and every agent's runner with
+# it, then each of its agents' folder (~/.luke/agents/<id>) removed, with any
+# machine an older release ran it in deleted, and its LaunchAgent, folder (the
+# release and the Mac's secret) and logs removed. Note that ~/.luke/clones and ~/.luke/worktrees stay, since every
 # Luke install on the Mac shares them, the desktop app's own repositories among
 # them.
-# Note that the machines are smolvm's, kept in the user's own smolvm store rather than the
-# state, so each is deleted by name, with the smolvm the daemon fetched, before
-# the state goes; smolvm's cache of the sandbox image stays with that store.
+# Note that the machines are those older releases ran agents in, smolvm's, kept in the
+# user's own smolvm store rather than the state, so each is deleted by name, with the
+# smolvm such a release fetched, before the state goes; smolvm's cache of the sandbox
+# image stays with that store.
 # Note that the store and ~/.luke/agents are shared with every Luke app profile
 # whose This Mac runs beside this install, so only the agents the daemon's
 # record names are removed, and ~/.luke/agents and ~/.luke only where nothing
