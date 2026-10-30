@@ -259,9 +259,9 @@ function notTakenNote(item: InboxItem): string {
   }
 }
 
-/** A reply no answer came back for, which may have landed all the same: who sent it, the task it was sent on, where its words went back and as what, and what its card says of it. */
+/** A reply no answer came back for, which may have landed all the same: who sent it, where the reader was known as it went, the task it was sent on, where its words went back and as what, and what its card says of it. */
 interface UnheardReply extends SentReply {
-  readonly by: string;
+  readonly by: string | undefined;
   readonly taskId: string | undefined;
   readonly place: InboxPlace;
   readonly unsent: Draft;
@@ -452,8 +452,10 @@ function withRefused(now: Draft, went: Draft): Draft {
 /**
  * Whether a box holds just the words and files a reply gave back to it, so
  * letting go of them takes nothing written since. Note that its picks are
- * not compared, because the drafts let go of picks made on an item that
- * has changed since, as the reply landing changes it.
+ * not compared, and are kept where they still stand, because the drafts
+ * let go of those made on an item that has changed since, as the reply
+ * landing changes it, and one made since on an ask still open is the
+ * reader's own.
  */
 function holdsOnly(now: Draft, went: Draft): boolean {
   return now.text === went.text && Equal.equals(now.attachments, went.attachments);
@@ -645,12 +647,16 @@ export function useHeldTaskInbox(input: {
     [note],
   );
 
-  // Note that a reply no answer came back for is taken as sent once the thread holds it, its key let go as a sent one's is.
+  // Note that a reply no answer came back for is taken as sent once the thread holds it as the reader's, its key let go as a sent one's is; one sent before the reader was known waits until they are, so a teammate's words are never taken for it.
   useEffect(() => {
     const landed = [...unheard.values()].filter((reply) => {
       const item = held.items.find((each) => each.id === reply.place.itemId);
+      const by = reply.by ?? readerId;
       return (
-        held.taskId === reply.taskId && item !== undefined && holdsReply(item, reply, reply.by)
+        held.taskId === reply.taskId &&
+        item !== undefined &&
+        by !== undefined &&
+        holdsReply(item, reply, by)
       );
     });
     if (landed.length === 0) return;
@@ -664,11 +670,13 @@ export function useHeldTaskInbox(input: {
     for (const reply of landed) {
       const { itemId } = reply.place;
       onDropNote(itemId, reply.note);
-      writer.update(reply.place, (now) => (holdsOnly(now, reply.unsent) ? EMPTY_DRAFT : now));
+      writer.update(reply.place, (now) =>
+        holdsOnly(now, reply.unsent) ? { ...now, text: "", attachments: [] } : now,
+      );
       if (attempts.current.get(itemId)?.key === reply.key) attempts.current.delete(itemId);
     }
     latest.current.onRetryList();
-  }, [held, unheard, onDropNote, writer]);
+  }, [held, unheard, readerId, onDropNote, writer]);
 
   // Note that a nod is keyed by the revision it nods to, so a press again after a lost reply is
   // taken once, and a nod to the notice posted over since goes under a key of its own.
@@ -776,8 +784,7 @@ export function useHeldTaskInbox(input: {
               answers === undefined ? (holdsNothing(now) ? unsent : now) : withRefused(now, unsent),
             );
             const said = refused(item.id, answer.failure);
-            // Note that a teammate's message in the same words is not this reply, so a reader not known yet is never taken to have sent one.
-            if (answer.failure === AGENT_CALL_FAILURE.UNANSWERED && sender !== undefined) {
+            if (answer.failure === AGENT_CALL_FAILURE.UNANSWERED) {
               const reply = {
                 key,
                 text,
