@@ -79,13 +79,13 @@ test("each experiment is a switch, on as the account chose, that writes the choi
   assert.ok(memory, "Memory has a switch");
   assert.equal(memory.getAttribute("aria-checked"), "true");
   // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
-  assert.ok(page.textContent?.startsWith("Pilot"));
+  assert.ok(page.textContent?.startsWith("Skills"));
   assert.deepEqual(
     [...page.querySelectorAll('[role="switch"]')]
       .slice(0, 2)
       .map((each) => each.getAttribute("aria-label")),
-    ["Pilot", "Channels"],
-    "Channels stands second, after the newest",
+    ["Skills", "Pilot"],
+    "Pilot stands second, after the newest",
   );
 
   await act(async () => memory.click());
@@ -102,6 +102,7 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     for (const button of feedback) button.click();
   });
   assert.deepEqual(feedbackAbout, [
+    EXPERIMENT.SKILLS,
     EXPERIMENT.PILOT,
     EXPERIMENT.CHANNELS,
     EXPERIMENT.MEMORY,

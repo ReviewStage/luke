@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { HOST_CAPABILITY } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { settingsView } from "@luke/settings/testing";
+import { experimentsOn, settingsView } from "@luke/settings/testing";
 import { test } from "vitest";
 import {
   type SettingsSearchEntry,
@@ -185,7 +185,7 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["Experimental", "beta", "labs"]) {
     assert.deepEqual(
       experimentalFound(query, true),
-      ["Pilot", "Channels", "Memory", "Luke, your operator"],
+      ["Skills", "Pilot", "Channels", "Memory", "Luke, your operator"],
       query,
     );
   }
@@ -245,9 +245,9 @@ test("Escape and the keys that answer in place are found on the Keyboard shortcu
   assert.ok(shortcutsFound("link").includes("Link selected words"));
 });
 
-/** Every page's rows as a signed-in desktop reader of a workspace they administer sees them. */
+/** Every page's rows as a signed-in desktop reader of a workspace they administer sees them, Skills' among them. */
 const FULL_INPUT: SettingsSearchInput = {
-  settings: settingsView(),
+  settings: settingsView({ experiments: experimentsOn(EXPERIMENT.SKILLS) }),
   accountDrawn: true,
   capabilities: DESKTOP_CAPABILITIES,
   workspace: { ...TEAM, role: WORKSPACE_ROLE.ADMIN },

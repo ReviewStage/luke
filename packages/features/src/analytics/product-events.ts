@@ -306,6 +306,7 @@ export const PRODUCT_EXPERIMENT = {
   LOCAL_AGENTS: "local-agents",
   CHANNELS: "channels",
   PILOT: "pilot",
+  SKILLS: "skills",
 } as const;
 
 export type ProductExperiment = (typeof PRODUCT_EXPERIMENT)[keyof typeof PRODUCT_EXPERIMENT];
