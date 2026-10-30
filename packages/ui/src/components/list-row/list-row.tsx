@@ -155,7 +155,13 @@ export type { ListSelection } from "../selection/list-selection.js";
  * app's is (`LIST_ROW_META.TITLE`), at the end of its first line, its
  * title's or its lead's where that stands over the title, the lines under
  * it running the row's whole width and its leading mark level with the
- * first. A row's acts stand beside it, or, in a list
+ * first; or, in a rail whose rows count what each holds
+ * (`LIST_ROW_META.LAST`), at the end of its last line, the description's,
+ * on that line's baseline, the title over both running the row's whole
+ * width and its leading mark level with the title's first line. A row
+ * whose names run long may let its title run to a second line before it
+ * is cut short (`LIST_ROW_TITLE_LINES.TWO`), ending then in an ellipsis
+ * rather than a fade. A row's acts stand beside it, or, in a list
  * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), in
  * its metadata's place while the pointer rests on it or it holds the
  * keyboard, the metadata stepping aside as a sidebar row's time does for
@@ -215,13 +221,22 @@ export const LIST_ROW_CURRENT_LOOK = {
 
 export type ListRowCurrentLook = (typeof LIST_ROW_CURRENT_LOOK)[keyof typeof LIST_ROW_CURRENT_LOOK];
 
-/** Where a row's metadata stands: at the row's middle, or at the end of its title's line. */
+/** Where a row's metadata stands: at the row's middle, at the end of its title's line, or at the end of its last line, its description's. */
 export const LIST_ROW_META = {
   MIDDLE: "middle",
   TITLE: "title",
+  LAST: "last",
 } as const;
 
 export type ListRowMeta = (typeof LIST_ROW_META)[keyof typeof LIST_ROW_META];
+
+/** How many lines a row's title may run to before it is cut short: one, or two, as a rail of long names reads them. */
+export const LIST_ROW_TITLE_LINES = {
+  ONE: "one",
+  TWO: "two",
+} as const;
+
+export type ListRowTitleLines = (typeof LIST_ROW_TITLE_LINES)[keyof typeof LIST_ROW_TITLE_LINES];
 
 /** When a row's acts stand: always, beside it, or in its metadata's place only while the row is in hand. */
 export const LIST_ROW_ACTIONS = {
@@ -524,6 +539,7 @@ export function ListRow({
   attachmentsOpen = false,
   meta,
   metaAt = LIST_ROW_META.MIDDLE,
+  titleLines = LIST_ROW_TITLE_LINES.ONE,
   actions,
   actionsAt = LIST_ROW_ACTIONS.ALWAYS,
   onPress,
@@ -571,6 +587,8 @@ export function ListRow({
   meta?: ReactNode;
   /** Where the metadata stands: at the row's middle, or at the end of the title's line. */
   metaAt?: ListRowMeta;
+  /** How many lines its title may run to before it is cut short. */
+  titleLines?: ListRowTitleLines;
   /** The row's own acts (an IconButton, a Button), each a control beside the row's press. */
   actions?: ReactNode;
   /** When the acts stand: always, beside the row, or over its metadata's end while the row is hovered or holds the keyboard. */
@@ -700,6 +718,7 @@ export function ListRow({
       id={moreDrawn || said(actions) || describedAs !== undefined ? titleId : undefined}
       className="luke-list-row-title"
       data-overflow={String(titleClipped)}
+      data-lines={titleLines === LIST_ROW_TITLE_LINES.ONE ? undefined : titleLines}
     >
       {unread === true && unreadWords !== undefined ? (
         <VisuallyHidden>{unreadWords}</VisuallyHidden>
@@ -796,8 +815,9 @@ export function ListRow({
             {description}
           </span>
         ) : null}
+        {metaAt === LIST_ROW_META.LAST ? end : null}
       </span>
-      {metaAt === LIST_ROW_META.TITLE ? null : end}
+      {metaAt === LIST_ROW_META.MIDDLE ? end : null}
     </>
   );
   const press = onPress ? (
@@ -907,7 +927,7 @@ export function ListRow({
         {...placed}
         ref={place === undefined ? (onPress ? undefined : ref) : itemRef}
         className={ROW_CLASS}
-        data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
+        data-meta={metaAt === LIST_ROW_META.MIDDLE ? undefined : metaAt}
         data-lead={above ? LIST_ROW_LEAD.ABOVE : undefined}
         data-actions={actsOnHover ? LIST_ROW_ACTIONS.HOVER : undefined}
         data-current={current === undefined ? undefined : "true"}

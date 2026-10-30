@@ -7,6 +7,7 @@ import {
   LIST_ROW_INK,
   LIST_ROW_LEAD,
   LIST_ROW_META,
+  LIST_ROW_TITLE_LINES,
   LIST_VARIANT,
   List,
   type ListDensity,
@@ -31,7 +32,8 @@ import { CatalogSection } from "../section";
  * a row a finger's height on a coarse pointer, compact and dense, rows whose
  * acts show on hover, rows that go deeper, rows nested under a row that
  * folds them, rows whose menu their ⋯, a right-click, and the menu key
- * open, and long words in a narrow column.
+ * open, a rail's rows counting what each holds on their last line, and
+ * long words in a narrow column.
  */
 
 const MEMBERS = [
@@ -305,6 +307,38 @@ function ListRows(): React.JSX.Element {
                 onPress={() => undefined}
               />
             ))}
+          </List>
+        </div>
+      </CatalogSection>
+      <CatalogSection
+        id="list-row-meta-last"
+        title="A rail's rows: titles on up to two lines, their counts on the last line, the open row tinted"
+      >
+        <div className="catalog-narrow">
+          <List label="Chapters">
+            <ListRow
+              leading={<GLYPH.PULL_REQUEST_CHAPTERS />}
+              title="Expose an open-question check for task finishing"
+              titleLines={LIST_ROW_TITLE_LINES.TWO}
+              description="+9 −0"
+              meta="2 comments"
+              metaAt={LIST_ROW_META.LAST}
+              ink={LIST_ROW_INK.SIDEBAR}
+              current={LIST_ROW_CURRENT.PAGE}
+              currentLook={LIST_ROW_CURRENT_LOOK.TINT}
+              onPress={() => undefined}
+            />
+            <ListRow
+              leading={<GLYPH.PULL_REQUEST_CHAPTERS />}
+              title="Refuse an agent's Done while an ask is open, and say why in the transcript"
+              titleLines={LIST_ROW_TITLE_LINES.TWO}
+              description="+44 −0"
+              metaAt={LIST_ROW_META.LAST}
+              ink={LIST_ROW_INK.SIDEBAR}
+              currentLook={LIST_ROW_CURRENT_LOOK.TINT}
+              muted
+              onPress={() => undefined}
+            />
           </List>
         </div>
       </CatalogSection>
