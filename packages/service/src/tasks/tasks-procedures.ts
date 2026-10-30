@@ -526,8 +526,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * agent's plan and the agent (`startedBefore`). A pilot task is refused,
      * also before anything is written, to an account without the Pilot
      * experiment (`modeAsked`). A plan started as a child of another takes
-     * its parent's repository and place to run (`parentAsked`), confirmed
-     * again as any start's repository is.
+     * its parent's repository, place to run, and, where it names none, its
+     * assignee (`parentAsked`), confirmed again as any start's repository is.
      */
     create: plans.create.effect(function* ({ input, context }) {
       const { userId, request } = context;
@@ -562,6 +562,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       // An agent is the start, so its plan opens with no planning phase.
       const planning = agent === undefined ? input.planning : false;
+      // A child takes its parent's assignee where the start names none.
+      const assigneeId = input.assigneeId ?? parent?.assigneeId ?? undefined;
       const { task: stored, txid } = yield* createTaskCommitted(userId, {
         organizationId,
         ...(input.name === undefined ? undefined : { name: input.name }),
@@ -571,7 +573,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ...(input.brief === undefined ? undefined : { brief: input.brief }),
         ...(input.status === undefined ? undefined : { status: input.status }),
         ...(input.priority === undefined ? undefined : { priority: input.priority }),
-        ...(input.assigneeId === undefined ? undefined : { assigneeId: input.assigneeId }),
+        ...(assigneeId === undefined ? undefined : { assigneeId }),
         ...(runsOn === undefined ? undefined : { runsOn }),
         ...(parent === undefined ? undefined : { parentTaskId: parent.id }),
         ...(input.mode === undefined ? undefined : { mode: input.mode }),
