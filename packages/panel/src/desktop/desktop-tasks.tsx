@@ -35,6 +35,7 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { FindScope } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
+import { HERE } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { agentActor, agentName, type SentLine, startsOwnAgents } from "../tasks/agent-model.js";
@@ -839,7 +840,17 @@ function PlanDocument({
   // a transcript, or an Inbox item, opens that same tab rather than GitHub; a link to any other
   // pull request of the task's repository opens in a Pull request tab by its number.
   const openHere = useMemo(
-    () => openPullRequestsHere(agents, openPullRequestDoor, openedRepository),
+    () =>
+      openPullRequestsHere(
+        {
+          kind: HERE.TASK,
+          repository: openedRepository,
+          pullRequests: agents.pullRequests,
+          agentIds: agents.agentIds,
+          heldIds: agents.heldIds,
+        },
+        openPullRequestDoor,
+      ),
     [agents, openPullRequestDoor, openedRepository],
   );
   // What every place on the page that picks or draws a mention reads (`task-mentions.tsx`).

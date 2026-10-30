@@ -45,6 +45,7 @@ import { unreadShown } from "../failure-report.js";
 import { FindScope } from "../find-in-tab.js";
 import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
+import { HERE } from "../route.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { agentName } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
@@ -510,7 +511,10 @@ export function DesktopAgentPage({
   const { pullRequests, agentIds, heldIds } = control;
   const openHere = useMemo(
     () =>
-      openPullRequestsHere({ pullRequests, agentIds, heldIds }, openPullRequest, agentRepository),
+      openPullRequestsHere(
+        { kind: HERE.AGENT, repository: agentRepository, pullRequests, agentIds, heldIds },
+        openPullRequest,
+      ),
     [pullRequests, agentIds, heldIds, openPullRequest, agentRepository],
   );
   // A link to the page's own agent, as a fork's chip opens its source, leaves the page's draft for the agent.

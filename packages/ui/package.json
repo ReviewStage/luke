@@ -45,7 +45,6 @@
     "./held-link": "./src/held-link.js",
     "./link-route": "./src/link-route.js",
     "./history-adapter": "./src/history-adapter.js",
-    "./inbox-panel-link": "./src/inbox-panel-link.js",
     "./pull-request-link": "./src/pull-request-link.js",
     "./link-glue": "./src/link-glue.js",
     "./link-face": "./src/link-face.js",

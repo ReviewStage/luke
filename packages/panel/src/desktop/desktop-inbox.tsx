@@ -1,6 +1,7 @@
 import { AGENT_CALL_FAILURE, type AgentInboxMessagedView } from "@luke/features/agent-view";
 import type { Channel } from "@luke/features/channel-wire";
 import type { InboxItem } from "@luke/features/inbox-wire";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { encodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { CodeRef } from "@luke/features/task-wire";
@@ -9,7 +10,6 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { ERROR_STATE_PLACEMENT, ErrorState, STATUS_TONE, Toolbar } from "@luke/ui";
-import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { memo, useEffect, useMemo, useRef } from "react";
 import type { useAct } from "../act.js";
@@ -21,6 +21,7 @@ import { unreadShown } from "../failure-report.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
+import { addressOf, HERE, ROUTE, route, THING } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { agentName, messageFailureWords } from "../tasks/agent-model.js";
 import {
@@ -120,7 +121,7 @@ import { taskCardOf } from "./task-card.js";
  * a task's side panel draws opens in that panel beside it instead, standing
  * for the chosen item's task (`use-tasks-tab.ts`): a code block's Open its
  * file, and a link naming a file of the task's repository, one of its
- * pages, or one of its agents' pull requests (`inbox-panel-link.ts`). The
+ * pages, or one of its agents' pull requests (`route.ts`). The
  * panel's toggle, its width, and its keys are a task's own, and ⌘F finds in
  * the panel while it holds the keys, as on a task. With nothing listed, it says so under the Inbox's
  * glyph (`@luke/ui`'s `EmptyState`) over New task, the window resting here
@@ -440,10 +441,6 @@ export const DesktopInbox = memo(function DesktopInbox({
   useAppCommand(APP_COMMAND.OPEN_IN_TASK, openInTask());
   // The panel stands for the item asked for, by its task, or its agent where it has none (`use-tasks-tab.ts`).
   const panelFor = taskId ?? chosenAgentId;
-  const pullRequests = [...named.pullRequests].map(([agentId, opened]) => ({
-    agentId,
-    url: opened.url,
-  }));
   const { pages } = view;
   // The panel's state is held to the task's agents this Inbox read, whose Pull request tabs alone the panel draws, an archived one's among them.
   const { onTaskAgents } = view;
@@ -458,46 +455,53 @@ export const DesktopInbox = memo(function DesktopInbox({
     );
   }, [taskId, taskAgents, heldIds, onTaskAgents]);
   const openHere: OpenHere = (href) => {
-    const target = inboxPanelTarget(href, {
+    const routed = route(addressOf(href), {
+      kind: HERE.INBOX_ITEM,
       taskId,
       agentId: taskId === undefined ? chosenAgentId : undefined,
       repository:
         taskId === undefined ? (place?.repository ?? null) : (chosenTask?.repository ?? null),
-      pullRequests,
+      pullRequests: named.pullRequests,
       agentIds: named.agentIds,
       heldIds,
     });
-    if (target === undefined || panelFor === undefined) return false;
+    // An archived agent of the item's task, which its task alone draws, goes to the task on its tab.
+    if (routed.kind === ROUTE.GO) {
+      const { place: at } = routed.link;
+      if (at.kind !== LINK_PLACE.AGENT || at.planId === undefined) return false;
+      tasks.onShowAgent(at.planId, at.agentId);
+      return true;
+    }
+    if (routed.kind !== ROUTE.PREVIEW) return false;
     // A link opens what it names beside the item as the panel's preview, so reading an item leaves no tab
     // standing on its task but the one last read.
-    switch (target.kind) {
-      case INBOX_PANEL_TARGET.FILE:
-        openFile(fileRef(target.path, target.lines), target.lines?.commit);
+    const { thing } = routed;
+    switch (thing.kind) {
+      case THING.FILE:
+        openFile(fileRef(thing.path, thing.lines), thing.lines?.commit);
         return true;
-      case INBOX_PANEL_TARGET.PAGE:
+      case THING.PAGE:
         // A page an agent showed since the pages were read stands as its change lands, since they are followed as they move.
-        sidePanel.onPreview({ page: target.pageId });
+        sidePanel.onPreview({ page: thing.pageId });
         return true;
-      case INBOX_PANEL_TARGET.CHANGES:
-        sidePanel.onPreview({ changes: target.agentId });
+      case THING.CHANGES:
+        sidePanel.onPreview({ changes: thing.agentId });
         return true;
-      case INBOX_PANEL_TARGET.AGENT:
-        // An agent of the item's task reads beside the item as the panel's preview; an archived one, which its task alone draws, goes to the task on its tab.
-        if (named.agentIds?.includes(target.agentId) === true) {
-          sidePanel.onPreview({ transcript: target.agentId });
-          return true;
-        }
-        if (taskId !== undefined) tasks.onShowAgent(taskId, target.agentId);
+      case THING.TRANSCRIPT:
+        sidePanel.onPreview({ transcript: thing.agentId });
         return true;
-      case INBOX_PANEL_TARGET.PULL_REQUEST:
+      case THING.PULL_REQUEST:
         showPullRequest(
           sidePanel,
           named,
-          target.agentId,
+          thing.agentId,
           PULL_REQUEST_VIEW.CONVERSATION,
-          target.number,
+          thing.number,
         );
         return true;
+      // Note that the panel beside an item draws no worker, so the table opens none there.
+      case THING.WORKER:
+        return false;
     }
   };
   // The chosen item's thread, beside the list or in its place.

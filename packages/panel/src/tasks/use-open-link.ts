@@ -1,11 +1,6 @@
-import { LINK_PLACE, type LinkPlace, type ReadLink, readLink } from "@luke/features/link-grammar";
-import { decodeMention, MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
+import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
+import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
-import {
-  listedPullRequestOf,
-  pullRequestAgentOf,
-  repositoryPullRequestOf,
-} from "@luke/ui/pull-request-link";
 import {
   createContext,
   createElement,
@@ -16,6 +11,7 @@ import {
   useMemo,
 } from "react";
 import { appPlatform } from "../app-platform.js";
+import { addressOf, HERE, type Here, type Listed, ROUTE, route, THING } from "../route.js";
 import { useSteadyDoor } from "../steady-door.js";
 
 /**
@@ -49,6 +45,8 @@ import { useSteadyDoor } from "../steady-door.js";
  * tab, on its task (`ListedPullRequests`), wherever it is pressed:
  * a thread, a version, a task's card, or another task. Inside a pull
  * request's own tab, a link leaves for GitHub (`PullRequestsOnGitHub`).
+ * Where each opens is the route table's (`../route.ts`), which each place,
+ * then the window, asks of the link's address.
  */
 
 const OpenLinkContext = createContext<((link: ReadLink) => void) | undefined>(undefined);
@@ -89,14 +87,8 @@ export function OpenHereFirst({
   return createElement(OpenHereContext.Provider, { value: first }, children);
 }
 
-/** The tasks and the agents on no task the window lists, as their rows name their pull requests; none outside the window. */
-interface ListedTasks {
-  readonly tasks: Parameters<typeof listedPullRequestOf>[1];
-  readonly agents: Parameters<typeof listedPullRequestOf>[2];
-}
-
 /** Reads the tasks and the agents on no task the window lists as they stand now. */
-type ListedTasksReader = () => ListedTasks;
+type ListedTasksReader = () => Listed;
 
 const ListedTasksContext = createContext<ListedTasksReader | undefined>(undefined);
 
@@ -112,11 +104,11 @@ export function ListedPullRequests({
   agents,
   children,
 }: {
-  tasks: ListedTasks["tasks"];
-  agents?: ListedTasks["agents"];
+  tasks: Listed["tasks"];
+  agents?: Listed["agents"];
   children: ReactNode;
 }): ReactNode {
-  const read = useSteadyDoor((): ListedTasks => ({ tasks, agents }));
+  const read = useSteadyDoor((): Listed => ({ tasks, agents }));
   return createElement(ListedTasksContext.Provider, { value: read }, children);
 }
 
@@ -134,45 +126,19 @@ export function PullRequestsOnGitHub({ children }: { children: ReactNode }): Rea
 }
 
 /**
- * A place's opener for the pull requests of its repository: a link to the
- * page on GitHub of one of its agents' pull requests, however it is spelled,
- * opens through `open`, the agent's Pull request tab; a link to any other
- * pull request of `repository`, such as one an agent opened before moving to
- * another branch, opens through `open` too, by its number, in a Pull request
- * tab of the first of the place's agents; and any other link is the window's.
- * `drawn` is the agents whose tabs the place draws, none before they are
- * read, and `held` every agent of the place, an archived one among them,
- * whose Pull request tab stands as a live agent's does, so a link to an
- * archived agent's pull request, merged or not, opens its tab too.
+ * A task's or an agent's page's opener for the pull requests the route table
+ * opens beside it (`route.ts`): one of its agents', in that agent's Pull
+ * request tab through `open`, or another of its repository, by its number in
+ * its first agent's; any other address is the window's.
  */
 export function openPullRequestsHere(
-  agents: {
-    readonly pullRequests: ReadonlyMap<string, { readonly url: string }>;
-    readonly agentIds: readonly string[] | undefined;
-    readonly heldIds?: readonly string[] | undefined;
-  },
+  here: Extract<Here, { readonly kind: typeof HERE.TASK | typeof HERE.AGENT }>,
   open: (agentId: string, number?: number) => void,
-  repository?: string | null,
 ): OpenHere {
   return (href) => {
-    const { pullRequests, agentIds: drawn } = agents;
-    const owners = agents.heldIds ?? drawn;
-    const opened = [...pullRequests].flatMap(([agentId, { url }]) =>
-      owners === undefined || owners.includes(agentId) ? [{ agentId, url }] : [],
-    );
-    const agentId = pullRequestAgentOf(href, opened);
-    if (agentId !== undefined) {
-      open(agentId);
-      return true;
-    }
-    const number = repositoryPullRequestOf(href, repository);
-    if (number === undefined) return false;
-    // A page under an agent's own pull request's, its files say, is still that agent's.
-    const owner = opened.find((each) => repositoryPullRequestOf(each.url, repository) === number);
-    const first = owner?.agentId ?? drawn?.[0];
-    if (first === undefined) return false;
-    if (owner === undefined) open(first, number);
-    else open(first);
+    const routed = route(addressOf(href), here);
+    if (routed.kind !== ROUTE.PREVIEW || routed.thing.kind !== THING.PULL_REQUEST) return false;
+    open(routed.thing.agentId, routed.thing.number);
     return true;
   };
 }
@@ -214,32 +180,7 @@ export function opensAsLink(href: string): boolean {
   return isGitHubAddress(href) || isWebAddress(href);
 }
 
-/** The place a Luke link names, or the plan a link written before the link was settled names; nothing for any other address. */
-function lukeLinkOf(href: string): ReadLink | undefined {
-  const read = readLink(href);
-  if (read !== undefined) return read;
-  // Note that no repository is handed, so a GitHub page is never read as a file here: it opens on GitHub.
-  const mention = decodeMention(href, null);
-  return mention?.kind === MENTION_KIND.TASK || mention?.kind === MENTION_KIND.SECTION
-    ? { workspace: "", place: placeOfMention(mention) }
-    : undefined;
-}
-
-/** The Pull request tab a link to a listed task's agent's pull request, or a listed agent's on no task, opens, as a Luke link names it; nothing for any other address. */
-function listedPullRequestLink(
-  href: string,
-  listed: ListedTasksReader | undefined,
-): ReadLink | undefined {
-  if (listed === undefined) return undefined;
-  const { tasks, agents } = listed();
-  const found = listedPullRequestOf(href, tasks, agents);
-  if (found === undefined) return undefined;
-  const { taskId, agentId } = found;
-  const task = taskId === undefined ? undefined : { planId: taskId };
-  return { workspace: "", place: { kind: LINK_PLACE.CHANGES, ...task, agentId } };
-}
-
-/** Opens a link {@link opensAsLink} admits: a Luke link in the window where it can be, a listed task's or a listed agent's on no task's pull request in its Pull request tab, anything else in the browser, over the capability it belongs to. */
+/** Opens a link {@link opensAsLink} admits: where the place it is pressed on opens it, else a Luke link in the window where it can be, a listed task's or a listed agent's on no task's pull request in its Pull request tab, anything else in the browser, over the capability it belongs to (`route.ts`). */
 export function useOpenLink(): (href: string) => void {
   const openPlace = useContext(OpenLinkContext);
   const openHere = useContext(OpenHereContext);
@@ -247,16 +188,19 @@ export function useOpenLink(): (href: string) => void {
   return useCallback(
     (href: string) => {
       if (openHere?.(href) === true) return;
-      const link =
-        openPlace === undefined
-          ? undefined
-          : (lukeLinkOf(href) ?? listedPullRequestLink(href, listed));
-      if (openPlace !== undefined && link !== undefined) {
-        openPlace(link);
-      } else if (isGitHubAddress(href)) {
-        appPlatform().openGitHub(href);
+      const routed = route(addressOf(href), {
+        kind: HERE.WINDOW,
+        opensPlaces: openPlace !== undefined,
+        listed: listed?.(),
+      });
+      if (routed.kind === ROUTE.GO) {
+        openPlace?.(routed.link);
+      } else if (routed.kind !== ROUTE.EXTERNAL) {
+        return;
+      } else if (isGitHubAddress(routed.href)) {
+        appPlatform().openGitHub(routed.href);
       } else {
-        appPlatform().openWeb(href);
+        appPlatform().openWeb(routed.href);
       }
     },
     [openPlace, openHere, listed],

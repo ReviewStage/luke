@@ -12,20 +12,17 @@ import { fakeAppPlatform } from "../testing/app-platform.js";
 import {
   ListedPullRequests,
   OpenLinkProvider,
-  openPullRequestsHere,
   PullRequestsOnGitHub,
   useOpenLink,
 } from "./use-open-link.js";
 
 /**
- * use-open-link.test.ts -- a pull request one of a listed task's agents
- * opened opens in that agent's Pull request tab on its task wherever the
- * window draws it, outside any task as much as on another, and one a
- * listed agent on no task opened in its tab on its page; one no listed
- * task or agent names, and any inside a pull request's own tab, open on GitHub.
- * A new list draws no part opening links again, which reads the list as
- * the link opens. Synthetic ids, a task card's pull request row standing
- * for every press.
+ * use-open-link.test.ts -- a pull request inside a pull request's own tab
+ * opens on GitHub, though a listed task's agent opened it, and a new list
+ * draws no part opening links again, which reads the list as the link
+ * opens; where every other link opens is the route table's
+ * (`../route.test.ts`). Synthetic ids, a task card's pull request row
+ * standing for every press.
  */
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -68,12 +65,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** An agent on no task the window lists, which opened the pull request numbered 43. */
-const TASKLESS = {
-  id: "5e2c8d1b-6a3f-4b9e-8d7c-2f1a0b9c8d7e",
-  pullRequest: { url: "https://github.com/acme/relay/pull/43" },
-};
-
 /** Presses the pull request's row drawn as `wrap` holds it under the window's opener, answering where it went. */
 function press(url: string, wrap: (row: ReactNode) => ReactNode = (row) => row) {
   const links: ReadLink[] = [];
@@ -91,11 +82,7 @@ function press(url: string, wrap: (row: ReactNode) => ReactNode = (row) => row) 
       createElement(
         OpenLinkProvider,
         { value: (link: ReadLink) => links.push(link) },
-        createElement(ListedPullRequests, {
-          tasks: LISTED,
-          agents: [TASKLESS],
-          children: wrap(row),
-        }),
+        createElement(ListedPullRequests, { tasks: LISTED, children: wrap(row) }),
       ),
     ),
   );
@@ -106,57 +93,11 @@ function press(url: string, wrap: (row: ReactNode) => ReactNode = (row) => row) 
   return { places: links.map((link) => link.place), github };
 }
 
-test("a listed task's agent's pull request opens in that agent's Pull request tab on its task, however its address is spelled", () => {
-  assert.deepEqual(press(`${URL}#issuecomment-1`), {
-    places: [{ kind: LINK_PLACE.CHANGES, planId: TASK, agentId: AGENT }],
-    github: [],
-  });
-});
-
-test("a listed agent on no task's pull request opens in its Pull request tab, on its own page", () => {
-  assert.deepEqual(press(TASKLESS.pullRequest.url), {
-    places: [{ kind: LINK_PLACE.CHANGES, agentId: TASKLESS.id }],
-    github: [],
-  });
-});
-
-test("a pull request no listed task names opens on GitHub", () => {
-  const other = "https://github.com/acme/relay/pull/7";
-  assert.deepEqual(press(other), { places: [], github: [other] });
-});
-
 test("inside a pull request's own tab, a link to it opens on GitHub", () => {
   assert.deepEqual(
     press(URL, (row) => createElement(PullRequestsOnGitHub, null, row)),
     { places: [], github: [URL] },
   );
-});
-
-test("on a task, its agent's pull request opens in its own Pull request tab, any other of the task's repository in the first agent's by its number, and another repository's is the window's", () => {
-  const opened: unknown[] = [];
-  const openHere = openPullRequestsHere(
-    { pullRequests: new Map([[AGENT, { url: URL }]]), agentIds: [AGENT] },
-    (agentId, number) => opened.push([agentId, number]),
-    "acme/relay",
-  );
-  assert.equal(openHere(`${URL}/files`), true);
-  assert.equal(openHere("https://github.com/acme/relay/pull/41"), true);
-  assert.equal(openHere("https://github.com/acme/other/pull/41"), false);
-  assert.deepEqual(opened, [
-    [AGENT, undefined],
-    [AGENT, 41],
-  ]);
-});
-
-test("on a task, an archived agent's pull request, merged or not, opens in its own Pull request tab too", () => {
-  const opened: unknown[] = [];
-  const openHere = openPullRequestsHere(
-    { pullRequests: new Map([[AGENT, { url: URL }]]), agentIds: [], heldIds: [AGENT] },
-    (agentId, number) => opened.push([agentId, number]),
-    "acme/relay",
-  );
-  assert.equal(openHere(URL), true);
-  assert.deepEqual(opened, [[AGENT, undefined]]);
 });
 
 test("a new list of tasks draws no part opening links again, and a link opened after it reads the new list", () => {
