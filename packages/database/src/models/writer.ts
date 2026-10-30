@@ -59,6 +59,7 @@ import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   Cause,
+  Context,
   DateTime,
   Duration,
   Effect,
@@ -191,6 +192,28 @@ interface StoreWriterOptions {
   /** The catalog's `tool()` declarations by name: what a stored tool part may name, and what its input is held to. */
   readonly tools: ToolSet;
 }
+
+/** A coding agent's turn a write settled, as the writer tells `SettledTurnListener`. */
+export interface SettledAgentTurn {
+  readonly userId: string;
+  readonly conversationId: string;
+  readonly status: TurnStatus;
+  /** The failure word a failed turn was settled with; null for any other end. */
+  readonly failure: string | null;
+  /** How long the turn ran: from its start, or its queueing for one that never started, to its settle. */
+  readonly ranMs: number;
+}
+
+/**
+ * What hears of each coding agent turn the writer settled, once the write's
+ * transaction is done: the service's analytics (`server-events.ts`). Read
+ * optionally, so a runtime or a test that provides none hears nothing, and
+ * what it does never fails the write it follows.
+ */
+export class SettledTurnListener extends Context.Service<
+  SettledTurnListener,
+  { readonly heard: (turn: SettledAgentTurn) => Effect.Effect<void, never, DatabaseServices> }
+>()("SettledTurnListener") {}
 
 /** What one write did: landed, found its row already standing, or had nothing to do for this kind. */
 export const STORE_WRITE_EFFECT = {
@@ -587,7 +610,11 @@ const MessageRowSchema = Schema.Struct({
 
 type MessageRow = Schema.Schema.Type<typeof MessageRowSchema>;
 
-const TurnRowSchema = Schema.Struct({ status: TurnStatusSchema });
+const TurnRowSchema = Schema.Struct({
+  status: TurnStatusSchema,
+  queuedAt: Schema.Date,
+  startedAt: Schema.NullOr(Schema.Date),
+});
 
 const MessageInsertSchema = Schema.Struct({
   userId: Schema.String,
@@ -664,7 +691,7 @@ const findTurn = SqlSchema.findOneOption({
   execute: (request) =>
     Database.use((db) =>
       db
-        .select({ status: turns.status })
+        .select({ status: turns.status, queuedAt: turns.queuedAt, startedAt: turns.startedAt })
         .from(turns)
         .where(and(eq(turns.id, request.turnId), eq(turns.conversationId, request.conversationId))),
     ),
@@ -1020,7 +1047,16 @@ interface WriterContext {
    * (`noticesAfterSettle`), by the kind it is and when it settled.
    */
   readonly notices: { kind: OperatorNoticeKind; at: Date }[];
+  /**
+   * The coding agent turns this write settled, each told the runtime's
+   * `SettledTurnListener` once the write's transaction is done
+   * (`settledAfterCommit`).
+   */
+  readonly settled: SettledAgentTurn[];
 }
+
+/** What a locked write leaves for once its transaction is done. */
+type AfterCommit = Pick<WriterContext, "notices" | "settled">;
 
 /** What one of this writer's statements answers: an effect over the transaction it runs in. */
 type Write<Result> = Effect.Effect<Result, StoreFailure, DatabaseServices>;
@@ -1078,7 +1114,7 @@ const allocateMessageSeq = /* @__PURE__ */ Effect.fnUntraced(function* (
 function turnRow(
   context: WriterContext,
   turnId: string,
-): Write<Option.Option<{ status: TurnStatus }>> {
+): Write<Option.Option<typeof TurnRowSchema.Type>> {
   return findTurn({ turnId, conversationId: context.target.conversationId });
 }
 
@@ -1340,6 +1376,14 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
         ? OPERATOR_NOTICE_KIND.TURN_FAILED
         : OPERATOR_NOTICE_KIND.TURN_SETTLED;
     context.notices.push({ kind, at: settledAt });
+    const { startedAt, queuedAt } = standing.value;
+    context.settled.push({
+      userId: context.target.userId,
+      conversationId: context.target.conversationId,
+      status,
+      failure: failure ?? null,
+      ranMs: Math.max(0, settledAt.getTime() - (startedAt ?? queuedAt).getTime()),
+    });
   }
   // A journal still open here belongs to a turn that answered nothing. A
   // brain's keeps what it did and the words its steps formed leave it,
@@ -2110,6 +2154,22 @@ function noticesAfterSettle(
 }
 
 /**
+ * The settled coding agent turns a write leaves, told the runtime's listener
+ * once the write's transaction is done, so the settle never waits on what
+ * hears of it; a runtime with no listener tells no one.
+ */
+function settledAfterCommit(
+  settled: readonly SettledAgentTurn[],
+): Effect.Effect<void, never, DatabaseServices> {
+  if (settled.length === 0) return Effect.void;
+  return Effect.flatMap(Effect.serviceOption(SettledTurnListener), (listener) =>
+    Option.isNone(listener)
+      ? Effect.void
+      : Effect.forEach(settled, listener.value.heard, { discard: true }),
+  );
+}
+
+/**
  * Composes the writer over one catalog, which is where the catalog is held to
  * the unknown outcome's envelope: a tool whose declared output schema refuses
  * it would leave a dispatched call's row unreadable, so the writer refuses to
@@ -2120,7 +2180,7 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
   function contextOf(
     target: ConversationTarget,
     kind: WriterContext["kind"],
-    notices: WriterContext["notices"],
+    after: AfterCommit,
   ): Effect.Effect<WriterContext> {
     return Effect.map(DateTime.nowAsDate, (now) => ({
       tools,
@@ -2128,7 +2188,7 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
       target,
       kind,
       journals: new Map(),
-      notices,
+      ...after,
     }));
   }
 
@@ -2150,15 +2210,18 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
     absent: () => A,
   ): Effect.Effect<A, StoreFailure | E, DatabaseServices> {
     return Effect.flatMap(SqlClient.SqlClient, (client) => {
-      const notices: WriterContext["notices"] = [];
+      const after: AfterCommit = { notices: [], settled: [] };
       return client
         .withTransaction(
           Effect.gen(function* () {
             const row = yield* lockConversation(target);
-            return yield* lockedWrite(target, row, notices, write, absent);
+            return yield* lockedWrite(target, row, after, write, absent);
           }),
         )
-        .pipe(Effect.tap(() => noticesAfterSettle(client, target, notices)));
+        .pipe(
+          Effect.tap(() => noticesAfterSettle(client, target, after.notices)),
+          Effect.tap(() => settledAfterCommit(after.settled)),
+        );
     });
   }
 
@@ -2214,13 +2277,13 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
   function lockedWrite<A, E>(
     target: ConversationTarget,
     row: Option.Option<{ readonly kind: WriterContext["kind"] }>,
-    notices: WriterContext["notices"],
+    after: AfterCommit,
     write: (context: WriterContext) => Effect.Effect<A, StoreFailure | E, DatabaseServices>,
     absent: () => A,
   ): Effect.Effect<A, StoreFailure | E, DatabaseServices> {
     return Effect.gen(function* () {
       if (Option.isNone(row)) return absent();
-      const context = yield* contextOf(target, row.value.kind, notices);
+      const context = yield* contextOf(target, row.value.kind, after);
       const written = yield* write(context);
       yield* landJournals(context);
       return written;

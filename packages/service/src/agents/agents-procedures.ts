@@ -69,6 +69,7 @@ import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { Clock, Duration, Effect, type Layer, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { HostedEnvironment } from "../environment.js";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { changesPeople, namedReviewOptions } from "../github/github-people.js";
 import {
   imageCommits,
@@ -511,6 +512,12 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         // The sandbox is stopped, not deleted, once the archive stands, so an unarchive resumes it from its snapshot.
         if (body.archived && Option.isSome(archived)) {
           yield* stoppedInBackground(seams, [agent]);
+          // Counted only where the agent stood unarchived, under the member who archived it.
+          if (agent.archivedAt === null) {
+            yield* recordServerEvent(SERVER_EVENT.AGENT_ARCHIVE, userId, {
+              agent_kind: agent.kind,
+            });
+          }
         }
         return yield* committedAgent(userId, archived);
       }
@@ -571,7 +578,14 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     /** The agent stopped: eve's cancel of the turn under way, then the row's stamp; an agent with no turn running is answered as it stands. */
     stop: signedIn.stop.effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.id);
-      yield* stoppedTurn(seams, writer, context.request, userId, agent);
+      const stopped = yield* stoppedTurn(seams, writer, context.request, userId, agent);
+      // Counted only where the Stop stopped a turn, under the member who pressed it.
+      if (stopped) {
+        yield* recordServerEvent(SERVER_EVENT.AGENT_STOP, userId, {
+          agent_kind: agent.kind,
+          stopped_tree: false,
+        });
+      }
       return { agent: yield* summaryOf(userId, agent) };
     }),
     /** The agent taken back to just before one of the developer's lines (`rewind.ts`), answered as it then stands. */

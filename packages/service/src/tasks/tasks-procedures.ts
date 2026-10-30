@@ -76,7 +76,7 @@ import {
 import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace, isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
-import { AGENT_MACHINE, LOCAL_AGENT_REFUSAL } from "@luke/features/agent-wire";
+import { AGENT_KIND, AGENT_MACHINE, LOCAL_AGENT_REFUSAL } from "@luke/features/agent-wire";
 import { TASK_START_STATUS } from "@luke/features/contract";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
@@ -774,6 +774,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           yield* tellPilotOfRunning(seams, request, writer, userId, taskId);
         } else {
           yield* stopRunningTree(seams, request, writer, userId, taskId);
+          yield* recordServerEvent(SERVER_EVENT.AGENT_STOP, userId, {
+            agent_kind: AGENT_KIND.PILOT,
+            stopped_tree: true,
+          });
         }
       }
       return txid === undefined ? { plan } : { plan, txid };

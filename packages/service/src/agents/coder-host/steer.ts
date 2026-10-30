@@ -24,7 +24,7 @@ import {
   STORE_WRITE_REFUSAL,
   type StoreWriter,
 } from "@luke/database/models/writer";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { type ConversationRuntime, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { AGENT_STATUS, type AgentAttachment } from "@luke/features/agent-wire";
 import { MENTION_KIND, withoutMemberLinks } from "@luke/features/mention-link";
 import { agentName } from "@luke/features/model-label";
@@ -293,6 +293,8 @@ const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, 
 export interface SteerWritten {
   readonly outcome: SteerOutcome;
   readonly txid?: string;
+  /** What a line sent found: the runtime that answers the agent and whether a turn of its was running; none for a repeat. */
+  readonly sent?: { readonly runtime: ConversationRuntime; readonly turnRunning: boolean };
 }
 
 /** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
@@ -512,7 +514,8 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   if (Option.isNone(written.success))
     return yield* Effect.fail(refused ?? HOSTED_REFUSAL.UNAVAILABLE);
   const { txid } = written.success.value;
+  const sent = { runtime, turnRunning: running !== undefined };
   return txid === undefined
-    ? { outcome: STEER_OUTCOME.SENT }
-    : { outcome: STEER_OUTCOME.SENT, txid };
+    ? { outcome: STEER_OUTCOME.SENT, sent }
+    : { outcome: STEER_OUTCOME.SENT, txid, sent };
 });

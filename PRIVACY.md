@@ -1075,8 +1075,14 @@ counts off (see "Your choices").
 
 Our service also counts, under the same account, the work done through it:
 a task or a workspace made (with where it was started from), an agent started (with the model and effort
-it runs on, and whether an automation started it), a pull request an agent
-opened (as you or as Luke's GitHub App, and whether as a draft), an Inbox item
+it runs on, and whether an automation started it), a message you sent an agent
+(with what runs it, where, what kind of agent it is, and whether it was at
+work), each of an agent's turns ended (with how it ended: answered, failed,
+stopped, or given up on by our service, roughly how long it ran, and what
+kind of agent it is), an agent stopped or archived (with what kind of agent
+it is, and whether a task's Running switch stopped its whole tree), a pull
+request an agent opened (as you or as Luke's GitHub App, and whether as a
+draft) and one it opened merged, an Inbox item
 answered, an issue filed, an automation made (with
 what triggers it), an integration connected or disconnected (with which
 provider), and a pull request's chapters generated (with how it came out, how

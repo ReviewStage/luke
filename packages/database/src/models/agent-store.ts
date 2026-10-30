@@ -1831,6 +1831,21 @@ const findAgentPublished = SqlSchema.findOneOption({
     ),
 });
 
+/** The pull request the agent's row keeps, under the row's lock, as a write of a new one reads it. */
+const lockAgentPublished = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ published: Schema.NullOr(PublishedColumnSchema) }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ published: agentTable.published })
+        .from(agentTable)
+        .where(reachableAgent(userId, agentId))
+        .limit(1)
+        .for("update", { of: agentTable }),
+    ),
+});
+
 const findAgentsOfTasks = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -2540,14 +2555,36 @@ export function continuationsOf(
   });
 }
 
-/** The pull request from the agent's branch as GitHub just answered, or null where it answered none, with the read that found it where one is named; nothing written for an agent of a workspace the account is not in. */
+/** Whether a pull request is a merge the row did not already keep as that pull request merged. */
+function newlyMerged(kept: StoredPullRequest | null, published: StoredPullRequest | null): boolean {
+  if (published?.state !== PULL_REQUEST_STATE.MERGED) return false;
+  return kept?.number !== published.number || kept.state !== PULL_REQUEST_STATE.MERGED;
+}
+
+/**
+ * The pull request from the agent's branch as GitHub just answered, or null
+ * where it answered none, with the read that found it where one is named;
+ * nothing written for an agent of a workspace the account is not in.
+ * Answers whether this write is the one that first kept it merged: the row
+ * is locked as it is read, so of two reads that find the same merge at once
+ * (the webhook's and the sweep's) only the first to write says so.
+ */
 export function recordAgentPublished(
   userId: string,
   agentId: string,
   published: StoredPullRequest | null,
   read?: StoredPublishedRead,
-): AgentStoreEffect<void> {
-  return updateAgentPublished({ userId, agentId, published, publishedRead: read ?? null });
+): AgentStoreEffect<boolean> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const kept = yield* lockAgentPublished({ userId, agentId });
+        if (Option.isNone(kept)) return false;
+        yield* updateAgentPublished({ userId, agentId, published, publishedRead: read ?? null });
+        return newlyMerged(kept.value.published, published);
+      }),
+    ),
+  );
 }
 
 /** The row's read of GitHub let go, so its pull request is no longer answered in GitHub's place; nothing written for an agent of a workspace the account is not in. */
@@ -3309,6 +3346,32 @@ export function agentConversation(
   agentId: string,
 ): AgentStoreEffect<Option.Option<ConversationTarget>> {
   return findAgentConversation(agentId);
+}
+
+const findAgentKindOfConversation = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ kind: Schema.Literals(Object.values(AGENT_KIND)) }),
+  execute: (conversationId) =>
+    Database.use((db) =>
+      db
+        .select({ kind: agentTable.kind })
+        .from(agentTable)
+        .where(eq(agentTable.conversationId, conversationId)),
+    ),
+});
+
+/**
+ * What the agent whose conversation this is is; nothing where no agent
+ * stands on it. Only for a conversation the service settled a turn of
+ * itself, because it reads past any account's gate.
+ */
+export function agentKindOfConversation(
+  conversationId: string,
+): AgentStoreEffect<Option.Option<AgentKind>> {
+  return Effect.map(
+    findAgentKindOfConversation(conversationId),
+    Option.map((row) => row.kind),
+  );
 }
 
 /**
