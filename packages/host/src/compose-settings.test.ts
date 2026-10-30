@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@luke/features";
-import { PRODUCT_EVENT } from "@luke/features/analytics";
+import { PRODUCT_EVENT, PRODUCT_PLATFORM } from "@luke/features/analytics";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
@@ -54,7 +54,11 @@ const sendingSettings = Effect.fnUntraced(function* (packaged: boolean) {
     ),
     Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
     // A version the counted events allowlist reads, so the launch is counted.
-    Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged, platform: "desktop" }),
+    Layer.succeed(AppIdentity, {
+      appVersion: "1.0.0",
+      packaged,
+      platform: PRODUCT_PLATFORM.DESKTOP,
+    }),
     fixedAccountSource(),
     NodeFileSystem.layer,
     NodePath.layer,
@@ -140,7 +144,11 @@ const tabOver = Effect.fnUntraced(function* (
       }),
     ),
     Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-    Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged: false, platform: "desktop" }),
+    Layer.succeed(AppIdentity, {
+      appVersion: "1.0.0",
+      packaged: false,
+      platform: PRODUCT_PLATFORM.DESKTOP,
+    }),
     fixedAccountSource(),
     changedElsewhere,
     NodeFileSystem.layer,

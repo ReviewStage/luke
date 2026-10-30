@@ -6,7 +6,7 @@ import { it } from "@effect/vitest";
 import type { OpenConsent } from "@luke/credentials";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@luke/features/analytics";
+import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT, PRODUCT_PLATFORM } from "@luke/features/analytics";
 import { SIGN_IN_FAILURE } from "@luke/features/words";
 import {
   GATEWAY_CLIENT_ROLE,
@@ -162,7 +162,7 @@ it.effect("a sign-in after a deletion in the same run lets session replay record
       machine: Layer.succeed(AppIdentity, {
         appVersion: "0.0.0-test",
         packaged: false,
-        platform: "desktop",
+        platform: PRODUCT_PLATFORM.DESKTOP,
       }),
     });
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
@@ -215,7 +215,7 @@ it.effect(
           machine: Layer.succeed(AppIdentity, {
             appVersion: "0.0.0-test",
             packaged: false,
-            platform: "desktop",
+            platform: PRODUCT_PLATFORM.DESKTOP,
           }),
           consent: () => ({
             signInEffect: () => Effect.succeed({ reason, failure }),
@@ -268,7 +268,7 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
       machine: Layer.succeed(AppIdentity, {
         appVersion: "0.0.0-test",
         packaged: false,
-        platform: "desktop",
+        platform: PRODUCT_PLATFORM.DESKTOP,
       }),
     });
     // Nothing is read until the gate opening asks, so nothing is an admin before it, and the read is owed.
@@ -390,7 +390,11 @@ const browserAccount = (service: TabService) =>
       ),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
       // A version the counted events allowlist reads, and packaged as a browser tab is, so the counts are sent.
-      Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged: true, platform: "desktop" }),
+      Layer.succeed(AppIdentity, {
+        appVersion: "1.0.0",
+        packaged: true,
+        platform: PRODUCT_PLATFORM.DESKTOP,
+      }),
       Layer.provide(cookieAccountSourceLayer(door), FetchHttpClient.layer),
       NodeFileSystem.layer,
       NodePath.layer,

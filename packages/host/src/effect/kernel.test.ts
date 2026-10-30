@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
+import { PRODUCT_PLATFORM } from "@luke/features/analytics";
 import { ConfigProvider, Effect, Layer } from "effect";
 import { ACCOUNT_BASE_URL_VARIABLE } from "../host-kernel.js";
 import { runModeFor } from "../run-mode.js";
@@ -46,7 +47,7 @@ const kernelLayerOver = (input: TestSeams) =>
       Layer.succeed(AppIdentity, {
         appVersion: input.appVersion,
         packaged: input.packaged,
-        platform: "desktop",
+        platform: PRODUCT_PLATFORM.DESKTOP,
       }),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord(input.environment)),
       Layer.succeed(IdSource, { create: input.createId }),
