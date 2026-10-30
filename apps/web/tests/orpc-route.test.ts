@@ -399,19 +399,26 @@ test("every procedure the contract declares is reached through the committed fal
   }
 });
 
-test("a pull request's chapters are reached at their public path through the committed table, in a function that outlasts a generation, an unsigned caller refused on both methods", async () => {
+test("a pull request's chapters are reached at their public paths through the committed table, in a function that outlasts a generation, an unsigned caller refused on both methods", async () => {
   const agent = "4b0d6b5e-0a8f-4a8e-9a43-1c5f7f8b2a10";
-  const routes = new Map([["agents/chapters", orpcRoute]]);
-  for (const method of [HTTP_METHOD.GET, HTTP_METHOD.POST]) {
-    const unsigned = await dispatched(
-      new Request(`${ORIGIN}/api/agents/${agent}/chapters?number=7`, { method }),
-      routes,
-    );
-    assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED, method);
-    assert.equal(await unsigned.text(), '{"error":"invalid-token"}', method);
+  const workspace = "9c1e2f3a-4b5c-4d6e-8f70-112233445566";
+  // Through an agent, and by the repository and number for a pull request no agent opened.
+  const publicPaths = new Map([
+    ["agents/chapters", `/api/agents/${agent}/chapters?number=7`],
+    [
+      "pull-requests/chapters",
+      `/api/pull-requests/chapters?workspaceId=${workspace}&repository=acme/relay&number=7`,
+    ],
+  ]);
+  const routes = new Map([...publicPaths.keys()].map((route) => [route, orpcRoute]));
+  const serving = functionDefinitions([...publicPaths.keys(), "models"]);
+  for (const [route, path] of publicPaths) {
+    for (const method of [HTTP_METHOD.GET, HTTP_METHOD.POST]) {
+      const unsigned = await dispatched(new Request(`${ORIGIN}${path}`, { method }), routes);
+      assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED, `${method} ${path}`);
+      assert.equal(await unsigned.text(), '{"error":"invalid-token"}', `${method} ${path}`);
+    }
+    const holding = serving.find((definition) => definition.routes.includes(route));
+    assert.ok((holding?.maxDuration ?? 0) > Duration.toSeconds(CHAPTERS_BOUNDS.TIMEOUT), route);
   }
-  const serving = functionDefinitions(["agents/chapters", "models"]).find((definition) =>
-    definition.routes.includes("agents/chapters"),
-  );
-  assert.ok((serving?.maxDuration ?? 0) > Duration.toSeconds(CHAPTERS_BOUNDS.TIMEOUT));
 });

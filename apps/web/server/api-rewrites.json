@@ -24,6 +24,10 @@
     "dest": "/api/pull-request-chapters.js?route=agents/chapters&route-path=agents/$1/chapters"
   },
   {
+    "src": "/api/pull-requests/chapters",
+    "dest": "/api/pull-request-chapters.js?route=pull-requests/chapters&route-path=pull-requests/chapters"
+  },
+  {
     "src": "/api/inbox/([^/]+)/attachments/([^/]+)",
     "dest": "/api/default.js?route=inbox/attachment&id=$1&attachment=$2"
   },

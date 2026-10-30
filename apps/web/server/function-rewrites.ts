@@ -58,11 +58,16 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     query: "id=$1&picture=$2",
   },
   { src: "/api/agents/([^/]+)/github-image", route: "agents/github-image", query: "id=$1" },
-  // A pull request's chapters are the oRPC router's, reached through a route file of their own so a Generate runs in the long function (`function-durations.ts`); the dispatcher restores their public path from `route-path`.
+  // A pull request's chapters, through an agent and by the repository and number, are the oRPC router's, reached through route files of their own so a Generate runs in the long function (`function-durations.ts`); the dispatcher restores their public path from `route-path`.
   {
     src: "/api/agents/([^/]+)/chapters",
     route: "agents/chapters",
     query: `${DISPATCH_QUERY.PATH}=agents/$1/chapters`,
+  },
+  {
+    src: "/api/pull-requests/chapters",
+    route: "pull-requests/chapters",
+    query: `${DISPATCH_QUERY.PATH}=pull-requests/chapters`,
   },
   {
     src: "/api/inbox/([^/]+)/attachments/([^/]+)",
