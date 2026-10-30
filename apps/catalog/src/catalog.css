@@ -492,6 +492,12 @@ body {
   max-width: 320px;
 }
 
+/* A column past the row's 380px line, as a phone's card stands, where two
+   presses still leave the words too little room beside them. */
+.catalog-settings-between {
+  max-width: 400px;
+}
+
 /* The window or pane a settings page fills: a fixed height, so the page
    scrolls inside it, and a dashed edge showing where the page's own edge is. */
 .catalog-settings-frame {
