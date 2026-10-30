@@ -50,8 +50,13 @@ import {
 import { HOSTED_REFUSAL, type UserIdResolver } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import { GitHubApp, type GitHubTokenAccess, markRefusedToken } from "./github-app.js";
+import { namedReviewOptions } from "./github-people.js";
 import { memberPlace } from "./github-procedures.js";
-import { type PullRequestReadFailure, pullRequestByNumber } from "./pull-requests.js";
+import {
+  type PullRequestReadFailure,
+  pullRequestByNumber,
+  pullRequestReviewOptions,
+} from "./pull-requests.js";
 
 export interface RepositoryPullRequestProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -156,7 +161,7 @@ const overviewPart = <A, R>(
     (part) => ({ pullRequest: part }),
   );
 
-/** The pull request resource: its six reads and its one change, to a signed-in member of the workspace the query names. */
+/** The pull request resource: its seven reads and its one change, to a signed-in member of the workspace the query names. */
 export function repositoryPullRequestProcedures(seams: RepositoryPullRequestProcedureSeams) {
   const signedIn = hosted.pullRequests.use(accountMiddleware(seams.resolveUserId));
   return {
@@ -177,6 +182,24 @@ export function repositoryPullRequestProcedures(seams: RepositoryPullRequestProc
       const { token, subject, pullRequest } = yield* reachedPullRequest(context.userId, input);
       const changes = yield* githubReadRefusal(pullRequestChangesRead(token, subject, pullRequest));
       return { pullRequest: changes };
+    }),
+    /**
+     * What the reviewer and label pickers offer, of the repository rather than
+     * the pull request, as an agent's are (`agents-procedures.ts`): the number
+     * is decoded with the rest of the query and names nothing more, so a number
+     * the repository holds none under still answers. Note that it is left
+     * unchecked, because reading the pull request would cost a GitHub call on
+     * every picker read for no gain: a non-member is refused all the same.
+     */
+    reviewOptions: signedIn.reviewOptions.effect(function* ({ input, context }) {
+      const { token, access, subject } = yield* reachedRepository(context.userId, input);
+      return yield* githubReadRefusal(
+        pullRequestReviewOptions(token, subject.repository).pipe(markRefusedToken(access)),
+      ).pipe(
+        Effect.flatMap((read) =>
+          namedReviewOptions({ organizationId: subject.organizationId }, read),
+        ),
+      );
     }),
     overviewPullRequest: signedIn.overviewPullRequest.effect(function* ({ input, context }) {
       const reached = yield* reachedPullRequest(context.userId, input);
