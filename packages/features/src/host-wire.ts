@@ -32,8 +32,10 @@ export const HOST_WIRE = {
   DEVICE_SECRET_PREFIX: "lkd_",
   /** The header every call of a host carries its daemon's version in, as `MAJOR.MINOR.PATCH`. */
   VERSION_HEADER: "luke-host-version",
-  /** The install script's path on the service's own origin, which the web app serves (`apps/web/scripts/install-script.ts`). */
+  /** The install script's path on the service's own origin, which the web service rewrites onto `INSTALL_SCRIPT_ROUTE`. */
   INSTALL_SCRIPT_PATH: "/install.sh",
+  /** The route that answers the install script, with the release and the origin it was asked on written in (`@luke/service/agents/host-install-script-app`). */
+  INSTALL_SCRIPT_ROUTE: "/api/hosts/install-script",
 } as const;
 
 /** A daemon's version, as `MAJOR.MINOR.PATCH` with no leading zeros. */
