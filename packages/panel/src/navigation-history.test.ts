@@ -2,9 +2,11 @@
 
 import assert from "node:assert/strict";
 import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import type { AppStateSnapshot } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -1172,11 +1174,34 @@ test("Back's and Forward's steps are listed the nearest first, each named as the
   );
 });
 
-/** What reads a workspace's channels as the sidebar does, so the window holds them, and its channel place as a surface drawing it reads it. */
+/** The workspace's channels as the host holds them on app state, each with nothing waiting in it. */
+function channelsHeld(
+  workspaceId: string,
+  open: readonly { readonly id: string; readonly name: string }[],
+  archived: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly archivedAt: number;
+  }[] = [],
+): Partial<AppStateSnapshot> {
+  const shape = { purpose: "", project: false, createdAt: 1 };
+  return {
+    [LIVE_READ.CHANNELS]: {
+      [workspaceId]: {
+        rows: {
+          open: open.map((each) => ({ ...each, ...shape, waiting: 0 })),
+          archived: archived.map((each) => ({ ...each, ...shape })),
+        },
+      },
+    },
+  };
+}
+
+/** What draws a workspace's channels as the sidebar does, and its channel place as a surface drawing it reads it. */
 async function channelsRead(workspaceId: string): Promise<() => ChannelPlaceControl> {
   let seen: ChannelPlaceControl | undefined;
   const Reader = () => {
-    useChannels(workspaceId, true);
+    useChannels(workspaceId);
     seen = useChannelPlace();
     return null;
   };
@@ -1188,7 +1213,6 @@ async function channelsRead(workspaceId: string): Promise<() => ChannelPlaceCont
 }
 
 test("with Channels on, each channel chosen is a step, named and linked by the channel, the first item chosen in it filling in its step as the Inbox's does, and Back goes back through them", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
   const workspace = {
     id: "workspace-acme",
     name: "Acme",
@@ -1198,18 +1222,7 @@ test("with Channels on, each channel chosen is a step, named and linked by the c
   };
   const general = { id: "a1000001-0000-4000-8000-000000000001", name: "general" };
   const app = { id: "a1000001-0000-4000-8000-000000000002", name: "app" };
-  fakeActPort({
-    [ACT_KIND.CHANNELS_LIST]: () =>
-      Promise.resolve({
-        channels: [general, app].map((each) => ({
-          ...each,
-          purpose: "",
-          project: false,
-          createdAt: 1,
-          waiting: 0,
-        })),
-      }),
-  });
+  handState(experimentsOn(EXPERIMENT.CHANNELS), channelsHeld(workspace.id, [general, app]));
   listChannelWorkspace(workspace.id);
   chooseChannel(general.id);
   const place = await channelsRead(workspace.id);
@@ -1247,7 +1260,6 @@ test("with Channels on, each channel chosen is a step, named and linked by the c
 });
 
 test("with Channels on, a channel chosen from the Inbox is a step of its own, which Back leaves for the Inbox", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
   const workspace = {
     id: "workspace-acme",
     name: "Acme",
@@ -1256,12 +1268,7 @@ test("with Channels on, a channel chosen from the Inbox is a step of its own, wh
     github: null,
   };
   const general = { id: "a1000001-0000-4000-8000-000000000001", name: "general" };
-  fakeActPort({
-    [ACT_KIND.CHANNELS_LIST]: () =>
-      Promise.resolve({
-        channels: [{ ...general, purpose: "", project: false, createdAt: 1, waiting: 0 }],
-      }),
-  });
+  handState(experimentsOn(EXPERIMENT.CHANNELS), channelsHeld(workspace.id, [general]));
   listChannelWorkspace(workspace.id);
   leaveChannel();
   const place = await channelsRead(workspace.id);
@@ -1287,7 +1294,6 @@ test("with Channels on, a channel chosen from the Inbox is a step of its own, wh
 });
 
 test("with Channels on, an archived channel shown, once the Inbox read the archived channels, is a step named and linked by it", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
   const workspace = {
     id: "workspace-acme",
     name: "Acme",
@@ -1297,18 +1303,10 @@ test("with Channels on, an archived channel shown, once the Inbox read the archi
   };
   const general = { id: "a1000001-0000-4000-8000-000000000001", name: "general" };
   const old = { id: "a1000001-0000-4000-8000-0000000000aa", name: "old-app" };
-  const channel = (each: { id: string; name: string }) => ({
-    ...each,
-    purpose: "",
-    project: false,
-    createdAt: 1,
-  });
-  fakeActPort({
-    [ACT_KIND.CHANNELS_LIST]: () =>
-      Promise.resolve({ channels: [{ ...channel(general), waiting: 0 }] }),
-    [ACT_KIND.CHANNELS_ARCHIVED]: () =>
-      Promise.resolve({ channels: [{ ...channel(old), archivedAt: 2 }] }),
-  });
+  handState(
+    experimentsOn(EXPERIMENT.CHANNELS),
+    channelsHeld(workspace.id, [general], [{ ...old, archivedAt: 2 }]),
+  );
   listChannelWorkspace(workspace.id);
   await channelsRead(workspace.id);
   // Note that the Inbox narrowed to an archived channel reads the archived channels.

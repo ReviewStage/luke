@@ -9,7 +9,9 @@ import {
   archiveChannel,
   CHANNEL_NAME_REFUSAL,
   CHANNEL_WRITE_REFUSAL,
+  type ChannelRow,
   type ChannelWriteRefusal,
+  type ChannelWritten,
   createChannel,
   editChannel,
   ensureGeneralChannel,
@@ -33,6 +35,11 @@ import {
  *
  * Synthetic accounts and workspaces throughout.
  */
+
+/** A channel as a write left it, without the transaction it was written in. */
+function rowOf({ txid: _txid, ...row }: ChannelWritten): ChannelRow {
+  return row;
+}
 
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
@@ -135,7 +142,8 @@ it.layer(getTestDB())("a workspace's channels", (it) => {
         const archived = yield* archiveChannel(dean, workspace, app.id, new Date(8));
         const remade = yield* createChannel(dean, workspace, draft("web"), new Date(9));
 
-        assert.deepEqual(app, {
+        const { txid, ...made } = app;
+        assert.deepEqual(made, {
           id: app.id,
           name: "app",
           purpose: "Desktop and panel.",
@@ -143,6 +151,7 @@ it.layer(getTestDB())("a workspace's channels", (it) => {
           createdBy: charles,
           createdAt: 5,
         });
+        assert.match(txid ?? "", /^\d+$/u, "a channel made answers the transaction it was made in");
         assert.deepEqual(refused, [
           CHANNEL_WRITE_REFUSAL.NAME_TAKEN,
           CHANNEL_WRITE_REFUSAL.NAME_TAKEN,
@@ -181,7 +190,10 @@ it.layer(getTestDB())("a workspace's channels", (it) => {
         );
         yield* archiveChannel(dean, workspace, retired.id, new Date(2));
 
-        assert.deepEqual(yield* resolveChannel(dean, workspace, "infra"), Result.succeed(infra));
+        assert.deepEqual(
+          yield* resolveChannel(dean, workspace, "infra"),
+          Result.succeed(rowOf(infra)),
+        );
         assert.deepEqual(
           yield* resolveChannel(dean, workspace, "retired"),
           Result.fail(CHANNEL_NAME_REFUSAL.ARCHIVED),
@@ -276,8 +288,8 @@ it.layer(getTestDB())("a workspace's channels", (it) => {
         ]);
         assert.deepEqual(outsiders, [[], Result.fail(CHANNEL_WRITE_REFUSAL.NOT_FOUND)]);
         assert.deepEqual(refused, Result.fail(CHANNEL_WRITE_REFUSAL.NAME_TAKEN));
-        assert.deepEqual(opened, Result.succeed(infra));
-        assert.deepEqual(again, Result.succeed(infra));
+        assert.deepEqual(Result.map(opened, rowOf), Result.succeed(rowOf(infra)));
+        assert.deepEqual(Result.map(again, rowOf), Result.succeed(rowOf(infra)));
         assert.deepEqual(
           (yield* listChannels(dean, workspace)).map((row) => [row.name, row.id]),
           [

@@ -1430,7 +1430,7 @@ export function useWindowHistory(input: {
   const personListed = trail.entries.some((entry) => entry.state?.kind === PLACE_KIND.PERSON);
   const { members } = useWorkspaceMembersRead(personListed ? tasks.workspace : undefined);
   // The workspace's channels as the window holds them, which a channel's step is listed by the name it goes by now.
-  const { channels } = useChannels(shown === undefined ? undefined : tasks.workspace?.id, false);
+  const { channels } = useChannels(shown === undefined ? undefined : tasks.workspace?.id);
   const named = (to: Place) =>
     liveStepTitle(namedStepOf(to), titleOf(to), tasks, members, channels);
   const { backTo, upTo, stepBack, stepAway, ...history } = useHistory({

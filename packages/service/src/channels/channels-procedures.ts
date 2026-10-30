@@ -5,7 +5,8 @@
  * `channels.ts`). Any member of a workspace reads and writes its channels,
  * but never renames or archives its #general (`channel-store.ts`), and every
  * write on a channel answers the workspace's channels as they then stand,
- * each with how many open asks wait on the reader there (`inbox-store.ts`'s
+ * and the transaction it was written in, which a desktop following the
+ * channels waits for, each with how many open asks wait on the reader there (`inbox-store.ts`'s
  * `WAITS_ON`), when they last looked at it, how many of its threads they
  * may read, and when the latest was posted; an archived channel carries the
  * same but the look. A member moves any thread they may read into another open channel
@@ -17,6 +18,7 @@ import {
   type ArchivedChannelRow,
   archiveChannel,
   CHANNEL_WRITE_REFUSAL,
+  type ChannelTxid,
   type ChannelWriteRefusal,
   channelWorkspaceOf,
   createChannel,
@@ -75,6 +77,16 @@ const workspaceOfChannel = /* @__PURE__ */ Effect.fnUntraced(function* (
   const workspace = yield* hostedStoreOrUnavailable(channelWorkspaceOf(userId, channelId));
   if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return workspace.value;
+});
+
+/** The workspace's channels as they stand once a write landed, with the transaction it was written in where it wrote any. */
+const channelsWritten = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  organizationId: string,
+  { txid }: ChannelTxid,
+) {
+  const answer: ChannelsAnswer = yield* channelsOf(userId, organizationId);
+  return txid === undefined ? answer : { ...answer, txid };
 });
 
 /** What a channel holds of the threads the reader may read, as the wire carries it: none and no latest post where it holds none. */
@@ -149,21 +161,19 @@ export function channelsProcedures(seams: ChannelsProcedureSeams) {
       return yield* channelsOf(context.userId, input.workspaceId);
     }),
     create: signedIn.create.effect(function* ({ input, context }) {
-      const { workspaceId, name, purpose, project = false } = input;
+      const { workspaceId, name, purpose, project = false, id } = input;
       const now = yield* DateTime.nowAsDate;
       const made = yield* hostedStoreOrUnavailable(
-        createChannel(context.userId, workspaceId, { name, purpose, project }, now),
+        createChannel(context.userId, workspaceId, { name, purpose, project, id }, now),
       );
-      yield* written(made);
-      return yield* channelsOf(context.userId, workspaceId);
+      return yield* channelsWritten(context.userId, workspaceId, yield* written(made));
     }),
     edit: signedIn.edit.effect(function* ({ input, context }) {
       const { workspaceId, channelId, name, purpose } = input;
       const edited = yield* hostedStoreOrUnavailable(
         editChannel(context.userId, workspaceId, channelId, { name, purpose }),
       );
-      yield* written(edited);
-      return yield* channelsOf(context.userId, workspaceId);
+      return yield* channelsWritten(context.userId, workspaceId, yield* written(edited));
     }),
     archive: signedIn.archive.effect(function* ({ input, context }) {
       const { workspaceId, channelId } = input;
@@ -171,16 +181,14 @@ export function channelsProcedures(seams: ChannelsProcedureSeams) {
       const archived = yield* hostedStoreOrUnavailable(
         archiveChannel(context.userId, workspaceId, channelId, now),
       );
-      yield* written(archived);
-      return yield* channelsOf(context.userId, workspaceId);
+      return yield* channelsWritten(context.userId, workspaceId, yield* written(archived));
     }),
     unarchive: signedIn.unarchive.effect(function* ({ input, context }) {
       const { workspaceId, channelId } = input;
       const opened = yield* hostedStoreOrUnavailable(
         unarchiveChannel(context.userId, workspaceId, channelId),
       );
-      yield* written(opened);
-      return yield* channelsOf(context.userId, workspaceId);
+      return yield* channelsWritten(context.userId, workspaceId, yield* written(opened));
     }),
     archived: signedIn.archived.effect(function* ({ input, context }) {
       const { workspaceId } = input;
@@ -208,8 +216,10 @@ export function channelsProcedures(seams: ChannelsProcedureSeams) {
       const workspace = yield* workspaceOfChannel(context.userId, channelId);
       if (workspace !== workspaceId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const now = yield* DateTime.nowAsDate;
-      yield* hostedStoreOrUnavailable(stampChannelLook(context.userId, channelId, now));
-      return yield* channelsOf(context.userId, workspaceId);
+      const looked = yield* hostedStoreOrUnavailable(
+        stampChannelLook(context.userId, channelId, now),
+      );
+      return yield* channelsWritten(context.userId, workspaceId, looked);
     }),
     threads: signedIn.threads.effect(function* ({ input, context }) {
       // Note that the channel is reached first, so one of a workspace the reader is not in is not found rather than empty.
@@ -227,7 +237,7 @@ export function channelsProcedures(seams: ChannelsProcedureSeams) {
       );
       // Note that a thread the mover may not read and a channel that is no open one of its workspace are one refusal, so a move tells nothing of either.
       if (Result.isFailure(moved)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { thread: moved.success };
+      return { thread: moved.success.thread, txid: moved.success.txid };
     }),
   };
 }

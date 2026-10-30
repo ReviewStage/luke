@@ -27,8 +27,8 @@ import { useArchivedChannels } from "../tasks/use-channels.js";
 /**
  * archived-channels-dialog.tsx -- Browse archived channels, from a sidebar section's head: the workspace's archived channels of that section, each with its Unarchive, and a press that opens one to read.
  *
- * The dialog reads the archived channels as it opens (`useArchivedChannels`),
- * the latest archived first, and lists those of the section it was opened
+ * The dialog draws the archived channels the host holds beside the open
+ * ones (`useArchivedChannels`), the latest archived first, and lists those of the section it was opened
  * from, the standing channels' or the projects': each by its name, its
  * purpose, and when it was archived. Unarchive opens the channel again under
  * its own name, for everyone, as archiving it closed it; it asks nothing,
@@ -113,7 +113,6 @@ function ArchivedList({
     channels.onUnarchive(channelId).then((refused) => {
       setUnarchiving(undefined);
       setRefusal(refused);
-      if (refused === undefined) archived.onRefresh();
     });
   };
   const listed = archived.channels?.filter((channel) => channel.project === project);

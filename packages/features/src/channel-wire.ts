@@ -13,9 +13,10 @@ import { filledText } from "./text-schema.js";
  * or archives its #general, where every thread that names no channel goes. What differs per reader is how
  * many open asks wait on them in each channel and when they last looked at
  * it. Every write answers the workspace's channels as they then stand, as
- * the read does, so the panel draws the service's word rather than its
- * guess. A channel's threads are inbox items (`inbox-wire.ts`), each read
- * with the channel it lives in.
+ * the read does, and the transaction it was written in, which a desktop
+ * following the channels waits for before it lets go of what it drew. A
+ * channel's threads are inbox items (`inbox-wire.ts`), each read with the
+ * channel it lives in.
  */
 
 export const CHANNEL_BOUNDS = {
@@ -59,9 +60,13 @@ export const channelSchema = EffectSchema.Struct({
 
 export type Channel = typeof channelSchema.Type;
 
-/** A workspace's open channels by name, as the read and every write answer them. */
+/** The transaction a write committed in, which a follower of the channels waits for; absent where it wrote nothing, and from a service before it. */
+const writtenIn = { txid: EffectSchema.optionalKey(EffectSchema.String) };
+
+/** A workspace's open channels by name, as the read and every write answer them, a write with its transaction. */
 export const channelsAnswerSchema = EffectSchema.Struct({
   channels: EffectSchema.Array(channelSchema),
+  ...writtenIn,
 });
 
 export type ChannelsAnswer = typeof channelsAnswerSchema.Type;
@@ -69,12 +74,18 @@ export type ChannelsAnswer = typeof channelsAnswerSchema.Type;
 /** The read's query: the workspace whose channels are read. */
 export const channelsQuerySchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
 
-/** A channel a member makes: its workspace, name, and purpose, and whether it is one project's, which it is not where the request says nothing. */
+/**
+ * A channel a member makes: its workspace, name, and purpose, and whether it
+ * is one project's, which it is not where the request says nothing; and its
+ * id, where the desktop minted it to draw the channel before the service
+ * answers, the service minting one where the request names none.
+ */
 export const channelCreateRequestSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
   name: channelNameSchema,
   purpose: channelPurposeSchema,
   project: EffectSchema.optionalKey(EffectSchema.Boolean),
+  id: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type ChannelCreateRequest = typeof channelCreateRequestSchema.Type;
@@ -189,8 +200,11 @@ export const channelMoveRequestSchema = EffectSchema.Struct({
 
 export type ChannelMoveRequest = typeof channelMoveRequestSchema.Type;
 
-/** The thread a move answers, as it then stands in the channel it went to. */
-export const channelMoveAnswerSchema = EffectSchema.Struct({ thread: channelThreadSchema });
+/** The thread a move answers, as it then stands in the channel it went to, and the transaction it moved in. */
+export const channelMoveAnswerSchema = EffectSchema.Struct({
+  thread: channelThreadSchema,
+  ...writtenIn,
+});
 
 export type ChannelMoveAnswer = typeof channelMoveAnswerSchema.Type;
 

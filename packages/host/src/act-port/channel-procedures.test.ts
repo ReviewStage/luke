@@ -38,12 +38,10 @@ const THREAD_ID = "8a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 
 /** Each kind's refusal, as its contract procedure words it. */
 const REFUSAL = {
-  [CHANNEL_ACT_KIND.CHANNELS_LIST]: "Could not read the channels on this system.",
   [CHANNEL_ACT_KIND.CHANNELS_CREATE]: "Could not make the channel on this system.",
   [CHANNEL_ACT_KIND.CHANNELS_EDIT]: "Could not edit the channel on this system.",
   [CHANNEL_ACT_KIND.CHANNELS_ARCHIVE]: "Could not archive the channel on this system.",
   [CHANNEL_ACT_KIND.CHANNELS_UNARCHIVE]: "Could not unarchive the channel on this system.",
-  [CHANNEL_ACT_KIND.CHANNELS_ARCHIVED]: "Could not read the archived channels on this system.",
   [CHANNEL_ACT_KIND.CHANNELS_LOOK]: "Could not mark the channel seen on this system.",
   [CHANNEL_ACT_KIND.CHANNELS_THREADS]: "Could not read the channel's threads on this system.",
   [CHANNEL_ACT_KIND.CHANNELS_MOVE]: "Could not move the thread on this system.",
@@ -58,12 +56,6 @@ const ACTS: readonly {
   payload: PortActPayload<Kind>;
   call: (client: ActPortClient) => Promise<PortActResult<Kind>>;
 }[] = [
-  {
-    kind: CHANNEL_ACT_KIND.CHANNELS_LIST,
-    host: "list",
-    payload: { workspaceId: WORKSPACE_ID },
-    call: (client) => client[CHANNEL_ACT_KIND.CHANNELS_LIST]({ workspaceId: WORKSPACE_ID }),
-  },
   {
     kind: CHANNEL_ACT_KIND.CHANNELS_CREATE,
     host: "create",
@@ -114,12 +106,6 @@ const ACTS: readonly {
       }),
   },
   {
-    kind: CHANNEL_ACT_KIND.CHANNELS_ARCHIVED,
-    host: "archived",
-    payload: { workspaceId: WORKSPACE_ID },
-    call: (client) => client[CHANNEL_ACT_KIND.CHANNELS_ARCHIVED]({ workspaceId: WORKSPACE_ID }),
-  },
-  {
     kind: CHANNEL_ACT_KIND.CHANNELS_LOOK,
     host: "look",
     payload: { workspaceId: WORKSPACE_ID, channelId: CHANNEL_ID },
@@ -153,18 +139,16 @@ function windowPort(actor: ActSender) {
       return { failure: CHANNEL_CALL_FAILURE.UNANSWERED };
     });
   const host: HostAsk = {
-    channelsList: unanswered("list"),
     channelsCreate: unanswered("create"),
     channelsEdit: unanswered("edit"),
     channelsArchive: unanswered("archive"),
     channelsUnarchive: unanswered("unarchive"),
-    channelsArchived: unanswered("archived"),
     channelsLook: unanswered("look"),
     channelsThreads: unanswered("threads"),
     channelsMove: unanswered("move"),
     channelsFollow: () => Effect.void,
     channelsUnfollow: () => Effect.void,
-    onChannelsChanged: () => () => undefined,
+    channelsRetry: () => Effect.void,
   };
   const port = testActPort<unknown>(channelProcedures({ host }));
   ports.push(port);

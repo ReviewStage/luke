@@ -1,9 +1,8 @@
 import { Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";
-import type { ChannelsLiveAnswer } from "./channel-live.js";
+import type { WorkspaceChannelsLiveAnswer } from "./channel-live.js";
 import {
-  type ArchivedChannelsView,
   CHANNEL_CALL_FAILURE,
   type ChannelArchiveParams,
   type ChannelCallFailure,
@@ -12,8 +11,6 @@ import {
   type ChannelLookParams,
   type ChannelMoveParams,
   type ChannelMoveView,
-  type ChannelsArchivedParams,
-  type ChannelsListParams,
   type ChannelsView,
   type ChannelThreadsParams,
   type ChannelThreadsView,
@@ -95,11 +92,6 @@ export class HostedChannelClient {
     });
   }
 
-  /** The workspace's open channels, each with what waits on the reader there and when they last looked. */
-  list(params: ChannelsListParams): Effect.Effect<ChannelsView, never, HttpClient.HttpClient> {
-    return answered(askHosted(this.#hosted.channels.list, params));
-  }
-
   /** A channel made, answering the workspace's channels as they then stand. */
   create(params: ChannelCreateParams): Effect.Effect<ChannelsView, never, HttpClient.HttpClient> {
     return answered(askHosted(this.#hosted.channels.create, params));
@@ -122,36 +114,35 @@ export class HostedChannelClient {
     return answered(askHosted(this.#hosted.channels.unarchive, params));
   }
 
-  /** The workspace's archived channels, the latest archived first. */
-  archived(
-    params: ChannelsArchivedParams,
-  ): Effect.Effect<ArchivedChannelsView, never, HttpClient.HttpClient> {
-    return answered(askHosted(this.#hosted.channels.archived, params));
-  }
-
   /** A thread moved into another open channel of its workspace, answering it as it then stands. */
   move(params: ChannelMoveParams): Effect.Effect<ChannelMoveView, never, HttpClient.HttpClient> {
     return answered(askHosted(this.#hosted.channels.move, params));
   }
 
   /**
-   * A workspace's channels sealed for following over Neon Realtime, to a
-   * member of it and for the account named, or with their rows inline where
-   * `poll` asks for them, held by the service until they move past `after`;
-   * signed out where the session is another account's, or why not.
+   * A workspace's channels list sealed for following, to a member of it and
+   * for the account named, every channel open or archived with what it holds
+   * for the reader, or with their rows inline where `poll` asks for them,
+   * held by the service until they move past `after`; signed out where the
+   * session is another account's, or why not.
    */
-  live(
+  workspaceLive(
     workspaceId: string,
     userId: string,
     poll = false,
     after?: string,
   ): Effect.Effect<
-    ChannelsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    WorkspaceChannelsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
     never,
     HttpClient.HttpClient
   > {
     return liveAnswered(
-      askLive(this.#hosted.live.channels, { workspaceId, [LIVE_USER_QUERY]: userId }, poll, after),
+      askLive(
+        this.#hosted.live.workspaceChannels,
+        { workspaceId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
     );
   }
 

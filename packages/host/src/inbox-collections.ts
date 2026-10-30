@@ -53,6 +53,8 @@ export const INBOX_CHANGE = {
   MARKED: "marked",
   /** The item as the service answered it. */
   ANSWERED: "answered",
+  /** The thread moved into another channel of its workspace. */
+  MOVED: "moved",
 } as const;
 
 /** One write's change, as every read draws it over what it holds. */
@@ -68,7 +70,12 @@ export type InboxChange =
       readonly itemIds: ReadonlySet<string>;
       readonly unread: boolean;
     }
-  | { readonly kind: typeof INBOX_CHANGE.ANSWERED; readonly item: InboxItem };
+  | { readonly kind: typeof INBOX_CHANGE.ANSWERED; readonly item: InboxItem }
+  | {
+      readonly kind: typeof INBOX_CHANGE.MOVED;
+      readonly itemId: string;
+      readonly channelId: string;
+    };
 
 /** One standing read as a write reaches it. */
 export interface InboxRead {
@@ -141,6 +148,10 @@ function changedItem(change: InboxChange, item: InboxItem): InboxItem | undefine
       return item.id === change.item.id && item.updatedAt <= change.item.updatedAt
         ? change.item
         : undefined;
+    case INBOX_CHANGE.MOVED:
+      return item.id === change.itemId && item.channelId !== change.channelId
+        ? { ...item, channelId: change.channelId }
+        : undefined;
   }
 }
 
@@ -153,6 +164,8 @@ export function changedIds(change: InboxChange): readonly string[] {
       return [...change.itemIds];
     case INBOX_CHANGE.ANSWERED:
       return [change.item.id];
+    case INBOX_CHANGE.MOVED:
+      return [change.itemId];
   }
 }
 

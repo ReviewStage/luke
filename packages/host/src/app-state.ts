@@ -2,6 +2,7 @@ import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { AgentKind } from "@luke/features/agent-wire";
+import type { WorkspaceChannels } from "@luke/features/channel-live";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { LIVE_READ } from "@luke/features/live-wire";
 import type { TasksView } from "@luke/features/tasks-view";
@@ -301,10 +302,22 @@ export const NO_HOLDER_INBOXES: AppHolderInboxes = {
   [INBOX_SCOPE_KIND.AGENT]: {},
 };
 
+/**
+ * Each workspace's channels the host holds for the windows
+ * (`channel-follow.ts`): the workspaces a window lists or names, and the few
+ * let go lately, by id, each as its own read stands, its open channels by
+ * name and its archived ones the latest archived first.
+ */
+export type AppWorkspaceChannels = Readonly<Record<string, AppHostRead<WorkspaceChannels>>>;
+
+/** No workspace's channels held, as the host stands before any window lists one and after the session ends. */
+export const NO_WORKSPACE_CHANNELS: AppWorkspaceChannels = {};
+
 /** The rows of each read the host holds for the panel, by its name: a keyed read's are one key's rows. */
 export interface AppHostReads {
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
+  [LIVE_READ.CHANNELS]: WorkspaceChannels;
 }
 
 /**
@@ -387,6 +400,8 @@ export interface AppState {
   [LIVE_READ.INBOX_ITEMS]: AppHostRead<AppInboxItems>;
   /** Each plan's or agent's inbox the windows chose, held while a window holds it and a while after: what a chosen item's pane, a task's Inbox tab, and an agent's page read past the feed. */
   [LIVE_READ.HOLDER_INBOX]: AppHolderInboxes;
+  /** Each workspace's channels, open and archived, held while a window holds them and a while after: what the sidebar's channels, the Inbox's head, the palette, and a `#channel` chip read. */
+  [LIVE_READ.CHANNELS]: AppWorkspaceChannels;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;

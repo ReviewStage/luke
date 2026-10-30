@@ -214,8 +214,8 @@ export const DesktopInbox = memo(function DesktopInbox({
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const narrowed = useInboxNarrowed();
   const channelPlace = useChannelPlace();
-  const channels = useChannels(channelsOn ? tasks.workspace?.id : undefined, tasks.shown);
-  // A channel chosen that is open no more is looked for among the archived ones, read only then, and shown to read where it is one.
+  const channels = useChannels(channelsOn ? tasks.workspace?.id : undefined);
+  // A channel chosen that is open no more is looked for among the archived ones, and shown to read where it is one.
   const chosenGone =
     narrowed &&
     channels.channels !== undefined &&

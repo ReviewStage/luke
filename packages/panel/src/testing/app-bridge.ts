@@ -10,6 +10,7 @@ import {
   AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
   actContract,
+  CHANNEL_ACT_KIND,
   type PortActKind,
   type PortActPayload,
   type PortActResult,
@@ -89,7 +90,7 @@ function followedFromReads(
     );
 }
 
-/** A hold on a task's or an agent's inbox, as the host's answers it: a stream carrying nothing, standing until the window closes it. */
+/** A hold on a task's or an agent's inbox, or on a workspace's channels, as the host's answers it: a stream carrying nothing, standing until the window closes it. */
 function quietHold(): Promise<PortActResult<typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW>> {
   const ended = Promise.withResolvers<IteratorReturnResult<undefined>>();
   const close = () => ended.resolve({ done: true, value: undefined });
@@ -120,10 +121,12 @@ function quietHold(): Promise<PortActResult<typeof AGENT_INBOX_ACT_KIND.AGENTS_I
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
   const list = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_LIST];
   const runs = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS];
-  const held: Partial<FakeActPort> =
-    procedures[AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW] === undefined
-      ? { ...procedures, [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: quietHold }
-      : procedures;
+  // Note that the host's holds are answered quietly unless the test answers them, since their reads arrive on app state.
+  const held: Partial<FakeActPort> = {
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: quietHold,
+    [CHANNEL_ACT_KIND.CHANNELS_FOLLOW]: quietHold,
+    ...procedures,
+  };
   const answered: Partial<FakeActPort> =
     held[AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW] !== undefined ||
     (list === undefined && runs === undefined)
@@ -278,9 +281,16 @@ export function fakeActs(
       [kind]: async (payload: WireBoundaryInput) => {
         // SAFETY: the window paired this payload with this kind, as its own procedure takes it.
         const request = (payload === undefined ? { kind } : { kind, payload }) as PortAct;
-        if (request.kind !== AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW) return answered(request);
+        if (
+          request.kind !== AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW &&
+          request.kind !== CHANNEL_ACT_KIND.CHANNELS_FOLLOW
+        ) {
+          return answered(request);
+        }
         const outcome = await answer(request);
         if (outcome.status === FAKE_ANSWER.DONE) return outcome.value;
+        // Note that a hold on a workspace's channels the switch does not answer stands quiet, since the channels arrive on app state.
+        if (request.kind === CHANNEL_ACT_KIND.CHANNELS_FOLLOW) return quietHold();
         return followed(request.payload);
       },
     });
