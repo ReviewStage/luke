@@ -20,10 +20,11 @@ import { ACTION_RESULT_STATUS, type WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test, vi } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { holdFrames, settleFrames } from "../testing/frames.js";
 import { ToastHost } from "../toast.js";
 import { type AgentsControl, MODELS_READ, useAgents } from "./use-agents.js";
 
@@ -59,16 +60,17 @@ interface Asked {
 
 const roots: Root[] = [];
 
+beforeEach(() => holdFrames());
+
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   window.localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  await settleFrames();
 }
 
 /**

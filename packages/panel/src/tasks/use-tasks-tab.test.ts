@@ -59,10 +59,11 @@ import {
 import { PANEL_TAB } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { FAKE_ANSWER, fakeActPort, fakeActs } from "../testing/app-bridge.js";
+import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { holdFrames, settleFrames } from "../testing/frames.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -1038,6 +1039,8 @@ test("a Luke link to an agent's worker opens the worker's own tab in the task's 
 });
 
 test("a link to an agent's Pull request tab, on a pull request another of the task's agents shares whose tab is open, opens that tab rather than a second, unless that agent was archived", async () => {
+  // Note that the task's sweep of its agents' pull requests starts once a frame has painted.
+  holdFrames();
   const EARLIER = { ...RUNNING_AGENT, id: "5e3b6f1d-2a10-4c7a-9a55-7b0f5f3e2c1d", createdAt: 2 };
   const shared = {
     repository: "acme/relay",
@@ -1061,7 +1064,7 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
       [ACT_KIND.AGENTS_ARCHIVE]: () => Promise.resolve({ agent: archived }),
     },
   );
-  await settle();
+  await settleFrames();
   const open = (agentId: string) =>
     act(() =>
       tab.control().onOpenLink({
@@ -1079,7 +1082,7 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
   // Archived, the earlier agent's tab is no longer drawn, so the link opens the later agent's own.
   tab.stand({ tasks: withAgents([archived, RUNNING_AGENT]) });
   await act(() => tab.control().agents.onArchive(EARLIER.id, true));
-  await settle();
+  await settleFrames();
   open(AGENT_ID);
   assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
 });

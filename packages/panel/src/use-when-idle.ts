@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { afterPaint } from "./after-paint.js";
 
 /**
  * use-when-idle.ts -- work the panel's first paint does not need, started once the renderer has nothing better to do.
@@ -24,7 +25,8 @@ export const IDLE_TIMEOUT_MS = {
  * first. A new `work` before then replaces the old one without restarting the wait.
  *
  * A browser with no `requestIdleCallback` (Safari) runs it after the first
- * frame has painted, or at once in a hidden tab, which paints none.
+ * frame has painted, or at once in a hidden tab, which paints none
+ * (`afterPaint`).
  */
 export function useWhenIdle(work: () => void, timeoutMs: number): void {
   const latest = useRef(work);
@@ -37,24 +39,6 @@ export function useWhenIdle(work: () => void, timeoutMs: number): void {
       const handle = globalThis.requestIdleCallback(run, { timeout: timeoutMs });
       return () => globalThis.cancelIdleCallback(handle);
     }
-    let cancelled = false;
-    const go = () => {
-      if (!cancelled) run();
-    };
-    // A hidden tab paints no frames, so waiting for one would hold the work until it is looked at; nobody is waiting on that tab's first paint, so it runs at once.
-    if (document.visibilityState === "hidden") {
-      queueMicrotask(go);
-      return () => {
-        cancelled = true;
-      };
-    }
-    // Two frames on: the first runs before the paint it belongs to, the second after it.
-    let frame = globalThis.requestAnimationFrame(() => {
-      frame = globalThis.requestAnimationFrame(go);
-    });
-    return () => {
-      cancelled = true;
-      globalThis.cancelAnimationFrame(frame);
-    };
+    return afterPaint(run);
   }, [timeoutMs]);
 }
