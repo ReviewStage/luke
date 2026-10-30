@@ -468,6 +468,7 @@ export const DesktopInbox = memo(function DesktopInbox({
   const openHere: OpenHere = (href) => {
     const target = inboxPanelTarget(href, {
       taskId,
+      agentId: taskId === undefined ? chosenAgentId : undefined,
       repository:
         taskId === undefined ? (place?.repository ?? null) : (chosenTask?.repository ?? null),
       pullRequests,
@@ -879,6 +880,7 @@ function InboxSidePanel({
       unread={NO_UNREAD}
       holder={SIDE_PANEL_HOLDER.INBOX}
       taskId={panelFor ?? ""}
+      onAgent={taskId === undefined && panelFor !== undefined}
       repository={repository}
       repositoryPlace={repositoryPlace}
       pages={pages}

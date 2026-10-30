@@ -17,7 +17,8 @@ import {
 
 /**
  * What the panel beside an Inbox item opens of a link pressed on the item:
- * a file of the task's repository, a page of the task, an agent of the
+ * a file of the task's repository, a page of the task or of the agent on no
+ * task that holds the item, an agent of the
  * task's transcript, an agent's Pull request tab as a Luke link names it, or that tab on its conversation as
  * the pull request's own page on GitHub names it, by its number where it is
  * another pull request of the task's repository.
@@ -50,6 +51,8 @@ export type InboxPanelTarget =
 /** What holds the item: its task, none for an agent with no task, the task's repository or the agent's own where it has none, each of its agents' pull requests by its page on GitHub, and its agents, the first of which shows any other pull request of the task's repository. */
 export interface InboxPanelPlace {
   readonly taskId: string | undefined;
+  /** The agent on no task that holds the item, whose own pages open beside it; none for an item of a task. */
+  readonly agentId?: string | undefined;
   readonly repository: string | null;
   readonly pullRequests: readonly OpenedPullRequest[];
   readonly agentIds?: readonly string[] | undefined;
@@ -71,7 +74,8 @@ function holdsAgent(
 /**
  * What the panel beside the item opens of the link, or nothing where the
  * window opens it, leaving the Inbox or for the browser: a Luke link to a
- * page or an agent's Pull request tab of the item's own task, the page on
+ * page or an agent's Pull request tab of the item's own task, a page of the
+ * agent on no task that holds it, the page on
  * GitHub of a pull request one of its agents opened, or a file of the
  * item's repository on GitHub, which the panel reads through the task it
  * stands for, or through the workspace and repository of an agent with none.
@@ -83,8 +87,13 @@ export function inboxPanelTarget(
   const link = readLink(href);
   if (link !== undefined) {
     const at = link.place;
-    // A page of an agent on no task is opened on the agent's own page, by the window.
-    if (at.kind === LINK_PLACE.PAGE && "planId" in at && at.planId === place.taskId) {
+    // A page of the item's own task, or of the agent on no task that holds it, opens beside the item; another's is the window's to open.
+    if (
+      at.kind === LINK_PLACE.PAGE &&
+      ("planId" in at
+        ? at.planId === place.taskId
+        : place.agentId !== undefined && at.agentId === place.agentId)
+    ) {
       return { kind: INBOX_PANEL_TARGET.PAGE, pageId: at.pageId };
     }
     // An archived agent's Changes still opens beside the item, as its older link under the task did.
