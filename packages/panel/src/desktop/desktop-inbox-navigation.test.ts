@@ -768,7 +768,7 @@ test("an item a link names that no read holds, of a task the reader cannot read,
 
   assert.match(
     page.querySelector(".inbox-view-items")?.textContent ?? "",
-    /Not foundThis Inbox item doesn't exist, or you don't have access to it\./u,
+    /Not foundThis inbox item doesn't exist, or you don't have access to it\./u,
   );
   assert.equal(page.querySelector('.inbox-tasks [aria-current="page"]'), null);
 });

@@ -326,8 +326,11 @@ function insteadOf(show: InboxShow, counts: InboxCounts): keyof typeof SHOW_INST
   return show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0 ? INBOX_SHOW.ALL : undefined;
 }
 
-/** What All says where Whose, naming someone, leaves out every item. */
-const NOTHING_THEIRS = "Nothing in the inbox is theirs";
+/** What All says where Whose, naming the reader or a teammate, leaves out every item, in the words that name whose. */
+const NOTHING_WHOSE = {
+  YOURS: "Nothing in the inbox is yours",
+  THEIRS: "Nothing in the inbox is theirs",
+} as const;
 
 /** What each status group is called, and its glyph, a list grouped by status heading it. */
 const STATUS_WORDS = {
@@ -980,7 +983,9 @@ export function ShowEmpty({
     whose !== undefined && whose.whose.kind !== INBOX_WHOSE.EVERYONE ? whose : undefined;
   const line =
     show.show === INBOX_SHOW.ALL && whoseNames !== undefined
-      ? NOTHING_THEIRS
+      ? whoseNames.whose.kind === INBOX_WHOSE.MINE
+        ? NOTHING_WHOSE.YOURS
+        : NOTHING_WHOSE.THEIRS
       : SHOW_EMPTY[show.show];
   const instead = insteadOf(show.show, counts);
   const everyone = instead === undefined ? whoseNames : undefined;

@@ -1493,6 +1493,26 @@ test("a teammate chosen in Whose with nothing in the scope shown says so, and of
   assert.equal(listed(page).length, 5);
 });
 
+test("Me chosen in Whose with nothing of the reader's in the scope shown says so in the reader's words", async () => {
+  world.listedWorkspace = SHARED_WORKSPACE;
+  world.members = SHARED_MEMBERS;
+  for (const [holder, items] of world.inboxes) {
+    world.inboxes.set(
+      holder,
+      items.map((item) => ({ ...item, startedBy: TEAMMATE })),
+    );
+  }
+  const { page } = mount();
+  await settle();
+  chooseView(page, "Whose", "Me");
+  assert.deepEqual(listed(page), []);
+  assert.deepEqual(listEmpty(page), [
+    undefined,
+    "Nothing in the inbox is yours",
+    "Show everyone's items",
+  ]);
+});
+
 test("grouped by status, what needs you stands under the attention mark, then what waits on a teammate, then what is answered, each folding as a task's group does, a folded group counting what in it needs you and its rows passed over by K and J", async () => {
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
   const { page } = mount([], { chosen: ON_EXPIRY });

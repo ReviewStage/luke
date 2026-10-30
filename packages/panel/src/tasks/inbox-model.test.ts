@@ -1544,7 +1544,7 @@ test("a thread's row says the ask itself while one is open: a choice's options, 
   assert.equal(rowOf(steps, [0]), "2 steps left · Add it");
   assert.equal(rowOf(steps, [0, 2]), "1 step left · Add it");
   assert.equal(rowOf(steps, [0, 1, 2]), "Every step ticked · Mark done");
-  assert.equal(rowOf({ type: INBOX_ASK.DO, steps: [] }, [0]), "Mark it done");
+  assert.equal(rowOf({ type: INBOX_ASK.DO, steps: [] }, [0]), "Mark done");
   assert.equal(lineOf(steps), INBOX_LINE.DO);
   assert.equal(
     rowOf({

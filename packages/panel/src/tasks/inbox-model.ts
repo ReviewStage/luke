@@ -985,7 +985,7 @@ function askLine(ask: InboxKnownAsk, ticked: readonly number[]): string {
         .join(" / ");
     case INBOX_ASK.DO: {
       const steps = ask.steps.map((step) => plainWords(step));
-      if (steps.length === 0) return "Mark it done";
+      if (steps.length === 0) return "Mark done";
       const done = new Set(ticked.filter((at) => at < steps.length));
       const next = steps.find((_, at) => !done.has(at));
       if (next === undefined) return "Every step ticked · Mark done";
