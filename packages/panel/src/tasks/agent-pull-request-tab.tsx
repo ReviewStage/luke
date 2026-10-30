@@ -564,6 +564,22 @@ function headerPullRequestOf(
 }
 
 /**
+ * Where the header's pill says GitHub's merge queue holds the pull request:
+ * as the overview's merge read says once it lands, and until then as what the
+ * agent published says of that same pull request, place unknown, so the pill
+ * says Queued from the first frame as the tab's own mark does. Unread where
+ * neither says, which Close asks about as it may be queued.
+ */
+function headerQueuedOf(
+  pullRequest: AgentOverviewPullRequest | undefined,
+  published: AgentPullRequest | undefined,
+  number: number,
+): { readonly position?: number } | null | undefined {
+  if (pullRequest !== undefined) return pullRequest.merging?.queued;
+  return published?.number === number && published.queued === true ? {} : undefined;
+}
+
+/**
  * Who the pull request names as its reviewers, as stage-cli's header names
  * them: where each stands by their reviews, as its conversation's read
  * says, with those it still asks for a review, as its own read says,
@@ -2971,7 +2987,7 @@ function PullRequestTabBody({
                       <div className="pull-request-state">
                         <PullRequestStateMenu
                           pullRequest={held}
-                          queued={overview?.merging?.queued}
+                          queued={headerQueuedOf(overview, published, held.number)}
                           shown={shown}
                           writes={writes}
                         />
