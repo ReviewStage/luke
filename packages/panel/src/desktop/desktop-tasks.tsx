@@ -4,6 +4,7 @@ import { planSections } from "@luke/features/plan-document";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskBlockRequest, TaskStanding } from "@luke/features/task-wire";
 import { readingWords } from "@luke/features/words";
+import { taskKey } from "@luke/features/workspace-key";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -13,6 +14,8 @@ import {
   FailureNote,
   FILL_ELEMENT,
   Fill,
+  FrameHead,
+  FrameHeadSkeleton,
   NOT_FOUND_THING,
   NotFound,
   SKELETON_SHAPE,
@@ -42,7 +45,7 @@ import { agentActor, agentName, type SentLine, startsOwnAgents } from "../tasks/
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
-import { taskHolder } from "../tasks/inbox-model.js";
+import { NEEDS_YOU, taskHolder } from "../tasks/inbox-model.js";
 import { PlanBody, type SectionLinks, type TitleRename } from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
@@ -125,6 +128,12 @@ import {
  * the task's repository is the sidebar's row's to name, so the toolbar draws
  * the repository chip only while the task has none, and otherwise only the
  * chip's menu, which Change repository opens.
+ *
+ * Under the toolbar the task's head stands over every tab of the column
+ * (`FrameHead`): the task as a chip, its key and name, which shows its plan,
+ * and how many of its Inbox items wait on the reader, a press that opens
+ * the window's Inbox narrowed to the task. A phone heads the task with its
+ * own row instead (`TaskHead`).
  *
  * The column's summary stands at its right, under the toolbar, listing what
  * both "+" menus open, with its button last in the
@@ -231,6 +240,7 @@ function TaskPageSkeleton({
   onColumn,
   starting,
   head,
+  framed,
 }: {
   /** The line New task's agent start under way opens its agent on, which the column draws as the agent's tab will; none while a task is read. */
   starting?: SentLine | undefined;
@@ -242,6 +252,8 @@ function TaskPageSkeleton({
   onColumn: (column: HTMLElement | null) => void;
   /** A phone's head over the page, as the page will be headed once it lands (`TaskWaitHead`); none elsewhere. */
   head?: React.ReactNode;
+  /** Whether the task's head stands over its column, as on a wide window, where the page will draw it (`FrameHead`). */
+  framed: boolean;
 }): React.JSX.Element {
   const { panel, ...frame } = drawing;
   return (
@@ -260,6 +272,7 @@ function TaskPageSkeleton({
               title={<MainTabStripSkeleton />}
               actions={<TaskActionsSkeleton summary={summary.holds} />}
             />
+            {framed ? <FrameHeadSkeleton /> : null}
             <TaskBody>
               <Fill className="desktop-task-column">
                 <AgentColumn>
@@ -900,6 +913,7 @@ function PlanDocument({
         summary={summaryLayout}
         onColumn={setColumn}
         head={phone ? <TaskWaitHead away={away} reading /> : undefined}
+        framed={!phone}
       />
     );
   }
@@ -1173,6 +1187,24 @@ function PlanDocument({
                             </>
                           }
                         />
+                        {/* The task's head stands over every tab of the column, naming the
+            task whichever is chosen; a phone heads the task with its own row (`TaskHead`). */}
+                        {switched ? null : (
+                          <FrameHead
+                            taskKey={
+                              task.number === undefined
+                                ? undefined
+                                : taskKey(workspaceName, task.number)
+                            }
+                            name={listed.name}
+                            onOpen={() => openPanelTab(SIDE_PANEL_TAB.PLAN)}
+                            waiting={{
+                              count: inbox.board.waiting.length,
+                              noun: NEEDS_YOU.COUNT,
+                              onOpen: () => tasks.onShowInbox({ taskId: task.id }),
+                            }}
+                          />
+                        )}
                         {/* The plan's banner is the whole plan's, so it stands over every
             tab of the column, and over the panel's while that fills the window. */}
                         {sidePanel.fullScreen ? null : stranded.banner}
@@ -1299,6 +1331,7 @@ function StartingTaskPage({
       onColumn={setColumn}
       starting={line}
       head={phoneAway === undefined ? undefined : <TaskWaitHead away={phoneAway} reading />}
+      framed={phoneAway === undefined}
     />
   );
 }

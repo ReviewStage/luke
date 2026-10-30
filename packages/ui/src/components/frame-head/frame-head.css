@@ -1,0 +1,26 @@
+/* frame-head.css -- the head of a task's frame: one row across its column
+   at the column's inset, the task's chip leading and what waits at the
+   row's end. */
+
+@layer components {
+  .luke-frame-head {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--luke-control-gap);
+    min-width: 0;
+    padding: var(--luke-space-8) var(--luke-space-12);
+  }
+
+  /* Note that the chip gives way, its name cut short, before the count
+     does, since the count is a press the reader is asked to make. */
+  .luke-frame-head-named {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .luke-frame-head > :not(.luke-frame-head-named) {
+    flex: none;
+  }
+}
