@@ -9,10 +9,14 @@ ALTER TABLE "agent" ADD CONSTRAINT "agent_automation_run_id_automation_run_id_fk
 -- run of an automation that hands every run to the same agent, which names an agent it did not start.
 UPDATE "agent" SET "automation_run_id" = "automation_run"."id" FROM "automation_run" WHERE "automation_run"."agent_id" = "agent"."id" AND "agent"."idempotency_key" = "automation_run"."id"::text;
 --> statement-breakpoint
--- And an agent a run's agent started belongs to that run too, down every chain of starters. Note that
--- the walk takes UNION rather than UNION ALL, because a pilot's takeover moves its agents' starter, and
--- a chain that comes back on itself must end rather than loop.
-WITH RECURSIVE "owned" ("id", "automation_run_id") AS (SELECT "id", "automation_run_id" FROM "agent" WHERE "automation_run_id" IS NOT NULL UNION SELECT "child"."id", "owned"."automation_run_id" FROM "agent" AS "child" INNER JOIN "owned" ON "child"."started_by_agent_id" = "owned"."id" WHERE "child"."automation_run_id" IS NULL) UPDATE "agent" SET "automation_run_id" = "owned"."automation_run_id" FROM "owned" WHERE "agent"."id" = "owned"."id" AND "agent"."automation_run_id" IS NULL;
+-- And an agent a run's agent started with no task belongs to that run too, down every chain of
+-- starters; one started onto a task is that task's, and the walk stops below it. Note that the walk
+-- takes UNION rather than UNION ALL, because a pilot's takeover moves its agents' starter, and a chain
+-- that comes back on itself must end rather than loop.
+WITH RECURSIVE "owned" ("id", "automation_run_id") AS (SELECT "id", "automation_run_id" FROM "agent" WHERE "automation_run_id" IS NOT NULL UNION SELECT "child"."id", "owned"."automation_run_id" FROM "agent" AS "child" INNER JOIN "owned" ON "child"."started_by_agent_id" = "owned"."id" WHERE "child"."automation_run_id" IS NULL AND "child"."task_id" IS NULL) UPDATE "agent" SET "automation_run_id" = "owned"."automation_run_id" FROM "owned" WHERE "agent"."id" = "owned"."id" AND "agent"."automation_run_id" IS NULL;
+--> statement-breakpoint
+-- An agent a run owns names that run's automation too, where it names none yet.
+UPDATE "agent" SET "automation_id" = "automation_run"."automation_id" FROM "automation_run" WHERE "agent"."automation_run_id" = "automation_run"."id" AND "agent"."automation_id" IS NULL;
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION "luke_sync_agent"() RETURNS trigger LANGUAGE plpgsql AS $luke_sync$
 DECLARE
