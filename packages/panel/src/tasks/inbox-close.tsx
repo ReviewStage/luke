@@ -190,51 +190,96 @@ export function closedNote(landed: number, refused: number): string {
     : `${countWords(landed, TERM.INBOX_ITEM)} resolved, ${refused} could not be`;
 }
 
-/** One item's close as a menu and its question card's × offer it, and the question it asks through, which the caller draws beside them. */
-export interface InboxClose {
-  /** The menu's item, and what the × presses; none where the item cannot be closed. */
-  readonly action: MenuAction | undefined;
+/** The closes a surface asks first, of whichever of its items asked last, through one question it draws once. */
+interface InboxCloseAsk {
+  /** Asks to close the item given, as it stands now. */
+  readonly ask: (item: InboxItem) => void;
   readonly dialog: React.JSX.Element;
 }
 
 /**
- * One item's close, asked first: offered while the item is open and a
- * closer is handed, which a surface that answers nothing, an archived
- * task's say, hands none of. The question goes once the surface is put
- * away or the item is open no longer.
+ * The closes of the items a surface draws, each asked first through the one
+ * question, so a list of a thousand rows draws one rather than a thousand
+ * standing shut; `current` finds an item as the surface draws it now, none
+ * once it draws it no longer. The question goes once the surface is put
+ * away, or the item it asks about is drawn, open, or at the revision it was
+ * asked on no longer, so the agent's change while it stands withdraws it
+ * rather than closing what the reader never saw.
+ */
+export function useInboxCloseAsk(
+  closer: InboxCloser | undefined,
+  surfaceOpen: boolean,
+  current: (itemId: string) => InboxItem | undefined,
+): InboxCloseAsk {
+  // The item as it stood when the question was asked, whose words the question says through its fade.
+  const [asked, setAsked] = useState<InboxItem | undefined>(undefined);
+  const now = asked === undefined ? undefined : current(asked.id);
+  const standing =
+    now !== undefined && now.status === INBOX_STATUS.OPEN && now.revision === asked?.revision;
+  const confirm = useConfirmDialog(
+    { subject: standing, surfaceOpen },
+    () => {
+      if (now !== undefined) void closer?.(now);
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+    confirmFailure(FAILURE_SURFACE.INBOX_CLOSE),
+  );
+  const { ask: confirmAsk } = confirm;
+  const ask = useCallback(
+    (item: InboxItem) => {
+      setAsked(item);
+      confirmAsk();
+    },
+    [confirmAsk],
+  );
+  return {
+    ask,
+    dialog: (
+      <ConfirmDialog
+        open
+        confirm={confirm}
+        question={closeAllQuestion(asked === undefined ? [] : [asked])}
+        restoreTo={nextRowOrHead}
+      />
+    ),
+  };
+}
+
+/**
+ * An item's close as its menu offers it, last: while the item is open and
+ * the surface hands an ask, which one that answers nothing, an archived
+ * task's say, hands none of.
+ */
+export function closeAction(
+  item: InboxItem,
+  ask: ((item: InboxItem) => void) | undefined,
+): MenuAction | undefined {
+  return ask === undefined || item.status !== INBOX_STATUS.OPEN
+    ? undefined
+    : { label: CLOSE_ITEM_LABEL, icon: <GLYPH.CLOSE />, onSelect: () => ask(item) };
+}
+
+/** One item's close as a menu and its question card's × offer it, and the question it asks through, which the caller draws beside them. */
+export interface InboxClose {
+  /** The menu's item, and what the × presses; none where the item cannot be closed. */
+  readonly action: MenuAction | undefined;
+  /** Asks to close the item; none where it cannot be closed. */
+  readonly ask: ((item: InboxItem) => void) | undefined;
+  readonly dialog: React.JSX.Element;
+}
+
+/**
+ * One item's close, asked first (`useInboxCloseAsk`), as the pane that shows
+ * it offers it: offered while the item is open and a closer is handed.
  */
 export function useInboxClose(
   item: InboxItem,
   closer: InboxCloser | undefined,
   surfaceOpen: boolean,
 ): InboxClose {
-  const open = item.status === INBOX_STATUS.OPEN;
-  // The revision the question was asked on, so the agent's change while it stands withdraws it rather than closing what the reader never saw.
-  const [asked, setAsked] = useState(item.revision);
-  const confirm = useConfirmDialog(
-    { subject: open && item.revision === asked, surfaceOpen },
-    () => {
-      void closer?.(item);
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
-    confirmFailure(FAILURE_SURFACE.INBOX_CLOSE),
+  const { ask, dialog } = useInboxCloseAsk(closer, surfaceOpen, (itemId) =>
+    itemId === item.id ? item : undefined,
   );
-  const ask = () => {
-    setAsked(item.revision);
-    confirm.ask();
-  };
-  return {
-    action:
-      closer === undefined || !open
-        ? undefined
-        : { label: CLOSE_ITEM_LABEL, icon: <GLYPH.CLOSE />, onSelect: ask },
-    dialog: (
-      <ConfirmDialog
-        open
-        confirm={confirm}
-        question={closeQuestion(item)}
-        restoreTo={nextRowOrHead}
-      />
-    ),
-  };
+  const handed = closer === undefined ? undefined : ask;
+  return { action: closeAction(item, handed), ask: handed, dialog };
 }

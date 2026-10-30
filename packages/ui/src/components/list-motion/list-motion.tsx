@@ -349,13 +349,22 @@ function placesOf(root: HTMLElement, elements: readonly Element[]): Map<Element,
   const origin = root.getBoundingClientRect();
   const view = viewOf(root);
   const places = new Map<Element, Place>();
+  // Note that a box's shift is read once however many rows it holds, because a long list's rows share their lists and groups.
+  const shifts = new Map<Element, Point>();
+  const shiftOnce = (element: Element): Point => {
+    const known = shifts.get(element);
+    if (known !== undefined) return known;
+    const shift = shiftOf(element);
+    shifts.set(element, shift);
+    return shift;
+  };
   for (const element of elements) {
     const box = element.getBoundingClientRect();
     const seen = box.bottom >= view.top && box.top <= view.bottom;
     let x = box.left - origin.left;
     let y = box.top - origin.top;
     for (let at: Element | null = element; at !== null && at !== root; at = at.parentElement) {
-      const shift = shiftOf(at);
+      const shift = shiftOnce(at);
       x -= shift.x;
       y -= shift.y;
     }
