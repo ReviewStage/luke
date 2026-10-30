@@ -7,7 +7,8 @@ import { afterEach, beforeAll, test } from "vitest";
 import { CommandAsk } from "./command-ask.js";
 
 /**
- * command-ask.test.ts -- the ask lands on Deny, names itself and shows the
+ * command-ask.test.ts -- the ask lands on Deny, names itself, says what
+ * Allow all commands lets through and where it is undone, and shows the
  * command as written; each answer is heard as its own; and Escape, which
  * waves the card away, denies rather than runs.
  */
@@ -62,11 +63,16 @@ function asked(): Record<"once" | "always" | "deny", number> {
   return heard;
 }
 
-test("it lands on Deny, names itself, and shows the command as written", () => {
+test("it lands on Deny, names itself, says what allowing all lets through, and shows the command as written", () => {
   asked();
   const card = document.querySelector('[role="alertdialog"]') ?? assert.fail("no card");
   const title = document.getElementById(card.getAttribute("aria-labelledby") ?? "");
   assert.equal(title?.textContent, "Run this command on your Mac?");
+  const description = document.getElementById(card.getAttribute("aria-describedby") ?? "");
+  assert.equal(
+    description?.textContent,
+    "Allow all commands lets every agent run commands on this Mac without asking. You can change it in Settings › This Mac.",
+  );
   assert.equal(document.activeElement, button("Deny"));
   assert.equal(document.querySelector(".luke-file-text-words")?.textContent, COMMAND);
 });
@@ -74,7 +80,7 @@ test("it lands on Deny, names itself, and shows the command as written", () => {
 test("each answer is heard as its own, and Escape denies", () => {
   const heard = asked();
   act(() => button("Allow once").click());
-  act(() => button("Always allow").click());
+  act(() => button("Allow all commands").click());
   act(() => button("Deny").click());
   assert.deepEqual(heard, { once: 1, always: 1, deny: 1 });
 
