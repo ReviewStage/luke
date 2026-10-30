@@ -1113,7 +1113,8 @@ call and so on its own key), Luke's own `read_web_page`
 (`public-research.ts`: refusing any address off the public internet), and two of Luke's own: `delegate`, the hand-off to a worker (below), and
 `edit_plan` (`src/agents/coder-host/plan-edit.ts`), which takes notes
 (`@luke/features/plan-template`'s `planNotesSchema`)
-into the agent's plan through the plan's one write (`plan-notes.ts`): an open
+into the plan of the task the call names, the agent's own or any other of
+its workspace, through the plan's one write (`plan-notes.ts`): an open
 question the agent met with the assumption it goes on under, a fact it
 corrected in the code, a decision it made. The save is journaled on the task's
 row (`task.agent_edits`, the last fifty, the agent's id and its notes as
@@ -1122,9 +1123,9 @@ by" line and the "recent edits by agents" every agent on the task
 is handed say what the row says now, and a turn may take only so many
 notes. `edit_plan` and
 `show_page` resolve at each turn's start (`tool-set.ts`'s `taskToolsOf`):
-an agent on no plan, as an automation's run starts one, is offered
-neither, and one handed a prompt on a plan only `show_page`, so no agent is
-offered a tool its every call would refuse.
+every agent is offered both, one on no task among them, as an automation's
+run starts one, since its pages stand on the agent itself and every
+`edit_plan` names its task.
 Beside them stand
 the agent tools (`src/agents/agent-tools.ts`): `list_agents`, every other agent on
 any task and by any member, each with its task, narrowed to one task or its

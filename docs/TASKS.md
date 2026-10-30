@@ -487,7 +487,9 @@ ordinary line.
 ### Agents' notes
 
 An agent writes the task's plan with its `edit_plan` tool
-(`packages/service/src/agents/coder-host/plan-edit.ts`): on a call as the talk
+(`packages/service/src/agents/coder-host/plan-edit.ts`), whose every call
+names the task by its id, so it writes any other plan of its workspace too,
+as a pilot fixes a child task's plan: on a call as the talk
 settles it, and off one where it meets something the plan does not settle,
 finds a fact the plan has wrong, or makes a decision the plan left open. Its
 saves go through `saveNotes` (`packages/service/src/tasks/plan-notes.ts`),

@@ -340,7 +340,7 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
   /** A worker's title generated from the task its call handed it and written on the child conversation the call recorded, where none stands; a call no delegation was recorded for, a failed call, and a title already standing each write nothing. */
   delegationTitle(admitted: AdmittedConversation, callId: string, task: string): HostEffect<void>;
-  /** Takes one `edit_plan` call's notes into the agent's plan, given how many notes the turn has taken already. */
+  /** Takes one `edit_plan` call's notes into the plan of the task it names, given how many notes the turn has taken already. */
   editPlan(
     admitted: AdmittedConversation,
     input: UnparsedWireValue,

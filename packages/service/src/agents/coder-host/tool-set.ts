@@ -96,7 +96,7 @@ export const CODER_TOOL = {
   SLEEP: AGENT_TOOL.SLEEP,
 } as const;
 
-/** The tools that act on the agent's task: `edit_plan`, which takes notes in its plan, `show_page`, which shows a page on it (or on the agent itself where it works on none), `look_at_picture`, which looks at a picture in its plan, and the four that read and answer its comments. */
+/** The tools that act on a task: `edit_plan`, which takes notes in the plan of the task it names, `show_page`, which shows a page on the agent's task (or on the agent itself where it works on none), `look_at_picture`, which looks at a picture in its plan, and the four that read and answer its comments. */
 export type TaskTool =
   | typeof CODER_TOOL.EDIT_PLAN
   | typeof CODER_TOOL.SHOW_PAGE
@@ -112,18 +112,19 @@ const COMMENT_TASK_TOOLS = [
 ] as const;
 
 /**
- * The task's tools an agent is offered: `show_page` alone for one on no
- * task, as an automation's run starts one, whose pages stand on the agent
- * itself, and all of them for one on a task, whether
+ * The task's tools an agent is offered: `show_page` and `edit_plan` alone
+ * for one on no task, as an automation's run starts one, whose pages stand
+ * on the agent itself and whose notes go on a task it names, and all of
+ * them for one on a task, whether
  * it was handed the plan or a prompt, since New task starts every agent on
  * the developer's own words while Luke writes the plan beside it. Note that
  * each tool withheld is one its call would only be refused by (`host.ts`'s
- * `editPlan` and `showPage`), and that the instructions leave out
+ * `lookAtPicture` and the comment tools), and that the instructions leave out
  * the same words (`instructions.ts`).
  */
 export function taskToolsOf(agent: Pick<Agent, "taskId">): ReadonlySet<TaskTool> {
-  // A page stands on the agent itself where it works on no task, so every agent shows one.
-  if (agent.taskId === null) return new Set([CODER_TOOL.SHOW_PAGE]);
+  // A page stands on the agent itself where it works on no task, and a call of `edit_plan` names its task, so every agent has both.
+  if (agent.taskId === null) return new Set([CODER_TOOL.SHOW_PAGE, CODER_TOOL.EDIT_PLAN]);
   return new Set([
     CODER_TOOL.EDIT_PLAN,
     CODER_TOOL.SHOW_PAGE,
