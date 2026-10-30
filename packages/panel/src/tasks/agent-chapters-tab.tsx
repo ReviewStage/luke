@@ -711,7 +711,9 @@ function ChaptersReading({
   const [root, setRoot] = useState<HTMLElement | null>(null);
   // The box in the chapter's bar its list's own tools are drawn into, the list drawing no bar of its own.
   const [tools, setTools] = useState<HTMLElement | null>(null);
-  const host: ChangesBarHost = { tools, view: root };
+  // The box at the bar's very end its list's tree toggle is drawn into, past the ⋯, as every tab's bar stands it.
+  const [end, setEnd] = useState<HTMLElement | null>(null);
+  const host: ChangesBarHost = { tools, end, view: root };
   const overBox = useRef<HTMLSpanElement | null>(null);
   const stripBox = useRef<HTMLDivElement | null>(null);
   // Note that the rail floats over the chapter wherever the stylesheet draws its over toggle, and then only.
@@ -829,7 +831,7 @@ function ChaptersReading({
         <ChapterStrip rows={rows} at={at} viewed={viewed} box={stripBox} onOpen={toggleRail} />
         <ChapterReading label={`${at + 1}. ${chapter.title}`}>
           <PaneBar
-            mark={
+            start={
               <RailToggle
                 beside={beside}
                 over={over}
@@ -854,7 +856,7 @@ function ChaptersReading({
                     label={done ? CHAPTERS_WORDS.UNMARK_VIEWED : CHAPTERS_WORDS.MARK_VIEWED}
                     chord={CHAPTERS_SHORTCUTS[CHAPTERS_KEY.MARK_CHAPTER_VIEWED].chord}
                   >
-                    <span className="chapter-viewed flex items-center whitespace-nowrap text-caption-inline text-muted-foreground tabular-nums">
+                    <span className="chapter-viewed me-control-gap flex items-center whitespace-nowrap text-caption-inline text-muted-foreground tabular-nums">
                       <Checkbox checked={done} mixed={seen > 0 && !done} onChange={markChapter}>
                         {CHAPTERS_WORDS.viewed(seen, row.paths.length)}
                       </Checkbox>
@@ -880,6 +882,7 @@ function ChaptersReading({
                 <span ref={setTools} className="chapter-list-tools" />
               </>
             }
+            end={<span ref={setEnd} className="chapter-list-tools" />}
             menu={
               generatable
                 ? {
@@ -904,7 +907,7 @@ function ChaptersReading({
               fade={SCROLL_FADE.BOTH}
               overscroll={SCROLL_OVERSCROLL.CHAIN}
             >
-              <div className="px-column-inset pb-list-inset">
+              <div className="chapter-brief pb-list-inset">
                 <Section
                   title={CHAPTERS_WORDS.BRIEF}
                   fold={{ open: briefOpen, onOpenChange: setBriefOpen }}
