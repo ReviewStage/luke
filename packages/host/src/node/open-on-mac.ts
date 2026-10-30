@@ -458,12 +458,15 @@ export function agentWorktreeScript(input: {
  * The script, its path quoted, that says what a discard would lose from a
  * local agent's worktree (`@luke/host`'s `compose-local-agents.ts`): it
  * prints one line, and exits 0, when the worktree holds work that is nowhere
- * else, changes `git status --porcelain` shows, or commits its upstream does
+ * else, changes `git status --porcelain` shows, commits its upstream does
  * not hold, or, with no upstream, commits on no remote branch of Luke's
- * shared clone nor a head it fetched, or files in a folder with no
+ * shared clone nor a head it fetched, a local branch, checked out or not,
+ * with commits on no such branch or head, a stash, or files in a folder with no
  * repository. It prints nothing and exits 0 for a worktree with nothing to
  * lose, or none at all, and exits 1 where Git could
- * not say, which the caller takes as work to keep.
+ * not say, which the caller takes as work to keep. Note that it fetches
+ * nothing, so a remote branch is read as the worktree last knew it, which
+ * at worst keeps work GitHub already has.
  */
 export function agentUnsavedWorkScript(input: { readonly worktree: string }): string {
   return [
@@ -488,11 +491,26 @@ export function agentUnsavedWorkScript(input: { readonly worktree: string }): st
     // Note that the upstream is asked for quietly, since a branch with none is the common case and no failure.
     "if git rev-parse --verify --quiet '@{upstream}' >/dev/null; then",
     `  ahead="$(git rev-list --max-count=1 HEAD --not '@{upstream}')" || exit 1`,
-    '  [ -z "$ahead" ] || echo "it has commits its upstream does not"',
+    '  if [ -n "$ahead" ]; then',
+    '    echo "it has commits its upstream does not"',
+    "    exit 0",
+    "  fi",
     "else",
     // Note that the heads Luke fetched into refs/luke are GitHub's too, which the agent's own commits are not.
     `  ahead="$(git rev-list --max-count=1 HEAD --not --remotes --glob='refs/luke/*')" || exit 1`,
-    '  [ -z "$ahead" ] || echo "it has commits on no remote branch"',
+    '  if [ -n "$ahead" ]; then',
+    '    echo "it has commits on no remote branch"',
+    "    exit 0",
+    "  fi",
+    "fi",
+    // Note that a branch the agent left for another holds its commits as surely as the one checked out.
+    `ahead="$(git rev-list --max-count=1 --branches --not --remotes --glob='refs/luke/*')" || exit 1`,
+    'if [ -n "$ahead" ]; then',
+    '  echo "it has a branch with commits on no remote branch"',
+    "  exit 0",
+    "fi",
+    "if git rev-parse --verify --quiet refs/stash >/dev/null; then",
+    '  echo "it has changes stashed"',
     "fi",
     "exit 0",
     "",
