@@ -182,6 +182,8 @@ interface Submenu {
   onPick: (id: string) => void;
   /** One muted line under the rows, pressed by nothing: what the long context window costs. */
   note?: string | undefined;
+  /** Whether a pick in it leaves the menu standing, as a choice that changes what the list holds does; in a sheet the list comes back in its place. */
+  stays?: boolean | undefined;
 }
 
 /** A row pinned under the list: a press of its own, a switch, or a submenu beside it. */
@@ -762,7 +764,8 @@ export function SearchableMenu(
   // an owner whose pick opens what takes the focus, as a new Browser tab
   // does, never hears it leave a sheet that traps it.
   const pickIn = (shown: Submenu, id: string) => {
-    if (sheet) props.onClose();
+    if (sheet && shown.stays === true) setPage(undefined);
+    else if (sheet) props.onClose();
     shown.onPick(id);
   };
 

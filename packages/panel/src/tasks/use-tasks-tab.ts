@@ -2507,9 +2507,11 @@ export function useTasksTab(input: {
     setRepositoryMenu((held) => ({ taskId, request: (held?.request ?? 0) + 1 }));
   };
 
-  // The add menu hangs from the task's head, so the task opens first, as Change repository's chip does.
+  // The add menu hangs from the task's head, so the task opens first, as
+  // Change repository's chip does, and comes out from under a page standing
+  // in its place, such as the Board whose card asked.
   const addRelation = (taskId: string, kind: TaskRelationKind) => {
-    if (taskId !== tasks.activeTaskId) select(taskId);
+    if (taskId !== tasks.activeTaskId || standIn !== undefined) select(taskId);
     setRelationMenu((held) => ({ taskId, kind, request: (held?.request ?? 0) + 1 }));
   };
 

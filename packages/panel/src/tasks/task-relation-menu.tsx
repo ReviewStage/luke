@@ -272,6 +272,7 @@ export function TaskRelationMenu({
         })),
         value: kind,
         onPick: (picked) => setKind(kindOf(picked) ?? kind),
+        stays: true,
       },
     },
   ];
