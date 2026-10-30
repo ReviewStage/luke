@@ -307,15 +307,27 @@ function taskRowStatus(row: TaskRow): TaskStatus | undefined {
   return row.kind === TASK_ROW.TASK ? row.task.status : undefined;
 }
 
-/** The rows of the statuses shown, and every row with no status to leave it out by. */
+/** Whether the view draws a row: one of a status shown, one with no status to leave it out by, or a parent a child task keeps open (`openParentIds`). */
+export function taskRowInStatuses(
+  row: TaskRow,
+  statuses: readonly TaskStatus[],
+  openParents: ReadonlySet<string>,
+): boolean {
+  const status = taskRowStatus(row);
+  return (
+    status === undefined ||
+    statuses.includes(status) ||
+    (row.kind === TASK_ROW.TASK && openParents.has(row.task.id))
+  );
+}
+
+/** The rows the view draws by status (`taskRowInStatuses`). */
 export function taskRowsInStatuses(
   rows: readonly TaskRow[],
   statuses: readonly TaskStatus[],
+  openParents: ReadonlySet<string>,
 ): readonly TaskRow[] {
-  return rows.filter((row) => {
-    const status = taskRowStatus(row);
-    return status === undefined || statuses.includes(status);
-  });
+  return rows.filter((row) => taskRowInStatuses(row, statuses, openParents));
 }
 
 /** How many of the rows each status the view leaves out holds, in `TASK_STATUS_ORDER`, a status holding none left unsaid. */
@@ -324,14 +336,16 @@ export interface HiddenStatus {
   readonly count: number;
 }
 
-/** The rows the statuses shown leave out, counted by status; none where every row stands. */
+/** The rows the statuses shown leave out, counted by status, a parent a child task keeps open not among them; none where every row stands. */
 export function hiddenStatuses(
   rows: readonly TaskRow[],
   statuses: readonly TaskStatus[],
+  openParents: ReadonlySet<string>,
 ): readonly HiddenStatus[] {
+  const hidden = rows.filter((row) => !taskRowInStatuses(row, statuses, openParents));
   return TASK_STATUS_ORDER.flatMap((status) => {
     if (statuses.includes(status)) return [];
-    const count = rows.filter((row) => taskRowStatus(row) === status).length;
+    const count = hidden.filter((row) => taskRowStatus(row) === status).length;
     return count === 0 ? [] : [{ status, count }];
   });
 }
@@ -562,4 +576,27 @@ export function childTaskCounts(
     });
   }
   return counts;
+}
+
+/**
+ * The tasks a child task keeps in the list whatever their own status: each
+ * parent of a task not yet done or canceled, and every parent above it, so a
+ * parent settled before its child tasks stays in the sidebar with them until
+ * the last of them settles. Note that `tasks` is every task the workspace
+ * holds rather than the rows a view draws, since a child task the view
+ * hides, a filed one in the backlog among them, still keeps its parent.
+ */
+export function openParentIds(tasks: readonly TaskSummary[]): ReadonlySet<string> {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const open = new Set<string>();
+  for (const task of tasks) {
+    if (finished(task)) continue;
+    // Note that a loop of parents, which nothing writes, ends the walk where it closes.
+    let parentId = task.parentTaskId;
+    while (parentId !== undefined && parentId !== task.id && !open.has(parentId)) {
+      open.add(parentId);
+      parentId = byId.get(parentId)?.parentTaskId;
+    }
+  }
+  return open;
 }
