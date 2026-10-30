@@ -192,6 +192,12 @@ test("a signed-out run records nothing, a sign-in records under the person it na
   });
   assert.equal(identify?.properties.platform, "desktop");
 
+  // The same account renamed while it records: the person is shown by what it is called now.
+  applySessionReplay({ ...bootstrap(true, "user-2"), email: "ada@new.luke.test" }, importRecorder);
+  assert.equal(posthog.get_distinct_id(), "user-2");
+  const renamed = sent.findLast((event) => event.event === "$set");
+  assert.equal(renamed?.properties.$set?.email, "ada@new.luke.test");
+
   // A sign-out stops it and lets the person go.
   applySessionReplay(signedOut(true), importRecorder);
   assert.equal(posthog.sessionRecordingStarted(), false);

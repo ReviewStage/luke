@@ -316,8 +316,8 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
   let client: PostHog | undefined;
   /** The run's latest word asking for a recording, which a recorder that finishes loading starts under. */
   let latest: SignedInBootstrap | undefined;
-  /** The account the running recording is filed under, cleared with the person on a stop. */
-  let identified: string | undefined;
+  /** The account the running recording is filed under, as last identified, cleared with the person on a stop. */
+  let identified: SignedInBootstrap | undefined;
 
   /**
    * Files what is being recorded under the signed-in account, and sets the
@@ -334,17 +334,24 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
    * recorded after is filed under the person who left.
    * Note that an account already identified is not identified again, because
    * every account transition re-answers recording, most of them for nothing
-   * that moved.
+   * that moved; where its name or email moved (a cookie session re-read when
+   * a tab comes back), only the person's properties are set again, so the
+   * recording stays findable by what the account is called now.
    */
   const followAccount = (posthog: PostHog, bootstrap: SignedInBootstrap): void => {
-    const accountId = bootstrap.accountId;
-    if (accountId === identified) return;
-    if (identified !== undefined) {
+    const before = identified;
+    identified = bootstrap;
+    if (before?.accountId === bootstrap.accountId) {
+      if (before.name !== bootstrap.name || before.email !== bootstrap.email) {
+        posthog.setPersonProperties(personProperties(bootstrap, shell.platform));
+      }
+      return;
+    }
+    if (before !== undefined) {
       posthog.reset();
       registerBuild(posthog, bootstrap, shell.platform);
     }
-    identified = accountId;
-    posthog.identify(accountId, personProperties(bootstrap, shell.platform));
+    posthog.identify(bootstrap.accountId, personProperties(bootstrap, shell.platform));
   };
 
   /** Starts the client over a recorder already loaded: built once per window, resumed after that. */
