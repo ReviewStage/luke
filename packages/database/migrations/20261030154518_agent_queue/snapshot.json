@@ -1,10 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "458d12e8-9bf7-4630-b01a-e56a95b5a38a",
+  "id": "bd691f14-bf62-4a9a-9d05-a3148c1c4a4f",
   "prevIds": [
-    "b9a7d607-caa3-4146-8eea-db97c7465e9c",
-    "d321892c-6f9d-42a9-9e04-cafc4fa2ebd8"
+    "aa9a95ba-466f-47dd-85ba-88a814a2408b"
   ],
   "ddl": [
     {
@@ -9783,19 +9782,6 @@
       "default": "false",
       "generated": null,
       "identity": null,
-      "name": "cancel_requested_for_running",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "turns"
-    },
-    {
-      "type": "boolean",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "false",
-      "generated": null,
-      "identity": null,
       "name": "fast_refused",
       "entityType": "columns",
       "schema": "public",
@@ -9901,32 +9887,6 @@
       "generated": null,
       "identity": null,
       "name": "mode",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "task"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'merge-on-green'",
-      "generated": null,
-      "identity": null,
-      "name": "merge_policy",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "task"
-    },
-    {
-      "type": "boolean",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "false",
-      "generated": null,
-      "identity": null,
-      "name": "running",
       "entityType": "columns",
       "schema": "public",
       "table": "task"

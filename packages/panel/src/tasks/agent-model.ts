@@ -451,7 +451,6 @@ const SHARED_FAILURE_NOTE = {
     "The subscription paying for this agent has reached its usage limit. It waits until the limit resets.",
   [AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
     "The subscription paying for this agent isn't eligible to run it.",
-  [AGENT_CALL_FAILURE.TREE_STOPPED]: "Press Start on the top task to start agents here.",
 } as const;
 
 /** What a Start from an agent whose session has ended says. */
@@ -596,7 +595,6 @@ export function chooseFailureNote(failure: AgentCallFailure): string {
     case AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
     case AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
     case AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:
-    case AGENT_CALL_FAILURE.TREE_STOPPED:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -1042,7 +1040,6 @@ function startFailureWords(failure: AgentCallFailure): string {
     case AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
     case AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
     case AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
-    case AGENT_CALL_FAILURE.TREE_STOPPED:
       return SHARED_FAILURE_NOTE[failure];
     case AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
       return credentialMissingWords(undefined, ACTION.START);
@@ -1155,7 +1152,6 @@ export function messageFailureWords(failure: AgentCallFailure): string {
     case AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
     case AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
     case AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
-    case AGENT_CALL_FAILURE.TREE_STOPPED:
       return SHARED_FAILURE_NOTE[failure];
     case AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
       return credentialMissingWords(undefined, ACTION.MESSAGE);

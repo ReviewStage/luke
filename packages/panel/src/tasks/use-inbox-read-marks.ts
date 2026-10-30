@@ -8,6 +8,7 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { STATUS_TONE } from "@luke/ui";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { type ActHandle, KEPT, type Kept, notKept, unreachedAs } from "../act.js";
+import { afterPaint } from "../after-paint.js";
 import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
@@ -38,6 +39,9 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * plain U marks the chosen item read or unread, as its row's menu says.
  * Opening the reader's own notice acknowledges it too (`useNodOnOpen`),
  * once each time it is shown, so an update counts as seen once it is opened.
+ * Either is sent once the frame that draws the item has painted
+ * (`afterPaint`), so the write never holds up the thread being drawn; an
+ * item stepped past before then is still marked, as it was opened.
  */
 
 /** How a mark is told: `quiet` where the caller says a refusal itself, so it is never toasted twice. */
@@ -140,7 +144,7 @@ export function useReadOnOpen({
     }
     if (readOn.current === shown.id) return;
     readOn.current = shown.id;
-    if (isUnread(shown)) onMark(shown, false);
+    if (isUnread(shown)) afterPaint(() => onMark(shown, false));
   }, [shown, onMark]);
   useAppCommand(
     APP_COMMAND.TOGGLE_READ,
@@ -187,6 +191,6 @@ export function useNodOnOpen({
     if (!acknowledgedOnOpen(item, readerId, channels)) return;
     const draft = draftOf(item);
     if (draft.note.trim() !== "" || draft.attachments.length > 0) return;
-    onAcknowledge(item);
+    afterPaint(() => onAcknowledge(item));
   }, [shown, readerId, drawn, failed, draftOf, onAcknowledge, channels]);
 }

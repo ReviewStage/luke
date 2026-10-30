@@ -144,8 +144,6 @@ export const AGENT_CALL_FAILURE = {
   OPENAI_KEY_MISSING: "openai-key-missing",
   /** The task runs its agents on a device that would not take this one, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
-  /** The task is a child task of a stopped pilot tree, so no agent starts on it until someone presses Start on the top task. */
-  TREE_STOPPED: "tree-stopped",
 } as const;
 
 export type AgentCallFailure = (typeof AGENT_CALL_FAILURE)[keyof typeof AGENT_CALL_FAILURE];

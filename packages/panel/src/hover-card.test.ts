@@ -18,6 +18,7 @@ import { SentWords, SkillFiles } from "./tasks/skill-chip.js";
 import type { SkillSource } from "./tasks/skill-picker.js";
 import { PULL_REQUEST_MOMENT } from "./tasks/use-link-standing.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
+import { holdFrames, settleFrames } from "./testing/frames.js";
 import { restOn } from "./testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "./testing/markdown.js";
 
@@ -38,10 +39,14 @@ const roots: Root[] = [];
 // Note that a skill chip is drawn through the markdown parser, which lands as its own chunk, so the suite waits for it once rather than racing it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
-beforeEach(() => fakeAppPlatform(QUIET_PANEL));
+beforeEach(() => {
+  fakeAppPlatform(QUIET_PANEL);
+  holdFrames();
+});
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   delete document.documentElement.dataset.keyboard;
@@ -259,9 +264,7 @@ test("a plan's, a skill's, an agent tab's, and a pull request's cards each name 
       children: createElement(SentWords, { text: "Cut it with /release now." }),
     }),
   );
-  await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  await settleFrames();
   const skill = hung(message, "button[data-skill-ref]");
   assert.deepEqual(headOf(skill), {
     glyph: true,

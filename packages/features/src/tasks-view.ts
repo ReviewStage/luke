@@ -39,7 +39,6 @@ import {
 } from "./sentry-install-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
-  mergePolicySchema,
   planRevisionAnswerSchema,
   planRevisionSeqSchema,
   planRevisionsAnswerSchema,
@@ -299,31 +298,23 @@ export const tasksSetRepositoryParamsSchema = EffectSchema.Struct({
 
 export type TasksSetRepositoryParams = typeof tasksSetRepositoryParamsSchema.Type;
 
-/** Whether a change of where a task stands names its status, its priority, its assignee, its merge policy, its running switch, or any of them. */
+/** Whether a change of where a task stands names its status, its priority, its assignee, or any of them. */
 function namesAStanding(params: {
   status?: unknown;
   priority?: unknown;
   assigneeId?: unknown;
-  mergePolicy?: unknown;
-  running?: unknown;
 }): boolean {
   return (
-    params.status !== undefined ||
-    params.priority !== undefined ||
-    params.assigneeId !== undefined ||
-    params.mergePolicy !== undefined ||
-    params.running !== undefined
+    params.status !== undefined || params.priority !== undefined || params.assigneeId !== undefined
   );
 }
 
-/** Setting where a task stands, how much it matters, who it is assigned to (null for no one), its merge policy, its running switch, or any of them, as the window asks it. */
+/** Setting where a task stands, how much it matters, who it is assigned to (null for no one), or any of them, as the window asks it. */
 export const tasksSetStandingParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
-  mergePolicy: EffectSchema.optionalKey(mergePolicySchema),
-  running: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** The name the window knows the member assigned by, which the host draws them by until the list carries them; never sent to the service. */
   assigneeName: EffectSchema.optionalKey(EffectSchema.String),
 }).check(EffectSchema.makeFilter(namesAStanding));

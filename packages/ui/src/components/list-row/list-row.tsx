@@ -35,6 +35,7 @@ import {
   selectionRoot,
   useListSelection,
 } from "../selection/list-selection.js";
+import type { VirtualRowPlace } from "../virtual-rows/virtual-rows.js";
 import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 
 export type { ListRowMenu } from "../row-menu/row-menu.js";
@@ -539,6 +540,7 @@ export function ListRow({
   fold,
   describedAs,
   unreadWords,
+  place,
 }: {
   /** A mark before the title (an avatar, a status's glyph), drawn as decoration. */
   leading?: ReactNode;
@@ -611,6 +613,8 @@ export function ListRow({
   describedAs?: string | undefined;
   /** What an unread row says to a reader at the head of its title, its weight being drawn for the eye alone; none where its owner says it elsewhere. */
   unreadWords?: string | undefined;
+  /** Where the row stands in a run drawing only the rows near the view (`VirtualRows`'s `listItems`), which its item wears; none in a list drawing every row. */
+  place?: VirtualRowPlace | undefined;
 }): React.JSX.Element {
   // The press hands the row's ref its element, and the link menu the address it opens.
   const linkAddress = useLinkAddress(linkHref);
@@ -869,6 +873,16 @@ export function ListRow({
       ) : null}
     </>
   );
+  // Note that a row in a run is measured through its item, which hands its element to the row's own ref too where the row opens nothing.
+  const { ref: placeRef, ...placed } = place ?? {};
+  const opens = onPress !== undefined;
+  const itemRef = useCallback(
+    (element: HTMLLIElement | null) => {
+      if (!opens) ref?.(element);
+      placeRef?.(element);
+    },
+    [opens, ref, placeRef],
+  );
   // Note that a row whose only act is its ⋯ offers it as a hover row offers its acts, so no row keeps an empty ⋯ track at rest.
   const actsOnHover = actionsAt === LIST_ROW_ACTIONS.HOVER || (moreDrawn && !said(actions));
   return (
@@ -876,7 +890,8 @@ export function ListRow({
       <li
         id={id}
         {...(followedBy === undefined ? {} : motionKey(followedBy))}
-        ref={onPress ? undefined : ref}
+        {...placed}
+        ref={place === undefined ? (onPress ? undefined : ref) : itemRef}
         className={ROW_CLASS}
         data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
         data-lead={above ? LIST_ROW_LEAD.ABOVE : undefined}

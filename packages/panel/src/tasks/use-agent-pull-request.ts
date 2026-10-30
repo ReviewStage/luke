@@ -10,6 +10,7 @@ import type { TaskPullRequestLine } from "@luke/features/task-wire";
 import { keepIdentity } from "@luke/wire";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { afterPaint } from "../after-paint.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { agentStillWriting, PUBLISHED_REREAD_MS } from "./agent-model.js";
 
@@ -159,6 +160,9 @@ interface Visit {
  * naming the pull request already kept leaves what is kept as it stood, so
  * neither redraws the task.
  *
+ * The sweep starts once the frame that drew the task's agents has painted
+ * (`afterPaint`), since nothing in that frame draws its answers.
+ *
  * Note that the sweep has at most `SWEEP_READS_AT_ONCE` reads out, the rest
  * waiting their turn and each starting as one settles, because a task may
  * hold a hundred agents and each read costs the service several calls to
@@ -260,7 +264,8 @@ export function useTaskPullRequests(
       if (agent.archivedAt === undefined) queued.add(agent.id);
       else archived.add(agent.id);
     }
-    pump();
+    // Note that the sweep starts once the frame that drew the agents has painted, so its reads never hold up a task or an Inbox item drawn.
+    return afterPaint(pump);
   }, [agents, pump]);
 
   return { pullRequests: held.taskId === taskId ? held.pullRequests : NO_PULL_REQUESTS, read };

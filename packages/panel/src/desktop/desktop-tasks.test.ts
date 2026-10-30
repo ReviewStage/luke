@@ -60,6 +60,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { holdFrames, settleFrames } from "../testing/frames.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
 import { ToastHost } from "../toast.js";
@@ -970,6 +971,8 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
 });
 
 test("a plan's own Inbox marks the item it shows read as it opens it, and its rows offer to mark an item read or unread as the window's Inbox does", async () => {
+  // Note that a mark on opening goes once the frame that drew the item has painted.
+  holdFrames();
   const marked: string[] = [];
   fakeAppBridge({});
   fakeActPort({
@@ -993,6 +996,8 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
   assert.deepEqual(marked, [], "nothing is read before it is opened");
   await act(async () => inbox.row("Ship it?")?.click());
   assert.equal(inbox.title(), "Ship it?");
+  assert.deepEqual(marked, [], "the mark waits on the paint");
+  await settleFrames();
   assert.deepEqual(marked, [`read:${SHIP.id}`]);
   act(() => {
     inbox
@@ -1009,6 +1014,8 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
 });
 
 test("a plan's own Inbox acknowledges the reader's own notice as it opens it, and leaves a teammate's open", async () => {
+  // Note that a nod on opening goes once the frame that drew the item has painted.
+  holdFrames();
   // Note that the Inbox opens on All, since Needs you leaves the teammate's notice out.
   window.localStorage.clear();
   showEverything();
@@ -1042,12 +1049,14 @@ test("a plan's own Inbox acknowledges the reader's own notice as it opens it, an
   assert.equal(answered.length, 0, "nothing is acknowledged before it is opened");
   await act(async () => inbox.row("The preview is up")?.click());
   assert.equal(inbox.title(), "The preview is up");
+  await settleFrames();
   // Note that a nod carries its item, the revision shown, and the nod alone, under a key of the window's own.
   const sent = () => answered.map(({ clientKey: _key, ...nod }) => nod);
   assert.deepEqual(sent(), [{ itemId: OWN.id, revision: 3, reply: INBOX_REPLY.ACKNOWLEDGED }]);
 
   await act(async () => inbox.row("The migration ran")?.click());
   assert.equal(inbox.title(), "The migration ran");
+  await settleFrames();
   assert.deepEqual(sent(), [{ itemId: OWN.id, revision: 3, reply: INBOX_REPLY.ACKNOWLEDGED }]);
   window.localStorage.clear();
   inbox.unmount();

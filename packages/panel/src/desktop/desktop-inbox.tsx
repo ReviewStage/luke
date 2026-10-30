@@ -11,7 +11,7 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { ERROR_STATE_PLACEMENT, ErrorState, STATUS_TONE, Toolbar } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
-import { memo, useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -159,7 +159,10 @@ import { taskCardOf } from "./task-card.js";
  * the pointer: each row's time counts from the window's minute on its own,
  * and the list keeps the pointer where its next draw reads it; and the box's
  * drafts are read in the pane that draws it (`DraftedInboxPane`), so a word
- * typed there draws the pane alone.
+ * typed there draws the pane alone. A row chosen is drawn here first, the
+ * window holding the choice once that frame has painted
+ * (`use-inbox-listing.ts`), so the side panel, which follows the window's
+ * choice, stands as last drawn until then.
  */
 
 /** What the pane says where the item asked for could not be read, its holder's own read having failed. */
@@ -181,6 +184,20 @@ const NO_CHANNELS: readonly Channel[] = [];
 
 /** What heads the Inbox narrowed to no channel: nothing it draws. */
 const NO_CHANNEL: HeadedChannel = { id: "", name: "", purpose: "" };
+
+/**
+ * `drawn` as last drawn while `holding`, else as it is now. Note that what
+ * is handed back while holding is the element drawn before, which React
+ * draws nothing anew for.
+ */
+function useHeldWhile<Drawn>(holding: boolean, drawn: Drawn): Drawn {
+  const held = useRef(drawn);
+  const shown = holding ? held.current : drawn;
+  useLayoutEffect(() => {
+    held.current = shown;
+  });
+  return shown;
+}
 
 /** The window's Inbox, in the task's place: every task's items and every automation's, and the chosen one read beside them; a memo boundary, as the module's head says. */
 export const DesktopInbox = memo(function DesktopInbox({
@@ -231,6 +248,7 @@ export const DesktopInbox = memo(function DesktopInbox({
     openAutomation,
     failed,
     asked,
+    settling,
     chosenTask,
     taskId,
     chosenAgentId,
@@ -254,6 +272,7 @@ export const DesktopInbox = memo(function DesktopInbox({
     onRetryChosen,
     reading,
     choose,
+    clear,
     closeItem,
     onRetry,
   } = useInboxListing(tasks, narrowed ? channelPlace.channelId : undefined);
@@ -311,10 +330,11 @@ export const DesktopInbox = memo(function DesktopInbox({
   // Note that a phone shows one thing at a time across the screen: the list, or the item in its place.
   const phone = room === SHELL_ROOM.NARROW;
   // A missing item's pane stands where its item would, and so does one whose read failed, so a narrow Inbox shows the notice rather than the list.
-  const { onClear, onSingle } = view;
+  // Note that the Inbox's own way back to its list chooses nothing through the listing, which drops a choice still on its way (`use-inbox-listing.ts`).
+  const { onSingle } = view;
   const columns = useInboxColumns(
     chosen?.item.id ?? (missing || chosenFailed ? asked?.itemId : undefined),
-    { onClear, onSingle },
+    { onClear: clear, onSingle },
   );
   const timeOpen = useInboxItemOpenSpan(chosen?.item.id, live.read);
   useInboxOpenSpan(listedRows.length);
@@ -569,6 +589,37 @@ export const DesktopInbox = memo(function DesktopInbox({
       </SkillFiles>
     </OpenHereProvider>
   );
+  // The panel stands for the chosen item's task, so its links are written under the item's own workspace, as its pane's are.
+  // Note that it follows the window's choice, so it stands as last drawn while a choice made here settles (`useChoiceFirst`).
+  const heldPanel = useHeldWhile(
+    settling,
+    drawing.panel ? (
+      <LinkWorkspaceProvider value={chosenLinkWorkspace}>
+        <InboxSidePanel
+          tasks={tasks}
+          drawing={{ ...drawing, panel: drawing.panel }}
+          focused={sideFocused}
+          taskId={taskId}
+          panelFor={panelFor}
+          repository={chosenTask?.repository ?? place?.repository ?? agents.agentRepository ?? null}
+          repositoryPlace={
+            taskId === undefined && place !== undefined && place.repository !== null
+              ? { workspaceId: place.workspaceId, repository: place.repository }
+              : undefined
+          }
+          pages={pages}
+          agents={named}
+          views={views}
+          mentions={mentions}
+          phone={
+            room === SHELL_ROOM.NARROW && chosen !== undefined
+              ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
+              : undefined
+          }
+        />
+      </LinkWorkspaceProvider>
+    ) : null,
+  );
   return (
     <LinkWorkspaceProvider value={listedWorkspace?.slug ?? listedWorkspace?.id}>
       <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
@@ -597,6 +648,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                 ) : (
                   <InboxList
                     view={list}
+                    scene={narrowed ? channelPlace.channelId : undefined}
                     chosen={chosen?.item.id}
                     columns={columns.shown}
                     rows={columns.rows}
@@ -677,35 +729,7 @@ export const DesktopInbox = memo(function DesktopInbox({
               </div>
             </PageFind>
             {move.dialog}
-            {/* The panel stands for the chosen item's task, so its links are written under the item's own workspace, as its pane's are. */}
-            {drawing.panel ? (
-              <LinkWorkspaceProvider value={chosenLinkWorkspace}>
-                <InboxSidePanel
-                  tasks={tasks}
-                  drawing={{ ...drawing, panel: drawing.panel }}
-                  focused={sideFocused}
-                  taskId={taskId}
-                  panelFor={panelFor}
-                  repository={
-                    chosenTask?.repository ?? place?.repository ?? agents.agentRepository ?? null
-                  }
-                  repositoryPlace={
-                    taskId === undefined && place !== undefined && place.repository !== null
-                      ? { workspaceId: place.workspaceId, repository: place.repository }
-                      : undefined
-                  }
-                  pages={pages}
-                  agents={named}
-                  views={views}
-                  mentions={mentions}
-                  phone={
-                    room === SHELL_ROOM.NARROW && chosen !== undefined
-                      ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
-                      : undefined
-                  }
-                />
-              </LinkWorkspaceProvider>
-            ) : null}
+            {heldPanel}
           </div>
         </AutomationDirectory>
       </MemberDirectory>

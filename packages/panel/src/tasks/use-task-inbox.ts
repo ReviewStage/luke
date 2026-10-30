@@ -23,6 +23,7 @@ import { LIVE_READ } from "@luke/features/live-wire";
 import type { AppInboxItems } from "@luke/host/app-state";
 import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { afterPaint } from "../after-paint.js";
 import {
   DRAFT_PLACE,
   type Draft,
@@ -344,19 +345,22 @@ function useInboxImageReads(input: {
       if (images.has(attachmentId) || reading.current.has(attachmentId)) return;
       reading.current.add(attachmentId);
       const askedOn = scope;
-      latest.current
-        .read({ itemId, attachmentId })
-        .catch((): AgentInboxAttachmentView => UNANSWERED)
-        .then((answer) => {
-          reading.current.delete(attachmentId);
-          const image: InboxImage =
-            "failure" in answer
-              ? { failed: true }
-              : { url: `data:${answer.contentType};base64,${answer.base64}` };
-          const now = latest.current;
-          const kept = now.scope === askedOn && (!now.drawn || now.named.has(attachmentId));
-          setImages((standing) => (kept ? new Map(standing).set(attachmentId, image) : standing));
-        });
+      // Note that a picture is read once the frame that drew its place has painted, so it never holds up the thread.
+      afterPaint(() => {
+        latest.current
+          .read({ itemId, attachmentId })
+          .catch((): AgentInboxAttachmentView => UNANSWERED)
+          .then((answer) => {
+            reading.current.delete(attachmentId);
+            const image: InboxImage =
+              "failure" in answer
+                ? { failed: true }
+                : { url: `data:${answer.contentType};base64,${answer.base64}` };
+            const now = latest.current;
+            const kept = now.scope === askedOn && (!now.drawn || now.named.has(attachmentId));
+            setImages((standing) => (kept ? new Map(standing).set(attachmentId, image) : standing));
+          });
+      });
     },
     [images, scope],
   );
