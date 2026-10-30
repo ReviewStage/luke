@@ -86,10 +86,20 @@ function sameLayout(a: PaneLayout, b: PaneLayout): boolean {
   return names.length === Object.keys(b).length && names.every((name) => a[name] === b[name]);
 }
 
+/**
+ * Whether an element is drawn at all. Note that one under a page kept hidden
+ * (the Inbox's, `desktop-shell.tsx`) is not, and so has nowhere to glide from
+ * or to; a DOM with no layout, a test's, draws everything.
+ */
+function isDrawn(element: Element): boolean {
+  return !("checkVisibility" in element) || element.checkVisibility();
+}
+
 /** Where each glider and the pane are drawn now, motion under way included. */
 function measure(root: HTMLElement): Snapshot {
   const drawn: Snapshot = new Map();
   for (const element of root.querySelectorAll(`${GLIDERS}, ${PANE}, ${SUMMARY}`)) {
+    if (!isDrawn(element)) continue;
     const clip = element.matches(PANE) ? getComputedStyle(element).clipPath : "none";
     drawn.set(element, { rect: element.getBoundingClientRect(), clip });
   }
@@ -141,7 +151,9 @@ function playPane(
 function play(root: HTMLElement, before: Snapshot): void {
   const timing = paneTiming(root);
   if (timing === undefined) return;
-  const moved = [...root.querySelectorAll(`${GLIDERS}, ${ARRIVING_PANE}, ${SUMMARY}`)];
+  const moved = [...root.querySelectorAll(`${GLIDERS}, ${ARRIVING_PANE}, ${SUMMARY}`)].filter(
+    isDrawn,
+  );
   // Note that a motion still under way is stopped before anything is
   // measured, so each element is read where the new layout stands it, and
   // read all at once, so the layout is worked out once rather than per element.
