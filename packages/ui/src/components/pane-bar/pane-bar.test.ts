@@ -9,8 +9,9 @@ import type { MenuEntry } from "../menu/menu.js";
 import { PaneBar } from "./pane-bar.js";
 
 /**
- * pane-bar.test.ts -- a tab's bar draws its lead, its middle, and its
- * actions in that order with the ⋯ last, and leaves out a slot that says
+ * pane-bar.test.ts -- a tab's bar draws its left pane's toggle, its lead,
+ * its middle, its actions, its ⋯, and its right pane's toggle in that
+ * order, and leaves out a slot that says
  * nothing; the ⋯ drops the menu it was handed, named as the ⋯ is, and a
  * choice in it acts and closes it; a title the bar would cut under the
  * readable floor stands on a row of its own, still read whole.
@@ -60,21 +61,31 @@ function openMenu(label: string): HTMLElement | null {
 
 const ignore = (): void => undefined;
 
-test("the lead, the middle, and the actions stand in that order, the ⋯ last", () => {
+test("the left pane's toggle, the lead, the middle, the actions, the ⋯, and the right pane's toggle stand in that order", () => {
   const container = render(
     createElement(PaneBar, {
+      start: createElement("button", { type: "button", onClick: ignore }, "Show chapters"),
       mark: createElement("svg", { "data-part": "mark", "aria-hidden": true }),
       title: TITLE,
       detail: "Version 2 of 3",
       middle: createElement("span", { "data-part": "middle" }, "src / index.ts"),
       actions: createElement("button", { type: "button", onClick: ignore }, "Reload"),
       menu: { thing: "Page", groups: [[{ label: "Copy link", onSelect: ignore }]] },
+      end: createElement("button", { type: "button", onClick: ignore }, "Show files"),
     }),
   );
   const said = [...barOf(container).querySelectorAll("[data-part], .luke-one-line, button")].map(
     (part) => part.getAttribute("data-part") ?? part.getAttribute("aria-label") ?? part.textContent,
   );
-  assert.deepEqual(said, ["mark", TITLE, "middle", "Reload", "Page actions"]);
+  assert.deepEqual(said, [
+    "Show chapters",
+    "mark",
+    TITLE,
+    "middle",
+    "Reload",
+    "Page actions",
+    "Show files",
+  ]);
   assert.ok(barOf(container).textContent?.includes("Version 2 of 3"));
 });
 
