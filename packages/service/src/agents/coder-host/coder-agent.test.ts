@@ -961,17 +961,10 @@ const PILOT_GOLDEN = Schema.decodeUnknownSync(Schema.Struct({ pilot: Schema.Stri
   JSON.parse(readFileSync(PILOT_PATH, "utf8")),
 );
 
-test("a pilot's instructions are the golden's, byte for byte: its own job in place of a coder's, and none of a coder's publishing", () => {
+test("a pilot's instructions are the golden's, byte for byte: its own job in place of a coder's, and a coder's publishing only for a task too small to split", () => {
   const pilot = pilotInstructions();
   assert.equal(pilot, PILOT_GOLDEN.pilot);
-  assert.ok(pilot.includes("You never change code and never open a pull request"));
-  for (const untold of [
-    `\`${CODER_TOOL.OPEN_PULL_REQUEST}\``,
-    "Work on a branch named",
-    "## Seeing what you built",
-    "name it in the pull request's description",
-    "makes a task of its own, for the developer",
-  ]) {
-    assert.ok(!pilot.includes(untold), untold);
-  }
+  assert.ok(pilot.includes("Too small to split; I'll do it myself"));
+  assert.ok(pilot.includes("## Doing a task yourself"));
+  assert.ok(!pilot.includes("makes a task of its own, for the developer"));
 });
