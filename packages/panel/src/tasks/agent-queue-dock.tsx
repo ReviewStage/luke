@@ -39,8 +39,9 @@ import { SentWords } from "./skill-chip.js";
  * past it, and its files under them as the bubble draws its own
  * (`KeptFileChips`), an image as its thumbnail, leading with the queue's
  * glyph, which gives way to the handle it is dragged by as the row is
- * hovered (`tasks.css`); on hover, Steer sends it into the turn now, the
- * pencil takes it into the message box to edit (`agent-composer.tsx`), and
+ * hovered (`tasks.css`) where another row stands to move it past; on
+ * hover, Steer sends it into the turn now, the pencil takes it into the
+ * message box to edit (`agent-composer.tsx`), and
  * the trash deletes it, asking first, since nothing brings its words and
  * files back. A message being edited stays in its place, muted, the queue
  * stopping at it, with Cancel on its row in every window of the agent's
@@ -142,6 +143,8 @@ export function AgentQueueDock({
     confirmFailure(FAILURE_SURFACE.AGENT_QUEUE_DELETE),
   );
   if (messages.length === 0) return null;
+  // Note that a lone message has nowhere to move, so it offers no handle.
+  const movable = controls && messages.length > 1;
   return (
     <div className={`agent-queue-dock ${COMPOSER_DOCK_CLASS}`}>
       {paused === undefined ? null : (
@@ -181,7 +184,7 @@ export function AgentQueueDock({
                 leading={
                   <span
                     className="agent-queue-lead"
-                    {...(controls && !edited ? { "data-queue-handle": "" } : undefined)}
+                    {...(movable && !edited ? { "data-queue-handle": "" } : undefined)}
                   >
                     <GLYPH.QUEUED />
                     <GLYPH.DRAG_HANDLE />

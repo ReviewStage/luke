@@ -1689,7 +1689,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* A queued message's row leads with the queue's glyph, which gives way to the
    handle it is dragged by while the row is hovered, dragged, or lifted, where
-   it may be dragged at all (`agent-queue-dock.tsx`). */
+   it may be dragged at all, which a lone message may not (`agent-queue-dock.tsx`). */
 .agent-queue-lead {
   display: inline-flex;
 }
