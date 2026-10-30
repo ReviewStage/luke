@@ -83,21 +83,18 @@ function dialogText(): string {
   return document.querySelector('[role="dialog"]')?.textContent ?? "";
 }
 
-test("Add hosts shows the public install command, with no secret in it, waits for a host it has not seen, and Close puts it away", async () => {
+test("Add hosts shows the public install command, with no secret in it, waits for a host it has not seen, and Close puts it away with the list read again", async () => {
+  const hosts: Host[] = [
+    {
+      id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14",
+      name: "fra-03",
+      seenAt: 0,
+      version: "0.1.0",
+      upgradeNeeded: false,
+    },
+  ];
   fakeActPort({
-    [ACT_KIND.HOSTS_LIST]: () =>
-      Promise.resolve({
-        hosts: [
-          {
-            id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14",
-            name: "fra-03",
-            seenAt: 0,
-            version: "0.1.0",
-            upgradeNeeded: false,
-          },
-        ],
-        installScriptUrl: SCRIPT,
-      }),
+    [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
     [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
   });
   drawHosts();
@@ -109,8 +106,17 @@ test("Add hosts shows the public install command, with no secret in it, waits fo
   assert.ok(!/lkh_|--token|sudo/u.test(dialogText()), "the command carries no secret");
   assert.ok(dialogText().includes("Waiting for approval"));
   assert.ok(!dialogText().includes("fra-03"), "a host the account had already is not named");
+  // Note that the host is approved after the dialog's last read, and the minute has not turned.
+  hosts.push({
+    id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31",
+    name: "hel-02",
+    seenAt: 0,
+    version: "0.1.0",
+    upgradeNeeded: false,
+  });
   await press("Close");
   assert.equal(document.querySelector('[role="dialog"]'), null, "Close puts the dialog away");
+  assert.ok(document.body.textContent?.includes("hel-02"), "the host approved meanwhile is listed");
 });
 
 it.effect(

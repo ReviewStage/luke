@@ -473,27 +473,39 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const settingUp = hosts?.some((host) => host.setup === DEVICE_SETUP.PREPARING) ?? false;
   const watched = settingUp || adding !== undefined;
   const period = watched ? Math.floor(now / WATCHED_READ_EVERY_MS) : minute;
+  // A read after the page's first lands over the list standing, so no skeleton covers the rows the member is reading.
+  const relist = useCallback(
+    (live: () => boolean) =>
+      act(ACT_KIND.HOSTS_LIST).then(
+        (answer) => {
+          if (!live() || "failure" in answer) return;
+          setHosts((standing) => (standing === undefined ? standing : answer.hosts));
+        },
+        () => undefined,
+      ),
+    [act],
+  );
   const mountMinute = useRef(minute);
   useEffect(() => {
     // The mount's own read is the effect above, so the minute it began in stands as it is.
     if (!signedIn || (!watched && period === mountMinute.current)) return;
     let live = true;
-    act(ACT_KIND.HOSTS_LIST).then(
-      (answer) => {
-        if (!live || "failure" in answer) return;
-        setHosts((standing) => (standing === undefined ? standing : answer.hosts));
-      },
-      () => undefined,
-    );
+    relist(() => live);
     return () => {
       live = false;
     };
-  }, [act, signedIn, watched, period]);
+  }, [signedIn, watched, period, relist]);
 
   // Note that Add hosts waits for the list, since the dialog names only the hosts the list did not hold as it opened, and its command names the script the list's answer does.
   const add = useCallback(() => {
     if (hosts !== undefined) setAdding(new Set(hosts.map((host) => host.id)));
   }, [hosts]);
+
+  // Note that closing Add hosts reads the list once more, so a host approved since the dialog's last read is drawn now rather than at the next minute.
+  const closeAdd = useCallback(() => {
+    setAdding(undefined);
+    relist(() => true);
+  }, [relist]);
 
   const remove = useCallback(
     (id: string): Promise<ActionResult> =>
@@ -571,7 +583,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
           known={adding}
           hosts={hosts}
           installScriptUrl={installScriptUrl}
-          onClose={() => setAdding(undefined)}
+          onClose={closeAdd}
         />
       )}
     </>
