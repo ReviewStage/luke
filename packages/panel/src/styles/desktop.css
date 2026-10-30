@@ -602,8 +602,7 @@ body,
 .desktop-agent .draft-fork-dock,
 .desktop-agent .agent-composer,
 .desktop-inbox .conversation-log.inbox-board,
-.desktop-inbox > .agent-composer,
-.desktop-inbox .inbox-next-dock {
+.desktop-inbox > .agent-composer {
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 

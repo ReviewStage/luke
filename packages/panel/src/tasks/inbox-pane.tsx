@@ -144,7 +144,7 @@ import {
   readersItem,
   sentStamp,
 } from "./inbox-model.js";
-import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager.js";
+import { type InboxPager, InboxPagerControls } from "./inbox-pager.js";
 import { InboxStamp } from "./inbox-stamp.js";
 import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
@@ -203,8 +203,7 @@ import {
  * its skills, and its microphone (`inbox-answer-box.tsx`), flowing at the
  * thread's end rather than docked under it, and a notice's Send reads "Got
  * it" until a word is written. The draft reply ends a settled item's
- * thread too, the next item that needs the developer docked under the
- * board. The board is a log, as an agent's transcript is: each item opens
+ * thread too. The board is a log, as an agent's transcript is: each item opens
  * at its newest message, the draft reply just over the board's foot, and
  * keeps to it as messages land while the reader is there; scrolled up, the
  * transcript's way back to the newest line floats over the foot; and the
@@ -1344,9 +1343,7 @@ function PhoneHolder({
  * the item's title alone as the thread's subject, then every message of
  * its thread, oldest first, a plain reply of the reader's on its way after
  * them (`PendingReply`), and the reader's draft reply at its end, the
- * open ask's controls standing in it. Once the item is settled, the next
- * item that needs the developer is offered under the board
- * (`inbox-pager.tsx`).
+ * open ask's controls standing in it.
  * Where the item stands alone, the whole Inbox wide, the crumbs follow a
  * way back to the list (`inbox-columns.ts`), its tooltip naming Back's
  * chord, which goes back as Escape does, and the bar ends in the pager,
@@ -1361,7 +1358,6 @@ export function InboxPane({
   hidden,
   onBack,
   pager,
-  next,
   mentions,
   phone,
   channelName,
@@ -1380,8 +1376,6 @@ export function InboxPane({
   onBack: (() => void) | undefined;
   /** Where the item stands in the list and the steps either side, drawn at the bar's end where the item stands alone among others. */
   pager: InboxPager | undefined;
-  /** The next item that needs the developer, offered over the box once the item is settled. */
-  next: InboxNext | undefined;
   /** What the box's `@` offers where the page around the pane hands nothing, as the window's Inbox does; the page's own otherwise. */
   mentions?: TaskMentionsValue | undefined;
   /**
@@ -1610,7 +1604,6 @@ export function InboxPane({
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
-        {open || next === undefined ? null : <InboxNextUp next={next} />}
       </Fill>
     </section>
   );
