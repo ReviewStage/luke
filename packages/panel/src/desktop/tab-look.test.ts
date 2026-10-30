@@ -18,6 +18,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { ChipCards } from "../tasks/chip-cards.js";
+import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
@@ -143,8 +144,8 @@ async function mount(shown: { body?: string; tab?: SidePanelTab } = {}): Promise
     },
     mainTabs: {
       ...base.mainTabs,
-      tabs: [{ agent: WORKING.id }, { draft: DRAFT }],
-      tab: undefined,
+      tabs: [MAIN_TAB.OVERVIEW, { agent: WORKING.id }, { draft: DRAFT }],
+      tab: MAIN_TAB.OVERVIEW,
       openAgents: [WORKING.id],
     },
     sidePanel: {
@@ -271,32 +272,16 @@ test("the side panel's + offers an agent's Pull request in the look its tab wear
   );
 });
 
-test("the side panel's Plan tab is named for the task and wears its status's mark, and its + offers it in that look", async () => {
-  const panel = (await mount()).querySelector(".side-panel-tabs");
+test("the column's strip leads with the task's Overview, under the document's glyph, and the side panel offers no Plan", async () => {
+  const container = await mount();
+  const column = container.querySelector(".main-tabs");
+  assert.ok(column, "the task's column's strip");
+  const first = column.querySelector<HTMLElement>('[role="tab"] .luke-tab-label');
+  assert.equal(first?.textContent, TAB_WORDS.OVERVIEW, "Overview leads the strip");
+  const panel = container.querySelector(".side-panel-tabs");
   assert.ok(panel, "the side panel's strip");
-  const tabs = tabLooks(panel);
-  const rows = rowLooks(panel);
-  assert.ok(!tabs.has("Plan"), "no tab says Plan");
-  assert.ok(tabs.has(TASK.name), "the strip has a tab named for the task");
-  assert.match(
-    tabs.get(TASK.name)?.glyph ?? "",
-    /data-status="in-progress"/u,
-    "the Plan tab wears the task's status as the list holds it",
-  );
-  assert.deepEqual(rows.get(TASK.name), tabs.get(TASK.name), "the Plan looks the same in the +");
-});
-
-test("the side panel's Plan tab hangs the task's card, as its sidebar row does", async () => {
-  const panel = (await mount()).querySelector(".side-panel-tabs");
-  const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
-    (each) => each.querySelector(".luke-tab-label")?.textContent === TASK.name,
-  );
-  assert.ok(tab, "the strip has the Plan tab");
-  restOn(tab);
-  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
-  assert.ok(card, "the task's card is hung");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, TASK.name);
-  assert.match(card.textContent ?? "", /Invite flow/u, "the card lists the task's agents");
+  assert.ok(!tabLooks(panel).has(TASK.name) && !tabLooks(panel).has("Plan"), "no Plan tab");
+  assert.ok(!rowLooks(panel).has(TASK.name) && !rowLooks(panel).has("Plan"), "nor a Plan row");
 });
 
 test("the side panel's Inbox tab hangs what waits on the developer, as the plan's summary row does", async () => {
@@ -316,7 +301,6 @@ test("a link to an agent's pull request in the plan hangs the card its Pull requ
   const url = "https://github.com/acme/relay/pull/42";
   const container = await mount({
     body: `## Goal\n\nShip it with [@#42](${url}) once ${url}/files is green.\n`,
-    tab: SIDE_PANEL_TAB.PLAN,
   });
   const tab = [...container.querySelectorAll<HTMLElement>('.side-panel-tabs [role="tab"]')].find(
     (each) => each.querySelector(".luke-tab-label")?.textContent === "#42 Expire invitations",

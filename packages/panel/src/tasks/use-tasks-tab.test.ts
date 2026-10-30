@@ -72,6 +72,7 @@ import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { loadTasksFixture } from "./tasks-fixture-loader.js";
 import { type ChannelPlaceControl, useChannelPlace, useInboxTask } from "./use-channels.js";
+import { MAIN_TAB } from "./use-main-tabs.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -596,24 +597,23 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   const panel = () => tab.control().sidePanel;
   const column = () => tab.control().mainTabs;
   const file = { file: FILE_REF.path };
-  // The plan stands first.
   act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
   act(() => panel().onOpenFile(FILE_REF));
-  const strip = [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.COMMENTS, file];
+  const strip = [SIDE_PANEL_TAB.COMMENTS, file];
   assert.deepEqual(panel().strip, strip);
-  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, { agent: AGENT_ID }]);
   assert.equal(tab.control().onReopenClosedTab, undefined, "nothing closed, nothing to reopen");
 
   act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
   act(() => column().onClose({ agent: AGENT_ID }));
   act(() => panel().onClose(file));
-  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.PLAN]);
-  // The column with no tab left opens a new agent's draft in their place.
+  assert.deepEqual(panel().strip, []);
+  // The column with no agent's tab left opens a new agent's draft beside its Overview.
   const draft = { draft: tab.control().agents.draft?.id ?? assert.fail("no draft opened") };
-  assert.deepEqual(column().tabs, [draft]);
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, draft]);
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.PLAN, file]);
+  assert.deepEqual(panel().strip, [file]);
   assert.deepEqual(panel().tab, file);
   assert.deepEqual(
     panel().files.map((each) => [each.path, each.range]),
@@ -622,7 +622,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   );
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }, draft]);
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, { agent: AGENT_ID }, draft]);
   assert.deepEqual(column().tab, { agent: AGENT_ID });
 
   act(() => tab.control().onReopenClosedTab?.());
@@ -631,16 +631,19 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
-test("a task none of whose tabs was viewed shows its strip's last, keeps the tab chosen across a launch, and opens a new agent's draft once its last tab closes", async () => {
+test("a task none of whose tabs was viewed shows its Overview, keeps the tab chosen across a launch, and opens a new agent's draft beside Overview once its last agent's tab closes", async () => {
   const listed = withAgents([RUNNING_AGENT]);
   const tab = mount({ shown: true, tasks: listed });
   await settle();
   const column = () => tab.control().mainTabs;
   const agent = { agent: AGENT_ID };
-  assert.deepEqual(column().tabs, [agent]);
-  assert.deepEqual(column().tab, agent, "a task never shown on an agent shows its last tab");
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, agent], "Overview leads the strip");
+  assert.equal(column().tab, MAIN_TAB.OVERVIEW, "a task never shown on a tab shows its Overview");
   assert.equal(tab.control().agents.draft, undefined, "and opens no draft beside it");
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.PLAN });
+  assert.equal(panelOf(tab).open, false, "the plan opens no side panel beside it");
+
+  act(() => column().onClose(MAIN_TAB.OVERVIEW));
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, agent], "Overview never closes");
 
   act(() => column().onChoose(agent));
   assert.deepEqual(column().tab, agent);
@@ -653,8 +656,8 @@ test("a task none of whose tabs was viewed shows its strip's last, keeps the tab
   act(() => again().onClose(agent));
   await settle();
   const draft = { draft: launched.control().agents.draft?.id ?? assert.fail("no draft opened") };
-  assert.deepEqual(again().tabs, [draft]);
-  assert.deepEqual(again().tab, draft, "a column with no tab left shows a new agent's draft");
+  assert.deepEqual(again().tabs, [MAIN_TAB.OVERVIEW, draft]);
+  assert.equal(again().tab, MAIN_TAB.OVERVIEW, "the tab viewed before it is shown");
 });
 
 /** The open task's row as the sidebar lists it, naming the agents given, and how many it has in all. */
@@ -677,7 +680,7 @@ function namingRow(lines: readonly string[], total: number) {
   };
 }
 
-test("a task whose row settles its tab shows that agent's before its agents are read, and one whose row cannot say shows none until they are", async () => {
+test("a task whose row settles its tab shows that agent's before its agents are read, one with none viewed its Overview, and one whose row cannot say shows none until they are", async () => {
   const OLDER = "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9";
   const UNNAMED = "2c3d4e5f-6071-4829-93a4-b5c6d7e8f9a0";
   // The list carries none of the task's agents yet, so whatever the column shows, the row chose.
@@ -705,10 +708,10 @@ test("a task whose row settles its tab shows that agent's before its agents are 
     { agent: OLDER },
     "the agent last viewed, which the row names",
   );
-  assert.deepEqual(
+  assert.equal(
     await shownOn([AGENT_ID], 1, undefined),
-    { agent: AGENT_ID },
-    "the task's one agent, where none was viewed",
+    MAIN_TAB.OVERVIEW,
+    "its Overview, where none was viewed",
   );
   assert.deepEqual(
     await shownOn([AGENT_ID, OLDER], 2, [OLDER, UNNAMED]),
@@ -722,12 +725,29 @@ test("a task whose row settles its tab shows that agent's before its agents are 
   );
   assert.equal(
     await shownOn([AGENT_ID, OLDER], 2, undefined),
-    undefined,
-    "of two agents none viewed, the row cannot say which started last, as two started together stand by id",
+    MAIN_TAB.OVERVIEW,
+    "of two agents none viewed, its Overview too",
   );
 });
 
-test("a column kept while the plan, the Inbox, and the Call stood in it reads with each let go, its agents' order and the tab last viewed still standing", async () => {
+test("a column kept while the plan, the Inbox, and the Call stood in it, and a side panel kept on its Plan tab, read with each let go, the agents' order, the tab last viewed, and the panel's other tabs still standing", async () => {
+  window.localStorage.setItem(
+    "luke.sidePanel",
+    JSON.stringify({
+      open: true,
+      tabs: ["plan", "inbox", "comments"],
+      tab: "plan",
+      width: 400,
+      tasks: {
+        [TASK.id]: {
+          opened: ["plan", "comments"],
+          closed: [],
+          recent: ["comments", "plan"],
+          order: ["plan", "comments"],
+        },
+      },
+    }),
+  );
   window.localStorage.setItem(
     "luke.mainTabs",
     JSON.stringify({
@@ -747,11 +767,13 @@ test("a column kept while the plan, the Inbox, and the Call stood in it reads wi
   const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
   const column = () => tab.control().mainTabs;
-  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, { agent: AGENT_ID }]);
   assert.deepEqual(column().tab, { agent: AGENT_ID });
+  assert.deepEqual(tab.control().sidePanel.strip, [SIDE_PANEL_TAB.COMMENTS], "no Plan tab stands");
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
 });
 
-test("a column whose last agent is archived shows a new agent's draft standing alone", async () => {
+test("a column whose last agent is archived shows its Overview, a new agent's draft beside it", async () => {
   const archived = { ...RUNNING_AGENT, archivedAt: 5 };
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
@@ -767,8 +789,8 @@ test("a column whose last agent is archived shows a new agent's draft standing a
   await act(() => tab.control().agents.onArchive(AGENT_ID, true));
   await settle();
   const draft = { draft: tab.control().agents.draft?.id ?? assert.fail("no draft opened") };
-  assert.deepEqual(column().tabs, [draft]);
-  assert.deepEqual(column().tab, draft);
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, draft]);
+  assert.equal(column().tab, MAIN_TAB.OVERVIEW);
 });
 
 test("a tab closed on another plan opens that plan again, and the tab on it once the host has it open", () => {
@@ -786,10 +808,10 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
 
   tab.stand({ tasks: OPEN });
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
-  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.COMMENTS]);
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.COMMENTS]);
 });
 
-test("in a narrow room a task opened from a list lands on its plan, the side panel standing on the plan's tab whichever tab it last showed or shut, and on the desktop's width it opens as it was left", () => {
+test("in a narrow room a task opened from a list lands on its plan, its Overview with the side panel shut over it whichever tab it last showed, and on the desktop's width it opens as it was left", () => {
   for (const room of [SHELL_ROOM.NARROW, SHELL_ROOM.WIDE]) {
     window.localStorage.clear();
     const tab = mount(
@@ -798,38 +820,37 @@ test("in a narrow room a task opened from a list lands on its plan, the side pan
     );
     act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
     tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
-    act(() => tab.control().sidePanel.onSetOpen(false));
 
     act(() => tab.control().onSelect(TASK.id));
     tab.stand({ tasks: OPEN });
     if (room === SHELL_ROOM.NARROW) {
-      assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.PLAN }, "narrow");
+      assert.equal(tab.control().sidePanel.open, false, "narrow shuts the panel");
+      assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW, "over the task's Overview");
     } else {
-      assert.equal(tab.control().sidePanel.open, false, "wide leaves the panel shut");
+      assert.equal(tab.control().sidePanel.open, true, "wide leaves the panel as it was");
     }
   }
 });
 
-test("in a narrow room Back to a task opens it as it stood, its plan's tab closed there staying closed, where a task opened from a list lands on its plan", async () => {
+test("in a narrow room Back to a task opens it as it stood, its panel open on the tab it showed, where a task opened from a list lands on its plan", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN, room: SHELL_ROOM.NARROW, history: true },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
   const panel = () => tab.control().sidePanel;
   act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
-  act(() => panel().onClose(SIDE_PANEL_TAB.PLAN));
   assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.COMMENTS]);
 
   act(() => tab.control().onSelect(OTHER_TASK_ID));
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
   await settle();
-  assert.equal(panel().tab, SIDE_PANEL_TAB.PLAN, "the task opened from a list lands on its plan");
+  assert.equal(panel().open, false, "the task opened from a list lands on its plan");
+  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW);
 
   act(() => tab.history().onBack());
   assert.equal(tab.control().boundFor, TASK.id);
   tab.stand({ tasks: OPEN });
   await settle();
-  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.COMMENTS], "the plan's tab stays closed");
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
 });
 
@@ -851,11 +872,10 @@ test("in a narrow room a Luke link to another task's panel item opens that item,
   assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
 });
 
-test("Show panel on a plan whose strip holds no tab opens the tab last closed there, else the kind last closed on it, and a plan's own tab stands from a first launch, the panel shown on it", () => {
+test("Show panel on a plan whose strip holds no tab opens the tab last closed there, else the kind last closed on it, else shows the panel empty, as a first launch does with no tab standing", () => {
   const tab = mount({ shown: true, tasks: OPEN });
   const panel = () => tab.control().sidePanel;
   act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
-  act(() => panel().onClose(SIDE_PANEL_TAB.PLAN));
   act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
   assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
 
@@ -873,8 +893,10 @@ test("Show panel on a plan whose strip holds no tab opens the tab last closed th
 
   window.localStorage.clear();
   const fresh = mount({ shown: true, tasks: OPEN });
-  assert.deepEqual(fresh.control().sidePanel.strip, [SIDE_PANEL_TAB.PLAN]);
-  assert.deepEqual(panelOf(fresh), { open: true, tab: SIDE_PANEL_TAB.PLAN });
+  assert.deepEqual(fresh.control().sidePanel.strip, [], "the plan stands in the column");
+  assert.equal(fresh.control().sidePanel.open, false);
+  act(() => fresh.control().sidePanel.onToggle());
+  assert.deepEqual(panelOf(fresh), { open: true, tab: undefined });
 });
 
 test("Show panel beside the Inbox, its item's plan's strip holding no tab, shows the panel empty, though another plan stands open behind it", () => {
@@ -1405,7 +1427,7 @@ test("a Luke link to a task's version opens its version history on that version,
 
   assert.deepEqual(history, { open: true, spot: { revision: 3, opened: undefined } });
   assert.equal(tab.control().history.open, false);
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.PLAN });
+  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW, "its plan, in its Overview");
 });
 
 test("a Luke link to a version of a task the service will not hand the reader leaves no version history standing over the task's Not found", () => {
@@ -2950,6 +2972,7 @@ test("archiving a task's last agent opens no draft while the archive is out, so 
     },
   );
   await settle();
+  act(() => tab.control().mainTabs.onChoose({ agent: AGENT_ID }));
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
 
   // The host draws the archive on the list as it is asked, and takes it back as the service refuses it.
@@ -2958,7 +2981,7 @@ test("archiving a task's last agent opens no draft while the archive is out, so 
   });
   tab.stand({ tasks: withAgents([{ ...RUNNING_AGENT, archivedAt: 5 }]) });
   await settle();
-  assert.deepEqual(tab.control().mainTabs.tabs, [], "the agent leaves at once");
+  assert.deepEqual(tab.control().mainTabs.tabs, [MAIN_TAB.OVERVIEW], "the agent leaves at once");
   assert.equal(tab.control().agents.draft, undefined, "no draft opens while the archive is out");
 
   tab.stand({ tasks: withAgents([RUNNING_AGENT]) });
@@ -2977,7 +3000,7 @@ test("a task started, with an agent or without, leaves a hidden side panel hidde
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
     },
   );
-  act(() => tab.control().sidePanel.onToggle());
+  act(() => tab.control().sidePanel.onSetOpen(false));
   assert.equal(tab.control().sidePanel.open, false);
 
   await act(async () => {
@@ -2999,7 +3022,8 @@ test("New task's agent opens alone, no plan beside it, and the side panel stands
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
     },
   );
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.PLAN });
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
 
   await startAgentTask(tab);
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
@@ -3009,7 +3033,7 @@ test("New task's agent opens alone, no plan beside it, and the side panel stands
   await settle();
   assert.deepEqual(
     panelOf(tab),
-    { open: true, tab: SIDE_PANEL_TAB.PLAN },
+    { open: true, tab: SIDE_PANEL_TAB.COMMENTS },
     "the task left keeps it",
   );
 });
@@ -3120,7 +3144,11 @@ test("New task's agent start opens no draft beside its agent while the task stan
     await note;
   });
   await settle();
-  assert.deepEqual(tab.control().mainTabs.tabs, [{ agent: AGENT_ID }], "the agent's tab alone");
+  assert.deepEqual(
+    tab.control().mainTabs.tabs,
+    [MAIN_TAB.OVERVIEW, { agent: AGENT_ID }],
+    "the agent's tab alone beside Overview",
+  );
 });
 
 test("New task's agent start refused after its page opened opens the card again on the repository, model, and press it held, saying why, over the version history it was asked from", async () => {
@@ -3310,7 +3338,7 @@ function payloadsOf(tab: ReturnType<typeof mount>, kind: PortActKind): unknown[]
   return tab.payloads.filter((asked) => asked.kind === kind).map((asked) => asked.payload);
 }
 
-test("a task with no agent opens on a new agent's draft once its agents are read, asking the service nothing, and closing it opens a fresh one", async () => {
+test("a task with no agent opens on its Overview, a new agent's draft beside it once its agents are read, asking the service nothing, and closing it opens a fresh one", async () => {
   const tab = mount({ shown: true, tasks: withAgents([]) });
   await vi.waitFor(async () => {
     await settle();
@@ -3318,7 +3346,8 @@ test("a task with no agent opens on a new agent's draft once its agents are read
   });
   const draft = tab.control().agents.draft;
   assert.ok(draft);
-  assert.deepEqual(tab.control().mainTabs.tab, { draft: draft.id }, "and its column shows it");
+  assert.deepEqual(tab.control().mainTabs.tabs, [MAIN_TAB.OVERVIEW, { draft: draft.id }]);
+  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW, "and its column shows Overview");
   assert.deepEqual(payloadsOf(tab, ACT_KIND.AGENTS_START), [], "nothing is started");
 
   act(() => {
@@ -3329,7 +3358,7 @@ test("a task with no agent opens on a new agent's draft once its agents are read
   const fresh = tab.control().agents.draft;
   assert.ok(fresh);
   assert.notEqual(fresh.id, draft.id, "the draft closed is let go");
-  assert.deepEqual(tab.control().mainTabs.tab, { draft: fresh.id });
+  assert.deepEqual(tab.control().mainTabs.tabs, [MAIN_TAB.OVERVIEW, { draft: fresh.id }]);
   assert.deepEqual(payloadsOf(tab, ACT_KIND.AGENTS_START), []);
 });
 
@@ -3572,7 +3601,7 @@ it.effect(
       act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
       yield* landed;
       const strip = panel().strip;
-      assert.deepEqual(strip, [SIDE_PANEL_TAB.PLAN, file, pulls, SIDE_PANEL_TAB.COMMENTS]);
+      assert.deepEqual(strip, [file, pulls, SIDE_PANEL_TAB.COMMENTS]);
 
       yield* passing(Duration.hours(23));
       assert.deepEqual(panel().strip, strip, "a tab viewed within the day stays");
@@ -3580,8 +3609,8 @@ it.effect(
       yield* passing(Duration.hours(1));
       assert.deepEqual(
         panel().strip,
-        [SIDE_PANEL_TAB.PLAN, pulls, SIDE_PANEL_TAB.COMMENTS],
-        "the file's tab closed; the fixed tabs, the pinned Pull request, and the tab shown stay",
+        [pulls, SIDE_PANEL_TAB.COMMENTS],
+        "the file's tab closed; the pinned Pull request and the tab shown stay",
       );
       assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
 
@@ -3608,10 +3637,14 @@ it.effect(
       act(() => column().onChoose(finished));
       act(() => column().onChoose(running));
       yield* landed;
-      assert.deepEqual(column().tabs, [running, finished, unseen]);
+      assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, running, finished, unseen]);
 
       yield* passing(Duration.days(1));
-      assert.deepEqual(column().tabs, [running, unseen], "the finished agent's tab closed");
+      assert.deepEqual(
+        column().tabs,
+        [MAIN_TAB.OVERVIEW, running, unseen],
+        "the finished agent's tab closed",
+      );
       assert.deepEqual(column().tab, running);
       assert.ok(tab.control().onReopenClosedTab, "and stands on ⇧⌘T's stack");
 
@@ -3620,7 +3653,7 @@ it.effect(
       yield* landed;
       assert.deepEqual(
         column().tabs,
-        [running, finished],
+        [MAIN_TAB.OVERVIEW, running, finished],
         "the agent closed for being idle is back with its item, the one closed by hand is not",
       );
       assert.deepEqual(
@@ -3641,15 +3674,15 @@ it.effect(
       const first = mount({ shown: true, tasks: OPEN }, listed, registryOn(clock));
       yield* landed;
       act(() => first.control().sidePanel.onChoose(pulls));
-      act(() => first.control().sidePanel.onChoose(SIDE_PANEL_TAB.PLAN));
+      act(() => first.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
       yield* landed;
-      assert.deepEqual(first.control().sidePanel.strip, [SIDE_PANEL_TAB.PLAN, pulls]);
+      assert.deepEqual(first.control().sidePanel.strip, [pulls, SIDE_PANEL_TAB.COMMENTS]);
       closeWindow();
 
       yield* TestClock.adjust(Duration.hours(25));
       const again = mount({ shown: true, tasks: OPEN }, listed, registryOn(clock));
       yield* landed;
-      assert.deepEqual(again.control().sidePanel.strip, [SIDE_PANEL_TAB.PLAN]);
+      assert.deepEqual(again.control().sidePanel.strip, [SIDE_PANEL_TAB.COMMENTS]);
       assert.ok(again.control().onReopenClosedTab, "and stands on ⇧⌘T's stack");
     }),
 );
@@ -3679,12 +3712,16 @@ it.effect(
       yield* passing(Duration.minutes(1));
       assert.deepEqual(
         column().tabs,
-        [running, finished, unseen],
+        [MAIN_TAB.OVERVIEW, running, finished, unseen],
         "its first count leaves it open",
       );
 
       yield* passing(Duration.days(1));
-      assert.deepEqual(column().tabs, [running, unseen], "a day unviewed after it closes it");
+      assert.deepEqual(
+        column().tabs,
+        [MAIN_TAB.OVERVIEW, running, unseen],
+        "a day unviewed after it closes it",
+      );
     }),
 );
 
@@ -3700,12 +3737,17 @@ it.effect(
       yield* landed;
       const column = () => tab.control().mainTabs;
       act(() => column().onChoose({ agent: FINISHED_ID }));
+      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
       act(() => tab.control().sidePanel.onToggleFullScreen());
       yield* landed;
       assert.equal(tab.control().sidePanel.fullScreen, true);
 
       yield* passing(Duration.days(1));
-      assert.deepEqual(column().tabs, [{ agent: AGENT_ID }, { agent: UNSEEN_ID }]);
+      assert.deepEqual(column().tabs, [
+        MAIN_TAB.OVERVIEW,
+        { agent: AGENT_ID },
+        { agent: UNSEEN_ID },
+      ]);
     }),
 );
 
@@ -3721,10 +3763,12 @@ it.effect(
       yield* landed;
       const column = () => tab.control().mainTabs;
       act(() => column().onChoose({ agent: FINISHED_ID }));
+      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
       yield* passing(Duration.minutes(50));
       tab.stand({ tasks: { ...withAgents(IDLE_AGENTS), activeTaskId: OTHER_TASK_ID } });
       yield* landed;
       // The panel filling the window over the column keeps the tab from being viewed again on return.
+      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
       act(() => tab.control().sidePanel.onToggleFullScreen());
 
       yield* passing(Duration.hours(23));
@@ -3732,11 +3776,15 @@ it.effect(
       yield* passing(Duration.minutes(30));
       assert.deepEqual(
         column().tabs,
-        [{ agent: AGENT_ID }, { agent: FINISHED_ID }, { agent: UNSEEN_ID }],
+        [MAIN_TAB.OVERVIEW, { agent: AGENT_ID }, { agent: FINISHED_ID }, { agent: UNSEEN_ID }],
         "a day has not passed since it was left",
       );
 
       yield* passing(Duration.hours(1));
-      assert.deepEqual(column().tabs, [{ agent: AGENT_ID }, { agent: UNSEEN_ID }]);
+      assert.deepEqual(column().tabs, [
+        MAIN_TAB.OVERVIEW,
+        { agent: AGENT_ID },
+        { agent: UNSEEN_ID },
+      ]);
     }),
 );

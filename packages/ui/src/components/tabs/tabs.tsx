@@ -95,6 +95,9 @@ import { type TabMove, useTabDrag } from "./use-tab-drag.js";
 
 const TAB = '[role="tab"]';
 
+/** An anchored tab's pill (`Tab`'s `anchored`). */
+const ANCHORED = '[data-anchored="true"]';
+
 /*
  * The strip's plain looks, in Tailwind over the theme as shadcn/ui's tabs
  * draw theirs: each box's layout, type, and the inks no state changes. Note
@@ -274,9 +277,10 @@ export function tabMenuPlacement(tab: HTMLElement): MenuPlacement {
   return { x: bounds.left, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.START };
 }
 
-/** The strip's tabs that move, in order. */
+/** The strip's tabs that move, in order: every one but an anchored tab, which leads the strip where it stands. */
 function movableTabs(strip: HTMLElement | null): HTMLElement[] {
-  return [...(strip?.querySelectorAll<HTMLElement>(TAB) ?? [])];
+  const tabs = [...(strip?.querySelectorAll<HTMLElement>(TAB) ?? [])];
+  return tabs.filter((tab) => tab.closest(ANCHORED) === null);
 }
 
 /**
@@ -462,6 +466,7 @@ export function Tab({
   editor,
   tabRef,
   preview = false,
+  anchored = false,
   onSelect,
   onKeep,
   onClose,
@@ -490,6 +495,8 @@ export function Tab({
   tabRef?: RefObject<HTMLButtonElement | null> | undefined;
   /** Stands as its strip's preview, which the next one opened takes the place of: its label in italics, as VS Code draws one. */
   preview?: boolean;
+  /** Leads its strip and never moves: counted among no moves, dragged by none, and dropped before by none, as a task's Overview. */
+  anchored?: boolean;
   onSelect: () => void;
   /** Keeps a preview as a tab of its own, as a double-click on it asks. */
   onKeep?: (() => void) | undefined;
@@ -583,6 +590,7 @@ export function Tab({
       data-selected={String(selected)}
       data-closable={String(onClose !== undefined)}
       data-preview={String(preview)}
+      data-anchored={String(anchored)}
       data-unread={String(unread)}
       data-marked={String(endMark !== undefined)}
     >

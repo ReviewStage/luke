@@ -52,11 +52,14 @@ A reviewer can hold the build to these as easily as to the layout:
   document: it is never copied, edited, or handed to an agent. The document
   itself is what Start hands to an agent, as the Markdown Copy puts on
   the clipboard ("From a plan to a pull request" below).
-- The work column is the agents'. Each agent started on the task stands in
-  a tab of its own; everything else, the plan's document and the task's Inbox, stands
-  in a side panel ("Side panel" below) that the developer opens and closes.
-  A task opens with the panel shown on its plan; only an Inbox item not yet
-  seen opens it on its own, and there are no second documents.
+- The task frames the work column, as a workspace frames an editor. Its
+  Overview leads the column's tabs, holding the plan's document, its head,
+  its agents, and its body; each agent started on the task stands in a tab
+  of its own after it. Everything else, the task's Inbox and the plan's
+  comments among it, stands in a side panel ("Side panel" below) that the
+  developer opens and closes. A task opens on the tab last viewed on it, and
+  on its Overview where none was; only an Inbox item not yet seen opens the
+  panel on its own, and there are no second documents.
 - No window of its own. Tasks live in Luke's one window (LUKE-347): there
   is no separate task window, Dock tile, Cmd-Tab entry, or app menu for it.
 
@@ -102,8 +105,8 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
 
 - Opening a task, from the list or by starting one, makes it the host's one
   **active task**, and every panel's Tasks tab shows it on its document page.
-  It opens on the agent tab it last showed, or on its plan: the side panel
-  on its Plan tab beside a column that offers **New agent**.
+  It opens on the tab it last showed, or on its Overview, its plan, where
+  none stands, the column's "+" offering **New agent**.
 - A task stays open while the developer turns to Settings or closes the
   window.
 - A task is left by Back (`‹`) or Escape on its document page, by opening
@@ -336,9 +339,10 @@ The open task's supporting views stand in a panel at the window's right,
 beside the document and its microphone row, the way a devtool's secondary
 sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
 
-- **Tabs.** `Plan`, the task's document; `Inbox`, what its agents need of
-  the developer; and `Comments`, the plan's
-  threads. After them stand the workers
+- **Tabs.** `Inbox`, what its agents need of the developer, and
+  `Comments`, the plan's threads. The plan's document is the column's
+  Overview ("Agent tabs" below), and a Plan tab an earlier version kept or
+  pinned opens it there. After them stand the workers
   opened from an agent's transcript, then files, pull requests, pages,
   terminals, and browsers, as the "+" lists them. The plan's versions open in
   the whole window ("History" below). The agents themselves have tabs
@@ -368,10 +372,11 @@ sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
 
 ### Agent tabs
 
-Each agent started on the task has a tab of its own in the task's column
-(`desktop/main-tabs.tsx`, `tasks/use-main-tabs.ts`, `tasks/agent-tab.tsx`,
-`tasks/use-agents.ts`), opened and selected the moment its Start
-lands, and showing its transcript and its composer. The column's
+The task's column leads with its Overview, which shows the plan's
+document and never closes nor moves. Each agent started on the task has a
+tab of its own after it (`desktop/main-tabs.tsx`, `tasks/use-main-tabs.ts`,
+`tasks/agent-tab.tsx`, `tasks/use-agents.ts`), opened and selected the
+moment its Start lands, and showing its transcript and its composer. The column's
 strip is the side panel's: tabs drag and step among themselves, close by ×,
 Delete, ⌘W, or Close and Close others, hang their cards, and pin to the
 sidebar. A column whose last tab closes is back on the plan. The tab each

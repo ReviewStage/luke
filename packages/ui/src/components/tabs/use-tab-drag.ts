@@ -31,7 +31,7 @@ import { flushSync } from "react-dom";
 const DRAG_THRESHOLD = 4;
 
 /** The strip's tabs, each the pill holding the tab and its ×. */
-const TAB_PILL = ":scope > .luke-tab";
+const TAB_PILL = ':scope > .luke-tab:not([data-anchored="true"])';
 
 /** What a tab and its strip wear while a drag lasts; tabs.css lifts the one and slides the others. */
 const DRAGGING_ATTRIBUTE = "data-dragging";

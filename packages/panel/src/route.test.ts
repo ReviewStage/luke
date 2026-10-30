@@ -340,6 +340,33 @@ it.each<[string, string, Here, Route]>([
     go({ workspace: "acme", place: { kind: LINK_PLACE.PAGE, planId: OTHER, pageId: PAGE } }),
   ],
   [
+    "the Tasks tab: the task it shows, its Overview",
+    `${LUKE}/plan/${TASK}`,
+    STANDING,
+    { kind: ROUTE.OVERVIEW, place: { kind: LINK_PLACE.TASK, planId: TASK } },
+  ],
+  [
+    "the Tasks tab: a section of the task it shows, its Overview at the section",
+    `${LUKE}/plan/${TASK}#rollout`,
+    STANDING,
+    { kind: ROUTE.OVERVIEW, place: { kind: LINK_PLACE.SECTION, planId: TASK, anchor: "rollout" } },
+  ],
+  [
+    "the Tasks tab: a comment of the task it shows, its Overview at the comment",
+    `${LUKE}/plan/${TASK}?comment=${MESSAGE}`,
+    STANDING,
+    { kind: ROUTE.OVERVIEW, place: { kind: LINK_PLACE.COMMENT, planId: TASK, threadId: MESSAGE } },
+  ],
+  [
+    "the Tasks tab: another task's section, to that task",
+    `${LUKE}/plan/${OTHER}#rollout`,
+    STANDING,
+    go({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.SECTION, planId: OTHER, anchor: "rollout" },
+    }),
+  ],
+  [
     "the Tasks tab: a worker of the task it shows, as the panel's preview",
     `${LUKE}/plan/${TASK}/agent/${AGENT}/worker/${CALL}`,
     STANDING,

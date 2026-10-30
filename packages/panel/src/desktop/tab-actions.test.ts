@@ -16,7 +16,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { AgentsControl } from "../tasks/use-agents.js";
-import type { MainTab } from "../tasks/use-main-tabs.js";
+import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -110,7 +110,7 @@ async function mountEveryTab(
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [{ agent: AGENT.id }, { draft: "draft-1" }],
+      tabs: [MAIN_TAB.OVERVIEW, { agent: AGENT.id }, { draft: "draft-1" }],
       tab: chosen.main,
       openAgents: [AGENT.id],
     },
@@ -283,10 +283,10 @@ test("the column's toolbar draws the chosen agent's ⋯ alone, no ⋯ of the tas
   }
 });
 
-test("the Plan tab's ⋯ and its right-click offer the task's own document menu, which pins the task rather than the tab and leaves out Mark done, Cancel task, and Change repository, while the column's ⋯ stays the agent's", async () => {
-  const container = await mountEveryTab({ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.PLAN });
-  const { main, side } = bars(container);
-  const fromMore = pressBarMore(side);
+test("Overview's ⋯ and its right-click offer the task's own document menu, which pins the task rather than the tab and leaves out Mark done, Cancel task, and Change repository, while an agent's ⋯ stays the agent's", async () => {
+  const container = await mountEveryTab({ main: MAIN_TAB.OVERVIEW, side: SIDE_PANEL_TAB.INBOX });
+  const { main } = bars(container);
+  const fromMore = pressBarMore(main);
   assert.deepEqual(fromMore, [
     "Copy plan",
     "Copy link",
@@ -299,15 +299,19 @@ test("the Plan tab's ⋯ and its right-click offer the task's own document menu,
     "Open on GitHub",
     "Permanently delete",
   ]);
-  // The right-click leads with the tab's keeping, which holds no Pin tab: the one Pin is the task's, among its own.
-  const fromRightClick = rightClickChosen(side);
+  // The right-click leads with the tab's keeping, which holds no Close nor Pin tab: Overview always stands, and the one Pin is the task's, among its own.
+  const fromRightClick = rightClickChosen(main);
   const keeping = fromRightClick.slice(0, fromRightClick.indexOf("Copy plan"));
   assert.ok(
-    keeping.includes("Close") && !keeping.includes("Pin"),
+    !keeping.includes("Close") && !keeping.includes("Pin"),
     `keeping: ${keeping.join(", ")}`,
   );
   assert.deepEqual(fromRightClick.slice(keeping.length), fromMore);
-  const agentMore = pressBarMore(main);
+  act(() => roots.pop()?.unmount());
+  container.remove();
+
+  const agent = await mountEveryTab({ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX });
+  const agentMore = pressBarMore(bars(agent).main);
   assert.ok(
     !agentMore.includes("Copy plan") && !agentMore.includes("Version history"),
     "the column's ⋯ offers none of the task's items",
@@ -346,7 +350,7 @@ const PULL_REQUEST: AgentPullRequest = {
   changedFiles: 6,
 };
 
-test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub and Refresh, which no other tab's offers but the Plan tab's, the task's own, and opens the pull request on GitHub", async () => {
+test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub and Refresh, which no other tab of the panel offers, and opens the pull request on GitHub", async () => {
   const opened: string[] = [];
   fakeAppPlatform({
     ...QUIET_PANEL,
@@ -377,14 +381,12 @@ test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub
   act(() => roots.pop()?.unmount());
   container.remove();
 
-  for (const other of [SUBAGENT, { page: PAGE_ID }, SIDE_PANEL_TAB.PLAN] as const) {
+  for (const other of [SUBAGENT, { page: PAGE_ID }] as const) {
     const each = await mountEveryTab({ main: { draft: "draft-1" }, side: other }, published);
     const items = pressBarMore(bars(each).side);
-    // The Plan tab's Open on GitHub is the task's repository's, not the pull request's.
     assert.ok(
-      (other === SIDE_PANEL_TAB.PLAN || !items.includes("Open on GitHub")) &&
-        !items.includes("Refresh"),
-      `the ${JSON.stringify(other)} tab offers no Refresh`,
+      !items.includes("Open on GitHub") && !items.includes("Refresh"),
+      `the ${JSON.stringify(other)} tab offers neither`,
     );
     act(() => roots.pop()?.unmount());
     each.remove();
@@ -398,7 +400,7 @@ function installClipboard(): string[] {
   return copied;
 }
 
-test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the agent's, its worker's, its Changes', a page's, or the Plan tab's, the task's own", async () => {
+test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the agent's, its worker's, its Changes', a page's, or Overview's, the task's own", async () => {
   const copied = installClipboard();
   const task = `https://tryluke.dev/workspace-personal/plan/${TASK.id}`;
   const agent = `https://tryluke.dev/workspace-personal/agent/${AGENT.id}`;
@@ -407,7 +409,7 @@ test("each tab whose thing has a link offers Copy link in its right-click and it
     [{ main: { draft: "draft-1" }, side: SUBAGENT }, "side", `${agent}/worker/call-1`],
     [{ main: { draft: "draft-1" }, side: { changes: AGENT.id } }, "side", `${agent}/changes`],
     [{ main: { draft: "draft-1" }, side: { page: PAGE_ID } }, "side", `${task}/page/${PAGE_ID}`],
-    [{ main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.PLAN }, "side", task],
+    [{ main: MAIN_TAB.OVERVIEW, side: SIDE_PANEL_TAB.INBOX }, "main", task],
   ];
   for (const [chosen, column] of cases) {
     const container = await mountEveryTab(chosen);

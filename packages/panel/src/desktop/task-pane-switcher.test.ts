@@ -12,6 +12,7 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
 import { useTaskRenameOffer } from "../tasks/task-menu-items.js";
+import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
@@ -32,7 +33,7 @@ function page(container: HTMLElement): HTMLButtonElement[] {
 }
 
 /**
- * task-pane-switcher.test.ts -- a phone's task is headed by one row, the way back, the title of what is on screen, and one ⋯ whose menu leads with Plan, Agents, and Activity and then offers the menu of what is on screen, the task's own on Plan, the chosen agent's on Agents, and a tab's on one chosen from Activity: each view reads what the panel holds, Activity lists every tab but the plan's and shows the one pressed, a tab shown names the row and leads back to the list, and a wide window keeps its strip and toolbar, the Plan tab's ⋯ renaming the task in the plan's own title.
+ * task-pane-switcher.test.ts -- a phone's task is headed by one row, the way back, the title of what is on screen, and one ⋯ whose menu leads with Overview, Agents, and Activity and then offers the menu of what is on screen, the task's own on Overview, the chosen agent's on Agents, and a tab's on one chosen from Activity: each view reads what the column and the panel hold, Activity lists every tab the panel holds and shows the one pressed, a tab shown names the row and leads back to the list, and a wide window keeps its strip and toolbar, Overview's ⋯ renaming the task in the plan's own title.
  */
 
 const TASK: Task = {
@@ -97,20 +98,10 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("the view standing follows the panel: Agents while it is shut, Plan on the plan, and Activity on its list or any other tab", () => {
-  assert.equal(
-    taskPaneOf({ open: false, tab: SIDE_PANEL_TAB.PLAN, listed: true }),
-    TASK_PANE.AGENTS,
-  );
-  assert.equal(taskPaneOf({ open: true, tab: SIDE_PANEL_TAB.PLAN, listed: false }), TASK_PANE.PLAN);
-  assert.equal(
-    taskPaneOf({ open: true, tab: SIDE_PANEL_TAB.PLAN, listed: true }),
-    TASK_PANE.ACTIVITY,
-  );
-  assert.equal(
-    taskPaneOf({ open: true, tab: SIDE_PANEL_TAB.COMMENTS, listed: false }),
-    TASK_PANE.ACTIVITY,
-  );
+test("the view standing follows the column and the panel: Activity while the panel is open, else Overview on the task's Overview and Agents on an agent's tab", () => {
+  assert.equal(taskPaneOf({ open: true, column: MAIN_TAB.OVERVIEW }), TASK_PANE.ACTIVITY);
+  assert.equal(taskPaneOf({ open: false, column: MAIN_TAB.OVERVIEW }), TASK_PANE.OVERVIEW);
+  assert.equal(taskPaneOf({ open: false, column: { agent: AGENT.id } }), TASK_PANE.AGENTS);
 });
 
 /** The task's page in `room`, its panel open on `tab` over the plan, the Inbox, and the comments, a page of the plan's where `paged`, and its column on the agent's tab where `agent`, every press on the panel, the way out, and a rename told; `draw` draws it again over a panel opened or shut on another tab. */
@@ -123,8 +114,8 @@ function itemWords(item: HTMLElement): string {
 
 function mount(
   room: ShellRoom,
-  open = true,
-  tab: SidePanelTab | undefined = SIDE_PANEL_TAB.PLAN,
+  open = false,
+  tab: SidePanelTab | undefined = SIDE_PANEL_TAB.COMMENTS,
   paged = false,
   agent = false,
 ) {
@@ -140,7 +131,12 @@ function mount(
     renameOffer = useTaskRenameOffer();
     return null;
   }
-  const draw = (shown: boolean, on: SidePanelTab | undefined, repositoryAsk?: number) =>
+  const draw = (
+    shown: boolean,
+    on: SidePanelTab | undefined,
+    repositoryAsk?: number,
+    onAgent = agent,
+  ) =>
     act(() =>
       root.render(
         onRegistry(
@@ -168,24 +164,21 @@ function mount(
                   repositoryAsk === undefined
                     ? undefined
                     : { taskId: TASK.id, request: repositoryAsk },
-                ...(agent
-                  ? {
-                      mainTabs: {
-                        ...tasksControl().mainTabs,
-                        tabs: [{ agent: AGENT.id }],
-                        tab: { agent: AGENT.id },
-                        openAgents: [AGENT.id],
-                      },
-                      agents: agentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
-                    }
-                  : undefined),
+                mainTabs: {
+                  ...tasksControl().mainTabs,
+                  tabs: [MAIN_TAB.OVERVIEW, { agent: AGENT.id }],
+                  tab: onAgent ? { agent: AGENT.id } : MAIN_TAB.OVERVIEW,
+                  openAgents: [AGENT.id],
+                  onChoose: (chosen) => told.push(`column ${JSON.stringify(chosen)}`),
+                },
+                agents: agentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
                 sidePanel: {
                   ...tasksControl().sidePanel,
                   open: shown,
                   fullScreen: shown && narrow,
                   fullScreenOnly: shown && narrow,
-                  tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.COMMENTS],
-                  strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.COMMENTS],
+                  tabs: [SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.COMMENTS],
+                  strip: [SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.COMMENTS],
                   pages: paged ? [{ page: PAGE.id }] : [],
                   tab: on,
                   onChoose: (chosen) => told.push(`choose ${String(chosen)}`),
@@ -216,7 +209,7 @@ function mount(
     return groups;
   };
   const views = () =>
-    menu().filter((each) => ["Plan", "Agents", "Activity"].includes(each.replace(/^\*/, "")));
+    menu().filter((each) => ["Overview", "Agents", "Activity"].includes(each.replace(/^\*/, "")));
   const choose = (name: string) => {
     act(() => more().click());
     const found = [...document.querySelectorAll<HTMLElement>('[role="menu"] button')].find(
@@ -289,31 +282,23 @@ function mount(
 test("on a phone a task is headed by one row, the way back named for the page it came from, the task's title, and one ⋯, whose menu leads with its views over the task's own actions", () => {
   const page = mount(SHELL_ROOM.NARROW);
   assert.deepEqual(page.head(), { buttons: ["Inbox", "Task actions"], title: TASK.name });
-  assert.deepEqual(page.views(), ["*Plan", "Agents", "Activity"]);
+  assert.deepEqual(page.views(), ["*Overview", "Agents", "Activity"]);
   const menu = page.menu();
-  assert.deepEqual(menu.slice(0, 3), ["*Plan", "Agents", "Activity"], "the views come first");
+  assert.deepEqual(menu.slice(0, 3), ["*Overview", "Agents", "Activity"], "the views come first");
   assert.ok(menu.includes("Rename") && menu.includes("Permanently delete"), "then the task's own");
-  assert.ok(
-    page.container.querySelector(".side-panel[data-pane-switch]"),
-    "the panel's bar gives way to the row",
-  );
   assert.equal(page.labelled("Title actions"), false, "the plan's title draws no second ⋯");
-  assert.equal(
-    page.labelled(`${TASK.name} actions`),
-    false,
-    "the panel draws no ⋯ of the plan's tab",
-  );
+  assert.equal(page.labelled("Overview actions"), false, "the column draws no ⋯ of Overview's");
 
   page.back();
   assert.deepEqual(page.told, ["away"], "the way back goes where the shell says, pushing nothing");
 });
 
-test("on a phone Activity lists every tab but the plan's, a press showing it", () => {
-  const page = mount(SHELL_ROOM.NARROW);
+test("on a phone Activity lists every tab the panel holds, a press showing it", () => {
+  const page = mount(SHELL_ROOM.NARROW, true);
   assert.deepEqual(page.rows(), [], "no list until Activity is asked for");
 
   page.choose("Activity");
-  assert.deepEqual(page.views(), ["Plan", "Agents", "*Activity"]);
+  assert.deepEqual(page.views(), ["Overview", "Agents", "*Activity"]);
   assert.deepEqual(page.rows(), ["Inbox", "Comments"]);
   assert.equal(page.head().title, TASK.name, "the list is the task's, which names the row");
 
@@ -322,32 +307,37 @@ test("on a phone Activity lists every tab but the plan's, a press showing it", (
   assert.deepEqual(page.rows(), [], "the list gives way to the tab pressed");
 });
 
-test("on a phone Agents shuts the panel by its own toggle, and Activity opens a shut one on its list", () => {
-  const open = mount(SHELL_ROOM.NARROW);
+test("on a phone Agents shuts the panel by its own toggle and shows an agent's tab, Overview the task's, and Activity opens a shut panel on its list", () => {
+  const open = mount(SHELL_ROOM.NARROW, true);
   open.choose("Agents");
-  assert.deepEqual(open.told, ["toggle"]);
+  assert.deepEqual(open.told, ["toggle", `column ${JSON.stringify({ agent: AGENT.id })}`]);
   document.body.innerHTML = "";
 
-  const shut = mount(SHELL_ROOM.NARROW, false);
-  assert.deepEqual(shut.views(), ["Plan", "*Agents", "Activity"]);
+  const shut = mount(SHELL_ROOM.NARROW, false, undefined, false, true);
+  assert.deepEqual(shut.views(), ["Overview", "*Agents", "Activity"]);
   assert.deepEqual(shut.head(), { buttons: ["Inbox", "Task actions"], title: TASK.name });
   assert.equal(
     shut.container.querySelectorAll('[aria-label="Task actions"]').length,
     1,
     "the agents' column's toolbar draws no second ⋯ of the task's",
   );
+  shut.choose("Overview");
+  assert.deepEqual(shut.told, [`column "${MAIN_TAB.OVERVIEW}"`]);
   shut.choose("Activity");
-  assert.deepEqual(shut.told, ["toggle"]);
+  assert.deepEqual(shut.told, [`column "${MAIN_TAB.OVERVIEW}"`, "toggle"]);
 });
 
-test("on a phone ⌘K's Change repository clears the Activity list standing over the plan, and the repository crumb opens its menu only once the plan is in sight", async () => {
-  const page = mount(SHELL_ROOM.NARROW);
+test("on a phone ⌘K's Change repository shows Overview from under the panel, and the repository crumb opens its menu only once the plan is in sight", async () => {
+  const page = mount(SHELL_ROOM.NARROW, true);
   page.choose("Activity");
   assert.deepEqual(page.rows(), ["Inbox", "Comments"]);
 
-  page.draw(true, SIDE_PANEL_TAB.PLAN, 1);
+  page.draw(true, SIDE_PANEL_TAB.COMMENTS, 1);
   await act(async () => undefined);
   assert.deepEqual(page.rows(), [], "the list gives way to the plan");
+  assert.deepEqual(page.told, [`column "${MAIN_TAB.OVERVIEW}"`], "Overview is shown");
+  page.draw(false, SIDE_PANEL_TAB.COMMENTS, 1);
+  await act(async () => undefined);
   const chip = [
     ...page.container.querySelectorAll<HTMLButtonElement>(".plan-task-path button"),
   ].find((each) => each.textContent?.includes("Choose a repository"));
@@ -355,7 +345,7 @@ test("on a phone ⌘K's Change repository clears the Activity list standing over
 });
 
 test("on a phone Activity closes a tab from its row, as the strip's × did, without showing it", () => {
-  const page = mount(SHELL_ROOM.NARROW);
+  const page = mount(SHELL_ROOM.NARROW, true);
   page.choose("Activity");
   page.close("Comments");
   assert.deepEqual(page.told, [`close ${SIDE_PANEL_TAB.COMMENTS}`]);
@@ -365,16 +355,20 @@ test("on a phone Activity asked over a shut panel lists the tabs whatever tab th
   const page = mount(SHELL_ROOM.NARROW, false, undefined);
   page.choose("Activity");
   assert.deepEqual(page.told, ["toggle"]);
-  page.draw(true, SIDE_PANEL_TAB.PLAN);
+  page.draw(true, SIDE_PANEL_TAB.INBOX);
   await act(async () => undefined);
-  assert.deepEqual(page.views(), ["Plan", "Agents", "*Activity"]);
+  assert.deepEqual(page.views(), ["Overview", "Agents", "*Activity"]);
   assert.deepEqual(page.rows(), ["Inbox", "Comments"]);
 });
 
 test("on a phone a tab chosen from Activity names the row and leads it back to the list, and the ⋯ still leads with the views", () => {
   const page = mount(SHELL_ROOM.NARROW, true, SIDE_PANEL_TAB.COMMENTS);
   assert.deepEqual(page.head(), { buttons: ["Activity", "Task actions"], title: "Comments" });
-  assert.deepEqual(page.views(), ["Plan", "Agents", "*Activity"]);
+  assert.deepEqual(page.views(), ["Overview", "Agents", "*Activity"]);
+  assert.ok(
+    page.container.querySelector(".side-panel[data-pane-switch]"),
+    "the panel's bar gives way to the row",
+  );
 
   page.back();
   assert.deepEqual(page.rows(), ["Inbox", "Comments"]);
@@ -395,13 +389,13 @@ test("on a phone the ⋯ offers what the tab shown offers on what it shows, unde
   assert.ok(link > menu.indexOf("Activity"), "after the views");
   assert.ok(
     !menu.includes("Copy plan") && !menu.includes("Copy link"),
-    "the task's own menu is the Plan view's",
+    "the task's own menu is Overview's",
   );
 });
 
 test("on a phone the Agents view's ⋯ offers the chosen agent's menu under the views, each item naming the agent, and none of the task's own", () => {
   const page = mount(SHELL_ROOM.NARROW, false, undefined, false, true);
-  assert.deepEqual(page.views(), ["Plan", "*Agents", "Activity"]);
+  assert.deepEqual(page.views(), ["Overview", "*Agents", "Activity"]);
   const menu = page.menu();
   const link = menu.indexOf(`Copy link${AGENT.title}`);
   assert.ok(link > menu.indexOf("Activity"), "after the views");
@@ -426,10 +420,11 @@ test("on a phone the ⋯'s Rename edits the task's name in the row's title", asy
   assert.deepEqual(page.told, [`rename ${TASK.id} Invite teammates`]);
 });
 
-test("a wide window keeps the panel's strip and the column's toolbar, the task's ⋯ the Plan tab's, and draws no row of a phone's", () => {
-  const page = mount(SHELL_ROOM.WIDE);
+test("a wide window keeps the panel's strip and the column's toolbar, the task's ⋯ Overview's, and draws no row of a phone's", () => {
+  const page = mount(SHELL_ROOM.WIDE, true);
   assert.equal(page.container.querySelector(".task-head"), null);
-  assert.ok(page.labelled(`${TASK.name} actions`), "the Plan tab keeps the task's ⋯");
+  assert.ok(page.container.querySelector(".side-panel-tabs"), "the panel keeps its strip");
+  assert.ok(page.labelled("Overview actions"), "Overview keeps the task's ⋯");
   assert.equal(page.labelled("Task actions"), false, "the column's toolbar draws none");
 });
 
@@ -497,12 +492,12 @@ test("on a phone the task's Inbox tab draws no head over its list, its search st
   );
 });
 
-/** Chooses Rename from the Plan tab's ⋯ in a wide window's side panel. */
-function choosePlanTabRename(container: HTMLElement): void {
+/** Chooses Rename from Overview's ⋯ in a wide window's column. */
+function chooseOverviewRename(container: HTMLElement): void {
   const more = container.querySelector<HTMLButtonElement>(
-    ".side-panel-bar .toolbar-tab-actions button",
+    ".desktop-task-main .toolbar-tab-actions button",
   );
-  assert.ok(more, "the Plan tab holds the task's ⋯");
+  assert.ok(more, "Overview holds the task's ⋯");
   act(() => more.click());
   const rename = [...document.querySelectorAll<HTMLElement>('[role="menu"] button')].find(
     (each) => itemWords(each) === "Rename",
@@ -516,9 +511,9 @@ function planTitle(container: HTMLElement): HTMLElement | null {
   return container.querySelector<HTMLElement>('[role="textbox"][aria-label="Task name"]');
 }
 
-test("on a wide window the Plan tab's ⋯ › Rename puts the caret in the plan's own title, and draws no phone's field", () => {
+test("on a wide window Overview's ⋯ › Rename puts the caret in the plan's own title, and draws no phone's field", () => {
   const page = mount(SHELL_ROOM.WIDE);
-  choosePlanTabRename(page.container);
+  chooseOverviewRename(page.container);
 
   assert.ok(planTitle(page.container), "the plan's title is drawn");
   assert.ok(
@@ -528,12 +523,12 @@ test("on a wide window the Plan tab's ⋯ › Rename puts the caret in the plan'
   assert.equal(page.container.querySelector('input[aria-label="Task name"]'), null);
 });
 
-test("on a wide window whose panel is shut, the rename ⌘K asks shows the plan and puts the caret in its title once it stands", () => {
-  const page = mount(SHELL_ROOM.WIDE, false);
+test("on a wide window whose column shows an agent, the rename ⌘K asks shows Overview and puts the caret in the plan's title once it stands", () => {
+  const page = mount(SHELL_ROOM.WIDE, false, undefined, false, true);
   page.renameFromPalette();
-  assert.deepEqual(page.told, [`choose ${SIDE_PANEL_TAB.PLAN}`]);
+  assert.deepEqual(page.told, [`column "${MAIN_TAB.OVERVIEW}"`]);
 
-  page.draw(true, SIDE_PANEL_TAB.PLAN);
+  page.draw(false, undefined, undefined, false);
 
   assert.ok(
     document.activeElement === planTitle(page.container),
@@ -555,13 +550,6 @@ function RefusingTask(): React.JSX.Element {
       region: { kind: DOCUMENT_REGION.READY, task },
       onDraftName: (_taskId, name) => setDraft(name),
       onRenameTask: () => Promise.resolve(false),
-      sidePanel: {
-        ...tasksControl().sidePanel,
-        open: true,
-        tabs: [SIDE_PANEL_TAB.PLAN],
-        strip: [SIDE_PANEL_TAB.PLAN],
-        tab: SIDE_PANEL_TAB.PLAN,
-      },
     }),
   });
 }

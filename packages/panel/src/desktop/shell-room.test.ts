@@ -327,7 +327,11 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
   const agents = paneView(page, "Agents");
   act(() => agents.click());
   assert.equal(page.querySelector("aside.side-panel"), null, "Agents shuts the panel");
-  assert.equal(paneView(page, "Agents").getAttribute("aria-checked"), "true");
+  assert.equal(
+    paneView(page, "Overview").getAttribute("aria-checked"),
+    "true",
+    "over the column, which holds no agent's tab and stands on Overview",
+  );
 });
 
 test("the sidebar on a narrow stage is a drawer: no edge peeks it out and no title bar's toggle stands, the places bar's More opens it over the work, and a press outside puts it away", () => {

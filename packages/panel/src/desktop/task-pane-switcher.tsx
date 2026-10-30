@@ -11,35 +11,36 @@ import {
 } from "@luke/ui";
 import { BotIcon, ListIcon } from "lucide-react";
 import type { AwayStep } from "../navigation-history.js";
-import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
+import { isOverviewTab, type MainTab } from "../tasks/use-main-tabs.js";
 import type { MenuAction } from "./action-menu.js";
 import { PhoneHead } from "./phone-head.js";
 
 /**
  * task-pane-switcher.tsx -- how a phone heads a task: one row of the way
  * back, the title of what is on screen, and one ⋯, whose menu leads with the
- * task's three views, its Plan, its Agents, and its Activity.
+ * task's three views, its Overview, its Agents, and its Activity.
  *
- * Nothing here is held apart from the side panel: the views read what the
- * panel already holds. Plan is the panel open on the plan; Agents is the
- * panel shut, the agents' column and its tabs standing; Activity is the
- * panel open on the list of every other tab it holds, or on one of them
- * chosen from that list. So the tabs a phone opens are the same tabs, kept
- * the same way (`use-side-panel.ts`), and Back walks them as it did.
+ * Nothing here is held apart from the column and the side panel: the views
+ * read what they already hold. Overview is the panel shut over the column on
+ * its Overview, the task's plan; Agents is the panel shut over the column on
+ * an agent's tab; Activity is the panel open on the list of every tab it
+ * holds, or on one of them chosen from that list. So the tabs a phone opens
+ * are the same tabs, kept the same way (`use-main-tabs.ts`,
+ * `use-side-panel.ts`), and Back walks them as it did.
  *
  * The row is a phone's standard header and holds nothing else: the way back,
  * its glyph alone, is named for where it goes, the list the task was opened
  * from on the task's own views, or Activity on a tab chosen there; the
  * title, centred between the two corners, names the task, or the tab shown;
  * and the ⋯ holds the views as a checked group, then the menu of what is on
- * screen: the task's own on the Plan view (`task-actions.tsx`), the chosen
+ * screen: the task's own on Overview (`task-actions.tsx`), the chosen
  * agent's on Agents (`agent-actions.tsx`), and the tab's on one chosen from
  * Activity, as its own ⋯ offers it where a bar stands.
  */
 
 /** The three views of a task on a phone. */
 export const TASK_PANE = {
-  PLAN: "plan",
+  OVERVIEW: "overview",
   AGENTS: "agents",
   ACTIVITY: "activity",
 } as const;
@@ -56,18 +57,16 @@ export const TASKS_BACK = "Tasks";
 const BACK = "Back";
 
 /**
- * Which view stands: Agents while the panel is shut, Plan while it shows the
- * plan and its list is not asked for, and Activity otherwise, the list or any
- * other tab chosen from it.
+ * Which view stands: Activity while the panel is open, its list or any tab
+ * chosen from it; else Overview while the column shows it, and Agents on any
+ * other of its tabs.
  */
-export function taskPaneOf(panel: {
+export function taskPaneOf(input: {
   readonly open: boolean;
-  readonly tab: SidePanelTab | undefined;
-  readonly listed: boolean;
+  readonly column: MainTab | undefined;
 }): TaskPane {
-  if (!panel.open) return TASK_PANE.AGENTS;
-  if (panel.tab === SIDE_PANEL_TAB.PLAN && !panel.listed) return TASK_PANE.PLAN;
-  return TASK_PANE.ACTIVITY;
+  if (input.open) return TASK_PANE.ACTIVITY;
+  return isOverviewTab(input.column) ? TASK_PANE.OVERVIEW : TASK_PANE.AGENTS;
 }
 
 /** The ⋯'s first group: the three views, the one standing checked, each choosing itself. */
@@ -79,7 +78,7 @@ export function taskPaneItems(pane: TaskPane, onChoose: (pane: TaskPane) => void
     onSelect: () => onChoose(value),
   });
   return [
-    item(TASK_PANE.PLAN, "Plan", <DocumentIcon />),
+    item(TASK_PANE.OVERVIEW, "Overview", <DocumentIcon />),
     item(TASK_PANE.AGENTS, "Agents", <BotIcon />),
     item(TASK_PANE.ACTIVITY, "Activity", <ListIcon />),
   ];

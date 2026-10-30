@@ -62,7 +62,7 @@ import { taskLinkPlace, useOfferTaskRename } from "../tasks/task-menu-items.js";
 import type { TaskRepositoryDoor, TaskStandingDoor } from "../tasks/task-standing.js";
 import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { placeOfTaskTarget, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
-import type { MainTab } from "../tasks/use-main-tabs.js";
+import { isOverviewTab, MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { OpenHereProvider, openPullRequestsHere, useOpenPlace } from "../tasks/use-open-link.js";
 import { usePlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
@@ -413,6 +413,7 @@ function PlanDocument({
   const [inboxAsk, setInboxAsk] = useState<InboxItemAsk | undefined>(undefined);
   const inboxAsked = useCallback(() => setInboxAsk(undefined), []);
   const { open: panelOpen, tab: panelTab } = tasks.sidePanel;
+  const phone = room === SHELL_ROOM.NARROW;
   useEffect(() => {
     if (activityAsked?.opening && panelOpen)
       setActivityAsked({ ...activityAsked, tab: panelTab, opening: false });
@@ -501,18 +502,25 @@ function PlanDocument({
   // title drawn afresh takes only the asks that come after it.
   const [titleAsked, setTitleAsked] = useState(false);
   const [titleAsks, setTitleAsks] = useState(0);
-  const planShown = panelOpen && panelTab === SIDE_PANEL_TAB.PLAN;
+  // The plan is shown while the column is on Overview, with no panel filling the window over it.
+  const planShown = isOverviewTab(tasks.mainTabs.tab) && !tasks.sidePanel.fullScreen;
+  const { onChoose: chooseColumnTab } = tasks.mainTabs;
   useEffect(() => {
     if (!titleAsked || !planShown) return;
     setTitleAsked(false);
     setTitleAsks((count) => count + 1);
   }, [titleAsked, planShown]);
+  // Overview shown, a panel filling the window over the column giving way, as a row opening a tab of the column does.
+  const showOverview = useSteadyDoor(() => {
+    if (tasks.sidePanel.fullScreen) tasks.sidePanel.onToggleFullScreen();
+    chooseColumnTab(MAIN_TAB.OVERVIEW);
+  });
   const beginRename = useSteadyDoor(() => {
     if (room === SHELL_ROOM.NARROW) {
       rename.begin();
       return;
     }
-    if (!planShown) tasks.sidePanel.onChoose(SIDE_PANEL_TAB.PLAN);
+    if (!planShown) showOverview();
     setTitleAsked(true);
   });
   useOfferTaskRename(taskId, beginRename);
@@ -573,14 +581,21 @@ function PlanDocument({
     mainTabs.onChoose(opened);
     setFocus(COLUMN.MAIN);
   };
-  // A row that opens the plan or the Inbox, which stand in the side panel,
-  // shows the panel on it and hands it the keys, as a terminal shown does.
+  // The plan's document stands in the column's Overview, so a row that opens it chooses that tab.
+  const openOverview = () => openColumnTab(MAIN_TAB.OVERVIEW);
+  // A row that opens the Inbox or the comments, which stand in the side panel,
+  // shows the panel on it and hands it the keys, as a terminal shown does; one
+  // that names the plan's tab of old, as a summary row may, opens Overview.
   const openPanelTab = (opened: SidePanelTab) => {
+    if (opened === SIDE_PANEL_TAB.PLAN) {
+      openOverview();
+      return;
+    }
     sidePanel.onChoose(opened);
     showSide();
   };
   // A call's row in a transcript opens what the call is about where the
-  // window already draws it: an agent in this column, the plan and the
+  // window already draws it: an agent or the plan in this column, the
   // Inbox in the side panel, the Inbox on the item a call names, posted by
   // the agent whose row it was (`from`), another task as a link to it opens
   // (`route.ts`), the rest in the side panel.
@@ -590,7 +605,7 @@ function PlanDocument({
       case TOOL_TARGET.AGENT:
         return openColumnTab({ agent: target.agent });
       case TOOL_TARGET.PLAN:
-        return openPanelTab(SIDE_PANEL_TAB.PLAN);
+        return openOverview();
       case TOOL_TARGET.INBOX:
         if (target.key !== undefined && taskId !== undefined) {
           setInboxAsk({ taskId, key: target.key, agentId: from });
@@ -747,14 +762,13 @@ function PlanDocument({
       (activityAsked.tab === undefined
         ? panelTab === undefined
         : panelTab !== undefined && sameTab(activityAsked.tab, panelTab)));
-  // The plan is in sight: the panel shows it, and no Activity list stands over it.
-  const planInSight = planShown && !activityListed;
-  const { onChoose: choosePanelTab } = tasks.sidePanel;
+  // The plan is in sight: the column shows Overview, and no panel fills the window over it, as a phone's always does.
+  const planInSight = planShown;
   useEffect(() => {
     if (menuRequest === undefined || planInSight) return;
-    if (!planShown) choosePanelTab(SIDE_PANEL_TAB.PLAN);
+    showOverview();
     setActivityAsked(undefined);
-  }, [menuRequest, planShown, planInSight, choosePanelTab]);
+  }, [menuRequest, planInSight, showOverview]);
   // Note that the crumb is handed the ask only once the plan is in sight, so its menu never opens behind a list.
   const openRequest = planInSight ? menuRequest : undefined;
   const repositoryDoor = useMemo<TaskRepositoryDoor | undefined>(
@@ -835,6 +849,8 @@ function PlanDocument({
         held={views.held}
         tab={tab}
         runsOn={opened?.runsOn}
+        // Overview's agents stand open, its list the task's own rather than a fold under the plan's head.
+        folded={false}
         onOpenAgent={(agentId) => openAgentTab({ agent: agentId })}
         onOpenPullRequest={openPullRequestDoor}
       />
@@ -920,7 +936,6 @@ function PlanDocument({
     agentLookDoor,
     pullRequestCardDoor,
   ]);
-  const phone = room === SHELL_ROOM.NARROW;
   if (region.kind === DOCUMENT_REGION.READING) {
     return (
       <TaskPageSkeleton
@@ -991,8 +1006,8 @@ function PlanDocument({
   const terminalHere = agentOfTab(
     sideFocused && sidePanel.tab !== undefined ? sidePanel.tab : mainTabs.tab,
   );
-  // The plan's document and its Inbox stand in the side panel, drawn here,
-  // where what they read is held, and handed to the panel to draw as tabs.
+  // The plan's document stands in the column's Overview and the task's Inbox
+  // in the side panel, each drawn here, where what they read is held.
   // A summary row that opens a tab of the side panel hands the panel the
   // keys, as a transcript's row does (`openPanelTab`), so ⌘W closes what it opened.
   const summaryTasks: TasksControl = {
@@ -1006,11 +1021,16 @@ function PlanDocument({
       },
     },
   };
+  // Note that the document stays laid out while another tab of the column is
+  // shown, so coming back to Overview finds it where it was left.
+  const overviewShown = isOverviewTab(tab);
   const documentBody = (
     <Fill
       as={FILL_ELEMENT.SECTION}
       className="desktop-document @container/plan-document [&[hidden]]:hidden"
+      role="tabpanel"
       aria-label={task.name}
+      hidden={!overviewShown}
     >
       <PlanBody
         task={task}
@@ -1043,7 +1063,7 @@ function PlanDocument({
       ask={inboxAsk?.taskId === listed.id ? inboxAsk : undefined}
       onAsked={inboxAsked}
       doors={{
-        onOpenHolder: () => openPanelTab(SIDE_PANEL_TAB.PLAN),
+        onOpenHolder: openOverview,
         taskCard: taskCardOf(tasks, listed, now),
         onOpenAgent: (agent) => openColumnTab({ agent }),
         code: {
@@ -1061,26 +1081,26 @@ function PlanDocument({
     setActivityAsked(
       asked ? { taskId: task.id, tab: sidePanel.tab, opening: !sidePanel.open } : undefined,
     );
-  const pane = taskPaneOf({ open: sidePanel.open, tab: sidePanel.tab, listed: activityListed });
+  const pane = taskPaneOf({ open: sidePanel.open, column: tab });
   const choosePane = (chosen: TaskPane) => {
-    if (chosen === TASK_PANE.AGENTS) {
-      onListed(false);
-      // Note that the panel's own toggle shuts it as a step back where the window keeps one, as its Close does.
-      if (sidePanel.open) sidePanel.onToggle();
+    if (chosen === TASK_PANE.ACTIVITY) {
+      onListed(true);
+      if (!sidePanel.open) sidePanel.onToggle();
       return;
     }
-    onListed(chosen === TASK_PANE.ACTIVITY);
-    // Note that a shut panel already on the plan opens by its own toggle, as Show panel opened it, so the window's history steps as it did.
-    if (chosen === TASK_PANE.PLAN && !sidePanel.open && sidePanel.tab === SIDE_PANEL_TAB.PLAN)
-      sidePanel.onToggle();
-    else if (chosen === TASK_PANE.PLAN) sidePanel.onChoose(SIDE_PANEL_TAB.PLAN);
-    else if (!sidePanel.open) sidePanel.onToggle();
+    onListed(false);
+    // Note that the panel's own toggle shuts it as a step back where the window keeps one, as its Close does.
+    if (sidePanel.open) sidePanel.onToggle();
+    // Agents chooses the agent's tab the column holds first where it stands on Overview.
+    const agentTab = mainTabs.tabs.find((each) => !isOverviewTab(each));
+    if (chosen === TASK_PANE.OVERVIEW) mainTabs.onChoose(MAIN_TAB.OVERVIEW);
+    else if (isOverviewTab(tab) && agentTab !== undefined) mainTabs.onChoose(agentTab);
   };
   // A tab chosen from Activity heads the row by its name and leads back to the list; the task's own views name the task and lead out of it.
   const onTab = pane === TASK_PANE.ACTIVITY && !activityListed ? shownTab : undefined;
-  // What the header's ⋯ offers under the views follows what is on screen: the task's own menu on the Plan view, the chosen agent's on Agents, and the tab's on one chosen from Activity, the last two each naming what they act on (`shownTabGroups`).
+  // What the header's ⋯ offers under the views follows what is on screen: the task's own menu on Overview, the chosen agent's on Agents, and the tab's on one chosen from Activity, the last two each naming what they act on (`shownTabGroups`).
   const shownGroups = (opener: HTMLElement): readonly (readonly MenuEntry[])[] =>
-    pane === TASK_PANE.PLAN
+    pane === TASK_PANE.OVERVIEW
       ? planMenu.groups()
       : shownTabGroups(pane === TASK_PANE.AGENTS ? shownAgentTab : onTab, opener);
   const head = switched ? (
@@ -1101,7 +1121,7 @@ function PlanDocument({
           thing="Task"
           shown={tasks.shown}
           groups={(opener) => [taskPaneItems(pane, choosePane), ...shownGroups(opener)]}
-          ends={() => (pane === TASK_PANE.PLAN ? planMenu : undefined)}
+          ends={() => (pane === TASK_PANE.OVERVIEW ? planMenu : undefined)}
         />
       }
     />
@@ -1163,6 +1183,7 @@ function PlanDocument({
                               onOpenTerminal={terminalDoors.onOpenTerminal}
                               slot={switched ? null : actionsSlot}
                               onShown={switched ? setShownAgentTab : undefined}
+                              planMenu={planMenu}
                             />
                           }
                           actions={
@@ -1213,7 +1234,7 @@ function PlanDocument({
                                   : taskKey(workspaceName, task.number)
                               }
                               name={listed.name}
-                              onOpen={() => openPanelTab(SIDE_PANEL_TAB.PLAN)}
+                              onOpen={openOverview}
                               waiting={{
                                 count: inbox.board.waiting.length,
                                 noun: NEEDS_YOU.COUNT,
@@ -1231,12 +1252,13 @@ function PlanDocument({
                           <FindScope
                             className="desktop-task-column"
                             active={tasks.shown && !sideFocused}
-                            subject={{ task: task.id, tab: tab ?? SIDE_PANEL_TAB.PLAN }}
+                            subject={{ task: task.id, tab: tab ?? MAIN_TAB.OVERVIEW }}
                           >
-                            {tab === undefined ? (
+                            {documentBody}
+                            {tab === undefined || isOverviewTab(tab) ? (
                               // While the agents are read, or a draft opens on a task with none, the
                               // column stands as the tab it will show does before it lands.
-                              columnComing ? (
+                              tab === undefined && columnComing ? (
                                 <AgentColumn>
                                   <AgentTabSkeleton />
                                 </AgentColumn>
@@ -1290,8 +1312,6 @@ function PlanDocument({
                         focused={sideFocused}
                         onOpenTarget={openTarget}
                         banner={stranded.banner}
-                        plan={documentBody}
-                        planMenu={planMenu}
                         task={{ name: task.name, status: listed.status }}
                         inbox={{
                           body: inboxBody,

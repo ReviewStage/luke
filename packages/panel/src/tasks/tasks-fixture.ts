@@ -32,6 +32,7 @@ import { FIXTURE_IDS, FIXTURE_TASK_NAME } from "@luke/host/fixture-stage";
 import type { SettingsLink } from "@luke/settings/settings-views";
 import {
   agentActAnswer,
+  agentColumnTab,
   agentSidePanel,
   agentTasksView,
   FIXTURE_AGENT_ID,
@@ -45,8 +46,8 @@ import {
   settingsLaunchLink,
   settingsTasksView,
 } from "./settings-fixture.js";
+import type { MainTab } from "./use-main-tabs.js";
 import {
-  SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
   type SidePanelState,
@@ -566,14 +567,13 @@ function commentsActAnswer(
   return { answer: commentsAnswer(read) as PortActResult<PortActKind> };
 }
 
-/** The side panels the fixture profiles open their task with. */
-const FIXTURE_DOCUMENT_PANEL: SidePanelState = {
+/** The side panels the fixture profiles open their task with: open, for an agent profile to stage a tab in, or shut. */
+const FIXTURE_OPEN_PANEL: SidePanelState = {
   open: true,
   tabs: SIDE_PANEL_TABS,
-  tab: SIDE_PANEL_TAB.PLAN,
   width: SIDE_PANEL_WIDTH.DEFAULT,
 };
-const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_DOCUMENT_PANEL, open: false };
+const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_OPEN_PANEL, open: false };
 
 /**
  * The tasks a fixture run draws: the list with its first task open under the
@@ -597,24 +597,29 @@ export function fixtureTasksView(run: {
 }
 
 /**
- * The side panel a fixture run opens its task with: on the plan under
- * the tasks, tasks-transcript, and
- * tasks-work profiles, whose call the task's column shows, the latter with
- * Luke at work on it, on the agent's tab each agent profile names, and
- * closed under any other. Nothing for a live run, which opens the panel as
- * the developer last left it.
+ * The side panel a fixture run opens its task with: on the tab each agent
+ * profile names, and shut under any other, the tasks profiles' among them,
+ * whose plan the column's Overview shows. Nothing for a live run, which
+ * opens the panel as the developer last left it.
  */
 export function fixtureSidePanel(run: {
   readonly fixtureMode: boolean;
   readonly profile: string;
 }): StagedSidePanel | undefined {
   if (!run.fixtureMode) return undefined;
-  const agent = agentSidePanel(run.profile, FIXTURE_DOCUMENT_PANEL, FIXTURE_TASK_ID);
-  if (agent !== undefined) return agent;
-  if (run.profile === RUN_PROFILE.TASKS) return FIXTURE_DOCUMENT_PANEL;
-  if (run.profile === RUN_PROFILE.TASKS_TRANSCRIPT) return FIXTURE_DOCUMENT_PANEL;
-  if (run.profile === RUN_PROFILE.TASKS_WORK) return FIXTURE_DOCUMENT_PANEL;
-  return FIXTURE_CLOSED_PANEL;
+  return agentSidePanel(run.profile, FIXTURE_OPEN_PANEL, FIXTURE_TASK_ID) ?? FIXTURE_CLOSED_PANEL;
+}
+
+/**
+ * The tab a fixture run's task column opens on: the one each agent profile
+ * names, its agent's or Overview; none under any other profile, whose task
+ * opens on its Overview as one never opened does. Nothing for a live run.
+ */
+export function fixtureColumnTab(run: {
+  readonly fixtureMode: boolean;
+  readonly profile: string;
+}): MainTab | undefined {
+  return run.fixtureMode ? agentColumnTab(run.profile) : undefined;
 }
 
 /**

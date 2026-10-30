@@ -38,7 +38,12 @@ import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { ToolTarget } from "../tasks/tool-call-model.js";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
-import type { MainTab, MainTabsControl } from "../tasks/use-main-tabs.js";
+import {
+  isOverviewTab,
+  MAIN_TAB,
+  type MainTab,
+  type MainTabsControl,
+} from "../tasks/use-main-tabs.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type AgentTerminalDoors, useAgentActions } from "./agent-actions.js";
 import type { TaskCards } from "./side-panel.js";
@@ -46,6 +51,7 @@ import {
   type AddEntry,
   AddTabButton,
   AddTabSkeleton,
+  type DocumentMenu,
   DoorsTab,
   type HeldTranscripts,
   type ShownTab,
@@ -59,7 +65,7 @@ import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { TabStrip } from "./tab-strip.js";
 
 /**
- * main-tabs.tsx -- the task's column's tabs: each agent's and the draft agent's, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
+ * main-tabs.tsx -- the task's column's tabs: its Overview, each agent's and the draft agent's, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
  *
  * Each part draws what `use-main-tabs.ts` holds and hands every press back
  * to it. The strip is the side panel's in every way: the same pills, the
@@ -69,6 +75,12 @@ import { TabStrip } from "./tab-strip.js";
  * (`agent-actions.tsx`), stand on its tab's right-click after the tab's
  * keeping, and the chosen agent's in the toolbar's ⋯, drawn into the slot
  * the toolbar keeps for it (`slot`), so the ⋯ acts on what is under the bar.
+ *
+ * Overview leads the strip on every task, wearing the plan's document glyph:
+ * it shows the task's plan document, which the task's page draws and hands
+ * in (`desktop-tasks.tsx`), and offers the task's own menu on its
+ * right-click and in the toolbar's ⋯, as the task's plan did where it stood
+ * in the side panel. It never closes, and the agents' tabs move after it.
  *
  * Each agent's tab is named by its title, or its model until it has one,
  * wearing its harness's mark for where the agent stands, a ring while it
@@ -256,8 +268,8 @@ interface DrawnTab {
 }
 
 /**
- * The agents' tabs and the draft's, in the order started, each closing
- * through `main`. An agent's card previews its
+ * Overview's tab, then the agents' tabs and the draft's, in the order
+ * started, each but Overview closing through `main`. An agent's card previews its
  * latest step from what its tab last held (`heldLatest`). An agent's tab,
  * and the draft's, wears the Draft pencil at its end while its box holds
  * words and another tab is chosen (`draft-mark.tsx`); an agent's failure
@@ -280,6 +292,11 @@ function agentTabs(input: {
     selected: chosen(tab),
     onSelect: () => main.onChoose(tab),
   });
+  const overview = {
+    tab: MAIN_TAB.OVERVIEW,
+    look: { ...look(MAIN_TAB.OVERVIEW, tabLook({ kind: TAB_KIND.OVERVIEW })), anchored: true },
+    close: undefined,
+  };
   const open = (agents.agents ?? []).filter((agent) => main.openAgents?.includes(agent.id));
   const own = open.map((agent) => {
     const tab = { agent: agent.id };
@@ -340,7 +357,7 @@ function agentTabs(input: {
             },
           },
         ];
-  return [...own, ...starting, ...drafts];
+  return [overview, ...own, ...starting, ...drafts];
 }
 
 /**
@@ -461,7 +478,7 @@ export function MainTabStripSkeleton(): React.JSX.Element {
 }
 
 /**
- * The column's strip across its toolbar: the agents' and the draft's, then the "+", which stands apart from the strip so it is never
+ * The column's strip across its toolbar: Overview, the agents' and the draft's, then the "+", which stands apart from the strip so it is never
  * dragged nor dropped before. ⌘W closes the chosen tab while the column
  * holds the window's focus (`keys`).
  */
@@ -477,6 +494,7 @@ export function MainTabStrip({
   onOpenTerminal,
   slot,
   onShown,
+  planMenu,
 }: {
   task: TaskSummary;
   main: MainTabsControl;
@@ -499,9 +517,11 @@ export function MainTabStrip({
   slot?: HTMLElement | null | undefined;
   /** Hears the tab the column shows, for a phone's header, whose ⋯ offers what the agent's ⋯ would (`task-pane-switcher.tsx`); none where the toolbar draws the ⋯. */
   onShown?: ((shown: ShownTab | undefined) => void) | undefined;
+  /** The task's own menu, which Overview's right-click and ⋯ draw. */
+  planMenu?: DocumentMenu | undefined;
 }): React.JSX.Element {
   const drafted = useDraftedAgents();
-  // The agents' and the draft's tabs in the column's order,
+  // Overview, then the agents' and the draft's tabs in the column's order,
   // which the developer's moves and their opening set (`use-main-tabs.ts`).
   const own = inTaskOrder(
     agentTabs({ main, agents, unread, views, drafted }),
@@ -545,6 +565,8 @@ export function MainTabStrip({
       // Note that an archived agent offers no pin, as its sidebar row does none, since no pin of it is drawn until it comes back.
       pin: agent === undefined || agent.archivedAt !== undefined ? undefined : pinDoor(agent.id),
       copyLink: linked === undefined ? undefined : copyLink(linked),
+      // Overview's menu is the task's own, its Pin and Copy link among it.
+      document: isOverviewTab(entry.tab) ? planMenu : undefined,
     };
   };
   return (
@@ -553,7 +575,8 @@ export function MainTabStrip({
         label="Task"
         ground={TABS_GROUND.GROUND}
         onMove={(from, to) => {
-          const entry = own[from];
+          // Note that the strip counts its moves among the tabs after Overview, which never moves.
+          const entry = strip.filter((each) => !isOverviewTab(each.tab))[from];
           if (entry !== undefined) main.onMove(entry.tab, to);
         }}
       >
@@ -563,7 +586,9 @@ export function MainTabStrip({
               key={tabKey(entry.tab)}
               look={entry.look}
               doors={doorsOf(entry)}
-              onShown={onShown}
+              slot={slot}
+              // A phone's header names itself by the task, and offers the task's menu on Overview.
+              onShown={isOverviewTab(entry.tab) ? undefined : onShown}
             />
           ) : (
             <AgentMenuTab
@@ -607,8 +632,9 @@ export function MainTabStrip({
   );
 }
 
-/** What an agent's or the draft's tab is called to a reader of the column. */
+/** What a tab of the column is called to a reader of it. */
 export function mainTabLabel(tab: MainTab, agents: AgentsControl): string | undefined {
+  if (isOverviewTab(tab)) return tabLook({ kind: TAB_KIND.OVERVIEW }).label;
   if (isDraftTab(tab)) return tabLook({ kind: TAB_KIND.DRAFT }).label;
   const agent = agents.agents?.find((each) => each.id === tab.agent);
   return agent === undefined ? undefined : agentName(agent, agents.models);
@@ -635,7 +661,7 @@ export function MainTabContent({
   onFork,
   onContinue,
 }: {
-  tab: MainTab;
+  tab: Exclude<MainTab, typeof MAIN_TAB.OVERVIEW>;
   agents: AgentsControl;
   /** Whether the column is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;
@@ -722,7 +748,9 @@ export const AgentPane = memo(function AgentPane({
   label,
   tabbed,
   ...content
-}: Parameters<typeof MainTabContent>[0] & {
+}: Omit<Parameters<typeof MainTabContent>[0], "tab"> & {
+  /** The agent's or the draft's tab whose pane it is; Overview's is the task's page's own. */
+  tab: Exclude<MainTab, typeof MAIN_TAB.OVERVIEW>;
   /** What the pane is called to a reader: the agent's tab's name. */
   label: string | undefined;
   /** Whether the pane is the panel of a tab in a strip, as the task column's is. */

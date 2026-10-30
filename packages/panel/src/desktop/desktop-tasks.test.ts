@@ -49,6 +49,7 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
+import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import {
   type FixedSidePanelTab,
   PULL_REQUEST_VIEW,
@@ -87,11 +88,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The side panel shown on the plan, as a task opens. */
+/** The side panel shown on the plan's comments beside it. */
 const DOCUMENT_PANEL: TasksControl["sidePanel"] = {
   ...tasksControl().sidePanel,
   open: true,
-  tab: SIDE_PANEL_TAB.PLAN,
+  tab: SIDE_PANEL_TAB.COMMENTS,
 };
 
 test("a task the service will not hand the reader, as a link to another workspace's may name, is not found, its Close the one way on", () => {
@@ -880,7 +881,7 @@ test("a plan's own Inbox acknowledges the reader's own notice as it opens it, an
 function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
-  const draw = (shown: SidePanelTab) =>
+  const draw = (shown: SidePanelTab, more: Partial<TasksControl> = {}) =>
     act(() =>
       root.render(
         onRegistry(
@@ -893,6 +894,7 @@ function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
               activeTaskId: TASK.id,
               region: { kind: DOCUMENT_REGION.READY, task: TASK },
               ...overrides,
+              ...more,
               sidePanel: { ...DOCUMENT_PANEL, ...overrides.sidePanel, tab: shown },
             }),
           }),
@@ -910,18 +912,28 @@ function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
   };
 }
 
-test("the plan stays drawn, hidden, while another tab of the side panel is shown, so an edit not yet saved outlives the switch", () => {
-  const page = panelPage(SIDE_PANEL_TAB.PLAN);
+test("the plan stays drawn, hidden, while an agent's tab of the column is shown, so an edit not yet saved outlives the switch", () => {
+  const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const column = (tab: MainTab): Partial<TasksControl> => ({
+    mainTabs: {
+      ...tasksControl().mainTabs,
+      tabs: [MAIN_TAB.OVERVIEW, { agent: agentId }],
+      tab,
+      openAgents: [agentId],
+    },
+  });
+  const page = panelPage(SIDE_PANEL_TAB.COMMENTS, column(MAIN_TAB.OVERVIEW));
   const document = page.container.querySelector(".desktop-document");
-  assert.ok(document, "the plan is drawn on its tab");
+  assert.ok(document, "the plan is drawn on Overview");
+  assert.equal(document.hasAttribute("hidden"), false);
 
-  page.draw(SIDE_PANEL_TAB.COMMENTS);
+  page.draw(SIDE_PANEL_TAB.COMMENTS, column({ agent: agentId }));
   assert.equal(page.container.querySelector(".desktop-document"), document, "the same plan stands");
-  assert.equal(document.closest(".side-panel-content")?.hasAttribute("hidden"), true);
+  assert.equal(document.hasAttribute("hidden"), true);
 
-  page.draw(SIDE_PANEL_TAB.PLAN);
+  page.draw(SIDE_PANEL_TAB.COMMENTS, column(MAIN_TAB.OVERVIEW));
   assert.equal(page.container.querySelector(".desktop-document"), document);
-  assert.equal(document.closest(".side-panel-content")?.hasAttribute("hidden"), false);
+  assert.equal(document.hasAttribute("hidden"), false);
   page.unmount();
 });
 
@@ -931,11 +943,11 @@ test("a summary row that opens a tab of the side panel hands the panel the keys,
   );
   const closed: string[] = [];
   const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-  const page = panelPage(SIDE_PANEL_TAB.PLAN, {
+  const page = panelPage(SIDE_PANEL_TAB.COMMENTS, {
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [{ agent: agentId }],
-      tab: undefined,
+      tabs: [MAIN_TAB.OVERVIEW, { agent: agentId }],
+      tab: MAIN_TAB.OVERVIEW,
       onClose: () => closed.push("column"),
     },
     sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },

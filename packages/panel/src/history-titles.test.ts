@@ -3,6 +3,7 @@ import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { test } from "vitest";
 import { liveStepTitle, NAMED_STEP, stepTitle } from "./history-titles.js";
 import { PANEL_TAB } from "./panel-tabs.js";
+import { MAIN_TAB } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB } from "./tasks/use-side-panel.js";
 import type { InboxChoice } from "./tasks/use-tasks-tab.js";
 import { tasksControl } from "./testing/tasks-control.js";
@@ -57,6 +58,19 @@ test("a task's step is named by the task, with the side panel's tab while it is 
 test("a task on its way, its strips still another's, is named by the task alone", () => {
   const opening = { ...onTask(SIDE_PANEL_TAB.COMMENTS), activeTaskId: "task-before" };
   assert.deepEqual(stepTitle(PANEL_TAB.TASKS, opening), { label: "Auth refactor" });
+});
+
+test("a task's step listed later on its Overview is named by the task and its panel's tab, Overview being the task itself", () => {
+  const step = {
+    kind: NAMED_STEP.TASK,
+    taskId: TASK.id,
+    column: MAIN_TAB.OVERVIEW,
+    side: SIDE_PANEL_TAB.COMMENTS,
+  } as const;
+  assert.deepEqual(liveStepTitle(step, undefined, tasksControl({ tasks: [TASK] }), undefined), {
+    label: "Auth refactor",
+    detail: "Comments",
+  });
 });
 
 test("the Inbox's step names the task its item is of, and Settings and a new account's welcome are named alone", () => {

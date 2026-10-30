@@ -124,7 +124,7 @@ import {
   PANEL_SPAN_ATTRIBUTE,
   recordPanelSpan,
 } from "../panel-spans.js";
-import { ADDRESS, HERE, ROUTE, route } from "../route.js";
+import { ADDRESS, HERE, type OverviewPlace, ROUTE, route } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
@@ -172,6 +172,8 @@ import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
 import { useLastTask } from "./use-last-task.js";
 import {
+  isOverviewTab,
+  MAIN_TAB,
   type MainTab,
   type MainTabsControl,
   type NamedAgents,
@@ -1453,7 +1455,7 @@ export function useTasksTab(input: {
     return { ids: lines.map((line) => line.id), total };
   }, [rowListed, rowAgents]);
   const mainTabs = useMainTabs(
-    fixture !== undefined,
+    fixture === undefined ? undefined : { tab: tasksFixture?.fixtureColumnTab(input.run) },
     viewed.activeTaskId,
     agents.agentIds,
     named,
@@ -1465,10 +1467,11 @@ export function useTasksTab(input: {
     (agents.heldIds?.length ?? 0) > 0 ||
     input.inboxWaiting.some((task) => task.taskId === viewed.activeTaskId);
   mainRef.current = mainTabs;
-  // A task whose column shows no tab once its agents are read opens a new
-  // agent's draft, which the column then shows (`use-main-tabs.ts`), so a
-  // task with no agent, or whose last tab closed, lands in a composer. Note
-  // that nothing reaches the service until the draft is sent or called.
+  // A task whose column holds no tab past its Overview once its agents are
+  // read opens a new agent's draft beside it (`use-main-tabs.ts`), so a task
+  // with no agent, or whose last agent's tab closed, has a composer one tab
+  // away. Note that nothing reaches the service until the draft is sent or
+  // called.
   const openDraftNow = useRef(agents.onNewDraft);
   openDraftNow.current = agents.onNewDraft;
   // Note that an archive still out wants none, since the agent it took comes back if refused, nor
@@ -1476,7 +1479,8 @@ export function useTasksTab(input: {
   // neither does New task's start of an agent, since main opens its task before the start answers,
   // whose agent no list holds yet, and its answer opens the agent's tab, or its draft if refused.
   const draftWanted =
-    mainTabs.tab === undefined &&
+    mainTabs.tab !== undefined &&
+    mainTabs.tabs.every(isOverviewTab) &&
     startingTask === undefined &&
     agents.agentIds !== undefined &&
     agents.onUnarchive === undefined &&
@@ -2545,10 +2549,12 @@ export function useTasksTab(input: {
     setChosen((held) => (held !== undefined && pinOnTask(held.pin, taskId) ? undefined : held));
     select(taskId);
   };
-  // One opened from a list lands on its plan in a narrow room.
+  // One opened from a list lands on its plan in a narrow room: its Overview, the panel shut over it.
   const selectListed = (taskId: string) => {
     openUnpinned(taskId);
-    if (input.room === SHELL_ROOM.NARROW) sidePanel.onShow(taskId, SIDE_PANEL_TAB.PLAN);
+    if (input.room !== SHELL_ROOM.NARROW) return;
+    sidePanel.onSetOpen(false);
+    mainTabs.onShow(taskId, MAIN_TAB.OVERVIEW);
   };
   // A started task becomes the host's open one, which turns the page to it,
   // so the dialog closes and the Inbox or a version history standing behind
@@ -2689,8 +2695,8 @@ export function useTasksTab(input: {
   // Start opens it; one whose agent was refused opens on a draft holding
   // the words, the files, and the model under the start's key, with why
   // under its box, whose Retry is the agent's own Start on the task. Either
-  // opens on the agent alone, its plan's tab closed on the task, so the side
-  // panel draws nothing beside it and stands as it stood on every other task.
+  // opens on the agent's tab, the task's Overview beside it, so the side
+  // panel stands as it stood on every other task.
   // Note that an answer naming neither is read as one the service never gave.
   const openAgent = (
     planId: string,
@@ -2698,7 +2704,6 @@ export function useTasksTab(input: {
     started: AgentAgentAnswer | undefined,
     device: MacOffer | undefined,
   ) => {
-    sidePanel.onCloseOn(planId, SIDE_PANEL_TAB.PLAN);
     if (started !== undefined && !("failure" in started)) {
       agents.onTaskStarted(planId, started.agent, {
         key: handed.idempotencyKey,
@@ -2774,6 +2779,26 @@ export function useTasksTab(input: {
     setHistoryFor(undefined);
     sidePanel.onShow(taskId, tab);
   };
+  // The task's plan shown at the place given: its column's Overview, which
+  // holds it, chosen in place on the task standing, and on another task as
+  // the window goes there (`route.ts`), a panel filling the window over the
+  // column giving way.
+  const showOverview = (place: OverviewPlace) => {
+    const standing = standIn === undefined && historyFor === undefined;
+    const routed = route(
+      { kind: ADDRESS.PLACE, link: { workspace: "", place } },
+      { kind: HERE.TASKS_TAB, taskId: standing ? tasks.activeTaskId : undefined },
+    );
+    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+    if (routed.kind === ROUTE.OVERVIEW) {
+      mainTabs.onChoose(MAIN_TAB.OVERVIEW);
+      return;
+    }
+    if (place.planId !== tasks.activeTaskId) select(place.planId);
+    setStandIn(undefined);
+    setHistoryFor(undefined);
+    mainTabs.onShow(place.planId, MAIN_TAB.OVERVIEW);
+  };
   // A link to a tab of the task standing opens it as the panel's preview, as
   // any link pressed there does; one to another task's goes there and opens
   // it as a tab of its own (`route.ts`).
@@ -2813,8 +2838,12 @@ export function useTasksTab(input: {
 
   // Each ask is its own, so the same section asked twice scrolls twice.
   const showMention = (mention: PlanMention) => {
-    showPanelTab(mention.taskId, SIDE_PANEL_TAB.PLAN);
     const anchor = mention.kind === MENTION_KIND.SECTION ? mention.anchor : undefined;
+    showOverview(
+      anchor === undefined
+        ? { kind: LINK_PLACE.TASK, planId: mention.taskId }
+        : { kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor },
+    );
     sectionAsks.current += 1;
     setSectionReveal({ taskId: mention.taskId, reveal: { anchor, ask: sectionAsks.current } });
   };
@@ -3007,7 +3036,7 @@ export function useTasksTab(input: {
         showMention({ kind: MENTION_KIND.SECTION, taskId: place.planId, anchor: place.anchor });
         return;
       case LINK_PLACE.COMMENT:
-        showPanelTab(place.planId, SIDE_PANEL_TAB.PLAN);
+        showOverview(place);
         setCommentReveal((last) => ({
           planId: place.planId,
           thread: place.threadId,
@@ -3133,7 +3162,10 @@ export function useTasksTab(input: {
   const { onClose: closeMainTab, onDoze: dozeMainTab } = mainTabs;
   const keepColumnClosed = useCallback(
     (tab: MainTab) => {
-      const at = openTabs.findIndex((each) => sameTab(each, tab));
+      // Note that the place is counted among the tabs after Overview, as the column's moves are.
+      const at = openTabs
+        .filter((each) => !isOverviewTab(each))
+        .findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
       if (task !== undefined && at >= 0 && !isDraftTab(tab)) {
         const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at };
@@ -3240,6 +3272,7 @@ export function useTasksTab(input: {
             onViewedAt: mainTabs.onViewedAt,
             onIdle: dozeColumnTab,
             keeps: (tab) =>
+              isOverviewTab(tab) ||
               isDraftTab(tab) ||
               pinnedHere(tab) ||
               awakeAgents.includes(tab.agent) ||
@@ -3316,7 +3349,8 @@ export function useTasksTab(input: {
   // Showing the panel on a plan whose strip holds no tab opens one first, so
   // the panel is never shown empty beside the summary that lists the same:
   // the tab last closed on the plan this launch, where ⇧⌘T would open it,
-  // else the kind last closed on it, kept across launches, else Plan. An
+  // else the kind last closed on it, kept across launches, else none, the
+  // panel shown empty, offering what its "+" does. An
   // agent's page, and the Inbox beside an item, have no kind to fall back on,
   // so their panel shows empty, offering what its "+" does.
   const toggleSidePanel = () => {
@@ -3342,7 +3376,10 @@ export function useTasksTab(input: {
       reopenHere(closed);
       return;
     }
-    sidePanel.onChoose(sidePanel.closedTabs.at(-1) ?? SIDE_PANEL_TAB.PLAN);
+    // Note that the plan's kind of old stands nowhere in the panel now, so it is passed over.
+    const closedKind = sidePanel.closedTabs.findLast((tab) => tab !== SIDE_PANEL_TAB.PLAN);
+    if (closedKind === undefined) sidePanel.onToggle();
+    else sidePanel.onChoose(closedKind);
   };
 
   // The tab rests on no task, so only an open task steps back,
@@ -3567,7 +3604,7 @@ export function useTasksTab(input: {
     // A version's Open lands where its writer wrote it: an agent's tab.
     onShowSource: guard(showSource),
     // The call card's way back lands where the task's call bar is in sight.
-    onShowTask: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.PLAN)),
+    onShowTask: guard((taskId: string) => showOverview({ kind: LINK_PLACE.TASK, planId: taskId })),
     // Each ask is its own, so the same section asked twice scrolls twice.
     onShowMention: guard(showMention),
     onOpenLink: guard((link: ReadLink) => openLink(link)),

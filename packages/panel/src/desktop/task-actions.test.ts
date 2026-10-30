@@ -23,6 +23,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
 import { OpenPersonProvider } from "../person-door.js";
+import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -163,7 +164,7 @@ function mountPlanTab(tasks: TasksControl): HTMLButtonElement {
       tasks,
     }),
   );
-  const more = container.querySelector(".side-panel-bar .toolbar-tab-actions button");
+  const more = container.querySelector(".desktop-task-main .toolbar-tab-actions button");
   assert.ok(more instanceof HTMLButtonElement, "the Plan tab's ⋯ stands in the panel's bar");
   return more;
 }
@@ -298,7 +299,7 @@ test("a question asked of one task does not outlive it: the delete the Plan tab'
       ),
     );
   draw(tasks);
-  const more = container.querySelector(".side-panel-bar .toolbar-tab-actions button");
+  const more = container.querySelector(".desktop-task-main .toolbar-tab-actions button");
   assert.ok(more instanceof HTMLButtonElement);
   openMenu(more);
   choose("Permanently delete");
@@ -313,17 +314,16 @@ test("a question asked of one task does not outlive it: the delete the Plan tab'
   assert.equal(asking(), false, "the question went with the task it was asked of");
 });
 
-test("⌘K's Change repository shows the plan where the panel hides it, and the repository crumb in the plan opens its menu for the ask once, not again on a later draw", () => {
+test("⌘K's Change repository shows Overview where an agent's tab hides the plan, and the repository crumb in the plan opens its menu for the ask once, not again on a later draw", () => {
   const told: string[] = [];
   const { tasks } = openTab({ [TASK.id]: "acme/app" });
-  const asked = (open: boolean): TasksControl => ({
+  const asked = (overview: boolean): TasksControl => ({
     ...tasks,
     repositoryMenu: { taskId: TASK.id, request: 1 },
-    sidePanel: {
-      ...tasks.sidePanel,
-      open,
-      tab: open ? SIDE_PANEL_TAB.PLAN : SIDE_PANEL_TAB.COMMENTS,
-      onChoose: (tab) => told.push(`choose ${String(tab)}`),
+    mainTabs: {
+      ...tasks.mainTabs,
+      tab: overview ? MAIN_TAB.OVERVIEW : { draft: "draft-1" },
+      onChoose: (tab) => told.push(`choose ${JSON.stringify(tab)}`),
     },
   });
   const container = document.createElement("div");
@@ -337,7 +337,7 @@ test("⌘K's Change repository shows the plan where the panel hides it, and the 
       ),
     );
   draw(asked(false));
-  assert.deepEqual(told, [`choose ${SIDE_PANEL_TAB.PLAN}`], "the ask shows the plan first");
+  assert.deepEqual(told, [`choose "${MAIN_TAB.OVERVIEW}"`], "the ask shows the plan first");
 
   draw(asked(true));
   const chip = () =>

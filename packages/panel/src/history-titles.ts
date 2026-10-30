@@ -17,7 +17,7 @@ import { mainTabLabel } from "./desktop/main-tabs.js";
 import type { StepTitle } from "./navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { agentName } from "./tasks/agent-model.js";
-import type { MainTab } from "./tasks/use-main-tabs.js";
+import { isOverviewTab, type MainTab } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB_KIND, type SidePanelTab } from "./tasks/use-side-panel.js";
 import type { TasksControl } from "./tasks/use-tasks-tab.js";
 
@@ -153,10 +153,12 @@ export function stepTitle(tab: PanelTab, tasks: StepTitleTasks): StepTitle | und
   // Note that the strips are named only once they are the task's, as the history reads them.
   if (tasks.activeTaskId !== tasks.boundFor) return { label: name };
   const { boundFor } = tasks;
+  // Note that the column's Overview is the task itself, which the step's name already says.
+  const columnTab = tasks.mainTabs.tab;
   const column =
-    tasks.mainTabs.tab === undefined
+    columnTab === undefined || isOverviewTab(columnTab)
       ? undefined
-      : columnTabLabel(tasks.mainTabs.tab, boundFor, tasks);
+      : columnTabLabel(columnTab, boundFor, tasks);
   const side =
     tasks.sidePanel.open && tasks.sidePanel.tab !== undefined
       ? shownSideTabLabel(tasks.sidePanel.tab, boundFor, tasks)
@@ -213,9 +215,11 @@ function liveTaskTitle(
   const label = taskName(tasks, step.taskId) ?? kept?.label;
   if (label === undefined) return undefined;
   const { taskId, column, side } = step;
-  // Note that `null` is a pane that showed no tab, and `undefined` a tab named neither now nor as kept, which leaves the words kept whole.
+  // Note that `null` is a pane that showed no tab, or the column's Overview, which is the task itself, and `undefined` a tab named neither now nor as kept, which leaves the words kept whole.
   const columnName =
-    column === undefined ? null : (columnTabLabel(column, taskId, tasks) ?? kept?.panes?.column);
+    column === undefined || isOverviewTab(column)
+      ? null
+      : (columnTabLabel(column, taskId, tasks) ?? kept?.panes?.column);
   const sideName =
     side === undefined ? null : (sideTabLabel(side, taskId, tasks) ?? kept?.panes?.side);
   if (columnName === undefined || sideName === undefined) return { label, detail: kept?.detail };
