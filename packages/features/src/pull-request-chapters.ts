@@ -12,8 +12,7 @@ import { DIFF_ROW, type DiffHunk, LOCKFILE_NAMES, patchHunks } from "./diff-hunk
  * it holds, the changes a reviewer should weigh in it (`KeyChange`), each
  * on lines of its own hunks, and how risky it is and why. The last chapter
  * may be "Other changes", told by no model (`otherChangesChapter`): the
- * files a reader reads past (`ignoredForChapters`, the defaults and the
- * repository's `.stageignore`), those with no hunk to
+ * files a reader reads past (`ignoredForChapters`), those with no hunk to
  * read, and any hunk the model left out. It is named by its `kind` rather
  * than its title, because a model may title a chapter of its own the same.
  *
@@ -158,12 +157,14 @@ function chapterOwnHunks(chapter: Chapter, index: HunkIndex): readonly ChapterHu
 }
 
 /**
- * The patterns of files a reader reads past, as ReviewStage's default ignore
- * list writes them: every lockfile, what an operating system leaves in a
- * folder, minified and generated files, source maps, snapshots, images,
- * fonts, video, and documents.
+ * The patterns of files a reader reads past, as `.gitignore` writes them:
+ * ReviewStage's default ignore list (every lockfile, what an operating
+ * system leaves in a folder, minified files, source maps, snapshots,
+ * images, fonts, video, and documents), and the schema snapshots Drizzle
+ * writes beside each migration, which can run to tens of thousands of
+ * lines a reader never reads.
  */
-const DEFAULT_IGNORE_PATTERNS: readonly string[] = [
+const IGNORE_PATTERNS: readonly string[] = [
   ...LOCKFILE_NAMES,
   ".DS_Store",
   "Thumbs.db",
@@ -184,25 +185,21 @@ const DEFAULT_IGNORE_PATTERNS: readonly string[] = [
   "*.mp4",
   "*.webm",
   "*.pdf",
+  "**/migrations/*/snapshot.json",
+  "**/meta/*_snapshot.json",
 ];
 
-/** The file at a repository's root whose `.gitignore`-style patterns leave more of its files out of chapters, as stage-cli reads it. */
-export const STAGE_IGNORE_PATH = ".stageignore";
+/** The one matcher every path is held to, whatever its case, as ReviewStage's `filterFilesForLlm` builds it. */
+const IGNORED = ignore({ ignoreCase: true }).add([...IGNORE_PATTERNS]);
 
 /**
  * Whether a file is left out of the chapters a model tells and stands in
- * "Other changes" instead: what ReviewStage's default ignore list leaves
- * out, then what the repository's own `.stageignore` names, where it has
- * one, as stage-cli's `filterFilesForLlm` layers them. Both are one
- * matcher with `.gitignore`'s semantics, whatever the case (comments,
- * anchoring, folders, and `!` re-including a file a pattern above left
- * out, a default's included), so a pattern with no slash matches every
- * step of the path and a folder so named leaves out everything in it.
+ * "Other changes" instead (`IGNORE_PATTERNS`). Matched with `.gitignore`'s
+ * semantics, whatever the case: a pattern with no slash matches every step
+ * of the path, so a folder so named leaves out everything in it.
  */
-export function ignoredForChapters(stageIgnore: string | null = null): (path: string) => boolean {
-  const matcher = ignore({ ignoreCase: true }).add([...DEFAULT_IGNORE_PATTERNS]);
-  if (stageIgnore !== null) matcher.add(stageIgnore);
-  return (path) => matcher.ignores(path);
+export function ignoredForChapters(path: string): boolean {
+  return IGNORED.ignores(path);
 }
 
 /** A model's chapters held to the hunks it was given, and the hunks no chapter holds. */
