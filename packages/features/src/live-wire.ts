@@ -737,13 +737,18 @@ export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];
  * the query naming the instant the reader holds every item changed since,
  * in epoch milliseconds (`SINCE`); the parts its poll is held on alone
  * (`HELD_ON`), so a reader whose `since` moved with no item moving is held
- * still; and how far back a settled item is carried (`SETTLED_WINDOW_MILLIS`),
- * an open one always.
+ * still; how many settled items are carried, the latest changed
+ * (`MAX_SETTLED`), every open one always; and how many of a thread's latest
+ * messages an item carries (`LATEST_MESSAGES`), beside its first and the one
+ * whose ask it holds open, which is what a row draws. Note that a chosen
+ * item's whole thread comes from its holder's own read, which carries
+ * `INBOX_BOUNDS.MAX_MESSAGES_READ`.
  */
 export const ACCOUNT_INBOX_ITEMS = {
   SINCE: "since",
   HELD_ON: ["stamps"],
-  SETTLED_WINDOW_MILLIS: 30 * 24 * 60 * 60 * 1000,
+  MAX_SETTLED: 200,
+  LATEST_MESSAGES: 2,
 } as const;
 
 /**
@@ -760,11 +765,12 @@ export function liveDigestOn(
 
 /**
  * Every inbox item the account reaches, sealed for following: the address;
- * where each item stands (`stamps`), every open item and every settled one
- * changed in the last week, on the account's tasks and of its agents with
- * no task; and the items among them changed since the reader's `since`,
- * whole, with their threads and files, as a plan's inbox carries them
- * (`scopeInboxLiveAnswerSchema`). Its poll is held on `stamps` alone
+ * where each item stands (`stamps`), every open item and the latest settled
+ * ones (`ACCOUNT_INBOX_ITEMS.MAX_SETTLED`), on the account's tasks and of its
+ * agents with no task; and the items among them changed since the reader's
+ * `since`, each with its first message, its open ask, and its latest few
+ * (`ACCOUNT_INBOX_ITEMS.LATEST_MESSAGES`) and their files, in the rows a
+ * plan's inbox carries (`scopeInboxLiveAnswerSchema`). Its poll is held on `stamps` alone
  * (`ACCOUNT_INBOX_ITEMS.HELD_ON`), whose digest the reader sends as `after`
  * (`liveDigestOn`).
  */

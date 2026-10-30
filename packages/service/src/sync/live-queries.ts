@@ -279,22 +279,20 @@ function instantParam(param: string): Date {
 
 /**
  * Every inbox item the account reaches, where each stands and those
- * changed since the reader's instant whole, woken on the account's topic,
+ * changed since the reader's instant as a row draws them
+ * (`accountItemsLiveStatements`), woken on the account's topic,
  * which an item written in any of its workspaces names for every member
  * (`inboxItemSync`), as do its own read marks and what admits it to a
  * workspace or a repository. Note that a message withdrawn names only its
  * item's task and agent, and a task or an agent written itself no account,
- * as for the account's inbox: either shows at the hold's end. The settled
- * items it carries are those changed since `settledSince`, which its
- * procedure binds from the clock, since a live statement reads none.
+ * as for the account's inbox: either shows at the hold's end.
  */
 export const inboxItemsLive = defineLiveQuery({
   name: LIVE_READ.INBOX_ITEMS,
-  params: ["userId", "since", "settledSince"],
+  params: ["userId", "since"],
   reads: SCOPE_INBOX_READS,
   topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
-  statements: ({ userId, since, settledSince }) =>
-    accountItemsLiveStatements(userId, instantParam(since), instantParam(settledSince)),
+  statements: ({ userId, since }) => accountItemsLiveStatements(userId, instantParam(since)),
   mode: LIVE_MODE.SNAPSHOT,
 });
 

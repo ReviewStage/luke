@@ -1849,6 +1849,42 @@ test("a thread read cut to its latest messages says the earlier ones are in the 
   assert.deepEqual(asked.shownAgents, []);
 });
 
+test("a thread the account's feed cut to what its row draws is drawn so at once, and whole once its plan's own read lands", async () => {
+  const notes = Array.from({ length: 4 }, (_, at) =>
+    threadMessage(
+      `b1b2c3d4-0000-4000-8000-${String(at).padStart(12, "0")}`,
+      { member: TEAMMATE },
+      `Note ${String(at)}`,
+      5_001 + at,
+    ),
+  );
+  const whole: InboxItem = { ...RETRY, thread: inOrder(RETRY, notes) };
+  const [first, ...since] = whole.thread ?? [];
+  assert.ok(first !== undefined);
+  // The feed carries the thread's first message and its latest two, as the service cuts it for a row, while the plan's own read is out.
+  world.inboxes.set(BILLING.id, [THRESHOLD, { ...whole, thread: [first, ...since.slice(-2)] }]);
+  world.startRead = (taskId) => (taskId === BILLING.id ? new Promise(() => undefined) : undefined);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  const said = () => threadOf(page).map(([, , , words]) => words);
+
+  assert.deepEqual(said(), [first.text, "Note 2", "Note 3"]);
+  act(() =>
+    world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, { items: [THRESHOLD, whole] }),
+  );
+  await settle();
+  assert.deepEqual(said(), [
+    first.text,
+    "And page on-call if all three fail.",
+    "Note 0",
+    "Note 1",
+    "Note 2",
+    "Note 3",
+  ]);
+});
+
 test("what an item's box holds unsent, its words and its files, outlasts every message landing on the item: a teammate's answer settling it, then the agent asking on it again", async () => {
   const deliver = (items: readonly InboxItem[], cursor: string) =>
     world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, pushedOf({ items, cursor }));

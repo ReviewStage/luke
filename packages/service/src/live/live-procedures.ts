@@ -89,9 +89,9 @@
  *
  * `GET /api/live/inbox-items?since=` answers every inbox item the account
  * reaches as four statements: where each item stands, every open one and
- * every settled one changed in the last thirty days, and those changed since the
- * reader's `since` whole, with their threads and files, as a plan's inbox
- * carries them (`inbox-store.ts`'s `accountItemsLiveStatements`). Its poll
+ * the latest settled ones, and those changed since the reader's `since`,
+ * each with its first message, its open ask, and its latest few, and their
+ * files, as a row draws it (`inbox-store.ts`'s `accountItemsLiveStatements`). Its poll
  * is held on where the items stand alone (`ACCOUNT_INBOX_ITEMS.HELD_ON`),
  * so a reader whose `since` moved to the items it was just answered is
  * held rather than answered again; woken by Luke Sync on the account's
@@ -120,7 +120,7 @@ import {
 } from "@luke/features/live-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Duration, Effect, Option, Result } from "effect";
+import { Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { reachedAgentById } from "../agents/agent-reach.js";
 import { unparsedWire } from "../core.js";
@@ -519,11 +519,9 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     inboxItems: signedIn.inboxItems.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const since = yield* sinceOf(input[ACCOUNT_INBOX_ITEMS.SINCE]);
-      const now = yield* Clock.currentTimeMillis;
-      const settledSince = String(now - ACCOUNT_INBOX_ITEMS.SETTLED_WINDOW_MILLIS);
       return yield* liveQueryParts(
         inboxItemsLive,
-        { userId: context.userId, since, settledSince },
+        { userId: context.userId, since },
         input,
         LIVE_POLL_HOLD.LOOK,
         ACCOUNT_INBOX_ITEMS.HELD_ON,

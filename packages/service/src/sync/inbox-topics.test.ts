@@ -114,7 +114,7 @@ const wakes = <A, E, R>(
 /** The five reads of the world's inbox, as the member follows them. */
 const inboxReadsOf = (world: InboxWorld, userId: string) => ({
   account: [inboxLive, { userId }] as const,
-  items: [inboxItemsLive, { userId, since: "0", settledSince: "0" }] as const,
+  items: [inboxItemsLive, { userId, since: "0" }] as const,
   task: [taskInboxLive, { userId, taskId: world.taskId }] as const,
   agent: [agentInboxLive, { userId, agentId: world.agentId }] as const,
   channels: [channelsLive, { userId, workspaceId: world.workspaceId }] as const,

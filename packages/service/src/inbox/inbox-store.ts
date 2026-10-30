@@ -73,6 +73,7 @@ import {
   standingAsk,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
+import { ACCOUNT_INBOX_ITEMS } from "@luke/features/live-wire";
 import { insideCode } from "@luke/features/mention-link";
 import {
   and,
@@ -1595,13 +1596,20 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
       inScope(scope),
       or(eq(inboxItem.status, INBOX_STATUS.OPEN), inArray(inboxItem.id, latestSettled)),
     ),
+    INBOX_BOUNDS.MAX_MESSAGES_READ,
   );
 }
 
-/** The items `read` names, whole as a scope's inbox carries them, with their threads and files, each unread or not for the reader (`scopeLiveStatements`). */
+/**
+ * The items `read` names, as a scope's inbox carries them, each unread or
+ * not for the reader (`scopeLiveStatements`), with the files of the
+ * messages each carries: its latest `latestMessages`, its first, and the
+ * one whose ask it holds open.
+ */
 function itemsLiveStatements(
   readerId: string,
   read: SQL | undefined,
+  latestMessages: number,
 ): Option.Option<ScopeInboxLiveStatements> {
   const itemIds = queryBuilder.select({ id: inboxItem.id }).from(inboxItem).where(read);
   const ofItem = eq(sibling.itemId, qualified(inboxMessage, inboxMessage.itemId));
@@ -1610,7 +1618,7 @@ function itemsLiveStatements(
     .from(sibling)
     .where(ofItem)
     .orderBy(desc(sibling.createdAt), desc(sibling.id))
-    .limit(INBOX_BOUNDS.MAX_MESSAGES_READ);
+    .limit(latestMessages);
   const first = queryBuilder
     .select({ id: sibling.id })
     .from(sibling)
@@ -1716,25 +1724,33 @@ export interface AccountItemsLiveStatements extends ScopeInboxLiveStatements {
 
 /**
  * Every inbox item the account reaches written for Neon Realtime: where
- * each stands (`stamps`), every open item and every settled one changed at
- * or after `settledSince`, and the items among those changed at or after
- * `since` whole, with their threads and files, as a scope's inbox carries
- * them (`itemsLiveStatements`). A stamp carries what moves an item without
+ * each stands (`stamps`), every open item and the latest settled ones
+ * (`ACCOUNT_INBOX_ITEMS.MAX_SETTLED`), and the items among those changed at
+ * or after `since`, each with what its row draws: its first message, the
+ * one whose ask it holds open, and its latest few
+ * (`ACCOUNT_INBOX_ITEMS.LATEST_MESSAGES`), with their files
+ * (`itemsLiveStatements`). A stamp carries what moves an item without
  * moving its last change: whether it is unread for the reader, who it waits
  * on, the channel it lives in, which a move between channels changes, and
- * how many messages its thread holds, which a withdrawn message moves. Note that the instants are bound rather than read from the clock,
+ * how many messages its thread holds, which a withdrawn message moves. Note that the instant is bound rather than read from the clock,
  * because a live read measures nothing from it. None where a statement
  * names a value Realtime cannot carry.
  */
 export function accountItemsLiveStatements(
   userId: string,
   since: Date,
-  settledSince: Date,
 ): Option.Option<AccountItemsLiveStatements> {
+  // Every item the account may read, as its read of what waits names them (`accountWaiting`, `tasklessWaiting`).
+  const visible = itemVisibleTo(userId);
+  const latestSettled = queryBuilder
+    .select({ id: inboxItem.id })
+    .from(inboxItem)
+    .where(and(visible, ne(inboxItem.status, INBOX_STATUS.OPEN)))
+    .orderBy(...LATEST_FIRST)
+    .limit(ACCOUNT_INBOX_ITEMS.MAX_SETTLED);
   const carried = and(
-    // Every item the account may read, as its read of what waits names them (`accountWaiting`, `tasklessWaiting`).
-    itemVisibleTo(userId),
-    or(eq(inboxItem.status, INBOX_STATUS.OPEN), gte(inboxItem.updatedAt, settledSince)),
+    visible,
+    or(eq(inboxItem.status, INBOX_STATUS.OPEN), inArray(inboxItem.id, latestSettled)),
   );
   const stamps = liveStatementOf(
     queryBuilder
@@ -1761,7 +1777,11 @@ export function accountItemsLiveStatements(
   return Option.map(
     Option.all({
       stamps,
-      changed: itemsLiveStatements(userId, and(carried, gte(inboxItem.updatedAt, since))),
+      changed: itemsLiveStatements(
+        userId,
+        and(carried, gte(inboxItem.updatedAt, since)),
+        ACCOUNT_INBOX_ITEMS.LATEST_MESSAGES,
+      ),
     }),
     ({ stamps, changed }) => ({ stamps, ...changed }),
   );

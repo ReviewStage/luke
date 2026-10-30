@@ -15,13 +15,16 @@ import { type InboxReads, itemsRead } from "./inbox-collections.js";
 import { followTakingRows, restarting, type TxWait } from "./live-follow.js";
 
 /**
- * account-items-follow.ts -- every inbox item the account reaches, whole, followed over the service's one held poll for the signed-in session and told whole as it moves.
+ * account-items-follow.ts -- every inbox item the account reaches, as its row draws it, followed over the service's one held poll for the signed-in session and told whole as it moves.
  *
  * The host follows the account's items read (`/api/live/inbox-items`,
  * `live-follow.ts`) for as long as the session's account reads stand
  * (`live-collection.ts`'s `accountReads`). Each answer carries where
  * every item stands (`stamps`), which is the whole set, and the items
- * changed since the instant the poll named (`since`) whole; the poll is
+ * changed since the instant the poll named (`since`), each with the
+ * messages its row draws (`ACCOUNT_INBOX_ITEMS.LATEST_MESSAGES`), so a
+ * chosen item's whole thread is its holder's own read's
+ * (`scope-inbox-follow.ts`); the poll is
  * held on the stamps alone (`ACCOUNT_INBOX_ITEMS.HELD_ON`). The follow
  * keeps every item it was sent, with the plan it is on, or its agent where
  * that has no task, and asks each poll past the latest change it holds.
