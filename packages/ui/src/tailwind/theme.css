@@ -329,6 +329,7 @@
   --spacing-welcome-tile: 56px; /* off-scale: the welcome's tile, a masthead's size */
   --spacing-welcome-face: 34px; /* off-scale: Luke's face on the welcome's tile */
   --spacing-welcome-composer: min(var(--luke-page-measure), 100%);
+  --spacing-page-measure: var(--luke-page-measure);
   --spacing-row-context: 20ch; /* off-scale: a row's context, bounded in letters */
   --spacing-new-task-title: calc(100% - 2 * var(--luke-control-height) - var(--luke-item-gap));
   --spacing-card-line: calc(100% + 2 * var(--luke-row-inset));
@@ -655,6 +656,8 @@
   --color-badge-fill-edge: light-dark(var(--luke-badge-edge-light), var(--luke-badge-edge-dark));
   --color-badge-fill-words: light-dark(var(--luke-badge-words-light), var(--luke-badge-words-dark));
   --spacing-chip-inset: var(--luke-space-8);
+  /* A chip's leading mark from its box's edge, its hairline and its inset, which a line of chips under words is pulled back by so the mark stands on the words' edge. */
+  --spacing-chip-lead: calc(var(--luke-space-8) + 1px);
   --spacing-chip-inset-wide: var(--luke-space-12);
   --spacing-chip-tight: var(--luke-space-4);
   --spacing-chip-compact: var(--luke-space-20);

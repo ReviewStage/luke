@@ -7,10 +7,11 @@
  * conversation's lock, so two out at once would be taken in either order;
  * the queue keeps one key's sends in the order they were asked, each
  * starting once the one before it has answered. The key is whatever the
- * service locks on, an agent's id or an Inbox item's, so sends under
- * different keys never wait on each other. The agent's box
- * (`tasks/use-agent-composer.ts`) and the Inbox's thread box
- * (`tasks/use-task-inbox.ts`) send through it; what each draws of a send on
+ * service locks on, an agent's id, an Inbox item's, or a plan comment
+ * thread's, so sends under different keys never wait on each other. The
+ * agent's box (`tasks/use-agent-composer.ts`), the Inbox's thread box
+ * (`tasks/use-task-inbox.ts`), and a plan comment thread's reply field
+ * (`tasks/plan-comments.tsx`) send through it; what each draws of a send on
  * its way, or of one that did not go, is its own.
  *
  * A send answers however it went and never throws: each box catches every

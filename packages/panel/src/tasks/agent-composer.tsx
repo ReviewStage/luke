@@ -66,7 +66,6 @@ import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import { MENTION_MENU_SIDE, type MentionMenuSide } from "./mention-picker.js";
 import { ComposerQuoteView } from "./reply-to-selection.js";
 import { useRepositoryRemedy } from "./repository-remedy.js";
-import { SendOptions } from "./send-options.js";
 import type { SkillSource } from "./skill-picker.js";
 import { useMentionBox } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
@@ -938,14 +937,6 @@ export function AgentComposer({
               <DictateButton dictation={dictation} disabled={held || module === undefined} />
               <ComposerMore card={card} offers={offers} />
               {beforeSend?.(folds(FOLD_WIDTH.ACTIONS))}
-              {queues ? (
-                <SendOptions
-                  enterQueues={queueing.enterQueues}
-                  disabled={!sendable}
-                  onSteer={steer}
-                  onQueue={() => sentBy(queueing.onQueue)}
-                />
-              ) : null}
             </ComposerActions>
           }
           strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
