@@ -47,9 +47,10 @@ import {
  * The changed files are split into the hunks a model is shown and those it
  * never sees: the files a reader reads past (`ignoredForChapters`) and every
  * file with no hunk to read, a pure rename, a binary file, or one whose
- * patch was left out. The shown hunks and the pull request's words are told
- * against an input cap first (`CHAPTERS_BOUNDS.MAX_INPUT_TOKENS`, estimated
- * by characters), so a diff too large to send is refused before any call.
+ * patch was left out. Note that the shown hunks are sent whatever their
+ * size, because every chapters model reads far more than any pull request
+ * a reviewer would read; one past the model's own window fails as its call
+ * does.
  *
  * One call asks for the chapters through the AI SDK's structured output
  * (`Output.object`), the first structured call in the repository: the JSON
@@ -67,8 +68,7 @@ import {
  * or a new chapter read after them, a hunk placed in a chapter raising its
  * risk where the hunk earns more; whatever is still outside, with every
  * hunk the model never saw, closes the story as "Other changes". A repair
- * that fails, or whose prompt is past the cap, is passed over, since the
- * first answer already stands. Each
+ * that fails is passed over, since the first answer already stands. Each
  * key change keeps only line references inside its own chapter's hunks, and
  * the literal `\n` a model escapes twice is read as the newline it meant.
  *
@@ -92,10 +92,6 @@ export class ChaptersFailure extends Data.TaggedError("ChaptersFailure")<{
 
 /** The bounds a generation keeps to. */
 export const CHAPTERS_BOUNDS = {
-  /** The most tokens the instructions and the input together may be told at before the diff is refused as too large. */
-  MAX_INPUT_TOKENS: 150_000,
-  /** The characters a token of input is told at. Note that we count three, not four, because a diff is code and line numbers, which read in shorter tokens than prose. */
-  CHARS_PER_TOKEN: 3,
   /** How long the whole generation may take, the repair included; a route that runs it is given longer. */
   TIMEOUT: Duration.seconds(180),
   /** The most tokens the chapters call may write. */
@@ -370,10 +366,6 @@ function repairCoverage(
     missing,
     statusOf,
   });
-  // A repair past the cap is never sent, and what it would place closes the story as Other changes.
-  if (estimatedTokens(REPAIR_INSTRUCTIONS + prompt) > CHAPTERS_BOUNDS.MAX_INPUT_TOKENS) {
-    return Effect.succeed(covered);
-  }
   const asked = askStructured(model, {
     system: REPAIR_INSTRUCTIONS,
     prompt,
@@ -384,11 +376,6 @@ function repairCoverage(
     Effect.map((repair) => coverHunks(repairedChapters(covered.chapters, repair), shown)),
     Effect.catch(() => Effect.succeed(covered)),
   );
-}
-
-/** The input's tokens, told by its characters. */
-function estimatedTokens(text: string): number {
-  return Math.ceil(text.length / CHAPTERS_BOUNDS.CHARS_PER_TOKEN);
 }
 
 /** The status a file's hunks are headed with. */
@@ -430,8 +417,7 @@ export function chaptersModelOf(
  * grouped, ordered, and told in one call, held to the diff, repaired once
  * where hunks were left out, and closed by "Other changes" where anything
  * stands outside. A pull request with nothing to show the model asks it
- * nothing. Fails as too large before any call where the input is past the
- * cap, and as a timeout where the whole takes longer than its bound.
+ * nothing. Fails as a timeout where the whole takes longer than its bound.
  */
 export function generateChapters(
   model: ChaptersModel,
@@ -453,9 +439,6 @@ export function generateChapters(
     statusOf,
   });
   const generated = Effect.gen(function* () {
-    if (estimatedTokens(CHAPTERS_INSTRUCTIONS + prompt) > CHAPTERS_BOUNDS.MAX_INPUT_TOKENS) {
-      return yield* failedAs(PULL_REQUEST_CHAPTERS_FAILURE.TOO_LARGE);
-    }
     const told =
       shown.length === 0
         ? { chapters: [] }
