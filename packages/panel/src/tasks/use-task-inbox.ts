@@ -87,7 +87,11 @@ import {
  * every read the window draws the item from the moment it is sent
  * (`@luke/host`'s `inbox-collections.ts`), so the item leaves what needs the
  * developer at once and no read behind it brings it back, and a refusal
- * brings the item back as it stood, its draft kept.
+ * brings the item back as it stood, its draft kept. A send no answer came
+ * back for may have reached the agent all the same, so its words go back
+ * and the card says so only until the thread holds it, when it is taken as
+ * sent: its note goes, and so do its words, where the box still holds them
+ * as they went back.
  *
  * A notice's nod, Got it, goes the same way under a key minted for the
  * revision it nods to, so a nod sent again after a lost reply is taken
@@ -144,35 +148,44 @@ export type InboxImageReader = (
 /** One image as the hook holds it: the `data:` URL its card draws, or that its read did not answer. */
 export type InboxImage = { readonly url: string } | { readonly failed: true };
 
-/** A plain reply on its way, drawn at its thread's end until the item holds it: the key it goes under, its words and files, when it was sent, and the messages its thread held then. */
-export interface PendingInboxReply {
+/** A reply as its thread may come to hold it: the key it went under, its words, and the messages its thread held as it was sent. */
+interface SentReply {
   readonly key: string;
   readonly text: string;
-  readonly attachments: readonly AgentAttachment[];
-  readonly at: number;
   /** The ids of the messages the thread held as it was sent, so a message landing since is told apart from them. */
   readonly before: ReadonlySet<string>;
 }
 
+/** A plain reply on its way, drawn at its thread's end until the item holds it: the key it goes under, its words and files, when it was sent, and the messages its thread held then. */
+export interface PendingInboxReply extends SentReply {
+  readonly attachments: readonly AgentAttachment[];
+  readonly at: number;
+}
+
 /**
- * The reply on its way on `item`, where the thread drawn does not hold it
- * yet. Note that a thread message carries no key, so a read that holds the
- * reply before its own answer lands is known by a member's message the
- * thread did not hold as it was sent, in the reply's words.
+ * Whether the item's thread holds the reply. Note that a thread message
+ * carries no key, so the reply is known by a member's message the thread
+ * did not hold as it was sent, in the reply's words, and never by the one
+ * the host draws for an answer while it goes, which stands under its key.
  */
+function holdsReply(item: InboxItem, reply: SentReply): boolean {
+  return (item.thread ?? []).some(
+    (message) =>
+      message.id !== reply.key &&
+      !reply.before.has(message.id) &&
+      message.author === INBOX_MESSAGE_AUTHOR.MEMBER &&
+      message.text === reply.text,
+  );
+}
+
+/** The reply on its way on `item`, where the thread drawn does not hold it yet, as a read may before its own answer lands. */
 export function pendingReplyOn(
   pending: TaskInboxControl["pendingReplies"],
   item: InboxItem,
 ): PendingInboxReply | undefined {
   const reply = pending.get(item.id);
   if (reply === undefined) return undefined;
-  const held = (item.thread ?? []).some(
-    (message) =>
-      !reply.before.has(message.id) &&
-      message.author === INBOX_MESSAGE_AUTHOR.MEMBER &&
-      message.text === reply.text,
-  );
-  return held ? undefined : reply;
+  return holdsReply(item, reply) ? undefined : reply;
 }
 
 /** What the tab draws and presses. */
@@ -242,6 +255,14 @@ function notTakenNote(item: InboxItem): string {
     case INBOX_STATUS.OPEN:
       return INBOX_NOT_TAKEN_NOTE.CHANGED;
   }
+}
+
+/** A reply no answer came back for, which may have landed all the same: the task it was sent on, where its words went back and as what, and what its card says of it. */
+interface UnheardReply extends SentReply {
+  readonly taskId: string | undefined;
+  readonly place: InboxPlace;
+  readonly unsent: Draft;
+  readonly note: InboxNote;
 }
 
 /** A send's key and words, kept so the same send sent again goes under the same key. */
@@ -425,6 +446,18 @@ function withRefused(now: Draft, went: Draft): Draft {
   };
 }
 
+/** Whether a box holds just what a reply gave back to it, whatever revision its picks are kept at, so letting go of it takes nothing written since. */
+function holdsOnly(now: Draft, went: Draft): boolean {
+  return (
+    now.text === went.text &&
+    now.press === went.press &&
+    Equal.equals(now.attachments, went.attachments) &&
+    Equal.equals(now.choices, went.choices) &&
+    Equal.equals(now.values, went.values) &&
+    Equal.equals(now.steps ?? [], went.steps ?? [])
+  );
+}
+
 /** Whether a card holds nothing at all: no words, files, picks, fields, steps, or press. */
 function holdsNothing(draft: Draft): boolean {
   return (
@@ -561,6 +594,7 @@ export function useHeldTaskInbox(input: {
     new Map(),
   );
   const [notes, setNotes] = useState<ReadonlyMap<string, InboxNote>>(new Map());
+  const [unheard, setUnheard] = useState<ReadonlyMap<string, UnheardReply>>(new Map());
   const draftsOn = draftScope(taskId, kind, input.draftTask).draftsOn;
   const writer = useDraftWriter();
   const attempts = useRef(new Map<string, Attempt>());
@@ -601,12 +635,37 @@ export function useHeldTaskInbox(input: {
 
   // Note that a refusal naming no agent may be an archive the list has not read yet, so the agents are read again for the card to say which.
   const refused = useCallback(
-    (itemId: string, failure: AgentCallFailure) => {
-      note(itemId, { words: messageFailureWords(failure), failure });
+    (itemId: string, failure: AgentCallFailure): InboxNote => {
+      const said = { words: messageFailureWords(failure), failure };
+      note(itemId, said);
       if (failure === AGENT_CALL_FAILURE.NOT_FOUND) latest.current.onRetryList();
+      return said;
     },
     [note],
   );
+
+  // Note that a reply no answer came back for is taken as sent once the thread holds it, its key let go as a sent one's is.
+  useEffect(() => {
+    const landed = [...unheard.values()].filter((reply) => {
+      const item = held.items.find((each) => each.id === reply.place.itemId);
+      return held.taskId === reply.taskId && item !== undefined && holdsReply(item, reply);
+    });
+    if (landed.length === 0) return;
+    setUnheard((standing) => {
+      const next = new Map(standing);
+      for (const reply of landed) {
+        if (next.get(reply.place.itemId) === reply) next.delete(reply.place.itemId);
+      }
+      return next;
+    });
+    for (const reply of landed) {
+      const { itemId } = reply.place;
+      onDropNote(itemId, reply.note);
+      writer.update(reply.place, (now) => (holdsOnly(now, reply.unsent) ? EMPTY_DRAFT : now));
+      if (attempts.current.get(itemId)?.key === reply.key) attempts.current.delete(itemId);
+    }
+    latest.current.onRetryList();
+  }, [held, unheard, onDropNote, writer]);
 
   // Note that a nod is keyed by the revision it nods to, so a press again after a lost reply is
   // taken once, and a nod to the notice posted over since goes under a key of its own.
@@ -664,14 +723,20 @@ export function useHeldTaskInbox(input: {
       attempts.current.set(item.id, { key, words });
       setSending((standing) => new Set(standing).add(item.id));
       note(item.id, undefined);
+      setUnheard((standing) => {
+        if (!standing.has(item.id)) return standing;
+        const next = new Map(standing);
+        next.delete(item.id);
+        return next;
+      });
       // Note that the box lets go of what it sent at once, as the agent's box does, and takes it
       // back below where the send is refused, so it never stands holding words already sent.
       const place = draftPlace(item, draftsOn);
       const unsent = keptDraft(draft, item.revision);
       writer.update(place, () => EMPTY_DRAFT);
+      const before = new Set((item.thread ?? []).map(({ id }) => id));
       // Note that a plain reply stands on the thread at once under its key, as the agent's box draws a message on its way, so its words are never nowhere while it goes; one carrying an answer the host draws settled.
       if (answers === undefined) {
-        const before = new Set((item.thread ?? []).map(({ id }) => id));
         const reply: PendingInboxReply = { key, text, attachments, at: Date.now(), before };
         setPendingReplies((standing) => new Map(standing).set(item.id, reply));
       }
@@ -706,7 +771,11 @@ export function useHeldTaskInbox(input: {
             writer.update(place, (now) =>
               answers === undefined ? (holdsNothing(now) ? unsent : now) : withRefused(now, unsent),
             );
-            refused(item.id, answer.failure);
+            const said = refused(item.id, answer.failure);
+            if (answer.failure === AGENT_CALL_FAILURE.UNANSWERED) {
+              const reply = { key, text, before, taskId: askedOn, place, unsent, note: said };
+              setUnheard((standing) => new Map(standing).set(item.id, reply));
+            }
             return;
           }
           // Note that the item as the service answered it lands in the render the reply on its way leaves, whichever of the answer and the host's push comes first.

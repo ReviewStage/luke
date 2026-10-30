@@ -855,6 +855,27 @@ test("an answer the service refuses brings its item back as it was, needing you,
   );
 });
 
+test("an answer no reply came back for, which its thread then holds, is taken as sent: its box empties and says nothing", async () => {
+  const { page } = mount([], { chosen: ON_THRESHOLD });
+  await settle();
+  const { answer } = gatedAnswers();
+  answerWithNote(page, "Use 90%");
+  await settle();
+  await act(async () => answer({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
+  await settle();
+  assert.equal(composerEditor(itemPane(page)).textContent, "Use 90%");
+
+  // The service wrote the answer and handed it on all the same, and the plan's push says so.
+  world.main.push(
+    { kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id },
+    { items: [THRESHOLD_ANSWERED, RETRY] },
+  );
+  await settle();
+  const pane = itemPane(page);
+  assert.equal(composerEditor(pane).textContent, "", "the words that went back are let go");
+  assert.equal(pane.querySelector('.agent-composer [role="alert"]'), null);
+});
+
 test("a nod on a notice the agent posted over first is not taken: the notice stands open again, and the box says so", async () => {
   const notice: InboxItem = { ...noticeOf(THRESHOLD), startedBy: TEAMMATE };
   world.inboxes.set(BILLING.id, [notice, RETRY]);
