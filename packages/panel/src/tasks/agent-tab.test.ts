@@ -155,6 +155,16 @@ const OPENING_CALLS: readonly {
     opens: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
   },
   {
+    name: "a thread resolved on another task, named by that task's chip, called Plan until the window holds its name",
+    tool: "resolve_thread",
+    input: { taskId: "5d1e2f3a-4b5c-4d6e-8f70-000000000002", thread: "thread-1" },
+    output: { status: "accepted", thread: "thread-1" },
+    target: { kind: TOOL_TARGET.TASK, task: "5d1e2f3a-4b5c-4d6e-8f70-000000000002" },
+    verb: "Resolved a thread on",
+    made: "Plan",
+    opens: "5d1e2f3a-4b5c-4d6e-8f70-000000000002",
+  },
+  {
     name: "a post on a thread, named by the thread's title",
     tool: "post_thread",
     input: { key: "currency", title: "Which currency?", body: "Euros or dollars?" },
