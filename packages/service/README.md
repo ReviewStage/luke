@@ -1121,11 +1121,12 @@ row (`task.agent_edits`, the last fifty, the agent's id and its notes as
 taken) and named from the agent's row at read time, so the window's "Updated
 by" line and the "recent edits by agents" every agent on the task
 is handed say what the row says now, and a turn may take only so many
-notes. `edit_plan` and
-`show_page` resolve at each turn's start (`tool-set.ts`'s `taskToolsOf`):
-every agent is offered both, one on no task among them, as an automation's
-run starts one, since its pages stand on the agent itself and every
-`edit_plan` names its task.
+notes. Every agent is offered `edit_plan`, `show_page`, `look_at_picture`,
+and the comment tools, one on no task among them, as an automation's run
+starts one: its pages stand on the agent itself, a look names its plan by
+the picture's address, and every `edit_plan` and comment call names its
+task, any of its workspace, an operator's change held to its member's own
+tasks (`steward.ts`).
 Beside them stand
 the agent tools (`src/agents/agent-tools.ts`): `list_agents`, every other agent on
 any task and by any member, each with its task, narrowed to one task or its

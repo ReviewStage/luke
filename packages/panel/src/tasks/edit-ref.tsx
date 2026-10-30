@@ -46,9 +46,12 @@ const ACTOR_OF_GLYPH = {
   [GLYPH_STATE.REST]: ACTOR_STATE.REST,
 } as const satisfies Record<GlyphState, ActorState>;
 
-/** The task's coding agents, among which an agent's edit is found, and what opens one's tab where the place offers it. */
+/** The task's coding agents, among which an agent's edit is found, the window's across the workspace, and what opens one's tab where the place offers it. */
 export interface EditAgents {
-  readonly control: Pick<AgentsControl, "agents" | "archived" | "models" | "me" | "pullRequests">;
+  readonly control: Pick<
+    AgentsControl,
+    "agents" | "archived" | "listed" | "models" | "me" | "pullRequests"
+  >;
   readonly onOpen: ((agentId: string) => void) | undefined;
 }
 

@@ -146,7 +146,7 @@ import {
 import { useBusyPress } from "../settings/busy-press.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { keptKey, useKept } from "../use-kept.js";
-import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
+import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { ComposerField } from "./composer-field.js";
@@ -307,6 +307,21 @@ export function useCommentFocus(): CommentFocus {
   return useContext(CommentFocusContext);
 }
 
+/**
+ * The agent that wrote an entry: one of the task's own, or, where an agent
+ * of another task wrote on the plan by naming it, as the window's list
+ * across the workspace names it, rather than as an agent no list holds;
+ * and whether it is such an agent, which has no tab on this task.
+ */
+function writerSubject(
+  agents: EditAgents,
+  agentId: string,
+): { subject: AgentSubject; elsewhere: boolean } {
+  const line = agents.control.listed?.find((each) => each.id === agentId);
+  const subject = agentSubject(agents.control, agentId, NOTHING_HELD, false, line);
+  return { subject, elsewhere: subject.agent === undefined && line !== undefined };
+}
+
 /** Who wrote an entry as a comment draws them: their face, and their name as every place naming an actor draws it. */
 function useWriter(
   writer: PlanCommentWriter,
@@ -322,14 +337,15 @@ function useWriter(
     agents !== undefined
   ) {
     const { agentId } = writer;
-    const subject = agentSubject(agents.control, agentId, NOTHING_HELD, false);
+    const { subject, elsewhere } = writerSubject(agents, agentId);
     return {
       author: commentAuthor(subject.tile),
       nameRef: (
         <AgentActorRef
           subject={subject}
           models={agents.control.models}
-          onOpen={() => agents.onOpen?.(agentId)}
+          // An agent of another task has no tab on this one to open.
+          onOpen={elsewhere ? undefined : () => agents.onOpen?.(agentId)}
           nameOnly
         />
       ),
@@ -381,7 +397,7 @@ function WriterMark({
     writer.agentId !== undefined &&
     agents !== undefined
   ) {
-    actor = agentSubject(agents.control, writer.agentId, NOTHING_HELD, false).tile;
+    actor = writerSubject(agents, writer.agentId).subject.tile;
   }
   return <ActorMark actor={actor} />;
 }
