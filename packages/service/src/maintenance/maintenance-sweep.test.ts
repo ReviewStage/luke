@@ -71,6 +71,7 @@ interface Recorded {
   imageTemplates: number[];
   repositorySnapshots: number[];
   agentStates: number[];
+  hostPairings: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
@@ -93,6 +94,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     imageTemplates: [],
     repositorySnapshots: [],
     agentStates: [],
+    hostPairings: [],
   };
   const options: MaintenanceSweepOptions = {
     request: sweepRequest(),
@@ -189,6 +191,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.agentStates.push(now);
         return { deleted: 2, abandoned: 1, full: false };
       }),
+    sweepHostPairings: (now) =>
+      Effect.sync(() => {
+        recorded.hostPairings.push(now);
+        return 3;
+      }),
     ...overrides,
   };
   return { options, recorded };
@@ -227,6 +234,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       imageTemplates: [],
       repositorySnapshots: [],
       agentStates: [],
+      hostPairings: [],
     });
   }),
 );
@@ -260,6 +268,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       imageTemplates: [],
       repositorySnapshots: [],
       agentStates: [],
+      hostPairings: [],
     });
     assert.deepEqual(missing.recorded, {
       purged: [],
@@ -280,6 +289,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       imageTemplates: [],
       repositorySnapshots: [],
       agentStates: [],
+      hostPairings: [],
     });
   }),
 );
@@ -326,6 +336,7 @@ it.effect(
         imageTemplates: [instant],
         repositorySnapshots: [instant],
         agentStates: [instant],
+        hostPairings: [instant],
       });
     }),
 );

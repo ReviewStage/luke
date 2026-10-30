@@ -59,7 +59,9 @@ import {
   BROWSER_TAB_OPEN_FAILURE,
   GITHUB_DISCONNECT_FAILURE,
   HOST_LIVE,
+  type ParentCallFailure,
   PICTURE_KEEP_FAILURE,
+  type RelationCallFailure,
   type RepositoryCallFailure,
   TASK_CALL_FAILURE,
   TASKS_READ,
@@ -960,6 +962,33 @@ function fakeService(tasks: Task[]): FakeService {
           candidate.id === taskId ? blocked : candidate,
         );
         return { ok: true, answer: { task: blocked } };
+      }),
+    // The service sets the task's parent, or clears it, as the store does, and answers the task whole.
+    setParent: (taskId, { parentTaskId }) =>
+      Effect.sync((): TaskCallResult<TaskWritten, ParentCallFailure> => {
+        const found = service.tasks.find((candidate) => candidate.id === taskId);
+        if (found === undefined) return { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND };
+        const { parentTaskId: _standingParent, ...rest } = found;
+        const parented = parentTaskId === null ? rest : { ...rest, parentTaskId };
+        service.tasks = service.tasks.map((candidate) =>
+          candidate.id === taskId ? parented : candidate,
+        );
+        return { ok: true, answer: { task: parented } };
+      }),
+    // The service moves the relation to the kind named, as the store does: the other made the parent here, and answers the task whole.
+    changeRelation: (taskId, { taskId: otherId }) =>
+      Effect.sync((): TaskCallResult<TaskWritten, RelationCallFailure> => {
+        const found = service.tasks.find((candidate) => candidate.id === taskId);
+        if (found === undefined) return { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND };
+        const moved = {
+          ...found,
+          blockedBy: (found.blockedBy ?? []).filter((id) => id !== otherId),
+          parentTaskId: otherId,
+        };
+        service.tasks = service.tasks.map((candidate) =>
+          candidate.id === taskId ? moved : candidate,
+        );
+        return { ok: true, answer: { task: moved } };
       }),
     // The service re-titles the document with the name, as the store does.
     rename: (taskId, { name }) =>
@@ -2065,6 +2094,36 @@ it.effect("a block the service answered stands on the open task through the list
     assert.deepEqual(answered, { blockedBy: [BILLING], blocks: [] });
     assert.deepEqual(blockedBy(), [BILLING]);
   }),
+);
+
+it.effect(
+  "a parent the service answered stands on the open task and nests the list's row at once, through the list's next draw",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([
+        task(INVITES, "Teammate invitations", "# Draft", 10),
+        task(BILLING, "Billing", "# Draft", 11),
+      ]);
+      const { call, last, listed, openTask } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      yield* openTask(INVITES);
+      const parentOf = () => {
+        const document = last()?.document;
+        return document?.status === TASKS_READ.READY ? document.task?.parentTaskId : undefined;
+      };
+      const nestedUnder = () => last()?.tasks.find((row) => row.id === INVITES)?.parentTaskId;
+
+      const answered = yield* call(GATEWAY_METHOD.TASKS_SET_PARENT, {
+        taskId: INVITES,
+        parentTaskId: BILLING,
+      });
+      yield* listed();
+
+      assert.deepEqual(answered, { parentTaskId: BILLING });
+      assert.equal(parentOf(), BILLING);
+      assert.equal(nestedUnder(), BILLING);
+    }),
 );
 
 it.effect("a task marked done here is drawn finished now, so the recently finished find it", () =>
@@ -3839,6 +3898,7 @@ function rowOfTask(each: Task) {
     updatedAt: each.updatedAt,
     status: each.status ?? TASK_STATUS.TODO,
     priority: each.priority ?? TASK_PRIORITY.NONE,
+    parentTaskId: each.parentTaskId ?? null,
   };
 }
 

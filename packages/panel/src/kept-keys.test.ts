@@ -13,7 +13,6 @@ import {
   useInboxListWidth,
   useInboxViewChoices,
   useRunsPanel,
-  useTaskInboxShow,
 } from "./desktop/folded-groups.js";
 import { SIDEBAR_WIDTH, useSidebarCollapse } from "./desktop/sidebar-collapse.js";
 import { useTaskListView } from "./desktop/task-list-view.js";
@@ -78,16 +77,12 @@ function keep(name: string, text: string): void {
 
 test("the sidebar's folds are read from, and written back to, the names they were kept under", () => {
   keep("luke.sidebarFoldedGroups", '["acme/app",null]');
-  keep("luke.sidebarFoldedCreators", '["u1"]');
-  keep("luke.sidebarFoldedAssignees", "[null]");
   keep("luke.sidebarPinnedFolded", "true");
   keep("luke.sidebarFoldedSections", '["s1"]');
   const folds = draw(() => useFoldedGroups(false));
   expect(folds.now().folded("acme/app")).toBe(true);
   expect(folds.now().folded(null)).toBe(true);
   expect(folds.now().folded("acme/other")).toBe(false);
-  expect(folds.now().creatorFolded("u1")).toBe(true);
-  expect(folds.now().assigneeFolded(undefined)).toBe(true);
   expect(folds.now().pinnedFolded).toBe(true);
   expect(folds.now().sectionFolded("s1")).toBe(true);
   act(() => folds.now().toggle("acme/other"));
@@ -96,8 +91,6 @@ test("the sidebar's folds are read from, and written back to, the names they wer
   expect(kept("luke.sidebarFoldedGroups")).toBe('["acme/app",null,"acme/other"]');
   expect(kept("luke.sidebarPinnedFolded")).toBe("false");
   expect(kept("luke.sidebarFoldedSections")).toBe('["s1","s2"]');
-  // The folds that were not pressed are left as they were kept.
-  expect(kept("luke.sidebarFoldedCreators")).toBe('["u1"]');
 });
 
 test("a fixture run's folds keep nothing", () => {
@@ -130,11 +123,7 @@ test("the Inbox's scope is read from a tab, or a button's press, kept before the
 test("an Inbox scope kept as null reads the Needs you press kept beside it, as it did before", () => {
   keep("luke.inboxShow", "null");
   keep("luke.inboxWaitingOnly", "false");
-  keep("luke.taskInboxShow", "null");
-  keep("luke.taskInboxWaitingOnly", "false");
-  const shown = draw(() => ({ window: useInboxViewChoices(), task: useTaskInboxShow() }));
-  expect(shown.now().window.show).toBe("all");
-  expect(shown.now().task.show).toBe("all");
+  expect(draw(() => useInboxViewChoices()).now().show).toBe("all");
 });
 
 test("the Inbox's choices are read as they were kept", () => {
@@ -145,12 +134,6 @@ test("the Inbox's choices are read as they were kept", () => {
   expect(choices.now().whose).toEqual({ kind: "person", userId: "u1", name: "Ana" });
   act(() => choices.now().onShow("to-do"));
   expect(kept("luke.inboxShow")).toBe('"to-do"');
-});
-
-test("a task's own Inbox keeps its scope apart from the window's", () => {
-  keep("luke.taskInboxShow", '"all"');
-  keep("luke.inboxShow", '"to-do"');
-  expect(draw(() => useTaskInboxShow()).now().show).toBe("all");
 });
 
 test("the list, the file tree and the Runs panel stand at the widths they were kept at, held to their bounds", () => {
@@ -187,14 +170,26 @@ test("a sidebar never folded opens", () => {
   expect(draw(() => useSidebarCollapse(false, false)).now().collapsed).toBe(false);
 });
 
-test("each workspace's task list view is read from the record it was kept in", () => {
-  keep("luke.sidebarTaskViews", '{"w1":{"grouping":"creator","order":"created","createdBy":"u1"}}');
-  const list = draw(() => useTaskListView("w1", false));
-  expect(list.now().view).toMatchObject({ grouping: "creator", createdBy: "u1" });
-  act(() => list.now().onEveryone());
+test("a task list view an earlier build kept opens on the reader's own tasks, a grouping by person read as by repository, and Anyone chosen is kept", () => {
+  keep(
+    "luke.sidebarTaskViews",
+    '{"w1":{"grouping":"creator","order":"created","createdBy":"u1","assignedTo":"u2"},"w2":{"grouping":"none","order":"updated"}}',
+  );
+  const list = draw(() => ({
+    w1: useTaskListView("w1", false),
+    w2: useTaskListView("w2", false),
+  }));
+  expect(list.now().w1.view).toEqual({ grouping: "repository", assignedTo: { kind: "me" } });
+  expect(list.now().w2.view).toEqual({ grouping: "none", assignedTo: { kind: "me" } });
+  act(() => list.now().w2.onAssignedTo({ kind: "anyone" }));
   expect(JSON.parse(kept("luke.sidebarTaskViews") ?? "{}")).toEqual({
-    w1: { grouping: "creator", order: "created" },
+    w1: { grouping: "repository" },
+    w2: { grouping: "none", assignee: { kind: "anyone" } },
   });
+  // A later launch reads Anyone back.
+  act(() => root?.unmount());
+  const later = draw(() => useTaskListView("w2", false));
+  expect(later.now().view.assignedTo).toEqual({ kind: "anyone" });
 });
 
 test("the sidebar and a person's page draw one task list view at once", () => {
@@ -202,8 +197,8 @@ test("the sidebar and a person's page draw one task list view at once", () => {
     sidebar: useTaskListView("w1", false),
     person: useTaskListView("w1", false),
   }));
-  act(() => drawn.now().person.onCreatedByAlone("u2"));
-  expect(drawn.now().sidebar.view.createdBy).toBe("u2");
+  act(() => drawn.now().person.onAssignedTo({ kind: "member", userId: "u2" }));
+  expect(drawn.now().sidebar.view.assignedTo).toEqual({ kind: "member", userId: "u2" });
 });
 
 test("the chosen workspace is read from the id it was kept as", () => {

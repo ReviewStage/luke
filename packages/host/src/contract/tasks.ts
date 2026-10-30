@@ -27,6 +27,8 @@ import {
   tasksBrowserTabOpenAnswerSchema,
   tasksBrowserTabOpenParamsSchema,
   tasksBrowserTabsParamsSchema,
+  tasksChangeRelationAnswerSchema,
+  tasksChangeRelationParamsSchema,
   tasksCommentActParamsSchema,
   tasksCommentAnswerSchema,
   tasksCommentStartParamsSchema,
@@ -59,6 +61,8 @@ import {
   tasksRevisionParamsSchema,
   tasksRevisionsAnswerSchema,
   tasksRevisionsParamsSchema,
+  tasksSetParentAnswerSchema,
+  tasksSetParentParamsSchema,
   tasksSetRepositoryAnswerSchema,
   tasksSetRepositoryParamsSchema,
   tasksSetStandingParamsSchema,
@@ -149,6 +153,16 @@ export const tasksActsContract = {
   )
     .input(exactInput(tasksBlockParamsSchema))
     .output(EffectSchema.flip(tasksBlockAnswerSchema)),
+  [TASKS_ACT_KIND.TASKS_SET_PARENT]: actProcedure(
+    "Could not change that task's parent on this system.",
+  )
+    .input(exactInput(tasksSetParentParamsSchema))
+    .output(EffectSchema.flip(tasksSetParentAnswerSchema)),
+  [TASKS_ACT_KIND.TASKS_CHANGE_RELATION]: actProcedure(
+    "Could not change that relation on this system.",
+  )
+    .input(exactInput(tasksChangeRelationParamsSchema))
+    .output(EffectSchema.flip(tasksChangeRelationAnswerSchema)),
   [TASKS_ACT_KIND.TASKS_EDIT]: actProcedure("Could not save that edit on this system.")
     .input(exactInput(tasksEditParamsSchema))
     .output(EffectSchema.flip(tasksEditAnswerSchema)),

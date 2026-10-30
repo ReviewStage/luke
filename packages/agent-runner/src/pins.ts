@@ -8,10 +8,12 @@
  * app-server protocol types are generated from the same Codex
  * (`scripts/generate-codex-protocol.mjs`). A bump moves them together. A
  * local agent runs in a VM booted from that same image (`SANDBOX_IMAGE`);
- * what a device fetches or carries of its own, smolvm and a host's Node, is
- * an `AgentToolPin` checked by size and digest before it is kept
- * (`@luke/host`'s `localAgentTool`). Erasable syntax alone, so Node runs the
- * generator over it as it stands.
+ * what a device fetches or carries of its own, smolvm, a host's Node, and
+ * the Claude Code, Codex, and GitHub CLI every host keeps for its agents to
+ * run on the box itself, is an `AgentToolPin` checked by size, digest, and
+ * signature where it has one before it is kept (`@luke/host`'s
+ * `localAgentTool`). Erasable syntax alone, so Node runs the generator over
+ * it as it stands.
  */
 
 /** The unprivileged user the harness runs as, which the image creates. */
@@ -99,7 +101,10 @@ export interface AgentToolPin {
   readonly NAME: string;
   /** The folder under `NAME` this release is kept in. */
   readonly VERSION: string;
-  /** The archive, a gzipped tar, by its https address. */
+  /**
+   * The archive by its https address: a gzipped tar, or a zip where only a
+   * Mac fetches it, which macOS's own tar reads alike.
+   */
   readonly ARCHIVE: string;
   /** The archive's SHA-256, in hex: what decides whether anything of it is kept. */
   readonly SHA256: string;
@@ -111,6 +116,13 @@ export interface AgentToolPin {
   readonly MEMBERS: readonly string[];
   /** The executable, under the kept folder. */
   readonly BINARY: string;
+  /**
+   * The Developer ID team the binary is signed by, as read off the pinned
+   * release, which macOS's own `codesign` must verify and name before the
+   * build is kept; none where the release is not signed so, and its digests
+   * alone decide.
+   */
+  readonly TEAM?: string;
   /**
    * The SHA-256 of each kept file that runs on the device, by its path under
    * the kept folder, read off the pinned release: the kept build is answered only while each still matches, since anything of
@@ -217,6 +229,164 @@ export const NODE_MAC_PIN: AgentToolPin = {
   ROOT: `node-v${NODE_VERSION}-darwin-arm64`,
   MEMBERS: ["bin/node"],
   BINARY: "bin/node",
+};
+
+/**
+ * The Agent SDK release every host's own Claude Code is, and the Codex and
+ * GitHub CLI releases beside it, each written out in its pins below rather
+ * than read off `CLAUDE_CODE_PIN` and `CODEX_PIN`, so a bump fails the
+ * repository check (`tools/anti-slop/guards/agent-pins.ts`) until each
+ * pin's address, size, and digests are read off the new release too.
+ */
+const HOST_CLI_VERSION = { CLAUDE_CODE: "0.3.304", CODEX: "0.163.0", GH: "2.103.3" } as const;
+
+/**
+ * Claude Code on a Mac host, This Mac's among them: the macOS arm64 build of
+ * the very Agent SDK the runner pins (`CLAUDE_CODE_PIN.SDK_VERSION`), as npm
+ * keeps it, signed by Anthropic.
+ */
+export const CLAUDE_CODE_MAC_PIN: AgentToolPin = {
+  NAME: "claude",
+  VERSION: HOST_CLI_VERSION.CLAUDE_CODE,
+  ARCHIVE: `https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk-darwin-arm64/-/claude-agent-sdk-darwin-arm64-${HOST_CLI_VERSION.CLAUDE_CODE}.tgz`,
+  SHA256: "cdca064e1bbe6001c5d8bbefd636205379c79b8d05bf41a3a37fc1fde096a93d",
+  BYTES: 120_586_636,
+  ROOT: "package",
+  MEMBERS: ["claude"],
+  BINARY: "claude",
+  TEAM: "Q6L2SF6YDW",
+  FILES: { claude: "b9ac5374839f14abf3f1f45610637c332b5daee5ce0d1634726cef87aab78e6a" },
+};
+
+/**
+ * Codex on a Mac host: the sandbox's release (`CODEX_PIN.VERSION`), as npm
+ * keeps its macOS arm64 package, signed by OpenAI, its build's folder kept
+ * whole, so the binary finds its `codex-path` tools and its resources beside
+ * it.
+ */
+export const CODEX_MAC_PIN: AgentToolPin = {
+  NAME: "codex",
+  VERSION: HOST_CLI_VERSION.CODEX,
+  ARCHIVE: `https://registry.npmjs.org/@openai/codex/-/codex-${HOST_CLI_VERSION.CODEX}-darwin-arm64.tgz`,
+  SHA256: "1193ff4ce72387a5d6c34820b54a9dc57d007c67a958e8acb4715924facd3c31",
+  BYTES: 137_871_195,
+  ROOT: "package/vendor/aarch64-apple-darwin",
+  MEMBERS: ["bin", "codex-path", "codex-resources", "codex-package.json"],
+  BINARY: "bin/codex",
+  TEAM: "2DC432GLL2",
+  FILES: {
+    "bin/codex": "8813367285524ac798dd96d1b071aea30d58708c7226fd236cd275cf1cfdee31",
+    "bin/codex-code-mode-host": "79f123a85dbc61e8f5d0f0c050dfc3f4b81a8305d33a32b41e008b7f6e035698",
+    "codex-path/rg": "27d09e29c478fddbfc750a2cb5fd06965bad0ea223e776f8667160a0de63c6e4",
+  },
+};
+
+/** GitHub's CLI on a Mac host, as cli/cli's release keeps its macOS arm64 build, a zip, signed by GitHub. */
+export const GH_MAC_PIN: AgentToolPin = {
+  NAME: "gh",
+  VERSION: HOST_CLI_VERSION.GH,
+  ARCHIVE: `https://github.com/cli/cli/releases/download/v${HOST_CLI_VERSION.GH}/gh_${HOST_CLI_VERSION.GH}_macOS_arm64.zip`,
+  SHA256: "d700207eae9ae98fe2b89535c2c087c07823d4628c56364695a5a07ef311c062",
+  BYTES: 14_106_091,
+  ROOT: `gh_${HOST_CLI_VERSION.GH}_macOS_arm64`,
+  MEMBERS: ["bin/gh"],
+  BINARY: "bin/gh",
+  TEAM: "VEKTX9H2N7",
+  FILES: { "bin/gh": "5f8d7527e2bdf584249b030cdd1550c91d75e8afb40aa3c11573d416817a1260" },
+};
+
+/** Claude Code on a Linux host: the glibc Linux builds of the very Agent SDK the runner pins, as npm keeps them. */
+export const CLAUDE_CODE_LINUX_PINS: LinuxToolPins = {
+  x64: {
+    NAME: "claude",
+    VERSION: HOST_CLI_VERSION.CLAUDE_CODE,
+    ARCHIVE: `https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk-linux-x64/-/claude-agent-sdk-linux-x64-${HOST_CLI_VERSION.CLAUDE_CODE}.tgz`,
+    SHA256: "214fcde96f46b9b76f4acc9efbd65b843c90ae9a689da224c33f09a77e069395",
+    BYTES: 130_438_422,
+    ROOT: "package",
+    MEMBERS: ["claude"],
+    BINARY: "claude",
+    FILES: { claude: "ea0f135784631619a7a409d07322ecec964f9cc4fd377508ed1ba3f141f27912" },
+  },
+  arm64: {
+    NAME: "claude",
+    VERSION: HOST_CLI_VERSION.CLAUDE_CODE,
+    ARCHIVE: `https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk-linux-arm64/-/claude-agent-sdk-linux-arm64-${HOST_CLI_VERSION.CLAUDE_CODE}.tgz`,
+    SHA256: "429cfc8eca03f6e26bc5ca698994b7089c5d1fa345899d5beb96cc88173b544c",
+    BYTES: 130_978_746,
+    ROOT: "package",
+    MEMBERS: ["claude"],
+    BINARY: "claude",
+    FILES: { claude: "c487117526509ab6d2ee6013e14f181faf68d6d6afe6bb0d4b2b4a9feca5ecb3" },
+  },
+};
+
+/**
+ * Codex on a Linux host: the sandbox's release, as npm keeps its Linux
+ * packages, static musl builds, each build's folder kept whole, so the
+ * binary finds its `codex-path` tools and its own bubblewrap beside it.
+ */
+export const CODEX_LINUX_PINS: LinuxToolPins = {
+  x64: {
+    NAME: "codex",
+    VERSION: HOST_CLI_VERSION.CODEX,
+    ARCHIVE: `https://registry.npmjs.org/@openai/codex/-/codex-${HOST_CLI_VERSION.CODEX}-linux-x64.tgz`,
+    SHA256: "30efc97738b975940d78b59a9bea115fa34040b732807d54ec35ae6b7528de94",
+    BYTES: 162_055_867,
+    ROOT: "package/vendor/x86_64-unknown-linux-musl",
+    MEMBERS: ["bin", "codex-path", "codex-resources", "codex-package.json"],
+    BINARY: "bin/codex",
+    FILES: {
+      "bin/codex": "399ff69c431c066e40de318fba45c2b07f45a76b19939d247ee4828fc70c4215",
+      "bin/codex-code-mode-host":
+        "8724d73ec190536233ab4628d24a071bfbcf27e5124f08fe35129f26fe48b916",
+      "codex-path/rg": "e62198eb19b136b88c330af83647b5a962cb99b6b1f066758568f12de1974849",
+      "codex-resources/bwrap": "77360cb751ccedc5971391444ac86a8a33c15b04d6b4a6fe45f5d25496e62c4c",
+    },
+  },
+  arm64: {
+    NAME: "codex",
+    VERSION: HOST_CLI_VERSION.CODEX,
+    ARCHIVE: `https://registry.npmjs.org/@openai/codex/-/codex-${HOST_CLI_VERSION.CODEX}-linux-arm64.tgz`,
+    SHA256: "dc6e7c4d6de71c23a0f60d05e2577ff7eef615b76f22630d58ad384b84763522",
+    BYTES: 154_715_729,
+    ROOT: "package/vendor/aarch64-unknown-linux-musl",
+    MEMBERS: ["bin", "codex-path", "codex-resources", "codex-package.json"],
+    BINARY: "bin/codex",
+    FILES: {
+      "bin/codex": "8a96f66d059d653e68bfd5f3c79337e6f1d7d170d80bf705eb7d0249b34c0ece",
+      "bin/codex-code-mode-host":
+        "255eccc8a5c1d267dc0acbc815cc83aaa1f50955bd99943b29f00cafcdcab771",
+      "codex-path/rg": "e36d0eb52e70696bdf1781392722e05a21bb91d3b7b762ef5ec20e5df2ec687b",
+      "codex-resources/bwrap": "c547cbdc762a70ed216789ffaa4c6c0e7d2beabe32245a498f8e365a9fc8dab4",
+    },
+  },
+};
+
+/** GitHub's CLI on a Linux host, as cli/cli's release keeps its static Linux builds. */
+export const GH_LINUX_PINS: LinuxToolPins = {
+  x64: {
+    NAME: "gh",
+    VERSION: HOST_CLI_VERSION.GH,
+    ARCHIVE: `https://github.com/cli/cli/releases/download/v${HOST_CLI_VERSION.GH}/gh_${HOST_CLI_VERSION.GH}_linux_amd64.tar.gz`,
+    SHA256: "4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d",
+    BYTES: 15_031_972,
+    ROOT: `gh_${HOST_CLI_VERSION.GH}_linux_amd64`,
+    MEMBERS: ["bin/gh"],
+    BINARY: "bin/gh",
+    FILES: { "bin/gh": "b768184570b12536be4ac1528893f6340d1c6a7b40b56ad45bca9cd0e87ad34d" },
+  },
+  arm64: {
+    NAME: "gh",
+    VERSION: HOST_CLI_VERSION.GH,
+    ARCHIVE: `https://github.com/cli/cli/releases/download/v${HOST_CLI_VERSION.GH}/gh_${HOST_CLI_VERSION.GH}_linux_arm64.tar.gz`,
+    SHA256: "ee32df2323c8847f5fac6cb6b4b69ca75828e9329a8f22f677021f7b3306ce63",
+    BYTES: 13_661_485,
+    ROOT: `gh_${HOST_CLI_VERSION.GH}_linux_arm64`,
+    MEMBERS: ["bin/gh"],
+    BINARY: "bin/gh",
+    FILES: { "bin/gh": "a82a52e1bbe05bcd485f8cbbd5aa67e11a76fce6bdad394a2d179e1c24cfe367" },
+  },
 };
 
 /**

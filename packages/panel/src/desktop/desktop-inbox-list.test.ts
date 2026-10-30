@@ -12,9 +12,11 @@ import {
 } from "@luke/features/inbox-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
 import type { AppInboxTask, AppInboxTaskHolding } from "@luke/host/app-state";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
 import { act } from "react";
 import { beforeAll, onTestFinished, test } from "vitest";
+import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { FAKE_ANSWER } from "../testing/app-bridge.js";
 import { editorBundleLanded } from "../testing/composer.js";
@@ -1179,21 +1181,21 @@ test("a mark the service refuses is let go, and the dot stands as the reads hold
   assert.equal(unreadOf(page, "How is a failed email retried?"), false);
 });
 
-test("Mark all as read in the view's menu, under Addressed to, marks every unread item of the listed workspace read and clears the dots alone, the attention marks standing; with nothing unread it stands disabled", async () => {
+test("the view's menu offers Show and Addressed to alone, and ⌘K's Mark all as read marks every unread item of the listed workspace read and clears the dots alone, the attention marks standing; with nothing unread ⌘K offers it no more", async () => {
   world.listedWorkspace = ACME;
   // Note that the unread answered item is a teammate's, so the item standing chosen is the one that needs you, and nothing is read before the mark.
   world.inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true, startedBy: TEAMMATE }]);
   world.inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }]);
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
-  const openOptions = () => {
-    const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
-    assert.ok(options, "the head offers the view's menu");
-    act(() => options.click());
-    return menuWords();
-  };
-  assert.deepEqual(openOptions(), ["Open", "All", "—", "Addressed to", "—", "Mark all as read"]);
-  act(() => menuItem("Mark all as read").click());
+  const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  assert.ok(options, "the head offers the view's menu");
+  act(() => options.click());
+  assert.deepEqual(menuWords(), ["Open", "All", "—", "Addressed to"]);
+  act(() => options.click());
+  act(() => {
+    runAppCommand(APP_COMMAND.MARK_INBOX_READ);
+  });
   await settle();
   assert.deepEqual(world.readMarks, ["all:workspace-acme"]);
   assert.equal(unreadOf(page, "Expire after 7 days?"), false);
@@ -1203,8 +1205,7 @@ test("Mark all as read in the view's menu, under Addressed to, marks every unrea
     "*Expire after 7 days?",
     "▸ *Alert at 80%?",
   ]);
-  openOptions();
-  assert.equal(menuItem("Mark all as read").matches(":disabled"), true);
+  assert.equal(appCommandOffered(APP_COMMAND.MARK_INBOX_READ), false);
 });
 
 test("Mark all as read sends one write and asks no task or agent again, since each followed inbox is pushed its items' read state as it moves", async () => {
@@ -1216,15 +1217,15 @@ test("Mark all as read sends one write and asks no task or agent again, since ea
   };
   world.inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true }]);
   world.agentInboxes = new Map([[SWEEP_AGENT, [{ ...QUARANTINE, unread: true }]]]);
-  const { page } = mount([waitingTaskless(QUARANTINE)]);
+  mount([waitingTaskless(QUARANTINE)]);
   await settle();
   const tasksBefore = taskReads.length;
   const agentsBefore = world.agentReads.length;
   const followsBefore = world.main.asked.length;
   const marksBefore = world.readMarks.length;
-  const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
-  act(() => options?.click());
-  act(() => menuItem("Mark all as read").click());
+  act(() => {
+    runAppCommand(APP_COMMAND.MARK_INBOX_READ);
+  });
   await settle();
   assert.deepEqual(world.readMarks.slice(marksBefore), ["all:workspace-acme"]);
   assert.deepEqual(world.main.asked.slice(followsBefore), [], "nothing is followed again");
@@ -1356,11 +1357,7 @@ test("a teammate chosen in Addressed to with nothing in the scope shown says so,
   await settle();
   chooseView(page, "Addressed to", "Charles Pan");
   assert.deepEqual(listed(page), []);
-  assert.deepEqual(listEmpty(page), [
-    undefined,
-    "Nothing addressed to them",
-    "Show what's addressed to me",
-  ]);
+  assert.deepEqual(listEmpty(page), [undefined, "Nothing addressed to them", "Show mine"]);
   const mine = page.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button");
   act(() => mine?.click());
   assert.equal(whoseChip(page), null);

@@ -483,7 +483,7 @@ test("on a phone a tab draws no bar of its own, and the task's header's ⋯ offe
   assert.ok(page.menu().includes(`View page${PAGE.title}`), "the source is shown");
 });
 
-test("on a phone the task's Inbox tab draws no head over its list, its search standing alone: the task's header's ⋯ opens its View options where the ⋯ stood", async () => {
+test("on a phone the task's Inbox tab draws no head over its list, its search standing alone, and the task's header's ⋯ offers no View options, the tab listing everything", async () => {
   const page = mount(SHELL_ROOM.NARROW, true, SIDE_PANEL_TAB.INBOX);
   await act(async () => undefined);
   assert.equal(page.container.querySelector(".inbox-tasks-bar"), null);
@@ -491,15 +491,9 @@ test("on a phone the task's Inbox tab draws no head over its list, its search st
     page.container.querySelector('.inbox-search input[aria-label="Search inbox"]'),
     "the search's field stands over the list",
   );
-  const menu = page.menu();
-  const options = menu.find((each) => each.startsWith("View options")) ?? assert.fail();
-
-  page.choose(options);
-  assert.ok(
-    [...document.querySelectorAll('[role="menu"]')].some((each) =>
-      each.getAttribute("aria-label")?.startsWith("View options"),
-    ),
-    "the list's own View options menu stands open",
+  assert.equal(
+    page.menu().some((each) => each.startsWith("View options")),
+    false,
   );
 });
 

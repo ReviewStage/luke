@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { purgeWithdrawnLines, sweepAbandonedTurns } from "@luke/database/models/abandoned-turns";
+import { sweepHostPairings } from "@luke/database/models/host-pairing-store";
 import { hostedStore } from "@luke/database/models/hosted-store";
 import { purgeUnsavedAttachments } from "@luke/database/models/plan-attachments";
 import { storeWriter } from "@luke/database/models/writer";
@@ -133,6 +134,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepNativeRepositorySnapshots().pipe(Effect.provideContext(startContext)),
     sweepAgentStates: (now) =>
       sweepAgentStates(new Date(now)).pipe(Effect.provideContext(startContext)),
+    sweepHostPairings: (now) => sweepHostPairings(new Date(now)),
   });
 });
 

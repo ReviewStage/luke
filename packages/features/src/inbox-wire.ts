@@ -794,6 +794,13 @@ export const inboxMessageSchema = EffectSchema.Struct({
    * before it.
    */
   addressedTo: EffectSchema.optionalKey(memberRefSchema),
+  /**
+   * The key the reader's own message was sent under, which tells a send
+   * that went unanswered from a message that merely reads the same; absent
+   * on every other message, on a read made for no member, and from a
+   * service before it.
+   */
+  clientKey: EffectSchema.optionalKey(EffectSchema.String),
   createdAt: countedNumber,
 });
 

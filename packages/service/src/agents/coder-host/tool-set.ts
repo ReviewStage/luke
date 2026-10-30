@@ -96,43 +96,6 @@ export const CODER_TOOL = {
   SLEEP: AGENT_TOOL.SLEEP,
 } as const;
 
-/** The tools that act on a task: `edit_plan`, which takes notes in the plan of the task it names, `show_page`, which shows a page on the agent's task (or on the agent itself where it works on none), `look_at_picture`, which looks at a picture in its plan, and the four that read and answer its comments. */
-export type TaskTool =
-  | typeof CODER_TOOL.EDIT_PLAN
-  | typeof CODER_TOOL.SHOW_PAGE
-  | typeof CODER_TOOL.LOOK_AT_PICTURE
-  | (typeof COMMENT_TASK_TOOLS)[number];
-
-/** The comment tools every agent on a task is offered, since a member may send any of them a thread. */
-const COMMENT_TASK_TOOLS = [
-  CODER_TOOL.READ_COMMENTS,
-  CODER_TOOL.REPLY_TO_COMMENT,
-  CODER_TOOL.RESOLVE_THREAD,
-  CODER_TOOL.REOPEN_THREAD,
-] as const;
-
-/**
- * The task's tools an agent is offered: `show_page` and `edit_plan` alone
- * for one on no task, as an automation's run starts one, whose pages stand
- * on the agent itself and whose notes go on a task it names, and all of
- * them for one on a task, whether
- * it was handed the plan or a prompt, since New task starts every agent on
- * the developer's own words while Luke writes the plan beside it. Note that
- * each tool withheld is one its call would only be refused by (`host.ts`'s
- * `lookAtPicture` and the comment tools), and that the instructions leave out
- * the same words (`instructions.ts`).
- */
-export function taskToolsOf(agent: Pick<Agent, "taskId">): ReadonlySet<TaskTool> {
-  // A page stands on the agent itself where it works on no task, and a call of `edit_plan` names its task, so every agent has both.
-  if (agent.taskId === null) return new Set([CODER_TOOL.SHOW_PAGE, CODER_TOOL.EDIT_PLAN]);
-  return new Set([
-    CODER_TOOL.EDIT_PLAN,
-    CODER_TOOL.SHOW_PAGE,
-    CODER_TOOL.LOOK_AT_PICTURE,
-    ...COMMENT_TASK_TOOLS,
-  ]);
-}
-
 /** The tools only an agent working in a repository is offered: the pull request the service opens for it and `apply_patch`, which edits its checkout. */
 export type RepositoryTool = typeof CODER_TOOL.OPEN_PULL_REQUEST | typeof CODER_TOOL.APPLY_PATCH;
 
@@ -211,7 +174,7 @@ export function machineToolsOf(agent: Pick<Agent, "machine">): ReadonlySet<Machi
 }
 
 /** What of an agent decides which tools eve offers it. */
-export type CoderOfferedTo = Pick<Agent, "taskId" | "repository" | "kind" | "machine">;
+export type CoderOfferedTo = Pick<Agent, "repository" | "kind" | "machine">;
 
 /** What beside its own row decides which tools an agent is offered: whether its starter has Memory on, and whether it is under a pilot (`starterToolsOf`). */
 export interface OfferedBeside {
@@ -219,9 +182,15 @@ export interface OfferedBeside {
   readonly underPilot: boolean;
 }
 
-/** The coder's tools eve offers some agents and not others: each one some agent's task, repository, kind, starter, machine, or Memory withholds. */
+/**
+ * The coder's tools eve offers some agents and not others: each one some
+ * agent's repository, kind, starter, machine, or Memory withholds. Note that
+ * no tool is withheld by the agent's task, since every one that acts on a
+ * task names it or acts on the agent itself where it works on none: the
+ * plan's notes, pictures, and comments any task of its workspace, and a
+ * page the agent's own task, or the agent where it has none.
+ */
 const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
-  ...taskToolsOf({ taskId: "any" }),
   ...repositoryToolsOf({ repository: "any" }),
   ...kindToolsOf({ kind: AGENT_KIND.OPERATOR }),
   ...kindToolsOf({ kind: AGENT_KIND.CODER }),
@@ -233,10 +202,10 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
 
 /**
  * Every tool eve offers the agent on a turn, in the registry's order: each
- * coder's tool no agent is denied, and each narrowed one where its task,
- * its repository, its kind, who started it, or where it runs offers it, and `remember` and `recall` where
+ * coder's tool no agent is denied, and each narrowed one where its
+ * repository, its kind, who started it, or where it runs offers it, and `remember` and `recall` where
  * its starter has Memory on, the same rules eve's tool files read as each
- * turn starts (`apps/dev/host.ts`'s `offeredTaskTools`, `offeredRepositoryTools`,
+ * turn starts (`apps/dev/host.ts`'s `offeredRepositoryTools`,
  * `offeredKindTools`, `offeredStarterTools`, and `memoryOffered`).
  */
 export function offeredCoderTools(
@@ -244,7 +213,6 @@ export function offeredCoderTools(
   beside: OfferedBeside,
 ): readonly AgentTool[] {
   const offered: ReadonlySet<AgentTool> = new Set<AgentTool>([
-    ...taskToolsOf(agent),
     ...repositoryToolsOf(agent),
     ...kindToolsOf(agent),
     ...starterToolsOf(beside),

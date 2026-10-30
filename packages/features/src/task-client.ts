@@ -73,6 +73,8 @@ import {
   type TaskFileAnswer,
   type TaskFileRequest,
   type TaskListAnswer,
+  type TaskParentRequest,
+  type TaskRelationChangeRequest,
   type TaskRenameRequest,
   type TaskSkillsAnswer,
   type TaskStanding,
@@ -83,6 +85,8 @@ import {
   taskBlockRequestSchema,
   taskCreateRequestSchema,
   taskFileRequestSchema,
+  taskParentRequestSchema,
+  taskRelationChangeRequestSchema,
   taskRenameRequestSchema,
   taskTreeRequestSchema,
   taskUpdateRequestSchema,
@@ -91,13 +95,16 @@ import {
   type BlockCallFailure,
   BROWSER_TAB_OPEN_FAILURE,
   type BrowserTabOpenFailure,
+  type ParentCallFailure,
   PICTURE_KEEP_FAILURE,
   PLAN_COMMENT_CALL_FAILURE,
+  type RelationCallFailure,
   type RepositoryCallFailure,
   type RepositoryListFailure,
   type StartCallFailure,
   TASK_BLOCK_FAILURE,
   TASK_CALL_FAILURE,
+  TASK_PARENT_FAILURE,
   type TaskCallFailure,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
@@ -199,6 +206,16 @@ const BLOCK_REFUSALS = {
   [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: TASK_BLOCK_FAILURE.CYCLE,
 } as const;
 
+/** The refusals a parent write can answer with: a task not the account's or of another workspace, a parent in another repository, or one under which the task would descend from itself. */
+const PARENT_REFUSALS = {
+  [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: TASK_PARENT_FAILURE.REPOSITORY_DIFFERS,
+  [HOSTED_API_ERROR.TASK_PARENT_CYCLE]: TASK_PARENT_FAILURE.CYCLE,
+} as const;
+
+/** The refusals a relation's move can answer with: a block change's, and a parent write's. */
+const RELATION_REFUSALS = { ...BLOCK_REFUSALS, ...PARENT_REFUSALS } as const;
+
 /** The refusal a read of one of the plan's own rows can answer with: the plan or the row not the account's. */
 const NOT_FOUND_REFUSAL = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
@@ -209,6 +226,13 @@ const LIVE_REFUSALS = {
   ...NOT_FOUND_REFUSAL,
   [HOSTED_API_ERROR.INVALID_TOKEN]: LIVE_SIGNED_OUT.failure,
 } as const;
+
+/** A plan's write as the client answers it: the task as it then stands, and the transaction it was written in where it changed a row. */
+function writtenOf(changed: { readonly plan: Task; readonly txid?: string }): TaskWritten {
+  return changed.txid === undefined
+    ? { task: changed.plan }
+    : { task: changed.plan, txid: changed.txid };
+}
 
 /** A procedure's answer as a result: its refusal where it is one the caller names, unanswered for everything else. */
 function hostedResult<Answer, Failure extends string>(
@@ -487,12 +511,53 @@ export class HostedTaskClient {
     return hostedResult(
       Effect.map(
         askHosted(this.#hosted.plans.block, { params: { id: taskId }, body: admitted }),
-        (changed): TaskWritten =>
-          changed.txid === undefined
-            ? { task: changed.plan }
-            : { task: changed.plan, txid: changed.txid },
+        writtenOf,
       ),
       BLOCK_REFUSALS,
+    );
+  }
+
+  /**
+   * Sets one task's parent, or clears it with null, answering the task as
+   * it then stands; or why it is unchanged: the service did not answer, the
+   * parent is not the account's or not of the task's workspace, works in
+   * another repository, or is the task itself or one of its descendants. A
+   * request the service would refuse by shape is refused here without
+   * traveling at all.
+   */
+  setParent(
+    taskId: string,
+    parent: TaskParentRequest,
+  ): Effect.Effect<TaskCallResult<TaskWritten, ParentCallFailure>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(taskParentRequestSchema)(parent));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      Effect.map(
+        askHosted(this.#hosted.plans.parent, { params: { id: taskId }, body: admitted }),
+        writtenOf,
+      ),
+      PARENT_REFUSALS,
+    );
+  }
+
+  /**
+   * Moves one relation of a task to another kind in one call, answering the
+   * task as it then stands; or why it is unchanged, for a block's reasons
+   * (`block`) or a parent's (`setParent`). A change the service would refuse
+   * by shape is refused here without traveling at all.
+   */
+  changeRelation(
+    taskId: string,
+    relation: TaskRelationChangeRequest,
+  ): Effect.Effect<TaskCallResult<TaskWritten, RelationCallFailure>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(taskRelationChangeRequestSchema)(relation));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      Effect.map(
+        askHosted(this.#hosted.plans.relation, { params: { id: taskId }, body: admitted }),
+        writtenOf,
+      ),
+      RELATION_REFUSALS,
     );
   }
 
@@ -922,10 +987,7 @@ export class HostedTaskClient {
   ): Effect.Effect<TaskWritten, HostedFailure, HttpClient.HttpClient> {
     return Effect.map(
       askHosted(this.#hosted.plans.update, { params: { id: taskId }, body: changes }),
-      (changed) =>
-        changed.txid === undefined
-          ? { task: changed.plan }
-          : { task: changed.plan, txid: changed.txid },
+      writtenOf,
     );
   }
 

@@ -30,11 +30,13 @@ import type { ModelCatalog } from "../../providers/model-catalog.js";
 import {
   COMMENT_TOOL_REFUSAL,
   type CommentToolName,
+  commentedTaskOf,
   commentToolRejected,
   runCommentTool,
 } from "../../tasks/comment-tools.js";
 import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../../tasks/page-tool.js";
 import {
+  lookedTaskOf,
   PICTURE_LOOK_REFUSAL,
   type PictureLookResult,
   pictureNotLooked,
@@ -176,24 +178,23 @@ function agentHeaderOfConversation(admitted: AdmittedConversation) {
 }
 
 /**
- * Why the agent may not change the task a call names, or nothing where it
- * may: the task must stand in the agent's own workspace, as the member
- * whose turn this is reaches it, and an operator changes only a task its
- * own member started (`steward.ts`), as `update_task` holds it. Note that a
- * task of another workspace the member is also in is none of the agent's,
- * as `read_task` reads one, and answers as no task at all.
+ * The task a call names, where it stands in the agent's own workspace, as
+ * the member whose turn this is reaches it; nothing otherwise, which each
+ * tool refuses as no task in its own words. A call that changes the task
+ * holds it to the Steward rule beside this (`stewardTaskRefusal`), as
+ * `update_task` does, and a read does not. Note that a task of another
+ * workspace the member is also in is none of the agent's, as `read_task`
+ * reads one, and answers as no task at all.
  */
-function taskChangeRefusal(
+function agentTaskOf(
   admitted: AdmittedConversation,
-  agent: Pick<Agent, "organizationId" | "kind" | "userId">,
+  agent: Pick<Agent, "organizationId">,
   taskId: string,
 ) {
-  return Effect.map(readTaskHeader(admitted.caller, taskId), (stored) => {
-    if (Option.isNone(stored) || stored.value.workspaceId !== agent.organizationId) {
-      return PLAN_EDIT_REFUSAL.NO_TASK;
-    }
-    return stewardTaskRefusal(agent, stored.value);
-  });
+  return Effect.map(
+    readTaskHeader(admitted.caller, taskId),
+    Option.filter((task) => task.workspaceId === agent.organizationId),
+  );
 }
 
 /** Takes one `edit_plan` call's notes into the plan of the task it names, given how many notes the turn has taken already, its pictures read through the sandbox door given. */
@@ -208,7 +209,9 @@ export function runAgentEditPlan(
     if (Result.isFailure(found)) return planEditRejected(found.failure);
     const taskId = editedTaskOf(input);
     if (taskId === undefined) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK_NAMED);
-    const refusal = yield* taskChangeRefusal(admitted, found.success, taskId);
+    const task = yield* agentTaskOf(admitted, found.success, taskId);
+    if (Option.isNone(task)) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK);
+    const refusal = stewardTaskRefusal(found.success, task.value);
     if (refusal !== undefined) return planEditRejected(refusal);
     const agentId = found.success.id;
     // The plan is written as the member whose turn this is, whoever started the agent.
@@ -220,7 +223,7 @@ export function runAgentEditPlan(
   );
 }
 
-/** Runs one `look_at_picture` call: one of the pictures of the agent's plan, read as the member whose turn this is. */
+/** Runs one `look_at_picture` call: one of the pictures of the plan its address names, in the agent's workspace, read as the member whose turn this is. */
 export function runAgentLookAtPicture(
   admitted: AdmittedConversation,
   input: UnparsedWireValue,
@@ -228,8 +231,11 @@ export function runAgentLookAtPicture(
   return Effect.gen(function* () {
     const found = yield* agentHeaderOfConversation(admitted);
     if (Result.isFailure(found)) return pictureNotLooked(found.failure);
-    const { taskId } = found.success;
-    if (taskId === null) return pictureNotLooked(PICTURE_LOOK_REFUSAL.TASKLESS);
+    const taskId = lookedTaskOf(input);
+    if (taskId === undefined) return pictureNotLooked(PICTURE_LOOK_REFUSAL.UNREADABLE);
+    if (Option.isNone(yield* agentTaskOf(admitted, found.success, taskId))) {
+      return pictureNotLooked(PICTURE_LOOK_REFUSAL.ELSEWHERE);
+    }
     // The plan is read as the member whose turn this is, as `editPlan` writes it.
     return yield* runLookAtPicture({ userId: admitted.caller, taskId }, input);
   }).pipe(
@@ -259,17 +265,29 @@ export function runAgentOpenPullRequest(
   );
 }
 
-/** Runs one call of a comment tool (`tasks/comment-tools.ts`) on the agent's plan, as the member whose turn it is, written under the agent. */
+/**
+ * Runs one call of a comment tool (`tasks/comment-tools.ts`) on the plan of
+ * the task it names, in the agent's workspace, as the member whose turn it
+ * is, written under the agent. Note that a reply, a resolve, and a reopen
+ * change the task's threads, so an operator makes them only on its member's
+ * own task, while it reads a teammate's, as it reads the task itself.
+ */
 export function runAgentComment(
   admitted: AdmittedConversation,
   name: CommentToolName,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const found = yield* agentHeaderOfConversation(admitted);
+    const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return commentToolRejected(found.failure);
-    const { id: agentId, taskId } = found.success;
-    if (taskId === null) return commentToolRejected(COMMENT_TOOL_REFUSAL.TASKLESS);
+    const taskId = commentedTaskOf(input);
+    if (taskId === undefined) return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_TASK_NAMED);
+    const task = yield* agentTaskOf(admitted, found.success, taskId);
+    if (Option.isNone(task)) return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_TASK);
+    const refusal =
+      name === CODER_TOOL.READ_COMMENTS ? undefined : stewardTaskRefusal(found.success, task.value);
+    if (refusal !== undefined) return commentToolRejected(refusal);
+    const agentId = found.success.id;
     // The comments are read and written as the member whose turn this is, as `editPlan` writes the plan.
     const writer = {
       actor: PLAN_COMMENT_ACTOR.AGENT,
