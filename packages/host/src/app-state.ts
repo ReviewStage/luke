@@ -5,6 +5,7 @@ import type { AgentKind } from "@luke/features/agent-wire";
 import type { WorkspaceChannels } from "@luke/features/channel-live";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { LIVE_READ } from "@luke/features/live-wire";
+import { PAGE_OWNER, type PageLine } from "@luke/features/page-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
@@ -302,6 +303,25 @@ export const NO_HOLDER_INBOXES: AppHolderInboxes = {
   [INBOX_SCOPE_KIND.AGENT]: {},
 };
 
+/** What pages stand on: a task, or an agent with no task. */
+type PageOwnerKind = (typeof PAGE_OWNER)[keyof typeof PAGE_OWNER];
+
+/** One task's or agent's pages, as the host's read of them stands: each page by its newest version, the most recently written first, once it answered. */
+export type AppHolderPages = AppHostRead<readonly PageLine[]>;
+
+/**
+ * Each task's or agent's pages the host holds for the windows
+ * (`compose-tasks.ts`): those a window chose, and the few let go lately, by
+ * what they stand on and then its id, each as its own read stands. One
+ * absent is held by nobody.
+ */
+export type AppPages = {
+  readonly [Kind in PageOwnerKind]: Readonly<Record<string, AppHolderPages>>;
+};
+
+/** No pages held, as the host stands before any window chooses a task or an agent and after the session ends. */
+export const NO_PAGES: AppPages = { [PAGE_OWNER.TASK]: {}, [PAGE_OWNER.AGENT]: {} };
+
 /**
  * Each workspace's channels the host holds for the windows
  * (`channel-follow.ts`): the workspaces a window lists or names, and the few
@@ -317,6 +337,7 @@ export const NO_WORKSPACE_CHANNELS: AppWorkspaceChannels = {};
 export interface AppHostReads {
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
+  [LIVE_READ.PAGES]: readonly PageLine[];
   [LIVE_READ.CHANNELS]: WorkspaceChannels;
 }
 
@@ -400,6 +421,8 @@ export interface AppState {
   [LIVE_READ.INBOX_ITEMS]: AppHostRead<AppInboxItems>;
   /** Each plan's or agent's inbox the windows chose, held while a window holds it and a while after: what a chosen item's pane, a task's Inbox tab, and an agent's page read past the feed. */
   [LIVE_READ.HOLDER_INBOX]: AppHolderInboxes;
+  /** Each task's or agent's pages the windows chose, held while a window holds them and a while after: what the panel beside an Inbox item, and beside an agent's page, lists. */
+  [LIVE_READ.PAGES]: AppPages;
   /** Each workspace's channels, open and archived, held while a window holds them and a while after: what the sidebar's channels, the Inbox's head, the palette, and a `#channel` chip read. */
   [LIVE_READ.CHANNELS]: AppWorkspaceChannels;
   macCommands: AppMacCommandsSlice;

@@ -67,12 +67,13 @@ export const GATEWAY_METHOD = {
   /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the caller, never held in the view. */
   TASKS_PAGES: "tasks.pages",
   /**
-   * One plan's pages, followed from now until let go, over Neon Realtime.
-   * What they hold is heard as `TASKS_PAGES_CHANGED` events, never answered;
-   * following what is already followed does nothing.
+   * One plan's pages, or one agent's on no task, held followed for a window
+   * from now until it is let go, over Neon Realtime, and a while after among
+   * those let go lately. What they hold is heard as `PAGES_CHANGED` events,
+   * on the app state every window draws, never answered.
    */
   TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
-  /** A followed plan's pages let go: no more `TASKS_PAGES_CHANGED` events of it until it is followed again. */
+  /** One plan's or agent's pages let go by the window that held them: they stay among those let go lately until later ones push them out. */
   TASKS_PAGES_UNFOLLOW: "tasks.pagesUnfollow",
   /**
    * One plan's newest page of history, followed from now until let go, over
@@ -540,8 +541,8 @@ export const GATEWAY_EVENT = {
   BROWSER_LIVE_CLOSED: "browserLive.closed",
   /** A followed transcript's next page, or why there is none, each time it moves while it is followed. */
   TRANSCRIPT_CHANGED: "transcript.changed",
-  /** A followed plan's pages as they now stand, each time they move while followed. */
-  TASKS_PAGES_CHANGED: "tasks.pagesChanged",
+  /** Every plan's or agent's pages the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  PAGES_CHANGED: "pages.changed",
   /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
   TASKS_HISTORY_CHANGED: "tasks.historyChanged",
   /** A followed task's cloud Browser tabs as they now stand, each time one moves or a takeover lapses while followed. */

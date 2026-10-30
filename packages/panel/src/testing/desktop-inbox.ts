@@ -86,7 +86,7 @@ import {
   fakeActsAnswer,
 } from "./app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "./app-platform.js";
-import { handHostReads } from "./app-state.js";
+import { handHostReads, holdPages } from "./app-state.js";
 import { attachmentChipName } from "./attachment-chip.js";
 import {
   composerEditor,
@@ -805,6 +805,12 @@ export function mount(
   world.deliverFeed = reads.deliverItems;
   world.deliverHolders = reads.deliverHolders;
   world.deliverChannels = reads.deliverChannels;
+  // Note that a task's or an agent's pages are laid on the document as the window holds them, as the host lays them.
+  holdPages(reads.deliverPages, (place) =>
+    "taskId" in place
+      ? (world.taskPages.get(place.taskId) ?? [])
+      : (world.agentPages.get(place.agentId) ?? []),
+  );
   const asked: Asked = {
     shownTasks: [],
     shownAgents: [],

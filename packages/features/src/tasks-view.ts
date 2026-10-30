@@ -39,6 +39,7 @@ import {
 } from "./sentry-install-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
+  listedPullRequestSchema,
   planRevisionAnswerSchema,
   planRevisionSeqSchema,
   planRevisionsAnswerSchema,
@@ -188,6 +189,13 @@ export const tasksViewSchema = EffectSchema.Struct({
    * Tasks page's cards name each one rather than a count of the rest.
    */
   taskPullRequests: EffectSchema.optionalKey(EffectSchema.Array(taskPullRequestsSchema)),
+  /**
+   * The pull request of every agent that opened one, on a plan or none, the
+   * archived among them, as its row keeps it: present only while the list
+   * is followed live, when it is what a plan's or an agent's tabs offer each
+   * agent's Changes by, in place of reading each agent of it apart.
+   */
+  agentPullRequests: EffectSchema.optionalKey(EffectSchema.Array(listedPullRequestSchema)),
   /**
    * The reader's pins of agents on a plan, the archived ones left out: present
    * only while the list is followed live, when the sidebar's Pinned section
@@ -788,21 +796,10 @@ export const tasksPagesAnswerSchema = EffectSchema.Union([
 
 export type TasksPagesAnswer = typeof tasksPagesAnswerSchema.Type;
 
-/** One plan's pages, followed by a window while its Inbox draws an item of that plan, or one coding agent's on no task while its page is drawn. */
+/** One plan's pages, held by a window while its Inbox draws an item of that plan, or one coding agent's on no task while its page is drawn. */
 export const taskPagesFollowSchema = pagePlaceSchema;
 
 export type TaskPagesFollow = typeof taskPagesFollowSchema.Type;
-
-/**
- * A followed plan's or agent's pages as they now stand, each by its newest version,
- * told each time they move while followed, or why there are none.
- */
-export const taskPagesFollowedSchema = EffectSchema.Union([
-  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString, view: tasksPagesAnswerSchema }),
-  EffectSchema.Struct({ agentId: EffectSchema.NonEmptyString, view: tasksPagesAnswerSchema }),
-]);
-
-export type TaskPagesFollowed = typeof taskPagesFollowedSchema.Type;
 
 /** A page tab's read of one version's source, as the window hears it: its HTML line by line, coloured as HTML, or that the service did not answer. */
 export const tasksPageSourceAnswerSchema = EffectSchema.Union([

@@ -18,7 +18,6 @@ import { agentBrowserTabsAnswerSchema } from "@luke/features/agent-browser-tab-w
 import {
   codeLinesSchema,
   type TasksBrowserTabsAnswer,
-  type TasksPagesAnswer,
   type TasksRevisionsAnswer,
   taskBrowserTabsFollowSchema,
   taskHistoryFollowSchema,
@@ -235,11 +234,12 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_PAGES]: actProcedure("Could not read that plan's pages on this system.")
     .input(exactInput(tasksPagesParamsSchema))
     .output(EffectSchema.flip(tasksPagesAnswerSchema)),
+  // Note that the hold's stream carries nothing: the held pages reach the panel on app state, and the stream is the window's hold on them.
   [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: actProcedure(
     "Could not follow that plan's pages on this system.",
   )
     .input(exactInput(taskPagesFollowSchema))
-    .output(eventIterator(type<TasksPagesAnswer>())),
+    .output(eventIterator(type<never>())),
   [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actProcedure(
     "Could not follow that plan's history on this system.",
   )

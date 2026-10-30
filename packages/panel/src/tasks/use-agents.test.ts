@@ -7,6 +7,7 @@ import {
   AGENT_RUNTIME,
   AGENT_STATUS,
   type AgentSummary,
+  type TasklessAgent,
 } from "@luke/features/agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
@@ -47,6 +48,7 @@ interface Standing {
   agentId?: string;
   repository: string | null;
   listedAgents?: readonly AgentSummary[];
+  listedPage?: Pick<TasklessAgent, "id" | "workspaceId" | "repository">;
 }
 
 /** Any kind the hook asks. */
@@ -110,6 +112,7 @@ function mount(
       agentId: held.agentId,
       repository: held.repository,
       listedAgents: held.listedAgents,
+      listedPage: held.listedPage,
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
       onStarted: (agentId) => started.push(agentId),
@@ -470,6 +473,35 @@ test("with no plan open, a / reads the agent's own repository's skills through t
         payload: { workspaceId: "workspace-1", repository: "acme/relay" },
       },
     ],
+  );
+});
+
+test("with no plan open, an agent the list carries with its workspace is not read as a page, and a / reads its repository's skills through the workspace the list names", async () => {
+  handState(experimentsOn(EXPERIMENT.SKILLS));
+  const taskless = { ...STARTED, planId: null };
+  const tab = mount({
+    taskId: undefined,
+    agentId: AGENT,
+    repository: null,
+    listedAgents: [taskless],
+    listedPage: { id: AGENT, workspaceId: "workspace-1", repository: "acme/relay" },
+  });
+  tab.answer(ACT_KIND.TASKS_SKILLS, {
+    skills: { repository: "acme/relay", branch: "main", skills: [] },
+  });
+  await tab.mount();
+
+  const read = tab.control().readSkills ?? assert.fail("the agent's box offers its skills");
+  await read();
+  assert.deepEqual(tab.asked, [
+    {
+      kind: ACT_KIND.TASKS_SKILLS,
+      payload: { workspaceId: "workspace-1", repository: "acme/relay" },
+    },
+  ]);
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => agent.id),
+    [AGENT],
   );
 });
 

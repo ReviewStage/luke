@@ -17,6 +17,7 @@ import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
 import {
+  PAGE_OWNER,
   PAGE_SHOWER,
   type PageLine,
   type PageVersion,
@@ -836,7 +837,11 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     readFile: (_taskId, window) => Effect.sync(() => service.files[window.path]),
     readTree: (_taskId, folder) => Effect.sync(() => service.folders[folder.path]),
-    readSkills: (taskId) => Effect.sync(() => service.skills[taskId]),
+    readSkills: (taskId) =>
+      Effect.sync(() => {
+        service.reads.push(`skills:${taskId}`);
+        return service.skills[taskId];
+      }),
     readRepositoryFile: (place, window) =>
       Effect.sync(() => service.places[place.workspaceId]?.[place.repository]?.files[window.path]),
     readRepositoryTree: (place, folder) =>
@@ -3018,6 +3023,81 @@ it.effect(
 );
 
 it.effect(
+  "a plan's skills are answered at once from what was read and read again behind the answer, so a skill added lands on the next ask; a read that does not answer keeps them, and a sign-out lets them go",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const skillsNamed = (...names: string[]): TaskSkillsAnswer => ({
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: names.map((name) => ({
+            name,
+            description: "",
+            source: TASK_SKILL_SOURCE.REPOSITORY,
+            path: `.agents/skills/${name}/SKILL.md`,
+          })),
+        },
+      });
+      const { tasks, call, settled } = yield* subject(service);
+      const asked = () => call(GATEWAY_METHOD.TASKS_SKILLS, { planId: INVITES });
+
+      assert.deepEqual(yield* asked(), { failure: TASK_CALL_FAILURE.UNANSWERED });
+      service.skills[INVITES] = skillsNamed("review");
+      assert.deepEqual(yield* asked(), skillsNamed("review"), "none held, the read is waited on");
+
+      // A skill added on GitHub: the next ask answers what is held, and the one after what was read behind it.
+      service.skills[INVITES] = skillsNamed("review", "release");
+      assert.deepEqual(yield* asked(), skillsNamed("review"));
+      yield* settled;
+      assert.deepEqual(yield* asked(), skillsNamed("review", "release"));
+
+      Reflect.deleteProperty(service.skills, INVITES);
+      yield* asked();
+      yield* settled;
+      assert.deepEqual(
+        yield* asked(),
+        skillsNamed("review", "release"),
+        "kept past a read unanswered",
+      );
+
+      yield* tasks.reset;
+      assert.deepEqual(yield* asked(), { failure: TASK_CALL_FAILURE.UNANSWERED });
+    }),
+);
+
+it.effect(
+  "a plan moved to another workspace on the same repository has its skills read there, never answered with the last workspace's",
+  () =>
+    Effect.gen(function* () {
+      const invites = {
+        ...task(INVITES, "Teammate invitations", "# Invites", 10),
+        repository: "acme/relay",
+      };
+      const service = fakeService([invites]);
+      const installed = (name: string): TaskSkillsAnswer => ({
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [{ name, description: "", source: TASK_SKILL_SOURCE.WORKSPACE }],
+        },
+      });
+      const { call, listed } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      const asked = () => call(GATEWAY_METHOD.TASKS_SKILLS, { planId: INVITES });
+      service.skills[INVITES] = installed("review");
+      assert.deepEqual(yield* asked(), installed("review"));
+
+      // Moved to another workspace, the plan offers that workspace's installed skills.
+      service.tasks = [{ ...invites, workspaceId: "workspace-acme" }];
+      service.skills[INVITES] = installed("release");
+      yield* listed();
+      assert.deepEqual(yield* asked(), installed("release"));
+    }),
+);
+
+it.effect(
   "a pull request is read by its workspace, its repository, and its number, none is answered as none, a service that did not answer as unanswered, and a number off the wire is refused before the service",
   () =>
     Effect.gen(function* () {
@@ -3534,19 +3614,19 @@ const FUNNEL = {
 };
 
 it.effect(
-  "a plan's pages followed for the Inbox are told as they move, never in the view, a read the service did not answer is told as unanswered and read again, and let go they stop",
+  "a plan's pages held for the Inbox are laid on the app state as they move, never in the view, a read that never answered as failed, kept followed once let go, and dropped with the session",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      const { call, told, pushed } = yield* subject(service);
-      const changed = (view: WireValue) => [
-        GATEWAY_EVENT.TASKS_PAGES_CHANGED,
-        { taskId: INVITES, view },
+      const { tasks, call, told, pushed } = yield* subject(service);
+      const held = (read: WireValue) => [
+        GATEWAY_EVENT.PAGES_CHANGED,
+        { [PAGE_OWNER.TASK]: { [INVITES]: read }, [PAGE_OWNER.AGENT]: {} },
       ];
 
       yield* call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, { taskId: INVITES });
       yield* followSettled;
-      assert.deepEqual(pushed, [changed({ failure: TASK_CALL_FAILURE.UNANSWERED })]);
+      assert.deepEqual(pushed, [held({ failed: true })]);
 
       const pages = polledLive<"pages", typeof NOT_FOUND_LIVE>(["pages"]);
       service.pageLives[INVITES] = pages;
@@ -3555,19 +3635,24 @@ it.effect(
       yield* answered(() => pages.set({ pages: [{ ...FUNNEL, shownBy: null }] }));
       const shown = { ...FUNNEL, version: 2, at: 2_500, shownBy: { kind: PAGE_SHOWER.LUKE } };
       yield* answered(() => pages.set({ pages: [shown] }));
-      assert.deepEqual(pushed.slice(1), [
-        changed({ pages: [FUNNEL] }),
-        changed({ pages: [shown] }),
-      ]);
-      assert.equal(
-        told.length,
-        0,
-        "a plan's pages followed for the Inbox are never told in the view",
-      );
+      assert.deepEqual(pushed.slice(1), [held({ rows: [FUNNEL] }), held({ rows: [shown] })]);
+      assert.equal(told.length, 0, "a plan's pages held for the Inbox are never told in the view");
 
+      // Let go, the pages stay followed among those let go lately, so choosing the plan again reads nothing anew.
       yield* call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, { taskId: INVITES });
       yield* followSettled;
+      assert.equal(pages.held(), 1);
+      yield* call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, { taskId: INVITES });
+      yield* followSettled;
+      assert.equal(pushed.length, 3, "a plan held again is drawn from where its pages stand");
+
+      yield* tasks.reset;
+      yield* followSettled;
       assert.equal(pages.held(), 0);
+      assert.deepEqual(pushed.at(-1), [
+        GATEWAY_EVENT.PAGES_CHANGED,
+        { [PAGE_OWNER.TASK]: {}, [PAGE_OWNER.AGENT]: {} },
+      ]);
     }),
 );
 

@@ -231,7 +231,6 @@ import {
   type TaskHistoryFollow,
   type TaskHistoryFollowed,
   type TaskPagesFollow,
-  type TaskPagesFollowed,
   type TasksBlockAnswer,
   type TasksBlockParams,
   type TasksBrowserTabOpenAnswer,
@@ -309,7 +308,6 @@ import {
   type TasksWriteSectionParams,
   taskBrowserTabsFollowedSchema,
   taskHistoryFollowedSchema,
-  taskPagesFollowedSchema,
   tasksBlockAnswerSchema,
   tasksBrowserTabOpenAnswerSchema,
   tasksBrowserTabsAnswerSchema,
@@ -392,6 +390,7 @@ import type {
   AppHolderInboxes,
   AppHostRead,
   AppInboxItems,
+  AppPages,
   AppWorkspaceChannels,
   SessionReplayState,
 } from "./app-state.js";
@@ -525,12 +524,12 @@ export interface HostOperator {
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
   /** One plan's pages, each by its newest version; or that the service did not answer. */
   tasksPages(params: TasksPagesParams): Effect.Effect<TasksPagesAnswer>;
-  /** One plan's pages followed from now until let go, heard through `onTaskPagesChanged`. */
+  /** One plan's or agent's pages held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onPagesChanged`. */
   tasksPagesFollow(scope: TaskPagesFollow): Effect.Effect<void>;
-  /** A followed plan's pages let go: nothing more is heard of them until they are followed again. */
+  /** One plan's or agent's pages let go by the windows: they stay followed among those let go lately until later ones push them out. */
   tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
-  /** A followed plan's pages as they now stand, each time they move while followed. */
-  onTaskPagesChanged(listener: (followed: TaskPagesFollowed) => void): () => void;
+  /** Every plan's or agent's pages the host holds for the windows, whole, each time any of them moves. */
+  onPagesChanged(listener: (held: AppPages) => void): () => void;
   /** One task's cloud Browser tabs followed from now until let go, heard through `onTaskBrowserTabsChanged`. */
   tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
   /** A followed task's Browser tabs let go: nothing more is heard of them until they are followed again. */
@@ -1402,13 +1401,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     tasksPagesFollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, scope)),
     tasksPagesUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, scope)),
-    onTaskPagesChanged: (listener) =>
+    onPagesChanged: (listener) =>
       on(
-        GATEWAY_EVENT.TASKS_PAGES_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(taskPagesFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
+        GATEWAY_EVENT.PAGES_CHANGED,
+        // Note that the held pages are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppPages>(payload) : undefined),
         listener,
       ),
     tasksBrowserTabsFollow: (scope) =>

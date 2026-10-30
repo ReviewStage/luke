@@ -8,7 +8,6 @@ import {
   type AgentOverviewChecksAnswerView,
   type AgentOverviewConversationAnswerView,
   type AgentOverviewPullRequestAnswerView,
-  type AgentPullRequestAnswerView,
   type AgentPullRequestWriteAnswerView,
 } from "@luke/features/agent-view";
 import {
@@ -83,7 +82,6 @@ import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-plat
 import { deliveryOf, handSettings, stateWith } from "../testing/app-state.js";
 import { installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { holdFrames, settleFrames } from "../testing/frames.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
@@ -93,9 +91,7 @@ import { viewerPlace } from "../testing/viewer-place.js";
 import { ToastHost } from "../toast.js";
 import { AgentPullRequestTab } from "./agent-pull-request-tab.js";
 import { RepositoryRemedyProvider } from "./repository-remedy.js";
-import { TAB_KIND, tabLook } from "./tab-look.js";
 import { type ThreadReveal, ThreadRevealProvider } from "./thread-reveal.js";
-import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request.js";
 import type { AgentsControl } from "./use-agents.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
@@ -451,29 +447,6 @@ function Toolbar({ actions }: { actions: TabActionGroups | undefined }) {
         action.label,
       ),
     ),
-  );
-}
-
-/**
- * The tab beside the name the side panel's strip gives it (`tabLook`), both
- * drawn from what the task's real reads of the agent's published pull
- * request keep (`useTaskPullRequests`), as the window draws them.
- */
-function Named({ control, reader }: { control: AgentsControl; reader: PullRequestReader }) {
-  const kept = useTaskPullRequests(AGENT.planId ?? undefined, control.agents, reader);
-  const pullRequest = kept.pullRequests.get(AGENT.id);
-  return createElement(
-    "div",
-    null,
-    createElement(
-      "span",
-      { "data-tab-name": "" },
-      tabLook({ kind: TAB_KIND.CHANGES, pullRequest }).label,
-    ),
-    createElement(Switching, {
-      control: { ...control, pullRequests: kept.pullRequests, readPullRequest: kept.read },
-      first: PULL_REQUEST_VIEW.CONVERSATION,
-    }),
   );
 }
 
@@ -2296,39 +2269,6 @@ test("a part whose read failed says so with a Retry that reads it alone, the oth
     "Expire invitations weekly #42",
   );
   assert.equal(tab.querySelectorAll(".pull-request-entry").length, 1);
-});
-
-test("a pull request renamed on GitHub renames its tab once Refresh is pressed, as it does its header", async () => {
-  // Note that the task's sweep of its agents' pull requests, which names the tab, starts once a frame has painted.
-  holdFrames();
-  const renamed = { ...PULL_REQUEST, title: "Expire invitations weekly" };
-  const answer = (title: string) => ({
-    repository: "acme/relay",
-    branch: PULL_REQUEST.head,
-    pullRequest: { ...published(PULL_REQUEST_STATE.OPEN), title },
-  });
-  const tab = await drawn(
-    createElement(Named, {
-      control: controlAnswering({
-        pullRequest: inTurn<AgentOverviewPullRequestAnswerView>(
-          { pullRequest: PULL_REQUEST },
-          { pullRequest: renamed },
-        ),
-      }),
-      reader: inTurn<AgentPullRequestAnswerView>(answer(PULL_REQUEST.title), answer(renamed.title)),
-    }),
-  );
-  await settleFrames();
-  const name = () => tab.querySelector("[data-tab-name]")?.textContent;
-  assert.equal(name(), "#42 Expire invitations");
-
-  await pressToolbar(tab, "Refresh");
-  await settleFrames();
-  assert.equal(
-    tab.querySelector(".pull-request-title")?.textContent,
-    "Expire invitations weekly #42",
-  );
-  assert.equal(name(), "#42 Expire invitations weekly");
 });
 
 test("where nothing of the pull request is held and its reads fail, each part says so with its own Retry, and Files changed still reads on its own", async () => {

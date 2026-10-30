@@ -4,6 +4,7 @@ import {
   AGENT_MACHINE,
   AGENT_STATUS,
   agentKindSchema,
+  agentPullRequestSchema,
   agentStartRequestFields,
   agentSummarySchema,
   CHECK_SUMMARY,
@@ -634,6 +635,21 @@ export const taskPullRequestsSchema = EffectSchema.Struct({
 });
 
 export type TaskPullRequests = typeof taskPullRequestsSchema.Type;
+
+/**
+ * The pull request one agent opened, as its row keeps what the service last
+ * read of it on GitHub, the agent on a plan or none, archived or not, and
+ * the plan it stands on: what a plan's or an agent's own tabs and summary
+ * offer the agent's Changes by.
+ */
+export const listedPullRequestSchema = EffectSchema.Struct({
+  agentId: EffectSchema.String,
+  /** The plan the agent stands on; null for one on none. */
+  taskId: EffectSchema.NullOr(EffectSchema.String),
+  pullRequest: agentPullRequestSchema,
+});
+
+export type ListedPullRequest = typeof listedPullRequestSchema.Type;
 
 /**
  * The reader's own pin of one agent on a plan (`agent_pin`), as a plan's

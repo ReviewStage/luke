@@ -19,6 +19,7 @@ import {
   type AgentPullRequest,
   type AgentSummary,
   CONTEXT_WINDOW,
+  type TasklessAgent,
 } from "@luke/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type {
@@ -32,7 +33,7 @@ import {
   type PullRequestChaptersAnswerView,
 } from "@luke/features/pull-request-chapters-view";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import type { TaskMode } from "@luke/features/task-wire";
+import type { ListedPullRequest, TaskMode } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
@@ -79,7 +80,7 @@ import { keptSkills } from "./repository-skills.js";
 import type { SkillSource } from "./skill-picker.js";
 import type { MessageSender } from "./use-agent-composer.js";
 import type { ChoiceWriter } from "./use-agent-model.js";
-import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request.js";
+import { type PullRequestReader, useListedPullRequests } from "./use-agent-pull-request.js";
 import type { ServersWriter } from "./use-agent-servers.js";
 import {
   type TranscriptFollower,
@@ -366,9 +367,9 @@ export interface AgentsControl {
   readTranscript: TranscriptReader;
   /** How a shown tab follows its transcript and hears its pages pushed. */
   transcripts: TranscriptFollower;
-  /** One read of what an agent published, as its tab asks it, its answer kept in `pullRequests`. */
+  /** One read of what an agent published, as its tab asks it; the service writes what it found on the agent's row, which `pullRequests` then carries. */
   readPullRequest: PullRequestReader;
-  /** Each of the task's agents' pull requests, by agent, of those that have one (`useTaskPullRequests`). */
+  /** Each of the task's agents' pull requests, by agent, of those that have one, as the task list carries them (`useListedPullRequests`). */
   pullRequests: ReadonlyMap<string, AgentPullRequest>;
   /** Each pull request a Pull request tab names by its number, by agent and then by number (`pull-request-number.ts`), as `readNumberedPullRequest` last read it. */
   numberedPullRequests: ByPullRequestTab<AgentPullRequest>;
@@ -661,6 +662,18 @@ export function useAgents(input: {
    * does not list the open task.
    */
   listedAgents?: readonly AgentSummary[] | undefined;
+  /**
+   * The page's agent as the task list carries it, with its workspace and
+   * its repository, where the caller draws nothing of the run that started
+   * it, which the agent's own read alone carries: the page is then not read.
+   */
+  listedPage?: Pick<TasklessAgent, "id" | "workspaceId" | "repository"> | undefined;
+  /**
+   * The pull request of every agent the task list followed live carries,
+   * on a task or with none, the archived ones among them; none where it is
+   * not followed.
+   */
+  listedPullRequests?: readonly ListedPullRequest[] | undefined;
   /** Opens Settings on its Integrations page. */
   onOpenIntegrations: () => void;
   /** Opens Settings on its Agents page. */
@@ -691,7 +704,10 @@ export function useAgents(input: {
     repository?: string | undefined;
     origin?: AgentOrigin | undefined;
   }>({ agentId: undefined, agents: undefined, failed: false });
-  const listOf = taskId === undefined ? agentId : undefined;
+  // Note that an agent the list carries with its workspace and repository is not read as a page, so choosing it reads nothing.
+  const listedPage =
+    taskId === undefined && input.listedPage?.id === agentId ? input.listedPage : undefined;
+  const listOf = taskId === undefined && listedPage === undefined ? agentId : undefined;
   const ours = (was: { agentId: string | undefined }) =>
     listOf !== undefined && was.agentId === listOf;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
@@ -1398,13 +1414,16 @@ export function useAgents(input: {
     [act],
   );
 
-  const readPullRequestOnce = useCallback<PullRequestReader>(
+  const readPullRequest = useCallback<PullRequestReader>(
     (agentId) => act(ACT_KIND.AGENTS_PULL_REQUEST, { agentId }),
     [act],
   );
-  // Note that an archived agent's pull request is read too, after every other agent's, since the
-  // summary offers it as any other and the task list pushes none of an archived agent's.
-  const published = useTaskPullRequests(taskId, standing, readPullRequestOnce, standing);
+  // Note that every agent's pull request, an archived one's among them, is the task list's, so
+  // choosing a task, or the page of an agent on none, reads none of them.
+  const pullRequests = useListedPullRequests(
+    input.listedPullRequests,
+    taskId !== undefined ? { taskId } : agentId !== undefined ? { agentId } : undefined,
+  );
 
   // A pull request a tab names by its number is kept by agent and number,
   // apart from the agents' own, so it never stands for what an agent
@@ -1530,11 +1549,13 @@ export function useAgents(input: {
   );
 
   // Note that the skills are kept for the plan and its repository as they
-  // stand, so another plan, or the plan moved to another repository, reads
-  // afresh; an agent no plan holds reads its repository's through the
-  // workspace it belongs to, once the read of it has named that workspace.
-  const workspaceId = ours(list) ? list.workspaceId : undefined;
-  const agentRepository = ours(list) ? list.repository : undefined;
+  // stand, and the host keeps each one's for the session (`compose-tasks.ts`),
+  // so choosing the plan again reads none; another plan, or the plan moved to
+  // another repository, is another one. An agent no plan holds reads its
+  // repository's through the workspace it belongs to, once the list or the
+  // read of it has named that workspace.
+  const workspaceId = ours(list) ? list.workspaceId : listedPage?.workspaceId;
+  const agentRepository = ours(list) ? list.repository : (listedPage?.repository ?? undefined);
   // Note that a plan or an agent with no repository still reads its member's installed skills, and
   // that the plan's repository stays a dependency, so a plan moved to another repository reads afresh.
   // While the Skills experiment is off, no box offers a skill and no sent message draws one.
@@ -1621,8 +1642,8 @@ export function useAgents(input: {
     readAgent,
     readTranscript,
     transcripts: windowTranscriptFollower,
-    readPullRequest: published.read,
-    pullRequests: published.pullRequests,
+    readPullRequest,
+    pullRequests,
     numberedPullRequests,
     readNumberedPullRequest,
     readChanges,

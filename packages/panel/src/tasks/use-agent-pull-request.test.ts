@@ -12,24 +12,15 @@ import {
 import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
-import { holdFrames, settleFrames } from "../testing/frames.js";
-import {
-  type TaskPullRequests,
-  useAgentPullRequest,
-  useTaskPullRequests,
-} from "./use-agent-pull-request.js";
+import { afterEach, test } from "vitest";
+import { useAgentPullRequest, useListedPullRequests } from "./use-agent-pull-request.js";
 
 /**
  * use-agent-pull-request.test.ts -- what an agent published reaches its tab
  * however the tab's transcript lands around the read: a page landing while
- * the read is out does not throw its answer away. A task keeps its own
- * agents' pull requests as its reads land: an answer naming the pull
- * request it already keeps leaves what it keeps as it stood, so nothing
- * drawn from it is drawn again, and an agent of another task, read through
- * it as a card naming that agent may, is answered but never kept. Opening
- * a task reads at most four of its agents at once, the archived ones last.
- * Synthetic ids.
+ * the read is out does not throw its answer away. A task's agents' pull
+ * requests are what the task list carries of its own agents, read from
+ * nothing. Synthetic ids.
  */
 
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -56,13 +47,10 @@ function page(id: string): readonly AgentTranscriptMessage[] {
 
 let root: Root | undefined;
 
-beforeEach(() => holdFrames());
-
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
-  vi.restoreAllMocks();
 });
 
 test("a transcript page landing while the read is out leaves its answer standing", async () => {
@@ -131,86 +119,32 @@ test("a tab put out of sight drops the read it had out, and asks afresh when sho
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const ELSEWHERE = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+const LATER = "5d1e2f3a-4b5c-4d6e-8f70-000000000001";
+const TASKLESS = "5d1e2f3a-4b5c-4d6e-8f70-000000000002";
 
-/** Every read answers the same pull request, as a fresh object each time, as the service's answers are. */
-const publishedAgain = (): Promise<AgentPullRequestAnswerView> =>
-  Promise.resolve(structuredClone(PUBLISHED));
-
-/** The task's pull requests as each render held them, the newest last. */
-function taskKept(): TaskPullRequests[] {
-  const held: TaskPullRequests[] = [];
-  const agents = [{ id: AGENT, status: AGENT_STATUS.COMPLETED }];
-  function Task(): null {
-    held.push(useTaskPullRequests(TASK, agents, publishedAgain));
-    return null;
-  }
-  root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => root?.render(createElement(Task)));
-  return held;
-}
-
-async function settled(): Promise<void> {
-  await settleFrames();
-}
-
-const newest = (held: readonly TaskPullRequests[]) => held.at(-1) ?? assert.fail("drawn");
-
-test("an answer naming the pull request a task already keeps leaves its pull requests as they stood", async () => {
-  const held = taskKept();
-  await settled();
-  const first = newest(held).pullRequests;
-  assert.deepEqual(first.get(AGENT), PUBLISHED.pullRequest);
-
-  await act(() =>
-    newest(held)
-      .read(AGENT)
-      .then(() => undefined),
-  );
-  await settled();
-});
-
-test("an agent of another task read through a task is answered but never kept", async () => {
-  const held = taskKept();
-  await settled();
-
-  const answered = await act(() => newest(held).read(ELSEWHERE));
-  await settled();
-  assert.ok(!("failure" in answered), "the read is answered");
-  assert.equal(newest(held).pullRequests.has(ELSEWHERE), false);
-});
-
-/** Synthetic agent ids, one per place in a task's list. */
-const agentIds = (count: number): string[] =>
-  Array.from(
-    { length: count },
-    (_, at) => `5d1e2f3a-4b5c-4d6e-8f70-${String(at).padStart(12, "0")}`,
-  );
-
-test("a task with many agents reads four at once, starting the next as one settles, the archived last", async () => {
-  const [archived = "", ...live] = agentIds(6);
-  const agents = [
-    { id: archived, status: AGENT_STATUS.COMPLETED, archivedAt: 1_000 },
-    ...live.map((id) => ({ id, status: AGENT_STATUS.COMPLETED })),
+test("a task's agents' pull requests are those the task list carries of its own agents, and an agent on no task holds its own alone", () => {
+  const opened = PUBLISHED.pullRequest ?? assert.fail("a pull request");
+  const other = { ...opened, number: 7, url: "https://github.com/acme/relay/pull/7" };
+  const listed = [
+    { agentId: AGENT, taskId: TASK, pullRequest: opened },
+    { agentId: LATER, taskId: TASK, pullRequest: other },
+    { agentId: ELSEWHERE, taskId: "another-task", pullRequest: other },
+    { agentId: TASKLESS, taskId: null, pullRequest: other },
   ];
-  const answers = new Map<string, (value: AgentPullRequestAnswerView) => void>();
-  const read = (agentId: string) =>
-    new Promise<AgentPullRequestAnswerView>((resolve) => {
-      answers.set(agentId, resolve);
-    });
-  function Task(): null {
-    useTaskPullRequests(TASK, agents, read);
+  const held: { task?: ReadonlyMap<string, unknown>; agent?: ReadonlyMap<string, unknown> } = {};
+  function Holders(): null {
+    held.task = useListedPullRequests(listed, { taskId: TASK });
+    held.agent = useListedPullRequests(listed, { agentId: TASKLESS });
     return null;
   }
   root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => root?.render(createElement(Task)));
-  await settled();
-  assert.deepEqual([...answers.keys()], live.slice(0, 4), "four are asked, the rest wait");
-
-  await act(async () => answers.get(live[1] ?? "")?.(structuredClone(PUBLISHED)));
-  await settled();
-  assert.deepEqual([...answers.keys()], live, "one settling starts the next");
-
-  await act(async () => answers.get(live[0] ?? "")?.(structuredClone(PUBLISHED)));
-  await settled();
-  assert.deepEqual([...answers.keys()], [...live, archived], "the archived agent is read last");
+  act(() => root?.render(createElement(Holders)));
+  assert.deepEqual(
+    [...(held.task ?? new Map())],
+    [
+      [AGENT, opened],
+      [LATER, other],
+    ],
+  );
+  assert.deepEqual([...(held.agent ?? new Map())], [[TASKLESS, other]]);
 });

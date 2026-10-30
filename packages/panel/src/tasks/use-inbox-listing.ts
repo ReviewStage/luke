@@ -217,12 +217,23 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
       : undefined;
   const taskId = chosenTask?.id;
   const chosenAgentId = asked !== undefined && "agentId" in asked ? asked.agentId : undefined;
+  const { standing: listedStanding, archived: listedArchived } = tasks.listedAgents;
+  // Note that an agent with no task the list carries is drawn from its row, so choosing its item reads nothing of it.
+  const listedPage = useMemo(
+    () =>
+      chosenAgentId === undefined
+        ? undefined
+        : [...listedStanding, ...listedArchived].find((agent) => agent.id === chosenAgentId),
+    [chosenAgentId, listedStanding, listedArchived],
+  );
   const agents = useAgents({
     acts: { act },
     taskId,
     ...(chosenAgentId === undefined ? undefined : { agentId: chosenAgentId }),
     repository: chosenTask?.repository ?? null,
     listedAgents: tasks.liveAgents,
+    listedPage,
+    listedPullRequests: tasks.listedPullRequests,
     // The Inbox draws no agent's composer, so nothing here opens Settings.
     onOpenIntegrations: () => undefined,
     onOpenApiKeys: () => undefined,

@@ -14,6 +14,7 @@ import {
   type AppState,
   NO_ACCESS,
   NO_HOLDER_INBOXES,
+  NO_PAGES,
   NO_WORKSPACE_CHANNELS,
   UNREAD,
 } from "../app-state.js";
@@ -228,6 +229,7 @@ export function initialAppState(
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], agents: [], failedRuns: [] },
     [LIVE_READ.INBOX_ITEMS]: UNREAD,
     [LIVE_READ.HOLDER_INBOX]: NO_HOLDER_INBOXES,
+    [LIVE_READ.PAGES]: NO_PAGES,
     [LIVE_READ.CHANNELS]: NO_WORKSPACE_CHANNELS,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },

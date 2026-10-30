@@ -3,14 +3,11 @@ import type {
   AgentPullRequest,
   AgentPullRequestAnswer,
   AgentStatus,
-  AgentSummary,
   AgentTranscriptMessage,
 } from "@luke/features/agent-wire";
-import type { TaskPullRequestLine } from "@luke/features/task-wire";
-import { keepIdentity } from "@luke/wire";
+import type { ListedPullRequest, TaskPullRequestLine } from "@luke/features/task-wire";
 import * as Atom from "effect/reactivity/Atom";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { afterPaint } from "../after-paint.js";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { agentStillWriting, PUBLISHED_REREAD_MS } from "./agent-model.js";
 
@@ -26,9 +23,10 @@ import { agentStillWriting, PUBLISHED_REREAD_MS } from "./agent-model.js";
  * worth showing. An answer the service could not give leaves what was
  * drawn standing; another agent's tab starts from nothing of this one's.
  *
- * The task keeps every answer beside its agents (`useTaskPullRequests`), so
- * the side panel's "+", the task's summary, and ⌘K offer an agent's Changes
- * tab exactly while it has a pull request, its tab open or not.
+ * The task list carries every agent's pull request beside its agents
+ * (`useListedPullRequests`), so the side panel's "+", the task's summary,
+ * and ⌘K offer an agent's Changes tab exactly while it has a pull request,
+ * its tab open or not.
  *
  * An open Pull request tab also follows the line the task list pushes of its
  * pull request (`usePushedLineMoved`), reading again as that line moves.
@@ -62,7 +60,7 @@ export function useAgentPullRequest(input: {
   /** The transcript as held, whose every change is a page landed. */
   messages: readonly AgentTranscriptMessage[];
   read: PullRequestReader;
-  /** The pull request the task's own read already holds for the agent (`TaskPullRequests`), drawn until the tab's read answers. */
+  /** The pull request the task list already carries for the agent (`useListedPullRequests`), drawn until the tab's read answers. */
   known?: AgentPullRequest | undefined;
   /** The clock the gap between reads is measured on. */
   now?: () => number;
@@ -118,157 +116,37 @@ export function useAgentPullRequest(input: {
   return { published };
 }
 
-/** The task's agents' pull requests, and the reader that keeps them as its answers land. */
-export interface TaskPullRequests {
-  /** Each agent's pull request, by agent, of those whose latest read named one. */
-  readonly pullRequests: ReadonlyMap<string, AgentPullRequest>;
-  /** One read of what an agent published, its answer kept here as it lands. */
-  readonly read: PullRequestReader;
-}
-
 /** No agent has a pull request, one map so a render that has none hands down the same one. */
 const NO_PULL_REQUESTS: ReadonlyMap<string, AgentPullRequest> = new Map();
 
-/** The most reads the sweep of a task's agents has out at once (`useTaskPullRequests`). */
-const SWEEP_READS_AT_ONCE = 4;
-
-/** What one visit to a task has read: each agent's pull request, and the asks behind them. */
-interface Visit {
-  readonly taskId: string | undefined;
-  /** Each agent read on its own, by whether it had ended when it was asked. */
-  readonly asked: Map<string, boolean>;
-  /** Each agent's latest ask, numbered, whose answer alone is kept. */
-  readonly latest: Map<string, number>;
-  /** The agents not archived the sweep has yet to read, in the order they were asked for. */
-  readonly queued: Set<string>;
-  /** The archived agents the sweep has yet to read, once every other is read. */
-  readonly archived: Set<string>;
-}
+/** Whose agents' pull requests: a plan's, or one agent's on no task, by its id. */
+export type PullRequestHolder = { readonly taskId: string } | { readonly agentId: string };
 
 /**
- * Which of the task's agents have a pull request, as the side panel's "+",
- * the task's summary, and ⌘K offer its Changes tab by: every answer `read`
- * lands is kept, an agent's own tab's reads included, and each agent is
- * read once as the list first holds it and once more as it ends, since
- * that is when what it published settles. Nothing reads on a clock. An
- * answer the service could not give leaves what was kept standing. Note that what is kept is the visit's: opening the task again
- * reads every agent afresh, an answer to an ask made on an earlier visit is
- * let go, and of two asks of one agent out at once only the later one's
- * answer is kept, so an earlier read landing late never takes back a pull
- * request a later one found. An agent of another task, asked through
- * `read` as a card naming it may, is answered but never kept, and an answer
- * naming the pull request already kept leaves what is kept as it stood, so
- * neither redraws the task.
- *
- * The sweep starts once the frame that drew the task's agents has painted
- * (`afterPaint`), since nothing in that frame draws its answers.
- *
- * Note that the sweep has at most `SWEEP_READS_AT_ONCE` reads out, the rest
- * waiting their turn and each starting as one settles, because a task may
- * hold a hundred agents and each read costs the service several calls to
- * GitHub, which all at once trip its rate limit. The agents not archived
- * are read first, in the order asked, and the archived ones only once none
- * of those waits, since an archived agent's pull request is what the
- * summary offers last and the task list pushes none of it to stand in.
+ * Which of a plan's agents have a pull request, or whether the one agent on
+ * no task given has, as the side panel's "+", the task's summary, and ⌘K
+ * offer its Changes tab by: what the task list carries of each (`listed`),
+ * as the service last read it on GitHub, archived agents among them, so
+ * choosing a task, or an item of it, reads nothing. An agent's own tab still
+ * reads what it published as it shows (`useAgentPullRequest`), and that read
+ * is written on the agent's row, which the list then carries. Note that the
+ * map is built again only as the list's pull requests move, since the
+ * document keeps their identity while none does, so nothing drawn from it is
+ * drawn again.
  */
-export function useTaskPullRequests(
-  taskId: string | undefined,
-  agents: readonly Pick<AgentSummary, "id" | "status" | "archivedAt">[] | undefined,
-  readOnce: PullRequestReader,
-  /** Every agent of the task, an archived one among them, which alone its pull requests are kept for; `agents` where left out. */
-  owned: readonly Pick<AgentSummary, "id">[] | undefined = agents,
-): TaskPullRequests {
-  const [held, setHeld] = useState({ taskId, pullRequests: NO_PULL_REQUESTS });
-  if (held.taskId !== taskId) setHeld({ taskId, pullRequests: NO_PULL_REQUESTS });
-  const latest = useRef(readOnce);
-  latest.current = readOnce;
-  // The task's own agents, by id, which alone its pull requests are kept for.
-  const own = useRef<ReadonlySet<string>>(new Set());
-  own.current = new Set((owned ?? []).map((agent) => agent.id));
-  const visit = useRef<Visit>({
-    taskId,
-    asked: new Map(),
-    latest: new Map(),
-    queued: new Set(),
-    archived: new Set(),
-  });
-  if (visit.current.taskId !== taskId)
-    visit.current = {
-      taskId,
-      asked: new Map(),
-      latest: new Map(),
-      queued: new Set(),
-      archived: new Set(),
-    };
-  const asks = useRef(0);
-  // The sweep's reads out now, whichever visit asked them, so a task opened
-  // while another's are out waits on those too.
-  const sweeping = useRef(0);
-
-  const read = useCallback<PullRequestReader>((agentId) => {
-    const on = visit.current;
-    asks.current += 1;
-    const ask = asks.current;
-    on.latest.set(agentId, ask);
-    return latest.current(agentId).then((answer) => {
-      if ("failure" in answer || visit.current !== on || on.latest.get(agentId) !== ask) {
-        return answer;
-      }
-      // Note that an agent of another task is answered but never kept, so
-      // the task's pull requests name its own agents alone.
-      if (!own.current.has(agentId)) return answer;
-      const opened = answer.pullRequest;
-      setHeld((was) => {
-        if (was.taskId !== on.taskId) return was;
-        const kept = was.pullRequests.get(agentId);
-        if (opened === null && kept === undefined) return was;
-        // Note that an answer naming the pull request already kept keeps the
-        // map as it stood, so nothing drawn from it is drawn again.
-        if (opened !== null && kept !== undefined && keepIdentity(kept, opened) === kept) {
-          return was;
-        }
-        const next = new Map(was.pullRequests);
-        if (opened === null) next.delete(agentId);
-        else next.set(agentId, opened);
-        return { taskId: was.taskId, pullRequests: next };
-      });
-      return answer;
-    });
-  }, []);
-
-  // Starts the visit's queued reads, the archived agents' last, while fewer than the most are out.
-  const pump = useCallback(() => {
-    const { queued, archived } = visit.current;
-    for (const agentId of [...queued, ...archived]) {
-      if (sweeping.current >= SWEEP_READS_AT_ONCE) return;
-      queued.delete(agentId);
-      archived.delete(agentId);
-      sweeping.current += 1;
-      read(agentId)
-        .catch(() => undefined)
-        .then(() => {
-          sweeping.current -= 1;
-          pump();
-        });
-    }
-  }, [read]);
-
-  useEffect(() => {
-    const { asked, queued, archived } = visit.current;
-    for (const agent of agents ?? []) {
-      const ended = !agentStillWriting(agent.status);
-      const before = asked.get(agent.id);
-      if (before === true || before === ended) continue;
-      asked.set(agent.id, ended);
-      // Note that an agent still queued is not queued again, since its read has yet to ask.
-      if (agent.archivedAt === undefined) queued.add(agent.id);
-      else archived.add(agent.id);
-    }
-    // Note that the sweep starts once the frame that drew the agents has painted, so its reads never hold up a task or an Inbox item drawn.
-    return afterPaint(pump);
-  }, [agents, pump]);
-
-  return { pullRequests: held.taskId === taskId ? held.pullRequests : NO_PULL_REQUESTS, read };
+export function useListedPullRequests(
+  listed: readonly ListedPullRequest[] | undefined,
+  holder: PullRequestHolder | undefined,
+): ReadonlyMap<string, AgentPullRequest> {
+  const taskId = holder !== undefined && "taskId" in holder ? holder.taskId : undefined;
+  const agentId = holder !== undefined && "agentId" in holder ? holder.agentId : undefined;
+  return useMemo(() => {
+    const own = (listed ?? []).filter((each) =>
+      taskId !== undefined ? each.taskId === taskId : each.agentId === agentId,
+    );
+    if (own.length === 0) return NO_PULL_REQUESTS;
+    return new Map(own.map((each) => [each.agentId, each.pullRequest]));
+  }, [listed, taskId, agentId]);
 }
 
 /**

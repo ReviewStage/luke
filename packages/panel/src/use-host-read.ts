@@ -2,8 +2,19 @@ import type { AgentInboxScope } from "@luke/features/agent-view";
 import type { WorkspaceChannels } from "@luke/features/channel-live";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { LIVE_READ } from "@luke/features/live-wire";
+import {
+  PAGE_OWNER,
+  type PageLine,
+  type PageOwner,
+  type PagePlace,
+} from "@luke/features/page-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppHolderInbox, AppHostRead, AppInboxItems } from "@luke/host/app-state";
+import type {
+  AppHolderInbox,
+  AppHolderPages,
+  AppHostRead,
+  AppInboxItems,
+} from "@luke/host/app-state";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect } from "react";
 import { askAct, tellAct } from "./act.js";
@@ -20,11 +31,11 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * A read is loading until it first answers, failed where it said it could
  * not answer before it ever had, and ready from its first rows on: one that
  * holds rows never says loading again. A keyed read, a plan's or an agent's
- * own inbox, or a workspace's channels, is held by the surface that reads
- * it: the host follows it while any surface holds it and a while after, so
- * a holder chosen again, or a surface drawn again, draws from where its read
- * stands. Nothing else in the panel opens a follow
- * (`anti-slop/no-follow-outside-host-read`).
+ * own inbox, a task's or an agent's pages, or a workspace's channels, is
+ * held by the surface that reads it: the host follows it while any surface
+ * holds it and a while after, so a holder chosen again, or a surface drawn
+ * again, draws from where its read stands. Nothing else in the panel opens a
+ * follow (`anti-slop/no-follow-outside-host-read`).
  */
 
 export const HOST_READ_STATUS = {
@@ -35,10 +46,14 @@ export const HOST_READ_STATUS = {
 
 export type HostReadStatus = (typeof HOST_READ_STATUS)[keyof typeof HOST_READ_STATUS];
 
-/** A read as a surface draws it: its rows once it answered, where it stands, and Try again. */
-export interface HostRead<Rows> {
+/** A read as a surface draws it: its rows once it answered, and where it stands. */
+export interface HeldRead<Rows> {
   readonly rows: Rows | undefined;
   readonly status: HostReadStatus;
+}
+
+/** A read a surface offers Try again on, as well. */
+export interface HostRead<Rows> extends HeldRead<Rows> {
   readonly retry: () => void;
 }
 
@@ -60,6 +75,16 @@ const holderInboxAtom = Atom.family((kind: InboxHolderKey["kind"]) =>
 
 /** No holder read, for a surface holding none. */
 const NO_HOLDER: Atom.Atom<AppHolderInbox | undefined> = Atom.make(undefined);
+
+/** One task's or agent's pages as the host holds them, by what they stand on and then its id, told to their readers only as those pages move. */
+const pagesAtom = Atom.family((kind: PageOwner["kind"]) =>
+  Atom.family((id: string) =>
+    Atom.map(APP_SLICE.PAGES, (held): AppHolderPages | undefined => held?.[kind][id]),
+  ),
+);
+
+/** No pages read, for a surface holding none. */
+const NO_PAGES_HELD: Atom.Atom<AppHolderPages | undefined> = Atom.make(undefined);
 
 /** One workspace's channels as the host holds them, by its id, told to its readers only as that workspace's read moves. */
 const workspaceChannelsAtom = Atom.family((workspaceId: string) =>
@@ -104,6 +129,30 @@ function useHolderInbox(key: InboxHolderKey | undefined): HostRead<readonly Inbo
 }
 
 /**
+ * One task's pages, or one agent's on no task, held by this surface while
+ * `place` names one, as a holder's inbox is. Note that it offers no Try
+ * again, because the host reads pages that did not answer again on its own
+ * (`@luke/host`'s `live-push.ts`).
+ */
+function useHolderPages(place: PagePlace | undefined): HeldRead<readonly PageLine[]> {
+  const kind =
+    place === undefined ? undefined : "taskId" in place ? PAGE_OWNER.TASK : PAGE_OWNER.AGENT;
+  const id = place === undefined ? undefined : "taskId" in place ? place.taskId : place.agentId;
+  const held = useAppSlice(
+    kind === undefined || id === undefined ? NO_PAGES_HELD : pagesAtom(kind)(id),
+  );
+  useEffect(() => {
+    if (kind === undefined || id === undefined) return;
+    const asked: PagePlace = kind === PAGE_OWNER.TASK ? { taskId: id } : { agentId: id };
+    return streamFrom(
+      () => askAct(ACT_KIND.TASKS_PAGES_FOLLOW, asked),
+      () => undefined,
+    );
+  }, [kind, id]);
+  return { rows: held?.rows, status: statusOf(held) };
+}
+
+/**
  * One workspace's channels, open and archived, held by this surface while
  * `workspaceId` names one: the hold is a stream on the act port, which
  * carries nothing and which the host keeps the workspace followed for; the
@@ -132,21 +181,37 @@ export function useHostRead(
   key: InboxHolderKey | undefined,
 ): HostRead<readonly InboxItem[]>;
 export function useHostRead(
+  read: typeof LIVE_READ.PAGES,
+  key: PagePlace | undefined,
+): HeldRead<readonly PageLine[]>;
+export function useHostRead(
   read: typeof LIVE_READ.CHANNELS,
   workspaceId: string | undefined,
 ): HostRead<WorkspaceChannels>;
 export function useHostRead(
-  read: typeof LIVE_READ.INBOX_ITEMS | typeof LIVE_READ.HOLDER_INBOX | typeof LIVE_READ.CHANNELS,
-  key?: InboxHolderKey | string,
-): HostRead<AppInboxItems> | HostRead<readonly InboxItem[]> | HostRead<WorkspaceChannels> {
+  read:
+    | typeof LIVE_READ.INBOX_ITEMS
+    | typeof LIVE_READ.HOLDER_INBOX
+    | typeof LIVE_READ.PAGES
+    | typeof LIVE_READ.CHANNELS,
+  key?: InboxHolderKey | PagePlace | string,
+):
+  | HostRead<AppInboxItems>
+  | HostRead<readonly InboxItem[]>
+  | HeldRead<readonly PageLine[]>
+  | HostRead<WorkspaceChannels> {
   // Note that each read is one hook, called in the same order on every render, since the read a surface asks for never changes.
   const items = useAccountItems();
   const holder = useHolderInbox(
-    read === LIVE_READ.HOLDER_INBOX && typeof key === "object" ? key : undefined,
+    read === LIVE_READ.HOLDER_INBOX && typeof key === "object" && "kind" in key ? key : undefined,
+  );
+  const pages = useHolderPages(
+    read === LIVE_READ.PAGES && typeof key === "object" && !("kind" in key) ? key : undefined,
   );
   const channels = useWorkspaceChannels(
     read === LIVE_READ.CHANNELS && typeof key === "string" ? key : undefined,
   );
-  if (read === LIVE_READ.CHANNELS) return channels;
-  return read === LIVE_READ.INBOX_ITEMS ? items : holder;
+  if (read === LIVE_READ.INBOX_ITEMS) return items;
+  if (read === LIVE_READ.HOLDER_INBOX) return holder;
+  return read === LIVE_READ.PAGES ? pages : channels;
 }

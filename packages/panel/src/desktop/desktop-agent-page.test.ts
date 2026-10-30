@@ -217,6 +217,14 @@ async function* streamOf(
 let told: AnyAct[] = [];
 /** What a read of what the agent published answers; none refuses it. */
 let published: AgentPullRequestAnswer | undefined;
+
+/** What the agent published, as the task list carries it of the agent's row, where the host lays it; none where it published nothing. */
+function listedPublished(): TasksControl["listedPullRequests"] {
+  const opened = published?.pullRequest ?? undefined;
+  return opened === undefined
+    ? undefined
+    : [{ agentId: AGENT_ID, taskId: null, pullRequest: opened }];
+}
 /** How many of the pull request's conversation entries its read left on GitHub; none answers no read. */
 let earlier = 0;
 /** The owner of the fork the published pull request's head is pushed to; none for the base repository's own. */
@@ -431,7 +439,11 @@ function mount(
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const page = createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID, away });
+  const page = createElement(DesktopAgentPage, {
+    tasks: { ...tasks, listedPullRequests: tasks.listedPullRequests ?? listedPublished() },
+    agentId: AGENT_ID,
+    away,
+  });
   act(() =>
     root?.render(
       onRegistry(
@@ -632,7 +644,7 @@ function PanelPage(): React.JSX.Element {
   );
   drawnPanel = sidePanel;
   return createElement(DesktopAgentPage, {
-    tasks: { ...tasksControl({}), sidePanel },
+    tasks: { ...tasksControl({}), sidePanel, listedPullRequests: listedPublished() },
     agentId: AGENT_ID,
   });
 }
@@ -654,7 +666,7 @@ function PhonePanelPage(): React.JSX.Element {
     ShellRoomContext.Provider,
     { value: SHELL_ROOM.NARROW },
     createElement(DesktopAgentPage, {
-      tasks: { ...tasksControl({}), sidePanel },
+      tasks: { ...tasksControl({}), sidePanel, listedPullRequests: listedPublished() },
       agentId: AGENT_ID,
       away: { label: "Inbox", onPress: () => undefined },
     }),

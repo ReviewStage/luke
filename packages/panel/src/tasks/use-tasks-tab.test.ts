@@ -61,9 +61,8 @@ import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { FAKE_ANSWER, fakeActPort, fakeActs } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
+import { handHostReads, handState, holdPages } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { holdFrames, settleFrames } from "../testing/frames.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -977,20 +976,19 @@ test("a Luke link keyed by the agent alone opens on the agent's task where it ha
   assert.equal(tab.told.length, told, "the late read opens no other task");
 });
 
-test("a Luke link to a page an agent on no task showed opens that agent's page, its panel on the page's tab, the agent's own pages read and held for it", async () => {
+test("a Luke link to a page an agent on no task showed opens that agent's page, its panel on the page's tab, the agent's own pages held for it", async () => {
   const page = { id: "page-1", title: "Flaky funnel", version: 1, at: 1 };
-  const asked: unknown[] = [];
-  // Note that a panel's pages are read through the window's act port, as its hooks read them.
   fakeActs({
-    act: (request) => {
-      if (request.kind !== ACT_KIND.TASKS_PAGES) {
-        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
-      }
-      asked.push(request.payload);
-      return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { pages: [page] } });
-    },
+    act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
   });
-  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
+  // Note that a panel's pages are held through the window's act port and laid on the document, as the host lays them.
+  const asked = holdPages(handHostReads({}).deliverPages, () => [page]);
+  // A fresh registry reads the document handed here, rather than one an earlier test handed.
+  const tab = mount(
+    { shown: true, tasks: withAgents([RUNNING_AGENT]) },
+    {},
+    AtomRegistryModule.make(),
+  );
   await settle();
 
   act(() =>
@@ -1039,32 +1037,32 @@ test("a Luke link to an agent's worker opens the worker's own tab in the task's 
 });
 
 test("a link to an agent's Pull request tab, on a pull request another of the task's agents shares whose tab is open, opens that tab rather than a second, unless that agent was archived", async () => {
-  // Note that the task's sweep of its agents' pull requests starts once a frame has painted.
-  holdFrames();
   const EARLIER = { ...RUNNING_AGENT, id: "5e3b6f1d-2a10-4c7a-9a55-7b0f5f3e2c1d", createdAt: 2 };
   const shared = {
-    repository: "acme/relay",
-    branch: "luke/invites",
-    pullRequest: {
-      number: 41,
-      title: "Teammate invitations",
-      url: "https://github.com/acme/relay/pull/41",
-      state: PULL_REQUEST_STATE.OPEN,
-      checks: CHECK_SUMMARY.PASSING,
-      additions: 12,
-      deletions: 3,
-      changedFiles: 2,
-    },
+    number: 41,
+    title: "Teammate invitations",
+    url: "https://github.com/acme/relay/pull/41",
+    state: PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: 12,
+    deletions: 3,
+    changedFiles: 2,
   };
   const archived = { ...EARLIER, archivedAt: 5 };
+  // Both agents' rows keep the pull request they share, which the list carries beside them.
+  const sharing = (agents: readonly AgentSummary[]): TasksView => ({
+    ...withAgents(agents),
+    agentPullRequests: agents.map((agent) => ({
+      agentId: agent.id,
+      taskId: TASK.id,
+      pullRequest: shared,
+    })),
+  });
   const tab = mount(
-    { shown: true, tasks: withAgents([EARLIER, RUNNING_AGENT]) },
-    {
-      [ACT_KIND.AGENTS_PULL_REQUEST]: () => Promise.resolve(shared),
-      [ACT_KIND.AGENTS_ARCHIVE]: () => Promise.resolve({ agent: archived }),
-    },
+    { shown: true, tasks: sharing([EARLIER, RUNNING_AGENT]) },
+    { [ACT_KIND.AGENTS_ARCHIVE]: () => Promise.resolve({ agent: archived }) },
   );
-  await settleFrames();
+  await settle();
   const open = (agentId: string) =>
     act(() =>
       tab.control().onOpenLink({
@@ -1080,9 +1078,9 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
   assert.deepEqual(tab.control().sidePanel.changes, [{ changes: EARLIER.id }]);
 
   // Archived, the earlier agent's tab is no longer drawn, so the link opens the later agent's own.
-  tab.stand({ tasks: withAgents([archived, RUNNING_AGENT]) });
+  tab.stand({ tasks: sharing([archived, RUNNING_AGENT]) });
   await act(() => tab.control().agents.onArchive(EARLIER.id, true));
-  await settleFrames();
+  await settle();
   open(AGENT_ID);
   assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
 });
