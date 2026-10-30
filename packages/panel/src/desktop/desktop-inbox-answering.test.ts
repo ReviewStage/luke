@@ -855,13 +855,26 @@ test("an answer the service refuses brings its item back as it was, needing you,
   );
 });
 
-test("an answer no reply came back for, which its thread then holds, is taken as sent: its box empties and says nothing", async () => {
+test("an answer no reply came back for, which its thread then holds, is taken as sent once its own: its box empties and says nothing", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const { answer } = gatedAnswers();
   answerWithNote(page, "Use 90%");
   await settle();
   await act(async () => answer({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
+  await settle();
+  assert.equal(composerEditor(itemPane(page)).textContent, "Use 90%");
+
+  // A teammate's message in the same words is not the reader's answer, which may not have landed.
+  world.main.push(
+    { kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id },
+    {
+      items: [
+        answeredBy(THRESHOLD, TEAMMATE, "Retry 3 times over an hour", "Use 90%", 6_000),
+        RETRY,
+      ],
+    },
+  );
   await settle();
   assert.equal(composerEditor(itemPane(page)).textContent, "Use 90%");
 

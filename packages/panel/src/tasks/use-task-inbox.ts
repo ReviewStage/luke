@@ -163,17 +163,19 @@ export interface PendingInboxReply extends SentReply {
 }
 
 /**
- * Whether the item's thread holds the reply. Note that a thread message
- * carries no key, so the reply is known by a member's message the thread
- * did not hold as it was sent, in the reply's words, and never by the one
- * the host draws for an answer while it goes, which stands under its key.
+ * Whether the item's thread holds the reply, written by the member `by`
+ * names where it names one. Note that a thread message carries no key, so
+ * the reply is known by a member's message the thread did not hold as it
+ * was sent, in the reply's words, and never by the one the host draws for
+ * an answer while it goes, which stands under its key.
  */
-function holdsReply(item: InboxItem, reply: SentReply): boolean {
+function holdsReply(item: InboxItem, reply: SentReply, by?: string): boolean {
   return (item.thread ?? []).some(
     (message) =>
       message.id !== reply.key &&
       !reply.before.has(message.id) &&
       message.author === INBOX_MESSAGE_AUTHOR.MEMBER &&
+      (by === undefined || message.member?.userId === by) &&
       message.text === reply.text,
   );
 }
@@ -257,8 +259,9 @@ function notTakenNote(item: InboxItem): string {
   }
 }
 
-/** A reply no answer came back for, which may have landed all the same: the task it was sent on, where its words went back and as what, and what its card says of it. */
+/** A reply no answer came back for, which may have landed all the same: who sent it, the task it was sent on, where its words went back and as what, and what its card says of it. */
 interface UnheardReply extends SentReply {
+  readonly by: string;
   readonly taskId: string | undefined;
   readonly place: InboxPlace;
   readonly unsent: Draft;
@@ -446,16 +449,14 @@ function withRefused(now: Draft, went: Draft): Draft {
   };
 }
 
-/** Whether a box holds just what a reply gave back to it, whatever revision its picks are kept at, so letting go of it takes nothing written since. */
+/**
+ * Whether a box holds just the words and files a reply gave back to it, so
+ * letting go of them takes nothing written since. Note that its picks are
+ * not compared, because the drafts let go of picks made on an item that
+ * has changed since, as the reply landing changes it.
+ */
 function holdsOnly(now: Draft, went: Draft): boolean {
-  return (
-    now.text === went.text &&
-    now.press === went.press &&
-    Equal.equals(now.attachments, went.attachments) &&
-    Equal.equals(now.choices, went.choices) &&
-    Equal.equals(now.values, went.values) &&
-    Equal.equals(now.steps ?? [], went.steps ?? [])
-  );
+  return now.text === went.text && Equal.equals(now.attachments, went.attachments);
 }
 
 /** Whether a card holds nothing at all: no words, files, picks, fields, steps, or press. */
@@ -648,7 +649,9 @@ export function useHeldTaskInbox(input: {
   useEffect(() => {
     const landed = [...unheard.values()].filter((reply) => {
       const item = held.items.find((each) => each.id === reply.place.itemId);
-      return held.taskId === reply.taskId && item !== undefined && holdsReply(item, reply);
+      return (
+        held.taskId === reply.taskId && item !== undefined && holdsReply(item, reply, reply.by)
+      );
     });
     if (landed.length === 0) return;
     setUnheard((standing) => {
@@ -741,6 +744,7 @@ export function useHeldTaskInbox(input: {
         setPendingReplies((standing) => new Map(standing).set(item.id, reply));
       }
       const askedOn = taskId;
+      const sender = readerId;
       latest.current
         .messageInbox({
           itemId: item.id,
@@ -772,8 +776,18 @@ export function useHeldTaskInbox(input: {
               answers === undefined ? (holdsNothing(now) ? unsent : now) : withRefused(now, unsent),
             );
             const said = refused(item.id, answer.failure);
-            if (answer.failure === AGENT_CALL_FAILURE.UNANSWERED) {
-              const reply = { key, text, before, taskId: askedOn, place, unsent, note: said };
+            // Note that a teammate's message in the same words is not this reply, so a reader not known yet is never taken to have sent one.
+            if (answer.failure === AGENT_CALL_FAILURE.UNANSWERED && sender !== undefined) {
+              const reply = {
+                key,
+                text,
+                before,
+                by: sender,
+                taskId: askedOn,
+                place,
+                unsent,
+                note: said,
+              };
               setUnheard((standing) => new Map(standing).set(item.id, reply));
             }
             return;
@@ -790,7 +804,7 @@ export function useHeldTaskInbox(input: {
           latest.current.onRetryList();
         });
     },
-    [note, refused, taskId, writer, draftsOn],
+    [note, refused, taskId, readerId, writer, draftsOn],
   );
 
   // An item of an agent the list has not read yet, one started from another
