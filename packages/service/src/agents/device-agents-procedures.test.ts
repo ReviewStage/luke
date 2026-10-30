@@ -797,7 +797,7 @@ it.layer(
   );
 
   it.effect(
-    "a box pairs with a code: a start below the floor is refused, a member reads and approves the code, the host is listed at once, and the box's next poll alone is handed its secret, counted as an install",
+    "a box pairs with a code: a start below the floor is refused, a member reads and approves the code, the host is listed at once, the box's next poll alone is handed its secret, counted as an install, and the host is listed as called in only once its program registers",
     () =>
       Effect.gen(function* () {
         const owner = yield* account();
@@ -817,12 +817,14 @@ it.layer(
         yield* TestClock.adjust("5 seconds");
         const again = yield* pollPairing(pollSecret);
         const secret: string = handed.body.deviceSecret;
+        const collected = yield* answerOf(request(owner, PATH.HOSTS));
         const register = yield* statusOf(
           request(secret, PATH.DEVICES, {
             version: HOST_VERSION.FLOOR,
             body: { ...registered(deviceId), platform: DEVICE_PLATFORM.LINUX, home: "/srv/luke" },
           }),
         );
+        const joined = yield* answerOf(request(owner, PATH.HOSTS));
 
         assert.equal(old, HOSTED_HTTP_STATUS.UPGRADE_REQUIRED);
         assert.match(userCode, /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/u);
@@ -851,6 +853,11 @@ it.layer(
         assert.ok(secret.startsWith("lkd_"));
         assert.deepEqual(again.body, { status: "expired" }, "the secret is handed over once");
         assert.equal(register, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(
+          [listed, collected, joined].map((each) => each.body.hosts[0]?.calledIn),
+          [false, false, true],
+          "collecting its secret is not calling in; its program's register is",
+        );
         assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_INSTALL), [
           { kind: "luke_host" },
         ]);

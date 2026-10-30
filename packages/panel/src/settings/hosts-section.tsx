@@ -6,13 +6,12 @@ import {
 } from "@luke/features/device-agent-wire";
 import {
   HOST_UNINSTALL_COMMAND,
-  HOST_WIRE,
   type Host,
   hostInstallCommand,
   hostUpgradeCommand,
 } from "@luke/features/host-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { agoText, momentText } from "@luke/features/time-format";
+import { agoText } from "@luke/features/time-format";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
@@ -27,27 +26,29 @@ import {
   ConfirmDialog,
   DIALOG_SIZE,
   Dialog,
-  DialogActions,
-  ErrorLine,
   ErrorState,
   GAP,
   PlusIcon,
   SETTINGS_ROW_STATE,
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
+  SettingsRow,
   type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
+  SPINNER_SIZE,
+  SpinnerRing,
   STATUS_TONE,
   Stack,
+  TEXT_TONE,
   Text,
   TrashIcon,
+  useAnnounce,
   useConfirmDialog,
   useMinute,
   useSecond,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { Base64Url, Hex } from "effect/encoding";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
@@ -71,7 +72,7 @@ import {
 } from "./this-mac-host-row.js";
 
 /**
- * hosts-section.tsx -- Settings › Hosts: the member's own machines that run their local agents, Linux servers and Macs alike, and Add hosts, which shows the install command once.
+ * hosts-section.tsx -- Settings › Hosts: the member's own machines that run their local agents, Linux servers and Macs alike, and Add hosts, which shows the install command and waits for the hosts it adds.
  *
  * A machine is any device of the member's enrolled with a secret of its own
  * (`@luke/features/host-wire`): a Linux server or a Mac that ran the install
@@ -99,37 +100,33 @@ import {
  * tab has no This Mac, so it draws neither, and with no host says what one
  * is above Add hosts.
  *
- * Add hosts mints an install token here, in the window, and hands the
- * service its SHA-256 alone, so the token never leaves the window that
- * shows it: it stands in this section's state while the dialog is open,
- * inside the install command the member runs on each host, and is gone once
- * the dialog closes. Revoke this command stops new servers enrolling with it, and none it
- * already enrolled. The page stands only while the Bring your own host
+ * Add hosts shows the install command, public and the same for every
+ * member, which pairs a box with a code the member approves, and waits.
+ * While it stands the list is read every few seconds, and the dialog names
+ * each host the list holds that it did not hold as the dialog opened,
+ * moving by itself from connecting through getting ready to ready or
+ * couldn't set up and why (`joinedLine`). A host so named is approved,
+ * since the service lists no box before its approve, so the dialog never
+ * names one that is not. The page stands only while the Bring your own host
  * experiment is on (`settings-rows.ts`'s `PAGE_EXPERIMENT`), so while it is
  * off nothing here is drawn, read, or turned on.
  */
 
-/** The bytes of randomness behind an install token, as many as a device secret's. */
-const INSTALL_TOKEN_BYTES = 32;
-
 /** `useMinute` counts in milliseconds, so the minute the list stands on is read off it in whole ones. */
 const MINUTE_MS = 60_000;
 
-/** How often the list is read while a host is getting ready, as often as This Mac's row reads its own. */
-const SETTING_UP_READ_EVERY_MS = 5_000;
+/** How often the list is read while a host is getting ready or Add hosts waits for one, as often as This Mac's row reads its own. */
+const WATCHED_READ_EVERY_MS = 5_000;
 
 /**
- * The class PostHog's recorder leaves out of a recording, element and children
- * alike, and a size containment: the commands do not wrap, so without it
- * their width widens the dialog's grid track past a phone's and puts the card,
- * its Done among it, off the screen. They scroll inside their cards instead.
+ * A size containment: the command does not wrap, so without it its width
+ * widens the dialog's grid track past a phone's and puts its card off the
+ * screen. It scrolls inside its card instead.
  */
-const COMMANDS = "ph-no-capture contain-inline-size";
+const COMMAND = "contain-inline-size";
 
 const WORDS = {
   ADD: "Add hosts",
-  ADDING: "Making a command",
-  ADD_FAILED: "Could not make an install command. Try again.",
   READ_FAILED: "Could not read your hosts.",
   NONE: "No hosts yet. A host is a Mac or Linux server of yours that runs your agents instead of the cloud.",
   SIGNED_OUT: "Sign in to see your hosts.",
@@ -142,7 +139,12 @@ const WORDS = {
   OTHER_MAC_UPGRADE: "If you added it from the Luke app on it, update the app there.",
   OTHER_MAC_UPGRADE_TITLE: "If you used the install command, run this on it",
   INSTALL_TITLE: "Run this on each host",
-  REVOKE: "Revoke this command",
+  INSTALL_NEXT: "Then open the link it prints, and approve its code.",
+  MAC_SESSION: "A Mac host runs your agents only while its user is logged in.",
+  WAITING: "Waiting for approval",
+  WAITING_HOW: "Once you approve a code, its host shows here.",
+  CONNECTING: "Connecting…",
+  READY: "Ready",
 } as const;
 
 /** The row that stands while the machines are read: a machine with its ⋯. */
@@ -150,31 +152,15 @@ const HOSTS_SKELETON: readonly SettingsRowSkeletonShape[] = [
   { described: true, controls: [SETTINGS_SKELETON_CONTROL.MORE] },
 ];
 
-/** Add hosts' own line under the list, the button stretched to the rows' width and its failure under it. */
+/** Add hosts' own line under the list, the button stretched to the rows' width. */
 const ADD_LINE = "grid";
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
-/** A remove or a revoke the service did not take, said in the dialog that asked. */
+/** A remove the service did not take, said in the dialog that asked. */
 const REFUSED: ActionResult = {
   status: ACTION_RESULT_STATUS.REJECTED,
   reason: "Luke could not reach the service. Try again.",
 };
-
-/** An install token minted for the dialog, and what the service answered keeping its hash. */
-interface ShownToken {
-  readonly installToken: string;
-  readonly id: string;
-  readonly expiresAt: number;
-  readonly installScriptUrl: string;
-}
-
-/** A fresh install token and its SHA-256 in hex, from the platform's own Web Crypto, so the desktop and a browser mint one alike. */
-async function mintedInstallToken(): Promise<{ installToken: string; tokenHash: string }> {
-  const bytes = crypto.getRandomValues(new Uint8Array(INSTALL_TOKEN_BYTES));
-  const installToken = `${HOST_WIRE.INSTALL_TOKEN_PREFIX}${Base64Url.encode(bytes)}`;
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(installToken));
-  return { installToken, tokenHash: Hex.encode(new Uint8Array(digest)) };
-}
 
 /** Where a host stands now; one the read does not name, though it is the account's own, is gone. */
 function hostStanding(host: Host, book: PresenceBook): DeviceStanding {
@@ -353,56 +339,78 @@ function HostRow({
   );
 }
 
-/** The dialog Add hosts opens: the install command with the token in it, shown this once, and Revoke. */
+/**
+ * Where a host that joined while Add hosts stood is, in the words its row
+ * says its setup in: connecting until its program first calls in, then
+ * getting ready, or couldn't set up and why, while it says so, and ready.
+ * Like its row it offers no Retry, since a host retries its setup itself.
+ */
+function joinedLine(host: Host): HostLine {
+  // Note that a service older than `calledIn` lists none, so its hosts read as called in rather than connecting for good.
+  if (host.calledIn === false) return { words: WORDS.CONNECTING, state: SETTINGS_ROW_STATE.PLAIN };
+  if (host.setup !== undefined) return setupLineOf(host.setup, host.setupFailure);
+  return { words: WORDS.READY, state: SETTINGS_ROW_STATE.CONNECTED };
+}
+
+/**
+ * The dialog Add hosts opens: the install command, what comes after it, and
+ * the hosts that joined since it opened, each where it stands, or a wait
+ * until one does; a reader is told as each moves. It has no answers of its
+ * own and closes as any dialog does.
+ */
 function AddHostsDialog({
-  shown,
-  onRevoke,
+  known,
+  hosts,
+  installScriptUrl,
   onClose,
 }: {
-  shown: ShownToken;
-  onRevoke: () => Promise<ActionResult>;
+  /** The ids of the account's hosts as the dialog opened, which it never names as joined. */
+  known: ReadonlySet<string>;
+  hosts: readonly Host[];
+  installScriptUrl: string;
   onClose: () => void;
 }): React.JSX.Element {
-  const revoking = useConfirmDialog(
-    { subject: true, surfaceOpen: true },
-    onRevoke,
-    confirmFailure(FAILURE_SURFACE.HOST_REVOKE),
+  const joined = hosts.filter((host) => !known.has(host.id));
+  useAnnounce(
+    ANNOUNCE.POLITE,
+    joined.map((host) => `${host.name}: ${joinedLine(host).words}`).join(" "),
   );
   return (
-    <Dialog
-      open
-      title={WORDS.ADD}
-      size={DIALOG_SIZE.WIDE}
-      onDismiss={onClose}
-      actionsStart={
-        <Button variant={BUTTON_VARIANT.QUIET} onClick={revoking.ask} disabled={revoking.busy}>
-          {WORDS.REVOKE}
-        </Button>
-      }
-      actions={<DialogActions onDone={onClose} />}
-    >
-      <div className={COMMANDS}>
-        <Stack gap={GAP.CONTROL}>
-          <Text>{`It works until ${momentText(shown.expiresAt)}, and isn't shown again.`}</Text>
-          <CodeCard
-            title={WORDS.INSTALL_TITLE}
-            titleIs={CODE_CARD_TITLE.WORDS}
-            code={hostInstallCommand(shown.installScriptUrl, shown.installToken)}
-            copy={copyThroughShell}
-          />
-        </Stack>
+    <Dialog open title={WORDS.ADD} size={DIALOG_SIZE.WIDE} onDismiss={onClose}>
+      <div className={COMMAND}>
+        <CodeCard
+          title={WORDS.INSTALL_TITLE}
+          titleIs={CODE_CARD_TITLE.WORDS}
+          code={hostInstallCommand(installScriptUrl)}
+          copy={copyThroughShell}
+        />
       </div>
-      <ConfirmDialog
-        open
-        confirm={revoking}
-        question={{
-          title: "Revoke this command?",
-          body: "No new server can be added with it. Servers already added keep working.",
-          verb: "Revoke",
-          running: "Revoking",
-          loss: CONFIRM_LOSS.IRREVERSIBLE,
-        }}
-      />
+      <Stack gap={GAP.TIGHT}>
+        <Text>{WORDS.INSTALL_NEXT}</Text>
+        <Text tone={TEXT_TONE.MUTED}>{WORDS.MAC_SESSION}</Text>
+      </Stack>
+      <SettingsSection>
+        {joined.length === 0 ? (
+          <SettingsRow
+            leading={<SpinnerRing size={SPINNER_SIZE.INLINE} />}
+            label={WORDS.WAITING}
+            description={WORDS.WAITING_HOW}
+          />
+        ) : (
+          joined.map((host) => (
+            <SettingsRow
+              key={host.id}
+              label={host.name}
+              description={
+                <>
+                  {DEVICE_PLATFORM_NAME[host.platform ?? DEVICE_PLATFORM.LINUX]}
+                  <HostStateLine line={joinedLine(host)} />
+                </>
+              }
+            />
+          ))
+        )}
+      </SettingsSection>
     </Dialog>
   );
 }
@@ -418,9 +426,8 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const [installScriptUrl, setInstallScriptUrl] = useState<string | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [adding, setAdding] = useState(false);
-  const [addFailed, setAddFailed] = useState(false);
-  const [shown, setShown] = useState<ShownToken | undefined>(undefined);
+  // The ids of the account's hosts as Add hosts opened, while its dialog stands.
+  const [adding, setAdding] = useState<ReadonlySet<string> | undefined>(undefined);
   const thisMac = useThisMacHost(signedIn);
 
   // The page opening reads the hosts the service holds now, which a server may just have joined.
@@ -429,6 +436,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
     let live = true;
     setHosts(undefined);
     setReadFailed(false);
+    setAdding(undefined);
     act(ACT_KIND.HOSTS_LIST).then(
       (answer) => {
         if (!live) return;
@@ -449,13 +457,14 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   }, [act, signedIn, attempt]);
 
   // A server that joins while the page stands is drawn within a minute, with no skeleton over the list the member is reading.
-  // Note that while a host is getting ready the list is read every few seconds instead, so it reads ready, or why it couldn't set up, about as soon as This Mac's row would.
+  // Note that while a host is getting ready, or Add hosts waits for one, the list is read every few seconds instead, so a host reads approved, ready, or why it couldn't set up about as soon as This Mac's row would.
   const settingUp = hosts?.some((host) => host.setup === DEVICE_SETUP.PREPARING) ?? false;
-  const period = settingUp ? Math.floor(now / SETTING_UP_READ_EVERY_MS) : minute;
+  const watched = settingUp || adding !== undefined;
+  const period = watched ? Math.floor(now / WATCHED_READ_EVERY_MS) : minute;
   const mountMinute = useRef(minute);
   useEffect(() => {
     // The mount's own read is the effect above, so the minute it began in stands as it is.
-    if (!signedIn || (!settingUp && period === mountMinute.current)) return;
+    if (!signedIn || (!watched && period === mountMinute.current)) return;
     let live = true;
     act(ACT_KIND.HOSTS_LIST).then(
       (answer) => {
@@ -467,30 +476,12 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
     return () => {
       live = false;
     };
-  }, [act, signedIn, settingUp, period]);
+  }, [act, signedIn, watched, period]);
 
+  // Note that Add hosts waits for the list, since the dialog names only the hosts the list did not hold as it opened, and its command names the script the list's answer does.
   const add = useCallback(() => {
-    setAdding(true);
-    setAddFailed(false);
-    // Note that the token is minted here and only its hash is sent, so the token stands in this window alone.
-    mintedInstallToken()
-      .then(({ installToken, tokenHash }) =>
-        act(ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN, { tokenHash }).then((answer) => {
-          if ("failure" in answer) {
-            setAddFailed(true);
-            return;
-          }
-          setShown({
-            installToken,
-            id: answer.id,
-            expiresAt: answer.expiresAt,
-            installScriptUrl: answer.installScriptUrl,
-          });
-        }),
-      )
-      .catch(() => setAddFailed(true))
-      .finally(() => setAdding(false));
-  }, [act]);
+    if (hosts !== undefined) setAdding(new Set(hosts.map((host) => host.id)));
+  }, [hosts]);
 
   const remove = useCallback(
     (id: string): Promise<ActionResult> =>
@@ -503,17 +494,6 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
         }),
     [act],
   );
-
-  const revoke = useCallback((): Promise<ActionResult> => {
-    if (shown === undefined) return Promise.resolve(REFUSED);
-    return act(ACT_KIND.HOSTS_REVOKE_INSTALL_TOKEN, { id: shown.id })
-      .catch(() => undefined)
-      .then((answer) => {
-        if (answer === undefined || "failure" in answer) return REFUSED;
-        setShown(undefined);
-        return ACCEPTED;
-      });
-  }, [act, shown]);
 
   const thisMacId = thisMac.standing?.deviceId;
   const listedMac =
@@ -567,34 +547,19 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
           <Button
             variant={BUTTON_VARIANT.OUTLINE}
             icon={<PlusIcon />}
-            busy={adding}
-            busyLabel={WORDS.ADDING}
+            disabled={!loaded}
             onClick={add}
           >
             {WORDS.ADD}
           </Button>
-          <ErrorLine
-            level={ANNOUNCE.ALERT}
-            error={
-              addFailed
-                ? {
-                    words: WORDS.ADD_FAILED,
-                    failure: unreadShown(FAILURE_SURFACE.HOST_INSTALL_COMMAND),
-                  }
-                : undefined
-            }
-          />
         </div>
       ) : null}
-      {shown === undefined ? null : (
+      {adding === undefined || !loaded ? null : (
         <AddHostsDialog
-          shown={shown}
-          onRevoke={revoke}
-          onClose={() => {
-            setShown(undefined);
-            // The list is read again, so a server that joined while the dialog stood is drawn.
-            setAttempt((count) => count + 1);
-          }}
+          known={adding}
+          hosts={hosts}
+          installScriptUrl={installScriptUrl}
+          onClose={() => setAdding(undefined)}
         />
       )}
     </>
