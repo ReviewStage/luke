@@ -32,10 +32,12 @@ import { followTakingRows, restarting, type TxWait } from "./live-follow.js";
  * item's change, so it is resent. An item no stamp names any more is gone,
  * and dropped.
  *
- * The items stand in a collection among the reads an inbox write reaches
+ * The items stand in a read among those an inbox write reaches
  * (`inbox-collections.ts`), each answer taken as its poll answers, and are
- * told whole, by plan and agent, after each answer and each write drawn
- * over them. A read the service refused, or a follow that stopped, is read
+ * told by plan and agent after each answer and each write drawn over them.
+ * Only a holder an item on it moved is ordered again, every other's list
+ * told as the very one told before, so a change costs the holders it
+ * moved rather than the feed's whole. A read the service refused, or a follow that stopped, is read
  * again after `LIVE_RESTART`, keeping what it told; one refused before it
  * ever answered is told as failed.
  */
@@ -90,21 +92,30 @@ function holderOf(stamp: InboxItemStamp): Pick<HeldItem, "kind" | "holder"> {
 }
 
 /**
- * The items held after an answer, and the stamps that moved with no item
- * sent: each item the answer sent taken whole, kept as it was held where it
- * is sent unchanged; each other held item's read mark patched from its
- * stamp, and its channel; and every item no stamp names dropped.
+ * The items held after an answer, the stamps that moved with no item sent,
+ * and the items now on another holder than they were: each item the answer
+ * sent taken whole, kept as it was held where it is sent unchanged; each
+ * other held item's read mark patched from its stamp, and its channel; and
+ * every item no stamp names dropped.
  */
 function heldAfter(
   held: Held,
   rows: AccountInboxItemsLiveRows,
-): { readonly held: Held; readonly unsent: readonly InboxItemStamp[] } {
+): {
+  readonly held: Held;
+  readonly unsent: readonly InboxItemStamp[];
+  readonly placed: readonly string[];
+} {
   const sent = new Map(inboxOfLiveRows(rows).map((item) => [item.id, item]));
   const next = new Map<string, HeldItem>();
   const unsent: InboxItemStamp[] = [];
+  const placed: string[] = [];
   for (const stamp of rows.stamps) {
     const on = holderOf(stamp);
     const before = held.get(stamp.id);
+    if (before !== undefined && (before.kind !== on.kind || before.holder !== on.holder)) {
+      placed.push(stamp.id);
+    }
     const item = sent.get(stamp.id);
     if (item !== undefined) {
       // Note that an item sent again as it stood stays the object held, so its holder's list keeps its identity where nothing moved.
@@ -126,7 +137,7 @@ function heldAfter(
           };
     next.set(stamp.id, { item: patched.item, sent: patched.sent, ...on });
   }
-  return { held: next, unsent };
+  return { held: next, unsent, placed };
 }
 
 /** The instant the next poll is sent every item changed since: the latest change held, or earlier, the change of each stamp `again` asks for; none while nothing is held. */
@@ -137,23 +148,55 @@ function sinceOf(held: Held, again: readonly InboxItemStamp[]): number | undefin
   return since;
 }
 
-/** Every item held, as `shown` draws it where it holds it, by its plan or agent, each holder's in the order its own read answers them. */
-function inboxItemsOf(held: Held, shown: ReadonlyMap<string, InboxItem>): AppInboxItems {
-  const grouped = {
+/** No item on any holder, as the feed is told before it first answers. */
+const NO_ITEMS: AppInboxItems = { [INBOX_SCOPE_KIND.PLAN]: {}, [INBOX_SCOPE_KIND.AGENT]: {} };
+
+/**
+ * The holders `told` once the items `moved` names are drawn again: each
+ * holder one of them stood on in `was`, or stands on in `held`, holds what
+ * `held` puts on it now, each as `drawn` holds it, in the order its own read
+ * answers them, and is gone where it holds none; every other holder's list
+ * is the very one told.
+ */
+function inboxItemsPatched(
+  told: AppInboxItems,
+  moved: Iterable<string>,
+  was: Held,
+  held: Held,
+  drawn: ReadonlyMap<string, InboxItem>,
+): AppInboxItems {
+  const touched = {
+    [INBOX_SCOPE_KIND.PLAN]: new Set<string>(),
+    [INBOX_SCOPE_KIND.AGENT]: new Set<string>(),
+  };
+  for (const id of moved) {
+    for (const on of [was.get(id), held.get(id)])
+      if (on !== undefined) touched[on.kind].add(on.holder);
+  }
+  const lists = {
     [INBOX_SCOPE_KIND.PLAN]: new Map<string, InboxItem[]>(),
     [INBOX_SCOPE_KIND.AGENT]: new Map<string, InboxItem[]>(),
   };
   for (const [id, { item, kind, holder }] of held) {
-    const drawn = shown.get(id) ?? item;
-    const items = grouped[kind].get(holder);
-    if (items === undefined) grouped[kind].set(holder, [drawn]);
-    else items.push(drawn);
+    if (!touched[kind].has(holder)) continue;
+    const items = lists[kind].get(holder);
+    const shown = drawn.get(id) ?? item;
+    if (items === undefined) lists[kind].set(holder, [shown]);
+    else items.push(shown);
   }
-  const ordered = (holders: ReadonlyMap<string, InboxItem[]>) =>
-    Object.fromEntries([...holders].map(([holder, items]) => [holder, inboxInOrder(items)]));
+  const ofKind = (kind: HolderKind) => {
+    if (touched[kind].size === 0) return told[kind];
+    const next = { ...told[kind] };
+    for (const holder of touched[kind]) {
+      const items = lists[kind].get(holder);
+      if (items === undefined) Reflect.deleteProperty(next, holder);
+      else next[holder] = inboxInOrder(items);
+    }
+    return next;
+  };
   return {
-    [INBOX_SCOPE_KIND.PLAN]: ordered(grouped[INBOX_SCOPE_KIND.PLAN]),
-    [INBOX_SCOPE_KIND.AGENT]: ordered(grouped[INBOX_SCOPE_KIND.AGENT]),
+    [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN),
+    [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT),
   };
 }
 
@@ -179,19 +222,28 @@ export function followAccountItems(
         return true;
       }
       const asking = yield* Ref.make<Asking>({ since: undefined, again: false });
-      const read = yield* itemsRead(dependencies.reads);
+      const read = itemsRead(dependencies.reads);
       let wait: TxWait | undefined;
       /** Every item as the read last answered it, with the stamp it was sent with and its holder. */
       let held: Held | undefined;
+      /** The items as last drawn, a standing write's among them, by the holder each is on. */
+      let told = NO_ITEMS;
       /** The stamps last asked for again, so a stamp whose item the service does not send is asked for once rather than every poll. */
       let askedFor: string | undefined;
-      /** The items as they stand, a standing write's among them, each on the holder the read answered it on. */
-      const drawn = Effect.suspend(() => {
+      /** Tells the items as last drawn, once the read first answered. */
+      const toldNow = Effect.suspend(() => {
         if (held === undefined) return Effect.void;
         answered = true;
-        const shown = new Map(read.shown().map((item) => [item.id, item]));
-        return tell({ rows: inboxItemsOf(held, shown) });
+        return tell({ rows: told });
       });
+      /** Draws the items `ids` names again, a write standing over them, on the holders the read answered them on. */
+      const drawn = (ids: readonly string[]) =>
+        Effect.suspend(() => {
+          if (held !== undefined) {
+            told = inboxItemsPatched(told, read.redrawn(ids), held, held, read.items());
+          }
+          return toldNow;
+        });
       yield* dependencies.reads.stand({
         shown: read.shown,
         take: read.take,
@@ -202,9 +254,17 @@ export function followAccountItems(
       // Note that a poll already held when a stamp moved alone asks again only once it answers, by the hold's end at the latest.
       const landed = (decoded: AccountInboxItemsLiveRows) =>
         Effect.gen(function* () {
-          const after = heldAfter(held ?? new Map(), decoded);
+          const was = held ?? new Map<string, HeldItem>();
+          const after = heldAfter(was, decoded);
           held = after.held;
-          read.items.answer([...after.held.values()].map((kept) => kept.item));
+          const moved = read.answer([...after.held.values()].map((kept) => kept.item));
+          told = inboxItemsPatched(
+            told,
+            [...moved, ...after.placed],
+            was,
+            after.held,
+            read.items(),
+          );
           const unsent = after.unsent.length === 0 ? undefined : JSON.stringify(after.unsent);
           const again = unsent !== undefined && unsent !== askedFor;
           askedFor = unsent;
@@ -212,7 +272,7 @@ export function followAccountItems(
             since: sinceOf(after.held, again ? after.unsent : []),
             again,
           });
-          yield* drawn;
+          yield* toldNow;
         });
       yield* followTakingRows(
         {

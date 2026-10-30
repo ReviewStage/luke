@@ -1,13 +1,20 @@
 /**
- * inbox-collections.ts -- every inbox read the host follows, held in TanStack DB collections, one set a read, and a member's write on an item drawn over each that holds it the moment it is asked.
+ * inbox-collections.ts -- every inbox read the host follows, its rows held by key, and a member's write on an item drawn over each that holds it the moment it is asked.
  *
- * Each followed read keeps what it answers in collections of its own
- * (`live-collection.ts`): a plan's or an agent's inbox and the account's
- * feed of every item (`itemsRead`) whole items by id, and main's read of
- * what waits (`account-inbox-follow.ts`) its brief entries and the tasks
- * holding them. Each stands among the reads a write reaches for as long as
- * its follow does (`InboxReads.stand`), so an item several reads hold, as
- * the open task's inbox and the feed both do, is one write over all of them.
+ * Each followed read keeps what it answers: a plan's or an agent's inbox
+ * and the account's feed of every item (`itemsRead`) whole items by id, and
+ * main's read of what waits (`account-inbox-follow.ts`) its brief entries
+ * and the tasks holding them, in collections of its own
+ * (`live-collection.ts`). Each stands among the reads a write reaches for as
+ * long as its follow does (`InboxReads.stand`), so an item several reads
+ * hold, as the open task's inbox and the feed both do, is one write over
+ * all of them.
+ *
+ * An items read keeps each item the very object it was answered as, and
+ * draws one again only where an answer or a write names it, so a reader of
+ * what did not move holds the same object, and a change costs what it
+ * moved rather than the read's whole. A write is compared and drawn on each
+ * read by the items it names alone, for the same reason.
  *
  * A write is drawn the moment it is asked, laid over the rows every read
  * holds, and stands until each read it changed carries its transaction, or
@@ -40,9 +47,7 @@
  */
 
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
-import { inboxInOrder } from "@luke/features/live-wire";
 import { Deferred, Effect, Equal, Exit, FiberSet, type Scope } from "effect";
-import { type AnsweredCollection, answeredCollection, rowsOf } from "./live-collection.js";
 import { confirmWrite, type TxWait } from "./live-follow.js";
 
 /** What a member's write does to the items it names. */
@@ -72,14 +77,14 @@ export type InboxChange =
 
 /** One standing read as a write reaches it. */
 export interface InboxRead {
-  /** What the read shows now, the writes standing drawn over it, compared whole to tell which reads a write moves. */
-  readonly shown: () => unknown;
+  /** What the read shows of the items `ids` names now, the writes standing drawn over them, compared whole to tell which reads a write moves. */
+  readonly shown: (ids: readonly string[]) => unknown;
   /** Takes the change as the read's own, in its place, where it can confirm no write yet. */
   readonly take: (change: InboxChange) => void;
   /** The read's wait for a write's transaction; none while its follow hands none. */
   readonly txWait: () => TxWait | undefined;
-  /** Tells the read's readers what it shows now. */
-  readonly drawn: Effect.Effect<void>;
+  /** Tells the read's readers what it shows now, the items `ids` names drawn again. */
+  readonly drawn: (ids: readonly string[]) => Effect.Effect<void>;
   /** Whether the read is the account's own, which every write on an item the account reaches wakes. */
   readonly accountWide: boolean;
 }
@@ -156,51 +161,86 @@ export function changedIds(change: InboxChange): readonly string[] {
   }
 }
 
-/**
- * `next` as the fields that replace `row` whole: every key `next` drops left
- * undefined, which a collection reads as absent, since a row is taken by
- * laying fields over it.
- */
-function whole<Row extends object>(row: Row, next: Row): Partial<Row> {
-  const dropped = Object.keys(row).filter((name) => !(name in next));
-  return { ...Object.fromEntries(dropped.map((name) => [name, undefined])), ...next };
+/** The item as every write standing leaves it, in the order they were asked; the very item where none changes it. */
+function drawnOver(writes: readonly InboxChange[], item: InboxItem): InboxItem {
+  return writes.reduce((each, change) => changedItem(change, each) ?? each, item);
 }
 
 /** One read's whole items, by id, and how a write reaches them. */
 export interface ItemsRead {
-  readonly items: AnsweredCollection<InboxItem, string>;
-  /** Every item the read shows, the writes standing drawn over them, in the order the held read answers them. */
-  readonly shown: () => readonly InboxItem[];
+  /**
+   * Takes the items the read answered, whole, keeping the one held for
+   * each equal to it, and draws again each that moved: answers the ids of
+   * those whose drawing moved, an item new or gone among them.
+   */
+  readonly answer: (items: readonly InboxItem[]) => ReadonlySet<string>;
+  /**
+   * Draws the items `ids` names again over the writes standing now,
+   * answering the ids of those whose drawing moved. Every other item stays
+   * the very object drawn before.
+   */
+  readonly redrawn: (ids: Iterable<string>) => ReadonlySet<string>;
+  /** Every item as last drawn, by id, the writes standing over it then. */
+  readonly items: () => ReadonlyMap<string, InboxItem>;
+  readonly shown: InboxRead["shown"];
   readonly take: InboxRead["take"];
 }
 
-/** A read's whole items in a collection, empty until it first answers, the writes `reads` holds standing drawn over them, for as long as the scope stands. */
-export function itemsRead(
-  reads: Pick<InboxReads, "standingWrites">,
-): Effect.Effect<ItemsRead, never, Scope.Scope> {
-  return Effect.map(answeredCollection({ getKey: (item: InboxItem) => item.id }), (items) => {
-    const drawnItems = () => {
+/**
+ * A read's whole items, empty until it first answers, the writes `reads`
+ * holds standing drawn over them. Note that each is drawn again only where
+ * an answer or a write names it, because a read is a whole holder's inbox,
+ * or the account's every item, and a change moves a few.
+ */
+export function itemsRead(reads: Pick<InboxReads, "standingWrites">): ItemsRead {
+  /** Every item as the read answered it, or a write's answer took it in the read's place. */
+  const synced = new Map<string, InboxItem>();
+  /** Every item as drawn, each the very object drawn before where its drawing did not move. */
+  const drawn = new Map<string, InboxItem>();
+  const redrawn = (ids: Iterable<string>) => {
+    const writes = reads.standingWrites();
+    const moved = new Set<string>();
+    for (const id of ids) {
+      const item = synced.get(id);
+      const next = item === undefined ? undefined : drawnOver(writes, item);
+      const was = drawn.get(id);
+      if (was === next || (was !== undefined && Equal.equals(was, next))) continue;
+      if (next === undefined) drawn.delete(id);
+      else drawn.set(id, next);
+      moved.add(id);
+    }
+    return moved;
+  };
+  return {
+    answer: (items) => {
+      const answered = new Map(items.map((item) => [item.id, item]));
+      const changed = [...synced.keys()].filter((id) => !answered.has(id));
+      for (const id of changed) synced.delete(id);
+      for (const [id, item] of answered) {
+        const was = synced.get(id);
+        if (was === item || (was !== undefined && Equal.equals(was, item))) continue;
+        synced.set(id, item);
+        changed.push(id);
+      }
+      return redrawn(changed);
+    },
+    redrawn,
+    items: () => drawn,
+    shown: (ids) => {
       const writes = reads.standingWrites();
-      const held = rowsOf(items.collection);
-      return writes.length === 0
-        ? held
-        : held.map((item) =>
-            writes.reduce((each, change) => changedItem(change, each) ?? each, item),
-          );
-    };
-    return {
-      items,
-      shown: () => inboxInOrder(drawnItems()),
-      take: (change) => {
-        for (const id of changedIds(change)) {
-          items.confirmRow(id, (item) => {
-            const changed = changedItem(change, item);
-            return changed === undefined ? {} : whole(item, changed);
-          });
-        }
-      },
-    };
-  });
+      return ids.map((id) => {
+        const item = synced.get(id);
+        return item === undefined ? undefined : drawnOver(writes, item);
+      });
+    },
+    take: (change) => {
+      for (const id of changedIds(change)) {
+        const item = synced.get(id);
+        const changed = item === undefined ? undefined : changedItem(change, item);
+        if (changed !== undefined) synced.set(id, changed);
+      }
+    },
+  };
 }
 
 /** Whether a change leaves the item no longer open: settled by the reader, or answered settled. */
@@ -226,14 +266,20 @@ export function inboxReads(): Effect.Effect<InboxReads, never, Scope.Scope> {
     let drawnWrites: readonly { change: InboxChange }[] = [];
     /** Each item's newest write, which the next write to it stands down after, and the next mark is written after. */
     const lastWrites = new Map<string, Turn>();
-    const drawnAll = (reads: readonly InboxRead[]) =>
-      Effect.forEach(reads, (read) => read.drawn, { discard: true });
-    /** Runs `step` over the writes drawn, answering each standing read it changed what it shows. Note that a read is compared whole, because a write dropped or answered stands among others, which may draw over it. */
-    const movedBy = (step: () => void): readonly InboxRead[] => {
+    const drawnAll = (reads: readonly InboxRead[], ids: readonly string[]) =>
+      Effect.forEach(reads, (read) => read.drawn(ids), { discard: true });
+    /**
+     * Runs `step` over the writes drawn, answering each standing read it
+     * changed what it shows of the items `ids` names, which are all a step
+     * on one write can move. Note that each read compares what it shows of
+     * them, never the change, because a write dropped or answered stands
+     * among others, which may draw over it.
+     */
+    const movedBy = (ids: readonly string[], step: () => void): readonly InboxRead[] => {
       const reads = [...standing];
-      const before = reads.map((read) => read.shown());
+      const before = reads.map((read) => read.shown(ids));
       step();
-      return reads.filter((read, at) => !Equal.equals(before[at], read.shown()));
+      return reads.filter((read, at) => !Equal.equals(before[at], read.shown(ids)));
     };
 
     /** Confirms a kept write on one read it changed by the read's own wait, or takes the service's word in its place where it hands none, and draws it. */
@@ -251,7 +297,7 @@ export function inboxReads(): Effect.Effect<InboxReads, never, Scope.Scope> {
       return Effect.suspend(() => {
         if (taken === undefined) return Effect.void;
         read.take(taken);
-        return read.drawn;
+        return read.drawn(changedIds(taken));
       });
     };
 
@@ -270,43 +316,47 @@ export function inboxReads(): Effect.Effect<InboxReads, never, Scope.Scope> {
         (read) =>
           Effect.andThen(
             Effect.sync(() => read.take({ kind: INBOX_CHANGE.ANSWERED, item })),
-            read.drawn,
+            read.drawn([item.id]),
           ),
         { discard: true },
       );
     };
 
     /**
-     * `change` laid over every read as the newest write to its items: the
-     * writes to them asked before it, and the reads it moved, for the caller
-     * to draw. `answeredWith` draws the service's own item in its place,
-     * answering the reads that moves, each drawn again; `drop` takes it out,
-     * drawing each read that shows otherwise without it, and is run once.
+     * `change` laid over every read as the newest write to its items: their
+     * ids, the writes to them asked before it, and the reads it moved, for
+     * the caller to draw. `answeredWith` draws the service's own item in its
+     * place, answering the reads that moves, each drawn again; `drop` takes
+     * it out, drawing each read that shows otherwise without it, and is run
+     * once.
      */
     const laid = (change: InboxChange, turn: Turn) => {
       const ids = changedIds(change);
       const before = [...new Set(ids.flatMap((id) => lastWrites.get(id) ?? []))];
       for (const id of ids) lastWrites.set(id, turn);
       const entry = { change };
-      const changed = movedBy(() => {
+      const changed = movedBy(ids, () => {
         drawnWrites = [...drawnWrites, entry];
       });
       const answeredWith = (item: InboxItem) =>
         Effect.suspend(() => {
-          const moved = movedBy(() => {
+          const named = [...new Set([...changedIds(entry.change), item.id])];
+          const moved = movedBy(named, () => {
             entry.change = { kind: INBOX_CHANGE.ANSWERED, item };
           });
-          return Effect.as(drawnAll(moved), moved);
+          return Effect.as(drawnAll(moved, named), moved);
         });
       const drop = Effect.suspend(() => {
         for (const id of ids) if (lastWrites.get(id) === turn) lastWrites.delete(id);
+        const named = changedIds(entry.change);
         return drawnAll(
-          movedBy(() => {
+          movedBy(named, () => {
             drawnWrites = drawnWrites.filter((each) => each !== entry);
           }),
+          named,
         );
       }).pipe(Effect.ensuring(Deferred.succeed(turn.dropped, undefined)));
-      return { before, changed, answeredWith, drop };
+      return { ids, before, changed, answeredWith, drop };
     };
 
     return {
@@ -322,9 +372,9 @@ export function inboxReads(): Effect.Effect<InboxReads, never, Scope.Scope> {
             answered: yield* Deferred.make<void>(),
             dropped: yield* Deferred.make<void>(),
           };
-          const { before, changed, answeredWith, drop } = laid(change, turn);
+          const { ids, before, changed, answeredWith, drop } = laid(change, turn);
           const asked = Effect.gen(function* () {
-            yield* drawnAll(changed);
+            yield* drawnAll(changed, ids);
             if (inTurn) yield* awaitEach(before, (each) => each.answered);
             return yield* written;
           }).pipe(Effect.ensuring(Deferred.succeed(turn.answered, undefined)));

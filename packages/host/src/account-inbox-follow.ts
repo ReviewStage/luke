@@ -209,7 +209,7 @@ export function accountInboxes(
             if (answered !== undefined && next !== undefined) taken({ ...answered, ...next });
           },
           txWait: () => wait,
-          drawn,
+          drawn: () => drawn,
           accountWide: true,
         });
         const follow = followTakingRows<AnsweredPart, AccountInboxLiveRows>(
