@@ -2000,14 +2000,16 @@ const finishTask = SqlSchema.findOneOption({
  * Like any change it is not a save, so the list's order stands. A finish
  * settles the task's open inbox items that still ask, and leaves its
  * notices open until a member opens them (`inbox-settle.ts`). It archives
- * every standing agent with the task, as Luke for the account, since the
- * guard read each of them idle, as a member's move to Done archives the
- * idle ones (`updateTaskCommitted`).
+ * with the task, as Luke for the account, every standing agent `archiveIdle`
+ * reads idle, as a member's move to Done archives the idle ones
+ * (`updateTaskCommitted`); one whose Stop is still on its way is archived as
+ * its turn ends instead.
  */
 export function finishTaskWork<R = never>(
   userId: string,
   taskId: string,
   idle: TaskFinishGuard<R>,
+  archiveIdle: TaskIdleGuard<R>,
 ): Effect.Effect<
   Option.Option<readonly TaskArchivedAgent[]>,
   TaskStoreFailure,
@@ -2031,14 +2033,12 @@ export function finishTaskWork<R = never>(
         const now = yield* DateTime.nowAsDate;
         const finished = yield* finishTask({ taskId, now });
         if (Option.isNone(finished)) return unfinished;
-        const archived =
-          agents.length === 0
-            ? []
-            : yield* stampArchivedWithTask({
-                agentIds: agents.map(({ id }) => id),
-                archivedAt: now,
-                archivedBy: { by: AGENT_ARCHIVER.LUKE, userId, withTask: true },
-              });
+        const archived = yield* archivedIdleWithTask(
+          taskId,
+          undefined,
+          { archivedBy: { by: AGENT_ARCHIVER.LUKE, userId }, idle: archiveIdle },
+          now,
+        );
         yield* settleTaskInboxItems(taskId, TASK_STATUS.DONE, now);
         yield* settleAgentInboxItems(
           archived.map(({ id }) => id),

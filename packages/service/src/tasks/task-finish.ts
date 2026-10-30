@@ -35,12 +35,12 @@ import { discardedOrLogged } from "../agents/device-discard.js";
  * reads it (`stop.ts`'s `standsStopped`): a line awaiting its turn reads as
  * running, an agent started blank with no turn as idle.
  *
- * A task's move to Done archives its agents with it, whoever moves it: the
- * finish archives every one, all of them idle, as Luke for the account, and a
- * member's or an agent's move archives those standing idle
- * (`task-store.ts`'s `updateTaskCommitted`). An agent still at work then is
- * not stopped: its turn's end archives it, where its task still stands Done
- * (`settleTaskAfterTurn`). Each agent archived here is let go of on its
+ * A task's move to Done archives its agents standing idle with it, whoever
+ * moves it: the finish as Luke for the account, and a member's or an agent's
+ * move as them (`task-store.ts`'s `updateTaskCommitted`). An agent still at
+ * work then, a turn whose Stop is on its way among it, since its runner still
+ * holds its folder, is not stopped: its turn's end archives it, where its
+ * task still stands Done (`settleTaskAfterTurn`). Each agent archived here is let go of on its
  * device, its folder removed (`device-discard.ts`), as the agent tools'
  * archive lets one go; its sandbox already stopped as its turn ended.
  *
@@ -70,8 +70,9 @@ function letGo(archived: readonly TaskArchivedAgent[]) {
 
 /** The task finished, as `finishTaskWork` finishes it, and the agents it archived let go of. */
 function finishedAndLetGo(userId: string, taskId: string) {
-  return Effect.flatMap(finishTaskWork(userId, taskId, standsStopped), (archived) =>
-    letGo(Option.getOrElse(archived, () => [])),
+  return Effect.flatMap(
+    finishTaskWork(userId, taskId, standsStopped, idleStandingAgents),
+    (archived) => letGo(Option.getOrElse(archived, () => [])),
   );
 }
 

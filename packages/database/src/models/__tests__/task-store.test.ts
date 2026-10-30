@@ -949,9 +949,15 @@ const pullRequestIn = (state: StoredPullRequest["state"]): StoredPullRequest => 
 /** A guard reading every agent idle. */
 const everyoneIdle = () => Effect.succeed(true);
 
+/** A guard reading every agent idle but the one named, as an archive reads them. */
+const idleBut =
+  (busy: string) =>
+  (agents: readonly TaskStandingAgent[]): Effect.Effect<ReadonlySet<string>> =>
+    Effect.succeed(new Set(agents.map(({ id }) => id).filter((id) => id !== busy)));
+
 /** Whether the finish moved the task to done. */
 const finished = (userId: string, taskId: string, idle: TaskFinishGuard<never>) =>
-  Effect.map(finishTaskWork(userId, taskId, idle), Option.isSome);
+  Effect.map(finishTaskWork(userId, taskId, idle, idleBut("")), Option.isSome);
 
 /** Who archived the agent, as Dean reads it: none while it stands unarchived. */
 const archiveOf = (dean: string, agentId: string) =>
@@ -992,7 +998,7 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         // Everyone idle: done, and done once, stamped when it finished; the work taken up again clears the stamp.
         yield* TestClock.adjust("1 minute");
         const finishedAt = yield* Clock.currentTimeMillis;
-        const archived = yield* finishTaskWork(charles, taskId, everyoneIdle);
+        const archived = yield* finishTaskWork(charles, taskId, everyoneIdle, idleBut(""));
         assert.deepEqual(
           Option.getOrThrow(archived)
             .map(({ id }) => id)
@@ -1066,12 +1072,6 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
       }),
   );
 });
-
-/** A guard reading every agent idle but the one named. */
-const idleBut =
-  (busy: string) =>
-  (agents: readonly TaskStandingAgent[]): Effect.Effect<ReadonlySet<string>> =>
-    Effect.succeed(new Set(agents.map(({ id }) => id).filter((id) => id !== busy)));
 
 it.layer(getTestDB())("a task's move to Done", (it) => {
   it.effect(
