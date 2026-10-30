@@ -28,6 +28,7 @@
     "./scroll-asked": "./src/scroll-asked.js",
     "./tokens.css": "./src/tokens/tokens.css",
     "./styles.css": "./src/styles.css",
+    "./fonts/geist-serif.css": "./src/fonts/geist-serif.css",
     "./search-tokens": "./src/search-tokens.js",
     "./microphone-access": "./src/microphone-access.js",
     "./search-score": "./src/search-score.js",

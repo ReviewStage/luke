@@ -86,3 +86,10 @@ Bricolage Grotesque, Geist, and JetBrains Mono, packaged by Fontsource
 under the SIL Open Font License, Version 1.1
 (https://openfontlicense.org). Each font remains under the copyright of its
 authors; see the license file shipped in each package.
+
+Geist Serif (packages/ui/src/fonts/)
+------------------------------------
+Geist Serif Regular, copied from the geist package
+(https://github.com/vercel/geist-font). Licensed under the SIL Open Font
+License, Version 1.1 (packages/ui/src/fonts/GeistSerif-OFL.txt). Copyright
+(c) 2023 Vercel, in collaboration with basement.studio.

@@ -21,7 +21,9 @@
 @import "@luke/ui/tailwind/theme.css";
 
 /* The three faces the page loads, declared beside the stack that names them
-   rather than at each of the four HTML entry points. */
+   rather than at each of the four HTML entry points, and Geist Serif on
+   trial in Geist's place. */
+@import "@luke/ui/fonts/geist-serif.css";
 @import "@fontsource-variable/geist/wght.css";
 @import "@fontsource-variable/jetbrains-mono/wght.css";
 @import "@fontsource-variable/bricolage-grotesque/wght.css";

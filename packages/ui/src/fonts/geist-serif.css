@@ -1,0 +1,14 @@
+/* geist-serif.css -- Vercel's Geist Serif, the face both profiles' `--luke-font-sans` names on trial.
+
+   Vendored from the `geist` package (1.9.0), whose own entry points need
+   Next.js's `next/font`; Fontsource does not carry it yet. It ships one
+   weight, Regular, and the panel sets `font-synthesis: none`, so a role
+   asking for medium or semibold draws at 400. Licensed under the SIL Open
+   Font License 1.1 (`GeistSerif-OFL.txt`). */
+
+@font-face {
+  font-family: "Geist Serif";
+  font-style: normal;
+  font-display: swap;
+  src: url("./GeistSerif-Regular.woff2") format("woff2");
+}

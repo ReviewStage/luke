@@ -298,11 +298,14 @@ await Promise.all([
   build({
     // The stylesheet entry `@import`s the renderer's stylesheets; esbuild
     // inlines them into the single `styles.css` the renderer HTML links. The
-    // Tailwind entry among them is compiled by the plugin as it is loaded.
+    // Tailwind entry among them is compiled by the plugin as it is loaded. A
+    // face a sheet declares is copied beside it, so the window loads it from
+    // its own folder.
     entryPoints: [path.join(appRoot, "src/renderer/styles/index.css")],
     outfile: path.join(outputRoot, "renderer/styles.css"),
     bundle: true,
     target: "chrome140",
+    loader: { ".woff2": "file" },
     plugins: [tailwindPlugin()],
     minify: true,
     sourcemap: "external",

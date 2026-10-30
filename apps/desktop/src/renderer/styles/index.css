@@ -2,6 +2,8 @@
    panel's own sheets, and the shared tokens they read, come in the order the
    cascade needs from `@luke/panel/styles/index.css`, which the web imports too. */
 @import "@luke/panel/styles/index.css";
+/* The desktop profile's face on trial (`@luke/ui`'s `tokens/profiles.css`). */
+@import "@luke/ui/fonts/geist-serif.css";
 /* The AI Elements components' utilities, over the tokens above; compiled by
    scripts/tailwind.mjs as the stylesheet is built. Its rules sit in cascade
    layers the panel's sheets opened first, so coming after them changes no

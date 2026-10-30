@@ -3,7 +3,9 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Catalog, readView } from "./catalog";
 // The site's faces, bundled from the workspace so the catalog loads nothing
-// from the network; the desktop's is the system's own. Then the page.
+// from the network, and Geist Serif, on trial as both profiles' face. Then
+// the page.
+import "@luke/ui/fonts/geist-serif.css";
 import "@fontsource-variable/geist/wght.css";
 import "@fontsource-variable/jetbrains-mono/wght.css";
 import "@fontsource-variable/bricolage-grotesque/wght.css";

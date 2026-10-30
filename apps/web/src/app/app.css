@@ -6,7 +6,8 @@
    draws. The root asks for compact, a mouse's density; on a coarse pointer
    the site's full roles stand instead (`@luke/ui`'s `profiles.css`). */
 /* The web profile's three faces (`@luke/ui`'s `tokens/profiles.css`), as the
-   site's `styles.css` declares them. */
+   site's `styles.css` declares them, and Geist Serif on trial in Geist's place. */
+@import "@luke/ui/fonts/geist-serif.css";
 @import "@fontsource-variable/geist/wght.css";
 @import "@fontsource-variable/jetbrains-mono/wght.css";
 @import "@fontsource-variable/bricolage-grotesque/wght.css";

@@ -19,7 +19,8 @@
 }
 
 [data-luke-profile="desktop"] {
-  --luke-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  /* Geist Serif on trial in place of the system's face (`fonts/geist-serif.css`). */
+  --luke-font-sans: "Geist Serif", ui-serif, Georgia, "Times New Roman", serif;
   --luke-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
   /* The window sets no display face of its own; its largest words are the system's. */
   --luke-font-display: var(--luke-font-sans);
@@ -290,7 +291,8 @@
 }
 
 [data-luke-profile="web"] {
-  --luke-font-sans: "Geist Variable", -apple-system, blinkmacsystemfont, "Segoe UI", sans-serif;
+  /* Geist Serif on trial in place of Geist (`fonts/geist-serif.css`). */
+  --luke-font-sans: "Geist Serif", ui-serif, Georgia, "Times New Roman", serif;
   --luke-font-mono:
     "JetBrains Mono Variable", ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
   /* The wordmark's face, which the marketing pages' display styles are set in. */
