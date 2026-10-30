@@ -1,5 +1,5 @@
 /**
- * pull-requests.ts -- one pull request of a workspace's repository, named by its repository and number rather than by an agent, as six reads and one change.
+ * pull-requests.ts -- one pull request of a workspace's repository, named by its repository and number rather than by an agent, as seven reads and one change.
  *
  * Each names the pull request as a link names it, in the query: the
  * workspace whose installation reaches the repository, the repository's
@@ -21,6 +21,7 @@ import {
   agentOverviewConversationAnswerSchema,
   agentOverviewPullRequestAnswerSchema,
   agentPullRequestAnswerSchema,
+  agentReviewOptionsAnswerSchema,
 } from "../agent-wire.js";
 import {
   pullRequestActionRequestSchema,
@@ -37,6 +38,7 @@ const PULL_REQUEST_PATH = {
   CHANGES: "/api/pull-requests/changes",
   ACTION: "/api/pull-requests/action",
   VIEWED: "/api/pull-requests/viewed",
+  REVIEW_OPTIONS: "/api/pull-requests/review-options",
   OVERVIEW_PULL_REQUEST: "/api/pull-requests/overview/pull-request",
   OVERVIEW_CHECKS: "/api/pull-requests/overview/checks",
   OVERVIEW_CONVERSATION: "/api/pull-requests/overview/conversation",
@@ -80,6 +82,10 @@ export const pullRequestsContract = {
     .output(EffectSchema.flip(pullRequestWriteAnswerSchema)),
   /** Which of the pull request's files the asking member marked viewed on GitHub. */
   viewed: read(PULL_REQUEST_PATH.VIEWED).output(EffectSchema.flip(pullRequestViewedAnswerSchema)),
+  /** What the reviewer and label pickers offer, of the pull request's repository: its labels, its assignable users, and the teams that reach it. */
+  reviewOptions: read(PULL_REQUEST_PATH.REVIEW_OPTIONS).output(
+    EffectSchema.flip(agentReviewOptionsAnswerSchema),
+  ),
   /** The pull request itself, as its overview draws it. */
   overviewPullRequest: read(PULL_REQUEST_PATH.OVERVIEW_PULL_REQUEST).output(
     EffectSchema.flip(agentOverviewPullRequestAnswerSchema),
