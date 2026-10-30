@@ -1563,7 +1563,7 @@ test("words selected in a thread stand Reply over them, which quotes them into t
   );
 });
 
-test("words selected in an open item's question quote into its box, its reply carries the quote, and Reply stands down while the reply is out", async () => {
+test("words selected in an open item's question quote into its box, its reply carries the quote, and Reply stands still while the reply is out, since the box takes the next", async () => {
   const asked = saying(THRESHOLD, "Usage alerts fire at 80% of the plan's quota.");
   world.inboxes = new Map([
     [BILLING.id, [asked]],
@@ -1595,7 +1595,14 @@ test("words selected in an open item's question quote into its box, its reply ca
   await settle();
 
   selectInPane(page, "Usage alerts fire", "Usage", "quota.");
-  assert.equal(replyPress(), undefined, "no quote is offered while the reply is out");
+  const again = replyPress() ?? assert.fail("Reply stands while the reply is out");
+  act(() => again.click());
+  await settle();
+  assert.equal(
+    pane.querySelector(".composer-quote-words")?.textContent,
+    "Usage alerts fire at 80% of the plan's quota.",
+    "the quote lands in the box behind the reply on its way",
+  );
   assert.deepEqual(
     sent.map(({ itemId, text }) => ({ itemId, text })),
     [
@@ -2421,9 +2428,10 @@ test("a teammate's notice is left open as it is opened, since acknowledging it s
   assert.deepEqual(messaged, []);
 });
 
-test("a reply leaves its box the moment it is sent, the box and the ask standing empty and open while it is out, so a second Enter sends nothing; refused, its words and files come back into the box, which says why", async () => {
+test("a reply leaves its box the moment it is sent, the box and the ask standing empty and open while it is out, so the next reply goes once it answers, in order; refused, its words and files come back into the box, which says why, those of every reply behind it after them, none of which goes", async () => {
   const shown = threadItem([askingMessage(EXPIRY_ASK)]);
   const pane = await mountThread(shown);
+  const page = pane.ownerDocument.body;
   const sent: AgentInboxMessageParams[] = [];
   const answers: ((answer: AgentInboxMessagedView) => void)[] = [];
   const bridge = appBridge();
@@ -2439,15 +2447,36 @@ test("a reply leaves its box the moment it is sent, the box and the ask standing
       );
     },
   });
+  const texts = () => sent.map(({ text }) => text);
 
-  await handFiles(pane.ownerDocument.body, [new File(["# Notes"], "notes.md")], "pick");
   typeInComposer(pane, "Does it matter for SSO teams?");
   composerEditor(pane).focus();
   pressInComposer(pane, "Enter");
   await settle();
 
   assert.equal(composerEditor(pane).textContent, "", "the box lets its words go at once");
-  assert.deepEqual(attachedNames(draftReplyIn(pane)), [], "and its files");
+  assert.equal(composerEditor(pane).getAttribute("aria-disabled"), null, "and stands open");
+  assert.equal(sendWords(pane), "Send", "its Send never busy");
+  assert.ok(
+    openOptions(pane).every((option) => !option.disabled),
+    "the ask still takes a pick",
+  );
+
+  await handFiles(page, [new File(["# Notes"], "notes.md")], "pick");
+  typeInComposer(pane, "And for guests?");
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(
+    texts(),
+    ["Does it matter for SSO teams?"],
+    "the second waits for the first's answer",
+  );
+  assert.deepEqual(
+    sendingMarks(page),
+    ["Sending", "Sending"],
+    "both stand on the thread meanwhile",
+  );
+  assert.deepEqual(attachedNames(draftReplyIn(pane)), [], "the box let its files go too");
   assert.deepEqual(
     [...pane.querySelectorAll('.inbox-thread > li:not([data-inbox-comment="draft"])')].flatMap(
       attachedNames,
@@ -2455,23 +2484,36 @@ test("a reply leaves its box the moment it is sent, the box and the ask standing
     ["notes.md"],
     "which go up with the reply on the thread",
   );
-  assert.equal(composerEditor(pane).getAttribute("aria-disabled"), null, "and stands open");
-  assert.ok(
-    openOptions(pane).every((option) => !option.disabled),
-    "the ask still takes a pick",
+
+  const first = sent[0] ?? assert.fail("the first went");
+  await act(async () =>
+    answers[0]?.(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000021")(first)),
   );
-  pressInComposer(pane, "Enter");
   await settle();
   assert.deepEqual(
-    sent.map(({ text }) => text),
-    ["Does it matter for SSO teams?"],
-    "a second Enter sends nothing again",
+    texts(),
+    ["Does it matter for SSO teams?", "And for guests?"],
+    "the second goes once the first answered",
   );
+  assert.notEqual(sent[0]?.clientKey, sent[1]?.clientKey, "each under a key of its own");
 
-  await act(async () => answers[0]?.({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }));
+  typeInComposer(pane, "Never mind.");
+  pressInComposer(pane, "Enter");
+  await settle();
+  await act(async () => answers[1]?.({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }));
   await settle();
 
-  assert.equal(composerEditor(pane).textContent, "Does it matter for SSO teams?");
+  assert.deepEqual(
+    texts(),
+    ["Does it matter for SSO teams?", "And for guests?"],
+    "the reply behind the one refused never goes",
+  );
+  assert.deepEqual(sendingMarks(page), [], "both leave the thread");
+  assert.equal(
+    composerEditor(pane).textContent,
+    "And for guests?Never mind.",
+    "their words come back into the box, in order, a line each read without its break",
+  );
   assert.deepEqual(attachedNames(pane), ["notes.md"]);
   assert.equal(
     pane.querySelector('.agent-composer [role="alert"]')?.textContent,
@@ -2610,8 +2652,8 @@ test("words written in a reply's box while the reply is out stay there, whether 
   await settle();
   assert.equal(
     composerEditor(pane).textContent,
-    "Never mind.",
-    "a refusal puts nothing back over them",
+    "And for guests?Never mind.",
+    "a refusal puts its words back ahead of them, a line each read without its break",
   );
 });
 

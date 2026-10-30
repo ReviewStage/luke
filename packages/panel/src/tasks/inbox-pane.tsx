@@ -157,7 +157,7 @@ import { opensAsLink } from "./use-open-link.js";
 import {
   type InboxImageReads,
   type PendingInboxReply,
-  pendingReplyOn,
+  pendingRepliesOn,
   type TaskInboxControl,
 } from "./use-task-inbox.js";
 
@@ -367,10 +367,11 @@ function DraftReply({
 const SENDING = "Sending";
 
 /**
- * The reader's plain reply on its way, as the thread's last message before
- * the draft reply: drawn as the reader's own message is, its files going
- * up, and "Sending" at its head's end, until the item holds it, when the
- * message it became stands in its place.
+ * One of the reader's plain replies on their way, which stand as the
+ * thread's last messages before the draft reply, in the order sent: drawn
+ * as the reader's own message is, its files going up, and "Sending" at its
+ * head's end, until the item holds it, when the message it became stands in
+ * its place.
  */
 function PendingReply({
   readerId,
@@ -1342,8 +1343,8 @@ function PhoneHolder({
 /**
  * One item at reading size, as a comment thread: under the pane's crumbs,
  * the item's title alone as the thread's subject, then every message of
- * its thread, oldest first, a plain reply of the reader's on its way after
- * them (`PendingReply`), and the reader's draft reply at its end, the
+ * its thread, oldest first, the reader's plain replies on their way after
+ * them, in the order sent (`PendingReply`), and the reader's draft reply at its end, the
  * open ask's controls standing in it. Once the item is settled, the next
  * item that needs the developer is offered under the board
  * (`inbox-pager.tsx`).
@@ -1432,7 +1433,7 @@ export function InboxPane({
   const open = item.status === INBOX_STATUS.OPEN;
   const draft = control.draftOf(item);
   const thread = item.thread ?? NO_MESSAGES;
-  const pending = pendingReplyOn(control.pendingReplies, item);
+  const pending = pendingRepliesOn(control.pendingReplies, item);
   const resolved = resolvedAfter(item, thread);
   useOptionNumbers(pane, item, draft, control, open ? numberedPickOf(thread) : undefined);
   const formText: FormTextDoors = {
@@ -1593,9 +1594,9 @@ export function InboxPane({
                     {at === resolved ? <ResolvedEvent item={item} now={now} /> : null}
                   </Fragment>
                 ))}
-                {pending === undefined ? null : (
-                  <PendingReply readerId={readerId} reply={pending} now={now} />
-                )}
+                {pending.map((reply) => (
+                  <PendingReply key={reply.key} readerId={readerId} reply={reply} now={now} />
+                ))}
                 {draftReply}
               </Stack>
             </ItemWords>
