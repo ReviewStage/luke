@@ -241,6 +241,7 @@ const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   const task = yield* hostedStoreOrUnavailable(readTaskHeader(userId, taskId));
   if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const text = commentAskMessage({
+    taskId,
     taskName: task.value.name,
     thread,
     sender: asked?.writer.by?.name ?? "A member",

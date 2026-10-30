@@ -1,9 +1,9 @@
 /**
- * fake-sandbox.ts -- a local agent's VM as a suite stands it in for smolvm (`LocalAgentSandbox`): ready as the suite says, every VM made at once, each command in a VM run as the program `VM_EXEC` with the command after it, and what was handed to it written down.
+ * fake-sandbox.ts -- a local agent's VM as a suite stands it in for smolvm (`LocalAgentSandbox`): ready as the suite says, every VM made at once, each command in a VM run as the program `VM_EXEC` with the command after it, and what was handed to it written down; and the device's agent CLIs beside it (`LocalAgentClis`), ready as the suite says.
  */
 
 import { Effect, Option } from "effect";
-import type { LocalAgentSandbox } from "../effect/seams.js";
+import type { LocalAgentClis, LocalAgentSandbox } from "../effect/seams.js";
 
 /** The program a command in a fake VM is spawned as, the command's own program and arguments after it. */
 export const VM_EXEC = "/opt/luke/smolvm-exec";
@@ -45,4 +45,16 @@ export function fakeSandbox(ready: LocalAgentSandbox["ready"] = () => Effect.voi
     deviceGit: () => ({}),
   };
   return { sandbox, tokens, signalled, deleted };
+}
+
+/** The device's agent CLIs, had as `ready` says, at once and with nothing to fetch where the suite names none. */
+export function fakeClis(ready: LocalAgentClis["ready"] = () => Effect.void): LocalAgentClis {
+  return {
+    paths: {
+      claude: "/opt/luke/agent-tools/claude",
+      codex: "/opt/luke/agent-tools/codex",
+      gh: "/opt/luke/agent-tools/gh",
+    },
+    ready,
+  };
 }

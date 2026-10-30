@@ -33,6 +33,7 @@ import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
 import { sealAgentState } from "./node/agent-state-seal.js";
 import { smolvmSandbox } from "./node/smolvm-sandbox.js";
+import { fakeClis } from "./testing/fake-sandbox.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const SMOLVM = "/usr/local/bin/smolvm";
@@ -337,6 +338,7 @@ const following = (input: {
       Layer.succeed(LocalAgentPlatform, {
         launch: vm.launch,
         sandbox,
+        clis: fakeClis(),
         runnerBundle: `${RUNNER_FOLDER}/agent-runner.mjs`,
         runnerEnv: {},
         formerlyDirect: input.ranDirectly !== undefined,

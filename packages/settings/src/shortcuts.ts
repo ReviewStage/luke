@@ -102,6 +102,7 @@ export const APP_COMMAND = {
   LIST_TASKS_UNGROUPED: "list-tasks-ungrouped",
   SHOW_MY_TASKS: "show-my-tasks",
   SHOW_EVERYONES_TASKS: "show-everyones-tasks",
+  MARK_INBOX_READ: "mark-inbox-read",
   INSERT_PICTURE: "insert-picture",
   NEXT_RECENT_TAB: "next-recent-tab",
   PREVIOUS_RECENT_TAB: "previous-recent-tab",
@@ -137,6 +138,7 @@ const PALETTE_COMMAND_LABELS = {
   [APP_COMMAND.LIST_TASKS_UNGROUPED]: "Show tasks in one list",
   [APP_COMMAND.SHOW_MY_TASKS]: "Show my tasks",
   [APP_COMMAND.SHOW_EVERYONES_TASKS]: "Show everyone's tasks",
+  [APP_COMMAND.MARK_INBOX_READ]: "Mark all as read",
 } as const;
 
 export type PaletteCommand = keyof typeof PALETTE_COMMAND_LABELS;

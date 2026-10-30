@@ -30,6 +30,8 @@ import {
   type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
   type TasksBrowserTabsParams,
+  type TasksChangeRelationAnswer,
+  type TasksChangeRelationParams,
   type TasksCommentActParams,
   type TasksCommentAnswer,
   type TasksCommentStartParams,
@@ -65,6 +67,8 @@ import {
   type TasksRevisionParams,
   type TasksRevisionsAnswer,
   type TasksRevisionsParams,
+  type TasksSetParentAnswer,
+  type TasksSetParentParams,
   type TasksSetRepositoryAnswer,
   type TasksSetRepositoryParams,
   type TasksSetStandingParams,
@@ -98,6 +102,10 @@ export interface TasksProceduresDependencies {
     tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
     tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
     tasksBlock(params: TasksBlockParams): Effect.Effect<TasksBlockAnswer>;
+    tasksSetParent(params: TasksSetParentParams): Effect.Effect<TasksSetParentAnswer>;
+    tasksChangeRelation(
+      params: TasksChangeRelationParams,
+    ): Effect.Effect<TasksChangeRelationAnswer>;
     tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
     githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
     githubDisconnect(): Effect.Effect<TasksGitHubDisconnectAnswer>;
@@ -275,6 +283,20 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.tasksBlock(input);
     }),
+    [TASKS_ACT_KIND.TASKS_SET_PARENT]: actPort[TASKS_ACT_KIND.TASKS_SET_PARENT].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.tasksSetParent(input);
+    }),
+    [TASKS_ACT_KIND.TASKS_CHANGE_RELATION]: actPort[TASKS_ACT_KIND.TASKS_CHANGE_RELATION].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.tasksChangeRelation(input);
+      },
+    ),
     [TASKS_ACT_KIND.TASKS_EDIT]: actPort[TASKS_ACT_KIND.TASKS_EDIT].effect(function* ({
       input,
       context,

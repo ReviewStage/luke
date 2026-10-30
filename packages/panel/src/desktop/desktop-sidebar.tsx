@@ -175,6 +175,7 @@ import { type CountNoun, foldedCount, groupCount, sidebarFold, TASK_NOUN } from 
 import { SidebarFoot } from "./sidebar-foot.js";
 import { SidebarLuke } from "./sidebar-luke.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
+import { ReadAllMenu, type SidebarReadAll, useSidebarReadAll } from "./sidebar-read-all.js";
 import {
   type DrawnSection,
   moveToSectionEntry,
@@ -1433,34 +1434,56 @@ function ListSkeleton(): React.JSX.Element {
  * nothing at none. Its chord takes the count's place
  * while the row is hovered or reached from the keyboard, as New task's and
  * Search's show theirs. A press opens the window's Inbox
- * (`desktop-inbox.tsx`), and the row is the place shown while it stands.
+ * (`desktop-inbox.tsx`), and the row is the place shown while it stands. A
+ * right-click, a long press, or the menu key opens its menu, Mark all as
+ * read, which marks every unread thread of the listed workspace read
+ * (`sidebar-read-all.tsx`).
  */
 function SidebarInboxRow({
   waiting,
   current,
   disabled,
+  shown,
+  readAll,
   onOpen,
 }: {
   waiting: number;
   current: boolean;
   disabled: boolean;
+  /** Whether the sidebar is in sight, which its menu closes with. */
+  shown: boolean;
+  readAll: SidebarReadAll;
   onOpen: () => void;
 }): React.JSX.Element {
+  const menu = useMenu(shown && !disabled);
   return (
-    <NavItem
-      icon={<InboxIcon />}
-      current={current ? NAV_CURRENT.PAGE : undefined}
-      count={{
-        ...groupCount(waiting, NEEDS_YOU.COUNT),
-        tone: NAV_COUNT_TONE.UNREAD,
-      }}
-      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
-      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
-      disabled={disabled}
-      onClick={onOpen}
-    >
-      Inbox
-    </NavItem>
+    <>
+      <NavItem
+        icon={<InboxIcon />}
+        current={current ? NAV_CURRENT.PAGE : undefined}
+        count={{
+          ...groupCount(waiting, NEEDS_YOU.COUNT),
+          tone: NAV_COUNT_TONE.UNREAD,
+        }}
+        aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
+        shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
+        disabled={disabled}
+        contextMenu={disabled ? undefined : menu.contextMenu()}
+        onKeyDown={disabled ? undefined : menu.keyMenu}
+        onClick={onOpen}
+      >
+        Inbox
+      </NavItem>
+      {menu.drawn === undefined ? null : (
+        <ReadAllMenu
+          readAll={readAll}
+          label="Inbox actions"
+          menu={menu.drawn}
+          groups={(markAll) => [[markAll]]}
+          onClose={menu.close}
+        />
+      )}
+    </>
   );
 }
 
@@ -1829,6 +1852,8 @@ function SidebarColumn({
     channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel.id : undefined;
   const waiting = useInboxWaiting(tasks);
   const channelWaiting = useChannelWaiting(tasks);
+  // The Inbox's row and each channel's mark their threads read from their right-click.
+  const readAll = useSidebarReadAll(tasks);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
@@ -2209,6 +2234,8 @@ function SidebarColumn({
           waiting={waiting}
           current={inInbox && !narrowed}
           disabled={!tasks.signedIn}
+          shown={tasks.shown && overlay.inSight}
+          readAll={readAll}
           onOpen={chosen(openInbox)}
         />
         {/* With Channels on, the workspace's channels stand under the Inbox's row as its filters. */}
@@ -2219,6 +2246,7 @@ function SidebarColumn({
             waiting={channelWaiting}
             currentId={shownChannelId}
             shown={tasks.shown && overlay.inSight}
+            readAll={readAll}
             onOpen={chosen(openChannel)}
           />
         ) : null}

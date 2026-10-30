@@ -40,12 +40,13 @@ import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import {
   Environment,
+  type LocalAgentClis,
   LocalAgentPlatform,
   type LocalAgentSandbox,
   LocalAgentSandboxUnavailable,
   Reporter,
 } from "./effect/seams.js";
-import { fakeSandbox, VM_EXEC, VM_TOOLS } from "./testing/fake-sandbox.js";
+import { fakeClis, fakeSandbox, VM_EXEC, VM_TOOLS } from "./testing/fake-sandbox.js";
 import { type Script, scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const HOME = "/Users/dev";
@@ -126,6 +127,8 @@ const followingDevice = (
     readonly vmDeleteFails?: number;
     /** Setting the commit identity in the VM fails, so the launch is given up after its VM started. */
     readonly identityFails?: boolean;
+    /** How the device's agent CLIs are had, at once where none is named. */
+    readonly clisReady?: LocalAgentClis["ready"];
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -292,6 +295,7 @@ const followingDevice = (
       Layer.succeed(LocalAgentPlatform, {
         launch: ({ env }) => ({ command: VM_RUNNER, args: [], env }),
         sandbox,
+        clis: fakeClis(options.clisReady),
         formerlyDirect: options.formerlyDirect ?? true,
         storesOwned: false,
         runnerBundle: "/opt/luke/agent-runner.mjs",
@@ -391,12 +395,15 @@ it.effect(
 );
 
 it.effect(
-  "a device fetching its sandbox registers as getting ready and beats while it fetches, then registers ready and follows",
+  "a device fetching its CLIs and then its sandbox registers as getting ready once and beats while it fetches, then registers ready and follows",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { registered, beats, spawned } = yield* followingDevice((preparing) =>
-          Effect.andThen(preparing, Effect.sleep(Duration.minutes(3))),
+        const { registered, beats, spawned } = yield* followingDevice(
+          (preparing) => Effect.andThen(preparing, Effect.sleep(Duration.minutes(2))),
+          {
+            clisReady: (preparing) => Effect.andThen(preparing, Effect.sleep(Duration.minutes(1))),
+          },
         );
         yield* TestClock.adjust(Duration.seconds(5));
         yield* until(() => registered.length > 0);
@@ -405,11 +412,13 @@ it.effect(
           registered.map((each) => each.setup),
           [DEVICE_SETUP.PREPARING],
         );
+        // Note that the sandbox's own two minutes have passed by now, so the device waits on its CLIs too.
+        yield* TestClock.adjust(Duration.minutes(2));
         assert.equal(
           spawned.some((each) => each.program === VM_RUNNER),
           false,
         );
-        yield* TestClock.adjust(Duration.minutes(3));
+        yield* TestClock.adjust(Duration.minutes(1));
         yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
 
         assert.deepEqual(
@@ -493,8 +502,8 @@ it.effect(
           ],
         );
         assert.deepEqual(reported, [
-          "the local agents' smolvm or sandbox image could not be had",
-          "the local agents' smolvm or sandbox image could not be had",
+          "the local agents' setup failed: smolvm couldn't be downloaded",
+          "the local agents' setup failed: smolvm couldn't be downloaded",
         ]);
         yield* TestClock.adjust(Duration.seconds(1));
       }),

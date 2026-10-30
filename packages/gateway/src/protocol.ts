@@ -42,6 +42,10 @@ export const GATEWAY_METHOD = {
   TASKS_MOVE: "tasks.move",
   /** One block of a task added or taken away on the service; the open document takes the task it answered without reading it again. */
   TASKS_BLOCK: "tasks.block",
+  /** One task's parent set or cleared on the service; the list and the open document take the task it answered without reading either again. */
+  TASKS_SET_PARENT: "tasks.setParent",
+  /** One relation of a task moved to another kind on the service, in one call; the list and the open document take the task it answered without reading either again. */
+  TASKS_CHANGE_RELATION: "tasks.changeRelation",
   /** The developer's edit of a task's document saved on the service; the open document takes the task it answered, and a conflict leaves it unchanged. */
   TASKS_EDIT: "tasks.edit",
   /** A window of a file of one task's repository, read from GitHub through the service as it stands now and coloured here; answered to the caller, never held in the view. */

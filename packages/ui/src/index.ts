@@ -142,6 +142,7 @@ export * from "./components/switch/switch.js";
 export * from "./components/tab-notice/tab-notice.js";
 export * from "./components/tabs/tabs.js";
 export * from "./components/task-agents-mark/task-agents-mark.js";
+export * from "./components/task-row/task-row.js";
 export * from "./components/text/text.js";
 export * from "./components/text-button/text-button.js";
 export * from "./components/text-field/text-field.js";

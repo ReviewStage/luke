@@ -23,9 +23,13 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  * the words are not enough.
  *
  * The picture is read as the account the turn runs as, through the plan's
- * membership gate (`readPlanAttachment`), and only under the plan the
- * conversation is on, never the plan an address names: an address of
- * another plan, or of a picture this plan does not hold, is refused alike.
+ * membership gate (`readPlanAttachment`), and only under the plan the call
+ * is bound to: an address of another plan, or of a picture that plan does
+ * not hold, is refused alike. A coding agent's door binds a call to the
+ * plan its address names (`lookedTaskOf`), once that plan stands in the
+ * agent's own workspace (`../agents/coder-host/agent-doors.ts`), so an
+ * agent sees a picture in any plan of its workspace, its own task's or
+ * another's, and one on no task sees one too.
  *
  * A plan may hold a video an agent recorded, which no model is handed in any
  * form: a look at one is refused, pointing the model at its alt text and
@@ -52,11 +56,10 @@ const PICTURE_LOOK = {
 /** Why a call shows nothing, in words the model can act on. */
 export const PICTURE_LOOK_REFUSAL = {
   UNREADABLE: "Not looked: name the picture by its address, copied from the plan's text.",
-  ELSEWHERE: "Not looked: that address is not a picture in this task's plan.",
-  NO_PICTURE: "Not looked: this task's plan holds no such picture.",
+  ELSEWHERE: "Not looked: that address is not a picture in a plan of your workspace.",
+  NO_PICTURE: "Not looked: that plan holds no such picture.",
   VIDEO:
     "Not looked: that address is a video, which is never shown to a model. Its alt text and caption in the plan's text say what it shows.",
-  TASKLESS: "Not looked: you work on no task, so there is no plan to look in.",
   UNAVAILABLE: "Not looked: the picture could not be read just now. The call may be made again.",
 } as const;
 
@@ -87,12 +90,19 @@ const readInput = readEither(LOOK_INPUT);
 export const LOOK_AT_PICTURE_TOOL = {
   name: AGENT_TOOL.LOOK_AT_PICTURE,
   description:
-    "See one of the pictures in the task's plan, such as a screenshot or a mockup. Every picture " +
+    "See one of the pictures in a plan of your workspace, your own task's or another's, such as a " +
+    "screenshot or a mockup, by the address its plan's text writes it at. Every picture " +
     'is written in the plan as ![alt text](address "caption"), and its alt text and caption ' +
     "already say what it shows: look only when they do not tell you enough for what you are " +
     "doing. Answers the picture, or `not-looked` and why.",
   inputSchema: LOOK_INPUT,
 } as const;
+
+/** The plan a call's address names, whose picture it looks at; nothing where the call names no picture's address. */
+export function lookedTaskOf(input: UnparsedWireValue): string | undefined {
+  const read = readInput(input);
+  return Result.isSuccess(read) ? planAttachmentOf(read.success.address.trim())?.taskId : undefined;
+}
 
 /** A call that showed nothing, and why. */
 export function pictureNotLooked(reason: string): PictureLookResult {
