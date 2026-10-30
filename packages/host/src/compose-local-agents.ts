@@ -239,8 +239,8 @@ import type { RunMode } from "./run-mode.js";
  * platform that names no check, is kept, and recorded so with when, so no
  * work is deleted before `KEPT_FOR` has passed, and then let go of whole;
  * and one whose VM could not be deleted is tried again. A read that was
- * not answered lets go of no agent whole, and a listing smolvm could not
- * give changes nothing. This is what catches every agent a discard line
+ * not answered lets go of no agent whole, and on a sandboxed device a
+ * listing smolvm could not give changes nothing. This is what catches every agent a discard line
  * never reached: archived while the device was away, whose line expired,
  * discarded by a run that crashed, or deleted with its task. One that ran
  * on the developer's own logins is checked on the device as the rest are.
@@ -1748,8 +1748,8 @@ export function composeLocalAgents(
 
         /**
          * The VM of a kept launch that could not be deleted as its turn
-         * ended, its turn let go of again unless its agent runs or holds a
-         * VM now, whose own end deletes it in turn; whether its launch may be
+         * ended, its turn let go of again, on the box its VM alone, unless
+         * its agent runs or holds a VM now, whose own end deletes it in turn; whether its launch may be
          * settled: once the VM is gone, or once `VM_DELETE_TRIES` more
          * deletes failed, which is said.
          */
@@ -1758,7 +1758,11 @@ export function composeLocalAgents(
             Effect.gen(function* () {
               const triesLeft = undeleted.get(id) ?? 0;
               const held = runners.has(agentId) || vmHolds.has(agentId);
-              if (!held && triesLeft > 0 && !(yield* turnLetGo(folder, agentId))) {
+              // Note that on the box the turn was let go of as it ended, so only the VM a run from before left is deleted again, and a launch of the agent's starting meanwhile keeps its token.
+              const letGo = direct
+                ? Effect.provideContext(platform.sandbox.deleted(agentId), services)
+                : turnLetGo(folder, agentId);
+              if (!held && triesLeft > 0 && !(yield* letGo)) {
                 undeleted.set(id, triesLeft - 1);
                 return false;
               }
@@ -2029,18 +2033,21 @@ export function composeLocalAgents(
          * runs low, an agent left out is saved before it is let go of, and
          * one listed agent's folder no save holds is saved last
          * (`backfilled`), one at a time, a pass apart, so the device stays
-         * usable. A listing that failed changes nothing, and a read that was
-         * not answered lets go of no agent whole and saves none.
+         * usable. On a sandboxed device a listing that failed changes
+         * nothing, and on any a read that was not answered lets go of no
+         * agent whole and saves none.
          */
         const swept = Effect.gen(function* () {
           passes += 1;
           const owned = (yield* ownedAgents(kernel.stateRoot))
             .filter((id) => AGENT_UUID.test(id))
             .sort();
-          const machines = yield* platform.sandbox.machines;
-          if (Option.isNone(machines)) return;
+          const listed = yield* platform.sandbox.machines;
+          // Note that on the box no turn holds a VM, so a listing smolvm could not give holds up no pass there, and only a sandboxed device's waits for one.
+          if (Option.isNone(listed) && !direct) return;
+          const machines = Option.getOrElse(listed, (): ReadonlySet<string> => new Set());
           const vmStands = new Set<string>();
-          for (const id of owned.filter((each) => machines.value.has(each))) {
+          for (const id of owned.filter((each) => machines.has(each))) {
             if (!Option.exists(yield* whileIdle(id, leftoverLetGo(id)), (gone) => gone)) {
               vmStands.add(id);
             }

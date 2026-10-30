@@ -539,6 +539,7 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
         [RUNNER_ENV.CLAUDE_TOKEN]: undefined,
         [RUNNER_ENV.API_KEY]: undefined,
       },
+      inRunnerGroup: runsOnHost(env),
     },
     listenerFor(seen),
   ).pipe(Scope.provide(serverScope));

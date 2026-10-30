@@ -128,6 +128,8 @@ const following = (input: {
   readonly reads: readonly (readonly string[] | undefined)[];
   readonly unsavedWork?: Readonly<Record<string, string>>;
   readonly noSmolvm?: boolean;
+  /** The box's smolvm answers its listing of machines with a failure. */
+  readonly listingFails?: boolean;
   readonly deleteFails?: (machine: string, attempt: number) => boolean;
   readonly launches?: (home: string) => readonly DeviceAgentClaimedLine[];
   readonly keptLaunches?: readonly { readonly id: string; readonly agentId: string }[];
@@ -213,6 +215,7 @@ const following = (input: {
       const name = args[args.indexOf("--name") + 1] ?? "";
       switch (args[1]) {
         case "ls":
+          if (input.listingFails === true) return { exitCode: 1 };
           return { stdout: [...machines].map((each) => `${each}\n`).join(""), exitCode: 0 };
         case "delete":
           deletes.set(name, (deletes.get(name) ?? 0) + 1);
@@ -618,14 +621,18 @@ it.effect(
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
 
-it.effect(
-  "a box whose service names no smolvm holds no VM, so its passes go on and an agent left out is removed whole, its record let go of",
-  () =>
+it.effect.each([
+  { case: "names no smolvm", noSmolvm: true, listingFails: false },
+  { case: "names a smolvm that cannot list its machines", noSmolvm: false, listingFails: true },
+])(
+  "a box whose service $case holds up none of its passes, so an agent left out is removed whole, its record let go of",
+  ({ noSmolvm, listingFails }) =>
     Effect.scoped(
       Effect.gen(function* () {
         const device = yield* following({
           held: { folderOnly: [AGENT.ORPHAN] },
-          noSmolvm: true,
+          noSmolvm,
+          listingFails,
           reads: [[], []],
         });
         yield* device.passed(2);
