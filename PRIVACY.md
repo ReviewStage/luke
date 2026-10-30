@@ -476,9 +476,10 @@ earlier in its life is not tracked, and its snapshot stays until Vercel lets
 it expire. The sandbox of each session a task's own Luke ran, before tasks
 lost him, is deleted the same way, shortly after his conversation is removed.
 
-**A local agent on your Mac.** Once you turn on This Mac in Settings ›
-Hosts, an agent you start on This Mac runs Claude Code, or Codex for a
-GPT model, on your Mac, each in a virtual machine of its own (smolvm) that sees
+**A local agent on your Mac.** Once you turn on Bring your own host in
+Settings › Experimental and then This Mac in Settings › Hosts, an agent you
+start on This Mac runs Claude Code, or Codex for a GPT model, on your Mac,
+each in a virtual machine of its own (smolvm) that sees
 only that agent's folder, and its transcript, its events, and the files its
 tools read still reach our service as any agent's do. It runs on the
 plan or key you saved in Luke, never on the sign-in of Claude Code or Codex on
@@ -1084,7 +1085,7 @@ it runs on, and whether an automation started it), a message you sent an agent
 work), each of an agent's turns ended (with how it ended: answered, failed,
 stopped, or given up on by our service, roughly how long it ran, and what
 kind of agent it is), an agent stopped or archived (with what kind of agent
-it is, and whether a task's Running switch stopped its whole tree), a pull
+it is), a pull
 request an agent opened (as you or as Luke's GitHub App, and whether as a
 draft) and one it opened merged, an Inbox item
 answered, an automation made (with

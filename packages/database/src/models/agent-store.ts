@@ -1602,41 +1602,6 @@ const findAgentsOfTask = SqlSchema.findAll({
     ),
 });
 
-/**
- * The agents standing on the task or on any task under it, at any depth,
- * that the account may read. Note that the walk down `parent_task_id` keeps
- * to the top task's workspace, as the walk up to a top task does
- * (`task-store.ts`'s `readTopTaskRow`), and `union` drops a task already
- * walked, so a walk ends.
- */
-const findAgentsOfTree = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
-  Result: AgentRowSchema,
-  execute: ({ userId, taskId }) =>
-    Database.use((db) =>
-      db
-        .select(AGENT_COLUMNS)
-        .from(agentTable)
-        .innerJoin(task, eq(task.id, agentTable.taskId))
-        .where(
-          and(
-            sql`${task.id} in (
-              with recursive tree(id, organization_id) as (
-                select node.id, node.organization_id from task node where node.id = ${taskId}
-                union
-                select node.id, node.organization_id from task node
-                  join tree on node.parent_task_id = tree.id and node.organization_id = tree.organization_id
-              )
-              select id from tree)`,
-            taskReachableBy(userId),
-            agentVisibleTo(userId),
-            isNull(agentTable.archivedAt),
-          ),
-        )
-        .orderBy(asc(agentTable.createdAt), asc(agentTable.id)),
-    ),
-});
-
 const findAgentLinesOfTask = SqlSchema.findAll({
   Request: AgentsOfTaskSchema,
   Result: AgentLineRowSchema,
@@ -2364,14 +2329,6 @@ export function listAgents(
   options: { readonly includeArchived?: boolean } = {},
 ): AgentStoreEffect<readonly Agent[]> {
   return findAgentsOfTask({ userId, taskId, includeArchived: options.includeArchived ?? false });
-}
-
-/** Every agent standing on the task or on any task under it, at any depth, in the order they were started; the archived ones left out, and empty where the account reaches no such task. */
-export function listAgentsOfTree(
-  userId: string,
-  taskId: string,
-): AgentStoreEffect<readonly Agent[]> {
-  return findAgentsOfTree({ userId, taskId });
 }
 
 /** Every agent started on the task as its line reads, by any member, in the order they were started, the archived ones only where `includeArchived` asks; empty where the account reaches no such task. */

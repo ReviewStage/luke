@@ -14,14 +14,11 @@ import {
 import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { awaitingLinesOfReached, readMessageByClientId } from "@luke/database/models/message-reads";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { createTask } from "@luke/database/models/task-store";
 import { turns } from "@luke/database/schemas/storage";
-import { task } from "@luke/database/schemas/task";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { AGENT_BOUNDS, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
-import { TASK_MODE } from "@luke/features/task-wire";
 import {
   type GitHubLineMetadata,
   TURN_ORIGIN,
@@ -30,7 +27,6 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
-import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { test } from "vitest";
 import {
@@ -152,7 +148,6 @@ function turn(settledAt: number | undefined): AgentLatestTurn {
     failure: null,
     failureDetail: null,
     cancelRequestedAt: null,
-    cancelRequestedForRunning: false,
     queuedAt: new Date(MADE_AT - 600_000),
     startedAt: new Date(MADE_AT - 600_000),
     settledAt: settledAt === undefined ? null : new Date(settledAt),
@@ -578,35 +573,6 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           Effect.provide(github),
         );
         assert.deepEqual([own, archived, eve.sent.length], [0, 0, 1]);
-      }),
-  );
-
-  it.effect(
-    "a review on the pull request of an agent on a child task of a pilot tree whose Running switch is off wakes nothing, and wakes it once Running is on",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, agent, ref } = yield* openAgent;
-        yield* endedTurn(owner, agent.conversationId, MADE_AT - 60_000);
-        const github = githubReaching(INSTALLATIONS).layer;
-        const organizationId = agent.organizationId;
-        const top = yield* createTask(owner, { organizationId, mode: TASK_MODE.PILOT });
-        const setTask = (id: string, columns: Partial<typeof task.$inferInsert>) =>
-          Database.use((db) => db.update(task).set(columns).where(eq(task.id, id)));
-        yield* setTask(Option.getOrThrow(Option.fromNullishOr(agent.taskId)), {
-          parentTaskId: top.id,
-        });
-        const wake = reviewWakeOf(ref, "octocat");
-
-        const stopped = yield* wakeAgents(eve.eveFor, wake, randomUUID(), LUKE_BOT).pipe(
-          Effect.provide(github),
-        );
-        yield* setTask(top.id, { running: true });
-        const running = yield* wakeAgents(eve.eveFor, wake, randomUUID(), LUKE_BOT).pipe(
-          Effect.provide(github),
-        );
-
-        assert.deepEqual([stopped, running, eve.sent.length], [0, 1, 1]);
       }),
   );
 

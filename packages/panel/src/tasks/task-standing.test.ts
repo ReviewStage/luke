@@ -1,14 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  MERGE_POLICY,
-  TASK_MODE,
-  TASK_PRIORITY,
-  TASK_STATUS,
-  type Task,
-  type TaskStanding,
-} from "@luke/features/task-wire";
+import { TASK_PRIORITY, TASK_STATUS, type Task, type TaskStanding } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -94,21 +87,6 @@ function chip(host: HTMLElement, label: string): HTMLButtonElement {
   return found ?? assert.fail(`no ${label} chip`);
 }
 
-/** The button a task's head names `name`, by its accessible name; none where it draws none. */
-function buttonNamed(host: HTMLElement, name: string): HTMLButtonElement | undefined {
-  return [...host.querySelectorAll("button")].find(
-    (button) => (button.getAttribute("aria-label") ?? button.textContent?.trim()) === name,
-  );
-}
-
-/** The switch a task's head draws under `label`. */
-function switchNamed(host: HTMLElement, label: string): HTMLElement {
-  return (
-    host.querySelector<HTMLElement>(`[role="switch"][aria-label="${label}"]`) ??
-    assert.fail(`no ${label} switch`)
-  );
-}
-
 test("names the task by its workspace's prefix and its number, with its status and priority on its chips", () => {
   const host = drawn(TASK, () => undefined);
 
@@ -144,68 +122,6 @@ test("the repository chip stands among the chips where the page hands its doors,
   await act(async () => undefined);
   assert.ok(legacy.textContent?.includes("acme/web"), "the chip does not wait on the standing");
   assert.equal(legacy.querySelector('[aria-label^="Status"]'), null);
-});
-
-test("a pilot task's Auto-merge switch is on while it merges on green, and a press sends the other policy", () => {
-  const sent: TaskStanding[] = [];
-  const pilot: Task = { ...TASK, mode: TASK_MODE.PILOT };
-  const on = drawn(pilot, (standing) => sent.push(standing));
-  const merging = switchNamed(on, "Auto-merge");
-  assert.equal(merging.getAttribute("aria-checked"), "true");
-  act(() => merging.click());
-
-  const off = drawn({ ...pilot, mergePolicy: MERGE_POLICY.HOLD }, (standing) =>
-    sent.push(standing),
-  );
-  const holding = switchNamed(off, "Auto-merge");
-  assert.equal(holding.getAttribute("aria-checked"), "false");
-  act(() => holding.click());
-
-  assert.deepEqual(sent, [
-    { mergePolicy: MERGE_POLICY.HOLD },
-    { mergePolicy: MERGE_POLICY.MERGE_ON_GREEN },
-  ]);
-  assert.equal(drawn(TASK, () => undefined).querySelector('[role="switch"]'), null);
-});
-
-test("a top pilot task's head offers Start where the task names no running, and Stop while its tree runs, each press sending the other side", () => {
-  const sent: TaskStanding[] = [];
-  const pilot: Task = { ...TASK, mode: TASK_MODE.PILOT };
-  const stopped = drawn(pilot, (standing) => sent.push(standing));
-  assert.equal(buttonNamed(stopped, "Stop"), undefined);
-  act(() => (buttonNamed(stopped, "Start") ?? assert.fail("no Start")).click());
-
-  const running = drawn({ ...pilot, running: true }, (standing) => sent.push(standing));
-  assert.equal(buttonNamed(running, "Start"), undefined);
-  act(() => (buttonNamed(running, "Stop") ?? assert.fail("no Stop")).click());
-
-  assert.deepEqual(sent, [{ running: true }, { running: false }]);
-  assert.equal(
-    buttonNamed(
-      drawn(TASK, () => undefined),
-      "Start",
-    ),
-    undefined,
-  );
-});
-
-test("Start takes no second press while the service has yet to answer the first", async () => {
-  const sent: TaskStanding[] = [];
-  let answer: () => void = () => undefined;
-  const host = drawn({ ...TASK, mode: TASK_MODE.PILOT }, (standing) => {
-    sent.push(standing);
-    return new Promise<void>((resolve) => {
-      answer = resolve;
-    });
-  });
-  const start = buttonNamed(host, "Start") ?? assert.fail("no Start");
-  act(() => start.click());
-  act(() => (buttonNamed(host, "Starting") ?? assert.fail("no Starting")).click());
-  assert.deepEqual(sent, [{ running: true }]);
-
-  await act(async () => answer());
-  act(() => (buttonNamed(host, "Start") ?? assert.fail("no Start")).click());
-  assert.deepEqual(sent, [{ running: true }, { running: true }]);
 });
 
 test("a status picked from the menu, opened by its chip or by S, is handed to the page, and the one standing is not picked again", () => {

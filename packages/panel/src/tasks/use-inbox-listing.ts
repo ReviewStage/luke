@@ -2,8 +2,9 @@ import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { searchTokens } from "@luke/ui/search-tokens";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { afterPaint } from "../after-paint.js";
 import {
   type InboxViewChoices,
   useChannelScope,
@@ -56,6 +57,12 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * across the whole feed, its groups, counts, and list, is read again only
  * as what it is read from moves.
  *
+ * A row's press, and K and J, choose an item for the Inbox at once, drawn
+ * in the frame the press lands in by the Inbox alone, and hand the choice
+ * to the window once that frame has painted (`useChoiceFirst`), so the
+ * sidebar, the side panel, and the window's history, which follow the
+ * window's choice, draw it a frame later rather than holding up the thread.
+ *
  * Narrowed to a channel, it lists and counts that channel's items alone
  * (`channelGroups`), under the channels' scope, one for every channel and
  * apart from the Inbox's: All of everyone's until the reader turns it,
@@ -91,6 +98,73 @@ export function choiceOf({ holder, item }: InboxListed): InboxChoice {
   return holder.kind === INBOX_HOLDER.TASK
     ? { taskId: holder.task.id, itemAgentId: item.agentId, itemId: item.id }
     : { agentId: item.agentId, itemId: item.id };
+}
+
+/** A choice on its way to the window, and the window's choice it was made over. */
+interface ChoiceOnItsWay {
+  readonly choice: InboxChoice;
+  readonly over: InboxChoice | undefined;
+}
+
+/** Whether the window's choice stands where a choice on its way found it, or on one this Inbox handed on since. */
+function unmoved(
+  way: ChoiceOnItsWay,
+  now: InboxChoice | undefined,
+  handed: WeakSet<InboxChoice>,
+): boolean {
+  return now === way.over || (now !== undefined && handed.has(now));
+}
+
+/**
+ * The item the Inbox shows, as the reader chose it: a choice made here is
+ * drawn at once, and handed to the window (`onChoose`) once the frame that
+ * draws it has painted, in the order they were made, so every choice is a
+ * step of the window's history as it was. Until the window holds it, the
+ * newest choice made here stands for the window's (`chosen`), and
+ * `settling` says so. Note that a choice the window made meanwhile, a
+ * link's or Back's, stands over one still on its way, which is then
+ * dropped rather than handed on, and that `clear`, the Inbox's own way to
+ * choose nothing, drops every choice on its way before it clears the
+ * window's.
+ */
+function useChoiceFirst(
+  chosen: InboxChoice | undefined,
+  onChoose: (chosen: InboxChoice) => void,
+  onClear: () => void,
+): {
+  readonly chosen: InboxChoice | undefined;
+  readonly settling: boolean;
+  readonly choose: (chosen: InboxChoice) => void;
+  readonly clear: () => void;
+} {
+  const [held, setHeld] = useState<readonly ChoiceOnItsWay[]>([]);
+  const latest = useRef({ chosen, onChoose, onClear });
+  latest.current = { chosen, onChoose, onClear };
+  // The choices on their way, so one dropped by a clear is never handed on.
+  const waiting = useRef(new Set<ChoiceOnItsWay>());
+  // The choices handed to the window, so one handed on while another waits is known as this Inbox's own.
+  const handed = useRef(new WeakSet<InboxChoice>());
+  const choose = useCallback((choice: InboxChoice) => {
+    const way: ChoiceOnItsWay = { choice, over: latest.current.chosen };
+    waiting.current.add(way);
+    setHeld((was) => [...was, way]);
+    afterPaint(() => {
+      if (!waiting.current.delete(way)) return;
+      if (unmoved(way, latest.current.chosen, handed.current)) {
+        handed.current.add(choice);
+        latest.current.onChoose(choice);
+      }
+      setHeld((was) => was.filter((each) => each !== way));
+    });
+  }, []);
+  const clear = useCallback(() => {
+    waiting.current.clear();
+    setHeld([]);
+    latest.current.onClear();
+  }, []);
+  const newest = held.at(-1);
+  const stands = newest !== undefined && unmoved(newest, chosen, handed.current);
+  return { chosen: stands ? newest.choice : chosen, settling: stands, choose, clear };
 }
 
 /**
@@ -129,7 +203,14 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     readTasks.has(id) && !read.feedHoldsNothing[INBOX_SCOPE_KIND.PLAN].has(id);
   const settlesAgent = (id: string) =>
     readAgents.has(id) && !read.feedHoldsNothing[INBOX_SCOPE_KIND.AGENT].has(id);
-  const asked = view.chosen;
+  const { onChoose, onClear } = view;
+  // Note that the item chosen here is drawn before the window holds it (`useChoiceFirst`).
+  const {
+    chosen: asked,
+    settling,
+    choose: chooseFirst,
+    clear,
+  } = useChoiceFirst(view.chosen, onChoose, onClear);
   const chosenTask =
     asked !== undefined && "taskId" in asked
       ? tasks.tasks.find((task) => task.id === asked.taskId)
@@ -327,8 +408,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     retryLive();
     retryAgents();
   }, [retryLive, retryAgents]);
-  const { onChoose } = view;
-  const choose = useCallback((listed: InboxListed) => onChoose(choiceOf(listed)), [onChoose]);
+  const choose = useCallback((listed: InboxListed) => chooseFirst(choiceOf(listed)), [chooseFirst]);
   // Note that a close the agent hears may open its turn, so its agents are read again once it is taken.
   const closeItem = useInboxCloser({ act, onHeard: agents.onRetryList });
   // Note that a task list that failed leaves the Inbox holding nothing to read, which would otherwise say it was empty.
@@ -345,6 +425,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     openAutomation,
     read,
     asked,
+    settling,
     chosenTask,
     taskId,
     chosenAgentId,
@@ -369,6 +450,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     reading,
     failed,
     choose,
+    clear,
     closeItem,
     onRetry,
   };

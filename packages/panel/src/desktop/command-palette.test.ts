@@ -311,7 +311,6 @@ const SETTINGS_PAGES = [
   "Account",
   "Workspace",
   "Agents",
-  "Hosts",
   "Integrations",
   "Appearance",
   "This Mac",

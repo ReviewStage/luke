@@ -1,7 +1,5 @@
-import type { MacOffer } from "@luke/features/models-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
-  MERGE_POLICY,
   TASK_PRIORITY,
   TASK_PRIORITY_ORDER,
   TASK_STATUS,
@@ -17,19 +15,14 @@ import { taskKey } from "@luke/features/workspace-key";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BUTTON_VARIANT,
-  Button,
   CHIP_WIDTH,
   ErrorState,
   FailureNote,
   GAP,
   Inline,
-  LabeledSwitch,
   type MenuRow,
-  PlayIcon,
   POPOVER_ALIGN,
   Spinner,
-  StopIcon,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -46,7 +39,6 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
 import { Picker } from "../settings/picker-row.js";
-import { mergePolicySwitchOf, runningSwitchOf } from "./pilot-switches.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip.js";
 import { TaskRunsOnChip } from "./runs-on.js";
 import { TaskBlockAdd, TaskBlockLines, type TaskBlocksDoor } from "./task-blocks.js";
@@ -64,11 +56,8 @@ import { TaskBlockAdd, TaskBlockLines, type TaskBlocksDoor } from "./task-blocks
  * repository's chip (`repository-chip.tsx`), the owner's picture and
  * `owner/name`, or Choose a repository while the task has none, which drops
  * the search over every repository the workspace reaches, and which ⌘K's
- * Change repository opens the same way; and, while local agents are on, a
- * fifth for where its agents run (`runs-on.tsx`); on a pilot tree's top
- * task, an Auto-merge switch for its merge policy, merge on green while on and
- * hold every PR while off, and Start, which lets the tree's agents work, or
- * Stop while they do, which stops them (`pilot-switches.ts`); and last, where the page hands their door,
+ * Change repository opens the same way; and a fifth for where its agents
+ * run (`runs-on.tsx`); and last, where the page hands their door,
  * Add relation, with the task's blocks on a line of their own under the chips
  * (`task-blocks.tsx`). A pick is handed back for the page to send;
  * without a door to send it, as on an archived task, the chips only say.
@@ -243,13 +232,12 @@ export interface TaskRepositoryDoor {
   readonly note?: string | undefined;
 }
 
-/** What the page hands the task's head: its workspace's name, which the key is drawn from, the door a pick is sent through, none where the task takes no change, the repository chip's doors, none where the task's repository is not changed from here, and the member's devices, as the models answer last listed them, which say whether a cloud task shows its Runs on. */
+/** What the page hands the task's head: its workspace's name, which the key is drawn from, the door a pick is sent through, none where the task takes no change, and the repository chip's doors, none where the task's repository is not changed from here. */
 export interface TaskStandingDoor {
   readonly workspaceName: string;
   /** Settles once the service has answered, where the page waits on it. */
   readonly onSet?: ((standing: TaskStanding) => void | Promise<void>) | undefined;
   readonly repository?: TaskRepositoryDoor | undefined;
-  readonly devices?: readonly MacOffer[] | undefined;
   /** The task's blocks' door: the tasks they name, where a press opens one, and where a change is sent; none where they are not drawn. */
   readonly blocks?: TaskBlocksDoor | undefined;
   /** Whether the plan is in sight, which S's ask waits on, so it never opens a menu behind another tab; in sight where unsaid. */
@@ -352,73 +340,11 @@ function TaskStatusPicker({
   );
 }
 
-/** What a pilot tree's run button says, worded once. */
-const TREE_RUN_COPY = {
-  START: "Start",
-  STARTING: "Starting",
-  STOP: "Stop",
-  STOPPING: "Stopping",
-} as const;
-
-/**
- * A pilot tree's run button on its top task: Start, the place's own act,
- * while the tree is stopped, and Stop, an ending act that is not the place's
- * own, while it runs, as the Mac terminal's Run and Stop are drawn. A press
- * sends the other side, and where the page waits on the service the button
- * stays busy until it answers, taking no second press meanwhile.
- */
-function TreeRunButton({
-  running,
-  onSet,
-}: {
-  running: boolean;
-  onSet: ((standing: TaskStanding) => void | Promise<void>) | undefined;
-}): React.JSX.Element {
-  // The side a press sent, while the service has yet to answer it.
-  const [sent, setSent] = useState<boolean | undefined>(undefined);
-  const press = () => {
-    if (sent !== undefined || onSet === undefined) return;
-    const asked = !running;
-    const settles = onSet({ running: asked });
-    // Note that a door that answers at once has nothing to wait on.
-    if (!(settles instanceof Promise)) return;
-    setSent(asked);
-    settles.finally(() => setSent(undefined));
-  };
-  // Note that the press's own face stays while it is out, because the tab
-  // draws the side sent at once, which would name the busy press the other act.
-  const stops = sent === undefined ? running : !sent;
-  return stops ? (
-    <Button
-      variant={BUTTON_VARIANT.DANGER_OUTLINE}
-      icon={<StopIcon />}
-      disabled={onSet === undefined}
-      busy={sent !== undefined}
-      busyLabel={TREE_RUN_COPY.STOPPING}
-      onClick={press}
-    >
-      {TREE_RUN_COPY.STOP}
-    </Button>
-  ) : (
-    <Button
-      variant={BUTTON_VARIANT.PRIMARY}
-      icon={<PlayIcon />}
-      disabled={onSet === undefined}
-      busy={sent !== undefined}
-      busyLabel={TREE_RUN_COPY.STARTING}
-      onClick={press}
-    >
-      {TREE_RUN_COPY.START}
-    </Button>
-  );
-}
-
 /**
  * The task's status, priority, and assignee chips, under its title, its
  * repository's where the page hands the chip's doors, with the service's
- * refusal of the last pick beside it, and where its agents run while the
- * member has a device or the task runs on one, and the Auto-merge switch and Start or Stop on a pilot tree's top task. A
- * task from a service before statuses draws none of the
+ * refusal of the last pick beside it, and where its agents run. A task
+ * from a service before statuses draws none of the
  * standing chips, and still its repository's, which does not wait on them,
  * since the plan's menu leaves Change repository to the chip.
  */
@@ -426,7 +352,6 @@ export function TaskStandingChips({
   task,
   onSet,
   repository,
-  devices,
   blocks,
   inSight = true,
 }: {
@@ -434,7 +359,6 @@ export function TaskStandingChips({
   /** Where a pick is sent, settling once the service has answered where the page waits on it; without one the chips only say. */
   onSet: ((standing: TaskStanding) => void | Promise<void>) | undefined;
   repository?: TaskRepositoryDoor | undefined;
-  devices?: readonly MacOffer[] | undefined;
   /** The task's blocks' door; without it no block is drawn. */
   blocks?: TaskBlocksDoor | undefined;
   /** Whether the plan is in sight, which S waits on, so it never opens a menu behind another tab. */
@@ -451,10 +375,6 @@ export function TaskStandingChips({
       : undefined,
   );
   if (!standing && repository === undefined) return null;
-  const mergePolicy = standing ? mergePolicySwitchOf(task) : undefined;
-  const running = standing ? runningSwitchOf(task) : undefined;
-  const runsOnDrawn =
-    standing && ((devices !== undefined && devices.length > 0) || task.runsOn !== undefined);
   return (
     <div className="plan-task-standing">
       <Inline gap={GAP.CONTROL}>
@@ -511,21 +431,7 @@ export function TaskStandingChips({
             {repository.note}
           </FailureNote>
         )}
-        {runsOnDrawn ? <TaskRunsOnChip runsOn={task.runsOn} /> : null}
-        {mergePolicy === undefined ? null : (
-          <LabeledSwitch
-            label="Auto-merge"
-            checked={mergePolicy === MERGE_POLICY.MERGE_ON_GREEN}
-            disabled={onSet === undefined}
-            onChange={(on) =>
-              onSet?.({ mergePolicy: on ? MERGE_POLICY.MERGE_ON_GREEN : MERGE_POLICY.HOLD })
-            }
-          />
-        )}
-        {running === undefined ? null : (
-          // Keyed by the task, so a press still out on one task never stands busy on another.
-          <TreeRunButton key={task.id} running={running} onSet={onSet} />
-        )}
+        {standing ? <TaskRunsOnChip runsOn={task.runsOn} /> : null}
         {blocks?.onChange === undefined ? null : (
           <TaskBlockAdd task={task} door={blocks} onChange={blocks.onChange} />
         )}

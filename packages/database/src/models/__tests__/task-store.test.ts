@@ -5,7 +5,6 @@ import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import {
-  MERGE_POLICY,
   PLAN_ACTOR,
   TASK_MODE,
   TASK_PRIORITY,
@@ -437,7 +436,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
   );
 
   it.effect(
-    "a plan's header names where it stands and whose it is to every member, follows its status, merge policy, and running switch, and names nothing to an account outside it or for a plan that is none",
+    "a plan's header names where it stands and whose it is to every member, follows its status, and names nothing to an account outside it or for a plan that is none",
     () =>
       Effect.gen(function* () {
         const { dean, charles, taskId } = yield* openSharedTask;
@@ -452,8 +451,6 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           runsOn: TASK_RUNS_IN_CLOUD,
           parentTaskId: null,
           mode: TASK_MODE.AGENT,
-          mergePolicy: MERGE_POLICY.MERGE_ON_GREEN,
-          running: false,
         };
 
         assert.deepEqual(yield* readTaskHeader(dean, taskId), Option.some(started));
@@ -461,18 +458,9 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
         assert.deepEqual(yield* readTaskHeader(stranger, taskId), Option.none());
         assert.deepEqual(yield* readTaskHeader(dean, randomUUID()), Option.none());
 
-        yield* updateTask(dean, taskId, {
-          status: TASK_STATUS.IN_PROGRESS,
-          mergePolicy: MERGE_POLICY.HOLD,
-          running: true,
-        });
+        yield* updateTask(dean, taskId, { status: TASK_STATUS.IN_PROGRESS });
         const header = Option.getOrThrow(yield* readTaskHeader(charles, taskId));
-        assert.deepEqual(header, {
-          ...started,
-          status: TASK_STATUS.IN_PROGRESS,
-          mergePolicy: MERGE_POLICY.HOLD,
-          running: true,
-        });
+        assert.deepEqual(header, { ...started, status: TASK_STATUS.IN_PROGRESS });
         // The header agrees with the whole read on everything it answers.
         const whole = Option.getOrThrow(yield* readTask(charles, taskId));
         assert.deepEqual(header, {
@@ -484,8 +472,6 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           runsOn: TASK_RUNS_IN_CLOUD,
           parentTaskId: null,
           mode: whole.task.mode,
-          mergePolicy: whole.task.mergePolicy,
-          running: whole.task.running,
         });
       }),
   );
@@ -563,29 +549,6 @@ it.layer(getTestDB())("a task's number", (it) => {
 
       assert.equal(Option.getOrUndefined(moved)?.number, 2);
       assert.equal(next.number, 4);
-    }),
-  );
-});
-
-it.layer(getTestDB())("a task's running switch", (it) => {
-  it.effect("a pilot task starts stopped, and every read follows its row once it runs", () =>
-    Effect.gen(function* () {
-      const dean = yield* openAccount;
-      const organizationId = yield* openWorkspace(dean);
-      const pilot = yield* createTask(dean, { organizationId, mode: TASK_MODE.PILOT });
-      const reads = Effect.gen(function* () {
-        const whole = Option.getOrThrow(yield* readTask(dean, pilot.id));
-        const listed = (yield* listTasks(dean)).find((row) => row.id === pilot.id);
-        return [whole.task.running, listed?.running];
-      });
-
-      assert.equal(pilot.running, false);
-      assert.deepEqual(yield* reads, [false, false]);
-
-      yield* Database.use((db) =>
-        db.update(task).set({ running: true }).where(eq(task.id, pilot.id)),
-      );
-      assert.deepEqual(yield* reads, [true, true]);
     }),
   );
 });

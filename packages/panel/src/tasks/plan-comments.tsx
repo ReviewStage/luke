@@ -359,22 +359,7 @@ function WrittenComment({
 }): React.JSX.Element {
   const { author, nameRef } = useWriter(writer, agents);
   return (
-    <Comment
-      author={author}
-      nameRef={
-        said === undefined ? (
-          nameRef
-        ) : (
-          <>
-            {nameRef}
-            <span className="flex-none whitespace-pre font-luke-regular text-muted-foreground">{` ${said}`}</span>
-          </>
-        )
-      }
-      at={at}
-      now={now}
-      trailing={trailing}
-    >
+    <Comment author={author} nameRef={nameRef} said={said} at={at} now={now} trailing={trailing}>
       {children}
     </Comment>
   );

@@ -92,7 +92,9 @@ import {
  * shows it: it stands in this section's state while the dialog is open,
  * inside the install command the member runs on each host, and is gone once
  * the dialog closes. Revoke this command stops new servers enrolling with it, and none it
- * already enrolled.
+ * already enrolled. The page stands only while the Bring your own host
+ * experiment is on (`settings-rows.ts`'s `PAGE_EXPERIMENT`), so while it is
+ * off nothing here is drawn, read, or turned on.
  */
 
 /** The bytes of randomness behind an install token, as many as a device secret's. */

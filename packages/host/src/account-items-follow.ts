@@ -179,7 +179,7 @@ export function followAccountItems(
         return true;
       }
       const asking = yield* Ref.make<Asking>({ since: undefined, again: false });
-      const read = yield* itemsRead();
+      const read = yield* itemsRead(dependencies.reads);
       let wait: TxWait | undefined;
       /** Every item as the read last answered it, with the stamp it was sent with and its holder. */
       let held: Held | undefined;
@@ -193,7 +193,7 @@ export function followAccountItems(
         return tell({ rows: inboxItemsOf(held, shown) });
       });
       yield* dependencies.reads.stand({
-        draw: read.draw,
+        shown: read.shown,
         take: read.take,
         txWait: () => wait,
         drawn,

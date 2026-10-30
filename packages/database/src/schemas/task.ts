@@ -2,8 +2,6 @@ import { AGENT_MACHINE, type AgentMachineKind } from "@luke/features/agent-wire"
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
 import {
-  MERGE_POLICY,
-  type MergePolicy,
   PLAN_ACTOR,
   TASK_MODE,
   TASK_PRIORITY,
@@ -16,7 +14,6 @@ import {
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
-  boolean,
   check,
   index,
   integer,
@@ -77,13 +74,6 @@ export const task = pgTable(
     }),
     /** How the task is worked (`TASK_MODE`): by its agents, or by a pilot; fixed as it starts. */
     mode: text("mode").$type<TaskMode>().notNull().default(TASK_MODE.AGENT),
-    /** What becomes of its agents' pull requests once their checks pass (`MERGE_POLICY`). */
-    mergePolicy: text("merge_policy")
-      .$type<MergePolicy>()
-      .notNull()
-      .default(MERGE_POLICY.MERGE_ON_GREEN),
-    /** Whether a pilot tree's agents may work, set on its top task; every task starts stopped. */
-    running: boolean("running").notNull().default(false),
     /** Where the task stands (`TASK_STATUS`). */
     status: text("status").$type<TaskStatus>().notNull().default(TASK_STATUS.TODO),
     /** How much the task matters (`TASK_PRIORITY`); none until someone weighs it. */

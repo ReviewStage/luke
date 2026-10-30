@@ -95,6 +95,7 @@ import {
 } from "./composer.js";
 import { onRegistry } from "./copy-feedback.js";
 import { sidebarProps } from "./desktop-sidebar.js";
+import { holdFrames, settleFrames } from "./frames.js";
 import { restOn } from "./hint-rest.js";
 import { relayout } from "./resize-observer.js";
 import { installScrollIntoView } from "./scroll-into-view.js";
@@ -543,6 +544,7 @@ function deliverFeed(): void {
 beforeEach(() => {
   installEditorLayout();
   installScrollIntoView();
+  holdFrames();
   window.localStorage.clear();
   // Note that the Inbox opens on All here, so the tests of what an item shows meet settled
   // items too; the tests of the scopes clear it to meet the Inbox as a fresh profile opens it.
@@ -911,11 +913,9 @@ export function mount(
   return { page: container, asked };
 }
 
-/** Lets every promise settled so far run its continuations. */
+/** Lets every promise settled so far run its continuations, and the frames a paint takes pass (`settleFrames`). */
 export async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 40; tick += 1) await Promise.resolve();
-  });
+  await settleFrames();
 }
 
 /** A row's title, as its ListRow draws it. */

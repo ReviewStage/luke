@@ -3327,7 +3327,7 @@ it.effect(
 );
 
 it.effect(
-  "a plan's status, priority, and running switch set on the service land in the list and the open document in place, and a change naming neither never travels",
+  "a plan's status and priority set on the service land in the list and the open document in place, and a change naming neither never travels",
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
@@ -3341,15 +3341,14 @@ it.effect(
         taskId: INVITES,
         status: TASK_STATUS.DONE,
         priority: TASK_PRIORITY.HIGH,
-        running: true,
       });
       const bare = yield* Effect.exit(call(GATEWAY_METHOD.TASKS_SET_STANDING, { taskId: INVITES }));
 
       assert.deepEqual(changed, { changed: true });
       assert.ok(Exit.isFailure(bare));
       assert.deepEqual(
-        last()?.tasks.map((each) => [each.status, each.priority, each.running]),
-        [[TASK_STATUS.DONE, TASK_PRIORITY.HIGH, true]],
+        last()?.tasks.map((each) => [each.status, each.priority]),
+        [[TASK_STATUS.DONE, TASK_PRIORITY.HIGH]],
       );
       const open = last()?.document;
       assert.equal(

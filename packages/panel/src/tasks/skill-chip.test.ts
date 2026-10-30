@@ -8,8 +8,9 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "../testing/composer.js";
+import { holdFrames, settleFrames } from "../testing/frames.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -44,6 +45,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 beforeEach(() => {
+  holdFrames();
   installScrollIntoView();
   installEditorLayout();
 });
@@ -52,6 +54,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   delete document.documentElement.dataset.keyboard;
+  vi.restoreAllMocks();
 });
 
 const ignore = () => undefined;
@@ -83,9 +86,7 @@ async function mounted(view: ReactNode, source: SkillSource = reading) {
       }),
     );
   });
-  await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  await settleFrames();
   return { container, opened };
 }
 

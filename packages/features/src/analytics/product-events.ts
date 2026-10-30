@@ -267,6 +267,7 @@ export const PRODUCT_EXPERIMENT = {
   CHANNELS: "channels",
   PILOT: "pilot",
   SKILLS: "skills",
+  BRING_YOUR_OWN_HOST: "bring-your-own-host",
 } as const;
 
 export type ProductExperiment = (typeof PRODUCT_EXPERIMENT)[keyof typeof PRODUCT_EXPERIMENT];
