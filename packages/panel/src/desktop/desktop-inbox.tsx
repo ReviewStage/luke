@@ -502,196 +502,197 @@ export const DesktopInbox = memo(function DesktopInbox({
   };
   // The chosen item's thread, beside the list or in its place.
   const itemPane = (listed: InboxListed) => (
-    <OpenHereProvider value={openHere}>
-      <SkillFiles
-        source={agents.readSkills}
-        onOpen={(skill) => {
-          // Note that a skill's file opens in the panel beside the Inbox, as a file the item names does, and on GitHub where the panel cannot open it.
-          if (place === undefined) return;
-          const url = encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, place);
-          if (!openHere(url)) appPlatform().openGitHub(url);
-        }}
-      >
-        {/* The item's links are written under its own workspace, which a link may open outside the one listed. */}
-        <LinkWorkspaceProvider value={chosenLinkWorkspace}>
-          {/* Its thread's words read their mentions where its box does, so a file it names opens as its code does. */}
-          <TaskMentions value={mentions}>
-            <DraftedInboxPane
-              holder={listed.holder}
-              item={listed.item}
-              control={live}
-              scope={liveScope}
-              opened={opened}
-              readerId={tasks.me}
-              agents={named}
-              hidden={columns.shown === INBOX_COLUMNS.LIST}
-              onBack={columns.onBack}
-              pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
-              next={next}
-              mentions={mentions}
-              channelName={channel?.name}
-              newThread={newThread}
-              phone={
-                phone ? { onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle } : undefined
-              }
-              doors={{
-                ...paneDoors(tasks, listed.holder, {
-                  act,
-                  panelFor,
-                  place,
-                  besideAgents: named.agentIds,
-                }),
-                onMark: markItem,
-                onClose: closeItem,
-                onMove: channelsOn ? askThreadMove : undefined,
-              }}
-            />
-          </TaskMentions>
-        </LinkWorkspaceProvider>
-      </SkillFiles>
-    </OpenHereProvider>
+    <SkillFiles
+      source={agents.readSkills}
+      onOpen={(skill) => {
+        // Note that a skill's file opens in the panel beside the Inbox, as a file the item names does, and on GitHub where the panel cannot open it.
+        if (place === undefined) return;
+        const url = encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, place);
+        if (!openHere(url)) appPlatform().openGitHub(url);
+      }}
+    >
+      {/* The item's links are written under its own workspace, which a link may open outside the one listed. */}
+      <LinkWorkspaceProvider value={chosenLinkWorkspace}>
+        {/* Its thread's words read their mentions where its box does, so a file it names opens as its code does. */}
+        <TaskMentions value={mentions}>
+          <DraftedInboxPane
+            holder={listed.holder}
+            item={listed.item}
+            control={live}
+            scope={liveScope}
+            opened={opened}
+            readerId={tasks.me}
+            agents={named}
+            hidden={columns.shown === INBOX_COLUMNS.LIST}
+            onBack={columns.onBack}
+            pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
+            next={next}
+            mentions={mentions}
+            channelName={channel?.name}
+            newThread={newThread}
+            phone={
+              phone ? { onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle } : undefined
+            }
+            doors={{
+              ...paneDoors(tasks, listed.holder, {
+                act,
+                panelFor,
+                place,
+                besideAgents: named.agentIds,
+              }),
+              onMark: markItem,
+              onClose: closeItem,
+              onMove: channelsOn ? askThreadMove : undefined,
+            }}
+          />
+        </TaskMentions>
+      </LinkWorkspaceProvider>
+    </SkillFiles>
   );
   return (
-    <LinkWorkspaceProvider value={listedWorkspace?.slug ?? listedWorkspace?.id}>
-      <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
-        <AutomationDirectory workspace={tasks.workspace} wanted onOpen={openAutomation}>
-          <div
-            ref={onArea}
-            className="desktop-task relative flex min-h-0 flex-1"
-            data-panel-open={String(sidePanel.open)}
-            data-page="inbox"
-          >
-            {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
-            <PageFind
-              page={FIND_PAGE.INBOX}
-              active={tasks.shown && !sideFocused}
-              hidden={sidePanel.fullScreen}
+    // Note that the opener stands over the side panel too, so a link pressed in a tab beside the item opens beside it, as the item's own do.
+    <OpenHereProvider value={openHere}>
+      <LinkWorkspaceProvider value={listedWorkspace?.slug ?? listedWorkspace?.id}>
+        <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
+          <AutomationDirectory workspace={tasks.workspace} wanted onOpen={openAutomation}>
+            <div
+              ref={onArea}
+              className="desktop-task relative flex min-h-0 flex-1"
+              data-panel-open={String(sidePanel.open)}
+              data-page="inbox"
             >
-              <div className={INBOX_VIEW} ref={columns.ref} data-columns={columns.shown}>
-                {narrowed && channels.channels === undefined && channels.failed ? (
-                  <ChannelsNotRead onRetry={channels.onRefresh} />
-                ) : channelState.kind === CHANNEL_SHOWN.MISSING ? (
-                  <ChannelMissing
-                    onGeneral={
-                      general === undefined ? undefined : () => channelPlace.onChoose(general.id)
+              {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
+              <PageFind
+                page={FIND_PAGE.INBOX}
+                active={tasks.shown && !sideFocused}
+                hidden={sidePanel.fullScreen}
+              >
+                <div className={INBOX_VIEW} ref={columns.ref} data-columns={columns.shown}>
+                  {narrowed && channels.channels === undefined && channels.failed ? (
+                    <ChannelsNotRead onRetry={channels.onRefresh} />
+                  ) : channelState.kind === CHANNEL_SHOWN.MISSING ? (
+                    <ChannelMissing
+                      onGeneral={
+                        general === undefined ? undefined : () => channelPlace.onChoose(general.id)
+                      }
+                    />
+                  ) : (
+                    <InboxList
+                      view={list}
+                      chosen={chosen?.item.id}
+                      columns={columns.shown}
+                      rows={columns.rows}
+                      head={{
+                        shown: tasks.shown,
+                        show: choices,
+                        view: { choices, folds },
+                        readAll: {
+                          unread,
+                          onMarkAll: () => marks.onMarkAll(standingItems),
+                        },
+                        search,
+                        phone:
+                          room === SHELL_ROOM.NARROW
+                            ? { start: <NewTaskButton tasks={tasks} /> }
+                            : undefined,
+                        channel: channel === undefined ? undefined : channelHead,
+                      }}
+                      models={named.models}
+                      readerId={tasks.me}
+                      reading={reading}
+                      note={
+                        <InboxListNote
+                          failed={failed}
+                          reading={reading}
+                          empty={listedRows.length === 0}
+                          alone={columns.shown === INBOX_COLUMNS.LIST}
+                          filteredOut={filteredOut ? choices : undefined}
+                          counts={counts}
+                          onList={columns.onList}
+                          onRetry={onRetry}
+                          searched={searched}
+                          onNewTask={newTask}
+                        />
+                      }
+                      onChoose={open}
+                      onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
+                      onClose={closeItem}
+                      onAskMove={askMove}
+                      onPointing={onPointing}
+                    />
+                  )}
+                  {chosen === undefined ? (
+                    <section
+                      className={INBOX_VIEW_ITEMS}
+                      hidden={
+                        missing || chosenFailed
+                          ? columns.shown === INBOX_COLUMNS.LIST
+                          : columns.shown !== INBOX_COLUMNS.BOTH
+                      }
+                    >
+                      <Toolbar />
+                      {missing ? (
+                        <NotFound
+                          thing={NOT_FOUND_THING.INBOX_ITEM}
+                          action={
+                            columns.onBack === undefined
+                              ? undefined
+                              : { label: BACK_TO_INBOX, onClick: columns.onBack }
+                          }
+                        />
+                      ) : chosenFailed ? (
+                        <ErrorState
+                          failure={unreadShown(FAILURE_SURFACE.INBOX_ITEM_READ)}
+                          placement={ERROR_STATE_PLACEMENT.CENTRED}
+                          onRetry={onRetryChosen}
+                        >
+                          {ITEM_NOT_READ}
+                        </ErrorState>
+                      ) : failed || reading || filteredOut || searched !== undefined ? null : (
+                        // Note that the list says the read failed, or what the filter or its search left out, so the pane beside it stands bare.
+                        <InboxPaneEmpty listed={listedRows.length} newTask={newTask} />
+                      )}
+                    </section>
+                  ) : (
+                    itemPane(chosen)
+                  )}
+                </div>
+              </PageFind>
+              {move.dialog}
+              {/* The panel stands for the chosen item's task, so its links are written under the item's own workspace, as its pane's are. */}
+              {drawing.panel ? (
+                <LinkWorkspaceProvider value={chosenLinkWorkspace}>
+                  <InboxSidePanel
+                    tasks={tasks}
+                    drawing={{ ...drawing, panel: drawing.panel }}
+                    focused={sideFocused}
+                    taskId={taskId}
+                    panelFor={panelFor}
+                    repository={
+                      chosenTask?.repository ?? place?.repository ?? agents.agentRepository ?? null
+                    }
+                    repositoryPlace={
+                      taskId === undefined && place !== undefined && place.repository !== null
+                        ? { workspaceId: place.workspaceId, repository: place.repository }
+                        : undefined
+                    }
+                    pages={pages}
+                    agents={named}
+                    views={views}
+                    mentions={mentions}
+                    phone={
+                      room === SHELL_ROOM.NARROW && chosen !== undefined
+                        ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
+                        : undefined
                     }
                   />
-                ) : (
-                  <InboxList
-                    view={list}
-                    chosen={chosen?.item.id}
-                    columns={columns.shown}
-                    rows={columns.rows}
-                    head={{
-                      shown: tasks.shown,
-                      show: choices,
-                      view: { choices, folds },
-                      readAll: {
-                        unread,
-                        onMarkAll: () => marks.onMarkAll(standingItems),
-                      },
-                      search,
-                      phone:
-                        room === SHELL_ROOM.NARROW
-                          ? { start: <NewTaskButton tasks={tasks} /> }
-                          : undefined,
-                      channel: channel === undefined ? undefined : channelHead,
-                    }}
-                    models={named.models}
-                    readerId={tasks.me}
-                    reading={reading}
-                    note={
-                      <InboxListNote
-                        failed={failed}
-                        reading={reading}
-                        empty={listedRows.length === 0}
-                        alone={columns.shown === INBOX_COLUMNS.LIST}
-                        filteredOut={filteredOut ? choices : undefined}
-                        counts={counts}
-                        onList={columns.onList}
-                        onRetry={onRetry}
-                        searched={searched}
-                        onNewTask={newTask}
-                      />
-                    }
-                    onChoose={open}
-                    onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
-                    onClose={closeItem}
-                    onAskMove={askMove}
-                    onPointing={onPointing}
-                  />
-                )}
-                {chosen === undefined ? (
-                  <section
-                    className={INBOX_VIEW_ITEMS}
-                    hidden={
-                      missing || chosenFailed
-                        ? columns.shown === INBOX_COLUMNS.LIST
-                        : columns.shown !== INBOX_COLUMNS.BOTH
-                    }
-                  >
-                    <Toolbar />
-                    {missing ? (
-                      <NotFound
-                        thing={NOT_FOUND_THING.INBOX_ITEM}
-                        action={
-                          columns.onBack === undefined
-                            ? undefined
-                            : { label: BACK_TO_INBOX, onClick: columns.onBack }
-                        }
-                      />
-                    ) : chosenFailed ? (
-                      <ErrorState
-                        failure={unreadShown(FAILURE_SURFACE.INBOX_ITEM_READ)}
-                        placement={ERROR_STATE_PLACEMENT.CENTRED}
-                        onRetry={onRetryChosen}
-                      >
-                        {ITEM_NOT_READ}
-                      </ErrorState>
-                    ) : failed || reading || filteredOut || searched !== undefined ? null : (
-                      // Note that the list says the read failed, or what the filter or its search left out, so the pane beside it stands bare.
-                      <InboxPaneEmpty listed={listedRows.length} newTask={newTask} />
-                    )}
-                  </section>
-                ) : (
-                  itemPane(chosen)
-                )}
-              </div>
-            </PageFind>
-            {move.dialog}
-            {/* The panel stands for the chosen item's task, so its links are written under the item's own workspace, as its pane's are. */}
-            {drawing.panel ? (
-              <LinkWorkspaceProvider value={chosenLinkWorkspace}>
-                <InboxSidePanel
-                  tasks={tasks}
-                  drawing={{ ...drawing, panel: drawing.panel }}
-                  focused={sideFocused}
-                  taskId={taskId}
-                  panelFor={panelFor}
-                  repository={
-                    chosenTask?.repository ?? place?.repository ?? agents.agentRepository ?? null
-                  }
-                  repositoryPlace={
-                    taskId === undefined && place !== undefined && place.repository !== null
-                      ? { workspaceId: place.workspaceId, repository: place.repository }
-                      : undefined
-                  }
-                  pages={pages}
-                  agents={named}
-                  views={views}
-                  mentions={mentions}
-                  phone={
-                    room === SHELL_ROOM.NARROW && chosen !== undefined
-                      ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
-                      : undefined
-                  }
-                />
-              </LinkWorkspaceProvider>
-            ) : null}
-          </div>
-        </AutomationDirectory>
-      </MemberDirectory>
-    </LinkWorkspaceProvider>
+                </LinkWorkspaceProvider>
+              ) : null}
+            </div>
+          </AutomationDirectory>
+        </MemberDirectory>
+      </LinkWorkspaceProvider>
+    </OpenHereProvider>
   );
 });
 
