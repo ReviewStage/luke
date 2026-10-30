@@ -18,6 +18,8 @@ export const EXPERIMENT = {
   PILOT: "pilot",
   /** Skills: the skills a member installs into Luke for their agents, managed in Settings › Skills, and the `/` list of skills in a box written to an agent. */
   SKILLS: "skills",
+  /** Bring your own host: agents that run on the member's own Macs and Linux machines, This Mac among them, set up in Settings › Hosts, rather than only in Luke's cloud. */
+  BRING_YOUR_OWN_HOST: "bring-your-own-host",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
@@ -41,6 +43,15 @@ export interface ExperimentEntry {
  * there is no status to drift and every experiment is off until turned on.
  */
 export const EXPERIMENTS = [
+  {
+    key: EXPERIMENT.BRING_YOUR_OWN_HOST,
+    name: "Bring your own host",
+    detail:
+      "Run agents on your own Macs and Linux machines, This Mac among them, set up in Settings › Hosts. " +
+      "Their transcripts and the files their tools read still reach Luke.",
+    owner: "Charles",
+    since: "2026-10-30",
+  },
   {
     key: EXPERIMENT.SKILLS,
     name: "Skills",
