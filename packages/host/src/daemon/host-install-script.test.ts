@@ -188,7 +188,8 @@ function servedScript(served: string, version: string): string {
  * asked in one log, and serve a release's tarball from the folder the box
  * keeps them in. The account lingers unless asked otherwise; where it does
  * not, `loginctl` turns lingering on only where the account may itself, or
- * under `sudo`, which refuses where asked.
+ * under `sudo`, which refuses where asked. Where asked, `id` answers that the
+ * run is root's.
  */
 const box = (
   os: Os,
@@ -196,6 +197,7 @@ const box = (
     readonly lingers?: boolean;
     readonly selfLinger?: boolean;
     readonly sudoRefused?: boolean;
+    readonly root?: boolean;
   } = {},
 ) => {
   const home = folder();
@@ -225,6 +227,9 @@ const box = (
       "esac",
     ].join("\n"),
     sudo: `printf 'sudo %s\\n' "$*" >>"$FAKE_ASKED"\n[ -z "$FAKE_SUDO_REFUSED" ] || exit 1\nFAKE_AS_ROOT=1 exec "$@"`,
+    ...(options.root
+      ? { id: 'if [ "$*" = -u ]; then echo 0; else exec /usr/bin/id "$@"; fi' }
+      : {}),
     launchctl: [
       `printf 'launchctl %s\\n' "$*" >>"$FAKE_ASKED"`,
       'case "$1" in',
@@ -313,15 +318,14 @@ describe("the host's install script", () => {
     ["an Intel Mac", "x86_64", "14.5", "Luke does not run agents on Intel Macs."],
   ] as const) {
     it(`${refusal === undefined ? "lets" : "refuses"} ${computer} ${refusal === undefined ? "through, past every check of the computer" : "by name"}, before anything is changed`, () => {
-      // Note that the run is under sudo from another account, which the next check refuses, so a Mac let through goes no further.
+      // Note that the run has no home, which the next check refuses, so a Mac let through goes no further.
       const answer = sh([SCRIPT, ...ORIGIN_ARGS], {
         PATH: `${macBin(machine, macos)}:${process.env.PATH}`,
-        SUDO_USER: "someone-else",
       });
       expect(answer.status).toBe(1);
       expect(answer.stdout).toBe("");
       if (refusal === undefined) {
-        expect(answer.stderr).toContain("Run it without sudo");
+        expect(answer.stderr).toContain("This account has no home folder");
         expect(answer.stderr).not.toMatch(/Intel|macOS/u);
       } else {
         expect(answer.stderr).toContain(refusal);
@@ -329,8 +333,8 @@ describe("the host's install script", () => {
     });
   }
 
-  it("refuses a run under sudo from another account, naming the command without sudo, before anything is changed", () => {
-    const computer = box(OS.LINUX);
+  it("refuses a run as root under sudo from another account, naming the command without sudo, before anything is changed", () => {
+    const computer = box(OS.LINUX, { root: true });
     const answer = computer.install("0.3.0", { SUDO_USER: "someone-else" });
 
     expect(answer.status).toBe(1);

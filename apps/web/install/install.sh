@@ -12,8 +12,9 @@
 # silicon Mac on macOS MAC_MIN_VERSION or later, and git. On Windows it runs
 # inside WSL2 alone, whose kernel is Linux's; WSL1 has none, so it is refused.
 # Run as root directly, it installs into root's own account, which is all a
-# VPS that logs in as root has; run under sudo from another account, it is
-# refused, so a stale `curl … | sudo sh` never installs into root's account.
+# VPS that logs in as root has; run as root under sudo from another account,
+# it is refused, so a stale `curl … | sudo sh` never installs into root's
+# account.
 # An install that came before, under /opt or a Mac's Application Support, is
 # refused with that install's own uninstall command, since the two would run
 # side by side.
@@ -148,12 +149,15 @@ require_macos_version() {
   fail "Luke host needs macOS $MAC_MIN_VERSION or later, and this Mac runs macOS ${1:-of a version it did not say}. Update macOS, then run this again."
 }
 
-# Refuses a run under sudo from another account, whose files would land in
-# root's account rather than the one that typed the command, and a run with
-# no home to install into. On a Mac it refuses root as well, which has no
-# login session for a LaunchAgent to run in.
+# Refuses a run as root under sudo from another account, whose files would
+# land in root's account rather than the one that typed the command, and a
+# run with no home to install into. On a Mac it refuses root as well, which
+# has no login session for a LaunchAgent to run in. Note that a session sudo
+# opened as another account than root, which installs into that account, is
+# let through, and on Linux refused by require_user_manager where its user
+# manager cannot be reached.
 require_own_account() {
-  if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "$(id -un)" ]; then
+  if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
     fail "Run it without sudo, as the account whose agents Luke host should run: curl -fsSL $ORIGIN/install.sh | sh"
   fi
   if [ "$(uname -s)" = "Darwin" ] && [ "$(id -u)" -eq 0 ]; then
