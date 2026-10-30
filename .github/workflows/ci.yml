@@ -167,36 +167,6 @@ jobs:
       - name: The store's lock and claim tests on a real Postgres
         run: pnpm exec vitest run --project database .postgres.test.ts
 
-  # The coding agent's OCI image, built for each platform from the sandbox's
-  # own preparation, on a runner of that architecture, and published nowhere:
-  # `sandbox-image.yml` publishes it from `main`. The script builds nothing
-  # where the image of this preparation's key is published already, which is
-  # every pull request that leaves the preparation alone; a fork's, whose
-  # token reads no package, builds it.
-  sandbox-image:
-    name: Sandbox image (${{ matrix.platform }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
-    permissions:
-      contents: read
-      packages: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-24.04
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: ./.github/actions/setup
-      - name: Sign in to GitHub's registry to read what is published
-        run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin || true
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-      - run: ./scripts/sandbox-image.sh build ${{ matrix.platform }}
-
   # The one check the ruleset requires, so a job or slice added above is
   # required without a ruleset edit. It passes only where every job it needs
   # succeeded. Note that it runs whatever became of them, because a job skipped
@@ -205,7 +175,7 @@ jobs:
   ci:
     name: CI
     if: ${{ always() }}
-    needs: [portable, tests, postgres, sandbox-image]
+    needs: [portable, tests, postgres]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
