@@ -193,7 +193,7 @@ export function followAccountItems(
         return tell({ rows: inboxItemsOf(held, shown) });
       });
       yield* dependencies.reads.stand({
-        moves: read.moves,
+        shown: read.shown,
         take: read.take,
         txWait: () => wait,
         drawn,

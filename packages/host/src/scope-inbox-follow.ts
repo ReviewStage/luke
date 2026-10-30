@@ -112,7 +112,7 @@ export function scopeInboxes(
             : Effect.void,
         );
         yield* dependencies.reads.stand({
-          moves: read.moves,
+          shown: read.shown,
           take: read.take,
           txWait: () => wait,
           drawn,

@@ -203,7 +203,7 @@ export function accountInboxes(
           answered === undefined ? Effect.void : Queue.offer(standing, { ...answered, ...shown() }),
         );
         yield* dependencies.reads.stand({
-          moves: (change) => rowsChanged(shown(), change, userId) !== undefined,
+          shown,
           take: (change) => {
             const next = answered === undefined ? undefined : rowsChanged(answered, change, userId);
             if (answered !== undefined && next !== undefined) taken({ ...answered, ...next });
