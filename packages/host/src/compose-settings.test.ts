@@ -54,7 +54,7 @@ const sendingSettings = Effect.fnUntraced(function* (packaged: boolean) {
     ),
     Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
     // A version the counted events allowlist reads, so the launch is counted.
-    Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged }),
+    Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged, platform: "desktop" }),
     fixedAccountSource(),
     NodeFileSystem.layer,
     NodePath.layer,
@@ -140,7 +140,7 @@ const tabOver = Effect.fnUntraced(function* (
       }),
     ),
     Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-    Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged: false }),
+    Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged: false, platform: "desktop" }),
     fixedAccountSource(),
     changedElsewhere,
     NodeFileSystem.layer,

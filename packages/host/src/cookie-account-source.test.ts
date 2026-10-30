@@ -424,6 +424,7 @@ describe("the cookie account source", () => {
         serviceBaseUrl: ORIGIN,
         appVersion: "0.2.0",
         packaged: false,
+        platform: "desktop",
         sends: true,
         credential: session.credential,
         confirmAccount: session.confirmAccount,
@@ -1045,7 +1046,7 @@ const machineOver = (stateRoot: string, accountSource: Layer.Layer<AccountSource
     ),
     Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
     // Packaged, as a browser tab is, so usage data is shared and the counts are sent.
-    Layer.succeed(AppIdentity, { appVersion: "0.2.0", packaged: true }),
+    Layer.succeed(AppIdentity, { appVersion: "0.2.0", packaged: true, platform: "desktop" }),
     accountSource,
     NodeFileSystem.layer,
     NodePath.layer,

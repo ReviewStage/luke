@@ -43,7 +43,11 @@ const kernelLayerOver = (input: TestSeams) =>
     Layer.mergeAll(
       Layer.succeed(StateRoot, input.stateRoot),
       Layer.succeed(RunMode, input.runMode),
-      Layer.succeed(AppIdentity, { appVersion: input.appVersion, packaged: input.packaged }),
+      Layer.succeed(AppIdentity, {
+        appVersion: input.appVersion,
+        packaged: input.packaged,
+        platform: "desktop",
+      }),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord(input.environment)),
       Layer.succeed(IdSource, { create: input.createId }),
       reporterLayer(input.report),

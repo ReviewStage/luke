@@ -159,7 +159,11 @@ it.effect("a sign-in after a deletion in the same run lets session replay record
 
     const account = yield* signedInAccount({
       kernel,
-      machine: Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
+      machine: Layer.succeed(AppIdentity, {
+        appVersion: "0.0.0-test",
+        packaged: false,
+        platform: "desktop",
+      }),
     });
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = account.methods[method];
@@ -208,7 +212,11 @@ it.effect(
       for (const failure of Object.values(SIGN_IN_FAILURE)) {
         const account = yield* desktopAccount({
           kernel,
-          machine: Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
+          machine: Layer.succeed(AppIdentity, {
+            appVersion: "0.0.0-test",
+            packaged: false,
+            platform: "desktop",
+          }),
           consent: () => ({
             signInEffect: () => Effect.succeed({ reason, failure }),
             cancel: () => undefined,
@@ -257,7 +265,11 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
 
     const account = yield* signedInAccount({
       kernel,
-      machine: Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
+      machine: Layer.succeed(AppIdentity, {
+        appVersion: "0.0.0-test",
+        packaged: false,
+        platform: "desktop",
+      }),
     });
     // Nothing is read until the gate opening asks, so nothing is an admin before it, and the read is owed.
     assert.deepEqual(yield* account.accessState, { admin: false, pending: true });
@@ -378,7 +390,7 @@ const browserAccount = (service: TabService) =>
       ),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
       // A version the counted events allowlist reads, and packaged as a browser tab is, so the counts are sent.
-      Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged: true }),
+      Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged: true, platform: "desktop" }),
       Layer.provide(cookieAccountSourceLayer(door), FetchHttpClient.layer),
       NodeFileSystem.layer,
       NodePath.layer,

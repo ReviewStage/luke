@@ -170,6 +170,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       appVersion: identity.appVersion,
       packaged: identity.packaged,
+      platform: identity.platform,
       sends: runMode.sendsNetwork,
       // The kernel's clock, so a count is stamped on the same clock as every other timer here.
       now: kernel.now,

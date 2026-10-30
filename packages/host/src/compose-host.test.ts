@@ -56,7 +56,11 @@ const machineOver = (stateRoot: string) =>
     Layer.mergeAll(
       Layer.succeed(StateRoot, stateRoot),
       Layer.succeed(RunMode, runModeFor({ capture: false, fixture: true })),
-      Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
+      Layer.succeed(AppIdentity, {
+        appVersion: "0.0.0-test",
+        packaged: false,
+        platform: "desktop",
+      }),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
       Layer.succeed(IdSource, { create: () => "id" }),
       reporterLayer(() => undefined),
