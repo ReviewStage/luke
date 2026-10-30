@@ -403,10 +403,10 @@ export function hostInstallCommand(installScriptUrl: string, installToken: strin
   return `curl -fsSL ${installScriptUrl} | sudo sh -s -- --token ${installToken}`;
 }
 
-/** The command that upgrades an enrolled box in place, keeping its secret: the install command with no token. */
+/** The command that upgrades a connected box in place, keeping its pairing: the install script run again in the account it installed into, with no sudo. */
 export function hostUpgradeCommand(installScriptUrl: string): string {
-  return `curl -fsSL ${installScriptUrl} | sudo sh`;
+  return `curl -fsSL ${installScriptUrl} | sh`;
 }
 
-/** The command that takes Luke's host off a box the install command set up, with its agents' VMs and folders (`apps/host/scripts/luke-host.sh`). */
-export const HOST_UNINSTALL_COMMAND = "sudo luke-host uninstall";
+/** The command that takes Luke's host out of the account the install command set it up in, with no sudo: its service, its agents' folders, its state and its releases (`apps/host/scripts/luke-host.sh`). Note that it names the install's own link, since the account's PATH may not hold `~/.local/bin`. */
+export const HOST_UNINSTALL_COMMAND = "~/.local/bin/luke-host uninstall";
