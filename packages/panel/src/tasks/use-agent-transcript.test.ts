@@ -149,20 +149,6 @@ test("a shown tab follows its transcript, joins the pages pushed for it alone, a
   assert.equal(seen.current?.messages.length, 2);
 });
 
-test("what a follow reads until it catches up stands as the reader opened on it, the host's held window and the pages read after it alike, and what later pages add arrives", () => {
-  const { follower, push } = scriptedFollower();
-  const { seen, draw } = drawn(follower);
-
-  draw(true);
-  push(AGENT, { ...newestOf(["m-1"]), held: true, caughtUp: true });
-  push(AGENT, { ...pageOf("m-2", "Written while the tab was away."), caughtUp: true });
-  push(AGENT, pageOf("m-3", "Written while the reader watched."));
-  assert.deepEqual(
-    seen.current?.standing.map((message) => message.id),
-    ["m-1", "m-2"],
-  );
-});
-
 test("a page that could not be read offers Try again, which follows the transcript anew, the messages held standing", () => {
   const { follower, asked, push } = scriptedFollower();
   const { seen, draw } = drawn(follower);

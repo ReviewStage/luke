@@ -143,8 +143,6 @@ export interface AgentTranscriptControl {
   delegations: ReadonlyMap<string, number>;
   /** Where each of the agent's workers stands, by the call that started it, as its own session reads and the last page said; none on a worker's, and from a service older than it. */
   subagents: ReadonlyMap<string, AgentSubagentStanding>;
-  /** The messages as the follow drew them once it caught up (`caughtUpWith`): what was written before the reader looked, which stands as it is, where what a page adds after it arrives. */
-  standing: readonly AgentTranscriptMessage[];
   /** Whether a read is out, with nothing held yet to draw. */
   reading: boolean;
   /** Whether the last read did not answer, so the tab offers to try again. */
@@ -178,9 +176,6 @@ interface Held {
   subagentTitles: ReadonlyMap<string, string>;
   delegations: ReadonlyMap<string, number>;
   subagents: ReadonlyMap<string, AgentSubagentStanding>;
-  standing: readonly AgentTranscriptMessage[];
-  /** Whether the follow is still reading what was written before it opened: from its newest page until a page the service read comes back caught up. */
-  catchingUp: boolean;
   /** The rewind the newest page held was read at; none before a page landed or where the transcript was never rewound. */
   rewound: number | undefined;
   failed: boolean;
@@ -207,8 +202,6 @@ function fresh(transcript: AgentTranscriptKey): Held {
     subagentTitles: new Map(),
     delegations: new Map(),
     subagents: new Map(),
-    standing: [],
-    catchingUp: false,
     rewound: undefined,
     failed: false,
     failedWith: undefined,
@@ -256,19 +249,6 @@ function meets(held: readonly AgentTranscriptMessage[], page: AgentTranscriptPag
   return held.some((message) => ids.has(message.id));
 }
 
-/**
- * Whether a follow has read all that was written before it opened, once
- * `page` lands. A follow opens on its newest page, which may be the window
- * the host held from the last time it was followed (`held`) and so stop
- * where the reader last looked, and reads on from its cursor, page after
- * page, until one comes back short (`caughtUp`). Note that only a page the
- * service read says so: a held window was caught up when it was held, and
- * everything written since still follows it.
- */
-function caughtUpWith(page: { readonly caughtUp: boolean; readonly held?: true }): boolean {
-  return page.caughtUp && page.held !== true;
-}
-
 /** A page pushed, joined to what is held: its messages by id, and where the agent stands as it says. */
 function joined(was: Held, page: HeardTranscriptPage): Held {
   // Note that a transcript the account does not reach draws nothing it held of it, as one the host drew from what it held before access was checked.
@@ -282,10 +262,9 @@ function joined(was: Held, page: HeardTranscriptPage): Held {
   const replaces =
     page.newest === true &&
     (was.messages.length === 0 || !meets(was.messages, page) || page.rewound !== was.rewound);
-  const messages = replaces ? page.messages : applyMessagesPage(was.messages, page.messages);
   return {
     ...was,
-    messages,
+    messages: replaces ? page.messages : applyMessagesPage(was.messages, page.messages),
     before: replaces ? page.before : was.before,
     olderOut: replaces ? undefined : was.olderOut,
     // Note that a failure is the failed cursor's, so a page that replaces the cursor lets it go.
@@ -316,9 +295,6 @@ function joined(was: Held, page: HeardTranscriptPage): Held {
       (page.subagents ?? []).map((standing) => [standing.callId, standing]),
       sameStanding,
     ),
-    // Note that what stands is what the follow drew until it caught up, which was written while nobody followed; every page after it is what the reader watched land.
-    standing: page.newest === true || was.catchingUp ? messages : was.standing,
-    catchingUp: page.newest === true || was.catchingUp ? !caughtUpWith(page) : false,
     failed: false,
     failedWith: undefined,
   };
@@ -482,7 +458,6 @@ export function useAgentTranscript(input: {
     subagentTitles: held.subagentTitles,
     delegations: held.delegations,
     subagents: held.subagents,
-    standing: held.standing,
     reading: shown && !held.failed && held.messages.length === 0 && writing,
     failed: held.failed,
     failedWith: held.failedWith,

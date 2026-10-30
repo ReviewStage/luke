@@ -438,18 +438,6 @@ export interface DelegationDoors {
  */
 const LiveDoors = createContext<Pick<DelegationDoors, "cards"> | undefined>(undefined);
 
-/**
- * The parts of a transcript the reader opened on, as its follow drew them
- * until it caught up (`standing`), which a text part reads as it is drawn:
- * words written before the reader looked stand, a reply the follow is still
- * catching up on among them, and only the words written after fade in. Note
- * that the parts are the reads the rows draw (`agentParts`), so a part is
- * looked up as itself, a part that grew since being a read of its own, and
- * the set moves only while a follow catches up, never with a page after.
- * Where a transcript hands none, every part stands.
- */
-const StandingParts = createContext<ReadonlySet<AgentPart> | undefined>(undefined);
-
 /** The live doors where a transcript hands them, else what `doors` carries. */
 function useLiveDoors(
   doors: Pick<DelegationDoors, "cards"> | undefined,
@@ -992,17 +980,12 @@ function AgentPartView({
   /** Whether the agent may still write to the message the part is of, whose words are then read as they stream. */
   moving?: boolean;
 }): ReactNode {
-  const standing = useContext(StandingParts);
   switch (part.kind) {
     case AGENT_PART.TEXT:
       // The agent's words alone may be replied to, never a call's output or a thought.
       return (
         <div {...{ [REPLY_SCOPE]: "" }}>
-          <TranscriptWords
-            text={part.text}
-            streaming={moving}
-            standing={standing?.has(part) ?? true}
-          />
+          <TranscriptWords text={part.text} streaming={moving} />
         </div>
       );
     case AGENT_PART.REASONING:
@@ -2178,11 +2161,8 @@ function AgentTranscriptView({
   endTrail,
   bringIn,
   holding = false,
-  standing,
 }: {
   messages: readonly AgentTranscriptMessage[];
-  /** The messages as the transcript's follow drew them until it caught up (`standing`), whose words stand while what is written after fades in; none where nothing streams, when every word stands. */
-  standing?: readonly AgentTranscriptMessage[] | undefined;
   /** Whether the log waits to draw for what stands around it, saying it is loading meanwhile. */
   holding?: boolean;
   /** Where the transcript hands the door that brings a message whose row is not drawn into view, which a link to the message asks through; none where nothing asks. */
@@ -2259,10 +2239,6 @@ function AgentTranscriptView({
   const arrivals = useArrivals(placing.placed, readerId, members, former);
   const cards = delegation?.cards;
   const live = useMemo(() => ({ cards }), [cards]);
-  const standingParts = useMemo(
-    () => (standing === undefined ? undefined : new Set(standing.flatMap(agentParts))),
-    [standing],
-  );
   // Whether a call of a server's tool is held, which is all the accounts' names are read for.
   const callsServer = useMemo(
     () =>
@@ -2327,134 +2303,132 @@ function AgentTranscriptView({
     return (
       <TranscriptAgent value={agentId}>
         <LiveDoors value={live}>
-          <StandingParts value={standingParts}>
-            <ConnectionNames needed={callsServer}>
-              <Conversation list={log} onNearTop={onOlder}>
-                {/* Note that it floats in a fixed slot over the log's top rather than standing in its flow, so its coming and going moves no row, measured or not. */}
-                {olderFailed && onOlder !== undefined ? (
-                  <div
-                    className={`${FLOATING_OVER_LOG_CLASS} top-luke-8 z-1 max-w-conversation-older bg-well px-list-inset py-tight-gap`}
-                  >
-                    <ErrorState
-                      failure={unreadShown(FAILURE_SURFACE.AGENT_TRANSCRIPT_OLDER_READ)}
-                      onRetry={onOlder}
-                    >
-                      {OLDER_FAILED_LINE}
-                    </ErrorState>
-                  </div>
-                ) : null}
-                {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
-                <ConversationContent
-                  className={overComposer ? LOG_OVER_COMPOSER_CLASS : undefined}
-                  streams
+          <ConnectionNames needed={callsServer}>
+            <Conversation list={log} onNearTop={onOlder}>
+              {/* Note that it floats in a fixed slot over the log's top rather than standing in its flow, so its coming and going moves no row, measured or not. */}
+              {olderFailed && onOlder !== undefined ? (
+                <div
+                  className={`${FLOATING_OVER_LOG_CLASS} top-luke-8 z-1 max-w-conversation-older bg-well px-list-inset py-tight-gap`}
                 >
-                  <ConversationRows
-                    keys={rowKeys}
-                    estimate={ROW_ESTIMATE_PX}
-                    gap={0}
-                    rowClassName={rowClassOf}
-                    handle={rowsHandle}
+                  <ErrorState
+                    failure={unreadShown(FAILURE_SURFACE.AGENT_TRANSCRIPT_OLDER_READ)}
+                    onRetry={onOlder}
                   >
-                    {(at) => {
-                      const entry = entries[at];
-                      if (entry === undefined) return null;
-                      const { row, index, piece } = entry;
-                      const { message } = row;
-                      const tails = piece === undefined || piece.last;
-                      return (
-                        <>
-                          <SteadyAgentMessage
-                            message={
-                              message === first && opening !== undefined ? opening.brief : message
-                            }
-                            plan={message === plan}
-                            taskId={message === plan ? taskId : undefined}
-                            lead={lead}
-                            moving={working && index === placed.length - 1}
-                            forkCut={forkCutOf(message, open)}
-                            delegation={delegation}
-                            todos={todos}
-                            briefTitle={briefTitle}
-                            origin={message === plan ? origin : undefined}
-                            sender={
-                              message === task
-                                ? briefSender
-                                : lineSender(message.sentBy, readerId, members, former)
-                            }
-                            arrived={arrivals.get(message.id) ?? NO_ARRIVED}
-                            piece={piece}
-                          />
-                          {!tails ? null : message === first &&
-                            opening !== undefined &&
-                            replay !== undefined ? (
-                            <>
-                              <ReplayCard
-                                replay={opening.replay}
-                                sentAt={first.sentAt}
-                                place={replay}
-                                taskId={taskId}
-                              />
-                              {opening.note === undefined ? null : (
-                                <SteadyAgentMessage
-                                  message={opening.note}
-                                  plan={false}
-                                  lead={lead}
-                                  moving={false}
-                                  delegation={delegation}
-                                  sender={briefSender}
-                                />
-                              )}
-                            </>
-                          ) : null}
-                          {earlierOmitted && message === plan ? (
-                            <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
-                          ) : null}
-                        </>
-                      );
-                    }}
-                  </ConversationRows>
-                  {working ? (
-                    <WorkingLine
-                      startedAt={startedAt}
-                      words={
-                        WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting, rewindOut)]
-                      }
-                    />
-                  ) : null}
-                  {ended === undefined && endTrail === undefined ? null : (
-                    <div
-                      className="agent-end flex flex-col items-start gap-control-gap"
-                      data-ended={ended === undefined ? undefined : ""}
-                    >
-                      {ended === undefined ? null : (
-                        <AgentEndRow
-                          ended={ended}
-                          endReason={endReason}
-                          keyProvider={keyProvider}
-                          onOpenApiKeys={onOpenApiKeys}
-                          press={endPress}
+                    {OLDER_FAILED_LINE}
+                  </ErrorState>
+                </div>
+              ) : null}
+              {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
+              <ConversationContent
+                className={overComposer ? LOG_OVER_COMPOSER_CLASS : undefined}
+                streams
+              >
+                <ConversationRows
+                  keys={rowKeys}
+                  estimate={ROW_ESTIMATE_PX}
+                  gap={0}
+                  rowClassName={rowClassOf}
+                  handle={rowsHandle}
+                >
+                  {(at) => {
+                    const entry = entries[at];
+                    if (entry === undefined) return null;
+                    const { row, index, piece } = entry;
+                    const { message } = row;
+                    const tails = piece === undefined || piece.last;
+                    return (
+                      <>
+                        <SteadyAgentMessage
+                          message={
+                            message === first && opening !== undefined ? opening.brief : message
+                          }
+                          plan={message === plan}
+                          taskId={message === plan ? taskId : undefined}
+                          lead={lead}
+                          moving={working && index === placed.length - 1}
+                          forkCut={forkCutOf(message, open)}
+                          delegation={delegation}
+                          todos={todos}
+                          briefTitle={briefTitle}
+                          origin={message === plan ? origin : undefined}
+                          sender={
+                            message === task
+                              ? briefSender
+                              : lineSender(message.sentBy, readerId, members, former)
+                          }
+                          arrived={arrivals.get(message.id) ?? NO_ARRIVED}
+                          piece={piece}
                         />
-                      )}
-                      {endTrail}
-                    </div>
-                  )}
-                  {failed ? (
-                    <ErrorState
-                      failure={failureShown({
-                        surface: FAILURE_SURFACE.AGENT_TRANSCRIPT_READ,
-                        cause: failedWith ?? FAILURE_CONDITION.UNREAD,
-                        about: { agentId },
-                      })}
-                      onRetry={onRetry}
-                    >
-                      {TRANSCRIPT_FAILED_LINE}
-                    </ErrorState>
-                  ) : null}
-                </ConversationContent>
-                <ConversationScrollButton />
-              </Conversation>
-            </ConnectionNames>
-          </StandingParts>
+                        {!tails ? null : message === first &&
+                          opening !== undefined &&
+                          replay !== undefined ? (
+                          <>
+                            <ReplayCard
+                              replay={opening.replay}
+                              sentAt={first.sentAt}
+                              place={replay}
+                              taskId={taskId}
+                            />
+                            {opening.note === undefined ? null : (
+                              <SteadyAgentMessage
+                                message={opening.note}
+                                plan={false}
+                                lead={lead}
+                                moving={false}
+                                delegation={delegation}
+                                sender={briefSender}
+                              />
+                            )}
+                          </>
+                        ) : null}
+                        {earlierOmitted && message === plan ? (
+                          <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
+                        ) : null}
+                      </>
+                    );
+                  }}
+                </ConversationRows>
+                {working ? (
+                  <WorkingLine
+                    startedAt={startedAt}
+                    words={
+                      WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting, rewindOut)]
+                    }
+                  />
+                ) : null}
+                {ended === undefined && endTrail === undefined ? null : (
+                  <div
+                    className="agent-end flex flex-col items-start gap-control-gap"
+                    data-ended={ended === undefined ? undefined : ""}
+                  >
+                    {ended === undefined ? null : (
+                      <AgentEndRow
+                        ended={ended}
+                        endReason={endReason}
+                        keyProvider={keyProvider}
+                        onOpenApiKeys={onOpenApiKeys}
+                        press={endPress}
+                      />
+                    )}
+                    {endTrail}
+                  </div>
+                )}
+                {failed ? (
+                  <ErrorState
+                    failure={failureShown({
+                      surface: FAILURE_SURFACE.AGENT_TRANSCRIPT_READ,
+                      cause: failedWith ?? FAILURE_CONDITION.UNREAD,
+                      about: { agentId },
+                    })}
+                    onRetry={onRetry}
+                  >
+                    {TRANSCRIPT_FAILED_LINE}
+                  </ErrorState>
+                ) : null}
+              </ConversationContent>
+              <ConversationScrollButton />
+            </Conversation>
+          </ConnectionNames>
         </LiveDoors>
       </TranscriptAgent>
     );
@@ -2742,7 +2716,6 @@ function AgentTabView({
                 <RewindProvider value={rewind}>
                   <AgentTranscriptView
                     messages={lines}
-                    standing={transcript.standing}
                     quietReplies={agent.kind === AGENT_KIND.OPERATOR}
                     brief={agent.brief}
                     briefSender={starter === undefined ? undefined : starterActor}
@@ -3300,7 +3273,6 @@ export function AgentSubagentTab({
           <WholePartsProvider value={wholeParts}>
             <AgentTranscriptView
               messages={lines}
-              standing={transcript.standing}
               lead={WORKER_LEAD}
               origin={origin}
               delegation={delegation}
