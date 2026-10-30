@@ -719,7 +719,7 @@
      clear of the edge it stands at, a window's or the panel's. */
   --chapter-brief-least: calc(3 * var(--luke-type-body-leading) + var(--luke-list-inset));
   --chapter-reading-least: calc(
-    3 *
+    2 *
     var(--luke-pane-bar-height) +
     var(--luke-row-inset) +
     var(--chapter-brief-least)
@@ -750,6 +750,14 @@
   flex: 0 0 auto;
   flex-direction: column;
   border-right: 1px solid var(--luke-color-border);
+}
+
+/* Which model told the chapters, quiet under the rail's rows at its foot,
+   its words where a row's title stands. */
+.chapter-rail-credit {
+  flex: none;
+  padding: var(--luke-tight-gap) calc(var(--luke-list-inset) + var(--luke-row-inset))
+    var(--luke-list-inset);
 }
 
 .chapter-rail[data-leaving] {
@@ -790,13 +798,25 @@
   display: none;
 }
 
-/* The chapter's files under the brief keep at least their own bar and a
-   bar's height of the diff, so in a short window the brief gives way to
-   them rather than squeezing their bar out past the body, and whatever
-   they still cannot fit is cut at their own edge, never drawn over it. */
+/* The chapter's files under the brief keep at least a bar's height of
+   the diff, so in a short window the brief gives way to them rather than
+   squeezing them out past the body, and whatever they still cannot fit is
+   cut at their own edge, never drawn over it. */
 .chapter-reading > .file-view {
-  min-height: calc(2 * var(--luke-pane-bar-height));
+  min-height: var(--luke-pane-bar-height);
   overflow: clip;
+}
+
+/* The chapter's bar holds its list's own tools (`ChangesBarHost`), spaced
+   as the bar's actions are, and nothing while the chapter draws no list. */
+.chapter-list-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-2);
+}
+
+.chapter-list-tools:empty {
+  display: none;
 }
 
 /* A key change's card, `@luke/ui`'s outlined Card: the words take its
@@ -845,6 +865,44 @@
   .chapter-rail-toggle[data-place="over"] {
     display: flex;
   }
+}
+
+/* A Pull request tab as narrow as a phone's folds the chapter's risk chip
+   away, so its title keeps room beside Viewed, the pager, and the list's
+   tools; the rail's row still marks the risk in its colour and says it. */
+/* off-scale: 480px, where the bar's controls leave the title no room beside the chip */
+@container pull-request-tab (width < 480px) {
+  .chapter-risk {
+    display: none;
+  }
+}
+
+/* The list's tree toggle in the chapter's bar moves to the place that opens
+   the tree as the File view's own does (above): over the list below a 550px
+   panel, and in a narrow room. */
+/* off-scale: 550px, the File view's own fold for its tree */
+@container side-panel (width < 550px) {
+  .chapter-list-tools .file-tree-toggle[data-place="beside"] {
+    display: none;
+  }
+
+  .chapter-list-tools .file-tree-toggle[data-place="over"] {
+    display: flex;
+  }
+}
+
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
+  .chapter-list-tools
+  .file-tree-toggle[data-place="beside"] {
+  display: none;
+}
+
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
+  .chapter-list-tools
+  .file-tree-toggle[data-place="over"] {
+  display: flex;
 }
 
 /* The tabs' row under the header, Review at its end while the pull request
