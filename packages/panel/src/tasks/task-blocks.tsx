@@ -59,7 +59,7 @@ const RELATION_ORDER: readonly TaskBlockRelation[] = [
 /** The add menu's first rows: which side the task picked next stands on. */
 const RELATION_ROWS: readonly MenuRow[] = RELATION_ORDER.map((relation) => ({
   id: relation,
-  label: `${TASK_BLOCK_WORDS[relation]}…`,
+  label: TASK_BLOCK_WORDS[relation],
 }));
 
 /** What a task the window does not list yet is called on its pill. */

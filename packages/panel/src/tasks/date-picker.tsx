@@ -46,7 +46,7 @@ import { SwitchRow } from "../settings/switch-row.js";
  *
  * A date chip in words that take a change (the plan's editor, an agent's
  * box, a comment's) opens this picker when pressed, and the `@` list
- * narrowed to dates opens it from its "Pick a date…" row to write a new
+ * narrowed to dates opens it from its "Pick a date" row to write a new
  * one. It is drawn as the window's other popovers with settings in them
  * are (`view-settings.tsx`): a card under its title and ×, its switches the
  * Settings rows' own (`../settings/switch-row.tsx`) at their compact
