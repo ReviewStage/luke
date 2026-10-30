@@ -1133,6 +1133,7 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md in a
     status: AGENT_STATUS.COMPLETED,
     title: null,
   };
+  handState(experimentsOn(EXPERIMENT.SKILLS));
   localStorage.clear();
   installScrollIntoView();
   const page = document.createElement("div");

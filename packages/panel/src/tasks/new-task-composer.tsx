@@ -433,9 +433,11 @@ export function NewTaskComposer({
           ),
     [workspaceId, slug, repository, onShowMention, readMentionAgents],
   );
+  // A `/` offers no skill while the Skills experiment is off.
+  const skillsOn = useExperiment(EXPERIMENT.SKILLS);
   const skills = useMemo(
     () =>
-      workspaceId === undefined
+      workspaceId === undefined || !skillsOn
         ? undefined
         : keptSkills(() =>
             act(
@@ -443,7 +445,7 @@ export function NewTaskComposer({
               repository === null ? { workspaceId } : { workspaceId, repository },
             ),
           ),
-    [act, workspaceId, repository],
+    [act, workspaceId, repository, skillsOn],
   );
   // A skill's chip opens its `SKILL.md` on GitHub, as on an agent's page no task holds, since no File tab stands here.
   const openSkill = (skill: SkillWithFile) => {

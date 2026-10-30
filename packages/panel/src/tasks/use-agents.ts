@@ -35,6 +35,7 @@ import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskMode } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
+import { EXPERIMENT } from "@luke/settings";
 import { STATUS_TONE } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -51,6 +52,7 @@ import type { ShownFailure } from "../failure-report.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
+import { useExperiment } from "../use-app-state.js";
 import {
   ARCHIVE_NOT_READY,
   archiveWords,
@@ -411,7 +413,7 @@ export interface AgentsControl {
   ) => Promise<AgentPullRequestViewedAnswerView>;
   /** The words a dictation into an agent's box is likely to say, read off the open task. */
   keywords: readonly string[];
-  /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a repository. */
+  /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a workspace, or while the Skills experiment is off. */
   readSkills: SkillSource | undefined;
   /** One answer to an inbox item, as a card sends it. */
   answerInbox: InboxAnswerer;
@@ -1535,7 +1537,10 @@ export function useAgents(input: {
   const agentRepository = ours(list) ? list.repository : undefined;
   // Note that a plan or an agent with no repository still reads its member's installed skills, and
   // that the plan's repository stays a dependency, so a plan moved to another repository reads afresh.
+  // While the Skills experiment is off, no box offers a skill and no sent message draws one.
+  const skillsOn = useExperiment(EXPERIMENT.SKILLS);
   const readSkills = useMemo(() => {
+    if (!skillsOn) return undefined;
     if (taskId !== undefined) {
       return keptSkills(() => act(ACT_KIND.TASKS_SKILLS, { planId: taskId }));
     }
@@ -1548,7 +1553,7 @@ export function useAgents(input: {
           : { workspaceId, repository: agentRepository },
       ),
     );
-  }, [act, taskId, workspaceId, agentRepository, repository]);
+  }, [act, skillsOn, taskId, workspaceId, agentRepository, repository]);
 
   // A start reads the agents as they stand when it is pressed, so the doors to it stand across draws.
   const steadyStartPrompt = useSteadyDoor(startPrompt);

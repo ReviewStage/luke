@@ -31,7 +31,9 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { pasteCutWords } from "@luke/features/words";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/settings/microphone";
+import { experimentsOn } from "@luke/settings/testing";
 import { DocumentIcon } from "@luke/ui";
 import { Effect } from "effect";
 import { act, createElement } from "react";
@@ -1325,6 +1327,7 @@ test("in the window's Inbox a skill an answer's words name is the chip a sent me
     "Run /release first.",
     5_000,
   );
+  handState(experimentsOn(EXPERIMENT.SKILLS));
   world.inboxes = new Map([
     [BILLING.id, [THRESHOLD, answered]],
     [INVITES.id, [EXPIRY]],
@@ -1346,6 +1349,7 @@ test("in the window's Inbox a skill an answer's words name is the chip a sent me
 
 test("a skill named by a settled item of an agent with no plan that a link reached opens beside the Inbox, in the agent's own repository, which its group names none of", async () => {
   const settled = answeredBy(BUMP, READER, "Retry once", "Run /release first.", 2_000);
+  handState(experimentsOn(EXPERIMENT.SKILLS));
   world.agentInboxes = new Map([[STRAY_AGENT, [settled]]]);
   world.pageAgents = new Map([
     [STRAY_AGENT, { ...AGENT, id: STRAY_AGENT, planId: null, title: "Bump" }],
