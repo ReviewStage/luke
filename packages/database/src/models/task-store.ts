@@ -418,7 +418,10 @@ const removePin = SqlSchema.findOneOption({
 
 /** The agents the journal names, as their rows name them now; a row that is gone names nothing. */
 const findAgentLabels = SqlSchema.findAll({
-  Request: Schema.Struct({ taskId: Schema.String, agentIds: Schema.Array(Schema.String) }),
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    agentIds: Schema.Array(Schema.String),
+  }),
   Result: Schema.Struct({
     id: Schema.String,
     kind: Schema.Literals(Object.values(AGENT_KIND)),
@@ -426,7 +429,7 @@ const findAgentLabels = SqlSchema.findAll({
     title: Schema.NullOr(Schema.String),
     automationName: Schema.NullOr(Schema.String),
   }),
-  execute: ({ taskId, agentIds }) =>
+  execute: ({ organizationId, agentIds }) =>
     Database.use((db) =>
       db
         .select({
@@ -437,7 +440,9 @@ const findAgentLabels = SqlSchema.findAll({
           automationName: agentAutomationNameSql(agentTable),
         })
         .from(agentTable)
-        .where(and(eq(agentTable.taskId, taskId), inArray(agentTable.id, agentIds))),
+        .where(
+          and(eq(agentTable.organizationId, organizationId), inArray(agentTable.id, agentIds)),
+        ),
     ),
 });
 
@@ -445,7 +450,9 @@ const findAgentLabels = SqlSchema.findAll({
  * The agents the journal and the sections' writers name, by id, as their rows
  * name them now, so a renamed agent reads renamed everywhere: the label is
  * the name its tab shows (`agentName`), Luke for an operator. The row's own
- * account is the one they are read under.
+ * account is the one they are read under. Note that an agent is found
+ * across the task's workspace, not only on the task, because an agent edits
+ * any plan of its workspace by naming the task (`edit_plan`).
  */
 function agentLabelsOf(
   row: TaskRow,
@@ -458,7 +465,7 @@ function agentLabelsOf(
   const agentIds = [...new Set(named)];
   if (agentIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
-    findAgentLabels({ taskId: row.id, agentIds }),
+    findAgentLabels({ organizationId: row.organizationId, agentIds }),
     (agents) => new Map(agents.map((agent) => [agent.id, agentName(agent)])),
   );
 }

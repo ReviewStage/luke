@@ -488,7 +488,7 @@ test("an agent on a task starts the agents that help with it on its own task, an
   }
 });
 
-test("an agent on a task is offered edit_plan, show_page, look_at_picture, and the comment tools, whether it was handed the plan or a prompt, and one an automation started with no task show_page alone, its pages standing on itself", () => {
+test("an agent on a task is offered edit_plan, show_page, look_at_picture, and the comment tools, whether it was handed the plan or a prompt, and one an automation started with no task show_page and edit_plan alone, its pages standing on itself and its notes on a task it names", () => {
   const offered = (agent: Parameters<typeof taskToolsOf>[0]) => [...taskToolsOf(agent)].sort();
   const comments = [
     CODER_TOOL.READ_COMMENTS,
@@ -507,7 +507,7 @@ test("an agent on a task is offered edit_plan, show_page, look_at_picture, and t
   const automation = { taskId: null, prompt: "Sweep the flaky tests." };
   assert.deepEqual(offered(handedItsTask), all);
   assert.deepEqual(offered(handedPrompt), all);
-  assert.deepEqual(offered(automation), [CODER_TOOL.SHOW_PAGE]);
+  assert.deepEqual(offered(automation), [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE].sort());
 });
 
 test("every agent on a task is told how to update its plan, one handed a prompt told to read it first, and one on no task told of no plan", () => {
