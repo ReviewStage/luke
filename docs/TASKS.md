@@ -248,9 +248,7 @@ Dictate, and Start.
   task in the sidebar alike: Copy plan (the open task's alone), Rename, Pin or
   Unpin and Archive (an archived task offers Unarchive alone), Change
   repository… (opens the repository picker, hung from the toolbar, opening
-  the task first where it is not the open one), Open on GitHub
-  (`https://github.com/owner/repository`, for a task with a repository), and
-  Permanently delete, last and red, which asks first in a dialog that points
+  the task first where it is not the open one), and Permanently delete, last and red, which asks first in a dialog that points
   a task not yet archived at Archive instead. ⇧⌘A archives the open task and
   ⌘⌫ asks to delete it, from any of its tabs.
 - An archived task opened from Archived tasks reads and works as any other,

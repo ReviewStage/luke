@@ -130,8 +130,7 @@ import { ChosenTasksContext, chosenRowMenu } from "./tasks-selection.js";
  * draws it the same way and Permanently delete can be drawn red.
  * Each item is worded, marked, and keyed as the window's one list has it
  * (`command-items.tsx`), as ⌘K offers the same command; the open task's menu
- * prints the chords of Copy plan, Version history, Open on GitHub, and
- * Permanently delete, which act on the open task, and another task's prints
+ * prints the chords of Copy plan, Version history, and Permanently delete, which act on the open task, and another task's prints
  * none, as a tab's menu prints its chords for the chosen tab alone. U and P,
  * which act on the focused sidebar row and otherwise on the open task, print
  * on the open task's menu and on a sidebar row's, and S, which opens Status
@@ -399,10 +398,9 @@ export type TaskMenuSurface = (typeof TASK_MENU_SURFACE)[keyof typeof TASK_MENU_
  * (Add sub-task, Set parent, Mark as blocked by, Mark as blocking), and
  * Remove parent where the task has one; then Pin, Move to section, and Move to
  * workspace where the task may be moved; then the repository changed from
- * any row and Open on GitHub where it has one. The Plan tab's document
- * menu leads with Copy plan, since Copy formats the document drawn, and
- * holds the same but for Status, Priority, Assignee, and Change repository,
- * which the plan's chips stand for, Open on GitHub alone in their place.
+ * any row. The Plan tab's document menu leads with Copy plan, since Copy
+ * formats the document drawn, and holds the same but for Status, Priority,
+ * Assignee, and Change repository, which the plan's chips stand for.
  * Permanently delete is last and alone on both. Only the open task's items
  * print their chords, since a chord acts on the open task alone.
  */
@@ -465,10 +463,6 @@ function taskActionGroups(
     doors.askMove === undefined
       ? []
       : [commandAction(PANEL_COMMAND.MOVE_TO_WORKSPACE, doors.askMove, drawn)];
-  const open: MenuAction[] =
-    (task?.repository ?? null) === null
-      ? []
-      : [commandAction(PANEL_COMMAND.OPEN_ON_GITHUB, () => tasks.onOpenOnGitHub(taskId), drawn)];
   const remove: MenuAction = {
     ...commandAction(PANEL_COMMAND.DELETE_TASK, doors.askDelete, drawn),
     danger: true,
@@ -480,7 +474,6 @@ function taskActionGroups(
           [rename, versions, ...read],
           relate,
           [...pinAction(tasks, task, lettered), ...section, ...move],
-          open,
           [remove],
         ]
       : [
@@ -489,7 +482,7 @@ function taskActionGroups(
           [...doors.standing],
           relate,
           [...pinAction(tasks, task, lettered), ...section, ...move],
-          [change, ...open],
+          [change],
           [remove],
         ];
   return groups.filter((group) => group.length > 0);
@@ -689,12 +682,11 @@ export type TaskMenuItems = ReturnType<typeof useTaskMenuItems>;
  * the task's page on every tab of the task, whichever tab is chosen and
  * whether or not the panel shows the plan, and keyed by the task, so a
  * question asked of one task never stands over the next. It offers the open
- * task's Mark done, Version history, Open on GitHub, and Permanently delete
- * commands, so each runs exactly as its menu item would: Permanently delete
- * still asks first, a task already done has no Mark done to offer, and one
- * with no repository no Open on GitHub. A focused agent's pane offers its
- * own Permanently delete over the task's (`main-tabs.tsx`), as a focused
- * Pull request tab does its Open on GitHub (`side-panel.tsx`). The items are handed up through
+ * task's Mark done, Version history, and Permanently delete commands, so
+ * each runs exactly as its menu item would: Permanently delete still asks
+ * first, and a task already done has no Mark done to offer. A focused
+ * agent's pane offers its own Permanently delete over the task's
+ * (`main-tabs.tsx`). The items are handed up through
  * `hand`, read as the Plan tab's ⋯ and right-click and a phone's header
  * draw them (`useTaskMenuItems`), and the newest stand there from the draw
  * that made them.
@@ -725,10 +717,6 @@ export function TaskActions({
   useAppCommand(APP_COMMAND.DELETE, asking || deletion.busy ? undefined : deletion.ask);
   useAppCommand(APP_COMMAND.MARK_TASK_DONE, actions.markDone);
   useAppCommand(APP_COMMAND.VERSION_HISTORY, () => tasks.history.onOpen(task.id));
-  useAppCommand(
-    APP_COMMAND.OPEN_ON_GITHUB,
-    task.repository === null ? undefined : () => tasks.onOpenOnGitHub(task.id),
-  );
   return actions.dialog;
 }
 

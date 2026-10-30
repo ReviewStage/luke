@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   PLAN_ACTOR,
   TASK_PRIORITY,
@@ -13,12 +12,10 @@ import {
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { ProviderMark } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
@@ -79,8 +76,6 @@ const SHARED_TASK: Task = {
 /** What the task actions asked of the tab, by the task each named. */
 interface Asked {
   opened: string[];
-  /** Each task whose page Open on GitHub asked for. */
-  openedOnGitHub: string[];
   /** Each task whose chip Change repository… asked open. */
   changed: string[];
   deleted: string[];
@@ -113,7 +108,6 @@ function openTab(
 ) {
   const asked: Asked = {
     opened: [],
-    openedOnGitHub: [],
     changed: [],
     deleted: [],
     renamed: [],
@@ -129,7 +123,6 @@ function openTab(
     tasks: [onRepository(TASK), onRepository(OTHER)],
     activeTaskId: TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: { ...TASK, ...open } },
-    onOpenOnGitHub: (taskId) => asked.openedOnGitHub.push(taskId),
     onChangeRepository: (taskId) => asked.changed.push(taskId),
     onDeleteTask: (taskId) => {
       asked.deleted.push(taskId);
@@ -831,7 +824,6 @@ test("a row's Status, opened by a right-click or by S on the focused row, sets t
   });
   const asked: Asked = {
     opened: [],
-    openedOnGitHub: [],
     changed: [],
     deleted: [],
     renamed: [],
@@ -881,7 +873,7 @@ test("a row's Status, opened by a right-click or by S on the focused row, sets t
 /** What the plan's chips stand for, which the Plan tab's menu leaves out and a row's keeps. */
 const CHIP_ITEMS = ["Status", "Priority", "Assignee", "Change repository"];
 
-test("the Plan tab's ⋯ prints the chords that act on the open task, and leaves Status, Priority, Assignee, and Change repository to the plan's chips, which a row keeps; another task's row prints only U, S, and P, which act on the focused row, and Open on GitHub wears the GitHub mark", () => {
+test("the Plan tab's ⋯ prints the chords that act on the open task, and leaves Status, Priority, Assignee, and Change repository to the plan's chips, which a row keeps; another task's row prints only U, S, and P, which act on the focused row", () => {
   const { tasks, asked } = openTab({ [TASK.id]: "acme/app", [OTHER.id]: "acme/app" });
 
   openMenu(mountPlanTab(tasks));
@@ -890,7 +882,6 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, and leaves
     ["Version history", "⌥⇧⌘H"],
     ["Mark as unread", "U"],
     ["Pin", "P"],
-    ["Open on GitHub", "⇧⌘O"],
     ["Permanently delete", "⌘⌫"],
   ]);
   const offered = menuItems().map(itemLabel);
@@ -898,12 +889,6 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, and leaves
     CHIP_ITEMS.filter((item) => offered.includes(item)),
     [],
     "the plan's chips stand for these",
-  );
-  const github = menuItems().find((item) => itemLabel(item) === "Open on GitHub");
-  assert.equal(
-    github?.querySelector(".luke-menu-item-glyph")?.innerHTML,
-    renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
-    "Open on GitHub wears the GitHub mark",
   );
 
   unmountAll();

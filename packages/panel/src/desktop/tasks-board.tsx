@@ -274,8 +274,8 @@ const BOARD_CARD_PILLS =
 
 /**
  * A card's repository as a pill: its owner's picture and its own name, its
- * whole name in its hint, and a press that opens it on GitHub, as the
- * task's menu does.
+ * whole name in its hint, and a press that opens it on GitHub, as its
+ * sidebar header's menu does.
  */
 function TaskBoardRepository({
   tasks,

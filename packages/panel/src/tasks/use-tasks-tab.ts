@@ -86,7 +86,6 @@ import {
   recentRepositories,
   renamedView,
   repositoryChangeFailureNote,
-  repositoryPageUrl,
   STATUS_RESTORE_FAILED_NOTE,
   type StatusChange,
   settleChanges,
@@ -752,8 +751,6 @@ export interface TasksControl {
   onRemoveTaskBlock: (taskId: string, relation: TaskBlockRelation, otherId: string) => void;
   /** Moves one relation of a task to another kind in one call, drawn as the service answers it; a refusal says why in a toast. */
   onChangeTaskRelation: (taskId: string, relation: TaskRelationChangeRequest) => void;
-  /** Opens a task's repository on GitHub in the browser. */
-  onOpenOnGitHub: (taskId: string) => void;
   /** Opens Settings › Workspace at its GitHub, for the workspace the task belongs to. */
   onOpenWorkspaceGitHub: (taskId: string) => void;
   /**
@@ -2537,12 +2534,6 @@ export function useTasksTab(input: {
     setRelationMenu((held) => ({ taskId, kind, request: (held?.request ?? 0) + 1 }));
   };
 
-  const repositoryOf = (taskId: string): string | null =>
-    tasks.tasks.find((task) => task.id === taskId)?.repository ??
-    (region.kind === DOCUMENT_REGION.READY && region.task.id === taskId
-      ? region.task.repository
-      : null);
-
   // A fixture's task reads its staged history through the same acts (`tasks-fixture.ts`).
   const historySource = useMemo(
     (): PlanHistorySource => ({
@@ -3661,10 +3652,6 @@ export function useTasksTab(input: {
         section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
         ...(workspaceId === undefined ? undefined : { workspaceId }),
       });
-    },
-    onOpenOnGitHub: (taskId) => {
-      const repository = repositoryOf(taskId);
-      if (repository !== null) openGitHub(repositoryPageUrl(repository));
     },
     onRetryList: () => press(ACT_KIND.TASKS_REFRESH),
     onRetryDocument: () => {
