@@ -66,8 +66,8 @@ import { useRepositoryRemedy } from "./repository-remedy.js";
  * the menu and lands on that harness's row in Settings › Agents rather
  * than choosing it. On an automation's
  * menu, whose choice a new agent starts on and the reader's own
- * credentials pay for, a choice that is such a model, as a new account's
- * Claude default is on an OpenAI key alone, has a Connect row head the
+ * credentials pay for, a choice that is such a model, as a stored Claude
+ * default is once no Claude credential pays for it, has a Connect row head the
  * pinned rows and the last line say why it cannot run; a running agent's
  * chip says nothing of it, since the catalog marks what the reader's
  * account lacks and the agent runs on what its starter's pays. The id a choice names is

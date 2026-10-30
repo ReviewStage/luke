@@ -6,7 +6,6 @@ import {
 } from "@luke/features/chapters-model-choice";
 import { LINK_OPEN_LIST, type LinkOpen } from "@luke/features/link-open";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import {
   type AccountPreferences,
   accountPreferencesFromStored,
@@ -42,8 +41,8 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
 export interface AccountPreferencesRow {
   /** The settings every device shares, the link choice among them where the account made one. */
   preferences: AccountPreferences;
-  /** What a click on Start runs on; the catalog's default until the account chooses. */
-  agent: ModelChoice;
+  /** What a click on Start runs on; none until the account chooses, which the service answers with the fallback its credentials pay for. */
+  agent: ModelChoice | undefined;
   /** What a Generate chapters the account presses runs on; Haiku until the account chooses, and for a stored value no build lists any more. */
   chaptersModel: ChaptersModelId;
   /** Each experiment the account turned on or back off; one it never chose is absent, and off. */
@@ -58,8 +57,8 @@ export interface AccountPreferencesRow {
 
 /**
  * What a write carries: each part present replaces what stood, and a part
- * left out stands as it was, so the desktop's settings sync and the Start
- * menu's choice each write their own part without reading the other first.
+ * left out stands as it was, so the desktop's settings sync and Settings'
+ * default model each write their own part without reading the other first.
  * The experiments part is the one patch: its keys are merged over what
  * stood, so a Mac that knows fewer experiments never erases another's.
  * `preferences` is the shared part; the link choice is a part of its own,
@@ -159,19 +158,20 @@ type PreferenceRow = typeof PreferenceRowSchema.Type;
 /**
  * The row as the group answers it. A coding-agent default stands only with
  * both halves written; one half alone is no choice the catalog could have
- * accepted, so it reads as the default beside a whole one. The context
- * window is named only where it is the standard one, as the wire names it.
+ * accepted, so it reads as none stored, as a row never written does. The
+ * context window is named only where it is the standard one, as the wire
+ * names it.
  */
 function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
   const standard = row.agentContextWindow === CONTEXT_WINDOW.STANDARD;
-  const agent: ModelChoice =
+  const agent: ModelChoice | undefined =
     row.agentModel !== null && row.agentEffort !== null
       ? {
           model: row.agentModel,
           effort: row.agentEffort,
           ...(standard ? { contextWindow: CONTEXT_WINDOW.STANDARD } : undefined),
         }
-      : AGENT_DEFAULT_CHOICE;
+      : undefined;
   return {
     preferences: accountPreferencesFromStored(row.linkOpen ? { linkOpen: row.linkOpen } : {}) ?? {},
     agent,

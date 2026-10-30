@@ -304,8 +304,6 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   integrations: Schema.optionalKey(Schema.Array(IntegrationServerSchema)),
   /** The hosts a command the agent runs may reach, besides nothing else. */
   allowedDomains: Schema.Array(Schema.String),
-  /** Claude Code's built-in tools this agent goes without, by the CLI's names, denied beside `CLAUDE_CODE_TOOLS.DENIED`; none where absent. */
-  deniedTools: Schema.optionalKey(Schema.Array(Schema.String)),
   /** Where the member's installed skills are (`INSTALLED_SKILLS`), loaded as a local plugin where the folder holds one. */
   installedSkills: Schema.optionalKey(
     Schema.String,

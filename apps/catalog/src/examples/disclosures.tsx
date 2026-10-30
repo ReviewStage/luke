@@ -195,6 +195,16 @@ function Disclosures(): React.JSX.Element {
                 <Text>Refresh on wake</Text>
               </DisclosureBody>
             </Disclosure>
+            <Disclosure look={DISCLOSURE_LOOK.DOCK}>
+              <DisclosureSummary look={DISCLOSURE_SUMMARY.HEAD}>
+                <BoardIcon />
+                <span>2 of 5 done · a dock, on the surface a list's card has</span>
+                <DisclosureChevron />
+              </DisclosureSummary>
+              <DisclosureBody inset={DISCLOSURE_BODY.CARD}>
+                <Text>Write the failing test</Text>
+              </DisclosureBody>
+            </Disclosure>
             <Disclosure
               look={DISCLOSURE_LOOK.CARD}
               actions={<MoreButton thing="Forked from Wire the start" />}

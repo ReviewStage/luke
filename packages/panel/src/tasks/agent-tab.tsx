@@ -500,8 +500,9 @@ function AgentMessageRow({ message }: { message: AgentTranscriptMessage }): Reac
 
 /**
  * What GitHub said on the agent's pull request, at the column's left as
- * another's line stands: its card (`GitHubLineCard`) in a bubble's place, then who said it by their
- * login, when it arrived, and Copy, which copies their words.
+ * another's line stands: its folding card (`GitHubLineCard`) across a
+ * bubble's measure, whose head names who said it by their chip, then when
+ * it arrived, and Copy, which copies their words.
  */
 function GitHubLineRow({
   message,
@@ -519,10 +520,9 @@ function GitHubLineRow({
       className={RECEIVED_MESSAGE_CLASS}
       data-message-id={message.id}
     >
-      <GitHubLineCard line={line} />
+      <GitHubLineCard line={line} words={messageWords(message)} sender={sender} />
       <MessageLine
         align={MESSAGE_LINE_ALIGN.START}
-        sender={sender}
         at={message.sentAt}
         actions={<CopyMessageAction words={words} copyable={words !== ""} messageId={message.id} />}
       />
@@ -593,6 +593,8 @@ function ToolCallView({
         server={server}
         subject={view.subject}
         description={view.description}
+        files={view.files}
+        page={view.page}
         agent={calledAgentActor(part, cards, known)}
         agentCard={agentCard}
         made={made}
@@ -2776,8 +2778,11 @@ function AgentTabView({
                       composer.rewinding && startedAt !== undefined ? composer.rewoundAt : startedAt
                     }
                     ended={
-                      // Note that the end line waits for a page, so a stopped agent's tab never draws it over nothing, and gives way to a line on its way, which the working line stands for.
-                      transcript.pages === 0 || lineGoing
+                      // Note that the end line waits for a page that has itself ended, so a stopped agent's tab never draws it over nothing, nor a failure's words before the page that carries its reason, and gives way to a line on its way, which the working line stands for.
+                      transcript.pages === 0 ||
+                      transcript.pageStatus === undefined ||
+                      agentStillWriting(transcript.pageStatus) ||
+                      lineGoing
                         ? undefined
                         : endLineParts(
                             agent.status,

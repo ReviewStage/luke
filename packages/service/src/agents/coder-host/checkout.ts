@@ -5,7 +5,7 @@ import {
   type WithRepository,
 } from "@luke/database/models/agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
-import { AGENT_AUTHOR, AGENT_KIND, type AgentAuthor } from "@luke/features/agent-wire";
+import { AGENT_AUTHOR, type AgentAuthor } from "@luke/features/agent-wire";
 import type { CheckoutIdentity } from "@luke/features/checkout-identity";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { automationRun } from "@luke/features/model-label";
@@ -57,9 +57,7 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * (`refreshAgentCheckout`, `repository-snapshot.ts`).
  * The first write deepens it (`deepenAgentCheckout`): a write token is
  * minted, carrying contents and pull requests write, since the agent pushes
- * a branch and opens a pull request from it, or, for a pilot, which ships no
- * code of its own, a token carrying their reads alone
- * (`agentRepositoryToken`); and it is set at the firewall for
+ * a branch and opens a pull request from it, and set at the firewall for
  * the fetch of the rest of the history alone, since a branch and a pull
  * request are cut from it; the commit identity is set; and the token is
  * handed back for the authored file to set at the firewall for the
@@ -243,14 +241,9 @@ export const agentCiReadable = /* @__PURE__ */ Effect.fn("web/agentCiReadable")(
 });
 
 /**
- * The token the agent's sandbox carries for its repository, minted as the
- * App where the installation of its task's workspace still reaches the
- * repository, with the repository as GitHub spells it: a write token for a
- * coding agent, which pushes a branch and opens a pull request from it, and
- * for a pilot, which ships no code of its own, one that reads the code, its
- * pull requests, and their CI alone, so GitHub itself refuses a push or a
- * merge from its sandbox. An agent on its starter's own token carries that
- * token whatever its kind.
+ * A write token for the agent's repository, minted as the App where the
+ * installation of its task's workspace still reaches the repository, with
+ * the repository as GitHub spells it.
  */
 export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentRepositoryToken")(
   function* (
@@ -268,12 +261,10 @@ export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentReposito
     CheckoutServices
   > {
     const app = yield* GitHubApp;
-    const mint =
-      agent.kind === AGENT_KIND.PILOT ? app.repositorySandboxReadToken : app.repositoryWriteToken;
     const reached = yield* Effect.gen(function* () {
       const workspace = yield* agentWorkspace(target, agent);
       if (Option.isNone(workspace)) return Option.none();
-      return yield* mint(workspace.value, agent.repository, agentMember(agent));
+      return yield* app.repositoryWriteToken(workspace.value, agent.repository, agentMember(agent));
     }).pipe(Effect.mapError(refusedBy));
     if (Option.isNone(reached))
       return yield* new CheckoutRefused({ reason: CODER_REFUSAL.NOT_REACHABLE });
@@ -564,15 +555,14 @@ export const deepenCheckoutWith = /* @__PURE__ */ Effect.fn("web/deepenCheckoutW
 /**
  * The rest of the agent's shallow checkout's history fetched for a worker
  * to read, as a worker's first command that may reach git asks
- * (`apps/dev/subagents/worker/tools/bash.ts`): the agent's own token
- * (`agentRepositoryToken`) minted and set at the firewall in the session's
- * own shape, and the history fetched through it, as the agent's own deepen
- * does; a checkout already whole fetches nothing and mints nothing. Note
- * that a coding agent's is a write token, never a clone's read one, because
- * the policy stands once set and a worker's fetch may land while the
- * agent's own deepen is setting the agent's, which a read policy would
- * overwrite and leave the agent's push refused; set to the same shape,
- * either order leaves a token that pushes. And that neither
+ * (`apps/dev/subagents/worker/tools/bash.ts`): a write token minted and set
+ * at the firewall in the session's own shape, and the history fetched
+ * through it, as the agent's own deepen does; a checkout already whole
+ * fetches nothing and mints nothing. Note that the token is a write token,
+ * never a read one, because the policy stands once set and a worker's fetch
+ * may land while the agent's own deepen is setting the agent's, which a
+ * read policy would overwrite and leave the agent's push refused; set to
+ * the same shape, either order leaves a token that pushes. And that neither
  * the identity is set nor the deepen's record written: the agent's first
  * write still deepens whole (`deepenAgentCheckout`), fetching nothing but
  * minting the token its session's record then renews from, so the token a

@@ -365,6 +365,23 @@ test("the model, Effort and Context rows each tick Saved once their write lands,
   assert.deepEqual(written().at(-1), { model: SONNET.id, effort: "low" });
 });
 
+test("on an OpenAI key alone, the GPT-6.1 Sol default the account never chose reads as no change", async () => {
+  const sol: CatalogModel = {
+    id: "openai/gpt-6.1-sol",
+    name: "GPT-6.1 Sol",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "high"],
+  };
+  models = [{ ...OPUS, credentialMissing: true }, sol];
+  stored = { model: sol.id, effort: "high" };
+  const page = await mount();
+
+  assert.deepEqual(
+    [marksIn(rowOf(page, "Default model")), marksIn(rowOf(page, "Effort"))],
+    [[], []],
+  );
+});
+
 test("the Chapters model ticks Saved beside Model once its write lands, within the page", async () => {
   const page = await mount();
   assert.deepEqual(marksIn(rowOf(page, "Model")), []);

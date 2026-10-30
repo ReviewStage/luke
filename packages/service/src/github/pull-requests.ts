@@ -64,6 +64,11 @@ import {
 } from "@luke/features/agent-wire";
 import { githubImageOf, imageTypeOfPath } from "@luke/features/github-image";
 import { REACTION, type Reaction } from "@luke/features/pull-request-write-wire";
+import {
+  GITHUB_CHECK_CONCLUSION,
+  type GitHubCheckConclusion,
+  isFailingConclusion,
+} from "@luke/wire";
 import { Duration, Effect, Fiber, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -133,21 +138,27 @@ const ANY_STATE = "all";
 /** GitHub pages check runs and statuses a hundred to a page; a head with more is read as its first hundred. */
 const CHECKS_PER_PAGE = "100";
 
-/** A check run's conclusion that reads as failing; every other conclusion, neutral and skipped among them, does not. */
-const FAILING_CONCLUSIONS: ReadonlySet<string> = new Set([
-  "failure",
-  "timed_out",
-  "cancelled",
-  "action_required",
-  "startup_failure",
-]);
-
 /** A commit status's state that reads as failing. */
 const FAILING_STATUS_STATES: ReadonlySet<string> = new Set(["failure", "error"]);
 
 /** The one check-run status that has ended; the others are queued or in progress. */
 const COMPLETED = "completed";
 const PENDING_STATUS_STATE = "pending";
+
+/** A check run's conclusion as a head's check names it, by GitHub's own word (`GITHUB_CHECK_CONCLUSION`). */
+const RUN_CONCLUSION: ReadonlyMap<string, GitHubCheckConclusion> = new Map(
+  Object.values(GITHUB_CHECK_CONCLUSION).map((conclusion) => [conclusion, conclusion]),
+);
+
+/** How a commit status that has ended reads as a check run's conclusion; one still pending has none. */
+const STATUS_CONCLUSION: ReadonlyMap<string, GitHubCheckConclusion> = new Map([
+  ["success", GITHUB_CHECK_CONCLUSION.SUCCESS],
+  ["failure", GITHUB_CHECK_CONCLUSION.FAILURE],
+  ["error", GITHUB_CHECK_CONCLUSION.FAILURE],
+]);
+
+/** What GitHub names a commit status set with no context (https://docs.github.com/en/rest/commits/statuses#create-a-commit-status). */
+const DEFAULT_STATUS_CONTEXT = "default";
 
 /** Who opened a pull request or an issue, as GitHub names them on it: their login, and, where it sends them, their kind and their avatar. */
 export const GitHubOpenerSchema = Schema.Struct({
@@ -211,8 +222,11 @@ const CheckRunsSchema = Schema.Struct({
   check_runs: Schema.Array(
     Schema.Struct({
       id: Schema.optionalKey(Schema.Number),
+      name: Schema.String,
       status: Schema.String,
       conclusion: Schema.NullOr(Schema.String),
+      html_url: Schema.optionalKey(Schema.NullOr(Schema.String)),
+      details_url: Schema.optionalKey(Schema.NullOr(Schema.String)),
     }),
   ),
 });
@@ -248,6 +262,7 @@ const CombinedStatusSchema = Schema.Struct({
     Schema.Struct({
       state: Schema.String,
       context: Schema.optionalKey(Schema.String),
+      target_url: Schema.optionalKey(Schema.NullOr(Schema.String)),
       updated_at: Schema.optionalKey(Schema.String),
     }),
   ),
@@ -441,17 +456,51 @@ export function branchStands(
 }
 
 /**
+ * What a head's check is: a check run, which only an App makes
+ * (https://docs.github.com/en/rest/checks/runs#create-a-check-run), or a
+ * commit status, which anyone who may push to the repository may set with
+ * any context and page, and whose combined read does not say who set it.
+ */
+export const HEAD_CHECK_KIND = {
+  RUN: "run",
+  STATUS: "status",
+} as const;
+
+type HeadCheckKind = (typeof HEAD_CHECK_KIND)[keyof typeof HEAD_CHECK_KIND];
+
+/**
+ * One check on a head: what it is, its check run's name or its status's
+ * context, how it ended, none while it is still to finish, and its page,
+ * where GitHub names one. Note that it carries no output the check wrote,
+ * because a check's title, summary, and annotations are words its line never
+ * carries.
+ */
+export interface HeadCheck {
+  readonly kind: HeadCheckKind;
+  readonly name: string;
+  readonly conclusion: GitHubCheckConclusion | null;
+  readonly url: string | null;
+}
+
+/**
  * The checks on one head, read together: whether any failed, whether any is
- * still to finish, whether there are any at all, and each one's outcome as
- * it stands, by GitHub's id of the check run (a run again is a run of its
- * own id) or the status's context and when it was set, sorted so the same
- * checks always read the same.
+ * still to finish, whether there are any at all, each one's outcome as it
+ * stands, by GitHub's id of the check run (a run again is a run of its own
+ * id) or the status's context and when it was set, sorted so the same checks
+ * always read the same, and each check, its check runs first, as GitHub
+ * lists them.
  */
 export interface HeadChecks {
   readonly failing: boolean;
   readonly pending: boolean;
   readonly any: boolean;
   readonly outcomes: readonly string[];
+  readonly checks: readonly HeadCheck[];
+}
+
+/** Whether a head's check failed: it ended with a conclusion that reads as failing, as a commit status that failed or errored does. */
+export function headCheckFailed(check: HeadCheck): boolean {
+  return check.conclusion !== null && isFailingConclusion(check.conclusion);
 }
 
 /** What one set of outcomes says: failing beats pending beats passing, and nothing at all is none. */
@@ -474,6 +523,12 @@ function forbiddenNotLimited(
     : Effect.succeed(false);
 }
 
+/** How a check run ended, where it has; none while it runs, or for a conclusion GitHub adds that the wire does not name. */
+function runConclusionOf(status: string, conclusion: string | null): GitHubCheckConclusion | null {
+  if (status !== COMPLETED || conclusion === null) return null;
+  return RUN_CONCLUSION.get(conclusion) ?? null;
+}
+
 /** A head's checks read as one answer, or as none where the App may not read them, said once in the log. */
 function readChecks<A>(
   what: string,
@@ -481,7 +536,13 @@ function readChecks<A>(
   schema: Schema.Codec<A, unknown>,
   tally: (answer: A) => HeadChecks,
 ): Read<HeadChecks> {
-  const none: HeadChecks = { failing: false, pending: false, any: false, outcomes: [] };
+  const none: HeadChecks = {
+    failing: false,
+    pending: false,
+    any: false,
+    outcomes: [],
+    checks: [],
+  };
   return Effect.scoped(
     Effect.flatMap(send(request), (response: HttpClientResponse.HttpClientResponse) => {
       if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return Effect.succeed(none);
@@ -520,13 +581,19 @@ export function headChecksOf(
     CheckRunsSchema,
     (answer) => ({
       failing: answer.check_runs.some(
-        (run) => run.conclusion !== null && FAILING_CONCLUSIONS.has(run.conclusion),
+        (run) => run.conclusion !== null && isFailingConclusion(run.conclusion),
       ),
       pending: answer.check_runs.some((run) => run.status !== COMPLETED),
       any: answer.check_runs.length > 0,
       outcomes: answer.check_runs.map((run) =>
         JSON.stringify(["run", run.id ?? null, run.status, run.conclusion]),
       ),
+      checks: answer.check_runs.map((run) => ({
+        kind: HEAD_CHECK_KIND.RUN,
+        name: run.name,
+        conclusion: runConclusionOf(run.status, run.conclusion),
+        url: run.html_url ?? run.details_url ?? null,
+      })),
     }),
   );
   const statuses = readChecks(
@@ -540,6 +607,12 @@ export function headChecksOf(
       outcomes: answer.statuses.map((status) =>
         JSON.stringify(["status", status.context ?? null, status.state, status.updated_at ?? null]),
       ),
+      checks: answer.statuses.map((status) => ({
+        kind: HEAD_CHECK_KIND.STATUS,
+        name: status.context ?? DEFAULT_STATUS_CONTEXT,
+        conclusion: STATUS_CONCLUSION.get(status.state) ?? null,
+        url: status.target_url ?? null,
+      })),
     }),
   );
   return Effect.map(Effect.all([runs, statuses]), ([a, b]) => ({
@@ -547,6 +620,7 @@ export function headChecksOf(
     pending: a.pending || b.pending,
     any: a.any || b.any,
     outcomes: [...a.outcomes, ...b.outcomes].toSorted(),
+    checks: [...a.checks, ...b.checks],
   }));
 }
 

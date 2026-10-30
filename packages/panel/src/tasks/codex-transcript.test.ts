@@ -114,7 +114,7 @@ const CODEX_ITEMS: readonly {
       results: null,
     },
     line: ["Searched the web for", "banker's rounding in JavaScript"],
-    body: ['"type": "search"'],
+    body: ["type: search"],
   },
 
   {
@@ -131,7 +131,7 @@ const CODEX_ITEMS: readonly {
     input: { server: "sentry", tool: "search_issues", arguments: { query: "invoice" } },
     output: "3 issues match invoice",
     line: ["Ran", "search_issues", "Sentry"],
-    body: ['"query": "invoice"', "3 issues match invoice"],
+    body: ["Inputinvoice", "3 issues match invoice"],
   },
 ];
 
@@ -162,7 +162,7 @@ test("a file change's update marks the lines Codex's diff changed, a file delete
     ),
   );
   const line = container.querySelector("summary") ?? assert.fail("the call is a fold's line");
-  assert.ok(line.textContent?.includes(`${CHECKOUT}/src/a.ts +1`), line.textContent ?? "");
+  assert.ok(line.textContent?.includes(`${CHECKOUT}/src/b.ts +1`), line.textContent ?? "");
   act(() => line.click());
   const marked = (kind: string) =>
     [...container.querySelectorAll(`[data-row="${kind}"]`)].map((each) => each.textContent);

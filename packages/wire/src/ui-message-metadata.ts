@@ -93,14 +93,46 @@ export const GITHUB_LINE_EVENT = {
 } as const;
 
 /**
+ * How a check on a GitHub line ended, by GitHub's own word for a check run's
+ * conclusion (https://docs.github.com/en/rest/checks/runs#get-a-check-run).
+ * A commit status maps onto it: one that succeeded reads as success, and one
+ * that failed or errored as failure.
+ */
+export const GITHUB_CHECK_CONCLUSION = {
+  SUCCESS: "success",
+  FAILURE: "failure",
+  NEUTRAL: "neutral",
+  CANCELLED: "cancelled",
+  SKIPPED: "skipped",
+  TIMED_OUT: "timed_out",
+  ACTION_REQUIRED: "action_required",
+  STALE: "stale",
+  STARTUP_FAILURE: "startup_failure",
+} as const;
+
+export type GitHubCheckConclusion =
+  (typeof GITHUB_CHECK_CONCLUSION)[keyof typeof GITHUB_CHECK_CONCLUSION];
+
+/** The conclusions that read as a check failing; every other, neutral, skipped, and stale among them, does not. */
+const FAILING_CHECK_CONCLUSIONS: ReadonlySet<string> = new Set([
+  GITHUB_CHECK_CONCLUSION.FAILURE,
+  GITHUB_CHECK_CONCLUSION.TIMED_OUT,
+  GITHUB_CHECK_CONCLUSION.CANCELLED,
+  GITHUB_CHECK_CONCLUSION.ACTION_REQUIRED,
+  GITHUB_CHECK_CONCLUSION.STARTUP_FAILURE,
+]);
+
+/**
  * The most a GitHub line's metadata holds: words and an inline comment's body
  * within the most GitHub lets one body spell, as many inline comments as Luke
- * reads of a review, and every name or address within a bound far past what
- * GitHub mints, so nothing it sends is refused.
+ * reads of a review, as many checks as Luke reads of a head (a hundred check
+ * runs and a hundred commit statuses), and every name or address within a
+ * bound far past what GitHub mints, so nothing it sends is refused.
  */
 export const GITHUB_LINE_BOUNDS = {
   WORDS_CHARS: 65_536,
   COMMENTS: 300,
+  CHECKS: 200,
   PATH_CHARS: 4_096,
   URL_CHARS: 8_192,
   NAME_CHARS: 256,
@@ -265,6 +297,13 @@ const GITHUB_LINE_COMMENT = EffectSchema.Struct({
   body: githubBody,
 });
 
+/** One finished check on a GitHub line's commit: its name, how it ended, and its page, where GitHub names one. */
+const GITHUB_LINE_CHECK = EffectSchema.Struct({
+  name: githubName(GITHUB_LINE_BOUNDS.NAME_CHARS),
+  conclusion: EffectSchema.Literals(Object.values(GITHUB_CHECK_CONCLUSION)),
+  url: EffectSchema.optional(githubName(GITHUB_LINE_BOUNDS.URL_CHARS)),
+});
+
 /**
  * A GitHub line is what GitHub said on an agent's pull request, steered into
  * the agent: a review with its verdict, words and inline comments, a comment
@@ -272,7 +311,9 @@ const GITHUB_LINE_COMMENT = EffectSchema.Struct({
  * repository, the pull request where GitHub named it, the page, and who
  * caused it, by their login. The words are the reviewer's, never the
  * developer's, and whether anyone but the agent's owner wrote them, which
- * `run_on_mac` reads; absent from a line kept before it was said.
+ * `run_on_mac` reads. A check line says whether a check failed, and every
+ * check finished names each finished check; no output a check wrote rides
+ * it. Each is absent from a line kept before it was said.
  */
 const GITHUB_LINE_METADATA = EffectSchema.Struct({
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.GITHUB),
@@ -290,6 +331,12 @@ const GITHUB_LINE_METADATA = EffectSchema.Struct({
   ),
   sha: EffectSchema.optional(githubName(GITHUB_LINE_BOUNDS.NAME_CHARS)),
   outside_words: EffectSchema.optional(EffectSchema.Boolean),
+  failing: EffectSchema.optional(EffectSchema.Boolean),
+  checks: EffectSchema.optional(
+    EffectSchema.Array(GITHUB_LINE_CHECK).check(
+      EffectSchema.isMaxLength(GITHUB_LINE_BOUNDS.CHECKS),
+    ),
+  ),
 });
 
 export type GitHubLineMetadata = EffectSchema.Schema.Type<typeof GITHUB_LINE_METADATA>;
@@ -356,6 +403,15 @@ export function isDeveloperLine(metadata: UserMessageMetadata): boolean {
   if ("source" in metadata) return false;
   if (metadata.channel === MESSAGE_CHANNEL.AGENT_MESSAGE) return false;
   return metadata.channel !== MESSAGE_CHANNEL.VOICE || metadata.author === MESSAGE_AUTHOR.DEVELOPER;
+}
+
+/**
+ * Whether a check that ended so failed, by GitHub's word for its conclusion:
+ * the one test the service counts a head's failures by, which a GitHub
+ * line's `failing` says, and the transcript's card reads a line's checks by.
+ */
+export function isFailingConclusion(conclusion: string): boolean {
+  return FAILING_CHECK_CONCLUSIONS.has(conclusion);
 }
 
 /**

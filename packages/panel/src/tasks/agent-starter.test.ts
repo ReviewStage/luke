@@ -341,6 +341,13 @@ test("a key a teammate's agent failed on is named as theirs, with no Settings of
   );
 });
 
+test("a failure that carries no reason says the run ended without saying why", () => {
+  assert.equal(
+    endLineParts(AGENT_STATUS.FAILED, undefined)?.words,
+    "Failed: the run ended without saying why",
+  );
+});
+
 /** A Mac command's place, as its row's pill says it, in the transcript of an agent `startedBy` started, as `readerId` reads it. */
 async function macPlace(
   startedBy: typeof CHARLES | undefined,

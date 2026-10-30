@@ -23,9 +23,10 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * snapshot at `/api/account/preferences`: one model, one effort, and the
  * standard context window where it was chosen, read beside the settings
  * preferences the desktop syncs through its own client and written on its
- * own, as a body carrying that part alone. A Start that names a model
- * writes the same value on the service, so the menu's last choice and the
- * default are one value.
+ * own, as a body carrying that part alone. Only Settings writes it: a Start
+ * that names a model runs that one agent on it and stores nothing. An
+ * account that stored none reads the fallback the credentials it keeps pay
+ * for (`agentFallbackChoice`).
  *
  * A choice without a context window runs on the model's whole window, the
  * long one, which is what every agent ran on before the choice, so a
@@ -35,12 +36,6 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * does not know, is sent none for the default.
  */
 
-/** What a first-time account starts an agent on, until it chooses. */
-export const AGENT_DEFAULT_CHOICE = {
-  model: "anthropic/claude-opus-5.5",
-  effort: "high",
-} as const;
-
 /** The providers whose models Luke runs coding agents on, as the catalog prefixes their ids. */
 export const MODEL_PROVIDER = {
   ANTHROPIC: "anthropic",
@@ -48,6 +43,15 @@ export const MODEL_PROVIDER = {
 } as const;
 
 export type ModelProvider = (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER];
+
+/** What a first-time account starts an agent on until it chooses, by the provider whose credential pays for it (`agentFallbackChoice`). */
+export const AGENT_FALLBACK_CHOICE = {
+  [MODEL_PROVIDER.ANTHROPIC]: { model: "anthropic/claude-opus-5.5", effort: "high" },
+  [MODEL_PROVIDER.OPENAI]: { model: "openai/gpt-6.1-sol", effort: "high" },
+} as const satisfies Record<ModelProvider, ModelChoice>;
+
+/** What a first-time account starts an agent on, until it chooses, where a Claude credential pays or none does. */
+export const AGENT_DEFAULT_CHOICE = AGENT_FALLBACK_CHOICE[MODEL_PROVIDER.ANTHROPIC];
 
 /** A model provider as the wire spells it. */
 export const modelProviderSchema = EffectSchema.Literals(Object.values(MODEL_PROVIDER));
@@ -156,3 +160,29 @@ export type ModelChoice = typeof modelChoiceSchema.Type;
 export const agentDefaultWriteSchema = EffectSchema.Struct({
   agent: modelChoiceSchema,
 });
+
+/**
+ * The default of an account that stored none, read off the models it is
+ * offered as `GET /api/models` marks them (`credentialMissing`): OpenAI's
+ * fallback where the Claude models offered are marked as no credential of
+ * the account's paying for them and OpenAI's fallback model is offered and
+ * paid for, Anthropic's otherwise. So an account a Claude credential pays
+ * for, or nothing does, or whose OpenAI fallback left the catalog, starts on
+ * Anthropic's. Note that a mark is the provider's, so one Claude model
+ * marked says no Claude credential pays, and a catalog offering none says
+ * nothing of it, so it reads Anthropic's. A Start naming no model, the
+ * preferences snapshot, and Settings' marks all read it here, so they never
+ * disagree.
+ */
+export function agentFallbackChoice(
+  models: readonly Pick<CatalogModel, "id" | "provider" | "credentialMissing">[],
+): ModelChoice {
+  const openai = AGENT_FALLBACK_CHOICE[MODEL_PROVIDER.OPENAI];
+  const claudeUnpaid = models.some(
+    (model) => model.provider === MODEL_PROVIDER.ANTHROPIC && model.credentialMissing === true,
+  );
+  const listed = models.find((model) => model.id === openai.model);
+  return claudeUnpaid && listed !== undefined && listed.credentialMissing !== true
+    ? openai
+    : AGENT_DEFAULT_CHOICE;
+}

@@ -119,7 +119,7 @@ export const DIALOG_SIZE = {
   COMPOSER: "composer",
   MEDIA: "media",
   WINDOW: "window",
-  /** A sheet risen from the window's foot, as a phone's menu stands (`menu.tsx`'s `MenuSheet`): the window's width up to a wide card's, its look its content's own. */
+  /** A sheet risen from the window's foot, as a phone's menu stands (`menu-sheet.tsx`'s `MenuSheetFrame`): the window's width up to a wide card's, its look its content's own. */
   SHEET: "sheet",
 } as const;
 

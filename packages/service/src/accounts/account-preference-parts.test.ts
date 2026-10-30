@@ -46,9 +46,10 @@ import { accountProcedures } from "./account-procedures.js";
  * shared part a build that predates it writes back whole, and refused where
  * it names no choice. The chapters model: Haiku until the account chooses,
  * written on its own and read back, and refused where it names no model the
- * set offers. The agent default: an Effort kept on a model no credential of
- * the account's pays for, and a move to another such model refused, keeping
- * what stood. The bearer names the account and nothing else does.
+ * set offers. The agent default: GPT-6.1 Sol at high effort for an account
+ * only an OpenAI key pays for until it stores one, an Effort kept on a model
+ * no credential of the account's pays for, and a move to another such model
+ * refused, keeping what stood. The bearer names the account and nothing else does.
  *
  * Synthetic accounts and bearers throughout.
  */
@@ -64,6 +65,13 @@ const OPUS: CatalogModel = {
 };
 
 const OPUS_FAST: CatalogModel = { ...OPUS, id: "anthropic/claude-opus-5.5-fast" };
+
+const SOL: CatalogModel = {
+  id: "openai/gpt-6.1-sol",
+  name: "GPT-6.1 Sol",
+  provider: MODEL_PROVIDER.OPENAI,
+  efforts: ["low", "high"],
+};
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
@@ -120,7 +128,7 @@ const answer = (procedures: ReturnType<typeof accountProcedures>, request: Reque
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
       noNetwork,
-      modelCatalogOf([OPUS, OPUS_FAST]),
+      modelCatalogOf([OPUS, OPUS_FAST, SOL]),
       // Only a delete asks Connect anything, and this suite deletes nothing.
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
@@ -302,5 +310,16 @@ it.layer(getTestDB())("the preferences snapshot's agent part", (it) => {
         });
         assert.deepEqual(partOf(yield* ask(request(owner)), "agent"), lowEffort);
       }),
+  );
+
+  it.effect("is GPT-6.1 Sol for an account only an OpenAI key pays for, until it stores one", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts;
+      yield* connectAgentApiKeys(owner, { providers: [PROVIDER_KEY_PROVIDER.OPENAI] });
+      assert.deepEqual(partOf(yield* ask(request(owner)), "agent"), {
+        model: "openai/gpt-6.1-sol",
+        effort: "high",
+      });
+    }),
   );
 });
