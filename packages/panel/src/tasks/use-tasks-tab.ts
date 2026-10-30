@@ -3162,7 +3162,10 @@ export function useTasksTab(input: {
   const { onClose: closeMainTab, onDoze: dozeMainTab } = mainTabs;
   const keepColumnClosed = useCallback(
     (tab: MainTab) => {
-      const at = openTabs.findIndex((each) => sameTab(each, tab));
+      // Note that the place is counted among the tabs after Overview, as the column's moves are.
+      const at = openTabs
+        .filter((each) => !isOverviewTab(each))
+        .findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
       if (task !== undefined && at >= 0 && !isDraftTab(tab)) {
         const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at };
