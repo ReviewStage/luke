@@ -331,7 +331,10 @@ it.effect(
         window.history.pushState(null, "", "/app");
         await travel(() => window.history.back());
         await travel(() => window.history.forward());
-        assert.ok(panel.shows("Inbox items · Needs you"), "the entry holding no step opens where the window rests");
+        assert.ok(
+          panel.shows("Inbox items · Needs you"),
+          "the entry holding no step opens where the window rests",
+        );
         assert.ok(savedEntry() !== undefined, "and the page writes its step on it");
       });
     }),
