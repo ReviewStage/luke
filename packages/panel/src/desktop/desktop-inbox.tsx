@@ -381,6 +381,7 @@ export const DesktopInbox = memo(function DesktopInbox({
     ? {
         channelOf: landsIn,
         workspaceId: tasks.workspace?.id,
+        onOpenChannel: view.onOpenChannel,
         onStart: (item, start) =>
           startInboxThread({
             agentId: item.agentId,

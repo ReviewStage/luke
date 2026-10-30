@@ -1185,6 +1185,8 @@ export interface InboxNewThread {
   readonly channelOf: (item: InboxItem) => Channel | undefined;
   /** The workspace whose channels those are, whose members name a channel's maker on its card. */
   readonly workspaceId: string | undefined;
+  /** Opens a channel, as its row in the sidebar does, from its chip. */
+  readonly onOpenChannel: (channelId: string) => void;
   /** Starts a thread with the item's agent, in the item's channel, and opens it; answers why it did not start, or nothing once it did. */
   readonly onStart: (item: InboxItem, start: NewThreadStart) => Promise<string | undefined>;
 }
@@ -1192,7 +1194,9 @@ export interface InboxNewThread {
 /**
  * The box's new thread for one item: the item's agent's chip, wearing its
  * tile as a mention of the agent does, and its channel's chip, each hanging
- * its card and opening nothing, since a press on the checkbox's words ticks it.
+ * its card and opening what it names, as a chip does elsewhere. Note that a
+ * chip is a button, so its press opens it rather than ticking the checkbox
+ * whose words it stands in.
  */
 function answerNewThread(offer: InboxNewThread, item: InboxItem, by: ItemAgent): AnswerNewThread {
   const { name, tile } = by.subject;
@@ -1204,6 +1208,7 @@ function answerNewThread(offer: InboxNewThread, item: InboxItem, by: ItemAgent):
         glyph={<ActorMark actor={tile} size={ACTOR_SIZE.INLINE} />}
         label={name}
         card={<AgentCard subject={by.subject} models={by.models} />}
+        onPress={by.onOpen}
       />
     ),
     channel:
@@ -1213,6 +1218,7 @@ function answerNewThread(offer: InboxNewThread, item: InboxItem, by: ItemAgent):
           glyph={<GLYPH.CHANNEL />}
           label={channel.name}
           card={<ChannelCard channel={channel} workspaceId={offer.workspaceId} />}
+          onPress={() => offer.onOpenChannel(channel.id)}
         />
       ),
     onStart: (start) => offer.onStart(item, start),
