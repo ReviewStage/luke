@@ -650,6 +650,17 @@ test("the experiments the service answered stand for the account signed in, acro
   assert.deepEqual((await store.snapshot()).experiments, memoryOn);
 });
 
+test("an account's experiments read as unread until the service first answers, even an answer naming none", async (t) => {
+  const store = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  assert.equal((await store.snapshot()).experimentsUnread, undefined, "signed out, nothing waits");
+  await store.setAccount(TEST_ACCOUNT);
+  assert.equal((await store.snapshot()).experimentsUnread, true);
+
+  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, {}), true);
+  assert.equal((await store.snapshot()).experimentsUnread, undefined);
+  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, {}), false);
+});
+
 test("a sign-out, or another account's sign-in, leaves no experiment of the last account on", async (t) => {
   const memoryOn = { [EXPERIMENT.MEMORY]: true };
 

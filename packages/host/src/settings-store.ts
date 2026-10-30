@@ -702,7 +702,12 @@ export class SettingsStore {
       const signedIn = yield* this.#accountEmailOf();
       yield* this.#mutate((persisted) => {
         if (signedIn(persisted) !== accountEmail) return undefined;
-        if (JSON.stringify(experimentsOf(persisted, accountEmail)) === JSON.stringify(choices)) {
+        // Note that a first answer is kept even where it names no choice, so the account's experiments read as answered.
+        const answered = persisted.experiments?.accountEmail === accountEmail;
+        if (
+          answered &&
+          JSON.stringify(experimentsOf(persisted, accountEmail)) === JSON.stringify(choices)
+        ) {
           return undefined;
         }
         changed = true;
@@ -785,6 +790,7 @@ export class SettingsStore {
   snapshot(): Effect.Effect<AppSettings, PlatformError> {
     return Effect.gen({ self: this }, function* () {
       const persisted = yield* this.#load();
+      const accountEmail = (yield* this.#accountEmailOf())(persisted);
       return {
         stored: {
           ...storedSettingsFromPersisted(persisted),
@@ -796,7 +802,10 @@ export class SettingsStore {
               ? APP_SETTING_SCHEMA.usageData.default
               : APP_SETTING_SCHEMA.usageData.unpackagedDefault),
         },
-        experiments: experimentsOf(persisted, (yield* this.#accountEmailOf())(persisted)),
+        experiments: experimentsOf(persisted, accountEmail),
+        ...(accountEmail !== undefined && persisted.experiments?.accountEmail !== accountEmail
+          ? { experimentsUnread: true as const }
+          : {}),
       };
     });
   }

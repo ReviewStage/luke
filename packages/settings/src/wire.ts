@@ -20,6 +20,12 @@ export interface AppSettings {
    * the main process read them off the one document the settings ride.
    */
   experiments: ExperimentChoices;
+  /**
+   * Present while an account is signed in whose experiments the service has
+   * not answered yet, here or on an earlier run, so a choice it made
+   * elsewhere may still arrive; what waits on whether one is on waits on it.
+   */
+  experimentsUnread?: true;
 }
 
 /** A renderer-local view over the two disjoint halves of the settings wire. */
