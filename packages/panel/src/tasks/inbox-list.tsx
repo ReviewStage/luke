@@ -417,13 +417,16 @@ export function inboxRowDraft(
  * (`draft-mark.tsx`).
  * The row's acts stand in its menu alone, its ⋯ the one press over its
  * time while the pointer rests on it or it holds the keyboard, so the title
- * keeps the room a row of buttons would cover. Where the list hands down
+ * keeps the room a row of buttons would cover. A finger's row draws no ⋯,
+ * as a phone's mail list draws none, its time running to the row's edge:
+ * a long press opens its menu, the menu key on the row still does, and the
+ * open item's own bar keeps its ⋯. Where the list hands down
  * `onMark`, the row offers to mark it read or unread: an item of its menu,
  * which names the key that does the same to the chosen item
  * (`APP_COMMAND.TOGGLE_READ`); and a swipe right, a
  * short one leaving the row open on a Read or Unread button, a long one
  * marking it as it is let go (`@luke/ui`'s `ListRow` swipe). Its menu,
- * opened by the row's ⋯, a right-click, and the menu key
+ * opened by the row's ⋯, a right-click, a long press, and the menu key
  * alike (`ListRow`'s `menu`), offers
  * Copy link, the item's link under the task or the agent that holds it, where
  * the list hands down a workspace to write it under. Where the list
@@ -494,6 +497,7 @@ export const InboxItemRow = memo(function InboxItemRow({
   const preview = inboxPreview(item, nameOf, ticked);
   const addressedTo = inboxAddressedTo(item);
   const addressee = usePerson(addressedTo);
+  const coarse = useCoarsePointer();
   // Note that U acts only on the chosen item, so only its row names the chord.
   const { groups } = useInboxItemActions(item, {
     onMark: onMark === undefined ? undefined : (_item, next) => onMark(listed, next),
@@ -555,6 +559,7 @@ export const InboxItemRow = memo(function InboxItemRow({
         selectKey={selectKey}
         onPress={() => onChoose(listed)}
         menu={rowMenu(ITEM_THING, groups())}
+        more={!coarse}
       />
     </RowHintOptions>
   );
