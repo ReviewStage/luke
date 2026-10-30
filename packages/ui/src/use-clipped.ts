@@ -1,7 +1,12 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
+/** Whether the box's words run past it: past its end on one line, or below its last line where they are held to a few. */
+function cutShort(element: HTMLElement): boolean {
+  return element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight;
+}
+
 /**
- * use-clipped.ts -- whether a line of words is cut short by its box, for the labels that fade out at their end rather than end in an ellipsis.
+ * use-clipped.ts -- whether a line of words is cut short by its box, or words held to a few lines are cut below the last, for the labels that fade out at their end rather than end in an ellipsis.
  *
  * The element the ref is handed is measured whenever its box resizes, the
  * room around it given to something else, and whenever its words change,
@@ -33,7 +38,7 @@ export function useClipped(
           box.current = null;
         };
       }
-      const measure = () => setClipped(element.scrollWidth > element.clientWidth);
+      const measure = () => setClipped(cutShort(element));
       const resized = new ResizeObserver(measure);
       resized.observe(element);
       const reworded = keyed ? undefined : new MutationObserver(measure);
@@ -54,7 +59,7 @@ export function useClipped(
     drawn.current = words;
     const element = box.current;
     if (element === null || words === undefined) return;
-    setClipped(element.scrollWidth > element.clientWidth);
+    setClipped(cutShort(element));
   }, [words]);
   return [measured, clipped];
 }

@@ -819,22 +819,14 @@
   display: none;
 }
 
-/* While chapters are being made, the placeholder's region takes the room under the line, as the
-   chapters' body does under theirs, so the rail runs the full height. */
-.chapters-generating > .luke-skeleton-region {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
-/* A placeholder row in the rail's own list, a chapter's row's height and
-   inset, its block where the row's title will stand. */
-.chapters-skeleton-reading {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-control-gap);
-  padding: var(--luke-list-inset) var(--column-inset);
+/* The brief's words hang under its heading's, past the fold's chevron, as
+   a disclosure's body hangs under its summary's words. */
+.chapter-brief-body {
+  padding-inline-start: calc(
+    var(--luke-tight-gap) +
+    var(--luke-control-icon) +
+    var(--luke-icon-gap)
+  );
 }
 
 /* A panel too narrow for the rail beside the chapter floats it over the

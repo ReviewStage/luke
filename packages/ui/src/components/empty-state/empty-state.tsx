@@ -69,6 +69,8 @@ export interface EmptyStateAction {
   readonly disabled?: boolean | undefined;
   /** Whether its glyph turns once as a press lands, as a retry's arrow does. */
   readonly turns?: boolean | undefined;
+  /** What it is doing while its press is out, as a busy button names it ("Refreshing"); none while it is not. */
+  readonly busy?: string | undefined;
 }
 
 /** One way on from an empty place, as a button in its look; nothing where none is given. */
@@ -80,6 +82,7 @@ function WayOn({ way }: { way: EmptyStateAction | undefined }): React.JSX.Elemen
       icon={way.icon}
       disabled={way.disabled}
       turns={way.turns}
+      {...(way.busy === undefined ? {} : { busy: true, busyLabel: way.busy })}
       onClick={way.onClick}
     >
       {way.label}

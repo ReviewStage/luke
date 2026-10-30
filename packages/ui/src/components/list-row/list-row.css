@@ -474,6 +474,54 @@
     margin-block-start: var(--luke-space-2);
   }
 
+  /* Metadata on the last line ends the description's line, on its
+     baseline, and the title runs the words' and the end's tracks whole over
+     both; the row's mark stands level with the title's first line. The
+     words lend their parts to the press's tracks, as a mail-style row's do,
+     so the title takes the first row and the description and the end the
+     next, each in its own track. */
+  .luke-list-row[data-meta="last"] .luke-list-row-text {
+    display: contents;
+  }
+
+  .luke-list-row[data-meta="last"] .luke-list-row-leading {
+    height: var(--luke-type-label-leading);
+    align-items: center;
+    align-self: start;
+  }
+
+  .luke-list-row[data-meta="last"] .luke-list-row-title {
+    grid-column: text-start / end-end;
+  }
+
+  .luke-list-row[data-meta="last"] .luke-list-row-description {
+    grid-column: text;
+    margin-block-start: var(--luke-space-2);
+  }
+
+  .luke-list-row[data-meta="last"] :is(.luke-list-row-description, .luke-list-row-end) {
+    align-self: baseline;
+  }
+
+  /* A title that may run to two lines wraps, and one longer still fades
+     out at the end of its second, its first line drawn whole above it. */
+  .luke-list-row-title[data-lines="two"] {
+    /* Note that it is held to two lines by its height, because a line clamp
+       draws an ellipsis whatever its overflow says. */
+    max-height: calc(2 * var(--luke-type-label-leading));
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .luke-list-row-title[data-lines="two"][data-overflow="true"] {
+    mask-image:
+      linear-gradient(#000, #000),
+      linear-gradient(to left, transparent, #000 var(--luke-label-fade));
+    mask-position: top, bottom;
+    mask-repeat: no-repeat;
+    mask-size: 100% 50%;
+  }
+
   /* Acts that always stand do so in their own track beside the press, as
      far in from the row's end as the press's words are. */
   .luke-list-row-actions {
