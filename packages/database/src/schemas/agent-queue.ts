@@ -42,8 +42,9 @@ export const queuedMessage = pgTable(
     position: integer("position").notNull(),
     clientKey: text("client_key").notNull(),
     text: text("text").notNull(),
-    /** The files that go with the words, as the message request carried them; null where none did. */
-    attachments: jsonb("attachments").$type<readonly AgentAttachment[]>(),
+    /** The files that go with the words, as the queue change carried them, each beside the id it was minted as it was written, by which a window reads its bytes; null where none did. */
+    attachments:
+      jsonb("attachments").$type<readonly (AgentAttachment & { readonly id: string })[]>(),
     heldUntil: timestamptz("held_until"),
     claimedAt: timestamptz("claimed_at"),
     createdAt: createdAt(),

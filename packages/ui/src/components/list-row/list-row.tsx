@@ -142,7 +142,8 @@ export type { ListSelection } from "../selection/list-selection.js";
  * A row may carry attachments (`attachments`), what its thing holds drawn
  * small on a line of their own under its description, as a mail app shows
  * a thread's pictures under its preview; they are decoration, the row's
- * words saying what it is.
+ * words saying what it is, unless they are files a reader opens
+ * (`attachmentsOpen`), which are read and reached as the row's own.
  *
  * A row's metadata stands at its middle, or, in a list read as a mail
  * app's is (`LIST_ROW_META.TITLE`), at the end of its title's line, the
@@ -535,6 +536,7 @@ export function ListRow({
   lead,
   leadAt = LIST_ROW_LEAD.DESCRIPTION,
   attachments,
+  attachmentsOpen = false,
   meta,
   metaAt = LIST_ROW_META.MIDDLE,
   actions,
@@ -574,6 +576,8 @@ export function ListRow({
   leadAt?: ListRowLeadAt | undefined;
   /** What the row's thing carries, its pictures or pages drawn small, on a line of their own under the description; decoration, since its words say what it is. */
   attachments?: ReactNode;
+  /** Whether the attachments are files a reader opens, so they are announced and reached rather than hidden as decoration. */
+  attachmentsOpen?: boolean | undefined;
   /** Metadata at the row's end, before its acts ("2h ago", "Owner"). */
   meta?: ReactNode;
   /** Where the metadata stands: at the row's middle, or at the end of the title's line. */
@@ -764,7 +768,7 @@ export function ListRow({
         {said(attachments) ? (
           <span
             className="luke-list-row-attachments flex gap-luke-6 overflow-hidden"
-            aria-hidden="true"
+            aria-hidden={attachmentsOpen ? undefined : "true"}
           >
             {attachments}
           </span>

@@ -667,7 +667,7 @@ export type AgentMessageRequest = typeof agentMessageRequestSchema.Type;
 export const QUEUE_CHANGE = {
   /** A message queued at the end, under the key this one send is known by, which a retry carries again. */
   ADD: "add",
-  /** A queued message's words written again in its place, its edit over; its files stay as they were. */
+  /** A queued message written again in its place, its words and files those the edit saved, its edit over. */
   EDIT: "edit",
   /** A queued message taken into a member's composer to edit, held out of the hand-off until the edit ends or lapses; or, `held` false, the edit cancelled. */
   HOLD: "hold",
@@ -693,8 +693,10 @@ export const agentQueueChangeSchema = EffectSchema.Union([
   EffectSchema.Struct({
     change: EffectSchema.Literal(QUEUE_CHANGE.EDIT),
     messageId: queuedMessageIdSchema,
-    text: messageWordsSchema.check(EffectSchema.isMinLength(1)),
-  }),
+    text: messageWordsSchema,
+    /** The files the edit saved, which replace the message's; absent where it keeps none. */
+    attachments: EffectSchema.optionalKey(agentAttachmentsSchema),
+  }).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments))),
   EffectSchema.Struct({
     change: EffectSchema.Literal(QUEUE_CHANGE.DELETE),
     messageId: queuedMessageIdSchema,
@@ -703,8 +705,14 @@ export const agentQueueChangeSchema = EffectSchema.Union([
     change: EffectSchema.Literal(QUEUE_CHANGE.STEER),
     messageId: queuedMessageIdSchema,
     /** The words an edit steers it with, which replace its own as it goes; absent to steer it as it stands. */
-    text: EffectSchema.optionalKey(messageWordsSchema.check(EffectSchema.isMinLength(1))),
-  }),
+    text: EffectSchema.optionalKey(messageWordsSchema),
+    /** The files an edit steers it with, which replace its own, given only beside the edit's words; absent there where it keeps none. */
+    attachments: EffectSchema.optionalKey(agentAttachmentsSchema),
+  }).check(
+    EffectSchema.makeFilter(({ text, attachments }) =>
+      text === undefined ? attachments === undefined : hasWordsOrFiles(text, attachments),
+    ),
+  ),
   EffectSchema.Struct({
     change: EffectSchema.Literal(QUEUE_CHANGE.HOLD),
     messageId: queuedMessageIdSchema,

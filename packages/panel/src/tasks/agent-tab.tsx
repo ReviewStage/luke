@@ -2479,7 +2479,8 @@ function AgentTabView({
   );
   const lines = useMemo(() => agentLines(kept, composer.sent), [kept, composer.sent]);
   const queue = useAgentQueue(agent.id, transcript.queue);
-  const queueEditing = useQueueEditing(composer, queue);
+  const pictures = useAgentPictureDoor(agent.id);
+  const queueEditing = useQueueEditing(composer, queue, pictures);
   const enterQueues = useAppSlice(APP_SETTINGS_VIEW)?.agentEnter === AGENT_ENTER.QUEUE;
   // Only the agent's starter may change its queue, as the service holds (`controlsAgent`); a teammate reads it.
   const controlsQueue = starter === undefined;
@@ -2575,7 +2576,6 @@ function AgentTabView({
     [undelivered, unsent, sending, retryLine],
   );
   const starterActor = usePerson(agent.startedBy);
-  const pictures = useAgentPictureDoor(agent.id);
   const wholeParts = useWholePartDoor(agent.id);
   const { members, former } = useMemberDirectory();
   // The door the box hands Reply, which lays a quote in at its caret.
@@ -2685,19 +2685,23 @@ function AgentTabView({
       <AgentTabFoot>
         <TodosDock messages={lines} working={working} />
         <PublishedDock published={published} doors={doors} />
-        <AgentQueueDock
-          messages={queue.messages}
-          landing={queue.landing}
-          controls={controlsQueue}
-          paused={queue.paused}
-          editing={queueEditing.editing}
-          onMove={queue.move}
-          onSteer={(message) => queue.change({ change: QUEUE_CHANGE.STEER, messageId: message.id })}
-          onEdit={queueEditing.edit}
-          onCancelEdit={queueEditing.cancel}
-          onDelete={queue.remove}
-          onResume={() => queue.change({ change: QUEUE_CHANGE.RESUME })}
-        />
+        <AgentPicturesProvider value={pictures}>
+          <AgentQueueDock
+            messages={queue.messages}
+            landing={queue.landing}
+            controls={controlsQueue}
+            paused={queue.paused}
+            editing={queueEditing.editing}
+            onMove={queue.move}
+            onSteer={(message) =>
+              queue.change({ change: QUEUE_CHANGE.STEER, messageId: message.id })
+            }
+            onEdit={queueEditing.edit}
+            onCancelEdit={queueEditing.cancel}
+            onDelete={queue.remove}
+            onResume={() => queue.change({ change: QUEUE_CHANGE.RESUME })}
+          />
+        </AgentPicturesProvider>
         {pilotNote !== undefined ? (
           pilotNote
         ) : onUnarchive !== undefined ? (

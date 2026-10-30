@@ -104,6 +104,7 @@ export function wireQueue(read: AgentQueueRead, now: Date): AgentQueue {
             files: message.attachments.map((file) => ({
               name: file.name,
               mediaType: file.mediaType,
+              id: file.id,
             })),
           }),
     })),
@@ -171,7 +172,16 @@ export const sendQueued = Effect.fn("web/sendQueued")(function* (
   yield* steerAgentWritten(eve, storeWriter({ tools: CODER_TOOL_SET }), message.userId, agent, {
     text: message.text,
     clientKey: message.clientKey,
-    ...(message.attachments.length === 0 ? undefined : { attachments: message.attachments }),
+    // Note that each file goes as it came, without the id the queue read its bytes by.
+    ...(message.attachments.length === 0
+      ? undefined
+      : {
+          attachments: message.attachments.map(({ name, mediaType, data }) => ({
+            name,
+            mediaType,
+            data,
+          })),
+        }),
     sender: { kind: MESSAGE_SENDER.MEMBER, userId: message.userId },
   });
   // Note that the message went, so a failure to take it out of the queue is no refusal of it: it is logged, and

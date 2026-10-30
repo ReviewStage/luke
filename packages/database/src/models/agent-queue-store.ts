@@ -30,7 +30,7 @@
  *   QUEUED  -> CLAIMED  claimQueueHead (the hand-off: the first unheld, where
  *                       the queue is unpaused and nothing else stands claimed)
  *   QUEUED | HELD -> CLAIMED  claimQueuedMessage (a member's steer, with the
- *                       edit's words where it steers an edit)
+ *                       edit's words and files where it steers an edit)
  *   CLAIMED -> (gone)   dropQueuedMessage, once its send answered
  *   CLAIMED -> QUEUED   releaseQueuedMessage (its send refused), or the
  *                       claim lapsing (its send cut off; sent again under
@@ -42,7 +42,7 @@
  *
  * Every write holds the agent's queue lock until it commits, so two changes
  * at once land one after the other, and each that changed anything moves
- * the queue's revision on in the same transaction (`agent_queue_revision`),
+ * the queue's revision on in the same transaction (`agent_queue.revision`),
  * which wakes every live read of the queue and tells a window that a change
  * it made has landed once a read stands at the revision its answer named. A
  * queue standing empty stands unpaused: a pause is written only over
@@ -50,12 +50,26 @@
  * nothing queued holds back nothing queued later.
  */
 
+import { randomUUID } from "node:crypto";
 import type { HostedApiError } from "@luke/features";
 import { AGENT_QUEUE_BOUNDS, QUEUE_PAUSE, type QueuePause } from "@luke/features/agent-queue-wire";
 import { LINE_GRACE_MILLIS } from "@luke/features/agent-status";
 import type { AgentAttachment } from "@luke/features/agent-wire";
 import { TURN_STATUS } from "@luke/wire";
-import { and, asc, count, eq, exists, inArray, isNotNull, isNull, lte, max, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  exists,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  max,
+  or,
+  sql,
+} from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
@@ -77,13 +91,23 @@ const QueuedRowSchema = Schema.Struct({
   claimedAt: Schema.NullOr(Schema.Date),
 });
 
+/**
+ * One file of a queued message: the file as the request carried it, and the
+ * id it was minted as it was written, by which a window reads its bytes
+ * (`readQueuedFile`). Note that a file an edit saves is minted a new id,
+ * so a window that read the file it replaced reads it afresh.
+ */
+export interface QueuedFile extends AgentAttachment {
+  readonly id: string;
+}
+
 /** One queued message: its words and files, the member who queued it, the key it goes under, until when an edit holds it out of the hand-off, and when the hand-off claimed it to send. */
 export interface QueuedMessageRow {
   readonly id: string;
   readonly userId: string;
   readonly clientKey: string;
   readonly text: string;
-  readonly attachments: readonly AgentAttachment[];
+  readonly attachments: readonly QueuedFile[];
   readonly heldUntil: Date | undefined;
   readonly claimedAt: Date | undefined;
 }
@@ -113,8 +137,8 @@ const PAUSES: readonly QueuePause[] = Object.values(QUEUE_PAUSE);
 
 /** A row as the store reads it, its files as the request carried them. */
 function messageOf(row: typeof QueuedRowSchema.Type): QueuedMessageRow {
-  // SAFETY: the column is written only from a message request's files, which their schema read.
-  const attachments = (row.attachments ?? []) as readonly AgentAttachment[];
+  // SAFETY: the column is written only by `filesColumn`, from a queue change's files, which their schema read.
+  const attachments = (row.attachments ?? []) as readonly QueuedFile[];
   return {
     ...row,
     attachments,
@@ -215,7 +239,7 @@ const insertMessage = SqlSchema.findAll({
         .values({
           ...row,
           // SAFETY: the files are a message request's, which their schema read.
-          attachments: attachments as readonly AgentAttachment[] | null,
+          attachments: attachments as readonly QueuedFile[] | null,
           createdAt: now,
           updatedAt: now,
         })
@@ -225,19 +249,27 @@ const insertMessage = SqlSchema.findAll({
     ),
 });
 
-const updateText = SqlSchema.findAll({
+/** A message written again as an edit saved it, its words and its files, its hold let go. */
+const updateEdit = SqlSchema.findAll({
   Request: Schema.Struct({
     agentId: Schema.String,
     messageId: Schema.String,
     text: Schema.String,
+    attachments: Schema.NullOr(Schema.Array(Schema.Unknown)),
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ agentId, messageId, text, now }) =>
+  execute: ({ agentId, messageId, text, attachments, now }) =>
     Database.use((db) =>
       db
         .update(queuedMessage)
-        .set({ text, heldUntil: null, updatedAt: now })
+        .set({
+          text,
+          // SAFETY: the files are a queue change's, which their schema read.
+          attachments: attachments as readonly QueuedFile[] | null,
+          heldUntil: null,
+          updatedAt: now,
+        })
         .where(
           and(
             eq(queuedMessage.agentId, agentId),
@@ -274,19 +306,24 @@ const updateHold = SqlSchema.findAll({
 });
 
 /**
- * A message claimed to send at `now`, its hold let go and its words those
- * given where an edit's are, where no send stands claimed on it already;
- * answers it as claimed.
+ * A message claimed to send at `now`, its hold let go and its words and
+ * files an edit's where one is given, where no send stands claimed on it
+ * already; answers it as claimed.
  */
 const updateClaim = SqlSchema.findAll({
   Request: Schema.Struct({
     agentId: Schema.String,
     messageId: Schema.String,
-    text: Schema.NullOr(Schema.String),
+    edit: Schema.NullOr(
+      Schema.Struct({
+        text: Schema.String,
+        attachments: Schema.NullOr(Schema.Array(Schema.Unknown)),
+      }),
+    ),
     now: Schema.Date,
   }),
   Result: QueuedRowSchema,
-  execute: ({ agentId, messageId, text, now }) =>
+  execute: ({ agentId, messageId, edit, now }) =>
     Database.use((db) =>
       db
         .update(queuedMessage)
@@ -294,7 +331,13 @@ const updateClaim = SqlSchema.findAll({
           claimedAt: now,
           heldUntil: null,
           updatedAt: now,
-          ...(text === null ? undefined : { text }),
+          ...(edit === null
+            ? undefined
+            : {
+                text: edit.text,
+                // SAFETY: the files are a queue change's, which their schema read.
+                attachments: edit.attachments as readonly QueuedFile[] | null,
+              }),
         })
         .where(
           and(
@@ -398,6 +441,25 @@ const deleteMessage = SqlSchema.findAll({
           heldUntil: queuedMessage.heldUntil,
           claimedAt: queuedMessage.claimedAt,
         }),
+    ),
+});
+
+/** The files of the agent's queued message that holds the file `fileId` names. */
+const findFileHolder = SqlSchema.findAll({
+  Request: Schema.Struct({ agentId: Schema.String, fileId: Schema.String }),
+  Result: Schema.Struct({ attachments: Schema.NullOr(Schema.Array(Schema.Unknown)) }),
+  execute: ({ agentId, fileId }) =>
+    Database.use((db) =>
+      db
+        .select({ attachments: queuedMessage.attachments })
+        .from(queuedMessage)
+        .where(
+          and(
+            eq(queuedMessage.agentId, agentId),
+            sql`${queuedMessage.attachments} @> ${JSON.stringify([{ id: fileId }])}::jsonb`,
+          ),
+        )
+        .limit(1),
     ),
 });
 
@@ -542,6 +604,26 @@ function underQueueLock<A>(
 /** Whether a member's change, answered as some of whether it changed anything, did. */
 const changedSome = (answer: Option.Option<boolean>) => Option.getOrElse(answer, () => false);
 
+/**
+ * One file of a message queued for the agent, by the id it was minted as;
+ * none where no message of this agent's queue holds it. For a caller that
+ * already settled the reader may read the agent, as a read of its
+ * transcript's queue does (`agentQueueNow`).
+ */
+export function readQueuedFile(
+  agentId: string,
+  fileId: string,
+): AgentQueueEffect<Option.Option<AgentAttachment>> {
+  return Effect.map(findFileHolder({ agentId, fileId }), ([holder]) => {
+    // SAFETY: the column is written only by `filesColumn`, from a queue change's files, which their schema read.
+    const files = (holder?.attachments ?? []) as readonly QueuedFile[];
+    const file = files.find((each) => each.id === fileId);
+    return file === undefined
+      ? Option.none()
+      : Option.some({ name: file.name, mediaType: file.mediaType, data: file.data });
+  });
+}
+
 /** The account's agent's queue, or none where the account does not reach the agent. */
 export function readAgentQueue(
   userId: string,
@@ -583,10 +665,7 @@ export function queueAgentMessage(
         position: (tail?.last ?? -1) + 1,
         clientKey: message.clientKey,
         text: message.text,
-        attachments:
-          message.attachments === undefined || message.attachments.length === 0
-            ? null
-            : message.attachments,
+        attachments: filesColumn(message.attachments ?? []),
         now: yield* DateTime.nowAsDate,
       });
       inserted = rows.length > 0;
@@ -596,23 +675,38 @@ export function queueAgentMessage(
   );
 }
 
+/** The files a message keeps as its row writes them, each minted an id: null where it keeps none. */
+function filesColumn(attachments: readonly AgentAttachment[]): readonly QueuedFile[] | null {
+  return attachments.length === 0
+    ? null
+    : attachments.map(({ name, mediaType, data }) => ({ name, mediaType, data, id: randomUUID() }));
+}
+
 /**
- * A queued or held message's words written again in its place, its hold let
- * go (HELD -> QUEUED); answers whether it stood queued and unclaimed, or none
- * where the account does not reach the agent.
+ * A queued or held message written again in its place as an edit saved it,
+ * its words and its files, which replace its own, none where `attachments`
+ * names none, its hold let go (HELD -> QUEUED); answers whether it stood
+ * queued and unclaimed, or none where the account does not reach the agent.
  */
 export function editQueuedMessage(
   userId: string,
   agentId: string,
   messageId: string,
   text: string,
+  attachments: readonly AgentAttachment[] = [],
 ): AgentQueueEffect<Option.Option<boolean>> {
   return underQueueLock(
     agentId,
     Effect.gen(function* () {
       if (!(yield* reaches(userId, agentId))) return Option.none();
       const now = yield* DateTime.nowAsDate;
-      const updated = yield* updateText({ agentId, messageId, text, now });
+      const updated = yield* updateEdit({
+        agentId,
+        messageId,
+        text,
+        attachments: filesColumn(attachments),
+        now,
+      });
       return Option.some(updated.length > 0);
     }),
     changedSome,
@@ -677,9 +771,9 @@ export function takeQueuedMessage(
 
 /**
  * A queued or held message claimed by a member to steer it now (QUEUED |
- * HELD -> CLAIMED), its words the edit's where `text` is given, so an edit
- * steered goes as one message with its new words. Answers the message as
- * claimed where it stood unclaimed, or none where the account does not
+ * HELD -> CLAIMED), its words and files the edit's where one is given, so an
+ * edit steered goes as one message as the edit has it. Answers the message
+ * as claimed where it stood unclaimed, or none where the account does not
  * reach the agent; once sent it is dropped, or released where its send was
  * refused.
  */
@@ -687,14 +781,22 @@ export function claimQueuedMessage(
   userId: string,
   agentId: string,
   messageId: string,
-  text?: string,
+  edit?: { readonly text: string; readonly attachments?: readonly AgentAttachment[] | undefined },
 ): AgentQueueEffect<Option.Option<Option.Option<QueuedMessageRow>>> {
   return underQueueLock(
     agentId,
     Effect.gen(function* () {
       if (!(yield* reaches(userId, agentId))) return Option.none();
       const now = yield* DateTime.nowAsDate;
-      const [claimed] = yield* updateClaim({ agentId, messageId, text: text ?? null, now });
+      const [claimed] = yield* updateClaim({
+        agentId,
+        messageId,
+        edit:
+          edit === undefined
+            ? null
+            : { text: edit.text, attachments: filesColumn(edit.attachments ?? []) },
+        now,
+      });
       return Option.some(Option.map(Option.fromNullishOr(claimed), messageOf));
     }),
     (answer) => Option.isSome(Option.flatten(answer)),
@@ -789,7 +891,7 @@ export function claimQueueHead(agentId: string): AgentQueueEffect<Option.Option<
       if (queue.messages.some((message) => claimedAt(message, now))) return Option.none();
       const head = queue.messages.find((message) => !heldAt(message, now));
       if (head === undefined) return Option.none();
-      const [claimed] = yield* updateClaim({ agentId, messageId: head.id, text: null, now });
+      const [claimed] = yield* updateClaim({ agentId, messageId: head.id, edit: null, now });
       return Option.map(Option.fromNullishOr(claimed), messageOf);
     }),
     Option.isSome,

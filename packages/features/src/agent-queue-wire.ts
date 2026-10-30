@@ -34,10 +34,18 @@ export const AGENT_QUEUE_BOUNDS = {
 export const queuedMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   text: EffectSchema.String,
-  /** The files that go with it, each by its name and type alone; absent where none do. */
+  /**
+   * The files that go with it, each by its name and type, and the id its
+   * bytes are read by, as a picture of the agent's is
+   * (`/api/agents/{id}/pictures/{picture}`); absent where none do.
+   */
   files: EffectSchema.optionalKey(
     EffectSchema.Array(
-      EffectSchema.Struct({ name: EffectSchema.String, mediaType: EffectSchema.String }),
+      EffectSchema.Struct({
+        name: EffectSchema.String,
+        mediaType: EffectSchema.String,
+        id: EffectSchema.optionalKey(EffectSchema.String),
+      }),
     ),
   ),
   /** The member who queued it, whose message it goes as. */

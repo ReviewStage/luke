@@ -26,6 +26,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useState } from "react";
 import { useRowDrag } from "../desktop/use-row-drag.js";
 import { COMPOSER_DOCK_CLASS } from "./agent-composer.js";
+import { KeptFileChips } from "./agent-pictures.js";
 import { SentWords } from "./skill-chip.js";
 
 /**
@@ -33,7 +34,9 @@ import { SentWords } from "./skill-chip.js";
  *
  * One row a message, its words drawn as its bubble draws them once sent
  * (`SentWords`), chips and all, on one line, fading out where they run
- * past it, leading with the queue's glyph, which gives way to the handle it
+ * past it, and its files under them as the bubble draws its own
+ * (`KeptFileChips`), each read by the id the queue names it under through
+ * the agent's pictures, an image as its thumbnail, leading with the queue's glyph, which gives way to the handle it
  * is dragged by as the row is hovered (`tasks.css`); on hover, Steer sends
  * it into the turn now, the pencil takes its words into the message box to
  * edit (`agent-composer.tsx`), and the trash deletes it, asking first, since
@@ -60,6 +63,16 @@ const WORDS = {
   REFUSED: "Queue paused: the next message could not be sent",
   PAUSED: "Queue paused",
 } as const;
+
+/** A queued message's files as a line's chips: each by its name, read by the id the queue names it under where it names one. */
+function queuedFileChips(message: QueuedMessage) {
+  return (message.files ?? []).map((file) => ({
+    name: file.name,
+    mediaType: file.mediaType,
+    url: "",
+    ...(file.id === undefined ? undefined : { pictureId: file.id }),
+  }));
+}
 
 /** What asking to delete a queued message says. */
 const DELETE_QUESTION: DialogQuestion = {
@@ -180,6 +193,12 @@ export function AgentQueueDock({
                     <SentWords text={message.text} line />
                   </OneLine>
                 }
+                attachments={
+                  message.files === undefined ? undefined : (
+                    <KeptFileChips files={queuedFileChips(message)} />
+                  )
+                }
+                attachmentsOpen
                 muted={edited || landing.has(message.id)}
                 actionsAt={mine ? LIST_ROW_ACTIONS.ALWAYS : LIST_ROW_ACTIONS.HOVER}
                 actions={

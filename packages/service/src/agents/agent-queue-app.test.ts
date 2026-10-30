@@ -15,6 +15,7 @@ import { getTestDB, joinWorkspace } from "@luke/database/testing";
 import { QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
 import { LINE_GRACE_MILLIS } from "@luke/features/agent-status";
 import {
+  AGENT_ATTACHMENT_TYPE,
   agentMessagesAnswerSchema,
   agentQueueAnswerSchema,
   QUEUE_CHANGE,
@@ -36,12 +37,15 @@ import { keptAfterResponse } from "../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   AGENT_MESSAGES,
+  AGENT_PICTURE,
   AGENT_STOP,
   type Answer,
   fakeEve,
   messagedAgent,
   readAnswer,
+  receiptOf,
   request,
+  SIZED_PNG,
   SNAPSHOT,
   sessionCookieOf,
 } from "../testing/agents-app-support.js";
@@ -124,6 +128,118 @@ it.layer(getTestDB())("an agent's queue", (it) => {
             ["First", true],
             ["Second, reworded", false],
           ],
+        );
+      }),
+  );
+
+  /** An image and a PDF a queued message may carry. */
+  const SHOT = {
+    name: "flow.png",
+    mediaType: AGENT_ATTACHMENT_TYPE.PNG,
+    data: Buffer.from(SIZED_PNG).toString("base64"),
+  };
+  const SPEC = {
+    name: "spec.pdf",
+    mediaType: AGENT_ATTACHMENT_TYPE.PDF,
+    data: Buffer.from("%PDF-1.4").toString("base64"),
+  };
+
+  /** The names of the files eve was last handed, in order. */
+  const handedFiles = (eve: ReturnType<typeof fakeEve>) =>
+    receiptOf(eve.sent.at(-1)?.message.message).flatMap((part) =>
+      part.type === "file" ? [part.filename] : [],
+    );
+
+  /** A message queued with an image behind the running turn, and held for an edit. */
+  const heldWithImage = (eve: ReturnType<typeof fakeEve>) =>
+    Effect.gen(function* () {
+      const started = yield* messagedAgent(eve, { running: true });
+      const { agent, ask, owner } = started;
+      const [message] = (yield* queueChanged(ask, owner, agent.id, {
+        change: QUEUE_CHANGE.ADD,
+        text: "Match this.",
+        clientKey: randomUUID(),
+        attachments: [SHOT],
+      })).messages;
+      assert.ok(message !== undefined);
+      yield* queueChanged(ask, owner, agent.id, {
+        change: QUEUE_CHANGE.HOLD,
+        messageId: message.id,
+        held: true,
+      });
+      return { ...started, message };
+    });
+
+  it.effect(
+    "a queued image is read by its id as a picture of the agent, by whoever reads the agent alone; an edit saved with other files replaces it, words and all, and the turn's end hands the agent the saved files",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { agent, ask, fetch, owner, other, message, target, writer, turnId, github } =
+          yield* heldWithImage(eve);
+        const fileId = message.files?.[0]?.id;
+        assert.ok(fileId !== undefined, "the queue names the file by an id");
+        const read = (bearer: string) =>
+          fetch(request(AGENT_PICTURE, bearer, { id: agent.id, picture: fileId }));
+        const served = yield* read(owner);
+        assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(
+          new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())),
+          SIZED_PNG,
+        );
+        assert.equal(
+          (yield* read(other)).status,
+          HOSTED_HTTP_STATUS.NOT_FOUND,
+          "an account that cannot read the agent reads none of its queue's files",
+        );
+
+        const saved = yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.EDIT,
+          messageId: message.id,
+          text: "",
+          attachments: [SPEC],
+        });
+        assert.deepEqual(
+          saved.messages.map((each) => [each.text, each.files?.map((file) => file.name)]),
+          [["", ["spec.pdf"]]],
+        );
+        yield* writer.consume(target, {
+          kind: RUN_EVENT.TURN_ENDED,
+          conversationId: sessionKey(target.conversationId),
+          turnId,
+          sequence: 2,
+          status: RUN_STATUS.SUCCEEDED,
+          responseIds: [],
+          at: 0,
+        });
+        const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
+        yield* queueAtTurnEnd(
+          (account) => Effect.succeed(eve.eve(`deployment:${account}`)),
+          stored,
+        ).pipe(Effect.provide(Layer.mergeAll(github.layer, noNetwork)));
+
+        assert.deepEqual(handedFiles(eve), ["spec.pdf"]);
+      }),
+  );
+
+  it.effect(
+    "an edit steered goes now with the edit's words and files in place of the message's",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { agent, ask, owner, message } = yield* heldWithImage(eve);
+
+        const queue = yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.STEER,
+          messageId: message.id,
+          text: "Use the spec instead.",
+          attachments: [SPEC],
+        });
+
+        assert.deepEqual(queue.messages, []);
+        assert.deepEqual(handedFiles(eve), ["spec.pdf"]);
+        assert.ok(
+          JSON.stringify(eve.sent.at(-1)?.message.message).includes("Use the spec instead."),
         );
       }),
   );

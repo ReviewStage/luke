@@ -435,7 +435,11 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           break;
         }
         case QUEUE_CHANGE.EDIT:
-          if (!(yield* found(editQueuedMessage(userId, agent.id, body.messageId, body.text)))) {
+          if (
+            !(yield* found(
+              editQueuedMessage(userId, agent.id, body.messageId, body.text, body.attachments),
+            ))
+          ) {
             return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
           }
           break;
@@ -451,10 +455,17 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           }
           break;
         case QUEUE_CHANGE.STEER: {
-          // Steered, the message is claimed first, with an edit's words where it steers one, so no hand-off sends it
-          // beside this send, and goes now, into the turn under way or as the next; a refusal lets it go back.
+          // Steered, the message is claimed first, with an edit's words and files where it steers one, so no hand-off
+          // sends it beside this send, and goes now, into the turn under way or as the next; a refusal lets it go back.
           const claimed = yield* found(
-            claimQueuedMessage(userId, agent.id, body.messageId, body.text),
+            claimQueuedMessage(
+              userId,
+              agent.id,
+              body.messageId,
+              body.text === undefined
+                ? undefined
+                : { text: body.text, attachments: body.attachments },
+            ),
           );
           if (Option.isNone(claimed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
           const message = claimed.value;

@@ -5,17 +5,19 @@ import { AGENT_CALL_FAILURE, type AgentQueueAnswerView } from "@luke/features/ag
 import {
   type AgentAttachment,
   type AgentQueueChange,
+  agentAttachmentsSchema,
   hasWordsOrFiles,
   QUEUE_CHANGE,
 } from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { Clock, Duration, Option, Schedule, Stream } from "effect";
+import { Clock, Duration, Option, Schedule, Schema, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import type { AgentPictureDoor } from "./agent-pictures.js";
 import type { HeldComposer } from "./use-agent-composer.js";
 
 /**
@@ -177,6 +179,27 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
   return { messages: drawn.messages, landing, listed, paused: drawn.paused, change, move, remove };
 }
 
+/** A queued message's files whole, read through the agent's pictures by the ids the queue names them under; none where any did not read. */
+function readQueuedFiles(
+  message: QueuedMessage,
+  door: AgentPictureDoor,
+): Promise<readonly AgentAttachment[] | undefined> {
+  const files = message.files ?? [];
+  return Promise.all(
+    files.map(({ name, id }) =>
+      id === undefined
+        ? undefined
+        : door
+            .read(door.owner, id)
+            .then((answer) =>
+              "base64" in answer
+                ? { name, mediaType: answer.contentType, data: answer.base64 }
+                : undefined,
+            ),
+    ),
+  ).then((read) => Option.getOrUndefined(Schema.decodeUnknownOption(agentAttachmentsSchema)(read)));
+}
+
 /** The box's words and files kept aside while it holds a queued message's words being edited. */
 interface Stashed {
   readonly id: string;
@@ -208,7 +231,11 @@ export interface QueueEditing {
  * the queue took it, so a refusal leaves the words where they are. Cancel,
  * Escape, Save with the box emptied, or the tab closing lets it go as it was,
  * and a message the queue would not hold, already on its way, closes the
- * edit. Its files stay with it, as the queue lists only their names. A
+ * edit. Its files come into the box beside its words, read whole through the
+ * agent's pictures as its row reads them (`readQueuedFiles`), where they are
+ * taken off or joined as any message's are, and Save and Steer send the
+ * box's files with its words; neither goes while they are still read, and an
+ * edit whose files did not read closes, the message left as it was. A
  * message the queue did not take comes back into the box under the key it
  * went under, so queueing it again can never queue it twice.
  */
@@ -218,6 +245,7 @@ export function useQueueEditing(
     "draft" | "setDraft" | "attachments" | "setAttachments" | "sendsSettled"
   >,
   queue: Pick<AgentQueueControl, "change" | "listed">,
+  files: AgentPictureDoor,
 ): QueueEditing {
   const [stashed, setStashed] = useState<Stashed | undefined>();
   const held = useRef<string | undefined>(undefined);
@@ -246,6 +274,8 @@ export function useQueueEditing(
   );
   // The message whose edit is being saved or steered, by id, which its hold is no longer renewed for.
   const settling = useRef<string | undefined>(undefined);
+  // The message whose files are still being read into the box, by id, which no Save or Steer sends meanwhile.
+  const reading = useRef<string | undefined>(undefined);
   const { change } = queue;
   const latestChange = useRef(change);
   latestChange.current = change;
@@ -277,10 +307,13 @@ export function useQueueEditing(
       if (!("failure" in answer) && held.current === stash.id) giveBack(stash);
     });
   };
+  /** The edit of `stash` given up, its hold let go and the box given back what it held. */
+  const cancelOf = (stash: Stashed) => {
+    void change({ change: QUEUE_CHANGE.HOLD, messageId: stash.id, held: false });
+    giveBack(stash);
+  };
   const cancel = () => {
-    if (stashed === undefined) return;
-    void change({ change: QUEUE_CHANGE.HOLD, messageId: stashed.id, held: false });
-    giveBack(stashed);
+    if (stashed !== undefined) cancelOf(stashed);
   };
   return {
     editing: stashed?.id,
@@ -329,18 +362,39 @@ export function useQueueEditing(
           if ("failure" in answer && held.current === message.id) giveBack(stash);
         },
       );
+      if ((message.files ?? []).length === 0) return;
+      // Its files join the box ahead of any taken on meanwhile, or, where they did not read, the edit closes.
+      reading.current = message.id;
+      void readQueuedFiles(message, files).then((read) => {
+        if (held.current !== message.id) return;
+        reading.current = undefined;
+        if (read === undefined) return cancelOf(stash);
+        composer.setAttachments((added) => [...read, ...added]);
+      });
     },
     save: () => {
-      if (stashed === undefined) return;
+      if (stashed === undefined || reading.current === stashed.id) return;
       const text = composer.draft.trim();
-      if (text === "") return cancel();
-      closing(stashed, { change: QUEUE_CHANGE.EDIT, messageId: stashed.id, text });
+      const { attachments } = composer;
+      if (!hasWordsOrFiles(text, attachments)) return cancel();
+      closing(stashed, {
+        change: QUEUE_CHANGE.EDIT,
+        messageId: stashed.id,
+        text,
+        ...(attachments.length === 0 ? undefined : { attachments }),
+      });
     },
     steer: () => {
-      if (stashed === undefined) return;
+      if (stashed === undefined || reading.current === stashed.id) return;
       const text = composer.draft.trim();
-      if (text === "") return cancel();
-      closing(stashed, { change: QUEUE_CHANGE.STEER, messageId: stashed.id, text });
+      const { attachments } = composer;
+      if (!hasWordsOrFiles(text, attachments)) return cancel();
+      closing(stashed, {
+        change: QUEUE_CHANGE.STEER,
+        messageId: stashed.id,
+        text,
+        ...(attachments.length === 0 ? undefined : { attachments }),
+      });
     },
     cancel,
   };

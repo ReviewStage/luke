@@ -3,7 +3,11 @@
 import assert from "node:assert/strict";
 import { type AgentQueue, QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
 import { AGENT_CALL_FAILURE, type AgentQueueAnswerView } from "@luke/features/agent-view";
-import { type AgentQueueChange, QUEUE_CHANGE } from "@luke/features/agent-wire";
+import {
+  AGENT_ATTACHMENT_TYPE,
+  type AgentQueueChange,
+  QUEUE_CHANGE,
+} from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useState } from "react";
@@ -11,6 +15,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { useAgentPictureDoor } from "./agent-pictures.js";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer.js";
 import {
   type AgentQueueControl,
@@ -27,8 +32,9 @@ import {
  * are drawn as they go, and spring back where refused. The
  * message box's part: a message the queue refused comes back into the box,
  * an edit the queue did not save stays open with its new words, an edit of
- * a message the queue would not hold closes, and an edit steered is one
- * change of that message.
+ * a message the queue would not hold closes, an edit steered is one
+ * change of that message, and an edit takes the message's files into the
+ * box, read as its row draws them, which Save sends back with its words.
  */
 
 const ignore = () => undefined;
@@ -58,7 +64,8 @@ function Tab(): ReactNode {
     send: () => new Promise(ignore),
   });
   const queue = useAgentQueue("agent-1", page);
-  held = { composer, queue, editing: useQueueEditing(composer, queue), page: setPage };
+  const files = useAgentPictureDoor("agent-1");
+  held = { composer, queue, editing: useQueueEditing(composer, queue, files), page: setPage };
   return null;
 }
 
@@ -89,6 +96,11 @@ const message = (id: string, text: string) => ({ id, text, queuedBy: "user-1" })
 
 const texts = () => now().queue.messages.map((each) => each.text);
 
+/** An image a queued message carries, the id the queue reads it by, and a file the box takes on beside it. */
+const SHOT = { name: "flow.png", mediaType: AGENT_ATTACHMENT_TYPE.PNG, data: "iVBORw0KGgo=" };
+const SHOT_ID = "3c1f5d0e-7a8b-4c9d-9e0f-1a2b3c4d5e6f";
+const SPEC = { name: "spec.pdf", mediaType: AGENT_ATTACHMENT_TYPE.PDF, data: "JVBERi0xLjQ=" };
+
 beforeEach(async () => {
   sent = [];
   owed = [];
@@ -98,6 +110,12 @@ beforeEach(async () => {
       sent.push(change);
       return new Promise((resolve) => owed.push(resolve));
     },
+    [ACT_KIND.AGENTS_PICTURE]: ({ pictureId }) =>
+      Promise.resolve(
+        pictureId === SHOT_ID
+          ? { contentType: SHOT.mediaType, base64: SHOT.data }
+          : { failure: AGENT_CALL_FAILURE.NOT_FOUND },
+      ),
   });
   const container = document.createElement("div");
   document.body.append(container);
@@ -238,4 +256,27 @@ test("an edit whose message left the queue, sent or deleted elsewhere, closes an
 
   assert.equal(now().editing.editing, undefined);
   assert.equal(now().composer.draft, "Run tests and fix failures");
+});
+
+test("an edit takes the message's files into the box, read as its row draws them, and Save sends the box's words and files as the message", async () => {
+  const queued = {
+    ...message("m1", "Match this."),
+    files: [{ name: SHOT.name, mediaType: SHOT.mediaType, id: SHOT_ID }],
+  };
+  act(() => now().page({ messages: [queued], revision: 1 }));
+  act(() => now().editing.edit(queued));
+  await answer({ queue: { messages: [{ ...queued, editing: true }], revision: 2 } });
+
+  assert.deepEqual(now().composer.attachments, [SHOT]);
+  act(() => now().composer.setDraft("Match this, smaller."));
+  act(() => now().composer.setAttachments((files) => [...files, SPEC]));
+  act(() => now().editing.save());
+  await settle();
+
+  assert.deepEqual(sent.at(-1), {
+    change: QUEUE_CHANGE.EDIT,
+    messageId: "m1",
+    text: "Match this, smaller.",
+    attachments: [SHOT, SPEC],
+  });
 });
