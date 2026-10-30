@@ -44,8 +44,11 @@ const WORDS = [
 /** The gzip magic the library opens a compressed snapshot field with, as the binary string it sends. */
 const GZIP_MAGIC = "\u001f\u008b";
 
+/** The account's name and email, as the host holds them for whoever is signed in. */
+const PERSON = { name: "Ada Lovelace", email: "ada@luke.test" } as const;
+
 function bootstrap(permitted: boolean, accountId = "user-1"): SessionReplayBootstrap {
-  return { permitted, appVersion: "1.2.3", packaged: true, accountId };
+  return { permitted, appVersion: "1.2.3", packaged: true, accountId, ...PERSON };
 }
 
 /** The same run's word on recording with nobody signed in. */
@@ -157,7 +160,7 @@ test("the recorder loads before anything records, a stop while it loads holds, a
   assert.equal(identify?.properties.packaged, true);
 });
 
-test("a sign-in partway through a recording files it under the account, and one after a deletion records again", async () => {
+test("a signed-out run records nothing, a sign-in records under the person it names, and a sign-out or a deletion stops it until the next", async () => {
   vi.useFakeTimers();
   vi.stubGlobal("PACKAGED_POSTHOG_PROJECT_API_KEY", "phc_test");
   drawPage();
@@ -167,30 +170,56 @@ test("a sign-in partway through a recording files it under the account, and one 
   const sent: CaptureResult[] = [];
   posthog.on("eventCaptured", (event) => sent.push(event));
 
-  // Whatever ran before, a sign-out stands it down, and recording starts again signed out.
+  // Whatever ran before, a stand-down; then the run, permitted, with nobody signed in.
   applySessionReplay(bootstrap(false), importRecorder);
   applySessionReplay(signedOut(true), importRecorder);
   await vi.advanceTimersByTimeAsync(10_000);
-  assert.equal(posthog.sessionRecordingStarted(), true);
-  const anonymous = posthog.get_distinct_id();
-  assert.notEqual(anonymous, "user-2");
+  assert.equal(posthog.sessionRecordingStarted(), false);
 
-  // The sign-in lands while it records: recording is still permitted, and only the account moved.
+  // A sign-in starts it, filed under the account, which is shown by its name,
+  // its email, and the shell it was seen on.
   applySessionReplay(bootstrap(true, "user-2"), importRecorder);
+  await vi.advanceTimersByTimeAsync(10_000);
   assert.equal(posthog.sessionRecordingStarted(), true);
   assert.equal(posthog.get_distinct_id(), "user-2");
-  // The anonymous stretch before it is joined to the person, so erasing the account reaches it.
-  const identify = sent.find((event) => event.event === "$identify");
-  assert.equal(identify?.properties.$anon_distinct_id, anonymous);
+  const identify = sent.findLast(
+    (event) => event.event === "$identify" && event.properties.distinct_id === "user-2",
+  );
+  assert.deepEqual(identify?.$set, {
+    name: "Ada Lovelace",
+    email: "ada@luke.test",
+    platform: "desktop",
+  });
+  assert.equal(identify?.properties.platform, "desktop");
 
-  // The account is deleted: the halt and then the host's answer stand recording down.
-  applySessionReplay(bootstrap(false, "user-2"), importRecorder);
-  applySessionReplay(signedOut(false), importRecorder);
+  // The same account renamed while it records: the person is shown by what it is called now.
+  applySessionReplay({ ...bootstrap(true, "user-2"), email: "ada@new.luke.test" }, importRecorder);
+  assert.equal(posthog.get_distinct_id(), "user-2");
+  const renamed = sent.findLast((event) => event.event === "$set");
+  assert.equal(renamed?.properties.$set?.email, "ada@new.luke.test");
+  // And its name taken away: the old one is not left standing on the person.
+  applySessionReplay(
+    { ...bootstrap(true, "user-2"), email: "ada@new.luke.test", name: undefined },
+    importRecorder,
+  );
+  const unnamed = sent.findLast((event) => event.properties.$unset !== undefined);
+  assert.deepEqual(unnamed?.properties.$unset, ["name"]);
+
+  // A sign-out stops it and lets the person go.
+  applySessionReplay(signedOut(true), importRecorder);
   assert.equal(posthog.sessionRecordingStarted(), false);
   assert.notEqual(posthog.get_distinct_id(), "user-2");
 
-  // A later sign-in in the same run records again, filed under the account that signed in.
+  // Signed in again, then the account is deleted: the halt and then the host's answer stand it down.
   applySessionReplay(bootstrap(true, "user-3"), importRecorder);
   assert.equal(posthog.sessionRecordingStarted(), true);
-  assert.equal(posthog.get_distinct_id(), "user-3");
+  applySessionReplay(bootstrap(false, "user-3"), importRecorder);
+  applySessionReplay(signedOut(false), importRecorder);
+  assert.equal(posthog.sessionRecordingStarted(), false);
+  assert.notEqual(posthog.get_distinct_id(), "user-3");
+
+  // A later sign-in in the same run records again, filed under the account that signed in.
+  applySessionReplay(bootstrap(true, "user-4"), importRecorder);
+  assert.equal(posthog.sessionRecordingStarted(), true);
+  assert.equal(posthog.get_distinct_id(), "user-4");
 });

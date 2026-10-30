@@ -8,7 +8,8 @@
  * every version of the document carries it, an answer that turns false — an
  * account deleted mid-run — stops a recording where it stands, and one that
  * turns true again at the next sign-in resumes it, rather than either waiting
- * for the next launch.
+ * for the next launch. Even where it is true, nothing records until an
+ * account is signed in (`packages/panel/src/session-replay.ts`).
  * Where a recording goes is not here either: the processor's address is fixed
  * by the build, in the renderer beside the connect policy that names it.
  */
@@ -17,9 +18,8 @@ export interface SessionReplayBootstrap {
    * Whether this run may record at all. False for a fixture and a capture
    * run, which must stay deterministic and send nothing, false for an
    * unpackaged development run, and false after an
-   * account is deleted until the next sign-in.
-   * Being signed out is not one of the reasons: recording begins at the first
-   * paint, before an account exists.
+   * account is deleted until the next sign-in. Being signed out is not one of
+   * the host's reasons: the recorder waits for `accountId` on its own.
    */
   permitted: boolean;
   /**
@@ -39,9 +39,12 @@ export interface SessionReplayBootstrap {
    * The account's opaque id, absent while signed out. It is the same id the
    * hosted endpoints resolve a bearer token to, so a recording lands on the
    * person the counted events already belong to — which is also what makes
-   * deleting the account erase the recordings with it. A recording that runs
-   * while this is absent is anonymous, joined to the person if a sign-in
-   * lands during it and to nobody if none ever does.
+   * deleting the account erase the recordings with it. Nothing records while
+   * it is absent, so no recording is anonymous.
    */
   accountId?: string | undefined;
+  /** The signed-in account's name, where it has one, which the person a recording is filed under is shown by. */
+  name?: string | undefined;
+  /** The signed-in account's email, beside its name on the person. */
+  email?: string | undefined;
 }

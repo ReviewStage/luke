@@ -589,6 +589,18 @@ export function productEventBatchFromWire(value: UnparsedWireValue): ProductEven
   return events;
 }
 
+/**
+ * Which of Luke's shells something came from, under the `platform` property:
+ * the desktop's panel window or the web app's tab. One set for the counted
+ * events and the session replay alike, so one filter separates both.
+ */
+export const PRODUCT_PLATFORM = {
+  DESKTOP: "desktop",
+  WEB: "web",
+} as const;
+
+export type ProductPlatform = (typeof PRODUCT_PLATFORM)[keyof typeof PRODUCT_PLATFORM];
+
 /** The fields of a batch's `build`, which the service stamps on every event the batch carries. */
 export const PRODUCT_EVENT_BUILD_FIELD = {
   APP_VERSION: PRODUCT_EVENT_PROPERTY.APP_VERSION,

@@ -10,20 +10,17 @@
  * the other tabs of this browser say.
  *
  * Each tab runs a host of its own, so an account deleted in one tab is
- * nothing its neighbours' hosts hear of: their next read finds the session
- * gone and says recording may go on, signed out. The tab that deleted it
- * says so on `RECORDING_CHANNEL`, and every other tab stands its recording
+ * nothing its neighbours' hosts hear of until their next read finds the
+ * session gone, and each records under the deleted account until then. The
+ * tab that deleted it says so on `RECORDING_CHANNEL`, and every other tab stands its recording
  * down for the rest of its life, as the deleting tab's host does for its
  * own, until that tab sees a sign-in after the sign-out that follows.
  */
 
+import { PRODUCT_PLATFORM } from "@luke/features/analytics";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import type { BundleImporter } from "@luke/panel/bundle-loader";
-import {
-  type ApplySessionReplay,
-  SESSION_REPLAY_APP,
-  sessionReplay,
-} from "@luke/panel/session-replay";
+import { type ApplySessionReplay, sessionReplay } from "@luke/panel/session-replay";
 import { PANEL_PATH } from "./web-address";
 import { webDeployment } from "./web-sentry";
 
@@ -117,7 +114,7 @@ const importSessionRecorder: BundleImporter<unknown> = () => import("./session-r
 
 /** The tab's own recording, before the other tabs have their say. */
 const recording: ApplySessionReplay = sessionReplay({
-  appName: SESSION_REPLAY_APP.WEB,
+  platform: PRODUCT_PLATFORM.WEB,
   projectApiKey,
   address: `${location.origin}${PANEL_PATH}`,
   namesOwnAddress: namesAddress,

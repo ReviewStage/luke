@@ -1121,8 +1121,14 @@ masking cannot reach, so leaving it out is
 its only line, and recording what a canvas draws is switched off. A mention drawn as a chip carries what it names, such as a
 plan section's heading, only in its words, never in an attribute the masking
 leaves, so the recording keeps its shape alone. Luke does not report what you
-clicked. Each recording carries Luke's version and whether it is a released
-build or a development one; only a released build records at all.
+clicked. Luke records only while you are signed in: nothing is recorded
+before you sign in, a visit to the web app that never signs in records
+nothing, and signing out stops it. Each recording is filed under your
+account, which carries your name and email address as you are shown in
+Luke, so that we can find the recordings of a person who reports a problem;
+deleting your account erases them. Each recording carries Luke's version,
+whether it is a released build or a development one, and whether it came
+from the Mac app or the web app; only a released build records at all.
 
 **Tab switcher previews.** When you hold ⌃Tab in the Mac app, each card shows a
 small, downscaled still of a screen you visited, taken by the app as you
@@ -1179,13 +1185,6 @@ repository"; the pages open at a stop are not kept, and the browser reopens
 each tab at its last address on resume. No other agent reaches that profile;
 an agent's workers share its sandbox, so they share it. Deleting the task, or
 your account, deletes the sandbox and its snapshot as described there.
-
-Recording starts just after the panel first draws when Luke opens, before
-you sign in, so it covers the signed-out panel and the sign-in. A recording
-that begins before you sign in is attached to your account if you sign in
-while it runs; one that never reaches a sign-in belongs to nobody, so
-deleting your account does not reach it — we have no way to tell it was
-yours.
 
 **Crash and performance reports from the Mac app.** In ordinary runs, Luke
 sends Sentry reports of unhandled exceptions in its Electron main, preload,
@@ -1532,9 +1531,9 @@ recordings", with every word masked and the same parts left out, and with
 the tab's address, which names the workspace and what it opens, and the
 address of the page that sent you there, replaced by the app's own; only the
 site's production deployment records, never a preview of it. A recording
-follows your account in that browser: signing out files what follows under
-nobody, and deleting your account in one tab stops the recording in every
-tab of that browser until you sign in again. It sends Sentry reports of the
+follows your account in that browser: a visit that never signs in records
+nothing, signing out stops it, and deleting your account in one tab stops
+the recording in every tab of that browser until you sign in again. It sends Sentry reports of the
 errors it did not handle and of a tab that could not draw, the errors it
 shows you, as described under "Errors Luke shows you", and performance
 traces for about one page load in ten, and a warning for each kind of request
@@ -1566,8 +1565,8 @@ are kept with that Mac's settings. Luke in a browser keeps your settings in
 that browser's own storage for the site, and no sign-in token at all: it is
 signed in by the site's session cookie, which only the browser holds. Its
 screen recording keeps, in that browser's storage for the site, the
-anonymous id it records under, the account id it files under once you sign
-in, and whether it may send, under `luke_app_replay` and
+account id it files under while you are signed in, an id of its own it
+keeps beside it, and whether it may send, under `luke_app_replay` and
 `luke_app_replay_consent`, apart from the site's own counting. A connect
 started there, such as connecting GitHub, keeps in its tab's session storage a
 random id naming the connect, or the address it left from, until the page it
