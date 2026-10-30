@@ -89,9 +89,8 @@ component, factored out of the surface where it builds the box by hand.
   integration trigger's event (a Sentry issue or alert as Luke's Sentry
   integration delivers it), may reach that run's agent task, transcript and
   traces. And an automation webhook secret may be shown once, in the window that
-  minted it, at creation or rotation; never anywhere else. And a host install
-  token may be shown once, in the window that minted it, inside the install
-  command; never anywhere else. And an agent's cloud browser, a
+  minted it, at creation or rotation; never anywhere else. And an agent's cloud
+  browser, a
   Chromium in that agent's own Vercel Sandbox, shows its pages, their live-view
   frames, address, title, screenshots, and text snapshots to that agent and its
   workers, the model, the agent's transcript, and the panels of the workspace
