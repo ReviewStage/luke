@@ -17,7 +17,7 @@ import { SearchXIcon } from "lucide-react";
 export const NOT_FOUND_THING = {
   TASK: "task",
   AGENT: "agent",
-  INBOX_ITEM: "Inbox item",
+  INBOX_ITEM: "inbox item",
   THREAD: "thread",
   AUTOMATION: "automation",
   PERSON: "profile",
