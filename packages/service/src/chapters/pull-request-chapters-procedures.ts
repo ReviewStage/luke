@@ -35,11 +35,23 @@
  * failure while it runs lands as unexpected and is answered as the error it
  * was. The diff and the chapters travel only to the model, the store, and
  * the caller: a log line and the counted event carry kinds and counts alone.
+ *
+ * The other two (`GET` and `POST /api/pull-requests/chapters`) name the pull
+ * request by its workspace, repository, and number in the query, for one no
+ * agent opened, and reach it as its other reads by repository do
+ * (`github/repository-pull-request-procedures.ts`): a workspace the account
+ * is no member of is not found. The read confirms the repository in reach
+ * on a minted token and answers as the agent's read does, asking GitHub for
+ * nothing more and starting no model call. The Generate reads the pull
+ * request by its number, not found where the repository holds none under
+ * it, and is then the agent's Generate, on the presser's own key and choice
+ * of model. Neither runs but on the caller's ask: no read of a pull request
+ * by its repository, nor its opening, generates chapters.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readAccountPreferences } from "@luke/database/models/account-store";
-import { type Agent, hasRepository, type WithRepository } from "@luke/database/models/agent-store";
+import { type Agent, hasRepository } from "@luke/database/models/agent-store";
 import {
   CHAPTER_CLAIM_OUTCOME,
   CHAPTER_GENERATION_STALE_MS,
@@ -93,6 +105,10 @@ import {
   pullRequestCommitMessages,
   pullRequestFiles,
 } from "../github/pull-requests.js";
+import {
+  reachedByNumber,
+  reachedRepository,
+} from "../github/repository-pull-request-procedures.js";
 import { agentWorkspace } from "../github/workspace-repository.js";
 import {
   HOSTED_REFUSAL,
@@ -131,18 +147,16 @@ const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string
   return agent;
 });
 
-/** What both procedures stand on: the pull request as GitHub holds it now, the token it was read on, and the workspace its chapters are kept under; none where there is no pull request. */
-interface ChaptersSubject {
-  readonly agent: WithRepository<Agent>;
+/** What a pull request's chapters are kept under: its repository, and the workspace that reaches it. */
+interface ChaptersOf {
+  readonly repository: string;
   readonly organizationId: string;
-  readonly token: Redacted.Redacted;
-  readonly pullRequest: GitHubPullRequest;
 }
 
-/** What a pull request's chapters are kept under: the agent's repository, and its workspace. */
-interface ChaptersOf {
-  readonly agent: WithRepository<Agent>;
-  readonly organizationId: string;
+/** What a Generate stands on: where the chapters are kept, the pull request as GitHub holds it now, and the token it was read on. */
+interface ChaptersSubject extends ChaptersOf {
+  readonly token: Redacted.Redacted;
+  readonly pullRequest: GitHubPullRequest;
 }
 
 /** The pull request the tab asks about, read afresh on the agent's repository token, with the workspace its chapters are kept under. */
@@ -167,7 +181,7 @@ const subjectOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   // The token was just minted through this workspace, so none here is a workspace left between two reads.
   if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
   return Option.map(found, (pullRequest) => ({
-    agent,
+    repository: agent.repository,
     organizationId: workspace.value,
     token,
     pullRequest,
@@ -185,7 +199,7 @@ const keptUnder = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   // The token was just minted through this workspace, so none here is a workspace left between two reads.
   if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-  return Option.some({ agent, organizationId: workspace.value });
+  return Option.some({ repository: agent.repository, organizationId: workspace.value });
 });
 
 /** The stored row as the wire's state of the chapters. */
@@ -229,7 +243,7 @@ const answerOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   generatable: boolean,
 ): Effect.fn.Return<PullRequestChaptersAnswer, HostedRefusal, DatabaseServices> {
   const row = yield* hostedStoreOrUnavailable(
-    latestPullRequestChapters(of.organizationId, of.agent.repository, number),
+    latestPullRequestChapters(of.organizationId, of.repository, number),
   );
   return {
     pullRequest: {
@@ -246,9 +260,9 @@ const answerOf = /* @__PURE__ */ Effect.fnUntraced(function* (
  * the store's stale bound, past which a Generate takes it over.
  */
 const generatingNow = /* @__PURE__ */ Effect.fnUntraced(function* (subject: ChaptersSubject) {
-  const { organizationId, agent, pullRequest } = subject;
+  const { organizationId, repository, pullRequest } = subject;
   const row = yield* hostedStoreOrUnavailable(
-    latestPullRequestChapters(organizationId, agent.repository, pullRequest.number),
+    latestPullRequestChapters(organizationId, repository, pullRequest.number),
   );
   if (Option.isNone(row)) return false;
   const now = yield* Clock.currentTimeMillis;
@@ -362,14 +376,14 @@ const generated = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** The pull request's files, words, and commit messages, as a generation reads them. */
 const generationInput = (subject: ChaptersSubject) => {
-  const { token, agent, pullRequest } = subject;
+  const { token, repository, pullRequest } = subject;
   return githubReadRefusal(
     Effect.all(
       [
-        pullRequestFiles(token, agent.repository, pullRequest),
+        pullRequestFiles(token, repository, pullRequest),
         // Note that the messages only help the story along, so a read of them that fails tells it without them.
         Effect.orElseSucceed(
-          pullRequestCommitMessages(token, agent.repository, pullRequest.number),
+          pullRequestCommitMessages(token, repository, pullRequest.number),
           (): readonly string[] => [],
         ),
       ],
@@ -386,7 +400,54 @@ const generationInput = (subject: ChaptersSubject) => {
   );
 };
 
-/** The chapters resource: the read and the Generate, each to a signed-in caller. */
+/**
+ * One Generate of the pull request's chapters, once the caller reached it
+ * and the presser's model is had: answered as it stands where another
+ * request generates them for this head or the head moved under the read,
+ * else claimed, told, and landed, then answered as the read answers.
+ */
+const generatedFor = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  model: ChaptersModel,
+  subject: ChaptersSubject,
+) {
+  const { organizationId, repository, token, pullRequest } = subject;
+  // Note that GitHub names the base on every read of one pull request; one that does not is a GitHub off its shape.
+  if (pullRequest.baseSha === undefined) {
+    return yield* Effect.fail(HOSTED_REFUSAL.GITHUB_UNANSWERED);
+  }
+  // A generation another request holds for this head answers as it stands, before GitHub is asked for a diff this request will not use.
+  if (yield* generatingNow(subject)) {
+    return yield* answerOf(subject, pullRequest.number, true);
+  }
+  const read = yield* generationInput(subject);
+  // The files are read by the pull request's number, so a push between the two reads would tell another head's diff under this one: the head is read again, and a moved one is answered as it now stands, to be generated on its own.
+  const after = yield* githubReadRefusal(
+    pullRequestByNumber(token, repository, pullRequest.number),
+  );
+  if (Option.isNone(after)) return { pullRequest: null };
+  if (after.value.headSha !== pullRequest.headSha) {
+    return yield* answerOf(subject, pullRequest.number, true);
+  }
+  const now = yield* Clock.currentTimeMillis;
+  const claimed = yield* hostedStoreOrUnavailable(
+    claimChapterGeneration({
+      organizationId,
+      repository,
+      pullRequestNumber: pullRequest.number,
+      baseSha: pullRequest.baseSha,
+      headSha: pullRequest.headSha,
+      requestedBy: userId,
+      now: new Date(now),
+    }),
+  );
+  if (claimed.outcome === CHAPTER_CLAIM_OUTCOME.CLAIMED) {
+    yield* generated(claimed.claim, model, userId, read);
+  }
+  return yield* answerOf(subject, pullRequest.number, true);
+});
+
+/** The chapters resource: the read and the Generate through an agent and by the repository and number, each to a signed-in caller. */
 export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedureSeams) {
   const signedIn = hosted.pullRequestChapters.use(accountMiddleware(seams.resolveUserId));
   const published = seams.published ?? instancePublishedCache();
@@ -412,40 +473,31 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
       if (model === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       const subject = yield* subjectOf(published, context.userId, agent, input.query?.number);
       if (Option.isNone(subject)) return { pullRequest: null };
-      const { organizationId, pullRequest, agent: held } = subject.value;
-      // Note that GitHub names the base on every read of one pull request; one that does not is a GitHub off its shape.
-      if (pullRequest.baseSha === undefined) {
-        return yield* Effect.fail(HOSTED_REFUSAL.GITHUB_UNANSWERED);
-      }
-      // A generation another request holds for this head answers as it stands, before GitHub is asked for a diff this request will not use.
-      if (yield* generatingNow(subject.value)) {
-        return yield* answerOf(subject.value, pullRequest.number, true);
-      }
-      const read = yield* generationInput(subject.value);
-      // The files are read by the pull request's number, so a push between the two reads would tell another head's diff under this one: the head is read again, and a moved one is answered as it now stands, to be generated on its own.
-      const after = yield* githubReadRefusal(
-        pullRequestByNumber(subject.value.token, held.repository, pullRequest.number),
+      return yield* generatedFor(context.userId, model, subject.value);
+    }),
+
+    repositoryRead: signedIn.repositoryRead.effect(function* ({ input, context }) {
+      const { subject } = yield* reachedRepository(context.userId, input);
+      // Whether the reader can generate at all, as the agent's read asks it.
+      const model = yield* modelOf(seams, context.userId, CHAPTERS_MODEL_DEFAULT);
+      return yield* answerOf(subject, input.number, model !== undefined);
+    }),
+
+    repositoryGenerate: signedIn.repositoryGenerate.effect(function* ({ input, context }) {
+      // The pull request is reached before the presser's key is asked about, so a non-member is refused alike whatever key they saved.
+      const { token, subject, found } = yield* reachedByNumber(
+        context.userId,
+        input.query,
+        pullRequestByNumber,
       );
-      if (Option.isNone(after)) return { pullRequest: null };
-      if (after.value.headSha !== pullRequest.headSha) {
-        return yield* answerOf(subject.value, pullRequest.number, true);
-      }
-      const now = yield* Clock.currentTimeMillis;
-      const claimed = yield* hostedStoreOrUnavailable(
-        claimChapterGeneration({
-          organizationId,
-          repository: held.repository,
-          pullRequestNumber: pullRequest.number,
-          baseSha: pullRequest.baseSha,
-          headSha: pullRequest.headSha,
-          requestedBy: context.userId,
-          now: new Date(now),
-        }),
-      );
-      if (claimed.outcome === CHAPTER_CLAIM_OUTCOME.CLAIMED) {
-        yield* generated(claimed.claim, model, context.userId, read);
-      }
-      return yield* answerOf(subject.value, pullRequest.number, true);
+      const model = yield* modelOf(seams, context.userId, yield* chosenModelOf(context.userId));
+      if (model === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* generatedFor(context.userId, model, {
+        repository: subject.repository,
+        organizationId: subject.organizationId,
+        token,
+        pullRequest: found,
+      });
     }),
   };
 }

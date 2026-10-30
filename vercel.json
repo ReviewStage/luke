@@ -113,6 +113,10 @@
           "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
         },
         {
+          "src": "/api/pull-requests/chapters",
+          "dest": "/api/pull-request-chapters.js?route=pull-requests/chapters"
+        },
+        {
           "src": "/api/browser/live",
           "dest": "/api/browser/live"
         },

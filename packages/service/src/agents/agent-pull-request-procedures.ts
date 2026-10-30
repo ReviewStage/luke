@@ -107,6 +107,7 @@ import {
 } from "./coder-host/published.js";
 import {
   type MemberPullRequest,
+  type MemberWritten,
   memberPullRequestWrite,
   memberReadToken,
   writeAnswerOf,
@@ -370,7 +371,7 @@ function writeOf(
 }
 
 /** The write a change makes on the pull request, on the member's token. */
-function actionWrite(
+export function actionWrite(
   request: PullRequestActionRequest,
 ): (
   pullRequest: MemberPullRequest,
@@ -401,6 +402,19 @@ function actionWrite(
         );
     }
   };
+}
+
+/** Which of the pull request's files the member marked viewed, read as a write is made, on their own token. */
+export const viewedRead = (member: MemberPullRequest) =>
+  pullRequestViewedStates(member.token, member.repository, member.number);
+
+/** How the read of the viewed marks went, as the wire answers it. */
+export function viewedAnswerOf(
+  read: MemberWritten<Effect.Success<ReturnType<typeof viewedRead>>>,
+): PullRequestViewedAnswer {
+  return read.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE
+    ? { outcome: read.outcome, files: read.value }
+    : read;
 }
 
 /** The agent pull request resource: the tab's five reads and its one change, to a signed-in member of the agent's workspace. */
@@ -467,13 +481,9 @@ export function agentPullRequestProcedures(seams: AgentPullRequestProcedureSeams
         context.userId,
         agent,
         pullRequest.number,
-        (member) => pullRequestViewedStates(member.token, member.repository, member.number),
+        viewedRead,
       );
-      const answer: PullRequestViewedAnswer =
-        read.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE
-          ? { outcome: read.outcome, files: read.value }
-          : read;
-      return answer;
+      return viewedAnswerOf(read);
     }),
     overviewPullRequest: signedIn.overviewPullRequest.effect(function* ({ input, context }) {
       const { agent, pullRequest } = yield* askedOfAgent(

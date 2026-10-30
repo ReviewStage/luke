@@ -3,7 +3,7 @@ import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
 import { LUKE_MCP_FUNCTION, LUKE_MCP_PATH } from "@luke/service/agents/luke-mcp/app";
 import {
   PULL_REQUEST_CHAPTERS_FUNCTION,
-  PULL_REQUEST_CHAPTERS_ROUTE_PATH,
+  PULL_REQUEST_CHAPTERS_ROUTE_PATHS,
 } from "@luke/service/chapters/chapters-function";
 import {
   MAINTENANCE_SWEEP,
@@ -74,7 +74,7 @@ const GROUPS: readonly GroupDefinition[] = [
   {
     file: FUNCTION_GROUP.PULL_REQUEST_CHAPTERS,
     maxDuration: PULL_REQUEST_CHAPTERS_FUNCTION.MAX_DURATION_SECONDS,
-    routes: [routeKeyOf(PULL_REQUEST_CHAPTERS_ROUTE_PATH)],
+    routes: PULL_REQUEST_CHAPTERS_ROUTE_PATHS.map(routeKeyOf),
   },
   // A native agent's `run_on_mac` waits on the developer's Mac for up to eight minutes, past the platform's default duration.
   {
