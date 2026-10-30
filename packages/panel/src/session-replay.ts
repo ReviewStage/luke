@@ -343,6 +343,8 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
     identified = bootstrap;
     if (before?.accountId === bootstrap.accountId) {
       if (before.name !== bootstrap.name || before.email !== bootstrap.email) {
+        // A name taken away is unset, since setting only what is there would leave the old one standing.
+        if (before.name && !bootstrap.name) posthog.unsetPersonProperties(["name"]);
         posthog.setPersonProperties(personProperties(bootstrap, shell.platform));
       }
       return;

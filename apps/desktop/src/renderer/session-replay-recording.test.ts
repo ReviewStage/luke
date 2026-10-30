@@ -197,6 +197,13 @@ test("a signed-out run records nothing, a sign-in records under the person it na
   assert.equal(posthog.get_distinct_id(), "user-2");
   const renamed = sent.findLast((event) => event.event === "$set");
   assert.equal(renamed?.properties.$set?.email, "ada@new.luke.test");
+  // And its name taken away: the old one is not left standing on the person.
+  applySessionReplay(
+    { ...bootstrap(true, "user-2"), email: "ada@new.luke.test", name: undefined },
+    importRecorder,
+  );
+  const unnamed = sent.findLast((event) => event.properties.$unset !== undefined);
+  assert.deepEqual(unnamed?.properties.$unset, ["name"]);
 
   // A sign-out stops it and lets the person go.
   applySessionReplay(signedOut(true), importRecorder);
