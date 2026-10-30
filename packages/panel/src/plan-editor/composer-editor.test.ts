@@ -42,6 +42,7 @@ afterEach(() => {
   for (const box of boxes.splice(0)) box.handle.destroy();
   document.body.innerHTML = "";
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 /** The device's pointer as a phone's, a finger, or a mouse's, which the browser's media queries answer. */
@@ -732,6 +733,28 @@ test("⌘K over words selected opens the owner's link field and links them, and 
   assert.equal(box.drafts.at(-1), "Read the [guide](https://example.com/guide)");
   box.handle.toggleMark("writing-bold");
   assert.equal(box.drafts.at(-1), "Read the [**guide**](https://example.com/guide)");
+});
+
+test("words selected past the box's scroller are measured by the lines it shows, so the toolbar stands by them", () => {
+  const box = mounted("First line\nSecond line");
+  const field = composerEditor(box.host);
+  // The box scrolls, standing 200 high at 600 from the window's top; the first line is scrolled away above it.
+  field.style.overflowY = "auto";
+  Object.defineProperty(field, "clientHeight", { value: 200 });
+  Object.defineProperty(field, "clientWidth", { value: 500 });
+  vi.spyOn(field, "getBoundingClientRect").mockReturnValue(new DOMRect(100, 600, 500, 200));
+  const hidden = new DOMRect(20, 400, 300, 20);
+  const shown = new DOMRect(120, 700, 200, 20);
+  vi.spyOn(Range.prototype, "getClientRects").mockReturnValue(
+    Object.assign([hidden, shown], { item: () => null }) as unknown as DOMRectList,
+  );
+  vi.spyOn(Range.prototype, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(20, 400, 300, 320),
+  );
+
+  box.selectAll();
+
+  assert.deepEqual(box.handle.selectionBox(), { left: 120, top: 700, right: 320, bottom: 720 });
 });
 
 test("pasted Markdown lands as its marks, a bare address pasted stays the words it is, and one pasted over words selected links them", () => {
