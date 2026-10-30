@@ -1,10 +1,4 @@
-import {
-  EXCESS_KEYS,
-  isRecord,
-  isWireString,
-  type UnparsedWireValue,
-  unparsedWire,
-} from "@luke/wire";
+import { EXCESS_KEYS, isRecord, type UnparsedWireValue } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import { mentionLinksIn } from "./mention-link.js";
@@ -24,9 +18,7 @@ import { trimmedText } from "./text-schema.js";
  * text standing exactly once in the plan, headings and whole sections
  * among it, and an empty replacement deletes. So a heading is renamed, a
  * section split, merged, moved, or struck, and a point moved between
- * sections the way a person edits a doc, while a draft drawn while the
- * notes stream differs from the one before only where the newest note
- * lands (`textNotesInProgress`). A batch of notes is taken whole or not at
+ * sections the way a person edits a doc. A batch of notes is taken whole or not at
  * all: a note naming text or a heading the plan does not hold exactly once
  * refuses every note beside it, so a move can never strike text without
  * placing it. A note's words are
@@ -226,9 +218,6 @@ export function withAgentEdit(
 
 /** A line that opens a Markdown list item. */
 const LIST_ITEM_LINE = /^\s*(?:[-*+]|\d{1,9}[.)])\s/u;
-
-/** A trailing line still being written that holds nothing but Markdown markers, whose escaping would change as it grows. */
-const MARKER_ONLY_LINE = /^[\s#>*+=`~<\-\d.)]+$/u;
 
 function escapedPattern(word: string): string {
   return word.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
@@ -459,24 +448,6 @@ export function applyNotesToText(text: string, notes: readonly PlanNote[]): Text
 
 const readNote = readEither(planNoteSchema, { excess: EXCESS_KEYS.DROP });
 
-/** Text still being written, cut back to its last line that cannot change how it is escaped. */
-function settledText(text: string): string {
-  const lastBreak = text.lastIndexOf("\n");
-  const lastLine = text.slice(lastBreak + 1);
-  return MARKER_ONLY_LINE.test(lastLine) ? text.slice(0, Math.max(0, lastBreak)) : text;
-}
-
-/** The note still being written, read as an addition whose text so far can be shown, or nothing. */
-function growingAddition(value: UnparsedWireValue): PlanNote | undefined {
-  if (!isRecord(value) || value.kind !== NOTE_KIND.ADD || !isWireString(value.text)) {
-    return undefined;
-  }
-  const text = settledText(value.text).trim();
-  if (text.length === 0) return undefined;
-  const read = readNote(unparsedWire({ ...value, text }));
-  return Result.isSuccess(read) ? read.success : undefined;
-}
-
 /** An answer's notes as read, and how many of its notes did not read. */
 export interface NotesRead {
   readonly notes: readonly PlanNote[];
@@ -495,32 +466,4 @@ export function readNotes(answer: UnparsedWireValue): NotesRead {
     return Result.isSuccess(read) ? [read.success] : [];
   });
   return { notes: notes.slice(0, MAX_NOTES), unread: values.length - notes.length };
-}
-
-/**
- * A document's text as the notetaker's answer so far leaves it, for a draft
- * drawn while the answer streams. The answer arrives as the JSON emitted so
- * far, so every note before the last is whole, and each is taken in order
- * up to the first that does not read or cannot be taken, since the save
- * refuses an answer holding one, and the draft ends there. The last
- * note may be cut off partway, so it is drawn only when it adds a point, as
- * the text written so far, held back at a trailing line of nothing but
- * Markdown markers. Each draft therefore differs from the one before only
- * where the newest note lands.
- */
-export function textNotesInProgress(text: string, partial: UnparsedWireValue): string {
-  return takenInOrder(text, notesSoFar(partial)).text;
-}
-
-/** The notes an answer so far holds: every whole note up to the first that does not read, then the last, while it adds a point, as written so far. */
-function notesSoFar(partial: UnparsedWireValue): readonly PlanNote[] {
-  const values = isRecord(partial) && Array.isArray(partial.notes) ? partial.notes : [];
-  const whole: PlanNote[] = [];
-  for (const value of values.slice(0, -1)) {
-    const read = readNote(value);
-    if (Result.isFailure(read)) return whole;
-    whole.push(read.success);
-  }
-  const growing = growingAddition(values.at(-1));
-  return growing === undefined ? whole : [...whole, growing];
 }
