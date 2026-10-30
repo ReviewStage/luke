@@ -154,7 +154,7 @@ function optionHeads(page: HTMLElement): (string | null)[] {
   return openOptions(pane).map((each) => wordsOf(each));
 }
 
-test("an open item's ⋯ menu in the pane's bar, and the × on its question's card, offer Resolve without answering, the menu beside Mark as read or unread and Copy link, which asks first and then settles it at the revision drawn, its ask saying who resolved it; a settled item's menu offers Copy link alone", async () => {
+test("an open item's ⋯ menu in the pane's bar, and the × on its question's card, offer Resolve without answering, the menu beside Mark as read or unread and Copy link, which asks first and then settles it at the revision drawn, the thread saying who resolved it; a settled item's menu offers Copy link alone", async () => {
   world.listedWorkspace = ACME;
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
@@ -193,10 +193,10 @@ test("an open item's ⋯ menu in the pane's bar, and the × on its question's ca
   await confirmClose();
 
   assert.deepEqual(sent, [{ itemId: THRESHOLD.id, revision: THRESHOLD.revision }]);
-  assert.match(
-    wordsOf(itemPane(page).querySelector('[data-inbox-settled="withdrawn"]')) ?? "",
-    /Resolved without an answer$/u,
-    "the ask it left open says it was resolved",
+  assert.equal(
+    wordsOf(itemPane(page).querySelector('[data-inbox-comment="closed"] .luke-comment-name')),
+    "You resolved this without an answer",
+    "the thread says the reader resolved it, in a line of its own",
   );
   act(() => ellipsis().click());
   assert.deepEqual(
@@ -1314,7 +1314,7 @@ test("a to-do with every step ticked by hand stands marked done and Send sends i
   );
 });
 
-test("a replaced or withdrawn ask draws no card: its controls as it offered them, stepped back, nothing picked and taking nothing, over a quiet marker saying a newer question replaced it, or a newer message where none asks, or that it was withdrawn with why under it, or the member who closed the item where no reason was said", async () => {
+test("a replaced or withdrawn ask draws no card: its controls as it offered them, stepped back, nothing picked and taking nothing, over a quiet marker saying a newer question replaced it, or a newer message where none asks, or that it was withdrawn with why under it, or, where a member closed the item, none, the thread ending in a line saying who resolved it", async () => {
   const withdrawnId = "e1b2c3d4-0000-4000-8000-000000000020";
   const closedId = "e1b2c3d4-0000-4000-8000-000000000021";
   const shown = threadItem(
@@ -1341,7 +1341,7 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
   for (const [id, settled, words, why] of [
     [ASKING_ID, "replaced", "Replaced by a newer question", null],
     [withdrawnId, "withdrawn", "Withdrawn", "Product picked 14 days."],
-    [closedId, "withdrawn", "Charles Pan · Resolved without an answer", null],
+    [closedId, null, null, null],
   ] as const) {
     const message =
       pane.querySelector(`[data-message-id="${id}"]`) ??
@@ -1378,8 +1378,8 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
         marker.dataset.inboxSettled,
         wordsOf(marker.querySelector(".luke-badge")),
       ]),
-      [[settled, words]],
-      "the agent's message ends with the marker saying so",
+      settled === null ? [] : [[settled, words]],
+      "the agent's message ends with the marker saying so, or none where the thread's own line says who closed it",
     );
     assert.equal(
       wordsOf(message.querySelector("[data-inbox-settled] [data-inbox-withdrawn-why]")),
@@ -1387,6 +1387,16 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
       "with why it was withdrawn under the pill, where its agent said",
     );
   }
+  assert.deepEqual(
+    [...pane.querySelectorAll(".inbox-thread > li:not([data-inbox-comment='draft'])")]
+      .slice(-1)
+      .map((line) => [
+        line.getAttribute("data-inbox-comment"),
+        wordsOf(line.querySelector(".luke-comment-name")),
+      ]),
+    [["closed", "Charles Pan resolved this without an answer"]],
+    "the thread ends in a line saying who resolved it",
+  );
 
   act(() => world.root?.unmount());
   world.root = undefined;

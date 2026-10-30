@@ -36,10 +36,8 @@ import {
   Text,
   TextField,
 } from "@luke/ui";
-import type { Actor } from "@luke/ui/actor-model";
 import { isComposingKey } from "@luke/ui/composing-key";
 import { CheckIcon, GLYPH, Undo2Icon } from "@luke/ui/icons";
-import { ActorLine, ActorRef } from "../actor-ref.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { INBOX_MISSING, type InboxMissing } from "./inbox-ask-words.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
@@ -892,36 +890,14 @@ const WITHDRAWN = "Withdrawn";
 /**
  * How a withdrawn ask's line reads, after a slashed circle: "Withdrawn"
  * where its agent said why, the why standing apart (`WithdrawnWhy`) so a
- * long one never wraps inside the line, or, where none was said, who closed
- * it without answering, where that is known.
+ * long one never wraps inside the line, or, where none was said, that it
+ * was resolved without an answer.
  */
-export function WithdrawnWords({
-  reason,
-  closer,
-}: {
-  reason: string | undefined;
-  /** Who closed it without answering; none where that is not known. */
-  closer: Actor | undefined;
-}): React.JSX.Element {
-  if (reason !== undefined) {
-    return (
-      <span className={INBOX_ASK_STANDING}>
-        <GLYPH.DISMISSED />
-        {WITHDRAWN}
-      </span>
-    );
-  }
+export function WithdrawnWords({ reason }: { reason: string | undefined }): React.JSX.Element {
   return (
     <span className={INBOX_ASK_STANDING}>
       <GLYPH.DISMISSED />
-      {closer === undefined ? (
-        CLOSED_WORDS
-      ) : (
-        <ActorLine>
-          <ActorRef actor={closer} nameOnly />
-          {` · ${CLOSED_WORDS}`}
-        </ActorLine>
-      )}
+      {reason === undefined ? CLOSED_WORDS : WITHDRAWN}
     </span>
   );
 }
