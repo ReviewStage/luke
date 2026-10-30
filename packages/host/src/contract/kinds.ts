@@ -363,9 +363,11 @@ export const TASKS_ACT_KIND = {
   /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
   TASKS_PAGES: "tasks.pages",
   /**
-   * One plan's pages, followed while the window holds the stream open for
-   * the Inbox's panel beside an item of that plan: each time they move, over
-   * Neon Realtime, never on the document.
+   * One plan's pages, or one agent's on no task, held followed while the
+   * window holds the stream open for the panel beside an Inbox item or an
+   * agent's page, and a while after among those let go lately: what they
+   * hold reaches the panel on app state (`LIVE_READ.PAGES`), so the stream
+   * carries nothing.
    */
   TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
   /**

@@ -6,7 +6,6 @@
   "packages/panel/src/tasks/mentioned-agent-card.tsx": "Step 2: a mention's agents, read off the task list's liveAgents rather than AGENTS_LIST.",
   "packages/panel/src/tasks/use-agent-transcript.ts": "Step 6: transcripts, on the adaptor's cursor feed.",
   "packages/panel/src/tasks/use-channels.ts": "Step 6: channels.",
-  "packages/panel/src/tasks/use-inbox-pages.ts": "Step 2: a task's pages, a per-item read.",
   "packages/panel/src/tasks/use-tasks-tab.ts": "Step 2: a task's history, a per-item read.",
   "packages/panel/src/tasks/use-workspace-members.ts": "Step 3: workspace members, an account read."
 }

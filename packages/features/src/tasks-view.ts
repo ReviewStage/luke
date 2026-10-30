@@ -797,21 +797,10 @@ export const tasksPagesAnswerSchema = EffectSchema.Union([
 
 export type TasksPagesAnswer = typeof tasksPagesAnswerSchema.Type;
 
-/** One plan's pages, followed by a window while its Inbox draws an item of that plan, or one coding agent's on no task while its page is drawn. */
+/** One plan's pages, held by a window while its Inbox draws an item of that plan, or one coding agent's on no task while its page is drawn. */
 export const taskPagesFollowSchema = pagePlaceSchema;
 
 export type TaskPagesFollow = typeof taskPagesFollowSchema.Type;
-
-/**
- * A followed plan's or agent's pages as they now stand, each by its newest version,
- * told each time they move while followed, or why there are none.
- */
-export const taskPagesFollowedSchema = EffectSchema.Union([
-  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString, view: tasksPagesAnswerSchema }),
-  EffectSchema.Struct({ agentId: EffectSchema.NonEmptyString, view: tasksPagesAnswerSchema }),
-]);
-
-export type TaskPagesFollowed = typeof taskPagesFollowedSchema.Type;
 
 /** A page tab's read of one version's source, as the window hears it: its HTML line by line, coloured as HTML, or that the service did not answer. */
 export const tasksPageSourceAnswerSchema = EffectSchema.Union([

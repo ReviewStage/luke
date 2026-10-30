@@ -10,6 +10,7 @@ import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import type { InboxItemPlace } from "@luke/features/inbox-attachment-link";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
+import { LIVE_READ } from "@luke/features/live-wire";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
@@ -123,6 +124,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { APP_SETTINGS_VIEW, useAppSlice, useExperiment } from "../use-app-state.js";
+import { useHostRead } from "../use-host-read.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
@@ -159,7 +161,6 @@ import {
   standChannelPlace,
 } from "./use-channels.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
-import { useInboxPages } from "./use-inbox-pages.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
 import { useLastTask } from "./use-last-task.js";
 import {
@@ -1457,21 +1458,18 @@ export function useTasksTab(input: {
     inboxChosen !== undefined && "taskId" in inboxChosen ? inboxChosen.taskId : undefined;
   const inboxAgent =
     inboxChosen !== undefined && "agentId" in inboxChosen ? inboxChosen.agentId : undefined;
-  const inboxPages = useInboxPages(
+  // Note that the pages are held in the host while drawn and a while after, so choosing another item of the task, or the task again, reads none anew.
+  const inboxPages = useHostRead(
+    LIVE_READ.PAGES,
     inboxView === undefined || inboxTask === undefined ? undefined : { taskId: inboxTask },
-  );
+  ).rows;
   // An agent on no task shows its pages on itself, which its page's panel draws as a task's draws its own.
-  const agentPages = useInboxPages(
+  const agentPages = useHostRead(
+    LIVE_READ.PAGES,
     inboxView !== undefined || pageAgent === undefined ? undefined : { agentId: pageAgent },
-  );
-  const agentPageIds = useMemo(
-    () => (agentPages.pages ?? NO_PAGES).map((page) => page.id),
-    [agentPages.pages],
-  );
-  const inboxPageIds = useMemo(
-    () => (inboxPages.pages ?? NO_PAGES).map((page) => page.id),
-    [inboxPages.pages],
-  );
+  ).rows;
+  const agentPageIds = useMemo(() => (agentPages ?? NO_PAGES).map((page) => page.id), [agentPages]);
+  const inboxPageIds = useMemo(() => (inboxPages ?? NO_PAGES).map((page) => page.id), [inboxPages]);
   const inboxAgents = useMemo(
     () => (inboxAgent === undefined ? NO_IDS : [inboxAgent]),
     [inboxAgent],
@@ -3388,13 +3386,13 @@ export function useTasksTab(input: {
         ),
       single: inboxView !== undefined && inboxSingle,
       onSingle: setInboxSingle,
-      pages: inboxPages.pages,
+      pages: inboxPages,
       onTaskAgents: inboxTaskAgents.onRead,
     },
     // An agent's page stands over the task's place as the Inbox does, so a version history there gives way.
     agentView: {
       agentId: agentView?.agentId,
-      pages: agentPages.pages,
+      pages: agentPages,
       onOpen: guard((agentId: string) => {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.AGENT, agentId });

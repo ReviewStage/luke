@@ -89,8 +89,13 @@ function followedFromReads(
     );
 }
 
-/** A hold on a task's or an agent's inbox, as the host's answers it: a stream carrying nothing, standing until the window closes it. */
-function quietHold(): Promise<PortActResult<typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW>> {
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, and its pages. */
+type HoldKind =
+  | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
+  | typeof TASKS_ACT_KIND.TASKS_PAGES_FOLLOW;
+
+/** A hold as the host answers it: a stream carrying nothing, standing until the window closes it. */
+export function quietHold<Kind extends HoldKind>(): Promise<PortActResult<Kind>> {
   const ended = Promise.withResolvers<IteratorReturnResult<undefined>>();
   const close = () => ended.resolve({ done: true, value: undefined });
   const stream: AsyncIteratorObject<never, undefined, unknown> = {
@@ -105,25 +110,25 @@ function quietHold(): Promise<PortActResult<typeof AGENT_INBOX_ACT_KIND.AGENTS_I
     },
   };
   // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
-  return Promise.resolve(
-    stream as unknown as PortActResult<typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW>,
-  );
+  return Promise.resolve(stream as unknown as PortActResult<Kind>);
 }
 
 /**
  * Installs an act port answering only the procedures given, each by its
  * kind, as a test's window calls them. A follow of the automations it does
  * not answer is answered from the list's or the runs' read where it answers
- * that, and a hold on a task's or an agent's inbox it does not answer is
- * held quietly, since what the hold reads reaches the window on app state.
+ * that, and a hold on a task's or an agent's inbox or pages it does not
+ * answer is held quietly, since what the hold reads reaches the window on
+ * app state.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
   const list = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_LIST];
   const runs = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS];
-  const held: Partial<FakeActPort> =
-    procedures[AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW] === undefined
-      ? { ...procedures, [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: quietHold }
-      : procedures;
+  const held: Partial<FakeActPort> = {
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: quietHold,
+    [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: quietHold,
+    ...procedures,
+  };
   const answered: Partial<FakeActPort> =
     held[AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW] !== undefined ||
     (list === undefined && runs === undefined)

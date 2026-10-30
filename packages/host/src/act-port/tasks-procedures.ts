@@ -24,7 +24,6 @@ import {
   type TaskHistoryFollow,
   type TaskHistoryFollowed,
   type TaskPagesFollow,
-  type TaskPagesFollowed,
   type TasksBlockAnswer,
   type TasksBlockParams,
   type TasksBrowserTabOpenAnswer,
@@ -123,10 +122,9 @@ export interface TasksProceduresDependencies {
     tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
     tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
     tasksPages(params: TasksPagesParams): Effect.Effect<TasksPagesAnswer>;
-    /** A plan's pages followed at the host, their changes heard through `onTaskPagesChanged`. */
+    /** A plan's or agent's pages held followed at the host while any stream of them stands; what they hold reaches the panel on app state. */
     tasksPagesFollow(scope: TaskPagesFollow): Effect.Effect<void>;
     tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
-    onTaskPagesChanged(listener: (followed: TaskPagesFollowed) => void): () => void;
     /** A plan's newest page of history followed at the host, its changes heard through `onTaskHistoryChanged`. */
     tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
     tasksHistoryUnfollow(scope: TaskHistoryFollow): Effect.Effect<void>;
@@ -177,7 +175,7 @@ function adminPage(serviceBaseUrl: string): string | undefined {
 export function tasksProcedures(dependencies: TasksProceduresDependencies) {
   const { host, openExternal } = dependencies;
   /** How many streams stand open of each plan's pages, and each agent's on no task, by its id. */
-  const openPages: OpenFollows<TasksPagesAnswer> = MutableHashMap.empty();
+  const openPages: OpenFollows<never> = MutableHashMap.empty();
   /** How many streams stand open of each agent's or task's Browser tabs, by its id. */
   const openBrowserTabs: OpenFollows<TasksBrowserTabsAnswer> = MutableHashMap.empty();
   /** How many streams stand open of each plan's history. */
@@ -504,21 +502,19 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
     [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        const pages = followedStream(
+        // Note that nothing is heard down the hold, since the held pages reach the panel on app state.
+        const hold = followedStream(
           {
             keyOf: (scope: TaskPagesFollow) => pagePlaceId(scope),
             follow: host.tasksPagesFollow,
             unfollow: host.tasksPagesUnfollow,
-            onChanged: host.onTaskPagesChanged,
-            valueOf: (changed: TaskPagesFollowed, scope: TaskPagesFollow) =>
-              pagePlaceId(changed) === pagePlaceId(scope)
-                ? Option.some(changed.view)
-                : Option.none(),
+            onChanged: () => () => undefined,
+            valueOf: () => Option.none<never>(),
           },
           openPages,
           input,
         );
-        return streamed(yield* Stream.toAsyncIterableEffect(pages));
+        return streamed(yield* Stream.toAsyncIterableEffect(hold));
       },
     ),
     [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actPort[TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW].effect(

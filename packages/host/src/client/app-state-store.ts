@@ -10,7 +10,7 @@ import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
 import type { BuildCommit } from "@luke/settings/update";
 import { keepIdentity } from "@luke/wire";
 import { type Context, Effect, type Scope, Stream, SubscriptionRef } from "effect";
-import { type AppState, NO_ACCESS, NO_HOLDER_INBOXES, UNREAD } from "../app-state.js";
+import { type AppState, NO_ACCESS, NO_HOLDER_INBOXES, NO_PAGES, UNREAD } from "../app-state.js";
 import type { HostBootstrap } from "../host-operator.js";
 import type { RunMode } from "../run-mode.js";
 import { idleUpdateSnapshot } from "../update-service.js";
@@ -222,6 +222,7 @@ export function initialAppState(
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], agents: [], failedRuns: [] },
     [LIVE_READ.INBOX_ITEMS]: UNREAD,
     [LIVE_READ.HOLDER_INBOX]: NO_HOLDER_INBOXES,
+    [LIVE_READ.PAGES]: NO_PAGES,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     network: { online: true },

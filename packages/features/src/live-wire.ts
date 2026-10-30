@@ -728,6 +728,8 @@ export const LIVE_READ = {
   INBOX_ITEMS: "inboxItems",
   /** One plan's inbox, or one agent's, by its holder: the service's `taskInbox` or `agentInbox` query, by the holder's kind, held for the windows that chose it and a few they chose lately. */
   HOLDER_INBOX: "holderInbox",
+  /** One task's pages, or one agent's on no task, by what they stand on: the service's `taskPagesLive` or `agentPagesLive` query, by its kind, held for the windows that chose it and a few they chose lately. */
+  PAGES: "pages",
 } as const;
 
 export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];
