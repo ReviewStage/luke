@@ -123,6 +123,8 @@ const followingDevice = (
     readonly runsUntilSignalled?: boolean;
     /** How long making the agent's repository takes, no time where none is named. */
     readonly worktreeTakes?: Duration.Input;
+    /** Making the agent's repository fails, as a clone that cannot be fetched does. */
+    readonly worktreeFails?: boolean;
     /** The service's beat names no open launches, as one from before the list does. */
     readonly listsNoLaunches?: boolean;
     /** The clock the follower reads, the test's own where none is named. */
@@ -150,7 +152,10 @@ const followingDevice = (
       if (program === "/bin/bash" && args[0] === "-l")
         return { stdout: "/usr/bin:/bin", exitCode: 0 };
       if (program === "/bin/bash" && args[1] === "exit 0")
-        return { exitCode: 0, after: options.worktreeTakes ?? Duration.zero };
+        return {
+          exitCode: options.worktreeFails === true ? 1 : 0,
+          after: options.worktreeTakes ?? Duration.zero,
+        };
       if (program === "/bin/bash") return { exitCode: 0 };
       if (program === RUNNER) return runner;
       return undefined;
@@ -572,6 +577,27 @@ it.effect(
         assert.equal(claims[1], claims[0], "the retry is the same claim");
         assert.equal(spawned.filter((each) => each.program === RUNNER).length, 1);
         assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
+      }),
+    ),
+);
+
+it.effect(
+  "a launch whose repository could not be made is settled unstarted and lets go of the GitHub token it was handed",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { spawned, settled, asked, files } = yield* followingDevice(() => Effect.void, {
+          worktreeFails: true,
+        });
+        yield* until(() => settled.some((each) => each.id === LINE_ID));
+
+        assert.deepEqual(asked, [AGENT_ID]);
+        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 1 }]);
+        assert.equal(files.has(GH_HOSTS), false, "the token stays readable with no turn running");
+        assert.equal(
+          spawned.some((each) => each.program === RUNNER),
+          false,
+        );
       }),
     ),
 );

@@ -1211,6 +1211,8 @@ export function composeLocalAgents(
                   : sandbox.deviceGit(agentId),
               Option.getOrUndefined(Option.map(fetched, (state) => ({ base: state.baseCommit }))),
             );
+            // Note that the token was written before the repository was made, and no turn reads it where none starts.
+            if (!made && direct) yield* agentGithubForgotten(layout.folder);
             if (!made && restore !== undefined) {
               yield* saves.notRestored(
                 restore.generation,
