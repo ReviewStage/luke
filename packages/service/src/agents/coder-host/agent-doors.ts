@@ -17,7 +17,6 @@ import {
   readAgentHeaderOfConversation,
   readAgentOfConversation,
 } from "@luke/database/models/agent-store";
-import { AGENT_KIND } from "@luke/features/agent-wire";
 import { PAGE_OWNER, PAGE_SHOWER } from "@luke/features/page-wire";
 import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
 import { Effect, Option, Result } from "effect";
@@ -224,8 +223,7 @@ export function runAgentOpenPullRequest(
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return pullRequestRejected(found.failure);
-    // Note that eve offers the tool to no pilot and no agent with no repository (`repositoryToolsOf`); a harness may call it anyway, and this refuses it.
-    if (found.success.kind === AGENT_KIND.PILOT) return pullRequestRejected(CODER_REFUSAL.PILOT);
+    // Note that eve offers the tool to no agent with no repository (`repositoryToolsOf`); a harness may call it anyway, and this refuses it.
     if (!hasRepository(found.success)) return pullRequestRejected(CODER_REFUSAL.NO_REPOSITORY);
     return yield* openPullRequest(admitted.target, found.success, input);
   }).pipe(

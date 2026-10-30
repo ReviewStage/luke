@@ -1046,55 +1046,14 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
         }),
     );
 
-    it.effect(
-      "a coder with a repository is offered its pull request and apply_patch, and a pilot neither, its pull request refused",
-      () =>
-        Effect.gen(function* () {
-          const { agent } = yield* unclaimedAgent();
-          assert.deepEqual(
-            [...repositoryToolsOf(agent)].sort(),
-            [CODER_TOOL.APPLY_PATCH, CODER_TOOL.OPEN_PULL_REQUEST].sort(),
-          );
-
-          // A pilot on the same kind of task: it plans and starts coding agents, and ships no code itself.
-          const host = yield* hostOverStore();
-          const userId = yield* openGithubUser();
-          const task = yield* startTask(userId, {
-            name: "Teammate invitations",
-            repository: "acme/relay",
-          });
-          const { agent: pilot } = Option.getOrThrow(
-            yield* createAgent(userId, {
-              taskId: task.id,
-              kind: AGENT_KIND.PILOT,
-              idempotencyKey: "start-pilot",
-              model: "anthropic/claude-opus-5.5",
-              effort: "high",
-              planSnapshot: PLAN_TEXT,
-              prompt: null,
-              repository: "acme/relay",
-            }),
-          );
-          const sessionId = mintSession();
-          const auth = ownSeat(userId, pilot.conversationId);
-          const starting = yield* host.admitStarting(auth, sessionId);
-          assert.ok(Result.isSuccess(starting));
-          yield* host.sessionStarted(starting.success, sessionId);
-          const admitted = yield* host.admit(auth, sessionId);
-          assert.ok(Result.isSuccess(admitted));
-
-          assert.deepEqual([...repositoryToolsOf(pilot)], []);
-          // Note that a harness may call a tool left off its list, so the door itself refuses the pilot.
-          assert.deepEqual(
-            yield* host
-              .openPullRequest(
-                admitted.success,
-                unparsedWire({ head: "luke/x", title: "x", body: "" }),
-              )
-              .pipe(Effect.provide(reachingRelay())),
-            { status: ACTION_RESULT_STATUS.REJECTED, reason: CODER_REFUSAL.PILOT },
-          );
-        }),
+    it.effect("an agent with a repository is offered its pull request and apply_patch", () =>
+      Effect.gen(function* () {
+        const { agent } = yield* unclaimedAgent();
+        assert.deepEqual(
+          [...repositoryToolsOf(agent)].sort(),
+          [CODER_TOOL.APPLY_PATCH, CODER_TOOL.OPEN_PULL_REQUEST].sort(),
+        );
+      }),
     );
 
     it.effect(
