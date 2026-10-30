@@ -1,8 +1,9 @@
 import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import { useMemo } from "react";
-import { type InboxListed, openItems } from "./inbox-model.js";
+import { type InboxGroup, type InboxListed, openItems } from "./inbox-model.js";
 import {
   agentHoldings,
+  type HolderInboxItems,
   inboxGroups,
   taskHoldings,
   useHolderInboxItems,
@@ -33,14 +34,16 @@ export interface WaitingItems {
 }
 
 /**
- * Every open Inbox item of the listed workspace's plans, and of its agents
- * with no plan, the latest changed first, read as the window's Inbox reads
- * them: each plan main says holds an item and the listed workspace's list
- * holds, read whole, a teammate's agent's items among them, as every
- * member's Inbox lists them, and each agent with no plan main says
- * holds an item.
+ * Every holder of the listed workspace's Inbox, its items open and settled
+ * alike, read as the window's Inbox reads them: each plan main says holds
+ * an item and the listed workspace's list holds, read whole, a teammate's
+ * agent's items among them, as every member's Inbox lists them, and each
+ * agent with no plan main says holds an item; and the read they come from.
  */
-export function useWaitingItems(tasks: TasksControl): WaitingItems {
+export function useListedInboxGroups(tasks: TasksControl): {
+  readonly groups: readonly InboxGroup[];
+  readonly read: HolderInboxItems;
+} {
   const { inboxTasks, tasks: listed } = tasks.listed;
   // Note that every plan holding an item is read, not only those main counts as waiting on the
   // account, because those are its own agents' alone, and the Inbox lists every member's.
@@ -54,14 +57,20 @@ export function useWaitingItems(tasks: TasksControl): WaitingItems {
       [holdings, tasks.inboxAgents],
     ),
   );
-  const entries = inboxGroups(read.items, {
+  const groups = inboxGroups(read.items, {
     tasks: holdings,
     listed,
     agents: tasks.inboxAgents,
     workspaceId: tasks.workspace?.id,
   });
+  return { groups, read };
+}
+
+/** Every open Inbox item of the listed workspace's plans, and of its agents with no plan, the latest changed first, read as the window's Inbox reads them (`useListedInboxGroups`). */
+export function useWaitingItems(tasks: TasksControl): WaitingItems {
+  const { groups, read } = useListedInboxGroups(tasks);
   // Note that every open item is kept as one that waits, whoever started its agent.
-  const items = openItems(entries);
+  const items = openItems(groups);
   return {
     items,
     readTasks: read.current[INBOX_SCOPE_KIND.PLAN],

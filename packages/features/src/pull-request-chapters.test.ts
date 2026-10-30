@@ -334,9 +334,19 @@ test("a thread on a whole file stands in every chapter holding a hunk of it, and
 
 test("a chapter's lines are what its own hunks add and remove, each counted once", () => {
   assert.deepEqual(
-    chapterLineCounts(story("Most", [seatsFirst, seatsSecond, added, seatsFirst, logo]), HUNKS),
-    { additions: 4, deletions: 1 },
+    chapterLineCounts(story("Most", [seatsFirst, seatsSecond, added, seatsFirst, logo]), FILES),
+    { additions: 4, deletions: 1, files: 3 },
   );
+});
+
+test("a chapter's file with no hunks counts the lines GitHub says it changes, as Files changed sums them", () => {
+  const huge = changed("pnpm-lock.yaml", null, {
+    omitted: PATCH_OMITTED.TOO_LARGE,
+    additions: 120,
+    deletions: 30,
+  });
+  const other = otherChangesChapter([{ path: "pnpm-lock.yaml", oldStart: HEADER_ONLY_OLD_START }]);
+  assert.deepEqual(chapterLineCounts(other, [huge]), { additions: 120, deletions: 30, files: 1 });
 });
 
 test("a literal \\n a model escaped twice is a newline in prose and in a fenced block, never in inline code", () => {
