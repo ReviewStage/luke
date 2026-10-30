@@ -26,7 +26,7 @@ import {
   useDrawerSwipe,
 } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Activity, Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
 import { AdminCollectionPage, AdminPlaceFrameProvider } from "../admin/chrome/page-header.js";
 import type { AdminView } from "../admin/routing.js";
@@ -610,6 +610,59 @@ function automationsPlaceKey(place: AutomationsPlace): string {
 }
 
 /**
+ * Whether the window keeps its Inbox drawn while it is away from it: from
+ * the Inbox's first visit, for as long as the shell stands (`standing`) on
+ * the workspace it was visited in. Settings, a version history, or the
+ * sign-in taking the window, or another workspace listed, lets it go, so it
+ * is drawn afresh at its next visit rather than kept for nothing.
+ */
+function useInboxKept(open: boolean, workspaceId: string | undefined, standing: boolean): boolean {
+  const keptFor = useRef<string | undefined>(undefined);
+  if (!standing) keptFor.current = undefined;
+  else if (open) keptFor.current = workspaceId;
+  return standing && keptFor.current !== undefined && keptFor.current === workspaceId;
+}
+
+/**
+ * The window's Inbox, kept drawn, hidden, between visits, as ⌘K's dialog
+ * is between openings, so a return draws it in its first frame with its
+ * rows, scroll, view, and search as they stood; the item chosen in it is
+ * still the window's to say (`use-tasks-tab.ts`), none from its row. Note
+ * that React's `Activity` hides it (`display: none`, so nothing in it takes
+ * focus or is found) and takes down its effects, its keys, commands, and
+ * subscriptions to the window's state among them, and that what it is
+ * handed is held as it was last shown, so a patch to the window draws
+ * nothing in it until it is shown again. Its effects coming back up is its
+ * return, which is where `inbox.open` ends (`use-inbox-spans.ts`).
+ */
+function KeptInbox({
+  shown,
+  tasks,
+  room,
+  chipCards,
+  mentionedAgents,
+}: {
+  shown: boolean;
+  tasks: TasksControl;
+  room: ShellRoom;
+  chipCards: React.ComponentProps<typeof ChipCards>["value"];
+  mentionedAgents: React.ComponentProps<typeof MentionedAgents>["value"];
+}): React.JSX.Element {
+  const held = useRef({ tasks, room, chipCards, mentionedAgents });
+  if (shown) held.current = { tasks, room, chipCards, mentionedAgents };
+  const last = held.current;
+  return (
+    <Activity mode={shown ? "visible" : "hidden"}>
+      <MentionedAgents value={last.mentionedAgents}>
+        <ChipCards value={last.chipCards}>
+          <DesktopInbox tasks={last.tasks} room={last.room} />
+        </ChipCards>
+      </MentionedAgents>
+    </Activity>
+  );
+}
+
+/**
  * Luke's window: the sidebar on the left and the chosen work on the right,
  * or the sign-in over the whole window while no account stands. Every
  * press is the control's it came from; this only lays them out. Settings
@@ -662,6 +715,12 @@ export function DesktopShell({
 }): React.JSX.Element {
   const { account } = settings;
   const shell = useRef<HTMLDivElement>(null);
+  const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
+  const inboxKept = useInboxKept(
+    tasks.inboxView.open,
+    tasks.workspace?.id,
+    !gated && tasks.signedIn && tab !== PANEL_TAB.SETTINGS && !tasks.history.open,
+  );
   useSettingsFocusReturn(tab === PANEL_TAB.SETTINGS);
   const keepOverlay = useFloatDismiss({ state: sidebar.overlay, onState: sidebar.onOverlay });
   // A phone's drawer follows a finger swiping in from the screen's left edge, or back out, as a phone's own drawers do.
@@ -676,7 +735,6 @@ export function DesktopShell({
   });
   // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
   const summary = useSummaryPin(sidebar.staged);
-  const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
   const offline = useOffline();
   usePlaceCommands(!gated, tab, onTabChange, tasks, settings, history);
   // The Admin place is an admin's alone: an account known to be no admin, or no longer one, is given the task's place back,
@@ -896,13 +954,11 @@ export function DesktopShell({
         room={room}
       />
       {room === SHELL_ROOM.NARROW ? <DrawerScrim open={drawerOver} /> : null}
-      <main className="desktop-main" inert={drawerOver}>
+      <main className="desktop-main" inert={drawerOver} data-inbox-shown={String(inboxOpen)}>
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
-            {inboxOpen ? (
-              <DesktopInbox tasks={tasks} room={room} />
-            ) : pageAgent !== undefined ? (
+            {inboxOpen ? null : pageAgent !== undefined ? (
               // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
               <DesktopAgentPage
                 key={pageAgent}
@@ -968,6 +1024,16 @@ export function DesktopShell({
             ) : (
               <DesktopTasks tasks={tasks} looks={looks} summary={summary} room={room} away={away} />
             )}
+            {/* Note that the Inbox kept stands after the page shown in its place, so a lookup of the page's first box finds the page's. */}
+            {inboxOpen || inboxKept ? (
+              <KeptInbox
+                shown={inboxOpen}
+                tasks={tasks}
+                room={room}
+                chipCards={chipCards}
+                mentionedAgents={mentionedAgents}
+              />
+            ) : null}
           </ChipCards>
         </MentionedAgents>
       </main>

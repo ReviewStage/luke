@@ -199,11 +199,12 @@ body,
   width: var(--luke-space-6);
 }
 
+/* Note that the side panel of the Inbox kept hidden between visits (`desktop-shell.tsx`) stands nowhere. */
 .desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]:has(
-    .side-panel[data-full-screen="true"]
-  )
-  .title-bar-controls:not([data-edge]),
-.desktop-shell:has(.side-panel) .title-bar-controls[data-edge="end"] {
+  .side-panel[data-full-screen="true"]:not([data-inbox-shown="false"] > [data-page="inbox"] *)
+) .title-bar-controls:not([data-edge]),
+.desktop-shell:has(.side-panel:not([data-inbox-shown="false"] > [data-page="inbox"] *))
+  .title-bar-controls[data-edge="end"] {
   --title-bar-ground: var(--luke-color-well);
 }
 

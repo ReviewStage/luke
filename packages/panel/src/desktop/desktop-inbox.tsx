@@ -577,6 +577,7 @@ export const DesktopInbox = memo(function DesktopInbox({
             ref={onArea}
             className="desktop-task relative flex min-h-0 flex-1"
             data-panel-open={String(sidePanel.open)}
+            data-page="inbox"
           >
             {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
             <PageFind
