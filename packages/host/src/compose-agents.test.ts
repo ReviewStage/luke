@@ -296,6 +296,9 @@ function fakeService() {
     removeHost: () => Effect.succeed({ failure: "unanswered" }),
     keepHostInstallToken: () => Effect.succeed({ failure: "unanswered" }),
     revokeHostInstallToken: () => Effect.succeed({ failure: "unanswered" }),
+    readHostPairing: () => Effect.succeed({ failure: "unanswered" }),
+    approveHostPairing: () => Effect.succeed({ failure: "unanswered" }),
+    denyHostPairing: () => Effect.succeed({ failure: "unanswered" }),
     list: (taskId, includeArchived) =>
       Effect.sync(() => {
         asked.push(includeArchived === true ? `list:${taskId}:archived` : `list:${taskId}`);

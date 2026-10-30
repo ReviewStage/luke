@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { APP_LINK_CLAIM, APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
-import type { ReadLink } from "@luke/features/link-grammar";
+import type { ShownLink } from "@luke/features/link-grammar";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
 import type { AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
 import { applyThemePreference, NativeTheme } from "@luke/host/appearance";
@@ -231,7 +231,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.focusExpanded();
   };
   // A Luke link's place opens in the panels, the window brought forward.
-  const openAppLink = (link: ReadLink): void => {
+  const openAppLink = (link: ShownLink): void => {
     panels.focusExpanded();
     panels.broadcast(PUSH.SHOW_LINK, link);
   };

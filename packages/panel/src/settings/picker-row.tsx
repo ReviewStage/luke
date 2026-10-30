@@ -36,7 +36,9 @@ import { SettingMarks } from "./marks.js";
  *
  * The chip is `@luke/ui`'s field `Chip`, at the column a settings row's
  * pop-ups share unless its place names another width, and a `PickerRow`
- * stands it in `@luke/ui`'s `SettingsRow`.
+ * stands it in `@luke/ui`'s `SettingsRow`. A place that is no form, a task's
+ * head, may draw it as a toolbar's chip instead, quiet until the pointer is
+ * on it or its menu is open, and with no chevron.
  */
 
 /** What a picker is handed: the value it names and the menu it drops. */
@@ -68,6 +70,8 @@ interface PickerProps {
   align?: PopoverAlign | undefined;
   /** How wide the chip stands; the settings column where none is named. */
   width?: ChipWidth | undefined;
+  /** The chip's look: a field's, ending in its chevron, where none is named, or a toolbar's. */
+  look?: typeof CHIP_LOOK.FIELD | typeof CHIP_LOOK.TOOLBAR | undefined;
   /** How wide the menu stands, the room allowing; narrow where none is named. */
   menuWidth?: PopoverWidth | undefined;
   /** Reads what the menu lists now, as it opens, so a list that failed to read is asked for again. */
@@ -100,6 +104,7 @@ export function Picker({
   hint,
   align = POPOVER_ALIGN.END,
   width = CHIP_WIDTH.FIELD,
+  look = CHIP_LOOK.FIELD,
   menuWidth = POPOVER_WIDTH.NARROW,
   onOpen,
   onSearch,
@@ -134,9 +139,9 @@ export function Picker({
       <Tooltip label={open ? undefined : hint}>
         <Chip
           ref={chip}
-          look={CHIP_LOOK.FIELD}
+          look={look}
           width={width}
-          chevron
+          chevron={look === CHIP_LOOK.FIELD}
           {...(anchor ? searchAnchorProps(anchor) : undefined)}
           aria-label={`${label}: ${valueLabel}`}
           aria-describedby={describedBy}

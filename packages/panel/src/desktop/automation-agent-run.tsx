@@ -12,8 +12,10 @@ import {
   Badge,
   FiringGlyph,
   GAP,
-  IconButton,
   Inline,
+  PAGER_AXIS,
+  PAGER_COUNT,
+  Pager,
   PaneBar,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -23,7 +25,7 @@ import {
   Tooltip,
   useMinute,
 } from "@luke/ui";
-import { ChevronLeftIcon, ChevronRightIcon, GLYPH } from "@luke/ui/icons";
+import { GLYPH } from "@luke/ui/icons";
 import { AGENT_STATUS_TONE } from "../tasks/agent-model.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
@@ -54,6 +56,9 @@ const AUTOMATIONS_PLACE = "Automations";
 /** What the arrows are called. */
 const OLDER_RUN = "Older run";
 const NEWER_RUN = "Newer run";
+
+/** What the place between the arrows counts, as it says it: "Run 3 of 5". */
+const RUN_NOUN = "Run";
 
 /** The trail an agent an automation started leads its bar with; none for any other agent. */
 export function automationTrail(
@@ -134,31 +139,18 @@ export function AutomationRunSteps({
 }): React.JSX.Element {
   const { older, newer } = place;
   return (
-    <Inline gap={GAP.TIGHT} wrap={false}>
-      <Tooltip label={OLDER_RUN}>
-        <IconButton
-          icon={<ChevronLeftIcon />}
-          label={OLDER_RUN}
-          disabled={older === undefined}
-          onClick={older === undefined ? undefined : () => onOpenAgent(older)}
-        />
-      </Tooltip>
-      <Text
-        as={TEXT_ELEMENT.SPAN}
-        variant={TEXT_VARIANT.CAPTION}
-        tone={TEXT_TONE.MUTED}
-        className="automation-agent-run-count"
-      >
-        {`Run ${place.at} of ${place.count}`}
-      </Text>
-      <Tooltip label={NEWER_RUN}>
-        <IconButton
-          icon={<ChevronRightIcon />}
-          label={NEWER_RUN}
-          disabled={newer === undefined}
-          onClick={newer === undefined ? undefined : () => onOpenAgent(newer)}
-        />
-      </Tooltip>
-    </Inline>
+    <Pager
+      axis={PAGER_AXIS.HORIZONTAL}
+      count={PAGER_COUNT.BETWEEN}
+      place={{ at: place.at, total: place.count, noun: RUN_NOUN }}
+      previous={{
+        label: OLDER_RUN,
+        onStep: older === undefined ? undefined : () => onOpenAgent(older),
+      }}
+      next={{
+        label: NEWER_RUN,
+        onStep: newer === undefined ? undefined : () => onOpenAgent(newer),
+      }}
+    />
   );
 }

@@ -1,4 +1,4 @@
-import { type ReadLink, readLink } from "@luke/features/link-grammar";
+import { readShownLink, type ShownLink } from "@luke/features/link-grammar";
 import { isAppLinkProtocol, LINK_HOME } from "@luke/features/link-home";
 
 /**
@@ -28,7 +28,7 @@ export const APP_LINK_SCHEME = LINK_HOME.APP_SCHEME;
 const MAX_HELD = 8;
 
 /** What opens a link's place in the panels. */
-type AppLinkOpener = (link: ReadLink) => void;
+type AppLinkOpener = (link: ShownLink) => void;
 
 /** The links the system hands the app, held until a window can open them. */
 export interface AppLinkInbox {
@@ -46,9 +46,9 @@ function isAppLink(argument: string): boolean {
   return colon > 0 && isAppLinkProtocol(argument.slice(0, colon + 1));
 }
 
-/** The place a link in the app's own scheme names, and the workspace it was written under; nothing for any other address. */
-export function placeOfAppLink(url: string): ReadLink | undefined {
-  return isAppLink(url) ? readLink(url) : undefined;
+/** The place a link in the app's own scheme names, and the workspace it was written under where it names one; nothing for any other address. */
+export function placeOfAppLink(url: string): ShownLink | undefined {
+  return isAppLink(url) ? readShownLink(url) : undefined;
 }
 
 /** The link a launch's arguments carry, as a second launch hands one: the last argument in the app's own scheme. */
@@ -94,7 +94,7 @@ export function appLinkClaim(launch: {
 
 /** An inbox holding no link and able to open none yet. */
 export function appLinkInbox(): AppLinkInbox {
-  const held: ReadLink[] = [];
+  const held: ShownLink[] = [];
   let opener: AppLinkOpener | undefined;
   let closed = false;
   return {

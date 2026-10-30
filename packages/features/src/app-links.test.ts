@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { appLinkClaim, appLinkInArguments, appLinkInbox, placeOfAppLink } from "./app-links.js";
-import { LINK_PLACE, type ReadLink } from "./link-grammar.js";
+import { LINK_PLACE, type ReadLink, type ShownLink } from "./link-grammar.js";
 
 /**
  * A Luke link the system hands the app: read only as a place in Luke, in
@@ -55,7 +55,7 @@ test("a second launch's link is the last of its arguments in the app's own schem
 
 test("links that arrive before a panel can open them open once it can, in order, and later ones as they come", () => {
   const inbox = appLinkInbox();
-  const opened: ReadLink[] = [];
+  const opened: ShownLink[] = [];
 
   inbox.arrive(SECTION_LINK);
   inbox.arrive("https://example.com");
@@ -70,7 +70,7 @@ test("links that arrive before a panel can open them open once it can, in order,
 
 test("once the launch is torn down a link opens nothing, and none is held for a later window", () => {
   const inbox = appLinkInbox();
-  const opened: ReadLink[] = [];
+  const opened: ShownLink[] = [];
   inbox.ready((place) => opened.push(place));
 
   inbox.close();

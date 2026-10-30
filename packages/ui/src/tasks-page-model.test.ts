@@ -15,6 +15,7 @@ import {
   EARLIER_BOARD_PROPERTIES,
   EARLIER_LIST_PROPERTIES,
   keptTasksDisplay,
+  LIST_COLUMN,
   listPropertiesFitting,
   NO_TASKS_FILTER,
   TASK_MAKER,
@@ -663,10 +664,14 @@ test("a display kept since rows offered the assignee keeps it off where its read
   expect(offAgain).not.toContain(TASK_PROPERTY.ASSIGNEE);
 });
 
-test("a List narrowing folds its properties away one by one, creator, agents, repository, key, then waiting, so its name keeps its room, and never its chips or its time", () => {
-  const every = Object.values(TASK_PROPERTY);
+test("a List narrowing folds its columns away one by one, creator, agents, sub-tasks, repository, key, then waiting, so its name keeps its room, and never its chips or its time", () => {
+  // The sub-tasks' count stands before the time, as a row draws it.
+  const every = Object.values(TASK_PROPERTY).flatMap((property) =>
+    property === TASK_PROPERTY.UPDATED ? [LIST_COLUMN.SUB_TASKS, property] : [property],
+  );
   const drawn = (width: number) => listPropertiesFitting(every, width);
   const { PRIORITY, KEY, STATUS, WAITING, REPOSITORY, ASSIGNEE, AGENTS, UPDATED } = TASK_PROPERTY;
+  const { SUB_TASKS } = LIST_COLUMN;
 
   expect(drawn(1100)).toEqual(every);
   expect(drawn(900)).toEqual([
@@ -677,9 +682,20 @@ test("a List narrowing folds its properties away one by one, creator, agents, re
     REPOSITORY,
     ASSIGNEE,
     AGENTS,
+    SUB_TASKS,
     UPDATED,
   ]);
-  expect(drawn(800)).toEqual([PRIORITY, KEY, STATUS, WAITING, REPOSITORY, ASSIGNEE, UPDATED]);
+  expect(drawn(800)).toEqual([
+    PRIORITY,
+    KEY,
+    STATUS,
+    WAITING,
+    REPOSITORY,
+    ASSIGNEE,
+    SUB_TASKS,
+    UPDATED,
+  ]);
+  expect(drawn(770)).toEqual([PRIORITY, KEY, STATUS, WAITING, REPOSITORY, ASSIGNEE, UPDATED]);
   expect(drawn(700)).toEqual([PRIORITY, KEY, STATUS, WAITING, ASSIGNEE, UPDATED]);
   expect(drawn(560)).toEqual([PRIORITY, STATUS, WAITING, ASSIGNEE, UPDATED]);
   expect(drawn(480)).toEqual([PRIORITY, STATUS, ASSIGNEE, UPDATED]);

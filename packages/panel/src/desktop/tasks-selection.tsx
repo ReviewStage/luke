@@ -24,7 +24,7 @@ import { confirmFailure } from "../failure-report.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { undoToast, useToast } from "../toast.js";
 import { sectionGlyph } from "./section-icon-picker.js";
-import { type SectionDialogs, useSectionDialogs } from "./sidebar-sections.js";
+import { newSectionAction, type SectionDialogs, useSectionDialogs } from "./sidebar-sections.js";
 import { sharedStatus, statusSubmenu } from "./standing-submenus.js";
 
 /**
@@ -46,7 +46,6 @@ import { sharedStatus, statusSubmenu } from "./standing-submenus.js";
 
 /** What the selection bar's Move to section says beyond the sections. */
 const SELECTION_ACT = {
-  NEW_SECTION: "New section…",
   NO_SECTION: "Remove from section",
 } as const;
 
@@ -110,7 +109,7 @@ export interface ChosenTasks {
  * What the selection bar offers the tasks chosen, as a task row's menu offers
  * them for one: Status, each status by its mark, the one they all stand at
  * checked; Move to section, each of the workspace's sections by its glyph,
- * New section… to make one holding them, and out of every section; and
+ * New section to make one holding them, and out of every section; and
  * Permanently delete, which asks first. Each acts on them all at once, then
  * lets the selection go.
  */
@@ -147,7 +146,7 @@ function selectionActs(
         icon: sectionGlyph(section.icon) ?? <GLYPH.SECTION />,
         onSelect: move(section.id),
       })),
-      { label: SELECTION_ACT.NEW_SECTION, onSelect: acted(() => doors.askNew(workspace, put)) },
+      newSectionAction(acted(() => doors.askNew(workspace, put))),
     ],
     ...(sections.length === 0 ? [] : [[{ label: SELECTION_ACT.NO_SECTION, onSelect: move(null) }]]),
   ];

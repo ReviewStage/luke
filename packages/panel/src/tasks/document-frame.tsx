@@ -70,7 +70,7 @@ export function DocumentByline({
   maker?: { readonly actor: Actor; readonly fromTask?: string | undefined } | undefined;
   createdAt: number;
   now: number;
-  /** The phrase for the last edit, "Last edited by [Luke] Luke · 2h ago"; none where nothing changed since it was created. */
+  /** The phrase for the last edit, "Edited 2h ago"; none where nothing changed since it was created. */
   edited?: ReactNode;
   /** What confirms the reader's own edit landed, a Saved tick, after the rest. */
   saved?: ReactNode;

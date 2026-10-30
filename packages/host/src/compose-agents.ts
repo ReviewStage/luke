@@ -84,6 +84,12 @@ import {
 } from "@luke/features/agent-view";
 import { AGENT_ARCHIVER, CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import { FAILURE_FACT, type FailureFacts, GATE_CLOSED_BY } from "@luke/features/failure-facts";
+import {
+  type HostPairingApproveView,
+  type HostPairingDenyView,
+  type HostPairingView,
+  hostPairingParamsSchema,
+} from "@luke/features/host-pairing-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import {
   acknowledgedNow,
@@ -191,6 +197,9 @@ export type AgentClient = Pick<
   | "removeHost"
   | "keepHostInstallToken"
   | "revokeHostInstallToken"
+  | "readHostPairing"
+  | "approveHostPairing"
+  | "denyHostPairing"
   | "list"
   | "listWorkspace"
   | "start"
@@ -540,6 +549,25 @@ function composed(
           "a revoke names an install token",
         );
         return carried<HostDoneAnswerView>(yield* asked(client.revokeHostInstallToken(id)));
+      }),
+    [GATEWAY_METHOD.HOSTS_PAIRING_READ]: (params) =>
+      Effect.gen(function* () {
+        const { code } = yield* readParams(hostPairingParamsSchema, params, "a read names a code");
+        return carried<HostPairingView>(yield* asked(client.readHostPairing(code)));
+      }),
+    [GATEWAY_METHOD.HOSTS_PAIRING_APPROVE]: (params) =>
+      Effect.gen(function* () {
+        const { code } = yield* readParams(
+          hostPairingParamsSchema,
+          params,
+          "an approve names a code",
+        );
+        return carried<HostPairingApproveView>(yield* asked(client.approveHostPairing(code)));
+      }),
+    [GATEWAY_METHOD.HOSTS_PAIRING_DENY]: (params) =>
+      Effect.gen(function* () {
+        const { code } = yield* readParams(hostPairingParamsSchema, params, "a deny names a code");
+        return carried<HostPairingDenyView>(yield* asked(client.denyHostPairing(code)));
       }),
     [GATEWAY_METHOD.PROVIDER_KEYS_READ]: () =>
       Effect.map(asked(client.readProviderKeys()), (answer) =>

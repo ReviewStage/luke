@@ -7,10 +7,10 @@ import {
 import type { MacOffer } from "@luke/features/models-wire";
 import type { TaskRunsOn, TaskRunsOnRequest } from "@luke/features/task-wire";
 import {
-  CHIP_LOOK,
   CHIP_WIDTH,
-  Chip,
-  ChipName,
+  GAP,
+  GlyphSlot,
+  Inline,
   MENU_ROW_WHY,
   type MenuRow,
   POPOVER_ALIGN,
@@ -18,10 +18,9 @@ import {
   STATUS_TONE,
   StatusGlyph,
   type StatusTone,
-  Tooltip,
   useSecond,
 } from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
+import { GLYPH, ICON_SIZE } from "@luke/ui/icons";
 import { Schema } from "effect";
 import { devicePlatformOf } from "../device-platform.js";
 import { type PresenceBook, presenceStanding, useDevicePresence } from "../device-presence.js";
@@ -55,11 +54,9 @@ import { keptKey, useKept } from "../use-kept.js";
  * is refused by name rather than sent quietly to the cloud. It stands on
  * every New task but an automation's or a child's, and lists Cloud alone
  * where the member has no device, or while the Bring your own host
- * experiment is off, which lists no device (`new-task-composer.tsx`). The
- * task's chip stands with its status and priority on every task, saying
- * Cloud, or the device it runs on and whether it is online, or that the
- * device was removed, with no menu, and its hint says it was set when the
- * task was created.
+ * experiment is off, which lists no device (`new-task-composer.tsx`). On
+ * the task, each agent's row in its plan's head says Cloud, or the device
+ * it runs on, or that the device was removed (`plan-agents.tsx`).
  */
 
 /** What the menu and its chips say. */
@@ -72,7 +69,6 @@ const RUNS_ON_WORDS = {
   CHECKING: "Checking",
   REMOVED: "Removed device",
   NO_MATCH: "No devices match",
-  LOCKED_HINT: "Set when the task was created.",
 } as const;
 
 /** The id the Cloud row is picked by, which no device's id is. */
@@ -253,38 +249,21 @@ export function NewTaskRunsOnChip({
   );
 }
 
-/** What the task's control says of where it runs now: Cloud, the device and whether it is online, or a device since removed. */
-function standingWords(runsOn: TaskRunsOn | undefined, book: PresenceBook): string {
-  if (runsOn === undefined) return RUNS_ON_WORDS.CLOUD;
-  if (runsOn.device === undefined) return RUNS_ON_WORDS.REMOVED;
-  const standing = presenceStanding(book, runsOn.deviceId);
-  // Note that a device the read does not name is a teammate's, which the window cannot speak for, so its chip is its name alone.
-  return standing === undefined
-    ? runsOn.device.name
-    : `${runsOn.device.name} · ${STANDING_WORDS[standing]}`;
-}
-
 /**
- * The task's Runs on chip, beside its status and priority: where its agents
- * run, read-only, since it is set when the task is created. It drops no menu
- * and takes no press, and its hover says so.
+ * Where a task's agents run, as each agent's row says it: the cloud's glyph
+ * and Cloud, or the device's glyph by its platform and its name, or that
+ * the device was removed. Note that it is the task's, shared by every agent
+ * on it, and words alone, since it is set when the task is created.
  */
-export function TaskRunsOnChip({ runsOn }: { runsOn: TaskRunsOn | undefined }): React.JSX.Element {
-  // Note that the clock only redraws the chip as a beat ages, since the standing is read off the book's own monotonic clock.
-  useSecond();
-  const book = useDevicePresence(runsOn?.device !== undefined);
-  const words = standingWords(runsOn, book);
+export function RunsOnPlace({ runsOn }: { runsOn: TaskRunsOn | undefined }): React.JSX.Element {
+  const words =
+    runsOn === undefined ? RUNS_ON_WORDS.CLOUD : (runsOn.device?.name ?? RUNS_ON_WORDS.REMOVED);
   return (
-    <Tooltip label={RUNS_ON_WORDS.LOCKED_HINT}>
-      <Chip
-        look={CHIP_LOOK.FIELD}
-        width={CHIP_WIDTH.AUTO}
-        aria-label={`${RUNS_ON_WORDS.LABEL}: ${words}`}
-        aria-disabled
-      >
+    <Inline gap={GAP.ICON} wrap={false}>
+      <GlyphSlot size={ICON_SIZE.SMALL}>
         {runsOn === undefined ? <GLYPH.CLOUD /> : <DeviceGlyph device={runsOn.device} />}
-        <ChipName>{words}</ChipName>
-      </Chip>
-    </Tooltip>
+      </GlyphSlot>
+      <span>{words}</span>
+    </Inline>
   );
 }

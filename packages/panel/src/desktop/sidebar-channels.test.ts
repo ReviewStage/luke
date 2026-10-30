@@ -5,7 +5,7 @@ import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
@@ -16,6 +16,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { BILLING, item } from "../testing/desktop-inbox.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { SidebarChannels } from "./sidebar-channels.js";
+import { SidebarInboxRow } from "./sidebar-inbox-row.js";
 import { useSidebarReadAll } from "./sidebar-read-all.js";
 
 declare global {
@@ -29,11 +30,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
  * posted in since the reader looked stands in the unread weight; its ⋯
  * offers Copy link, Mark all as read, which stamps the reader's look at it
  * and marks its own unread threads read, Edit, and Archive last and alone;
- * Add
- * channel's Browse archived channels lists the archived standing channels,
- * each opened again by its Unarchive, or opened by a press; and Edit asks
+ * the Inbox's Browse archived channels lists the archived standing channels,
+ * each opened again by its Unarchive, or opened by a press; Edit asks
  * for a channel's name and purpose, #general's name locked, sending what
- * changed.
+ * changed; and the Inbox's chevron folds the channels, the one shown
+ * still standing.
  *
  * The service is a script at the act boundary; synthetic channels throughout.
  */
@@ -119,8 +120,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The sidebar's channels over `channels`, each channel opened recorded in `opened`; the Billing task changed at `changedAt`, past the feed's items where it is later than 3. */
-function mount(channels: readonly Channel[], opened: string[], changedAt = 3): HTMLElement {
+/** The sidebar's channels over `channels` under the Inbox's row heading them, each channel opened recorded in `opened` and `currentId` the one shown; the Billing task changed at `changedAt`, past the feed's items where it is later than 3. */
+function mount(
+  channels: readonly Channel[],
+  opened: string[],
+  { changedAt = 3, currentId }: { changedAt?: number; currentId?: string } = {},
+): HTMLElement {
   const unasked = () => Promise.resolve(undefined);
   const control: ChannelsControl = {
     channels,
@@ -146,13 +151,27 @@ function mount(channels: readonly Channel[], opened: string[], changedAt = 3): H
     inboxTasks: [{ taskId: BILLING.id, items: 3, updatedAt: changedAt }],
   });
   function Channels() {
+    const readAll = useSidebarReadAll(tasks);
+    const [folded, setFolded] = useState(false);
     return createElement(SidebarChannels, {
       workspaceId: WORKSPACE_ID,
       channels: control,
       waiting: new Map(),
-      currentId: undefined,
+      currentId,
       shown: true,
-      readAll: useSidebarReadAll(tasks),
+      readAll,
+      folded,
+      onFold: () => setFolded(!folded),
+      inbox: (head) =>
+        createElement(SidebarInboxRow, {
+          waiting: 0,
+          current: false,
+          disabled: false,
+          shown: true,
+          readAll,
+          channels: head,
+          onOpen: () => undefined,
+        }),
       onOpen: (channelId) => opened.push(channelId),
     });
   }
@@ -226,7 +245,7 @@ test("a channel's ⋯ offers Copy link and Mark all as read, which stamps the re
 });
 
 test("a channel's Mark all as read stands disabled while the feed has not answered for its threads, though the channel is unread", async () => {
-  mount([channel("c-app", "app", { lookedAt: 1, latestPostedAt: 5 })], [], 99);
+  mount([channel("c-app", "app", { lookedAt: 1, latestPostedAt: 5 })], [], { changedAt: 99 });
   act(() => button("Channel actions").click());
   await settle();
   const markAll =
@@ -239,12 +258,12 @@ test("a channel's Mark all as read stands disabled while the feed has not answer
 test("Browse archived channels lists the archived standing channels, Unarchive opens one again, and a press opens one", async () => {
   const opened: string[] = [];
   mount([channel("c-general", "general")], opened);
-  act(() => button("Add channel").click());
+  act(() => button("Inbox actions").click());
   act(() =>
     (
       [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
         (item) => item.textContent === "Browse archived channels",
-      ) ?? assert.fail("Add channel offers the archived channels")
+      ) ?? assert.fail("the Inbox's ⋯ offers the archived channels")
     ).click(),
   );
   await settle();
@@ -306,4 +325,61 @@ test("Edit on #general fills in its purpose, keeps its name locked, and sends on
   assert.deepEqual(edits, [
     { channelId: "c-general", edit: { purpose: "Anything that cuts across" } },
   ]);
+});
+
+test("the Inbox's chevron folds the channels under it, the channel shown still standing, and unfolds them again", () => {
+  const sidebar = mount(
+    [channel("c-general", "general"), channel("c-app", "app"), channel("c-launch", "launch")],
+    [],
+    { currentId: "c-app" },
+  );
+  const rows = () =>
+    [...sidebar.querySelectorAll('[role="group"][aria-label="Channels"] .luke-nav-item')].map(
+      (row) => row.textContent,
+    );
+  assert.deepEqual(rows(), ["general", "app", "launch"]);
+
+  act(() => button("Channels").click());
+  assert.equal(button("Channels").getAttribute("aria-expanded"), "false");
+  assert.deepEqual(rows(), ["app"]);
+
+  act(() => button("Channels").click());
+  assert.deepEqual(rows(), ["general", "app", "launch"]);
+});
+
+test("a right-click on the Inbox's chevron opens the Inbox's menu: Mark all as read, then what makes a channel, then the archived ones", () => {
+  mount([channel("c-general", "general")], []);
+  act(() => {
+    button("Channels").dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, clientX: 4, clientY: 4 }),
+    );
+  });
+  assert.deepEqual(menuWords(), [
+    "Mark all as read",
+    "—",
+    "New channel",
+    "New project channel",
+    "—",
+    "Browse archived channels",
+    "Browse archived project channels",
+  ]);
+});
+
+test("with Channels off the Inbox's row still wears its ⋯, which drops Mark all as read alone", () => {
+  const tasks = tasksControl({ tasks: [BILLING] });
+  function InboxAlone() {
+    return createElement(SidebarInboxRow, {
+      waiting: 0,
+      current: false,
+      disabled: false,
+      shown: true,
+      readAll: useSidebarReadAll(tasks),
+      onOpen: () => undefined,
+    });
+  }
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(InboxAlone))));
+  act(() => button("Inbox actions").click());
+  assert.deepEqual(menuWords(), ["Mark all as read"]);
 });

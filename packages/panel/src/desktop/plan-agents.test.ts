@@ -10,7 +10,6 @@ import {
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import type { MainTab } from "../tasks/use-main-tabs.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { PlanAgents } from "./plan-agents.js";
 
@@ -64,8 +63,8 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The list over `agents`, `NEWEST` holding a merged pull request; every agent and pull request it opens recorded. */
-function mount(agents: readonly AgentSummary[]) {
+/** The group over `agents`, `NEWEST` holding a merged pull request, unfolded unless `folded` says; every agent and pull request it opens recorded. */
+function mount(agents: readonly AgentSummary[], folded = false) {
   const opened: { agents: string[]; pullRequests: string[] } = { agents: [], pullRequests: [] };
   const control = agentsControl({
     agents,
@@ -95,12 +94,10 @@ function mount(agents: readonly AgentSummary[]) {
       createElement(PlanAgents, {
         agents: control,
         held: { agents: new Map(), workers: new Map() },
-        main: {
-          tab: undefined,
-          onChoose: (tab: MainTab) => {
-            if ("agent" in tab) opened.agents.push(tab.agent);
-          },
-        },
+        tab: undefined,
+        runsOn: undefined,
+        folded,
+        onOpenAgent: (agentId) => opened.agents.push(agentId),
         onOpenPullRequest: (agentId) => opened.pullRequests.push(agentId),
       }),
     ),
@@ -108,14 +105,14 @@ function mount(agents: readonly AgentSummary[]) {
   return { host, opened };
 }
 
-test("the agents at work come first, then the newest, each row and chip opening its own", () => {
+test("the agents at work come first, then the newest, each saying where it runs, each row and chip opening its own", () => {
   const { host, opened } = mount([OLDEST, WORKING, NEWEST]);
   const list = host.querySelector('[aria-label="Agents"]');
   assert.ok(list !== null);
   const rows = [...list.querySelectorAll("li")].map((row) => row.textContent ?? "");
   assert.deepEqual(
     rows.map((row) => row.replace(/#42$/u, "")),
-    ["Expired invite page", "Invite email", "Research providers"],
+    ["Expired invite pageCloud", "Invite emailCloud", "Research providersCloud"],
   );
   const chip = host.querySelector<HTMLAnchorElement>(
     'a[href="https://github.com/acme/relay/pull/42"]',
@@ -129,6 +126,14 @@ test("the agents at work come first, then the newest, each row and chip opening 
   assert.ok(press !== undefined);
   act(() => press.click());
   assert.deepEqual(opened.agents, [OLDEST.id]);
+});
+
+test("the group starts folded unless the page says otherwise, its head counting the agents", () => {
+  const { host } = mount([OLDEST, WORKING, NEWEST], true);
+  const head = host.querySelector<HTMLButtonElement>("button[aria-expanded]");
+  assert.equal(head?.getAttribute("aria-expanded"), "false");
+  assert.match(head?.textContent ?? "", /Agents3/u);
+  assert.equal(host.querySelector('[aria-label="Agents"]'), null);
 });
 
 test("a task with no agent draws no list", () => {
