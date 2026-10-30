@@ -63,10 +63,15 @@ import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { runtimeChoiceRefusal } from "@luke/features/agent-runtime-models";
-import { AGENT_BOUNDS, AGENT_LIST_ARCHIVED, type AgentSummary } from "@luke/features/agent-wire";
+import {
+  AGENT_BOUNDS,
+  AGENT_LIST_ARCHIVED,
+  type AgentPullRequest,
+  type AgentSummary,
+} from "@luke/features/agent-wire";
 import { AGENT_START_STATUS } from "@luke/features/contract";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
-import { Clock, Duration, Effect, type Layer, Option, Result } from "effect";
+import { Clock, Duration, Effect, type Layer, Option, type Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
@@ -87,7 +92,12 @@ import {
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
 import { controlsAgent, reachedAgentById } from "./agent-reach.js";
-import { askedPullRequest, githubReadRefusal, pullRequestNumberOf } from "./asked-pull-request.js";
+import {
+  askedPullRequest,
+  githubReadRefusal,
+  type PullRequestSubject,
+  pullRequestNumberOf,
+} from "./asked-pull-request.js";
 import { ensureOperator } from "./coder-host/operator.js";
 import {
   agentPullRequestReach,
@@ -271,6 +281,41 @@ function agentStandsStopped(agent: Agent) {
     },
   ]);
 }
+
+/**
+ * A pull request's changes: its files, who it names (`github-people.ts`),
+ * and the commits its changed images are read at (`imageCommits`), read
+ * from GitHub afresh on the token minted for its repository, with who its
+ * subject says it writes as. Shared with the reads of a pull request by
+ * its repository (`github/repository-pull-request-procedures.ts`).
+ */
+export const pullRequestChangesRead = (
+  token: Redacted.Redacted,
+  subject: PullRequestSubject,
+  pullRequest: AgentPullRequest,
+) =>
+  Effect.gen(function* () {
+    // Note that the pull request itself is read beside its files for its head and base, which its changed images are read at; a read that does not land names neither.
+    const [files, people, whole] = yield* Effect.all(
+      [
+        pullRequestFiles(token, subject.repository, pullRequest),
+        changesPeople(token, subject, pullRequest.number),
+        Effect.orElseSucceed(
+          pullRequestByNumber(token, subject.repository, pullRequest.number),
+          () => Option.none(),
+        ),
+      ],
+      { concurrency: "unbounded" },
+    );
+    const commits = yield* imageCommits(token, subject.repository, whole, files.files);
+    return {
+      url: pullRequest.url,
+      ...commits,
+      ...files,
+      ...people,
+      ...(subject.author === null ? undefined : { writtenAs: subject.author }),
+    };
+  });
 
 /** The agents resource: every procedure to a signed-in caller, a body read under its own cap. */
 export function agentsProcedures(seams: AgentsProcedureSeams) {
@@ -607,32 +652,13 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const number = yield* pullRequestNumberOf(input.number === undefined ? [] : [input.number]);
       const pullRequest = yield* askedPullRequest(yield* published, userId, agent, number);
       if (pullRequest === null || !hasRepository(agent)) return { pullRequest: null };
-      const listed = yield* githubReadRefusal(
+      const changes = yield* githubReadRefusal(
         Effect.gen(function* () {
           const { token } = yield* agentPullRequestReach(userId, agent);
-          // Note that the pull request itself is read beside its files for its head and base, which its changed images are read at; a read that does not land names neither.
-          const [files, people, whole] = yield* Effect.all(
-            [
-              pullRequestFiles(token, agent.repository, pullRequest),
-              changesPeople(token, agent, pullRequest.number),
-              Effect.orElseSucceed(
-                pullRequestByNumber(token, agent.repository, pullRequest.number),
-                () => Option.none(),
-              ),
-            ],
-            { concurrency: "unbounded" },
-          );
-          const commits = yield* imageCommits(token, agent.repository, whole, files.files);
-          return { ...commits, ...files, ...people };
+          return yield* pullRequestChangesRead(token, agent, pullRequest);
         }),
       );
-      return {
-        pullRequest: {
-          url: pullRequest.url,
-          ...listed,
-          ...(agent.author === null ? undefined : { writtenAs: agent.author }),
-        },
-      };
+      return { pullRequest: changes };
     }),
     /**
      * What the reviewer and label pickers offer, of the agent's repository

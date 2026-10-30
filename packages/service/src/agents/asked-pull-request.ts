@@ -10,7 +10,7 @@
  */
 
 import { type Agent, forgetAgentPublishedRead } from "@luke/database/models/agent-store";
-import { AGENT_STATUS, type AgentPullRequest } from "@luke/features/agent-wire";
+import { AGENT_STATUS, type AgentAuthor, type AgentPullRequest } from "@luke/features/agent-wire";
 import { githubPullRequestNumberSchema } from "@luke/features/github-repositories-wire";
 import { readEither } from "@luke/wire/effect";
 import { Cache, Effect, Result } from "effect";
@@ -29,6 +29,18 @@ import {
   PublishedKey,
 } from "./coder-host/published.js";
 import { statusOf } from "./coder-host/stop.js";
+
+/**
+ * What a read of a pull request names it against: the repository it is
+ * of, the workspace whose members its people are named as, and who it says
+ * it writes as, none where no agent stands behind the read. An agent with
+ * a repository is one.
+ */
+export interface PullRequestSubject {
+  readonly organizationId: string;
+  readonly repository: string;
+  readonly author: AgentAuthor | null;
+}
 
 /** How a read of GitHub for an agent's repository fails: the store, GitHub, or the repository out of the workspace's reach. */
 type GitHubAskFailure = GitHubWorkspaceReadFailure | { readonly _tag: "RepositoryNotReachable" };
