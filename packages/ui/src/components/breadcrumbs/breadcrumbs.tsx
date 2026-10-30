@@ -221,8 +221,8 @@ const LOOK = {
     item: "",
     wordsItem: "",
     separator: "flex-none items-center text-muted-foreground [&>svg]:size-breadcrumb-chevron",
-    words: "h-control px-control-inset",
-    link: "h-control rounded-control px-control-inset py-0 gap-icon-gap",
+    words: "h-control px-breadcrumb-control-inline",
+    link: "h-control rounded-control px-breadcrumb-control-inline py-0 gap-icon-gap",
   },
 } as const;
 
