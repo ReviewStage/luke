@@ -66,7 +66,8 @@ function listedHoldings(
   holdings: TasksControl["inboxTasks"],
   listed: TasksControl["tasks"],
 ): readonly AppInboxTaskHolding[] {
-  return holdings.filter((holding) => listed.some((task) => task.id === holding.taskId));
+  const ids = new Set(listed.map((task) => task.id));
+  return holdings.filter((holding) => ids.has(holding.taskId));
 }
 
 /** The Inbox's view choices, under the channels' scope where a channel is given; the Inbox's kept choices where none is. */

@@ -45,6 +45,7 @@ import {
   INBOX_STATUS_GROUP,
   INBOX_WHOSE,
   type InboxDraft,
+  type InboxGroup,
   type InboxGrouping,
   type InboxListView,
   type InboxShow,
@@ -53,6 +54,7 @@ import {
   inboxBoard,
   inboxCommentFiles,
   inboxCounts,
+  inboxGroup,
   inboxLineKind,
   inboxList,
   inboxMissing,
@@ -478,6 +480,34 @@ test("the list holds every item the latest changed first, under its plan, the pl
     ),
     ["retry", "expiry", "threshold", "channel"],
   );
+});
+
+test("a list drawn again from a task's same items lists each in the object it listed it in before, and groups them in the same group; an item that changed is listed anew, and its task grouped anew", () => {
+  const view = {
+    grouping: INBOX_GROUPING.NONE,
+    show: INBOX_SHOW.ALL,
+    readerId: undefined,
+    chosen: undefined,
+  };
+  const items = [item({ id: "threshold", updatedAt: 30 }), item({ id: "retry", updatedAt: 50 })];
+  const group = inboxGroup(taskHolder(BILLING), items);
+  assert.equal(inboxGroup(taskHolder(BILLING), items), group, "the same items, the same group");
+  const listed = (groups: readonly InboxGroup[], id: string) =>
+    listedItems(inboxList(groups, view)).find(({ item }) => item.id === id);
+  const threshold = listed([group], "threshold");
+  const retry = listed([group], "retry");
+  assert.equal(listed([group], "threshold"), threshold, "drawn again, an item is listed alike");
+
+  const [kept, changed] = items;
+  assert.ok(kept !== undefined && changed !== undefined);
+  const after = inboxGroup(taskHolder(BILLING), [kept, { ...changed, unread: true }]);
+  assert.notEqual(after, group, "a task whose items changed is grouped anew");
+  assert.equal(
+    listed([after], "threshold"),
+    threshold,
+    "an item that did not change is listed alike",
+  );
+  assert.notEqual(listed([after], "retry"), retry, "an item that changed is listed anew");
 });
 
 test("an item whose place is held stands where the list drew it, under the status it stood under, whatever it changed to since, under either sort and every grouping", () => {

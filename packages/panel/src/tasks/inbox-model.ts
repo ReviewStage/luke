@@ -1132,9 +1132,22 @@ export type InboxHolder =
   | { readonly kind: typeof INBOX_HOLDER.TASK; readonly task: TaskSummary }
   | { readonly kind: typeof INBOX_HOLDER.AGENT; readonly agent: TasklessInboxAgent };
 
+/**
+ * Each task's and each agent's holder as last made, kept for as long as what
+ * it holds for stands. Note that a list read again from the same task or
+ * agent is held by the same holder, because the window's document keeps the
+ * identity of what a delivery did not change (`keepIdentity`), and every
+ * object the list makes of a holder is kept by it in turn.
+ */
+const keptHolders = new WeakMap<TaskSummary | TasklessInboxAgent, InboxHolder>();
+
 /** The agent with no task as the holder of its items. */
 export function agentHolder(agent: TasklessInboxAgent): InboxHolder {
-  return { kind: INBOX_HOLDER.AGENT, agent };
+  const kept = keptHolders.get(agent);
+  if (kept !== undefined) return kept;
+  const holder: InboxHolder = { kind: INBOX_HOLDER.AGENT, agent };
+  keptHolders.set(agent, holder);
+  return holder;
 }
 
 /** Whether a holder is the member's operator, Luke, whose items stand in a group of his own. */
@@ -1155,9 +1168,13 @@ function holderKey(holder: InboxHolder): string {
   return holder.agent.automationId ?? NO_AUTOMATION_KEY;
 }
 
-/** A task as the holder of its items. */
+/** A task as the holder of its items, kept as an agent's is (`keptHolders`). */
 export function taskHolder(task: TaskSummary): InboxHolder {
-  return { kind: INBOX_HOLDER.TASK, task };
+  const kept = keptHolders.get(task);
+  if (kept !== undefined) return kept;
+  const holder: InboxHolder = { kind: INBOX_HOLDER.TASK, task };
+  keptHolders.set(task, holder);
+  return holder;
 }
 
 /**
@@ -1276,7 +1293,7 @@ export function agentGroups(
       holders.set(agent.agentId, agentHolder(agent));
     }
   }
-  return [...holders].map(([agentId, holder]) => ({ holder, items: read.get(agentId) ?? [] }));
+  return [...holders].map(([agentId, holder]) => inboxGroup(holder, read.get(agentId) ?? NO_ITEMS));
 }
 
 /**
@@ -1369,6 +1386,42 @@ export interface InboxGroup {
 export interface InboxListed {
   readonly holder: InboxHolder;
   readonly item: InboxItem;
+}
+
+/** A holder holding nothing, the one empty list every such group holds. */
+export const NO_ITEMS: readonly InboxItem[] = [];
+
+/** Each holder's group as last made, kept while it holds the same items (`inboxGroup`). */
+const keptGroups = new WeakMap<InboxHolder, InboxGroup>();
+
+/**
+ * A holder and every item it holds as one group: the one made last for the
+ * holder while its items are the same list, so a list read again from items
+ * that did not move groups them in the objects it grouped them in before.
+ */
+export function inboxGroup(holder: InboxHolder, items: readonly InboxItem[]): InboxGroup {
+  const kept = keptGroups.get(holder);
+  if (kept?.items === items) return kept;
+  const group = { holder, items };
+  keptGroups.set(holder, group);
+  return group;
+}
+
+/** Each item as last listed, kept while the same holder holds it (`inboxListed`). */
+const keptListed = new WeakMap<InboxItem, InboxListed>();
+
+/**
+ * An item listed under what holds it: the one listed last while its holder
+ * is the same, so a list drawn again lists an item that did not move in the
+ * object it listed it in before, and the item's row, which is drawn again
+ * only for another (`InboxItemRow`), stands as it was.
+ */
+function inboxListed(holder: InboxHolder, item: InboxItem): InboxListed {
+  const kept = keptListed.get(item);
+  if (kept?.holder === holder) return kept;
+  const listed = { holder, item };
+  keptListed.set(item, listed);
+  return listed;
 }
 
 /**
@@ -1525,7 +1578,7 @@ export function channelGroups(
  */
 export function openItems(groups: readonly InboxGroup[]): readonly InboxListed[] {
   return groups
-    .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
+    .flatMap(({ holder, items }) => items.map((item) => inboxListed(holder, item)))
     .filter((listed) => needsYou(listed, undefined))
     .toSorted((a, b) => newestFirst(a.item, b.item));
 }
@@ -1669,7 +1722,7 @@ export function inboxList(
     .filter((group) => group.items.length > 0)
     .toSorted((a, b) => firstOrder(a.items[0], b.items[0], order));
   const items = groups
-    .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
+    .flatMap(({ holder, items }) => items.map((item) => inboxListed(holder, item)))
     .toSorted((a, b) => order(a.item, b.item));
   if (view.grouping === INBOX_GROUPING.TASK) {
     return { grouping: INBOX_GROUPING.TASK, groups: holderGroups(items), readerId };
@@ -1762,7 +1815,7 @@ export function inboxCounts(
   whose: InboxWhose = EVERYONES,
 ): InboxCounts {
   const items = tasks
-    .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
+    .flatMap(({ holder, items }) => items.map((item) => inboxListed(holder, item)))
     .filter(({ item }) => whoseItem(whose, item, readerId));
   const count = (show: InboxShow) =>
     items.filter((listed) => showsItem(show, listed, readerId)).length;

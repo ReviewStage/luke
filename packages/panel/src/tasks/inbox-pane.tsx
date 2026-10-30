@@ -937,11 +937,11 @@ function InboxItemMenu({
   heading?: React.ReactNode;
 }): React.JSX.Element | null {
   const menu = useMenu(shown);
-  const { close, groups: itemGroups } = useInboxItemActions(item, {
+  const close = useInboxClose(item, onClose, shown);
+  const { groups: itemGroups } = useInboxItemActions(item, {
     onMark,
     onMove,
-    onClose,
-    shown,
+    onAskClose: close.ask,
     keyed: true,
   });
   const groups = itemGroups(lead);
