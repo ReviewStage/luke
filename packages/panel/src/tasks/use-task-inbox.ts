@@ -477,13 +477,14 @@ function withRefused(now: Draft, went: Draft): Draft {
 
 /**
  * What comes back into the box from a refused reply and those queued behind
- * it, in the order sent: the first's draft, its picks among it, with the
- * words and files of each behind it after its own.
+ * it, in the order sent: the words and files of each after the one before
+ * it, and the picks of the last among them that holds any, an answer's
+ * queued behind a note.
  */
 function carriedBack(first: Draft, behind: readonly Draft[]): Draft {
   return behind.reduce(
     (joined, went) => ({
-      ...joined,
+      ...(holdsPicks(went) ? went : joined),
       text: [joined.text, went.text].filter((words) => words !== "").join("\n"),
       attachments: [...joined.attachments, ...went.attachments],
     }),
@@ -638,6 +639,8 @@ export function useHeldTaskInbox(input: {
   // Each item's replies on their way, in the order sent, read as a send's turn comes, since one
   // let go before then, queued behind a refusal, sends nothing.
   const queued = useRef(new Map<string, readonly QueuedReply[]>());
+  // Each item as the service last answered a reply on it, which a nod queued behind that reply reads.
+  const answered = useRef(new Map<string, InboxItem>());
   const latest = useRef({ ...agents, taskId });
   latest.current = { ...agents, taskId };
 
@@ -707,36 +710,43 @@ export function useHeldTaskInbox(input: {
       const key = keyFor(attempts.current, item.id, words);
       setSending((standing) => new Set(standing).add(item.id));
       note(item.id, undefined);
+      const release = () => {
+        out.current.delete(item.id);
+        setSending((standing) => {
+          const next = new Set(standing);
+          next.delete(item.id);
+          return next;
+        });
+      };
       // Note that the nod goes after the item's replies on their way, and holds the box meanwhile, since it settles the notice.
-      queue.after(item.id, () =>
-        latest.current
+      queue.after(item.id, async () => {
+        // A nod behind a reply that settled the notice at this revision has nothing left to nod to, and says nothing.
+        const settled = answered.current.get(item.id);
+        if (settled !== undefined && settled.revision === item.revision && !awaitsNod(settled)) {
+          release();
+          return;
+        }
+        const answer = await latest.current
           .answerInbox({
             itemId: item.id,
             revision: item.revision,
             reply: INBOX_REPLY.ACKNOWLEDGED,
             clientKey: key,
           })
-          .catch((): AgentInboxAnsweredView => UNANSWERED)
-          .then((answer) => {
-            out.current.delete(item.id);
-            setSending((standing) => {
-              const next = new Set(standing);
-              next.delete(item.id);
-              return next;
-            });
-            if ("failure" in answer) {
-              attempts.current.set(item.id, { key, words });
-              refused(item.id, answer.failure);
-              return;
-            }
-            if (!answer.taken) {
-              note(item.id, { words: notTakenNote(answer.item) });
-              return;
-            }
-            // Note that a nod the agent waits on reaches it and may open its turn, so the agents are read again.
-            if (item.needsReply) latest.current.onRetryList();
-          }),
-      );
+          .catch((): AgentInboxAnsweredView => UNANSWERED);
+        release();
+        if ("failure" in answer) {
+          attempts.current.set(item.id, { key, words });
+          refused(item.id, answer.failure);
+          return;
+        }
+        if (!answer.taken) {
+          note(item.id, { words: notTakenNote(answer.item) });
+          return;
+        }
+        // Note that a nod the agent waits on reaches it and may open its turn, so the agents are read again.
+        if (item.needsReply) latest.current.onRetryList();
+      });
     },
     [note, refused, queue],
   );
@@ -775,9 +785,11 @@ export function useHeldTaskInbox(input: {
       };
       requeue(item.id, (was) => [...was, reply]);
       const askedOn = taskId;
+      // Note that the reply is known by its key, since those behind one that lands are drawn afresh.
+      const ours = (each: QueuedReply) => each.params.clientKey === key;
       queue.after(item.id, async () => {
         // A reply let go before its turn, queued behind one refused, sends nothing.
-        if (!(queued.current.get(item.id) ?? []).includes(reply)) return;
+        if (!(queued.current.get(item.id) ?? []).some(ours)) return;
         const answer = await latest.current
           .messageInbox(reply.params)
           .catch((): AgentInboxMessagedView => UNANSWERED);
@@ -787,8 +799,8 @@ export function useHeldTaskInbox(input: {
           // them unless others were made, so nothing is lost and none reaches the agent ahead of the
           // one refused; the words sent again as they are go under the same key.
           const standing = queued.current.get(item.id) ?? [];
-          const behind = standing.slice(standing.indexOf(reply) + 1);
-          requeue(item.id, (was) => was.filter((each) => each !== reply && !behind.includes(each)));
+          const behind = standing.slice(standing.findIndex(ours) + 1);
+          requeue(item.id, (was) => was.filter((each) => !ours(each) && !behind.includes(each)));
           writer.update(place, (now) =>
             withRefused(
               now,
@@ -802,8 +814,24 @@ export function useHeldTaskInbox(input: {
           refused(item.id, answer.failure);
           return;
         }
-        // Note that the reply is let go under its own key, in the render its answer's item lands in, so it never stands beside the message it became.
-        requeue(item.id, (was) => was.filter((each) => each !== reply));
+        // Note that the reply is let go under its own key, in the render its answer's item lands in, so it
+        // never stands beside the message it became; and every reply behind it, none of which has gone,
+        // counts the messages the item holds now among those before it, so the one this reply became
+        // never stands for a later reply in the same words.
+        const landed = (answer.item.thread ?? []).map(({ id }) => id);
+        requeue(item.id, (was) =>
+          was
+            .filter((each) => !ours(each))
+            .map((each) =>
+              each.shown === undefined
+                ? each
+                : {
+                    ...each,
+                    shown: { ...each.shown, before: new Set([...each.shown.before, ...landed]) },
+                  },
+            ),
+        );
+        answered.current.set(item.id, answer.item);
         // Note that the item as the service answered it lands in the render the reply on its way leaves, whichever of the answer and the host's push comes first.
         setHeld((standing) =>
           standing.taskId === askedOn

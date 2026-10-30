@@ -2521,6 +2521,148 @@ test("a reply leaves its box the moment it is sent, the box and the ask standing
   );
 });
 
+test("a second reply in the same words as one on its way stays marked Sending once the first lands, until its own answer does", async () => {
+  const shown = threadItem([askingMessage(EXPIRY_ASK)]);
+  const pane = await mountThread(shown);
+  const page = pane.ownerDocument.body;
+  const sent: AgentInboxMessageParams[] = [];
+  const answers: ((answer: AgentInboxMessagedView) => void)[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
+      sent.push(request.payload);
+      return new Promise((resolve) =>
+        answers.push((value) => resolve({ status: FAKE_ANSWER.DONE, value })),
+      );
+    },
+  });
+
+  typeInComposer(pane, "Thanks.");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  typeInComposer(pane, "Thanks.");
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(sendingMarks(page), ["Sending", "Sending"]);
+
+  const first = sent[0] ?? assert.fail("the first went");
+  const landed = repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000021")(first);
+  await act(async () => answers[0]?.(landed));
+  await settle();
+  assert.deepEqual(
+    sendingMarks(page),
+    ["Sending"],
+    "the message the first became never stands for the second",
+  );
+  assert.equal(threadOf(page).filter(([, , , words]) => words === "Thanks.").length, 2);
+
+  const second = sent[1] ?? assert.fail("the second went");
+  assert.ok(!("failure" in landed));
+  await act(async () =>
+    answers[1]?.(repliedOn(landed.item, "e1b2c3d4-0000-4000-8000-000000000022")(second)),
+  );
+  await settle();
+  assert.deepEqual(sendingMarks(page), []);
+  assert.equal(threadOf(page).filter(([, , , words]) => words === "Thanks.").length, 2);
+});
+
+test("an answer queued behind a note on the open question keeps its pick once the note is refused, back in the box beside the note's words, and never goes", async () => {
+  const shown = threadItem([askingMessage(EXPIRY_ASK)]);
+  const pane = await mountThread(shown);
+  const sent: AgentInboxMessageParams[] = [];
+  const answers: ((answer: AgentInboxMessagedView) => void)[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
+      sent.push(request.payload);
+      return new Promise((resolve) =>
+        answers.push((value) => resolve({ status: FAKE_ANSWER.DONE, value })),
+      );
+    },
+  });
+
+  typeInComposer(pane, "Checking this.");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  act(() => openOptions(pane)[1]?.click());
+  act(() =>
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+  assert.deepEqual(
+    sent.map(({ text }) => text),
+    ["Checking this."],
+    "the answer waits behind the note",
+  );
+  assert.deepEqual(checkedOptions(pane), [], "and left the box");
+
+  await act(async () => answers[0]?.({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }));
+  await settle();
+  assert.deepEqual(
+    sent.map(({ text }) => text),
+    ["Checking this."],
+    "the answer never goes once the note is refused",
+  );
+  assert.equal(composerEditor(pane).textContent, "Checking this.");
+  assert.deepEqual(checkedOptions(pane), ["7 days"], "its pick is back in the box");
+});
+
+test("Got it pressed while a reply that settles the notice is out goes nowhere once the reply lands, the box released and saying nothing", async () => {
+  const notice = noticeItem({ startedBy: TEAMMATE });
+  const pane = await mountThread(notice);
+  const answered: AgentInboxAnswerParams[] = [];
+  const lands: (() => void)[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.AGENTS_INBOX_ANSWER) {
+        answered.push(request.payload);
+        return new Promise(() => undefined);
+      }
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
+      const landed = repliedOn(notice, "e1b2c3d4-0000-4000-8000-000000000021")(request.payload);
+      assert.ok(!("failure" in landed));
+      // The reply settles the notice, as one naming its revision does.
+      const settled: InboxItem = {
+        ...landed.item,
+        status: INBOX_STATUS.ANSWERED,
+        answeredBy: READER,
+        settledAt: 9_000,
+      };
+      return new Promise((resolve) =>
+        lands.push(() => resolve({ status: FAKE_ANSWER.DONE, value: { item: settled } })),
+      );
+    },
+  });
+
+  typeInComposer(pane, "Looks good.");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.equal(sendWords(pane), "Got it", "the emptied box offers the nod while the reply is out");
+  act(() =>
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+  assert.deepEqual(answered, [], "the nod waits behind the reply");
+
+  await act(async () => lands[0]?.());
+  await settle();
+  assert.deepEqual(answered, [], "and goes nowhere, since the reply settled the notice");
+  assert.equal(pane.querySelector('.agent-composer [role="alert"]'), null, "the box says nothing");
+  assert.equal(sendWords(pane), "Send", "and is released");
+});
+
 /** The reader's draft reply at the thread's end, which holds the box. */
 function draftReplyIn(pane: HTMLElement): Element {
   return pane.querySelector('[data-inbox-comment="draft"]') ?? assert.fail("the draft reply");
