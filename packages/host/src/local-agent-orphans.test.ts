@@ -1,5 +1,5 @@
 /**
- * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, its agents run straight on the box and their folders kept between turns: a VM a run from before left deleted; an agent two answered reads in a row leave out removed whole, but kept, for a week, where the box's check finds work in its folder, whatever a save record from before says; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a folder with unsaved work kept once and never checked again, a listed folder never let go of past a warm window, a box with no smolvm never held up by it, and a pass that died never the last; an idle agent's folder cleared a week after its last use where its work is all on GitHub, the agent kept as this machine's, one from before the stamp not until a week after the start that stamps it, and never a busy agent's, nor one with unpushed work, which is checked once while its agent stays idle; and the agents an install ran before it kept its record of them taken as its own as the gate opens, a Mac's by its own state alone and never by the store it shares, a Linux host's by its folders and machines.
+ * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, its agents run straight on the box and their folders kept between turns: a VM a run from before left deleted; an agent two answered reads in a row leave out removed whole, but kept, for a week, where the box's check finds work in its folder; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a folder with unsaved work kept once and never checked again, a box with no smolvm never held up by it, and a pass that died never the last; an idle agent's folder cleared a week after its last use where its work is all on GitHub, the agent kept as this machine's, one from before the stamp not until a week after the start that stamps it, and never a busy agent's, nor one with unpushed work, which is checked once while its agent stays idle; and the agents an install ran before it kept its record of them taken as its own as the gate opens, a Mac's by its own state alone and never by the store it shares, a Linux host's by its folders and machines.
  *
  * The follower runs the real smolvm sandbox over a fake `smolvm` that keeps
  * its machines in a set, on a real temporary folder, against a fake service
@@ -34,7 +34,7 @@ import {
 } from "@luke/features/device-agent-wire";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { ConfigProvider, Deferred, Duration, Effect, Exit, Layer, Option } from "effect";
+import { ConfigProvider, Deferred, Duration, Effect, Exit, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
@@ -55,8 +55,6 @@ const NOT_FOUND = {
   stderr: '{"error":{"code":"NOT_FOUND","message":"vm not found"}}\n',
 };
 
-/** When a saved agent's last turn ended, as a host that saved its agents' state recorded it: past its 15 minutes' warm window as the clock starts. */
-const ENDED_PAST_WINDOW = -Duration.toMillis(Duration.minutes(16));
 /** Half a pass short of a week before the second pass runs, five minutes in, and so half a pass past a week before the third: when a folder was first kept, or an agent last used. */
 const A_WEEK_BY_THE_THIRD_PASS =
   Duration.toMillis(Duration.minutes(7.5)) - Duration.toMillis(Duration.days(7));
@@ -116,9 +114,8 @@ interface Held {
  * `madeBeforeRecord` names, which this machine made before it kept that
  * record, in a folder and smolvm store shared with another install, as a
  * Mac's are, or its own alone where `storesOwned` says, as a Linux host's
- * are; with the save records `savedBefore` names, as a host that saved its
- * agents' state left them, and kept since when `kept` says; each agent
- * last used when `used` says, and each folder from before that record last
+ * are; with each folder kept since when `kept` says; each agent last used
+ * when `used` says, and each folder from before that record last
  * changed when `changedAt` says; its check of a
  * worktree printing what `unsavedWork` names for its agent, and nothing for
  * any other; its live-agents read answering `reads` one after another; and
@@ -134,7 +131,6 @@ const following = (input: {
   readonly madeBeforeRecord?: readonly string[];
   readonly storesOwned?: boolean;
   readonly mac?: boolean;
-  readonly savedBefore?: readonly string[];
   readonly kept?: Readonly<Record<string, number>>;
   readonly used?: Readonly<Record<string, number>>;
   readonly changedAt?: Readonly<Record<string, number>>;
@@ -178,18 +174,11 @@ const following = (input: {
     for (const agentId of owned.filter((each) => !(input.madeBeforeRecord ?? []).includes(each))) {
       writeFileSync(`${stateRoot}/owned-agents/${agentId}`, "");
     }
-    const saves = Object.fromEntries(
-      (input.savedBefore ?? []).map((agentId) => [
-        agentId,
-        { userId: USER_ID, generation: 1, endedAt: ENDED_PAST_WINDOW },
-      ]),
-    );
     writeFileSync(
       `${stateRoot}/local-agents.json`,
       JSON.stringify({
         devices: { [USER_ID]: "device-1" },
         launches: (input.keptLaunches ?? []).map((launch) => ({ userId: USER_ID, ...launch })),
-        saves,
         ...(input.kept === undefined ? {} : { kept: input.kept }),
         ...(input.used === undefined ? {} : { lastUsed: input.used }),
         // Note that This Mac records how each of its agents ran, these in VMs before they ran on the box.
@@ -263,8 +252,6 @@ const following = (input: {
       claimRequest: () => Effect.succeed({ claimed: false as const }),
       answerRequest: () => Effect.succeed(true),
       githubToken: () => Effect.succeed(undefined),
-      saveState: () => Effect.die("a device whose agents run on the box saves no state"),
-      commitState: () => Effect.die("a device whose agents run on the box saves no state"),
       liveAgents: () =>
         Effect.suspend(() => {
           const index = reads;
@@ -316,9 +303,6 @@ const following = (input: {
         deviceCapabilities: [DEVICE_CAPABILITY.DISCARD],
         worktreeScript: () => "exit 0",
         unsavedWorkScript: ({ worktree }) => `${UNSAVED_WORK_SCRIPT} ${worktree}`,
-        stateSealed: () => Effect.die("this device saves no state"),
-        stateOpened: () => Effect.die("this device restores no state"),
-        diskFree: () => Effect.succeed(Option.none()),
       }),
     );
     const composer = yield* composeLocalAgents({
@@ -456,14 +440,12 @@ it.effect("an agent whose runner runs, or whose launch is still kept, is left be
 );
 
 it.effect(
-  "a folder whose check finds unsaved work is kept, recorded, and never checked again, whatever a save record from before says",
+  "a folder whose check finds unsaved work is kept, recorded, and never checked again",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        // Note that its state was saved before the device stopped saving, which holds no copy Luke keeps for it any more.
         const device = yield* following({
           held: { whole: [AGENT.ORPHAN] },
-          savedBefore: [AGENT.ORPHAN],
           reads: [[], [], [], []],
           unsavedWork: { [AGENT.ORPHAN]: "it has changes not committed\n" },
         });
@@ -517,23 +499,6 @@ it.effect(
         assert.deepEqual(device.holdsOf(agentNumbered(1)), NOTHING);
         assert.deepEqual(device.holdsOf(agentNumbered(2)), NOTHING);
         assert.deepEqual([...device.machines].sort(), ["devbox", `luke-${AGENT.OTHER_INSTALL}`]);
-      }),
-    ).pipe(Effect.provide(NodeFileSystem.layer)),
-);
-
-it.effect(
-  "a listed agent's folder stays for its life, though a save record from before says its state was saved and its last turn ended past the warm window",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const device = yield* following({
-          held: { folderOnly: [AGENT.LIVE] },
-          savedBefore: [AGENT.LIVE],
-          reads: [[AGENT.LIVE], [AGENT.LIVE]],
-        });
-        yield* device.passed(2);
-
-        assert.equal(device.holdsOf(AGENT.LIVE).folder, true);
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );

@@ -33,7 +33,7 @@ import {
   deviceAgentLayout,
 } from "@luke/features/device-agent-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Clock, ConfigProvider, Deferred, Duration, Effect, Layer, Option } from "effect";
+import { Clock, ConfigProvider, Deferred, Duration, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { systemError } from "effect/PlatformError";
 import { TestClock } from "effect/testing";
@@ -235,9 +235,6 @@ const followingDevice = (
           asked.push(agentId);
           return `ghs_fixture_${asked.length}`;
         }),
-
-      saveState: () => Effect.succeed(undefined),
-      commitState: () => Effect.succeed(undefined),
     };
     const vm = fakeSandbox(() => Effect.die("a device whose agents run on the box readies no VM"));
     let deleteFails = options.vmDeleteFails ?? 0;
@@ -312,9 +309,6 @@ const followingDevice = (
         deviceIsolation: DEVICE_ISOLATION.DIRECT,
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
-        stateSealed: () => Effect.die("this device saves no state"),
-        stateOpened: () => Effect.die("this device restores no state"),
-        diskFree: () => Effect.succeed(Option.none()),
       }),
     );
     const clock = options.clock ?? (yield* Clock.Clock);

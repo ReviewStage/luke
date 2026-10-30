@@ -36,7 +36,7 @@ import {
 } from "@luke/features/device-agent-wire";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { ConfigProvider, Duration, Effect, Layer, Option, Result } from "effect";
+import { ConfigProvider, Duration, Effect, Layer, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "../compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "../effect/seams.js";
@@ -207,9 +207,6 @@ const following = (input: {
           asked.push(agentId);
           return `ghs_fixture_${asked.length}`;
         }),
-
-      saveState: () => Effect.succeed(undefined),
-      commitState: () => Effect.succeed(undefined),
     };
     const vm = smolvmSandbox({
       smolvm: SMOLVM,
@@ -241,9 +238,6 @@ const following = (input: {
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
         unsavedWorkScript: input.checksUnsavedWork === true ? () => UNSAVED_WORK_SCRIPT : undefined,
-        stateSealed: () => Effect.die("this device saves no state"),
-        stateOpened: () => Effect.die("this device restores no state"),
-        diskFree: () => Effect.succeed(Option.none()),
       }),
     );
     const composer = yield* composeLocalAgents({

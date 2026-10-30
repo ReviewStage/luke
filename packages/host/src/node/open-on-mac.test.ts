@@ -959,34 +959,6 @@ test(
 );
 
 test(
-  "an agent whose saved state is restored gets a repository of its own at the commit its work was saved on, though its branch moved on since",
-  async (t) => {
-    const { scratch, origin, push, shell, state } = await fixture(t);
-    const base = push("first\n");
-    push("second\n");
-    const own = path.join(scratch, "agents", "restored", "repository");
-
-    run(
-      scratch,
-      shell,
-      agentWorktreeScript({
-        repository: "acme/app",
-        clone: cloneFolder(state, "acme/app"),
-        worktree: own,
-        branch: "luke/fix-relay",
-        base,
-        remotes: { https: origin, ssh: origin },
-      }),
-    );
-
-    assert.equal(git(own, ["rev-parse", "HEAD"]), base);
-    assert.equal(readFileSync(path.join(own, "README.md"), "utf8"), "first\n");
-    assert.equal(git(own, ["remote", "get-url", "origin"]), origin);
-  },
-  GIT_DEADLINE,
-);
-
-test(
   "a discard finds work in an agent's worktree only where it is changed, ahead of its upstream, on no remote branch, on a branch left checked out or not, stashed, or has files and no repository",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);

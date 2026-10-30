@@ -8,8 +8,6 @@ import {
 import type { LocalAgentClis, LocalAgentPlatformSeam } from "../effect/seams.js";
 import { agentOnBox } from "../local-agent-box.js";
 import { localAgentClis } from "../local-agent-setup.js";
-import { openAgentState, sealAgentState } from "../node/agent-state-seal.js";
-import { diskFree } from "../node/disk-free.js";
 import { agentWorktreeScript, cloneFolder, worktreesRoot } from "../node/open-on-mac.js";
 import { smolvmSandbox } from "../node/smolvm-sandbox.js";
 import type { HostOs } from "./host-os.js";
@@ -105,21 +103,17 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
     storesOwned: options.os.storesOwned,
     deviceName: options.os.deviceName(),
     devicePlatform: options.os.platform,
-    // Note that a host runs every agent straight on the box and lets go of an archived agent's folder (`discard`); it saves no agent's state, whose folder stays for its life.
+    // Note that a host runs every agent straight on the box and lets go of an archived agent's folder (`discard`).
     deviceIsolation: DEVICE_ISOLATION.DIRECT,
     deviceCapabilities: [DEVICE_CAPABILITY.DISCARD],
     deviceArch: options.arch,
-    worktreeScript: ({ home, repository, worktree, branch, base }) =>
+    worktreeScript: ({ home, repository, worktree, branch }) =>
       agentWorktreeScript({
         repository,
         clone: cloneFolder(worktreesRoot(home), repository),
         worktree,
         branch,
-        base,
       }),
     unsavedWorkScript: options.os.unsavedWorkScript,
-    stateSealed: sealAgentState,
-    stateOpened: openAgentState,
-    diskFree,
   };
 }
