@@ -1508,8 +1508,8 @@ export function updateTaskCommitted<E = never, R = never>(
             yield* leaveTaskBlocks(taskId);
           }
         }
-        // A task moved to Done or Canceled settles its open inbox items, and one moved off them to work
-        // again opens again the items that move settled, by its stamp. Note that this runs after its
+        // A task moved to Done or Canceled settles its open inbox items that ask, and one moved off them
+        // to work again opens again the items that move settled, by its stamp. Note that this runs after its
         // agents moved, so the write locks agent rows before item rows, in the order an archive does.
         if (columns.status !== undefined) {
           yield* settleTaskInboxItems(taskId, columns.status, now);
@@ -1688,8 +1688,8 @@ const finishTask = SqlSchema.findOneOption({
  * so a start or a turn racing the finish either landed before the read,
  * which then refuses, or waits on the lock and reopens the task after.
  * Like any change it is not a save, so the list's order stands. A finish
- * settles the task's open inbox items, notices among them
- * (`inbox-settle.ts`).
+ * settles the task's open inbox items that still ask, and leaves its
+ * notices open until a member opens them (`inbox-settle.ts`).
  */
 export function finishTaskWork<R = never>(
   userId: string,

@@ -2867,7 +2867,7 @@ export function renameAgentCommitted(
   );
 }
 
-/** The account's agent archived, stamped now with who archived it, by default the account itself, or brought back, which clears who did; its conversation and what it published are kept either way. An archive, this one and every other below, settles the agent's open inbox items in the same transaction, and bringing the agent back opens again those its archive settled (`inbox-settle.ts`). Nothing for an agent of a workspace the account is not in. */
+/** The account's agent archived, stamped now with who archived it, by default the account itself, or brought back, which clears who did; its conversation and what it published are kept either way. An archive, this one and every other below, settles the agent's open inbox items that ask, its notices left open, in the same transaction, and bringing the agent back opens again those its archive settled (`inbox-settle.ts`). Nothing for an agent of a workspace the account is not in. */
 export function archiveAgent(
   userId: string,
   agentId: string,
@@ -3134,7 +3134,7 @@ export function archiveAgentCommitted(
           archivedBy: archived ? archivedBy : null,
         });
         if (Option.isNone(written)) return Option.none();
-        // An archive settles the agent's open inbox items, and bringing it back opens again those that archive settled.
+        // An archive settles the agent's open inbox items that ask, and bringing it back opens again those that archive settled.
         if (archived) yield* settleAgentInboxItems([agentId], now);
         const standingArchive = Option.getOrUndefined(standing)?.archivedAt;
         if (standingArchive !== undefined && standingArchive !== null) {
