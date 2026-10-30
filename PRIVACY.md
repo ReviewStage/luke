@@ -1083,7 +1083,7 @@ it runs on, and whether an automation started it), a message you sent an agent
 work), each of an agent's turns ended (with how it ended: answered, failed,
 stopped, or given up on by our service, roughly how long it ran, and what
 kind of agent it is), an agent stopped or archived (with what kind of agent
-it is, and whether a task's Running switch stopped its whole tree), a pull
+it is), a pull
 request an agent opened (as you or as Luke's GitHub App, and whether as a
 draft) and one it opened merged, an Inbox item
 answered, an issue filed, an automation made (with

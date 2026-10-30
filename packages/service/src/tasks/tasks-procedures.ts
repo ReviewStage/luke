@@ -76,7 +76,7 @@ import {
 import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace, isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
-import { AGENT_KIND, AGENT_MACHINE, LOCAL_AGENT_REFUSAL } from "@luke/features/agent-wire";
+import { AGENT_MACHINE, LOCAL_AGENT_REFUSAL } from "@luke/features/agent-wire";
 import { TASK_START_STATUS } from "@luke/features/contract";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
@@ -124,14 +124,12 @@ import {
 import { logStoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import { archiveAskedStatus } from "./archive-settle.js";
-import { tellPilotOfMergePolicy, tellPilotOfRunning } from "./pilot-switch-notice.js";
 import {
   PLAN_SAVE_REFUSAL,
   PLAN_SAVE_STATUS,
   restoreRevision,
   saveDeveloperEdit,
 } from "./plan-notes.js";
-import { resumeRunningTree, stopRunningTree } from "./running-tree.js";
 import { type TaskParent, taskParentOf } from "./task-parent.js";
 
 export interface TasksProcedureSeams extends EveReach, SandboxStopReach {
@@ -172,13 +170,6 @@ const reachedTask = /* @__PURE__ */ Effect.fnUntraced(function* (
   const reached = yield* hostedStoreOrUnavailable(readTaskHeader(userId, taskId));
   if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return reached.value;
-});
-
-/** A top pilot task, whose merge policy or running switch a switch changes; any other task's is refused, a child's being its top task's. */
-const topPilotTask = /* @__PURE__ */ Effect.fnUntraced(function* (stored: TaskHeader) {
-  if (stored.mode !== TASK_MODE.PILOT || stored.parentTaskId !== null) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
 });
 
 /** A move the workspace's GitHub refused under the plan's lock, carried out of the store's change as the procedure's refusal. */
@@ -645,13 +636,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * the row names under its lock, so one changed meanwhile is the one
      * confirmed.
      *
-     * A merge policy and the running switch are switched on a pilot task at
-     * the top of its tree alone, and refused as an invalid request on any
-     * other; one that moves is told to the task's pilot as the member's words
-     * once it is written (`pilot-switch-notice.ts`), but Running switched
-     * off, which stops the pilot with its tree (`running-tree.ts`) and tells
-     * it nothing.
-     *
      * A plan is archived no longer; an archive an older build asks for
      * stops every coding agent of the plan first, as a Stop stops one, then
      * settles the plan instead, and an unarchive puts it back to work
@@ -697,10 +681,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       }
       // Where its agents run is set at creation, so a change that names another place is refused before anything is stopped.
       yield* runsOnChange(userId, taskId, changes.runsOn);
-      // A merge policy and the running switch are a pilot tree's, set on its top task alone, whose children follow it.
-      if (changes.mergePolicy !== undefined || changes.running !== undefined) {
-        yield* topPilotTask(yield* reachedTask(userId, taskId));
-      }
       // A repository another than its tree's is refused before anything is stopped too; the store holds it again under the lock.
       // Note that the name GitHub resolved is asked, not the one typed, so a renamed repository's old name is the one held.
       if (reached !== undefined) {
@@ -747,8 +727,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ...(status === undefined ? undefined : { status }),
           ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
           ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
-          ...(changes.mergePolicy === undefined ? undefined : { mergePolicy: changes.mergePolicy }),
-          ...(changes.running === undefined ? undefined : { running: changes.running }),
         },
         organizationId === undefined ? undefined : movedRepositoryReached(organizationId, userId),
       ).pipe(
@@ -763,23 +741,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ),
       );
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const { task: plan, txid, mergePolicyMoved, runningMoved } = task.value;
-      // The pilot is told only of a switch that moved under the row's lock, so a repeat of the same switch wakes no one.
-      if (mergePolicyMoved) yield* tellPilotOfMergePolicy(seams, request, writer, userId, taskId);
-      // The tree is resumed before its pilot is told, so the pilot wakes to the tree as the switch left it;
-      // switched off, the pilot is stopped with its tree and told nothing.
-      if (runningMoved) {
-        if (plan.running === true) {
-          yield* resumeRunningTree(seams, writer, userId, taskId);
-          yield* tellPilotOfRunning(seams, request, writer, userId, taskId);
-        } else {
-          yield* stopRunningTree(seams, request, writer, userId, taskId);
-          yield* recordServerEvent(SERVER_EVENT.AGENT_STOP, userId, {
-            agent_kind: AGENT_KIND.PILOT,
-            stopped_tree: true,
-          });
-        }
-      }
+      const { task: plan, txid } = task.value;
       return txid === undefined ? { plan } : { plan, txid };
     }),
 

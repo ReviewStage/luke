@@ -5,13 +5,9 @@ import { Database } from "@luke/database/core/query";
 import { createAgent, readAgent } from "@luke/database/models/agent-store";
 import { replaceAgentWakeups } from "@luke/database/models/agent-wakeups";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { createTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
-import { task } from "@luke/database/schemas/task";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { TASK_MODE } from "@luke/features/task-wire";
-import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { cancelledTurn } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -126,43 +122,6 @@ it.layer(getTestDB())("the delivery of a released wait's wakeups", (it) => {
       yield* sweepAt(new Date(DUE.getTime() + RETRY_MS), eve);
       assert.deepEqual(sentTo(eve, sessionId), ["Check CI on #42."]);
     }),
-  );
-
-  it.effect.each([
-    { place: "a child task", onTop: false },
-    { place: "the top task", onTop: true },
-  ])(
-    "a wakeup of an agent on $place of a pilot tree whose Running switch is off is held past every attempt while it is off, and told once Running is on",
-    ({ onTop }) =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, agentId, sessionId } = yield* openAgent;
-        const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
-        const own = Option.getOrThrow(Option.fromNullishOr(agent.taskId));
-        const setTask = (id: string, columns: Partial<typeof task.$inferInsert>) =>
-          Database.use((db) => db.update(task).set(columns).where(eq(task.id, id)));
-        const top = onTop
-          ? own
-          : (yield* createTask(owner, {
-              organizationId: agent.organizationId,
-              mode: TASK_MODE.PILOT,
-            })).id;
-        yield* onTop
-          ? setTask(own, { mode: TASK_MODE.PILOT })
-          : setTask(own, { parentTaskId: top });
-        yield* replaceAgentWakeups(agentId, [{ at: DUE, prompt: "Check CI on #42." }]);
-        const sweepAfter = (retries: number) =>
-          sweepAt(new Date(DUE.getTime() + retries * RETRY_MS), eve);
-
-        for (let retries = 0; retries <= NATIVE_WAKEUP_SWEEP.MAX_ATTEMPTS; retries++) {
-          yield* sweepAfter(retries);
-        }
-        assert.deepEqual(sentTo(eve, sessionId), [], "a stopped tree's agent is woken by nothing");
-        yield* setTask(top, { running: true });
-        yield* sweepAfter(NATIVE_WAKEUP_SWEEP.MAX_ATTEMPTS + 1);
-
-        assert.deepEqual(sentTo(eve, sessionId), ["Check CI on #42."]);
-      }),
   );
 
   it.effect("a wakeup whose delivery fails is tried again past the retry, then given up", () =>

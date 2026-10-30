@@ -89,8 +89,6 @@ function tasksStatement(userId: string) {
           creatorAgentId: task.creatorAgentId,
           parentTaskId: task.parentTaskId,
           mode: task.mode,
-          mergePolicy: task.mergePolicy,
-          running: task.running,
           blocked: taskBlockedFor(userId),
         },
         {
