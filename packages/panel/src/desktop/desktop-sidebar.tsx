@@ -178,7 +178,7 @@ import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { useChannelWaiting, useInboxWaiting } from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
-import { SidebarChannels } from "./sidebar-channels.js";
+import { type InboxHead, SidebarChannels } from "./sidebar-channels.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { type CountNoun, foldedCount, groupCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { SidebarFoot } from "./sidebar-foot.js";
@@ -1649,16 +1649,20 @@ function ListSkeleton(): React.JSX.Element {
  * while the row is hovered or reached from the keyboard, as New task's and
  * Search's show theirs. A press opens the window's Inbox
  * (`desktop-inbox.tsx`), and the row is the place shown while it stands.
+ * With Channels on it heads them (`head`): the chevron that folds them, and
+ * the ⋯ that makes one, standing beside its chord.
  */
 function SidebarInboxRow({
   waiting,
   current,
   disabled,
+  head,
   onOpen,
 }: {
   waiting: number;
   current: boolean;
   disabled: boolean;
+  head?: InboxHead | undefined;
   onOpen: () => void;
 }): React.JSX.Element {
   return (
@@ -1672,6 +1676,9 @@ function SidebarInboxRow({
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
       shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
       disabled={disabled}
+      fold={head?.fold}
+      actions={head?.actions}
+      contextMenu={head?.contextMenu}
       onClick={onOpen}
     >
       Inbox
@@ -2430,13 +2437,7 @@ function SidebarColumn({
         >
           Search
         </NavItem>
-        <SidebarInboxRow
-          waiting={waiting}
-          current={inInbox && !narrowed}
-          disabled={!tasks.signedIn}
-          onOpen={chosen(openInbox)}
-        />
-        {/* With Channels on, the workspace's channels stand under the Inbox's row as its filters. */}
+        {/* With Channels on, the workspace's channels stand under the Inbox's row as its filters, the row heading them. */}
         {channelsOn && tasks.signedIn ? (
           <SidebarChannels
             workspaceId={tasks.workspace?.id}
@@ -2444,9 +2445,27 @@ function SidebarColumn({
             waiting={channelWaiting}
             currentId={shownChannelId}
             shown={tasks.shown && overlay.inSight}
+            folded={folds.channelsFolded}
+            onFold={folds.toggleChannels}
+            inbox={(head) => (
+              <SidebarInboxRow
+                waiting={waiting}
+                current={inInbox && !narrowed}
+                disabled={!tasks.signedIn}
+                head={head}
+                onOpen={chosen(openInbox)}
+              />
+            )}
             onOpen={chosen(openChannel)}
           />
-        ) : null}
+        ) : (
+          <SidebarInboxRow
+            waiting={waiting}
+            current={inInbox && !narrowed}
+            disabled={!tasks.signedIn}
+            onOpen={chosen(openInbox)}
+          />
+        )}
         <SidebarTasksRow current={inBoard} disabled={!tasks.signedIn} onOpen={chosen(openBoard)} />
         <SidebarAutomationsRow
           current={inAutomations}

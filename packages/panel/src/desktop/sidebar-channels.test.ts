@@ -2,8 +2,9 @@
 
 import assert from "node:assert/strict";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
+import { NavItem } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
@@ -23,11 +24,12 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
  * sidebar-channels.test.ts -- the sidebar's channels under the Inbox: a row
  * posted in since the reader looked stands in the unread weight; its ⋯
  * offers Copy link, Mark as read while it is unread, Edit, and Archive
- * last and alone; Add
- * channel's Browse archived channels lists the archived standing channels,
- * each opened again by its Unarchive, or opened by a press; and Edit asks
+ * last and alone; the
+ * Inbox's Browse archived channels lists the archived standing channels,
+ * each opened again by its Unarchive, or opened by a press; Edit asks
  * for a channel's name and purpose, #general's name locked, sending what
- * changed.
+ * changed; and the Inbox's chevron folds the channels, the one shown
+ * still standing.
  *
  * The service is a script at the act boundary; synthetic channels throughout.
  */
@@ -81,8 +83,31 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+/** The channels under an Inbox row that heads them, their fold held as the sidebar holds it. */
+function HeadedChannels(
+  props: Omit<React.ComponentProps<typeof SidebarChannels>, "folded" | "onFold" | "inbox">,
+): React.JSX.Element {
+  const [folded, setFolded] = useState(false);
+  return createElement(SidebarChannels, {
+    ...props,
+    folded,
+    onFold: () => setFolded(!folded),
+    inbox: (head) =>
+      createElement(NavItem, {
+        fold: head.fold,
+        actions: head.actions,
+        contextMenu: head.contextMenu,
+        children: "Inbox",
+      }),
+  });
+}
+
 /** The sidebar's channels over `channels`, each channel opened recorded in `opened`. */
-function mount(channels: readonly Channel[], opened: string[]): HTMLElement {
+function mount(
+  channels: readonly Channel[],
+  opened: string[],
+  currentId?: string | undefined,
+): HTMLElement {
   const unasked = () => Promise.resolve(undefined);
   const control: ChannelsControl = {
     channels,
@@ -110,11 +135,11 @@ function mount(channels: readonly Channel[], opened: string[]): HTMLElement {
         createElement(
           LinkWorkspaceProvider,
           { value: WORKSPACE_ID },
-          createElement(SidebarChannels, {
+          createElement(HeadedChannels, {
             workspaceId: WORKSPACE_ID,
             channels: control,
             waiting: new Map(),
-            currentId: undefined,
+            currentId,
             shown: true,
             onOpen: (channelId) => opened.push(channelId),
           }),
@@ -173,12 +198,12 @@ test("a channel's ⋯ offers Copy link and Mark as read while it is unread, then
 test("Browse archived channels lists the archived standing channels, Unarchive opens one again, and a press opens one", async () => {
   const opened: string[] = [];
   mount([channel("c-general", "general")], opened);
-  act(() => button("Add channel").click());
+  act(() => button("Inbox actions").click());
   act(() =>
     (
       [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
         (item) => item.textContent === "Browse archived channels",
-      ) ?? assert.fail("Add channel offers the archived channels")
+      ) ?? assert.fail("the Inbox's ⋯ offers the archived channels")
     ).click(),
   );
   await settle();
@@ -240,4 +265,24 @@ test("Edit on #general fills in its purpose, keeps its name locked, and sends on
   assert.deepEqual(edits, [
     { channelId: "c-general", edit: { purpose: "Anything that cuts across" } },
   ]);
+});
+
+test("the Inbox's chevron folds the channels under it, the channel shown still standing, and unfolds them again", () => {
+  const sidebar = mount(
+    [channel("c-general", "general"), channel("c-app", "app"), channel("c-launch", "launch")],
+    [],
+    "c-app",
+  );
+  const rows = () =>
+    [...sidebar.querySelectorAll('[role="group"][aria-label="Channels"] .luke-nav-item')].map(
+      (row) => row.textContent,
+    );
+  assert.deepEqual(rows(), ["general", "app", "launch"]);
+
+  act(() => button("Channels").click());
+  assert.equal(button("Channels").getAttribute("aria-expanded"), "false");
+  assert.deepEqual(rows(), ["app"]);
+
+  act(() => button("Channels").click());
+  assert.deepEqual(rows(), ["general", "app", "launch"]);
 });

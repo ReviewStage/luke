@@ -21,7 +21,7 @@ export interface ChannelSections {
 }
 
 /**
- * What the sidebar's Add channel offers of each kind of channel, the
+ * What the Inbox row's ⋯ offers of each kind of channel, the
  * standing ones and the projects', in its order: what makes one, and what
  * lists the archived ones.
  */
