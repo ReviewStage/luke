@@ -1778,14 +1778,17 @@ export interface FileReveal {
 
 /**
  * A bar of the host's that draws the view's tools in place of its own
- * (`FileViewBar`), as a chapter's header does: its diff settings, Collapse
- * all, and the tree's toggle, drawn into `tools`; the view's count of files
+ * (`FileViewBar`), as a chapter's header does: its diff settings and Collapse
+ * all, drawn into `tools`, and the tree's toggle, drawn into `end`, at the
+ * bar's very end past its ⋯, as every tab's bar stands it; the view's count of files
  * viewed, its pull request on GitHub, and its ⋯ over the whole pull request
  * left to the host, and no strip standing in the closed tree's place.
  */
 export interface ChangesBarHost {
   /** The box in the host's bar the tools are drawn into; none until it is drawn. */
   readonly tools: HTMLElement | null;
+  /** The box at the host's bar's very end the tree's toggle is drawn into; none until it is drawn. */
+  readonly end: HTMLElement | null;
   /** The host's view, which holds that bar and the list alike and resizes with the panel, the tree's toggles read in it; none until it is drawn. */
   readonly view: HTMLElement | null;
 }
@@ -1984,16 +1987,18 @@ export function AgentChangesTab({
       {phone ? (
         settings.sheet
       ) : host !== undefined ? (
-        host.tools === null ? null : (
-          createPortal(
-            <>
-              <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy }} />
-              <FoldAllButton list={list} />
-              <TreeToggle toggles={room.toggles} />
-            </>,
-            host.tools,
-          )
-        )
+        <>
+          {host.tools === null
+            ? null
+            : createPortal(
+                <>
+                  <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy }} />
+                  <FoldAllButton list={list} />
+                </>,
+                host.tools,
+              )}
+          {host.end === null ? null : createPortal(<TreeToggle toggles={room.toggles} />, host.end)}
+        </>
       ) : (
         <FileViewBar
           lead={

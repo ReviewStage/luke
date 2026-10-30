@@ -819,13 +819,27 @@
   display: none;
 }
 
-/* The brief's words hang under its heading's, past the fold's chevron, as
-   a disclosure's body hangs under its summary's words. */
+/* The brief lines up with the chapter's bar over it: its fold's chevron
+   under the rail toggle's glyph, which stands a control's inset in from the
+   bar's edge, and its heading and its words under the chapter's title,
+   which stands a control's gap past the toggle. */
+.chapter-brief {
+  --chapter-glyph-inset: calc((var(--luke-control-height) - var(--luke-control-icon)) / 2);
+  --chapter-words-gap: calc(var(--chapter-glyph-inset) + var(--luke-control-gap));
+
+  padding-inline: calc(var(--luke-list-inset) + var(--chapter-glyph-inset) - var(--luke-tight-gap))
+    var(--luke-list-inset);
+}
+
+.chapter-brief .pull-request-section-fold > .luke-disclosure-summary {
+  gap: var(--chapter-words-gap);
+}
+
 .chapter-brief-body {
   padding-inline-start: calc(
     var(--luke-tight-gap) +
     var(--luke-control-icon) +
-    var(--luke-icon-gap)
+    var(--chapter-words-gap)
   );
 }
 

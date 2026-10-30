@@ -1,5 +1,5 @@
 /**
- * device-agents.ts -- a local agent's Mac (`device-agent-wire.ts`): it registers and beats, reads which of its agents should still stand, holds a read for its lines and one for its requests, claims each, settles a line or answers a request, and saves its agents' state.
+ * device-agents.ts -- a local agent's Mac (`device-agent-wire.ts`): it registers and beats, reads which of its agents should still stand, holds a read for its lines and one for its requests, claims each, and settles a line or answers a request.
  *
  * A host enrolls first (`../host-wire.ts`), trading an install token for
  * its device secret, or pairing with a code (`startPairing`, then
@@ -30,10 +30,6 @@ import {
   deviceAgentRequestClaimAnswerSchema,
   deviceAgentRequestsAnswerSchema,
   deviceAgentSettleRequestSchema,
-  deviceAgentStateCommitAnswerSchema,
-  deviceAgentStateCommitRequestSchema,
-  deviceAgentStateSaveAnswerSchema,
-  deviceAgentStateSaveRequestSchema,
 } from "../device-agent-wire.js";
 import {
   hostEnrollAnswerSchema,
@@ -116,16 +112,4 @@ export const deviceAgentsContract = {
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_REQUESTS }))
     .input(exactInput(deviceAgentAnswerRequestSchema))
     .output(EffectSchema.flip(deviceAgentDoneAnswerSchema)),
-  saveState: hostedProcedure
-    .meta(bodyCap(SMALL_BODY_BYTES))
-    .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_STATE_SAVE }))
-    .input(exactInput(deviceAgentStateSaveRequestSchema))
-    .output(EffectSchema.flip(deviceAgentStateSaveAnswerSchema)),
-  commitState: hostedProcedure
-    .meta(bodyCap(SMALL_BODY_BYTES))
-    .meta(
-      openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_STATE_COMMIT }),
-    )
-    .input(exactInput(deviceAgentStateCommitRequestSchema))
-    .output(EffectSchema.flip(deviceAgentStateCommitAnswerSchema)),
 };

@@ -13,7 +13,6 @@ import {
   HOSTED_HTTP_STATUS,
   jsonResponse,
 } from "../http/http.js";
-import type { AgentStateSweepOutcome } from "./agent-state-sweep.js";
 import type { DeviceLeaseSweepOutcome } from "./device-lease-sweep.js";
 import type { EveSandboxSweepOutcome } from "./eve-sandbox-sweep.js";
 import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
@@ -43,8 +42,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * plan a day ago that no save ever named is deleted, and the pull requests of
  * agents on a member's own GitHub token, which no webhook reaches, are polled
  * for what their agents are told of, and the native agents' image template
- * is moved on and the templates of older images deleted, the device agents' saved
- * state no launch will restore again is deleted from its store, and the hosts' pairings
+ * is moved on and the templates of older images deleted, and the hosts' pairings
  * whose code lapsed are deleted with the address each kept. Each is bounded on its own, and the
  * sweep runs them in turn, each kept from the others, so one that fails is
  * logged and the rest still run.
@@ -91,8 +89,6 @@ interface MaintenanceSweeps {
   sweepRepositorySnapshots: (now: number) => SweepRead<RepositorySnapshotSweepOutcome>;
   /** Hands on the coding agents' queues standing unpaused whose agent idles, a sweep's worth, answering how many it looked at. */
   sweepAgentQueues: (now: number) => SweepRead<number>;
-  /** Deletes the device agents' saved state superseded, of an agent gone, or past its retention, and the uploads no commit named, blob then row, a sweep's worth. */
-  sweepAgentStates: (now: number) => SweepRead<AgentStateSweepOutcome>;
   /** Deletes the hosts' pairings whose code lapsed, a sweep's worth, and the hosts approved whose boxes never collected their secret, answering how many pairings went. */
   sweepHostPairings: (now: number) => SweepRead<number>;
 }
@@ -151,8 +147,6 @@ interface MaintenanceSweepAnswer {
   repositorySnapshots: Swept<RepositorySnapshotSweepOutcome>;
   /** How many coding agents' queues standing unpaused the sweep looked at, each handed on where its agent idled. */
   agentQueues: Swept<number>;
-  /** What the sweep over the device agents' saved state did. */
-  agentStates: Swept<AgentStateSweepOutcome>;
   /** Hosts' pairings whose code lapsed, deleted. */
   hostPairings: Swept<number>;
 }
@@ -213,7 +207,6 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
       sweeps.sweepRepositorySnapshots(now),
     ),
     agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
-    agentStates: yield* isolated("sweepAgentStates", sweeps.sweepAgentStates(now)),
     hostPairings: yield* isolated("sweepHostPairings", sweeps.sweepHostPairings(now)),
   };
 });

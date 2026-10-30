@@ -580,7 +580,9 @@ function historyActions(history: FileHistory): MenuAction[] {
  * by `PaneBar`: Back and Forward where the tab keeps a history, then what
  * leads it (a File tab's path, or Files changed's count of the files
  * viewed), the GitHub button, dimmed with no page to open yet, the tab's own
- * controls, the tree's toggle where there is a tree, and the ⋯ last.
+ * controls, the ⋯, and the tree's toggle last, where there is a tree, at
+ * the bar's very end beside the tree it opens, as the window's title bar
+ * ends with the side panel's.
  */
 export function FileViewBar({
   history,
@@ -597,7 +599,7 @@ export function FileViewBar({
   github: { readonly href: string; readonly open: (url: string) => void } | undefined;
   /** The tab's own controls after the GitHub button: View settings, or a ⋯ of its own. */
   menu: ReactNode;
-  /** The bar's ⋯, drawn last, after the tree's toggle; none draws none. */
+  /** The bar's ⋯, drawn after the tab's own controls, before the tree's toggle; none draws none. */
   more?: PaneBarMenu | undefined;
   /** The tree's toggles, where there is a tree. */
   tree?: PaneToggles | undefined;
@@ -634,10 +636,10 @@ export function FileViewBar({
             )}
           </Tooltip>
           {menu}
-          {tree === undefined ? null : <TreeToggle toggles={tree} />}
         </>
       }
       menu={more}
+      end={tree === undefined ? undefined : <TreeToggle toggles={tree} />}
     />
   );
 }
