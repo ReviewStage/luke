@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import {
+  AGENT_CALL_FAILURE,
+  type AgentMessagesAnswerView,
+  INBOX_SCOPE_KIND,
+} from "@luke/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentSummary,
@@ -20,7 +24,9 @@ import type { PageLine } from "@luke/features/page-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import type { PortActResult } from "@luke/host/contract";
 import { NO_EXPERIMENTS } from "@luke/settings";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -119,6 +125,33 @@ const WORDS = [
   `Ask [@Batch the invitations](https://tryluke.dev/acme/plan/${TASK.id}/agent/${AGENT.id}).`,
 ].join(" ");
 
+/** What the agent's transcript says, naming a page of its task, as an agent's words do. */
+const TRANSCRIPT: AgentMessagesAnswerView = {
+  messages: [
+    {
+      id: "answer",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        {
+          type: "text",
+          text: `The numbers are on [@Invite funnel](https://tryluke.dev/acme/plan/${TASK.id}/page/${FUNNEL.id}).`,
+        },
+      ],
+    },
+  ],
+  cursor: "1:0",
+  status: AGENT_STATUS.COMPLETED,
+  title: null,
+};
+
+/** The pages a transcript's stream pushes, then held open as a followed transcript stays. */
+async function* streamOf(
+  pages: readonly AgentMessagesAnswerView[],
+): AsyncGenerator<AgentMessagesAnswerView> {
+  yield* pages;
+  await new Promise(() => undefined);
+}
+
 const ITEM: InboxItem = {
   id: "a1b2c3d4-0000-4000-8000-000000000001",
   agentId: AGENT.id,
@@ -182,6 +215,19 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
             changedFiles: 2,
           },
         },
+      });
+    case ACT_KIND.AGENTS_TRANSCRIPT:
+      // SAFETY: the window reads oRPC's stream as an async iterator alone, which a generator is.
+      return Promise.resolve({
+        status: FAKE_ANSWER.DONE,
+        value: streamOf([TRANSCRIPT]) as unknown as PortActResult<
+          typeof ACT_KIND.AGENTS_TRANSCRIPT
+        >,
+      });
+    case ACT_KIND.AGENTS_MESSAGES:
+      return Promise.resolve({
+        status: FAKE_ANSWER.DONE,
+        value: { failure: AGENT_CALL_FAILURE.UNANSWERED },
       });
     default:
       return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
@@ -456,4 +502,22 @@ test("an agent beside the Inbox has the agent's menu from its tab's ⋯ and its 
     );
   });
   assert.deepEqual(left.went, [`${TASK.id} agent ${AGENT.id}`, `${TASK.id} agent ${AGENT.id}`]);
+});
+
+test("a link to a page of the item's task, pressed in a transcript beside the Inbox, opens in the panel as the item's own does, the Inbox still standing", async () => {
+  const { container, left } = await inbox();
+  await pressChip(container, "Batch the invitations");
+  assert.match(panelTabs(container)?.[0] ?? "", /^▸ Batch the invitations/);
+
+  // Note that the chip is the transcript's, drawn in the panel, not the item's words.
+  const chip = [
+    ...container.querySelectorAll<HTMLElement>('aside[aria-label="Panel"] [data-mention-ref]'),
+  ].find((each) => each.textContent?.includes("Invite funnel"));
+  assert.ok(chip, "the transcript names the page");
+  act(() => chip.click());
+  await settle();
+
+  assert.deepEqual(panelTabs(container), ["▸ Invite funnel"], "the page took the preview's place");
+  assert.ok(container.querySelector(".inbox-view"), "the Inbox still stands");
+  assert.equal(left.links.length + left.tasks.length, 0, "nothing left the Inbox");
 });
