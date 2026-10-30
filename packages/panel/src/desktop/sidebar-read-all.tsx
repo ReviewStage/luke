@@ -20,7 +20,7 @@ import { ActionMenu, type MenuAction } from "./action-menu.js";
  * every unread thread of the listed workspace, as the service marks the
  * workspace's whole (`onMarkAll`); on a channel's, that channel's threads
  * alone, each on its own (`onMarkEach`), since the service marks no
- * channel's whole.
+ * channel's whole, its look stamped beside them (`channel-menu.tsx`).
  */
 
 /** What the menus offer to clear every dot with. */

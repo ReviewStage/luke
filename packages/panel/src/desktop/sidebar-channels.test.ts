@@ -27,9 +27,9 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 /**
  * sidebar-channels.test.ts -- the sidebar's channels under the Inbox: a row
  * posted in since the reader looked stands in the unread weight; its ⋯
- * offers Copy link, Mark as read while it is unread, Mark all as read,
- * which marks its own unread threads read, Edit, and Archive last and
- * alone; Add
+ * offers Copy link, Mark all as read, which stamps the reader's look at it
+ * and marks its own unread threads read, Edit, and Archive last and alone;
+ * Add
  * channel's Browse archived channels lists the archived standing channels,
  * each opened again by its Unarchive, or opened by a press; and Edit asks
  * for a channel's name and purpose, #general's name locked, sending what
@@ -75,12 +75,15 @@ let unarchived: string[] = [];
 let edits: { channelId: string; edit: { name?: string; purpose?: string } }[] = [];
 /** Every thread marked read, in order. */
 let marked: string[] = [];
+/** Every channel looked at, in order. */
+let looked: string[] = [];
 let root: Root | undefined;
 
 beforeEach(() => {
   unarchived = [];
   edits = [];
   marked = [];
+  looked = [];
   fakeActs({
     act: (request): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.AGENTS_INBOX_READ_STATE)
@@ -134,7 +137,9 @@ function mount(channels: readonly Channel[], opened: string[]): HTMLElement {
       return Promise.resolve(undefined);
     },
     onMove: unasked,
-    onLook: () => undefined,
+    onLook: (channelId) => {
+      looked.push(channelId);
+    },
   };
   const tasks = tasksControl({
     tasks: [BILLING],
@@ -202,20 +207,12 @@ function menuWords(): string[] {
   );
 }
 
-test("a channel's ⋯ offers Copy link, Mark as read while it is unread, and Mark all as read, which marks its own unread threads read alone, then Edit, then Archive last and alone", async () => {
+test("a channel's ⋯ offers Copy link and Mark all as read, which stamps the reader's look at it and marks its own unread threads read alone, then Edit, then Archive last and alone", async () => {
   mount([channel("c-app", "app", { lookedAt: 1, latestPostedAt: 5 })], []);
   act(() => button("Channel actions").click());
   await settle();
   const words = menuWords().map((each) => each.replace(/[⇧⌥⌘⌃]+.$/u, ""));
-  assert.deepEqual(words, [
-    "Copy link",
-    "Mark as read",
-    "Mark all as read",
-    "—",
-    "Edit…",
-    "—",
-    "Archive",
-  ]);
+  assert.deepEqual(words, ["Copy link", "Mark all as read", "—", "Edit…", "—", "Archive"]);
   act(() =>
     (
       [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
@@ -225,6 +222,7 @@ test("a channel's ⋯ offers Copy link, Mark as read while it is unread, and Mar
   );
   await settle();
   assert.deepEqual(marked, [APP_UNREAD.id]);
+  assert.deepEqual(looked, ["c-app"]);
 });
 
 test("Browse archived channels lists the archived standing channels, Unarchive opens one again, and a press opens one", async () => {

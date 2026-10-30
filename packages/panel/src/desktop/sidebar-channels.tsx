@@ -47,9 +47,9 @@ import { ReadAllMenu, type SidebarReadAll } from "./sidebar-read-all.js";
  * few rows' blocks stand in their place (`SidebarChannelRowsSkeleton`), and
  * where that read failed, it says so with Retry. The ⋯ a hovered row wears,
  * and a right-click anywhere on it, offer the channel's menu
- * (`channel-menu.tsx`): Copy link, Mark as read while it is unread, and
- * Mark all as read, which marks its threads read and stands disabled while
- * none is unread (`sidebar-read-all.tsx`); Edit on every channel, #general's name staying as it is; and last and
+ * (`channel-menu.tsx`): Copy link, and Mark all as read, which stamps the
+ * reader's look at it and marks its threads read, disabled while neither
+ * is unread (`sidebar-read-all.tsx`); Edit on every channel, #general's name staying as it is; and last and
  * alone, Archive on any but #general, which is never archived. Making and editing ask through
  * `channel-dialog.tsx`; archiving the channel shown moves the window to
  * #general (`use-channels.ts`). Every answer waits on the service, and a
