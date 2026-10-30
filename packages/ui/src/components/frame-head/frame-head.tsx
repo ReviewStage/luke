@@ -3,7 +3,8 @@ import { BUTTON_SHAPE, BUTTON_SIZE, BUTTON_VARIANT, Button } from "../button/but
 import { CHIP_LOOK, Chip, ChipName } from "../chip/chip.js";
 import { OneLine } from "../one-line/one-line.js";
 import { SKELETON_SHAPE, Skeleton } from "../skeleton/skeleton.js";
-import { ToolbarName, type ToolbarProps } from "../toolbar/toolbar.js";
+import type { ToolbarProps } from "../toolbar/toolbar.js";
+import { ToolbarName } from "../toolbar/toolbar-name.js";
 
 /**
  * frame-head.tsx -- the head of the frame a place stands in, as a workspace heads a window: a task named as a chip, and what waits on the reader there, or any other place named by its words, which stay on screen whatever is chosen under it.

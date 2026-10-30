@@ -14,10 +14,11 @@
  * draws its head into it through a portal (`TitleBarPlace`), so the head
  * is the page's own, reading the page's state and pressing the page's acts,
  * and leaves with the page. A page whose bar names it (`PlaceToolbar`)
- * moves the name up and keeps the rest of its bar where it stood. Where no title bar stands (a phone's room, the
- * web's tab, whose window is the browser's, a page drawn alone in a test,
- * the side panel, and the Inbox kept hidden between visits), `useTitleBar`
- * says so, and a page names itself in its own top row as it always has.
+ * moves the name up and keeps the rest of its bar where it stood. Where no
+ * title bar stands (a phone's room, the web's tab, whose window is the
+ * browser's, a page drawn alone in a test, the side panel, and the Inbox
+ * kept hidden between visits), `useTitleBar` says so, and a page names
+ * itself in its own top row as it always has.
  */
 
 import { FramePlace, Toolbar, type ToolbarProps } from "@luke/ui";
