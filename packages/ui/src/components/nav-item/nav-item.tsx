@@ -21,6 +21,11 @@ import { Skeleton } from "../skeleton/skeleton.js";
  *   hovered or shown.
  * - `identity`, who or where: an account's picture and name, a
  *   workspace's tile and who shares it, a row tall enough for a face.
+ * - `step`, a step of something read in order, a pull request's chapter:
+ *   its name on up to two lines, cut short with an ellipsis past them, and
+ *   its `detail` under it as a muted meta line rather than after it, so
+ *   neither gives way to the other; its glyph and its end stand level with
+ *   the name's first line.
  *
  * Its end holds, at rest, a `mark` (a failed run's glyph, a pin) and a
  * `count`, read with its noun ("3 waiting on you") and left out at none,
@@ -52,7 +57,7 @@ import { Skeleton } from "../skeleton/skeleton.js";
  * A NavItemSkeleton stands a row while the places it lists are read: the
  * row's own box, its glyph's cell holding the glyph every row of the list
  * wears, and a block where its name will stand, so the rows land where the
- * blocks stood. It is no press; the region around it says what is read.
+ * blocks stood; a step's stands a second block where its meta line will. It is no press; the region around it says what is read.
  */
 
 /**
@@ -65,11 +70,17 @@ import { Skeleton } from "../skeleton/skeleton.js";
  * and chord trade places under the pointer and the keyboard.
  */
 const ROW =
-  "luke-nav-item group/nav m-0 flex h-control w-full min-w-0 cursor-press items-center gap-icon-gap rounded-control border-0 px-row-inset text-left font-sans text-body-size leading-label font-text no-underline transition-[background-color,color] duration-(--luke-duration-hover) ease-plain disabled:cursor-default disabled:opacity-disabled data-[variant=identity]:h-auto data-[variant=identity]:min-h-nav-identity data-[variant=identity]:py-luke-6";
+  "luke-nav-item group/nav m-0 flex h-control w-full min-w-0 cursor-press items-center gap-icon-gap rounded-control border-0 px-row-inset text-left font-sans text-body-size leading-label font-text no-underline transition-[background-color,color] duration-(--luke-duration-hover) ease-plain disabled:cursor-default disabled:opacity-disabled data-[variant=identity]:h-auto data-[variant=identity]:min-h-nav-identity data-[variant=identity]:py-luke-6 data-[variant=step]:h-auto data-[variant=step]:items-start data-[variant=step]:py-luke-6";
 
 /** A name cut short fades out over its last few pixels, as a browser's tab ends a long title; unread, or naming who or where, it reads in the heavier weight. */
 const NAME =
   "luke-nav-item-name min-w-0 flex-initial overflow-hidden whitespace-nowrap group-data-[unread=true]/nav:font-emphasis group-data-[variant=identity]/nav:font-emphasis";
+
+/** A step's name wraps to two lines and ends in an ellipsis past them, breaking a word too long for its line. */
+const STEP_NAME = "luke-nav-item-name min-w-0 line-clamp-2 wrap-break-word";
+
+/** A step's name and its meta line, one over the other in the room the glyph and the end leave. */
+const STEP_WORDS = "luke-nav-item-words flex min-w-0 flex-1 flex-col";
 
 /** A menu's chevron at the end is the small, muted one a chip's is. */
 const MARK =
@@ -79,6 +90,7 @@ const MARK =
 export const NAV_ITEM_VARIANT = {
   ROW: "row",
   IDENTITY: "identity",
+  STEP: "step",
 } as const;
 
 export type NavItemVariant = (typeof NAV_ITEM_VARIANT)[keyof typeof NAV_ITEM_VARIANT];
@@ -136,7 +148,7 @@ export type NavItemProps = HintProps & {
   icon?: ReactNode;
   /** Its name. */
   children: ReactNode;
-  /** Quieter words after its name, which give way first. */
+  /** Quieter words after its name, which give way first; a step's meta line, under its name. */
   detail?: ReactNode;
   /** Whether, and as what, it is the place shown. */
   current?: NavCurrent | undefined;
@@ -223,30 +235,58 @@ function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined 
   );
 }
 
-/** A row's box with nothing to press, which a skeleton stands its blocks in. */
-function StillRow({ children }: { children: ReactNode }): React.JSX.Element {
+/** A row's box of `variant` with nothing to press, which a skeleton stands its blocks in. */
+function StillRow({
+  variant,
+  children,
+}: {
+  variant: NavItemVariant;
+  children: ReactNode;
+}): React.JSX.Element {
   return (
-    <div className={ROW} data-variant={NAV_ITEM_VARIANT.ROW} aria-hidden="true">
+    <div className={ROW} data-variant={variant} aria-hidden="true">
       {children}
     </div>
   );
 }
 
-/** A row while its place is read: `icon`, the glyph its list's rows wear, and a block `width` wide where its name will stand. */
+/** A step's name over its meta line, the meta line left out where it says nothing. */
+function StepWords({ name, detail }: { name: ReactNode; detail: ReactNode }): React.JSX.Element {
+  return (
+    <span className={STEP_WORDS}>
+      <span className={STEP_NAME}>{name}</span>
+      {said(detail) ? <span className="luke-nav-item-detail">{detail}</span> : null}
+    </span>
+  );
+}
+
+/** A row while its place is read: `icon`, the glyph its list's rows wear, and a block `width` wide where its name will stand; a step's, a block `detailWidth` wide under it where its meta line will. */
 export function NavItemSkeleton({
+  variant = NAV_ITEM_VARIANT.ROW,
   icon,
   width,
+  detailWidth,
 }: {
+  variant?: NavItemVariant | undefined;
   icon?: ReactNode;
   /** How wide its name's block stands, a share of the row's room. */
   width: string;
+  /** How wide a step's meta line's block stands, a share of the row's room; none where its rows draw no meta line. */
+  detailWidth?: string | undefined;
 }): React.JSX.Element {
   return (
-    <StillRow>
+    <StillRow variant={variant}>
       {said(icon) ? <Glyph icon={icon} /> : null}
-      <Name>
-        <Skeleton width={width} />
-      </Name>
+      {variant === NAV_ITEM_VARIANT.STEP ? (
+        <StepWords
+          name={<Skeleton width={width} />}
+          detail={detailWidth === undefined ? undefined : <Skeleton width={detailWidth} />}
+        />
+      ) : (
+        <Name>
+          <Skeleton width={width} />
+        </Name>
+      )}
     </StillRow>
   );
 }
@@ -341,8 +381,14 @@ export function NavItem({
       {...(roving === true ? rovingItem() : undefined)}
     >
       {said(icon) ? <Glyph icon={icon} /> : null}
-      <Name>{children}</Name>
-      {said(detail) ? <span className="luke-nav-item-detail">{detail}</span> : null}
+      {variant === NAV_ITEM_VARIANT.STEP ? (
+        <StepWords name={children} detail={detail} />
+      ) : (
+        <>
+          <Name>{children}</Name>
+          {said(detail) ? <span className="luke-nav-item-detail">{detail}</span> : null}
+        </>
+      )}
       <AtRest mark={mark} count={count} />
       {said(shortcut) ? <span className="luke-nav-item-shortcut ml-auto">{shortcut}</span> : null}
     </button>

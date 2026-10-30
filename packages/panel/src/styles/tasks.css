@@ -849,13 +849,6 @@
 
 /* A placeholder row in the rail's own list, a chapter's row's height and
    inset, its block where the row's title will stand. */
-.chapter-rail-skeleton-row {
-  display: flex;
-  height: var(--luke-control-height);
-  align-items: center;
-  padding-inline: var(--luke-row-inset);
-}
-
 .chapters-skeleton-reading {
   display: flex;
   flex-direction: column;

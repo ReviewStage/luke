@@ -3,11 +3,14 @@ import {
   Avatar,
   Badge,
   BUTTON_SIZE,
+  CheckIcon,
   ChevronDownIcon,
   ComposeIcon,
+  CountParts,
   FolderIcon,
   GearIcon,
   InboxIcon,
+  linesCount,
   MoreButton,
   NAV_COUNT_TONE,
   NAV_CURRENT,
@@ -19,6 +22,7 @@ import {
   STATUS_TONE,
   useMenu,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -27,7 +31,8 @@ import { CatalogSection } from "../section";
  * nav-items.tsx -- a sidebar's places with their counts, marks, and chords,
  * the one shown, one unavailable, one unread; a place whose ⋯ comes in
  * over its count under the pointer; an account's menu trigger;
- * links with addresses of their own; long names in a narrow column; and
+ * links with addresses of their own; long names in a narrow column;
+ * steps read in order, their names on two lines over a meta line; and
  * rows while the places they list are read.
  */
 
@@ -128,6 +133,41 @@ function Links(): React.JSX.Element {
   );
 }
 
+/** A pull request's chapters as steps: a long title on two lines, its lines and threads under it, one viewed. */
+function Steps(): React.JSX.Element {
+  const [shown, setShown] = useState(0);
+  const step = (at: number) => ({
+    variant: NAV_ITEM_VARIANT.STEP,
+    icon: <GLYPH.PULL_REQUEST_CHAPTERS />,
+    current: shown === at ? NAV_CURRENT.PAGE : undefined,
+    onClick: () => setShown(at),
+  });
+  return (
+    <div className="catalog-narrow">
+      <NavItem
+        {...step(0)}
+        detail={
+          <CountParts
+            parts={[
+              ...linesCount(48, 12),
+              { text: "2", glyph: <GLYPH.COMMENT />, glyphLabel: "threads" },
+            ]}
+          />
+        }
+        mark={<CheckIcon />}
+      >
+        Read each invitation's expiry in the member's own time zone
+      </NavItem>
+      <NavItem {...step(1)} detail={<CountParts parts={linesCount(6, 0)} />}>
+        Sweep what expired
+      </NavItem>
+      <NavItem {...step(2)} detail={<CountParts parts={[{ text: "2 files" }]} />}>
+        Other changes
+      </NavItem>
+    </div>
+  );
+}
+
 function NavItems(): React.JSX.Element {
   return (
     <>
@@ -153,11 +193,20 @@ function NavItems(): React.JSX.Element {
           </NavItem>
         </div>
       </CatalogSection>
+      <CatalogSection id="nav-item-steps" title="Steps read in order, over a meta line">
+        <Steps />
+      </CatalogSection>
       <CatalogSection id="nav-item-skeleton" title="Rows while their places are read">
         <div className="catalog-narrow">
           <NavItemSkeleton icon={<FolderIcon />} width="64%" />
           <NavItemSkeleton icon={<FolderIcon />} width="48%" />
           <NavItemSkeleton icon={<FolderIcon />} width="72%" />
+          <NavItemSkeleton
+            variant={NAV_ITEM_VARIANT.STEP}
+            icon={<GLYPH.PULL_REQUEST_CHAPTERS />}
+            width="80%"
+            detailWidth="40%"
+          />
         </div>
       </CatalogSection>
     </>
