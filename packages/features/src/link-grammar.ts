@@ -1,5 +1,6 @@
 import { Schema as EffectSchema, Option } from "effect";
 import { isUtcDayKey } from "./admin-wire.js";
+import { HOST_WIRE, hostConnectPath, hostUserCodeOf } from "./host-wire.js";
 import { inAppScheme, isLinkHome, LINK_ORIGIN } from "./link-home.js";
 import { parsedUrl } from "./parsed-url.js";
 
@@ -45,6 +46,12 @@ import { parsedUrl } from "./parsed-url.js";
  *   an account's page, `/admin/user/<userId>`, and a day's,
  *   `/admin/day/<YYYY-MM-DD>`.
  *
+ * A place of the account's own, which no workspace holds, is linked under
+ * no workspace (`ACCOUNT_PLACE`): a box's pairing, `/connect/<code>`, by the
+ * code the box shows (`HOST_WIRE.CONNECT_PATH`), where the member approves
+ * or denies it. `connect` is a reserved slug, so no workspace's link is
+ * ever read as one.
+ *
  * An issue's page, `/issue/<issueId>`, is no place now that Luke keeps no
  * issues of its own, and Factory's, `/factory`, none now that Factory is
  * gone, so an old link to either reads as a link it does not know.
@@ -67,11 +74,14 @@ import { parsedUrl } from "./parsed-url.js";
  * (AGENTS.md's "Never"). The workspace's slug reads well and is never
  * trusted: the id alone finds the thing, and whoever opens the link is
  * checked against it there, so a link says no more than its address does.
- * A task is written `/plan/` and read under `/task/` too, the name the
- * unit of work is taking; a reader takes a trailing slash, a query, and a
- * fragment a kind has no use for, and refuses anything else. A section's
- * anchor is its heading as GitHub spells a Markdown heading's
- * (`mention-link.ts`'s `sectionAnchors`), read in lower case.
+ * A pairing's code is no credential either: the box prints it for anyone at
+ * its terminal to read, it approves nothing until a signed-in member presses
+ * Connect, and it lapses in minutes. A task is written `/plan/` and read
+ * under `/task/` too, the name the unit of work is taking; a reader takes a
+ * trailing slash, a query, and a fragment a kind has no use for, and refuses
+ * anything else. A section's anchor is its heading as GitHub spells a
+ * Markdown heading's (`mention-link.ts`'s `sectionAnchors`), read in lower
+ * case.
  *
  * A page of GitHub's the app reads is a pull request's,
  * `https://github.com/<owner>/<name>/pull/<number>` or any page under it, an
@@ -694,14 +704,76 @@ export function readLink(target: string): ReadLink | undefined {
   return place === undefined ? undefined : { workspace, place };
 }
 
+/** The places of the account's own, which no workspace holds, so their links name none. */
+export const ACCOUNT_PLACE = {
+  /** A box's pending pairing, by the code it shows, which the member approves or denies. */
+  CONNECT: "connect",
+} as const;
+
+const accountPlaceSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(ACCOUNT_PLACE.CONNECT),
+  code: EffectSchema.String.check(
+    EffectSchema.makeFilter((value: string) => hostUserCodeOf(value) === value),
+  ),
+});
+
+/** A place of the account's own, by what finds it: a pairing's code as its eight letters. */
+export type AccountPlace = typeof accountPlaceSchema.Type;
+
+/** The kind of place of the account's own a link sends someone to. */
+export type AccountPlaceKind = AccountPlace["kind"];
+
+/** Whether a value is a place of the account's own, as one crossing from main to a window is checked. */
+export const isAccountPlace = EffectSchema.is(accountPlaceSchema);
+
+/** A link read that names no workspace: a place of the account's own. */
+export interface AccountLink {
+  readonly place: AccountPlace;
+}
+
+/** A Luke link the system hands a window: a place under the workspace it was written in, or one of the account's own. */
+export type ShownLink = ReadLink | AccountLink;
+
+/** The step a pairing's link names its code after, as its path spells it. */
+const CONNECT_PREFIX = `${HOST_WIRE.CONNECT_PATH}/`;
+
+/**
+ * The place of the account's own a link names, by the web's scheme or the
+ * desktop's, on Luke's home: a pairing's, its code read whatever its case
+ * and dash; nothing for any other address.
+ */
+function readAccountLink(target: string): AccountLink | undefined {
+  if (target.length > LINK_BOUNDS.MAX_LINK_CHARS) return undefined;
+  const url = parsedUrl(target);
+  if (url === undefined || !isLinkHome(url)) return undefined;
+  const path = url.pathname.replace(/\/$/u, "");
+  if (!path.startsWith(CONNECT_PREFIX)) return undefined;
+  const typed = boundedStep(path.slice(CONNECT_PREFIX.length));
+  const code = typed === undefined ? undefined : hostUserCodeOf(typed);
+  return code === undefined ? undefined : { place: { kind: ACCOUNT_PLACE.CONNECT, code } };
+}
+
+/** The link a place of the account's own is shared by, under no workspace: a pairing's, its code as the box shows it. */
+function accountLinkOf(place: AccountPlace): string {
+  return `${LINK_ORIGIN}${hostConnectPath(place.code)}`;
+}
+
+/** What a link the system hands a window names: a workspace's place, or the account's own; nothing for an address naming neither. */
+export function readShownLink(target: string): ShownLink | undefined {
+  return readAccountLink(target) ?? readLink(target);
+}
+
 /**
  * A link spelled in the desktop's own scheme, which the system hands the
  * app: written again from the place it names, so nothing else the address
  * carried reaches the app; nothing for an address naming no place.
  */
 export function appLinkOf(target: string): string | undefined {
-  const read = readLink(target);
-  return read === undefined ? undefined : inAppScheme(linkOf(read.place, read.workspace));
+  const read = readShownLink(target);
+  if (read === undefined) return undefined;
+  return inAppScheme(
+    "workspace" in read ? linkOf(read.place, read.workspace) : accountLinkOf(read.place),
+  );
 }
 
 /** A file's lines a GitHub page names, the first through the last, counted from one. */

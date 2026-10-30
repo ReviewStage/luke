@@ -3,7 +3,7 @@
  *
  * The web serves the panel at every Luke link's own path, so the address a
  * tab is opened at is the link it was opened from on another host. It is
- * rebased onto the link home, so `readLink` reads it as the desktop reads a
+ * rebased onto the link home, so `readShownLink` reads it as the desktop reads a
  * link it is handed, and said once through the bridge's `onShowLink`, which
  * the panel already opens (`app.tsx`). A page reloaded on an entry the
  * browser history saved a step in (`browser-history.ts`) reopens that step
@@ -13,7 +13,7 @@
  * `/app`.
  */
 
-import { type ReadLink, readLink } from "@luke/features/link-grammar";
+import { readShownLink, type ShownLink } from "@luke/features/link-grammar";
 import { LINK_ORIGIN } from "@luke/features/link-home";
 import type { AppBridge } from "@luke/host/bridge";
 import { savedEntry } from "./browser-history";
@@ -23,9 +23,9 @@ import { addressHere, PANEL_PATH } from "./web-address";
 const PANEL_PATHS: ReadonlySet<string> = new Set([PANEL_PATH, `${PANEL_PATH}.html`]);
 
 /** The place the tab's address names, read as its link on the home; nothing for the panel's own paths or a path naming no place. */
-function linkHere(): ReadLink | undefined {
+function linkHere(): ShownLink | undefined {
   if (PANEL_PATHS.has(location.pathname.replace(/\/$/u, ""))) return undefined;
-  return readLink(`${LINK_ORIGIN}${addressHere()}`);
+  return readShownLink(`${LINK_ORIGIN}${addressHere()}`);
 }
 
 /**
