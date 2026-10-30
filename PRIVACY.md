@@ -521,8 +521,11 @@ long it took, never what it holds.
 Once a turn's save has landed, your Mac keeps the agent's folder for 15
 minutes, so a message soon after goes on from it, or for less while your disk
 has under a tenth free, then deletes it, and the agent's next turn brings its
-save back. A folder whose save did not land stays until a later one does. An
-agent you archive or delete loses its folder, its machine, and its token from
+save back. A folder whose save did not land, or that no save ever held, as an
+agent's from before saves did, is saved without a turn, one agent at a time,
+minutes apart, and less often after each save that fails; it stays until one
+lands, then goes after the same 15 minutes. An agent you archive or delete
+loses its folder, its machine, and its token from
 your Mac as soon as the archive reaches it, or within minutes of your Mac's
 next being online once our service no longer lists the agent; a folder whose
 save has not landed is saved first where it can be, and one that still is not
@@ -557,8 +560,9 @@ under the agent's own key, straight to Luke's private store, on the same
 terms and for as long; a save that fails leaves its file, already encrypted,
 in the host's own state folder until it uploads. As on This Mac, the host
 deletes the agent's folder 15 minutes after a turn whose save landed, or
-sooner while its disk is nearly full, and an archived or deleted agent's
-folder, machine, and token once the archive reaches it or our service no
+sooner while its disk is nearly full, saves a folder no save holds without a
+turn, one agent at a time, and deletes an archived or deleted agent's folder,
+machine, and token once the archive reaches it or our service no
 longer lists the agent; a folder whose save has not landed is saved first
 where it can be, and otherwise kept for seven days, then deleted. The agent
 sees only a placeholder.

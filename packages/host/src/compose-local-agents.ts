@@ -236,6 +236,14 @@ import type { RunMode } from "./run-mode.js";
  * nothing. This is what catches every agent a discard line never reached:
  * archived while the device was away, whose line expired, discarded by a
  * run that crashed, whose VM refused its delete, or deleted with its task.
+ * And a pass saves one listed agent's folder that no save holds, as an
+ * agent's from before saves, or one whose last save failed or was cut off,
+ * packed in a VM made for it as a turn's end packs it, so its warm window
+ * lets it go once the save lands: one agent at a time, a pass apart, so
+ * the machine stays usable, those never tried first; one whose save failed
+ * is kept and tried again after a wait doubled with each failure
+ * (`SAVE_RETRY`). One that ran directly on the device is left as it is,
+ * since it never launches again and a discard checks it on the device.
  *
  * Requests are each answered on a fiber of their own, inside the agent's
  * folder alone (`local-agent-requests.ts`). Turning the experiment off,
@@ -292,6 +300,8 @@ const KEPT_FOR = Duration.days(7);
 const ORPHAN_AFTER = 2;
 /** How many agents one pass lets go of at most, so a backlog clears over a few passes rather than in one long one. */
 const ORPHANS_PER_PASS = 5;
+/** How long a folder a pass could not save waits before a pass tries it again: the first wait, doubled after each failed try up to the last. */
+const SAVE_RETRY = { FIRST: Duration.minutes(10), LAST: Duration.hours(6) } as const;
 /** What an agent's id is, and so the one name a folder or machine must have to be taken for an agent's. */
 const AGENT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
@@ -1793,28 +1803,95 @@ export function composeLocalAgents(
 
         /**
          * A save tried of the agent's folder where it stands unsaved, before
-         * a sweep lets go of the agent: its bundle waiting committed now, or,
-         * where none waits and no restore into the folder is unfinished, the
-         * folder packed in a VM made for the save, whose let go deletes it,
-         * seals and sends as a turn's end does (`vmHeld`). Note that the
-         * agent's record says after whether it landed.
+         * a sweep lets go of the agent, or where no save holds it
+         * (`backfilled`): its bundle waiting committed now, or, where none
+         * waits and no restore into the folder is unfinished, the folder
+         * packed in a VM made for the save, whose let go deletes it, seals
+         * and sends as a turn's end does (`vmHeld`); whether it tried, which
+         * it does not where the folder stands saved or stands no more, or
+         * the agent ran directly on the device. Note that the agent's record
+         * says after whether it landed.
          */
         const saveTried = (agentId: string) =>
           Effect.gen(function* () {
             const save = (yield* Ref.get(state)).saves?.[agentId];
-            if (!savesState || Option.isSome(savedSince(save))) return;
-            if (save?.restoring !== undefined) return;
-            if (save?.pending !== undefined) return yield* saves.tried(userId, deviceId, agentId);
+            if (!savesState || Option.isSome(savedSince(save))) return false;
+            if (save?.restoring !== undefined) return false;
+            if (save?.pending !== undefined) {
+              yield* saves.tried(userId, deviceId, agentId);
+              return true;
+            }
             const layout = deviceAgentLayout(folder, agentId);
             if (!(yield* Effect.orElseSucceed(fileSystem.exists(layout.folder), () => false)))
-              return;
+              return false;
             const vm = yield* vmOf(agentId, layout.checkoutPath);
-            if (vm === undefined) return;
+            if (vm === undefined) return false;
             const made = vm.started({ agentId, folder: layout.folder, github: false }).pipe(
               Effect.as(true),
               Effect.orElseSucceed(() => false),
             );
             yield* Effect.scoped(vmHeld(agentId, made, {}));
+            return true;
+          });
+
+        /** When each agent whose folder a pass could not save is due to be tried again, and how many tries in a row failed (`SAVE_RETRY`). */
+        const saveRetries = new Map<string, { readonly failed: number; readonly at: number }>();
+
+        /**
+         * One folder of the agents given saved, where no save holds it, as
+         * an agent's from before saves, or one whose last save failed or was
+         * cut off: the first of them idle (`whileIdle`) and due, those never
+         * tried first, packed in a VM made for it (`saveTried`), so the warm
+         * window lets it go once the save lands. One with a bundle waiting,
+         * which the beat tries, or a restore unfinished, whose folder holds
+         * none of the agent's work, is left be, and one that ran directly
+         * on the device passed over. A save that fails keeps the folder,
+         * unsaved, and is tried again after `SAVE_RETRY`'s wait, doubled
+         * with each that fails in a row, so one that always fails, as a
+         * pack over its cap does, never holds the others back.
+         */
+        const backfilled = (agentIds: readonly string[]) =>
+          Effect.gen(function* () {
+            const now = yield* Clock.currentTimeMillis;
+            const records = (yield* Ref.get(state)).saves;
+            const dueAt = (id: string) => saveRetries.get(id)?.at ?? 0;
+            const unsaved = agentIds
+              .filter((id) => {
+                const save = records?.[id];
+                return (
+                  Option.isNone(savedSince(save)) &&
+                  save?.pending === undefined &&
+                  save?.restoring === undefined &&
+                  dueAt(id) <= now
+                );
+              })
+              .sort((one, other) => dueAt(one) - dueAt(other));
+            for (const id of unsaved) {
+              if (!Option.exists(yield* whileIdle(id, saveTried(id)), (tried) => tried)) continue;
+              const save = (yield* Ref.get(state)).saves?.[id];
+              if (Option.isSome(savedSince(save))) {
+                saveRetries.delete(id);
+                report(`a local agent's folder no save held was saved: ${id}`);
+                return;
+              }
+              if (save?.pending !== undefined) {
+                saveRetries.delete(id);
+                report(
+                  `a local agent's folder no save held was sealed, its save tried on the beat: ${id}`,
+                );
+                return;
+              }
+              const failed = (saveRetries.get(id)?.failed ?? 0) + 1;
+              const wait = Math.min(
+                Duration.toMillis(SAVE_RETRY.FIRST) * 2 ** (failed - 1),
+                Duration.toMillis(SAVE_RETRY.LAST),
+              );
+              saveRetries.set(id, { failed, at: (yield* Clock.currentTimeMillis) + wait });
+              report(
+                `a local agent's folder could not be saved, so it was kept and is tried again in ${Math.round(wait / 60_000)} minutes: ${id}`,
+              );
+              return;
+            }
           });
 
         /**
@@ -1828,9 +1905,11 @@ export function composeLocalAgents(
          * and every agent left out of `ORPHAN_AFTER` answered reads in a row,
          * and not kept for work it holds, saved where it is not and let go of
          * whole as a discard lets go of it, as is one kept `KEPT_FOR` since,
-         * up to `ORPHANS_PER_PASS`, those tried longest ago first. A listing
-         * that failed changes nothing, and a read that was not answered lets
-         * go of no agent whole.
+         * up to `ORPHANS_PER_PASS`, those tried longest ago first; then one
+         * listed agent's folder no save holds saved (`backfilled`), so the
+         * device saves them one at a time, a pass apart, and stays usable. A
+         * listing that failed changes nothing, and a read that was not
+         * answered lets go of no agent whole and saves none.
          */
         const swept = Effect.gen(function* () {
           passes += 1;
@@ -1861,6 +1940,9 @@ export function composeLocalAgents(
               missedReads.delete(id);
               lastTried.delete(id);
             }
+          }
+          for (const id of [...saveRetries.keys()]) {
+            if (!mine.has(id)) saveRetries.delete(id);
           }
           for (const id of owned) {
             if (!standing.has(id)) missedReads.set(id, (missedReads.get(id) ?? 0) + 1);
@@ -1910,6 +1992,8 @@ export function composeLocalAgents(
                 : `a local agent the service no longer lists here was removed: ${id}`,
             );
           }
+          // Note that a folder a VM still mounts is never packed in another made beside it.
+          yield* backfilled(owned.filter((id) => standing.has(id) && !vmStands.has(id)));
         });
 
         yield* Effect.forkScoped(linesFollowed);
