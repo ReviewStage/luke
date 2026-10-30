@@ -21,6 +21,7 @@ import {
   type AwaitingLineMetadata,
   type ConversationTarget,
   type LineSender,
+  STORE_WRITE_EFFECT,
   STORE_WRITE_REFUSAL,
   type StoreWriter,
 } from "@luke/database/models/writer";
@@ -293,7 +294,7 @@ const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, 
 export interface SteerWritten {
   readonly outcome: SteerOutcome;
   readonly txid?: string;
-  /** What a line sent found: the runtime that answers the agent and whether a turn of its was running; none for a repeat. */
+  /** What a line this send wrote found: the runtime that answers the agent and whether a turn of its was running; none for a repeat. */
   readonly sent?: { readonly runtime: ConversationRuntime; readonly turnRunning: boolean };
 }
 
@@ -513,9 +514,13 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   if (ended && running !== undefined) yield* settledEnded(writer, agent, running);
   if (Option.isNone(written.success))
     return yield* Effect.fail(refused ?? HOSTED_REFUSAL.UNAVAILABLE);
-  const { txid } = written.success.value;
-  const sent = { runtime, turnRunning: running !== undefined };
+  const { txid, effect } = written.success.value;
+  // A send that raced another under its key found the line standing under the lock, so it sent nothing new.
+  const sent =
+    effect === STORE_WRITE_EFFECT.WRITTEN
+      ? { sent: { runtime, turnRunning: running !== undefined } }
+      : undefined;
   return txid === undefined
-    ? { outcome: STEER_OUTCOME.SENT, sent }
-    : { outcome: STEER_OUTCOME.SENT, txid, sent };
+    ? { outcome: STEER_OUTCOME.SENT, ...sent }
+    : { outcome: STEER_OUTCOME.SENT, txid, ...sent };
 });

@@ -287,7 +287,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
       return Effect.gen(function* () {
         const writer = yield* storeWriter({ tools: {} });
         const target = yield* openAgentConversation;
-        yield* turnIn(writer, target, TURN_STATUS.RUNNING);
+        const turnId = yield* turnIn(writer, target, TURN_STATUS.RUNNING);
 
         yield* sweepAbandonedTurns({ writer }, { now: STARTED_AT + TURN_ABANDON.AFTER_MS + 1 });
         assert.deepEqual(yield* newestTurnOf(target), [TURN_STATUS.RUNNING, null]);
@@ -300,6 +300,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         assert.deepEqual(heardOfTarget, [
           {
             ...target,
+            turnId,
             status: TURN_STATUS.FAILED,
             failure: TURN_FAILURE.ABANDONED,
             ranMs: TURN_ABANDON.AGENT_AFTER_MS + 1,

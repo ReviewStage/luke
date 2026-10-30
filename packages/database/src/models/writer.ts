@@ -197,6 +197,7 @@ interface StoreWriterOptions {
 export interface SettledAgentTurn {
   readonly userId: string;
   readonly conversationId: string;
+  readonly turnId: string;
   readonly status: TurnStatus;
   /** The failure word a failed turn was settled with; null for any other end. */
   readonly failure: string | null;
@@ -208,7 +209,10 @@ export interface SettledAgentTurn {
  * What hears of each coding agent turn the writer settled, once the write's
  * transaction is done: the service's analytics (`server-events.ts`). Read
  * optionally, so a runtime or a test that provides none hears nothing, and
- * what it does never fails the write it follows.
+ * what it does never fails the write it follows. Note that a write run
+ * inside a caller's transaction is heard as its savepoint ends, before the
+ * caller's commit, so a listener that must not hear a settle rolled back
+ * reads the turn's row again once that transaction is over.
  */
 export class SettledTurnListener extends Context.Service<
   SettledTurnListener,
@@ -1380,6 +1384,7 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
     context.settled.push({
       userId: context.target.userId,
       conversationId: context.target.conversationId,
+      turnId: event.turnId,
       status,
       failure: failure ?? null,
       ranMs: Math.max(0, settledAt.getTime() - (startedAt ?? queuedAt).getTime()),

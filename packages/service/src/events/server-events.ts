@@ -1,4 +1,4 @@
-import { agentKindOfConversation } from "@luke/database/models/agent-store";
+import { settledTurnAgentKind } from "@luke/database/models/agent-store";
 import { type SettledAgentTurn, SettledTurnListener } from "@luke/database/models/writer";
 import { PULL_REQUEST_CHAPTERS_FAILURE } from "@luke/database/pull-request-chapters-vocabulary";
 import type { ConversationRuntime } from "@luke/database/storage-vocabulary";
@@ -335,8 +335,10 @@ function turnDurationOf(ranMs: number): Values<typeof SERVER_TURN_DURATION> {
  * the sweep's abandon alike, since each is the one write that moved the turn
  * to its end and a repeat of it settles nothing. It is counted under the
  * account the turn stands in, the agent's starter, as `agent:start` is, so an
- * automation's run counts under its owner; the agent's kind is read once the
- * request has answered.
+ * automation's run counts under its owner. The agent's kind is read once the
+ * request has answered, by then past any transaction the settle ran inside,
+ * and only where the turn still stands ended, so a settle that transaction
+ * rolled back is not counted.
  */
 const turnEndCounting = Layer.succeed(SettledTurnListener, {
   heard: (turn) =>
@@ -344,7 +346,7 @@ const turnEndCounting = Layer.succeed(SettledTurnListener, {
       SERVER_EVENT.TURN_END,
       turn.userId,
       Effect.map(
-        agentKindOfConversation(turn.conversationId),
+        settledTurnAgentKind(turn.turnId),
         Option.map((agentKind) => ({
           outcome: turnOutcomeOf(turn),
           duration: turnDurationOf(turn.ranMs),

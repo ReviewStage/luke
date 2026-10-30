@@ -512,8 +512,8 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         // The sandbox is stopped, not deleted, once the archive stands, so an unarchive resumes it from its snapshot.
         if (body.archived && Option.isSome(archived)) {
           yield* stoppedInBackground(seams, [agent]);
-          // Counted only where the agent stood unarchived, under the member who archived it.
-          if (agent.archivedAt === null) {
+          // Counted only where this write archived an agent standing unarchived, under the member who archived it.
+          if (archived.value.archivedNow) {
             yield* recordServerEvent(SERVER_EVENT.AGENT_ARCHIVE, userId, {
               agent_kind: agent.kind,
             });

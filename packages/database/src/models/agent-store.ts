@@ -3128,18 +3128,46 @@ export function restoreOperatorAgent(
   );
 }
 
-/** The agent archived or brought back, as `archiveAgent` does it, and the transaction its row was written in. */
+/** An archive's or a bring-back's write: the agent as it then stands, and whether this write archived one that stood unarchived. */
+export interface AgentArchiveCommitted extends AgentCommitted {
+  readonly archivedNow: boolean;
+}
+
+/** The agent's archive stamp under its row's lock, as an archive reads it before it writes its own. */
+const lockAgentArchivedAt = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ archivedAt: Schema.NullOr(InstantColumnSchema) }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ archivedAt: agentTable.archivedAt })
+        .from(agentTable)
+        .where(reachableAgent(userId, agentId))
+        .limit(1)
+        .for("update", { of: agentTable }),
+    ),
+});
+
+/**
+ * The agent archived or brought back, as `archiveAgent` does it, and the
+ * transaction its row was written in; an archive reads the row under its
+ * lock first, so of two archives at once only the first answers that it
+ * archived the agent.
+ */
 export function archiveAgentCommitted(
   userId: string,
   agentId: string,
   archived: boolean,
   archivedBy: StoredArchive = { by: AGENT_ARCHIVER.MEMBER, userId },
-): AgentStoreEffect<Option.Option<AgentCommitted>> {
+): AgentStoreEffect<Option.Option<AgentArchiveCommitted>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const now = yield* DateTime.nowAsDate;
         if (!archived) yield* lockAgentTask(agentId);
+        const archivedBefore = archived
+          ? Option.getOrUndefined(yield* lockAgentArchivedAt({ userId, agentId }))?.archivedAt
+          : undefined;
         // The archive standing before the write, whose stamp names the items it settled.
         const standing = archived ? Option.none() : yield* findAgent({ userId, agentId });
         const written = yield* updateAgentArchived({
@@ -3156,7 +3184,7 @@ export function archiveAgentCommitted(
           yield* reopenAgentInboxItems(agentId, standingArchive);
         }
         const { txid, ...agent } = written.value;
-        return Option.some({ agent, txid });
+        return Option.some({ agent, txid, archivedNow: archived && archivedBefore === null });
       }),
     ),
   );
@@ -3348,28 +3376,33 @@ export function agentConversation(
   return findAgentConversation(agentId);
 }
 
-const findAgentKindOfConversation = SqlSchema.findOneOption({
+const findSettledTurnAgentKind = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ kind: Schema.Literals(Object.values(AGENT_KIND)) }),
-  execute: (conversationId) =>
+  execute: (turnId) =>
     Database.use((db) =>
       db
         .select({ kind: agentTable.kind })
-        .from(agentTable)
-        .where(eq(agentTable.conversationId, conversationId)),
+        .from(turns)
+        .innerJoin(agentTable, eq(agentTable.conversationId, turns.conversationId))
+        .where(
+          and(
+            eq(turns.id, turnId),
+            inArray(turns.status, [TURN_STATUS.SETTLED, TURN_STATUS.CANCELLED, TURN_STATUS.FAILED]),
+          ),
+        ),
     ),
 });
 
 /**
- * What the agent whose conversation this is is; nothing where no agent
- * stands on it. Only for a conversation the service settled a turn of
- * itself, because it reads past any account's gate.
+ * What the agent whose turn this is is, where the turn stands ended;
+ * nothing where no agent stands on its conversation or the turn's end was
+ * rolled back with the transaction that wrote it. Only for a turn the
+ * service settled itself, because it reads past any account's gate.
  */
-export function agentKindOfConversation(
-  conversationId: string,
-): AgentStoreEffect<Option.Option<AgentKind>> {
+export function settledTurnAgentKind(turnId: string): AgentStoreEffect<Option.Option<AgentKind>> {
   return Effect.map(
-    findAgentKindOfConversation(conversationId),
+    findSettledTurnAgentKind(turnId),
     Option.map((row) => row.kind),
   );
 }
