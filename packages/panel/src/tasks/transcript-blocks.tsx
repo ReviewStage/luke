@@ -24,6 +24,8 @@ import {
   callPlace,
   isAgentCallKind,
   isCommandKind,
+  type MadeCallKind,
+  madeCallLine,
   sameFieldsBy,
   sameTurnRow,
   TURN_ROW,
@@ -1194,6 +1196,8 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
     agent?: Actor | undefined;
     /** For a call about one coding agent, the agent's card, which its chip hangs; none where the place hangs none. */
     agentCard?: ReactNode;
+    /** For a call that made or is about a page, the plan, a thread, a task, or a pull request, that thing's chip, which the row names it by after its verb alone, its press alone opening it; none where the place cannot link it. */
+    made?: { readonly kind: MadeCallKind; readonly chip: ReactNode } | undefined;
     /** For a call that read, wrote, or edited files, their paths, which the row names by the first one's chip and how many more. */
     files?: readonly string[] | undefined;
     /** For a read of a web page, its whole address, which the row names by its website chip. */
@@ -1214,9 +1218,10 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
  * its prompt, or by a find, which draws that body hidden, and so is any
  * subject the input says whole, a read's path or a search's pattern
  * (`blockSays`); a description stays, since the body does not say it. A
- * call that read, wrote, or edited files names the first by its chip, and
- * one that fetched a page names it by its website chip (`calledChip`),
- * which stays as the row opens.
+ * call that made something names it by its chip, as a call about an agent
+ * names the agent by its own; one that read, wrote, or edited files names
+ * the first by its chip, and one that fetched a page names it by its
+ * website chip (`calledChip`), which stays as the row opens.
  */
 export function TranscriptTool({
   state,
@@ -1227,6 +1232,7 @@ export function TranscriptTool({
   description,
   agent,
   agentCard,
+  made,
   files,
   page,
   input,
@@ -1238,9 +1244,11 @@ export function TranscriptTool({
   const Icon = CALL_ICON[kind];
   const called = calledChip(kind, files, page, useMentionDoors());
   const { line, chip } =
-    called === undefined
-      ? chippedLine(kind, subject, description, agent, undefined, agentCard)
-      : { line: { ...callLine(kind, moreFiles(files), undefined), code: false }, chip: called };
+    made !== undefined
+      ? { line: madeCallLine(made.kind), chip: made.chip }
+      : called === undefined
+        ? chippedLine(kind, subject, description, agent, undefined, agentCard)
+        : { line: { ...callLine(kind, moreFiles(files), undefined), code: false }, chip: called };
   const command = isCommandKind(kind);
   const macOwner = useContext(MacOwnerContext);
   return (
@@ -1306,7 +1314,7 @@ export function TranscriptTool({
 
 /**
  * A call whose subject stands in a tab of its own, as a coding agent's start
- * does once the agent began, or a page once shown: the
+ * does once the agent began, or a skill once loaded: the
  * call's line as a call's row draws it, its icon, what it did, and where it
  * stands, as the one button that opens that tab rather than folding its
  * input and answer open in place, its hover saying what it opens, or

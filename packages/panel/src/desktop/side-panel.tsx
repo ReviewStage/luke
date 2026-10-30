@@ -1752,7 +1752,7 @@ export function taskCards(input: {
   // Note that each agent's cards are the same value for as long as these are, so a transcript handed them draws nothing again for them.
   const byAgent = new Map<string, TranscriptCards>();
   return {
-    call: { target, agent, worker: () => undefined },
+    call: { target, agent, standsOn: pages, worker: () => undefined },
     agent: (agentId) => {
       const known = byAgent.get(agentId);
       if (known !== undefined) return known;
@@ -1760,6 +1760,7 @@ export function taskCards(input: {
         target,
         agent,
         task,
+        standsOn: pages,
         worker: ({ callId, task: job, status }) =>
           card(
             drawnSubagent(

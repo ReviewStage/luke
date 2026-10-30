@@ -277,6 +277,39 @@ export function agentCallLine(kind: AgentCallKind, subject: string | undefined):
   return { verb: words.verb, subject: words.subject ? subject : undefined, code: false };
 }
 
+/**
+ * How a call says what it did where its row names what it made or is about
+ * by that thing's chip: the verb alone, the chip standing in the place of
+ * "a page", "the plan", "a thread", "the task", or "pull request", so the
+ * row reads "Showed" then the page's chip. Note that an edit of the plan
+ * says no count, because the chip is its plan's, and the body under the row
+ * says what changed.
+ */
+const MADE_CALL_WORDS = {
+  [CALL_KIND.SHOW_PAGE]: "Showed",
+  [CALL_KIND.READ_PAGE]: "Read",
+  [CALL_KIND.EDIT_PLAN]: "Updated",
+  [CALL_KIND.LOOK_AT_PICTURE]: "Looked at a picture in",
+  [CALL_KIND.INBOX_POST]: "Posted",
+  [CALL_KIND.INBOX_WITHDRAW]: "Withdrew an ask on",
+  [CALL_KIND.CREATE_TASK]: "Made",
+  [CALL_KIND.READ_TASK]: "Read",
+  [CALL_KIND.UPDATE_TASK]: "Updated",
+  [CALL_KIND.OPEN_PULL_REQUEST]: "Opened",
+} as const satisfies Partial<Record<CallKind, string>>;
+
+export type MadeCallKind = keyof typeof MADE_CALL_WORDS;
+
+/** Whether a call's row may name what it made or is about by that thing's chip. */
+export function isMadeCallKind(kind: CallKind): kind is MadeCallKind {
+  return Object.hasOwn(MADE_CALL_WORDS, kind);
+}
+
+/** How the line of a call reads where the chip of what it made follows its verb: the verb alone. */
+export function madeCallLine(kind: MadeCallKind): CallLine {
+  return { verb: MADE_CALL_WORDS[kind], subject: undefined, code: false };
+}
+
 /** Whether a call is a shell command, wherever it ran: its line may say its description, and its body draws it behind a prompt. */
 export function isCommandKind(kind: CallKind): boolean {
   return kind === CALL_KIND.COMMAND || kind === CALL_KIND.MAC_COMMAND;
