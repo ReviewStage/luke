@@ -431,10 +431,10 @@ const GlyphPanel = memo(function GlyphPanel(
   const suggested = choices.filter((choice) => isSuggestedGlyph(choice.glyph));
   const rest = choices.filter((choice) => !isSuggestedGlyph(choice.glyph));
   const first = props.recent[0] ?? suggested[0];
+  // Note that a glyph this Mac's Lucide does not know is chosen but shown nowhere, so the first choice keeps the stop.
   const chosenShown =
-    props.icon !== undefined &&
-    (props.recent.some((one) => chosenIcon(props.icon, one)) ||
-      (props.icon.kind === TASK_SECTION_ICON_KIND.GLYPH && choices.length > 0));
+    props.recent.some((one) => chosenIcon(props.icon, one)) ||
+    choices.some((choice) => chosenGlyph(props.icon, choice.glyph));
   const stopAt = (pressed: boolean, isFirst: boolean) => (chosenShown ? pressed : isFirst);
   return (
     <>
@@ -515,11 +515,12 @@ const FoundPanel = memo(function FoundPanel(
     ...typedOne,
     ...groups.flatMap((group) => group.emojis).filter((one) => one.emoji !== typed.emoji),
   ];
-  if (icons !== undefined && glyphs.length === 0 && found.length === 0) {
+  if (glyphs.length === 0 && found.length === 0) {
+    // Note that nothing found says why where a set did not load, rather than that nothing matched.
+    if (!AsyncResult.isSuccess(lucide)) return <PanelNote loaded={lucide} tab={ICON_TAB.ICONS} />;
+    if (!AsyncResult.isSuccess(emoji)) return <PanelNote loaded={emoji} tab={ICON_TAB.EMOJI} />;
     return <NoteLine look={NOTE_LINE_LOOK.LIST}>{NO_MATCH_EITHER}</NoteLine>;
   }
-  if (icons === undefined && found.length === 0)
-    return <PanelNote loaded={lucide} tab={ICON_TAB.ICONS} />;
   const firstEmoji = typedOne.length > 0;
   return (
     <>
@@ -762,7 +763,8 @@ export function SectionIconWell({
 }: {
   icon: TaskSectionIcon | undefined;
   open: boolean;
-  onOpenChange: (open: boolean) => void;
+  /** Hears the picker stand or go; `away` where a press away from it put it away. */
+  onOpenChange: (open: boolean, away: boolean) => void;
   onIcon: (icon: TaskSectionIcon | undefined) => void;
   size?: ButtonSize | undefined;
   variant?: ButtonVariant | undefined;
@@ -787,7 +789,7 @@ export function SectionIconWell({
         search={search}
         onIcon={(next) => {
           onIcon(next);
-          onOpenChange(false);
+          onOpenChange(false, false);
         }}
         onRecolor={onIcon}
       />

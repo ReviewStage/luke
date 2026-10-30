@@ -1,4 +1,11 @@
-import { type ReactNode, useId, useLayoutEffect, useRef } from "react";
+import {
+  type ReactNode,
+  type Ref,
+  useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import { isComposingKey } from "../../composing-key.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { ShadcnInput } from "../../shadcn/input.js";
@@ -281,6 +288,11 @@ export interface GroupHeaderEditEnd {
   readonly byKey: boolean;
 }
 
+/** What a head's editor answers its owner: `leave` ends the edit as the focus leaving the head would, unless the focus stands in the head. */
+export interface GroupHeaderEditorHandle {
+  leave: () => void;
+}
+
 /**
  * A head being named in place: `glyph`, the control that changes the
  * group's glyph, in the glyph's cell, and a field named `label` opened over
@@ -290,7 +302,10 @@ export interface GroupHeaderEditEnd {
  * a layer the glyph's control hung is up (`holding`). Note that whether one
  * is up is read as the focus leaves, from the render it last drew, so a
  * press away that puts the layer away and takes the focus out of it ends the
- * edit too. It is laid out as the head is but not named as one, so a list
+ * edit too. A press away that puts the layer away after the focus has left,
+ * as Base UI's popover does on the press's click, says no blur again, so
+ * its owner calls `leave` (`ref`) when the layer says a press away put it
+ * away. It is laid out as the head is but not named as one, so a list
  * that drags its groups by their heads (`.luke-group-header-head`) never
  * takes a press in the field for a drag.
  */
@@ -302,6 +317,7 @@ export function GroupHeaderEditor({
   glyph,
   holding = false,
   onEnd,
+  ref,
 }: {
   value: string;
   label: string;
@@ -312,6 +328,7 @@ export function GroupHeaderEditor({
   /** Whether a layer the glyph's control hung stands, which the focus may go into and out of without ending the edit. */
   holding?: boolean | undefined;
   onEnd: (end: GroupHeaderEditEnd) => void;
+  ref?: Ref<GroupHeaderEditorHandle> | undefined;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
   const root = useRef<HTMLDivElement | null>(null);
@@ -327,6 +344,13 @@ export function GroupHeaderEditor({
     ended.current = true;
     onEnd({ kept, value: field.current?.value.trim() ?? "", byKey });
   };
+  const inHead = (target: EventTarget | null) =>
+    target instanceof Node && root.current?.contains(target) === true;
+  useImperativeHandle(ref, () => ({
+    leave: () => {
+      if (!inHead(document.activeElement)) end(true, false);
+    },
+  }));
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the head takes nothing itself; it hears the focus leave its field, its glyph's control, and the layer that control hangs in a portal, which only React carries back up to it.
     <div
@@ -334,7 +358,7 @@ export function GroupHeaderEditor({
       className={`luke-group-header-editor ${HEAD_BOX}`}
       onBlur={(event) => {
         const next = event.relatedTarget;
-        if (held.current || (next instanceof Node && root.current?.contains(next) === true)) return;
+        if (held.current || inHead(next)) return;
         end(true, false);
       }}
     >

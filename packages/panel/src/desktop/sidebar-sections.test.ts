@@ -1181,6 +1181,16 @@ test("Change icon opens a section's head with its picker, where a color chosen r
   ]);
 });
 
+test("a section wearing a glyph no Lucide knows still leaves the grid one tab stop", async () => {
+  const sidebar = await mountSidebar([], GLYPHS);
+
+  sectionMenuChoose(sidebar, "Lost", "Change icon");
+  await settleLoaded();
+
+  const panel = document.querySelector('[role="tabpanel"]') ?? assert.fail("no picker panel");
+  assert.equal(panel.querySelectorAll('button:not([tabindex="-1"])').length, 1);
+});
+
 test("Enter in the search chooses the first thing it found, an emoji where no glyph matches", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);

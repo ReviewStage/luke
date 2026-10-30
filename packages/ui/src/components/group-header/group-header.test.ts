@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { act, createElement, type ReactElement, useState } from "react";
+import { act, createElement, type ReactElement, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { NAV_COUNT_SHOWN } from "../nav-item/nav-item.js";
+import { PopoverIconButton } from "../popover-icon-button/popover-icon-button.js";
 import {
   type GroupFold,
   GroupHeader,
   type GroupHeaderEditEnd,
   GroupHeaderEditor,
+  type GroupHeaderEditorHandle,
 } from "./group-header.js";
 
 /**
@@ -245,4 +247,61 @@ test("while a layer the glyph's control hung stands, the focus leaving the head 
   act(() => outside.focus());
 
   assert.deepEqual(ends, []);
+});
+
+/** A head named in place whose glyph's button hangs a panel, the panel's standing held as an owner holds it. */
+function EditingWithPanel({ ends }: { ends: GroupHeaderEditEnd[] }): ReactElement {
+  const [open, setOpen] = useState(false);
+  const handle = useRef<GroupHeaderEditorHandle | null>(null);
+  const editor = createElement(GroupHeaderEditor, {
+    ref: handle,
+    value: "Launch",
+    label: "Section name",
+    holding: open,
+    glyph: createElement(PopoverIconButton, {
+      icon: "☺",
+      label: "Change icon",
+      title: "Icon",
+      open,
+      onOpenChange: (next: boolean, away: boolean) => {
+        setOpen(next);
+        if (away) handle.current?.leave();
+      },
+      children: createElement("button", { type: "button" }, "Rocket"),
+    }),
+    onEnd: (end: GroupHeaderEditEnd) => ends.push(end),
+  });
+  return createElement(GroupHeader, { label: "Launch", editing: editor, children: ROWS });
+}
+
+test("a press away while the glyph's panel stands puts the panel away and keeps the words", async () => {
+  const ends: GroupHeaderEditEnd[] = [];
+  const container = render(createElement(EditingWithPanel, { ends }));
+  const outside = document.body.appendChild(document.createElement("button"));
+  const settle = () =>
+    act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+  typeInto(fieldOf(container), "Launch week");
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="Change icon"]')?.click(),
+  );
+  await settle();
+  assert.ok(document.querySelector('[role="dialog"][aria-label="Icon"]'), "the panel stands");
+
+  await act(async () => {
+    outside.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }),
+    );
+    outside.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+    outside.focus();
+    outside.dispatchEvent(
+      new PointerEvent("pointerup", { bubbles: true, button: 0, pointerType: "mouse" }),
+    );
+    outside.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+    outside.click();
+  });
+  await settle();
+
+  assert.deepEqual(ends, [{ kept: true, value: "Launch week", byKey: false }]);
 });

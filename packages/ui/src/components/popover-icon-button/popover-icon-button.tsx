@@ -15,7 +15,9 @@ import { type ButtonSize, type ButtonVariant, IconButton } from "../button/butto
  * dialog's card (`aria-modal`, as a menu's layer is chosen). The owner holds
  * whether it stands open: a press on the button turns it, and Escape, a press
  * away from it and its button, or the focus leaving it puts it away, the
- * focus going back to the button. Note that a press on the button while the
+ * focus going back to the button; the owner is told when a press away put it
+ * away (`away`), since the focus has already gone where that press took it,
+ * which no blur says again once the panel is gone. Note that a press on the button while the
  * panel stands is the button's alone, which closes it, rather than also a
  * press away, which would close it only for the button's own press to open
  * it again.
@@ -74,7 +76,8 @@ export function PopoverIconButton({
   /** The panel's accessible name. */
   title: string;
   open: boolean;
-  onOpenChange: (open: boolean) => void;
+  /** Hears the panel stand or go; `away` where a press away from it and its button put it away. */
+  onOpenChange: (open: boolean, away: boolean) => void;
   size?: ButtonSize | undefined;
   variant?: ButtonVariant | undefined;
   disabled?: boolean | undefined;
@@ -95,13 +98,13 @@ export function PopoverIconButton({
         disabled={disabled}
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => onOpenChange(!open)}
+        onClick={() => onOpenChange(!open, false)}
       />
       <Popover
         open={open}
         onOpenChange={(next, details) => {
           if (!next && pressOnButton(details, button.current)) return;
-          onOpenChange(next);
+          onOpenChange(next, !next && details.reason === OUTSIDE_PRESS);
         }}
       >
         <PopoverContent

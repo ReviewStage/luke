@@ -28,6 +28,7 @@ import {
   GroupHeader,
   type GroupHeaderEditEnd,
   GroupHeaderEditor,
+  type GroupHeaderEditorHandle,
   Inline,
   LAYOUT_ELEMENT,
   MoreButton,
@@ -407,8 +408,10 @@ function SectionEditor({
 }): React.JSX.Element {
   const [chosen, setChosen] = useState(icon);
   const [open, setOpen] = useState(picking);
+  const editor = useRef<GroupHeaderEditorHandle | null>(null);
   return (
     <GroupHeaderEditor
+      ref={editor}
       value={title}
       label="Section name"
       placeholder="Section name"
@@ -418,7 +421,11 @@ function SectionEditor({
         <SectionIconWell
           icon={chosen}
           open={open}
-          onOpenChange={setOpen}
+          onOpenChange={(next, away) => {
+            setOpen(next);
+            // Note that a press away from the picker took the focus before it put the picker away, so it ends the edit here.
+            if (away) editor.current?.leave();
+          }}
           onIcon={setChosen}
           size={BUTTON_SIZE.COMPACT}
         />

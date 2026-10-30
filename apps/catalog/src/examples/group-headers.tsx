@@ -7,6 +7,7 @@ import {
   GroupAction,
   GroupHeader,
   GroupHeaderEditor,
+  type GroupHeaderEditorHandle,
   IconButton,
   MoreButton,
   NAV_COUNT_SHOWN,
@@ -17,7 +18,7 @@ import {
   Text,
 } from "@luke/ui";
 import { ListFilterIcon, SlidersHorizontalIcon } from "@luke/ui/icons";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -214,6 +215,7 @@ function Renamed(): React.JSX.Element {
   const [name, setName] = useState("Launch week");
   const [editing, setEditing] = useState(true);
   const [picking, setPicking] = useState(false);
+  const editor = useRef<GroupHeaderEditorHandle | null>(null);
   return (
     <div className="catalog-narrow">
       <GroupHeader
@@ -224,6 +226,7 @@ function Renamed(): React.JSX.Element {
         editing={
           editing ? (
             <GroupHeaderEditor
+              ref={editor}
               value={name}
               label="Section name"
               placeholder="Section name"
@@ -234,7 +237,10 @@ function Renamed(): React.JSX.Element {
                   label="Change icon"
                   title="Icon"
                   open={picking}
-                  onOpenChange={setPicking}
+                  onOpenChange={(open, away) => {
+                    setPicking(open);
+                    if (away) editor.current?.leave();
+                  }}
                 >
                   <div className="p-card-inset-snug">
                     <Text>Any panel hangs here.</Text>
