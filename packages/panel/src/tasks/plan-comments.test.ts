@@ -1148,8 +1148,9 @@ test("a comment's field offers no Luke among the agents, since no task has one, 
   assert.equal(card.querySelector(".comment-send-to"), null);
 });
 
-test("a reply's field empties as it is sent, and takes the words back where the send fails", async () => {
-  const { container } = drawn("page", THREADS, () => false);
+test("a reply's field empties as it is sent, and a refused reply takes the words back with the reply queued behind it, which never goes", async () => {
+  const answer = Promise.withResolvers<boolean>();
+  const { container, asked } = drawn("page", THREADS, () => answer.promise);
   act(() =>
     container
       .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
@@ -1159,24 +1160,29 @@ test("a reply's field empties as it is sent, and takes the words back where the 
     `.comment-card[data-thread="${ID.OPEN}"] textarea`,
   );
   assert.ok(field);
-  act(() => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-    setter?.call(field, "Not for v1.");
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-
-  act(() => {
-    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-  });
+  await post(field, "Not for v1.");
   assert.equal(field.value, "", "the field empties as the words are sent");
+  await post(field, "Maybe v2.");
 
-  await act(async () => undefined);
-  assert.equal(field.value, "Not for v1.", "and takes them back where the send fails");
+  await act(async () => answer.resolve(false));
+  assert.equal(
+    field.value,
+    "Not for v1.\n\nMaybe v2.",
+    "and takes them back where the send fails, the reply behind it after them",
+  );
+  assert.deepEqual(
+    asked.map(({ action }) => ("words" in action ? action.words : undefined)),
+    ["Not for v1."],
+  );
 });
 
-test("a reply's Send stands in the box's foot, busy from the press until the service answers", async () => {
-  const answer = Promise.withResolvers<boolean>();
-  const { container, asked } = drawn("page", THREADS, () => answer.promise);
+test("replies sent before the first answers each stand as Sending and go one at a time, in the order written, Send never busy", async () => {
+  const answers = [Promise.withResolvers<boolean>(), Promise.withResolvers<boolean>()];
+  const { container, asked } = drawn(
+    "page",
+    THREADS,
+    () => answers[asked.length - 1]?.promise ?? true,
+  );
   act(() =>
     container
       .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
@@ -1184,24 +1190,28 @@ test("a reply's Send stands in the box's foot, busy from the press until the ser
   );
   const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
   assert.ok(card);
-  typeInto(card.querySelector<HTMLTextAreaElement>("textarea"), "Not for v1.");
-  const send = () =>
-    card.querySelector<HTMLButtonElement>(
-      '.luke-composer-foot button[aria-label="Reply"], .luke-composer-foot button[aria-label="Sending"]',
-    );
-  assert.equal(send()?.getAttribute("aria-label"), "Reply");
+  const field = card.querySelector<HTMLTextAreaElement>("textarea");
+  assert.ok(field);
+  const sent = () => asked.map(({ action }) => ("words" in action ? action.words : undefined));
+  const sending = () =>
+    [...card.querySelectorAll("[data-sending] .comment-words")].map((words) => words.textContent);
 
-  act(() => send()?.click());
-  assert.equal(send()?.getAttribute("aria-label"), "Sending");
-  assert.equal(send()?.getAttribute("aria-busy"), "true");
-  assert.deepEqual(
-    asked.map((each) => each.action.action),
-    [PLAN_COMMENT_ACTION.REPLY],
-  );
+  await post(field, "Not for v1.");
+  await post(field, "Maybe v2.");
+  assert.deepEqual(sending(), ["Not for v1.", "Maybe v2."]);
+  assert.deepEqual(sent(), ["Not for v1."], "the second waits on the first's answer");
+  typeInto(field, "And a third?");
+  const foot = (label: string) =>
+    card.querySelector<HTMLButtonElement>(`.luke-composer-foot button[aria-label="${label}"]`);
+  assert.equal(foot("Sending"), null);
+  assert.equal(foot("Reply")?.disabled, false);
+  assert.equal(foot("Attach files")?.disabled, false);
 
-  await act(async () => answer.resolve(true));
-  assert.equal(send()?.getAttribute("aria-label"), "Reply");
-  assert.equal(send()?.getAttribute("aria-busy"), null);
+  await act(async () => answers[0]?.resolve(true));
+  assert.deepEqual(sent(), ["Not for v1.", "Maybe v2."]);
+  assert.deepEqual(sending(), ["Maybe v2."]);
+  await act(async () => answers[1]?.resolve(true));
+  assert.deepEqual(sending(), []);
 });
 
 test("a thread being started keeps its card through a press away while its words are sent, and takes them back where the send fails", async () => {

@@ -107,6 +107,7 @@ import { Equal, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   createContext,
+  Fragment,
   type ReactNode,
   type RefObject,
   useCallback,
@@ -143,6 +144,7 @@ import {
   type PlanEditorHandle,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
+import { type SendQueue, useSendQueue } from "../send-queue.js";
 import { useBusyPress } from "../settings/busy-press.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { keptKey, useKept } from "../use-kept.js";
@@ -199,6 +201,22 @@ import {
  * section's source (`@luke/features/plan-comment-anchor`), so emphasis, a
  * link, or a chip inside them puts nothing off. Posting a comment asks no
  * agent anything.
+ *
+ * A reply leaves its field the moment it is sent, and the field takes the
+ * next at once, as the agent's box does (`use-agent-composer.ts`): nothing
+ * holds Send, the files' +, or the microphone while the service answers. A
+ * thread's replies go one at a time, in the order sent, each under a key of
+ * its own, the next once the one before it answered (`../send-queue.ts`),
+ * through one queue the comments' scope holds, so a thread closed and opened
+ * again, or open in the margin and the Comments tab at once, keeps one
+ * order. Each reply on its way stands at the thread's end as the reader's
+ * own comment marked Sending, until the thread holds the comment it became.
+ * A reply refused comes back into the field above whatever was written there
+ * since, with every reply queued behind it, which never goes, so comments
+ * land in the order written; where the field is gone, or they are more than
+ * one comment carries, they stand apart as not sent, with Retry and Discard.
+ * A thread being started holds its field until it answers, since its send
+ * opens the thread.
  */
 
 /**
@@ -281,6 +299,8 @@ const COMMENT_WORDS = {
   SENDING: "Sending",
   DISCARD: "Discard",
   NOT_SENT: "This comment could not be sent.",
+  NOT_SENT_MANY: "These comments could not be sent.",
+  YOU: "You",
 } as const;
 
 /** Which thread is open, and the one being started, shared by the marks that open them and the margin that draws them. */
@@ -466,6 +486,15 @@ const DELETE_THREAD_QUESTION: DialogQuestion = {
 const DISCARD_QUESTION: DialogQuestion = {
   title: "Discard this comment?",
   body: `Its words and files are kept nowhere else. ${IRREVERSIBLE_WORDS}`,
+  verb: "Discard",
+  running: "Discarding",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
+};
+
+/** What discarding several sends not sent asks first, a reply refused and those queued behind it. */
+const DISCARD_MANY_QUESTION: DialogQuestion = {
+  title: "Discard these comments?",
+  body: `Their words and files are kept nowhere else. ${IRREVERSIBLE_WORDS}`,
   verb: "Discard",
   running: "Discarding",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
@@ -883,7 +912,8 @@ function PlainCommentText({
 function ReplyField({
   label,
   place,
-  sending,
+  sending = false,
+  replies,
   onSend,
   onCancel,
   autoFocus,
@@ -893,7 +923,10 @@ function ReplyField({
   label: string;
   /** Where the words are kept unsent, so Esc, a press away, or the thread closing finds them as the field opens again. */
   place: PlanCommentPlace;
-  sending: boolean;
+  /** Whether the thread being started is on its way, which holds the field until it answers, since its send opens the thread; a reply on its way holds nothing. */
+  sending?: boolean;
+  /** The thread a reply goes on and the queue its replies go through, one at a time in the order sent; none for a thread being started. */
+  replies?: { readonly on: string; readonly queue: ReplyQueue } | undefined;
   /** Sends the words and the files under a key that stays the same while they do, so a send tried again after a lost answer is taken once. */
   onSend: (
     words: string,
@@ -924,73 +957,103 @@ function ReplyField({
   // Why the last files handed to the field did not all come; nothing once they did.
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const files = useAttachedFiles({ onRefusal: setRefusal });
-  // The words sent and not yet answered, which the field holds as a draft while it stands empty, so a send that fails finds them.
+  // The words of a thread being started, sent and not yet answered, which hold its card through a press away.
   const [inFlight, setInFlight] = useState("");
+  // The last send refused, whose key the same words and files sent again go under, so a send whose answer was lost is taken once.
   const attempt = useRef<CommentSend | undefined>(undefined);
-  // A refused send the field could not take back beside what was typed or added since, kept apart, marked as not sent, with Retry under its key.
-  const unsent = useAtomValue(
-    unsentAtom,
-    (all) => all.find((each) => Equal.equals(each.place, place))?.send,
-  );
+  // Sends refused that the field could not take back beside what was typed or added since, kept apart in the order written, marked as not sent, with Retry under their keys.
+  const lines = useAtomValue(unsentAtom);
+  const unsent = lines.filter((each) => Equal.equals(each.place, place)).map(({ send }) => send);
   const keepUnsent = useAtomSet(unsentAtom);
-  const setUnsent = (send: CommentSend | undefined) =>
-    keepUnsent((all) => [
-      ...all.filter((each) => !Equal.equals(each.place, place)),
-      ...(send === undefined ? [] : [{ place, send }]),
-    ]);
+  const addUnsent = (sends: readonly CommentSend[]) =>
+    keepUnsent((all) => [...all, ...sends.map((send) => ({ place, send }))]);
+  const dropUnsent = () =>
+    keepUnsent((all) => all.filter((each) => !Equal.equals(each.place, place)));
   // The words the field holds this moment, for a send's answer that lands after the render it was made in.
   const wordsNow = useRef(words);
   wordsNow.current = words;
+  // Whether the field still stands, since sends refused after their thread closed have no field to come back into.
+  const standing = useRef(true);
+  useEffect(() => {
+    standing.current = true;
+    return () => {
+      standing.current = false;
+    };
+  }, []);
   // Note that a dictation's note is said before the cut paste's, and only the agent box's editor cuts a paste.
   const said = heard ?? (cut ? pasteCutWords(PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS) : undefined);
   // Note that a failed send is said over a refused file, which is said over a dictation's note or a cut paste, and stands on the not-sent line where there is one.
-  const note = (unsent === undefined ? failure : undefined) ?? refusal ?? said;
+  const note = (unsent.length === 0 ? failure : undefined) ?? refusal ?? said;
+  // Note that refused sends go back above whatever was typed or added since, in the order written, so nothing is dropped, unless the field is gone or together they are more than one comment carries.
+  const takeBack = (sends: readonly CommentSend[]) => {
+    attempt.current = sends[0];
+    const typed = wordsNow.current;
+    const back = {
+      words: [...sends.map((each) => each.words), typed]
+        .filter((each) => each.trim() !== "")
+        .join("\n\n"),
+      attachments: [...sends.flatMap((each) => each.attachments), ...files.now()],
+    };
+    if (!standing.current || !carried(back)) {
+      addUnsent(sends);
+      return;
+    }
+    update((now) => ({ ...now, text: back.words }));
+    files.set(back.attachments);
+  };
   const go = (out: CommentSend) => {
-    setInFlight(out.words);
-    void onSend(out.words, out.key, out.attachments).then((sent) => {
-      setInFlight("");
-      if (sent) {
-        attempt.current = undefined;
-        return;
-      }
-      // Note that a refused send goes back above whatever was typed or added since, so neither is dropped, unless the two together are more than one comment carries.
-      const held = wordsNow.current;
-      const back = {
-        words: held.trim() === "" ? out.words : `${out.words}\n\n${held}`,
-        attachments: [...out.attachments, ...files.now()],
-      };
-      if (!carried(back)) {
-        setUnsent(out);
-        return;
-      }
-      update((now) => ({ ...now, text: back.words }));
-      files.set(back.attachments);
+    if (replies === undefined) {
+      setInFlight(out.words);
+      void onSend(out.words, out.key, out.attachments).then((sent) => {
+        setInFlight("");
+        if (!sent) takeBack([out]);
+      });
+      return;
+    }
+    const { on, queue } = replies;
+    const line: QueuedReply = { threadId: on, send: out, at: Date.now() };
+    queue.change((was) => [...was, line]);
+    queue.after(on, async () => {
+      // A reply let go before its turn, queued behind one refused, sends nothing.
+      if (!queue.now().includes(line)) return;
+      const sent = await onSend(out.words, out.key, out.attachments);
+      // Note that a reply refused takes every reply queued behind it on the thread with it, which never goes, so none lands ahead of it.
+      const queued = queue.now();
+      const behind = sent
+        ? []
+        : queued.slice(queued.indexOf(line) + 1).filter((each) => each.threadId === on);
+      queue.change((was) => was.filter((each) => each !== line && !behind.includes(each)));
+      if (!sent) takeBack([line, ...behind].map((each) => each.send));
     });
   };
   const send = () => {
     const trimmed = words.trim();
-    // Note that a send not sent goes first, so comments land in the order they were written.
-    if (trimmed === "" || sending || files.reading || unsent !== undefined) return;
+    // Note that sends not sent go first, so comments land in the order they were written.
+    if (trimmed === "" || sending || files.reading || unsent.length > 0) return;
     const { attachments } = files;
     const was = attempt.current;
     const same = was?.words === trimmed && sameFiles(was.attachments, attachments);
-    const key = same && was !== undefined ? was.key : crypto.randomUUID();
-    attempt.current = { words: trimmed, attachments, key };
-    // Note that the field empties as the words are sent, since a send may wait on the ones its mentions hand the thread to.
+    // Note that the key is let go as the words go, since the same words sent again while they are out, or once they land, are a new comment.
+    attempt.current = undefined;
+    // Note that the field empties as the words are sent, since a send may wait on the ones before it and on those its mentions hand the thread to.
     setWords("");
     files.set([]);
-    go(attempt.current);
+    go({
+      words: trimmed,
+      attachments,
+      key: same && was !== undefined ? was.key : crypto.randomUUID(),
+    });
   };
   const retry = () => {
-    if (unsent === undefined || sending) return;
-    setUnsent(undefined);
-    go(unsent);
+    if (unsent.length === 0 || sending) return;
+    dropUnsent();
+    for (const each of unsent) go(each);
   };
   // Note that Discard asks first, since a send not sent is kept nowhere else.
   const discard = useConfirmDialog(
-    { subject: unsent !== undefined, surfaceOpen: true },
+    { subject: unsent.length > 0, surfaceOpen: true },
     () => {
-      setUnsent(undefined);
+      dropUnsent();
       // Note that words written again after a discard are a new comment, so they go under a new key.
       attempt.current = undefined;
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
@@ -1009,10 +1072,14 @@ function ReplyField({
       }
       {...files.drop.target}
     >
-      {unsent === undefined ? null : (
+      {unsent.length === 0 ? null : (
         <div className="comment-unsent" data-unsent="">
-          <AttachedFileChips files={attachmentChips(unsent.attachments)} />
-          <CommentWords words={unsent.words} />
+          {unsent.map((each) => (
+            <Fragment key={each.key}>
+              <AttachedFileChips files={attachmentChips(each.attachments)} />
+              <CommentWords words={each.words} />
+            </Fragment>
+          ))}
           <FailureNote
             onRetry={retry}
             failure={failureShown({
@@ -1025,9 +1092,14 @@ function ReplyField({
               </TextButton>
             }
           >
-            {failure ?? COMMENT_WORDS.NOT_SENT}
+            {failure ??
+              (unsent.length === 1 ? COMMENT_WORDS.NOT_SENT : COMMENT_WORDS.NOT_SENT_MANY)}
           </FailureNote>
-          <ConfirmDialog open confirm={discard} question={DISCARD_QUESTION} />
+          <ConfirmDialog
+            open
+            confirm={discard}
+            question={unsent.length === 1 ? DISCARD_QUESTION : DISCARD_MANY_QUESTION}
+          />
         </div>
       )}
       <ComposerBody
@@ -1067,7 +1139,7 @@ function ReplyField({
         send={{
           label: label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY,
           empty: words.trim() === "",
-          held: files.reading || unsent !== undefined,
+          held: files.reading || unsent.length > 0,
           onSend: send,
           busy: sending,
           busyLabel: COMMENT_WORDS.SENDING,
@@ -1112,14 +1184,58 @@ interface CommentSend {
 
 /**
  * Each window's sends marked as not sent, by the place they were written
- * in, kept past their field for the account that wrote them as its drafts
- * are (`heldLines`), so a thread closed and opened again finds its line
- * where it was left, another account signed in to the window reads none,
- * and one written while only the account's address was known stands still
- * once its identity learns its id. Note that each window's registry holds
- * its own.
+ * in and in the order written there, kept past their field for the account
+ * that wrote them as its drafts are (`heldLines`), so a thread closed and
+ * opened again finds its line where it was left, another account signed in
+ * to the window reads none, and one written while only the account's
+ * address was known stands still once its identity learns its id. Note that
+ * each window's registry holds its own.
  */
 const unsentAtom = heldLines<{ readonly place: PlanCommentPlace; readonly send: CommentSend }>();
+
+/** A reply on its way: the thread it goes on, what it carries under its key, and when it was sent. */
+interface QueuedReply {
+  readonly threadId: string;
+  readonly send: CommentSend;
+  readonly at: number;
+}
+
+/**
+ * The replies on their way, every thread's in the order sent, and the queue
+ * they go through, one thread's one at a time (`SendQueue`), keyed by the
+ * thread's id.
+ */
+interface ReplyQueue extends SendQueue {
+  readonly lines: readonly QueuedReply[];
+  /** The replies on their way this moment, for a send's answer that lands after the render it was made in. */
+  readonly now: () => readonly QueuedReply[];
+  readonly change: (change: (was: readonly QueuedReply[]) => readonly QueuedReply[]) => void;
+}
+
+/** No replies on their way, one array so a thread with none hands down the same one. */
+const NO_REPLIES: readonly QueuedReply[] = [];
+
+/** A reply queue held for as long as the component holding it is mounted. */
+function useOwnReplyQueue(): ReplyQueue {
+  const { after } = useSendQueue();
+  const [lines, setLines] = useState(NO_REPLIES);
+  const held = useRef(lines);
+  const now = useCallback(() => held.current, []);
+  const change = useCallback((next: (was: readonly QueuedReply[]) => readonly QueuedReply[]) => {
+    held.current = next(held.current);
+    setLines(held.current);
+  }, []);
+  return useMemo(() => ({ after, lines, now, change }), [after, lines, now, change]);
+}
+
+/** The reply queue the comments' scope holds (`CommentFocusScope`), which every thread's field shares. */
+const ReplyQueueContext = createContext<ReplyQueue | undefined>(undefined);
+
+/** The scope's reply queue, or one of the caller's own where no scope stands over it. */
+function useReplyQueue(): ReplyQueue {
+  const own = useOwnReplyQueue();
+  return useContext(ReplyQueueContext) ?? own;
+}
 
 /** Whether one comment carries these words and files: its words' bound, and a message's count of files and their bytes together. */
 function carried(send: Pick<CommentSend, "words" | "attachments">): boolean {
@@ -1141,6 +1257,44 @@ type ReplyVariant = (typeof REPLY_VARIANT)[keyof typeof REPLY_VARIANT];
 
 /** A comment's dictation hears no names of its own, which an agent's box takes from its repository. */
 const NO_KEYWORDS: readonly string[] = [];
+
+/** One of the reader's replies on its way, drawn as the thread draws a comment, its files going up and Sending at its head's end, until the thread holds the comment it became. */
+function SendingComment({
+  reply,
+  doors,
+  now,
+}: {
+  reply: QueuedReply;
+  doors: ThreadDoors;
+  now: number;
+}): React.JSX.Element {
+  const { send } = reply;
+  return (
+    <div className="comment-entry py-tight-gap" data-sending="">
+      <WrittenComment
+        writer={{
+          actor: PLAN_COMMENT_ACTOR.MEMBER,
+          ...(doors.me === undefined
+            ? undefined
+            : { by: { userId: doors.me, name: COMMENT_WORDS.YOU } }),
+        }}
+        agents={doors.agents}
+        at={reply.at}
+        now={now}
+        trailing={
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
+            {COMMENT_WORDS.SENDING}
+          </Text>
+        }
+      >
+        {send.attachments.length === 0 ? null : (
+          <AttachedFileChips files={attachmentChips(send.attachments)} uploading />
+        )}
+        <CommentWords words={send.words} />
+      </WrittenComment>
+    </div>
+  );
+}
 
 /** Over a thread whose words were deleted: that they were, and what they said. */
 function GoneQuote({
@@ -1249,8 +1403,9 @@ function CommentsRow({ children }: { children: ReactNode }): React.JSX.Element {
 
 /**
  * One thread as the margin, a count's card, or the Comments tab draws it:
- * open, every entry and the field that answers it; at rest, its first
- * comment and the faces and count of its replies, which opens it.
+ * open, every entry, the reader's replies on their way after them in the
+ * order sent, and the field that answers it; at rest, its first comment and
+ * the faces and count of its replies, which opens it.
  */
 function ThreadCard({
   thread,
@@ -1279,7 +1434,7 @@ function ThreadCard({
   onShowWords?: (() => void) | undefined;
 }): React.JSX.Element {
   const now = useMinute();
-  const [sending, setSending] = useState(false);
+  const replies = useReplyQueue();
   const comments = thread.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT);
   const [first] = comments;
   const gone = thread.anchor === undefined;
@@ -1374,6 +1529,11 @@ function ThreadCard({
               <EventLine key={entry.id} entry={entry} agents={doors.agents} now={now} />
             ),
           )}
+          {replies.lines
+            .filter((reply) => reply.threadId === thread.id)
+            .map((reply) => (
+              <SendingComment key={reply.send.key} reply={reply} doors={doors} now={now} />
+            ))}
         </div>
       </ScrollArea>
       {thread.status === PLAN_COMMENT_STATUS.OPEN ? (
@@ -1384,22 +1544,19 @@ function ThreadCard({
             planId: doors.control.planId,
             on: { threadId: thread.id },
           }}
-          sending={sending}
+          replies={{ on: thread.id, queue: replies }}
           autoFocus={pressed}
           failure={note}
           onCancel={() => onClose?.()}
-          onSend={async (words, clientKey, attachments) => {
-            setSending(true);
-            const sent = await doors.control.act(thread.id, {
+          onSend={(words, clientKey, attachments) =>
+            doors.control.act(thread.id, {
               action: PLAN_COMMENT_ACTION.REPLY,
               clientKey,
               words,
               // Note that a reply with no files sends no key for them, so a service from before files reads it as it always did.
               ...(attachments.length === 0 ? undefined : { attachments }),
-            });
-            setSending(false);
-            return sent;
-          }}
+            })
+          }
         />
       ) : note === undefined ? null : (
         // Note that a resolved thread has no field to stand a failure under, so its Reopen's is said on its own.
@@ -2263,7 +2420,7 @@ export function useEditorComment(editor: RefObject<PlanEditorHandle | undefined>
   };
 }
 
-/** Holds which thread is open and the one being started, for the marks, the margin, and the Comments tab under it. */
+/** Holds which thread is open, the one being started, and the replies on their way, for the marks, the margin, and the Comments tab under it. */
 export function CommentFocusScope({
   planId,
   children,
@@ -2279,6 +2436,7 @@ export function CommentFocusScope({
   const [pending, setPending] = useState<PendingThread | undefined>(undefined);
   const [revealed, setRevealed] = useState<CommentFocus["revealed"]>(undefined);
   const [focusedOn, setFocusedOn] = useState(planId);
+  const replies = useOwnReplyQueue();
   // Note that the thread being started is let go in the render the plan changes in, so it is never posted to another plan.
   if (focusedOn !== planId) {
     setFocusedOn(planId);
@@ -2309,7 +2467,9 @@ export function CommentFocusScope({
   );
   return (
     <CommentFocusContext.Provider value={focus}>
-      <PendingSetter.Provider value={setPending}>{children}</PendingSetter.Provider>
+      <ReplyQueueContext.Provider value={replies}>
+        <PendingSetter.Provider value={setPending}>{children}</PendingSetter.Provider>
+      </ReplyQueueContext.Provider>
     </CommentFocusContext.Provider>
   );
 }
