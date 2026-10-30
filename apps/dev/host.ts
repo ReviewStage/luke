@@ -360,7 +360,7 @@ function admitted<A, E>(
   );
 }
 
-/** One `edit_plan` call's notes taken into the agent's plan, its pictures read through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
+/** One `edit_plan` call's notes taken into the plan of the task it names, its pictures read through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
 export function editPlanNotes(
   auth: SessionAuth,
   sessionId: string,

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
-import { DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
+import { DEVICE_PLATFORM, DEVICE_SETUP } from "@luke/features/device-agent-wire";
 import type { Host } from "@luke/features/host-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { THIS_MAC_HOST_STANDING, type ThisMacHostStanding } from "@luke/host/contract";
@@ -139,15 +139,16 @@ it.effect(
     }),
 );
 
-/** Hosts drawn in the desktop over the hosts given, with This Mac standing as given; how often Retry or Turn on again was asked. */
+/** Hosts drawn in the desktop over the hosts given, with This Mac standing as given and the beats given; how often Retry or Turn on again was asked. */
 async function machinesWithThisMac(
   hosts: readonly Host[],
   standing: ThisMacHostStanding,
+  beats: readonly { readonly deviceId: string; readonly ageMs: number }[] = [],
 ): Promise<{ turnOns: () => number }> {
   let turnOns = 0;
   fakeActPort({
     [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-    [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
+    [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [...beats] }),
     [ACT_KIND.THIS_MAC_HOST_READ]: () => Promise.resolve(standing),
     [ACT_KIND.THIS_MAC_HOST_TURN_ON]: () => {
       turnOns += 1;
@@ -205,6 +206,32 @@ test("this Mac stands first on its own machine's row, with why its setup failed 
   assert.ok(text.includes("the image pull timed out"));
   await press("Retry");
   assert.equal(turnOns(), 1);
+});
+
+test("another Mac's row says why its setup failed and whose login it runs in, and nothing of This Mac", async () => {
+  const mini = "5c2e8a1f-3b7d-4e9a-8c6f-1d3b5e7a9c20";
+  await machinesWithThisMac(
+    [
+      {
+        id: mini,
+        name: "mini",
+        platform: DEVICE_PLATFORM.DARWIN,
+        seenAt: 0,
+        version: "0.0.9",
+        upgradeNeeded: true,
+        setup: DEVICE_SETUP.FAILED,
+        setupFailure: "Claude Code could not be installed",
+        loginName: "charles",
+      },
+    ],
+    { standing: THIS_MAC_HOST_STANDING.OFF },
+    [{ deviceId: mini, ageMs: 0 }],
+  );
+  const text = document.body.textContent ?? "";
+
+  assert.ok(text.includes("Couldn't set up: Claude Code could not be installed"));
+  assert.ok(text.includes("Runs while charles is logged in."));
+  assert.ok(!/this Mac/iu.test(text), "nothing on its row speaks of this Mac");
 });
 
 test.each([

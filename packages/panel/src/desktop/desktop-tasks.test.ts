@@ -511,7 +511,7 @@ function approvedItem(id: string, title: string, at: number): InboxItem {
   };
 }
 
-test("a task's Inbox heads its list with the Inbox's name and a view's menu offering To do and All alone, opening on To do with no tab bar; All lists everything, the head naming it, and the scope chosen is kept across a relaunch apart from the window's", async () => {
+test("a task's Inbox heads its list with the Inbox's name and a view's menu offering To do and All alone, opening on To do with no tab bar; All lists everything, the head naming the Inbox alone, and the scope chosen is kept across a relaunch apart from the window's", async () => {
   window.localStorage.clear();
   window.localStorage.setItem("luke.inboxShow", JSON.stringify("all"));
   const items = [
@@ -523,14 +523,14 @@ test("a task's Inbox heads its list with the Inbox's name and a view's menu offe
   assert.deepEqual(await inbox.head(), ["Inbox", "[Needs you]", "All"]);
   assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
   await inbox.pressScope("All");
-  assert.deepEqual(await inbox.head(), ["Inbox · All", "Needs you", "[All]"]);
+  assert.deepEqual(await inbox.head(), ["Inbox", "Needs you", "[All]"]);
   assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   inbox.unmount();
 
   inbox = await narrowTaskInbox(items, 1_200);
   assert.deepEqual(
     await inbox.head(),
-    ["Inbox · All", "Needs you", "[All]"],
+    ["Inbox", "Needs you", "[All]"],
     "the scope outlives a relaunch",
   );
   await inbox.pressScope("Needs you");
@@ -704,7 +704,7 @@ test("a task's Inbox holding only settled items, read, on To do lists no row and
   assert.deepEqual(wide.filteredOut(), [undefined, "Nothing needs you", "Show all"]);
   assert.equal(wide.title(), "Resend on bounce?", "the item read stays shown beside the list");
   wide.showAll();
-  assert.deepEqual(await wide.head(), ["Inbox · All", "Needs you", "[All]"]);
+  assert.deepEqual(await wide.head(), ["Inbox", "Needs you", "[All]"]);
   assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   await wide.pressScope("Needs you");
   wide.unmount();
@@ -719,7 +719,7 @@ test("a task's Inbox holding only settled items, read, on To do lists no row and
     ["list", ""],
     "Show all leaves the rows it brings back standing",
   );
-  assert.deepEqual(await narrow.head(), ["Inbox · All", "Needs you", "[All]"]);
+  assert.deepEqual(await narrow.head(), ["Inbox", "Needs you", "[All]"]);
   assert.deepEqual(narrow.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   window.localStorage.clear();
   narrow.unmount();

@@ -153,6 +153,64 @@ function pressFocused(): void {
   press(item);
 }
 
+/** How long a mouse rests on a submenu's item before its submenu opens: past Base UI's 100 ms delay. */
+const SUBMENU_REST_MS = 150;
+
+/**
+ * What a pointer over `element` lands on, as a browser finds it: the
+ * element, unless the nearest box it stands in that says whether it takes
+ * the pointer (`pointer-events`) takes none, when it lands on the document.
+ */
+function under(element: HTMLElement): HTMLElement {
+  for (let at: HTMLElement | null = element; at !== null; at = at.parentElement) {
+    if (at.style.pointerEvents === "auto") return element;
+    if (at.style.pointerEvents === "none") return document.documentElement;
+  }
+  return element;
+}
+
+/**
+ * The mouse moving from `from`, or from outside the window, to the point
+ * `at` over `to`, with every event a browser sends for it, which Base UI's
+ * hover reads; nothing is opened until it rests there (`rest`), on the
+ * test's fake timers. It answers what the mouse landed on (`under`). Note
+ * that a mouse keeps moving, so where landing let the pointer through to
+ * `to`, as a submenu given up does, its next move lands on `to`.
+ */
+function mouseMove(
+  from: HTMLElement | null,
+  to: HTMLElement,
+  at: { clientX: number; clientY: number } = { clientX: 0, clientY: 0 },
+): HTMLElement {
+  const landed = under(to);
+  const pointer = { pointerType: "mouse", ...at } as const;
+  act(() => {
+    from?.dispatchEvent(
+      new PointerEvent("pointerout", { bubbles: true, relatedTarget: landed, ...pointer }),
+    );
+    from?.dispatchEvent(
+      new MouseEvent("mouseout", { bubbles: true, relatedTarget: landed, ...at }),
+    );
+    from?.dispatchEvent(new MouseEvent("mouseleave", { relatedTarget: landed, ...at }));
+    landed.dispatchEvent(
+      new PointerEvent("pointerover", { bubbles: true, relatedTarget: from, ...pointer }),
+    );
+    landed.dispatchEvent(
+      new MouseEvent("mouseover", { bubbles: true, relatedTarget: from, ...at }),
+    );
+    landed.dispatchEvent(new MouseEvent("mouseenter", { relatedTarget: from, ...at }));
+    landed.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, movementX: 4, ...at }));
+  });
+  return landed !== to && under(to) === to ? mouseMove(landed, to, at) : landed;
+}
+
+/** The mouse resting where it last moved, long enough for a submenu to open. */
+function rest(): void {
+  act(() => {
+    vi.advanceTimersByTime(SUBMENU_REST_MS);
+  });
+}
+
 /** The pointer moving onto `to`, from `from` or from outside the window, as a browser reports it. */
 function pointerMove(from: HTMLElement | null, to: HTMLElement): void {
   act(() => {
@@ -410,17 +468,68 @@ test("Right opens a submenu on its first item, and Left or Escape closes it alon
 test("resting on one submenu's item after another's opens the second's submenu, with no press", () => {
   mount(createElement(Harness, { groups: viewGroups([]) }));
   press(button("More"));
-  pointerMove(null, button("Group by"));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  mouseMove(null, button("Group by"));
+  rest();
   expect(openMenu("Group by")).not.toBeNull();
-  pointerMove(button("Group by"), button("Order by"));
+  mouseMove(button("Group by"), button("Order by"));
+  rest();
   expect(openMenu("Order by")).not.toBeNull();
   expect(openMenu("Group by")).toBeNull();
-  pointerMove(button("Order by"), button("Name"));
+  mouseMove(button("Order by"), button("Name"));
+  rest();
   expect(openMenu("Order by")).not.toBeNull();
 });
 
+/** Where the menu of Group by over Order by stands, and Group by's submenu beside it, as `x`, `y`, width, and height. */
+const VIEW_LAYOUT = {
+  menu: { "Plan actions": [0, 0, 208, 72], "Group by": [212, 0, 208, 72] },
+  item: {
+    "Group by": [4, 4, 200, 32],
+    "Order by": [4, 36, 200, 32],
+    Repository: [216, 4, 200, 32],
+    None: [216, 36, 200, 32],
+  },
+} as const satisfies Record<string, Record<string, readonly [number, number, number, number]>>;
+
+/** The view menu laid out as `VIEW_LAYOUT` says, as a browser lays it out, though jsdom lays out nothing. */
+function viewMenuLaidOut(): void {
+  const measured = HTMLElement.prototype.getBoundingClientRect;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    // Note that a menu's positioner stands where the menu it holds does.
+    const menu =
+      this.getAttribute("role") === "menu" ? this : this.querySelector(':scope > [role="menu"]');
+    const boxes: Readonly<Record<string, readonly [number, number, number, number]>> =
+      menu === null ? VIEW_LAYOUT.item : VIEW_LAYOUT.menu;
+    const name = menu === null ? this.textContent : menu.getAttribute("aria-label");
+    const box = name === null ? undefined : boxes[name];
+    return box === undefined ? measured.call(this) : new DOMRect(...box);
+  });
+}
+
+test("the mouse passing over another submenu's item on its way into a submenu leaves that submenu standing, and opens nothing it did not rest on", () => {
+  mount(createElement(Harness, { groups: viewGroups([]) }));
+  viewMenuLaidOut();
+  press(button("More"));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const resting = mouseMove(null, button("Group by"), { clientX: 150, clientY: 20 });
+  expect(openMenu("Group by")).toBeNull();
+  rest();
+  expect(openMenu("Group by")).not.toBeNull();
+  // Note that the mouse heads down and right for None, over Order by's right end.
+  const crossing = mouseMove(resting, button("Order by"), { clientX: 203, clientY: 38 });
+  mouseMove(crossing, button("None"), { clientX: 260, clientY: 52 });
+  rest();
+  expect(openMenu("Group by")).not.toBeNull();
+  expect(openMenu("Order by")).toBeNull();
+});
+
 test("a value that stays, pressed in the second submenu the pointer opened once the first's exit has played, is chosen with both menus standing", async () => {
-  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  vi.useFakeTimers({
+    toFake: ["requestAnimationFrame", "cancelAnimationFrame", "setTimeout", "clearTimeout"],
+  });
   const exits = holdExits();
   try {
     const chosen: Chosen = [];
@@ -436,8 +545,10 @@ test("a value that stays, pressed in the second submenu the pointer opened once 
       }),
     );
     press(button("More"));
-    pointerMove(null, button("Status"));
-    pointerMove(button("Status"), button("Priority"));
+    mouseMove(null, button("Status"));
+    rest();
+    mouseMove(button("Status"), button("Priority"));
+    rest();
     act(() => vi.advanceTimersToNextFrame());
     await act(async () => exits.finish());
     act(() => {
@@ -458,13 +569,16 @@ test("a value that stays, pressed in the second submenu the pointer opened once 
 test("a press or Right on an item whose submenu the pointer opened takes the keyboard into it", () => {
   mount(createElement(Harness, { groups: viewGroups([]) }));
   press(button("More"));
-  pointerMove(null, button("Group by"));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  mouseMove(null, button("Group by"));
+  rest();
   expect(openMenu("Group by")).not.toBeNull();
   press(button("Group by"));
   expect(focused()).toBe("Repository");
 
   key("ArrowLeft");
-  pointerMove(null, button("Order by"));
+  mouseMove(button("Group by"), button("Order by"));
+  rest();
   expect(openMenu("Order by")).not.toBeNull();
   act(() => button("Order by").focus());
   key("ArrowRight");

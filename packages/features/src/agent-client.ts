@@ -38,6 +38,7 @@ import {
   type AgentPullRequestAnswerView,
   type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
+  type AgentQueueAnswerView,
   type AgentReviewOptionsAnswerView,
   type AgentWorkspaceListParams,
   type DevicePresenceAnswerView,
@@ -66,10 +67,12 @@ import {
   type AgentNewestAnswer,
   type AgentOlderAnswer,
   type AgentPinRequest,
+  type AgentQueueChange,
   type AgentRenameRequest,
   type AgentServersRequest,
   type AgentStartRequest,
   agentMessageRequestSchema,
+  agentQueueChangeSchema,
   agentRenameRequestSchema,
   agentServersRequestSchema,
   agentStartRequestOnWire,
@@ -85,7 +88,6 @@ import {
   localAgentRefusedDataSchema,
   planLimitReachedDataSchema,
 } from "./contract/errors.js";
-import { conversationMediaTypeSchema } from "./conversation-picture-wire.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
 import type { FailureFacts } from "./failure-facts.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
@@ -345,18 +347,10 @@ export function startRefusedAs(refusal: TaskAgentRefusal): Failed {
   return refusedAs(unparsedWire(refusal), START_REFUSALS);
 }
 
-/** A transcript's picture's bytes in base64 under its type: a picture, or a WebM an agent recorded; unanswered under any other type. */
-function readConversationPicture(response: Response): Effect.Effect<AgentInboxAttachmentView> {
-  return Effect.map(
-    imageBodyOf(response, conversationMediaTypeSchema),
-    (picture) => picture ?? UNANSWERED,
-  );
-}
-
 /** The types an inbox item's attachment is served under: a block's picture's or recording's, or any a file an answer carried travelled as. */
 const inboxFileTypeSchema = Schema.Literals(Object.values(INBOX_FILE_TYPE));
 
-/** An inbox attachment's bytes in base64 under its type: a picture, a recording, or a file an answer carried; unanswered under any other type. */
+/** A served file's bytes in base64 under its type: a picture, a recording, or a file an inbox answer carried or a queued message holds; unanswered under any other type. */
 function readInboxFile(response: Response): Effect.Effect<AgentInboxAttachmentView> {
   return Effect.map(imageBodyOf(response, inboxFileTypeSchema), (file) => file ?? UNANSWERED);
 }
@@ -929,6 +923,23 @@ export class HostedAgentClient {
     );
   }
 
+  /** Changes one agent's queue of messages waiting behind its turn, answering the queue as it then stands; a change the service would refuse by shape is refused here without traveling. */
+  changeQueue(
+    agentId: string,
+    change: AgentQueueChange,
+  ): Effect.Effect<AgentQueueAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(agentQueueChangeSchema)(change));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(
+      askHosted(
+        this.#hosted.messages.queue,
+        { params: { id: agentId }, body: admitted },
+        HOSTED_DEADLINE.STEER,
+      ),
+      MESSAGE_REFUSALS,
+    );
+  }
+
   /** Changes one agent's model and effort for its next step, answering it as it then stands; a choice the service would refuse by shape is refused here without traveling. */
   choose(
     agentId: string,
@@ -1255,10 +1266,11 @@ export class HostedAgentClient {
 
   /**
    * One picture a tool answered an agent, or one of its workers where
-   * `callId` names the delegation call, fetched under the account: its
-   * bytes in base64 under the media type the service kept, as an inbox
-   * image is; not found where the agent is not one the account reaches or
-   * its transcript keeps no such picture; unanswered for anything else.
+   * `callId` names the delegation call, or one file of a message queued for
+   * the agent, fetched under the account: its bytes in base64 under the media
+   * type the service kept or the file travels as, as an inbox file is; not
+   * found where the agent is not one the account reaches or it keeps no such
+   * picture or file; unanswered for anything else.
    */
   agentPicture(
     agentId: string,
@@ -1277,7 +1289,7 @@ export class HostedAgentClient {
             refusedAs(unparsedWire(body), ROW_REFUSALS),
           );
         }
-        return readConversationPicture(answer.response);
+        return readInboxFile(answer.response);
       },
     );
   }

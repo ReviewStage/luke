@@ -11,7 +11,8 @@ import { MARKDOWN_LOOK, Markdown, type MarkdownProps, markdownStep } from "./mar
  * markdown.test.ts -- the one renderer as a place meets it: a note draws its
  * headings as paragraphs, its pictures as their words, and raw HTML as text;
  * a document draws real headings and no root of its own; a line draws its
- * inline Markdown and its blocks' words as one run with no root; a step a place
+ * inline Markdown and its blocks' words as one run with no root; a
+ * transcript's line draws its blocks' words on one line; a step a place
  * hands in draws with the values it was handed, however many places hand
  * the same step; a note follows a new address rewriter; a task box a
  * reader may tick is named by its item, asks with its item's place, and
@@ -81,6 +82,20 @@ test("a line draws its inline Markdown, and its blocks' words as one run, with n
   assert.equal(
     html,
     "Open <strong>Domains</strong>\n\nadd <code>a.example</code>\n wait\n\n<code>verify\n</code>",
+  );
+});
+
+test("a transcript's line draws its blocks' words as one paragraph: no other block or break, a fence as its code", () => {
+  const { container } = drawn({
+    look: MARKDOWN_LOOK.TRANSCRIPT_LINE,
+    words: "Open **Domains**  \nnow\n\n- add `a.example`\n- wait\n\n```\nverify\nit\n```",
+  });
+  assert.equal(container.querySelectorAll("p").length, 1);
+  assert.equal(container.querySelector("ul, li, pre, br"), null);
+  assert.equal(container.textContent, "Open Domains now add a.example wait verify it");
+  assert.deepEqual(
+    [...container.querySelectorAll("code")].map((node) => node.textContent),
+    ["a.example", "verify it"],
   );
 });
 

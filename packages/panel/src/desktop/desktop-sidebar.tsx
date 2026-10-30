@@ -95,6 +95,7 @@ import {
   drawnTaskRows,
   hiddenStatuses,
   homedTaskRows,
+  openParentIds,
   orderTaskRows,
   type RepositoryGroup,
   repositoryGroups,
@@ -106,6 +107,7 @@ import {
   type TaskOrder,
   type TaskRow,
   taskRow,
+  taskRowInStatuses,
   taskRowKey,
   taskRowRepository,
   taskRowsAssignedTo,
@@ -1847,22 +1849,19 @@ function sectionedTasks(
 
 /**
  * A section as the view's filters leave it: its tasks of the statuses shown,
- * and any with no status, an agent's among them, of the creator and the
- * assignee the view names, where it names them, each with its entry, in its
- * order.
+ * any with no status, an agent's among them, and any parent a child task
+ * keeps open, of the creator and the assignee the view names, where it names
+ * them, each with its entry, in its order.
  */
 function sectionInView(
   drawn: DrawnSection,
   statuses: readonly TaskStatus[],
+  openParents: ReadonlySet<string>,
   createdBy: string | undefined,
   assignedTo: string | undefined,
 ): DrawnSection {
   const people = new Set(taskRowsAssignedTo(taskRowsCreatedBy(drawn.rows, createdBy), assignedTo));
-  const shown = (row: TaskRow) =>
-    people.has(row) &&
-    (row.kind === TASK_ROW.AGENT ||
-      row.task.status === undefined ||
-      statuses.includes(row.task.status));
+  const shown = (row: TaskRow) => people.has(row) && taskRowInStatuses(row, statuses, openParents);
   const kept = drawn.rows.flatMap((row, at) => {
     const entry = drawn.entries[at];
     return entry !== undefined && shown(row) ? [{ entry, row }] : [];
@@ -2169,8 +2168,13 @@ function SidebarColumn({
   );
   // The view's filters thin the sections' tasks as they thin the list's, a row dropped among them landing among those drawn.
   const statuses = shownStatuses(taskView.view);
+  // A parent stays while the view shows any child task under it, whatever its own status.
+  const openParents = useMemo(
+    () => openParentIds(tasks.listed.tasks, statuses),
+    [tasks.listed.tasks, statuses],
+  );
   const shownSections = sectioned.sections.map((drawn) =>
-    sectionInView(drawn, statuses, createdBy, assignedTo),
+    sectionInView(drawn, statuses, openParents, createdBy, assignedTo),
   );
   const sectionDialogs = useSectionDialogs(tasks, tasks.shown && overlay.inSight);
   // A slot a row is let go at in an open section, counted among its rows as drawn, child tasks nested, read back in the section's own order; a folded one takes it on top, as it always has.
@@ -2308,8 +2312,8 @@ function SidebarColumn({
   const rows = taskRowsAssignedTo(taskRowsCreatedBy(unpinned, createdBy), assignedTo);
   // The status filter thins the tasks listed.
   const sectionRows = sectioned.sections.flatMap((drawn) => drawn.rows);
-  const hidden = hiddenStatuses([...sectionRows, ...rows], statuses);
-  const statusRows = taskRowsInStatuses(rows, statuses);
+  const hidden = hiddenStatuses([...sectionRows, ...rows], statuses, openParents);
+  const statusRows = taskRowsInStatuses(rows, statuses, openParents);
   const { grouping, order } = taskView.view;
   const orderView: TaskOrderView = {
     workspaceId: tasks.workspace?.id,

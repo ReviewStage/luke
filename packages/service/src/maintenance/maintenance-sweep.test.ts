@@ -183,6 +183,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.repositorySnapshots.push(now);
         return { listed: 3, deleted: 1 };
       }),
+    sweepAgentQueues: () => Effect.succeed(0),
     sweepAgentStates: (now) =>
       Effect.sync(() => {
         recorded.agentStates.push(now);

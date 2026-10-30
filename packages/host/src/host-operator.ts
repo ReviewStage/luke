@@ -55,6 +55,8 @@ import {
   type AgentPullRequestReadParams,
   type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
+  type AgentQueueAnswerView,
+  type AgentQueueParams,
   type AgentRenameParams,
   type AgentReviewOptionsAnswerView,
   type AgentRewindParams,
@@ -90,6 +92,7 @@ import {
   agentPullRequestAnswerViewSchema,
   agentPullRequestViewedAnswerViewSchema,
   agentPullRequestWriteAnswerViewSchema,
+  agentQueueAnswerViewSchema,
   agentReviewOptionsAnswerViewSchema,
   agentTranscriptChangedSchema,
   agentTranscriptOlderAnswerSchema,
@@ -676,6 +679,7 @@ export interface HostOperator {
   /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
   agentRename(params: AgentRenameParams): Effect.Effect<AgentAgentAnswer>;
   agentServers(params: AgentServersParams): Effect.Effect<AgentAgentAnswer>;
+  agentQueue(params: AgentQueueParams): Effect.Effect<AgentQueueAnswerView>;
   /** One agent stopped; the agent as it then stands, or why it was not. */
   agentStop(params: AgentStopParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */
@@ -1771,6 +1775,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           disabledServers: params.disabledServers,
         }),
         answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
+      ),
+    agentQueue: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AGENTS_QUEUE, {
+          agentId: params.agentId,
+          change: params.change,
+        }),
+        answerOf(agentQueueAnswerViewSchema, AGENT_UNANSWERED),
       ),
     agentStop: (params) =>
       Effect.map(

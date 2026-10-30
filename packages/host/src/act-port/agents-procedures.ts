@@ -45,6 +45,8 @@ import {
   type AgentPullRequestReadParams,
   type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
+  type AgentQueueAnswerView,
+  type AgentQueueParams,
   type AgentRenameParams,
   type AgentReviewOptionsAnswerView,
   type AgentRewindParams,
@@ -96,6 +98,7 @@ export interface AgentProceduresDependencies {
     agentChoose(params: AgentChooseParams): Effect.Effect<AgentAgentAnswer>;
     agentRename(params: AgentRenameParams): Effect.Effect<AgentAgentAnswer>;
     agentServers(params: AgentServersParams): Effect.Effect<AgentAgentAnswer>;
+    agentQueue(params: AgentQueueParams): Effect.Effect<AgentQueueAnswerView>;
     agentStop(params: AgentStopParams): Effect.Effect<AgentAgentAnswer>;
     agentRewind(params: AgentRewindParams): Effect.Effect<AgentAgentAnswer>;
     agentArchive(params: AgentArchiveParams): Effect.Effect<AgentAgentAnswer>;
@@ -383,6 +386,14 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* notedAgent(host.agentServers(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_QUEUE]: actPort[AGENT_ACT_KIND.AGENTS_QUEUE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.agentQueue(input);
     }),
     [AGENT_ACT_KIND.AGENTS_STOP]: actPort[AGENT_ACT_KIND.AGENTS_STOP].effect(function* ({
       input,

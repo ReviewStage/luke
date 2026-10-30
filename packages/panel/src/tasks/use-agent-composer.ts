@@ -230,6 +230,8 @@ export interface HeldComposer extends AgentComposerControl {
   readonly cut: ReadonlySet<string> | undefined;
   /** The ids the lines sent were written under that the service has not said it took, whose rows it may yet withdraw, so no rewind lands on them. */
   readonly going: ReadonlySet<string>;
+  /** Settles once every line the box sent so far has been answered, which a message queued behind them waits for, so it never goes ahead of them. */
+  readonly sendsSettled: () => Promise<void>;
 }
 
 export function useAgentComposer(input: {
@@ -509,5 +511,7 @@ export function useAgentComposer(input: {
     revert,
     cut: held.cut,
     going: new Set(held.sent.filter((line) => line.taken !== true).map((line) => line.id)),
+    sendsSettled: () =>
+      (queues.current.get(latest.current.agentId) ?? Promise.resolve()).catch(() => undefined),
   };
 }

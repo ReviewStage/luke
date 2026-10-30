@@ -1,7 +1,6 @@
 import { useCallback, useLayoutEffect, useReducer, useRef } from "react";
 import {
   EVERYONES,
-  INBOX_SORT,
   INBOX_WHOSE,
   type InboxGroup,
   type InboxListView,
@@ -21,16 +20,16 @@ import { type HeldOrder, useHeldOrder } from "./use-held-order.js";
  * The chosen item's row stays while it is chosen, once the list drew it,
  * though answering or reading it leaves the scope shown, so it goes gray
  * where it stood (`isDone`) rather than leaving under the reader; choosing
- * another row lets it go, and so does another scope or Whose, or the list
+ * another row lets it go, and so does another scope or Addressed to, or the list
  * being hidden, so an item settled while it was hidden is gone once the
  * list is shown again. An item the
  * list never drew, chosen by a link, gets no row. While the pointer is over
  * the list every row keeps the place it was first drawn in, when its item
- * changed and the status it stood under, so nothing moves under the reader's
+ * changed, so nothing moves under the reader's
  * hand; once it leaves, every row but the chosen one stands where its item
  * does now, and the chosen row keeps its place while it stays chosen, so an
- * answer, which changes both, moves no row. Hidden, or sorted, grouped,
- * scoped, searched, or Whose chosen anew, the list is drawn again where each
+ * answer, which changes it, moves no row. Hidden, or
+ * scoped, searched, or Addressed to chosen anew, the list is drawn again where each
  * item stands now. A row that leaves the list lets its place go, so a later
  * change brings it back where it stands then.
  *
@@ -73,7 +72,7 @@ function heldPlaces(
   return chosen === undefined || place === undefined ? NO_PLACES : new Map([[chosen, place]]);
 }
 
-/** Whether two Whose choices name the same people. */
+/** Whether two Addressed to choices name the same people. */
 function sameWhose(a: InboxWhose = EVERYONES, b: InboxWhose = EVERYONES): boolean {
   if (a.kind !== INBOX_WHOSE.PERSON || b.kind !== INBOX_WHOSE.PERSON) return a.kind === b.kind;
   return a.userId === b.userId;
@@ -95,13 +94,9 @@ function sameScope(was: InboxFilter | undefined, now: InboxFilter): boolean {
   );
 }
 
-/** Whether a list drawn under one filter lists the same items as under another, in the same order and groups. */
+/** Whether a list drawn under one filter lists the same items as under another, in the same order: every list stands the latest first. */
 function sameOrder(was: InboxFilter | undefined, now: InboxFilter): boolean {
-  return (
-    sameScope(was, now) &&
-    was?.grouping === now.grouping &&
-    (was.sort ?? INBOX_SORT.LATEST) === (now.sort ?? INBOX_SORT.LATEST)
-  );
+  return sameScope(was, now);
 }
 
 /**
@@ -125,7 +120,7 @@ function holdsBack(list: InboxListView, held: ReadonlyMap<string, InboxPlace>): 
   if (held.size === 0) return false;
   for (const [id, now] of inboxPlaces(list, NO_PLACES)) {
     const place = held.get(id);
-    if (place !== undefined && (place.at !== now.at || place.status !== now.status)) return true;
+    if (place !== undefined && place.at !== now.at) return true;
   }
   return false;
 }

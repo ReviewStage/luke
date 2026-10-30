@@ -367,6 +367,8 @@ export function runCreateTask(
             )
           : { asked: parent.runsOn };
       if (runsOn === undefined) return agentToolRejected(CREATE_TASK_REFUSAL.PICK_REMOVED);
+      // A child takes its parent's assignee where the call names none; a null names no one.
+      const assignedId = assignee === undefined ? (parent?.assigneeId ?? undefined) : assigneeId;
       const text = planTextOf(plan ?? "");
       // The make and its plan's first revision are one write, so a call run again at once makes one task.
       const made = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -382,7 +384,7 @@ export function runCreateTask(
               ...(brief === undefined ? undefined : { brief }),
               ...(status === undefined ? undefined : { status }),
               ...(priority === undefined ? undefined : { priority }),
-              ...(assigneeId === undefined ? undefined : { assigneeId }),
+              ...(assignedId === undefined ? undefined : { assigneeId: assignedId }),
               ...(runsOn.asked === undefined ? undefined : { runsOn: runsOn.asked }),
               ...(parent === undefined ? undefined : { parentTaskId: parent.id }),
               ...(mode === undefined ? undefined : { mode }),

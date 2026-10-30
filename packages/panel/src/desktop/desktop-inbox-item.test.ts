@@ -78,7 +78,6 @@ import {
   faceKind,
   footWords,
   handFiles,
-  headerNamed,
   heldMessages,
   hoveredCard,
   INVITES,
@@ -804,20 +803,20 @@ test("split, K and J move the chosen row and the item beside it, which draws no 
   const keys = standKeymap();
   assert.equal(pagerOf(page), null, "the list beside the item says where it stands");
 
-  pressKey("j");
+  pressKey("k");
   assert.deepEqual(
     listed(page).filter((row) => row.startsWith("▸")),
     ["▸ *Expire after 7 days?"],
   );
   assert.equal(readTitle(page), "Expire after 7 days?");
-  pressKey("k");
+  pressKey("j");
   assert.equal(readTitle(page), "Alert at 80%?");
 
   const box = composerEditor(page.querySelector(".inbox-view-items") ?? page);
   // Note that jsdom computes no `isContentEditable`, which a browser answers for the editor.
   Object.defineProperty(box, "isContentEditable", { value: true });
   box.focus();
-  pressKey("j", box);
+  pressKey("k", box);
   assert.equal(readTitle(page), "Alert at 80%?", "the letter is the box's");
   act(() => keys.unmount());
 });
@@ -828,25 +827,25 @@ test("split, K and J hand the keyboard to the row they choose, so the arrows go 
   const keys = standKeymap();
   act(() => rowNamed(page, "Alert at 80%?").focus());
 
-  pressKey("j", document.activeElement ?? document.body);
+  pressKey("k", document.activeElement ?? document.body);
   assert.equal(readTitle(page), "Expire after 7 days?");
   assert.equal(
     document.activeElement,
     rowNamed(page, "Expire after 7 days?"),
-    "J's row holds the keyboard",
+    "K's row holds the keyboard",
   );
-  pressKey("k", document.activeElement ?? document.body);
+  pressKey("j", document.activeElement ?? document.body);
   assert.equal(readTitle(page), "Alert at 80%?");
   assert.equal(
     document.activeElement,
     rowNamed(page, "Alert at 80%?"),
-    "K's row holds the keyboard",
+    "J's row holds the keyboard",
   );
   pressKey("ArrowUp", document.activeElement ?? document.body);
   assert.equal(
     document.activeElement,
-    rowNamed(page, "How is a failed email retried?"),
-    "↑ goes on from the row K reached",
+    rowNamed(page, "Expire after 7 days?"),
+    "↑ goes on from the row J reached",
   );
   act(() => keys.unmount());
 });
@@ -858,7 +857,7 @@ function rowTabStops(page: HTMLElement): (string | null | undefined)[] {
     .map((row) => row.querySelector(ROW_TITLE)?.textContent);
 }
 
-test("the list's rows are one Tab stop, across its plans, that ↓ walks and End ends, the walk wrapping and the stop following the row last focused", async () => {
+test("the list's rows are one Tab stop, across its tasks, that ↓ walks and End ends, the walk wrapping and the stop following the row last focused", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   assert.deepEqual(rowTabStops(page), ["Alert at 80%?"], "Tab lands on the open row, one stop");
@@ -868,10 +867,10 @@ test("the list's rows are one Tab stop, across its plans, that ↓ walks and End
   pressKey("ArrowDown", document.activeElement ?? document.body);
   assert.equal(
     document.activeElement,
-    rowNamed(page, "Expire after 7 days?"),
-    "↓↓ goes two rows on, into the next plan",
+    rowNamed(page, "Alert at 80%?"),
+    "↓↓ goes two rows on, across tasks",
   );
-  assert.deepEqual(rowTabStops(page), ["Expire after 7 days?"], "Tab comes back to the row left");
+  assert.deepEqual(rowTabStops(page), ["Alert at 80%?"], "Tab comes back to the row left");
   pressKey("ArrowDown", document.activeElement ?? document.body);
   assert.equal(
     document.activeElement,
@@ -879,44 +878,7 @@ test("the list's rows are one Tab stop, across its plans, that ↓ walks and End
     "it wraps",
   );
   pressKey("End", document.activeElement ?? document.body);
-  assert.equal(document.activeElement, rowNamed(page, "Expire after 7 days?"));
-});
-
-test("↓ passes over a folded plan's rows", async () => {
-  const { page } = mount();
-  await settle();
-  act(() => headerNamed(page, "Invites").click());
-  act(() => rowNamed(page, "Alert at 80%?").focus());
-  pressKey("ArrowDown", document.activeElement ?? document.body);
-  assert.equal(
-    document.activeElement,
-    rowNamed(page, "How is a failed email retried?"),
-    "Invites' row is passed over, the walk wrapping to the first",
-  );
-});
-
-test("a folded plan's items have no row, so K and J pass over them and the pager counts the rows a reader finds", async () => {
-  const { page } = mount([], { chosen: ON_THRESHOLD });
-  await settle();
-  const keys = standKeymap();
-  act(() => headerNamed(page, "Invites").click());
-  pressKey("j");
-  assert.equal(readTitle(page), "Alert at 80%?", "nothing below the last row");
-  layOut(page, 800);
-  assert.equal(pagerOf(page), "2 of 2");
-  act(() => keys.unmount());
-});
-
-test("the chosen item keeps its place when its own plan folds, so J still reaches the rows below, and once left the folded rows are passed over", async () => {
-  const { page } = mount([], { chosen: ON_THRESHOLD });
-  await settle();
-  const keys = standKeymap();
-  act(() => headerNamed(page, "Billing usage alerts").click());
-  pressKey("j");
-  assert.equal(readTitle(page), "Expire after 7 days?");
-  pressKey("k");
-  assert.equal(readTitle(page), "Expire after 7 days?", "the folded plan holds no row above");
-  act(() => keys.unmount());
+  assert.equal(document.activeElement, rowNamed(page, "Alert at 80%?"));
 });
 
 test("a settled item offers, over its box, the next item that needs you as the Inbox draws it: its agent's tile, its title, the attention mark at its end and J where J reaches it, and its card hung beside it, a press opening it; an item that waits offers none", async () => {
@@ -929,25 +891,25 @@ test("a settled item offers, over its box, the next item that needs you as the I
   act(() => rowNamed(page, "How is a failed email retried?").click());
   const next = offered();
   assert.ok(next, "the settled item offers the next");
-  assert.equal(next.querySelector(".inbox-next-title")?.textContent, "Alert at 80%?");
+  assert.equal(next.querySelector(".inbox-next-title")?.textContent, "Expire after 7 days?");
   assert.ok(next.querySelector(".inbox-row-attention"), "it needs you, as its row says");
   assert.ok(wordsOf(next)?.endsWith("J"), "the key stands last");
   assert.ok(wearsAgentTile(next), "the next item's agent stands by its tile");
   assert.equal(next.querySelector("[data-agent-ref]"), null, "the tile hangs no card of its own");
   assert.match(
     hoveredCard(next, "[data-inbox-item-card]") ?? "",
-    /^Alert at 80%\?Needs you.*Billing usage alerts/u,
+    /^Expire after 7 days\?Needs you.*Invites/u,
     "the card is the item's own",
   );
   act(() => next.click());
-  assert.equal(readTitle(page), "Alert at 80%?");
+  assert.equal(readTitle(page), "Expire after 7 days?");
   assert.equal(offered(), null);
 });
 
 test("Next follows the way the keys last went: after K it offers the nearest item above that needs you, by an arrow up and K, a press opening it; after J the one below, by J", async () => {
   world.inboxes.set(BILLING.id, [
     { ...THRESHOLD, updatedAt: 4_500 },
-    { ...RETRY, updatedAt: 2_000, settledAt: 2_000 },
+    { ...RETRY, updatedAt: 4_200, settledAt: 4_200 },
   ]);
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
@@ -955,10 +917,8 @@ test("Next follows the way the keys last went: after K it offers the nearest ite
   const offered = () =>
     page.querySelector<HTMLButtonElement>('.inbox-view-items [aria-label="Next item"] button');
   assert.deepEqual(listed(page), [
-    "# Billing usage alerts",
     "▸ *Alert at 80%?",
     "How is a failed email retried?",
-    "# Invites",
     "*Expire after 7 days?",
   ]);
 
@@ -993,9 +953,9 @@ test("Next hands the keyboard to the item it opens, its way back one column wide
   scrollBoard(board, 200);
   next()?.focus();
   act(() => next()?.click());
-  assert.equal(readTitle(page), "Alert at 80%?");
+  assert.equal(readTitle(page), "Expire after 7 days?");
   assert.ok(
-    document.activeElement === rowNamed(page, "Alert at 80%?"),
+    document.activeElement === rowNamed(page, "Expire after 7 days?"),
     "split, the keyboard is on its row",
   );
   assert.equal(board.scrollTop, 800, "the next item opens at its newest message");
@@ -1006,7 +966,7 @@ test("Next hands the keyboard to the item it opens, its way back one column wide
   act(() => rowNamed(page, "How is a failed email retried?").click());
   next()?.focus();
   act(() => next()?.click());
-  assert.equal(readTitle(page), "Alert at 80%?");
+  assert.equal(readTitle(page), "Expire after 7 days?");
   assert.ok(
     document.activeElement === backToList(page),
     "one column wide, the keyboard is on its way back",

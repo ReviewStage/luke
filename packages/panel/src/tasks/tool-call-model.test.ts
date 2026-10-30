@@ -535,6 +535,20 @@ test("an agent's task calls draw from their parts", () => {
   assert.deepEqual([stopped.kind, stopped.subject], [CALL_KIND.WORKER_CANCEL, "delegate-7k2m9q"]);
 });
 
+test("a plan edit opens the task it named, and one made before edits named a task opens the plan", () => {
+  const edited = {
+    tool: "edit_plan",
+    callId: "call-1",
+    input: { taskId: "task-2", notes: [{ kind: "add", section: "Problem", text: "- Slow." }] },
+    output: { status: "accepted", taken: 1 },
+  };
+
+  assert.deepEqual(toolTarget(edited), { kind: TOOL_TARGET.TASK, task: "task-2" });
+  assert.deepEqual(toolTarget({ ...edited, input: { notes: edited.input.notes } }), {
+    kind: TOOL_TARGET.PLAN,
+  });
+});
+
 test("a look at one of the plan's pictures says it looked and opens the plan, and one refused shows why and opens nothing", () => {
   const input = {
     address:

@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { readQueuedFile } from "@luke/database/models/agent-queue-store";
 import { hasRepository } from "@luke/database/models/agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId } from "@luke/database/models/ids";
@@ -32,7 +33,7 @@ import { githubReadRefusal } from "./asked-pull-request.js";
 import { agentPullRequestReach } from "./coder-host/published.js";
 
 /**
- * agents-app.ts -- what a coding agent's window reads as bytes rather than JSON: an image its pull request's overview names, an inbox item's attachment, and a picture a tool answered it.
+ * agents-app.ts -- what a coding agent's window reads as bytes rather than JSON: an image its pull request's overview names, an inbox item's attachment, a picture a tool answered it, and a file of a message queued for it.
  *
  * Everything else about an agent answers through the hosted oRPC router
  * (`agents-procedures.ts`, `messages-procedures.ts`,
@@ -47,7 +48,7 @@ const AGENTS_PATH = {
   GITHUB_IMAGE: "/api/agents/github-image",
   /** GET serves one attachment of an inbox item, an image block's picture; the rewrite moves the item id into the `id` query and the attachment id into `attachment`. */
   INBOX_ATTACHMENT: "/api/inbox/attachment",
-  /** GET serves one picture a tool answered the agent, or one of its workers where the query names the delegation call; the rewrite moves the agent id into the `id` query, the call into `call`, and the picture into `picture`. */
+  /** GET serves one picture a tool answered the agent, or one of its workers where the query names the delegation call, or one file of a message queued for the agent; the rewrite moves the agent id into the `id` query, the call into `call`, and the picture into `picture`. */
   PICTURE: "/api/agents/picture",
 } as const;
 
@@ -160,6 +161,11 @@ const inboxAttachmentEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAttachmentEn
  * its workers' where the path names the delegation call, read from that
  * worker's own transcript. A picture of another agent's transcript, or of
  * another worker's, is not found, as an agent the account cannot reach is.
+ * The agent's own path serves one file of a message queued for it the same
+ * way, by the id the queue names it under, as the type it travels as, to
+ * the same readers, who read the queue on the agent's transcript; so a
+ * queued message's row draws its files as a sent line's, and an edit takes
+ * them into its box, through the one door.
  */
 const pictureEndpoint = /* @__PURE__ */ Effect.fn("web/agentPictureEndpoint")(function* (
   seams: AgentsAppSeams,
@@ -176,7 +182,18 @@ const pictureEndpoint = /* @__PURE__ */ Effect.fn("web/agentPictureEndpoint")(fu
   const conversationId =
     callId === undefined ? agent.conversationId : childConversationId(agent.conversationId, callId);
   const found = yield* hostedStoreOrUnavailable(readConversationPicture(conversationId, pictureId));
-  if (Option.isNone(found)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (Option.isNone(found)) {
+    const queued =
+      callId === undefined
+        ? yield* hostedStoreOrUnavailable(readQueuedFile(agent.id, pictureId))
+        : Option.none();
+    if (Option.isNone(queued)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return HttpServerResponse.uint8Array(Buffer.from(queued.value.data, "base64"), {
+      status: HOSTED_HTTP_STATUS.OK,
+      contentType: queued.value.mediaType,
+      headers: HOSTED_BYTES_HEADERS,
+    });
+  }
   return HttpServerResponse.uint8Array(found.value.bytes, {
     status: HOSTED_HTTP_STATUS.OK,
     contentType: found.value.contentType,

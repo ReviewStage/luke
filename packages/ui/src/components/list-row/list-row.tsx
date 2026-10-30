@@ -120,7 +120,10 @@ export type { ListSelection } from "../selection/list-selection.js";
  *
  * The open row is current in one of two ways (`LIST_ROW_CURRENT`): the page
  * shown beside the list, as an Inbox's item is, or the one item chosen in
- * its set. An unread row's title stands in the heavier weight, and its
+ * its set. It is lifted as a sheet on the ground, as a sidebar's is, or, in a
+ * list that stands beside the page it opens (`LIST_ROW_CURRENT_LOOK.TINT`),
+ * filled with the accent's tint, which reads in either theme and stands apart
+ * from the neutral fill of a row under the pointer. An unread row's title stands in the heavier weight, and its
  * description in the body's ink, until it is read, as a mail app's unread
  * thread does. A row whose thing is done with stands back (`muted`), as a
  * done to-do grays: its words in the palette's quieter inks, still legible,
@@ -141,6 +144,12 @@ export type { ListSelection } from "../selection/list-selection.js";
  * is on the chevron, as a group's head gives its glyph way (`GroupHeader`),
  * standing at rest on a screen with no hover. → and ← pressed on the row
  * open and fold them, as a tree's keys do.
+ *
+ * A row may carry attachments (`attachments`), what its thing holds drawn
+ * small on a line of their own over its words, as a message's files stand
+ * over its words in the box and the transcript; they are decoration, the row's
+ * words saying what it is, unless they are files a reader opens
+ * (`attachmentsOpen`), which are read and reached as the row's own.
  *
  * A row's metadata stands at its middle, or, in a list read as a mail
  * app's is (`LIST_ROW_META.TITLE`), at the end of its first line, its
@@ -197,6 +206,14 @@ export const LIST_ROW_CURRENT = {
 } as const;
 
 export type ListRowCurrent = (typeof LIST_ROW_CURRENT)[keyof typeof LIST_ROW_CURRENT];
+
+/** How the open row is lifted from the rest: a sheet over the ground, as a sidebar's is, or the accent's tint, as a list beside its page reads it. */
+export const LIST_ROW_CURRENT_LOOK = {
+  SHEET: "sheet",
+  TINT: "tint",
+} as const;
+
+export type ListRowCurrentLook = (typeof LIST_ROW_CURRENT_LOOK)[keyof typeof LIST_ROW_CURRENT_LOOK];
 
 /** Where a row's metadata stands: at the row's middle, or at the end of its title's line. */
 export const LIST_ROW_META = {
@@ -447,6 +464,7 @@ export function List({
   moves = false,
   joinsWalk = false,
   selection,
+  onPointerDown,
   children,
 }: {
   /** The id of the list, which a `SelectionBar` over it names to hand it the focus back. */
@@ -462,6 +480,8 @@ export function List({
   joinsWalk?: boolean;
   /** Which rows are chosen and what hears the next set, where the list chooses rows at all. */
   selection?: ListSelection | undefined;
+  /** A press on the list, as a drag that puts its rows in another order hears it (the panel's `useRowDrag`). */
+  onPointerDown?: PointerEventHandler<HTMLUListElement> | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   const roving = useRovingKeys<HTMLUListElement>();
@@ -479,6 +499,7 @@ export function List({
       data-density={density}
       data-finger-tall={fingerTall ? "true" : undefined}
       aria-label={label}
+      onPointerDown={onPointerDown}
       {...(moves ? motionRows() : {})}
     >
       <ListVariantContext.Provider value={variant}>
@@ -499,6 +520,8 @@ export function ListRow({
   description,
   lead,
   leadAt = LIST_ROW_LEAD.DESCRIPTION,
+  attachments,
+  attachmentsOpen = false,
   meta,
   metaAt = LIST_ROW_META.MIDDLE,
   actions,
@@ -511,6 +534,7 @@ export function ListRow({
   hint,
   density,
   ink = LIST_ROW_INK.TEXT,
+  currentLook = LIST_ROW_CURRENT_LOOK.SHEET,
   menuOpen = false,
   chevron = false,
   keepFocus = false,
@@ -539,6 +563,10 @@ export function ListRow({
   lead?: ListRowLead | undefined;
   /** Where the lead stands: a chip before the description, on its line, or a line of its own over the title. */
   leadAt?: ListRowLeadAt | undefined;
+  /** What the row's thing carries, its pictures or pages drawn small, on a line of their own over its words; decoration, since its words say what it is. */
+  attachments?: ReactNode;
+  /** Whether the attachments are files a reader opens, so they are announced and reached rather than hidden as decoration. */
+  attachmentsOpen?: boolean | undefined;
   /** Metadata at the row's end, before its acts ("2h ago", "Owner"). */
   meta?: ReactNode;
   /** Where the metadata stands: at the row's middle, or at the end of the title's line. */
@@ -563,6 +591,8 @@ export function ListRow({
   density?: ListDensity | undefined;
   /** The ink its title rests in. */
   ink?: ListRowInk | undefined;
+  /** How the open row is lifted from the rest, where it is current. */
+  currentLook?: ListRowCurrentLook | undefined;
   /** Whether the row's own menu is open, which rings it and keeps its acts shown. */
   menuOpen?: boolean | undefined;
   /** Whether a chevron at its end says the press goes somewhere deeper. */
@@ -736,6 +766,14 @@ export function ListRow({
         </span>
       ) : null}
       <span className="luke-list-row-text col-[text] min-w-0">
+        {said(attachments) ? (
+          <span
+            className="luke-list-row-attachments flex gap-luke-6 overflow-hidden"
+            aria-hidden={attachmentsOpen ? undefined : "true"}
+          >
+            {attachments}
+          </span>
+        ) : null}
         {metaAt === LIST_ROW_META.TITLE ? (
           <span className="luke-list-row-head">
             {firstLine}
@@ -873,6 +911,7 @@ export function ListRow({
         data-lead={above ? LIST_ROW_LEAD.ABOVE : undefined}
         data-actions={actsOnHover ? LIST_ROW_ACTIONS.HOVER : undefined}
         data-current={current === undefined ? undefined : "true"}
+        data-current-look={currentLook}
         data-selected={chosen ? "true" : undefined}
         data-unread={unread === true ? "true" : undefined}
         data-muted={muted === true ? "true" : undefined}

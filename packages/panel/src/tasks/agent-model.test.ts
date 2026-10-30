@@ -741,7 +741,7 @@ test("a Start refused for a missing credential says in one sentence which harnes
 
 test("a message to an agent whose device is away says it is offline, in the words a Start on it gets, under the composer and in the Inbox alike", () => {
   const away =
-    "Your device is offline, so this agent can't start there. Open Luke on it, or set this task to run in the cloud.";
+    "Your device is offline, so this agent can't start there. Wake it and log in on it, or set this task to run in the cloud.";
 
   assert.deepEqual(
     [
