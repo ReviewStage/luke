@@ -5,6 +5,7 @@ import { organization } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";
 import { Schema } from "effect";
 import { test } from "vitest";
+import { authOrganizationHooks, withAuthCounts } from "./auth-counts.js";
 import { authDatabaseAdapter } from "./auth-database.js";
 import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS } from "./auth-policy.js";
 
@@ -48,7 +49,7 @@ function invitationAuth(client: Awaited<ReturnType<typeof openMigratedPglite>>) 
     secret: "workspace-invitations-test-secret-of-enough-length",
     emailAndPassword: { enabled: true },
     disabledPaths: [...DISABLED_AUTH_PATHS],
-    plugins: [organization(ORGANIZATION_OPTIONS)],
+    plugins: [organization({ ...ORGANIZATION_OPTIONS, organizationHooks: authOrganizationHooks })],
   });
 }
 
@@ -182,10 +183,14 @@ test("an admin invites by address, and the invitee reads the invitation and acce
       inviterEmail: admin.email,
     });
 
-    const accepted = await call(auth, invitee, "/organization/accept-invitation", {
-      invitationId: invitation.id,
-    });
+    const { answer: accepted, counts } = await withAuthCounts(() =>
+      call(auth, invitee, "/organization/accept-invitation", { invitationId: invitation.id }),
+    );
     assert.equal(accepted.status, 200);
+    // Note that the acceptance is counted under the invitee, and the inviter's own send is the procedure's to count.
+    assert.deepEqual(counts, [
+      { name: "workspace:invite_accept", userId: invitee.id, properties: {} },
+    ]);
     assert.deepEqual(Schema.decodeUnknownSync(AcceptedSchema)(await accepted.json()).member, {
       organizationId: workspaceId,
       role: "member",

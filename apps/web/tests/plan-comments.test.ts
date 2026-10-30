@@ -37,6 +37,7 @@ import {
   type EveMessage,
 } from "@luke/service/agents/eve-host/eve-sessions";
 import { sessionSandboxesLayer } from "@luke/service/agents/session-sandboxes";
+import { recordingProductAnalytics, SERVER_EVENT } from "@luke/service/events/server-events";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { hostedFetch } from "@luke/service/orpc/handler";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
@@ -127,7 +128,16 @@ const fakeEve = (): AgentSessions => ({
   reset: () => Effect.die(new Error("this suite retires no session")),
 });
 
-/** The services a request runs on: the test's own database and clock, and no GitHub or model catalog. */
+/** What the routes counted, across the file; a case reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+/** The properties of each event of one name the account was counted for, in order. */
+const countedProperties = (userId: string, name: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === name)
+    .map((event) => event.properties);
+
+/** The services a request runs on: the test's own database and clock, the analytics, and no GitHub or model catalog. */
 const servicesOver = (clock: Clock.Clock) =>
   Effect.gen(function* () {
     return Layer.mergeAll(
@@ -137,6 +147,7 @@ const servicesOver = (clock: Clock.Clock) =>
       NO_GITHUB,
       modelCatalogOf([]),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
+      ANALYTICS.layer,
     );
   });
 
@@ -146,7 +157,7 @@ const webServicesOver = (clock: Clock.Clock) =>
     const provided = yield* Effect.context<Database>().pipe(
       Effect.provide(yield* servicesOver(clock)),
     );
-    // SAFETY: the procedures yield the database, the clock and GitHub alone, which is all a test provides of the web runtime's services.
+    // SAFETY: the procedures yield the database, the clock, GitHub and the analytics alone, which is all a test provides of the web runtime's services.
     return provided as Context.Context<WebServices>;
   });
 
@@ -321,6 +332,14 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
         assert.equal(outsiderRead.status, HOSTED_HTTP_STATUS.NOT_FOUND);
         assert.equal(outsiderStart.status, HOSTED_HTTP_STATUS.NOT_FOUND);
         assert.equal(outsiderResolve.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.deepEqual(countedProperties(teammate, SERVER_EVENT.PLAN_COMMENT), [
+          { is_reply: false },
+        ]);
+        assert.deepEqual(
+          countedProperties(outsider, SERVER_EVENT.PLAN_COMMENT),
+          [],
+          "a comment that wrote nothing counts nothing",
+        );
       }),
   );
 
@@ -396,6 +415,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
           yield* answer("comments", request(commentsPath(taskId), owner, {})),
         )[0];
         assert.deepEqual(afterUndo?.anchor, { from, to: from + WORDS.length });
+        assert.deepEqual(countedProperties(owner, SERVER_EVENT.PLAN_EDIT), [{}, {}]);
       }),
   );
 });
@@ -492,6 +512,10 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
             [PLAN_COMMENT_ENTRY.COMMENT, PLAN_COMMENT_ACTOR.MEMBER, undefined],
           ],
         );
+        assert.deepEqual(countedProperties(teammate, SERVER_EVENT.PLAN_COMMENT), [
+          { is_reply: false },
+        ]);
+        assert.deepEqual(countedProperties(owner, SERVER_EVENT.PLAN_COMMENT), [{ is_reply: true }]);
       }),
   );
 

@@ -52,6 +52,7 @@ import {
 import { generateRandomString } from "better-auth/crypto";
 import { Effect, Layer, Option } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { hostedNotFoundRoute } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import {
@@ -219,7 +220,12 @@ const connectInstallation = /* @__PURE__ */ Effect.fn("web/connectInstallation")
     redirectUri: callback,
   });
   if (Option.isNone(installation)) return GITHUB_INSTALL_STATUS.NOT_FOUND;
-  return LANDED_ON_LINK[yield* linkInstallationAs(userId, organizationId, installation.value)];
+  const linked = yield* linkInstallationAs(userId, organizationId, installation.value);
+  // Counted only where this link made the connection, not where it stood already.
+  if (linked === LINK_OUTCOME.LINKED) {
+    yield* recordServerEvent(SERVER_EVENT.GITHUB_APP_INSTALL, userId, {});
+  }
+  return LANDED_ON_LINK[linked];
 });
 
 /** A failure on the way to a status, as the status it lands on: GitHub or the store unavailable. */

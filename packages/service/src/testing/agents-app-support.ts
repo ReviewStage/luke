@@ -345,6 +345,12 @@ export const countedWith = (userId: string, name: string) =>
     .filter((event) => event.userId === userId && event.name === name)
     .map((event) => event.properties);
 
+/** The properties of each event of one name the account was counted for, in the order they were counted. */
+export const countedProperties = (userId: string, name: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === name)
+    .map((event) => event.properties);
+
 /**
  * The public path of each route the hosted oRPC router answers, by the
  * flattened key a test names it with: the rewrite carries this path to the

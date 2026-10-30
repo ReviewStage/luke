@@ -30,6 +30,7 @@ import {
 } from "@luke/features/workspace-invitation-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { Clock, Effect } from "effect";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import {
   HOSTED_REFUSAL,
   hostedStoreOrUnavailable,
@@ -128,6 +129,7 @@ export function workspaceInvitationsProcedures(seams: WorkspaceInvitationsProced
           role,
         }),
       );
+      yield* recordServerEvent(SERVER_EVENT.WORKSPACE_INVITE_SEND, context.userId, { role });
       const [invitation] = pendingInvitations(
         [made],
         new URL(context.request.url).origin,

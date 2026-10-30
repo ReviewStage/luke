@@ -57,6 +57,7 @@ import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import type { AgentSessions, EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { fenceable } from "../agents/fenced-text.js";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_API_ERROR } from "../http/http.js";
 import type { HostedRefusal } from "../http/http-effect.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
@@ -687,11 +688,16 @@ const outcomeOf = Effect.fnUntraced(function* (eveFor: EveForAccount, run: Acted
       };
     case DECISION.TAKEN:
       return undefined;
-    case DECISION.CLAIMED:
-      return {
-        outcome: yield* startClaimed(eveFor, decision.automation, run),
-        automation: decision.automation,
-      };
+    case DECISION.CLAIMED: {
+      const outcome = yield* startClaimed(eveFor, decision.automation, run);
+      // Counted for the owner once the run has an agent, whoever or whatever fired it.
+      if (outcome.status === AUTOMATION_RUN_STATUS.STARTED) {
+        yield* recordServerEvent(SERVER_EVENT.AUTOMATION_RUN_START, decision.automation.userId, {
+          trigger_kind: run.firing.kind,
+        });
+      }
+      return { outcome, automation: decision.automation };
+    }
   }
 });
 

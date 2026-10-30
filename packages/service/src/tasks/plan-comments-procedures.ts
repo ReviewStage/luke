@@ -23,6 +23,7 @@ import {
 } from "@luke/features/plan-comment-wire";
 import { Effect, Option } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { cursorOf, heldUntilMoved } from "../http/held-read.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -109,6 +110,8 @@ interface MentioningComment {
   readonly taskId: string;
   readonly words: string;
   readonly clientKey: string;
+  /** Whether it replied on a thread, or started one. */
+  readonly isReply: boolean;
 }
 
 /**
@@ -127,6 +130,10 @@ const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
 ) {
   const answer = yield* outcomeAnswer(outcome);
   if (!("thread" in answer)) return answer;
+  // Note that the same words sent again under their key answer the thread and count again, since the store does not say which write was new.
+  yield* recordServerEvent(SERVER_EVENT.PLAN_COMMENT, comment.userId, {
+    is_reply: comment.isReply,
+  });
   const { thread } = answer;
   const unsent = thread.entries.some(
     (entry) =>
@@ -271,6 +278,7 @@ export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
         taskId,
         words: start.words,
         clientKey: start.clientKey,
+        isReply: false,
       });
       return {
         status: "thread" in body ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK,
@@ -291,6 +299,7 @@ export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
         taskId,
         words: action.words,
         clientKey: action.clientKey,
+        isReply: true,
       });
     }),
   };

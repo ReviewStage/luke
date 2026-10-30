@@ -2,6 +2,7 @@ import { Effect, Layer } from "effect";
 import { type HttpMethod, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { hostedNotFoundRoute } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { recordAuthCount, withAuthCounts } from "./auth-counts.js";
 
 /**
  * The auth surface as the one route group this function serves: Better Auth's
@@ -70,7 +71,9 @@ const authPassthrough = /* @__PURE__ */ Effect.fn("web/authPassthrough")(functio
 > {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const answer = yield* Effect.promise(() => handle(request));
+  const { answer, counts } = yield* Effect.promise(() => withAuthCounts(() => handle(request)));
+  // Note that the counts run once Better Auth has answered, which is once what they count has committed.
+  yield* Effect.forEach(counts, recordAuthCount, { discard: true });
   return incoming.method === BODYLESS_METHOD.HEAD
     ? bodylessAnswer(answer)
     : HttpServerResponse.raw(answer);

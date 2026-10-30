@@ -50,6 +50,7 @@ import { Cause, Clock, type Context, Effect, Layer, Option, Result, Schema } fro
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { githubInstallApp } from "../github/github-install-app.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { answerInboxAsk, INBOX_ASK_ANSWER, postInboxThread } from "../inbox/inbox-store.js";
@@ -82,6 +83,15 @@ import { type WorkspacesProcedureSeams, workspacesProcedures } from "./workspace
  *
  * Synthetic accounts, bearers, installations, and logins throughout.
  */
+
+/** What the endpoints counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+/** The properties of each event of one name the account was counted for, in order. */
+const countedProperties = (userId: string, name: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === name)
+    .map((event) => event.properties);
 
 const ORIGIN = "https://luke.test";
 const INSTALL_ADDRESS = "https://github.com/apps/luke/installations/new";
@@ -172,6 +182,7 @@ const answered = <A>(
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       github.layer,
+      ANALYTICS.layer,
     );
     if (HOSTED_PATHS.has(new URL(request.url).pathname)) {
       const context = yield* Effect.context<never>().pipe(Effect.provide(services));
@@ -185,7 +196,7 @@ const answered = <A>(
           members: session.members,
         }),
       });
-      // SAFETY: the procedures yield the database, the clock and GitHub alone, which is all a test provides of the web runtime's services.
+      // SAFETY: the procedures yield the database, the clock, GitHub and the analytics alone, which is all a test provides of the web runtime's services.
       const response = yield* Effect.promise(() =>
         procedures(request, context as Context.Context<WebServices>),
       );
@@ -616,6 +627,11 @@ it.effect("an installation connected to one workspace is refused for a second", 
 
       assert.equal(linked, GITHUB_INSTALL_STATUS.CONNECTED);
       assert.equal(refused, GITHUB_INSTALL_STATUS.ALREADY_CONNECTED);
+      assert.deepEqual(
+        countedProperties(ada, SERVER_EVENT.GITHUB_APP_INSTALL),
+        [{}],
+        "counted for the connect that linked, not the one refused",
+      );
       const workspaces = yield* workspacesOf(seams, github, ada);
       assert.deepEqual(githubOf(workspaces, first.id), { login: "acme", active: true });
       assert.equal(githubOf(workspaces, second.id), null);
@@ -2043,6 +2059,9 @@ it.effect(
         assert.equal(link.searchParams.get("id"), made.id);
         assert.deepEqual(listed, [made]);
         assert.deepEqual(canceled, { status: HOSTED_HTTP_STATUS.OK, body: { invitations: [] } });
+        assert.deepEqual(countedProperties(grace, SERVER_EVENT.WORKSPACE_INVITE_SEND), [
+          { role: "member" },
+        ]);
       }).pipe(Effect.provide(plugin.database));
     }),
 );

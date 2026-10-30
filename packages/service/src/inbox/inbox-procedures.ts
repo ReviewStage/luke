@@ -339,7 +339,13 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
   // An answer sent again under the key it was taken under is the same answer, counted once.
   const counted =
     outcome === INBOX_ASK_ANSWER.TAKEN
-      ? recordServerEvent(SERVER_EVENT.INBOX_ANSWER_SEND, userId, {})
+      ? Effect.andThen(
+          recordServerEvent(SERVER_EVENT.INBOX_ANSWER_SEND, userId, {}),
+          recordServerEvent(SERVER_EVENT.THREAD_POST, userId, {
+            answered_ask: true,
+            has_media: attachments.length > 0,
+          }),
+        )
       : Effect.void;
   const reply = inboxAnswersReply(answers, text);
   if (!inboxAnswerHeard(item, reply, attachments)) {
@@ -520,6 +526,13 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
     Effect.catchIf(retiredRefusal, () => Effect.void),
     Effect.onError(() => unheard.pipe(Effect.tapError(logStoreFailure), Effect.ignore)),
   );
+  // Counted once the hand-off stands, since a failed one takes the message back above.
+  if (outcome === INBOX_MESSAGE_OUTCOME.WRITTEN) {
+    yield* recordServerEvent(SERVER_EVENT.THREAD_POST, userId, {
+      answered_ask: false,
+      has_media: attachments.length > 0,
+    });
+  }
   return { item };
 });
 
@@ -583,6 +596,13 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
   yield* handedOver.pipe(
     Effect.onError(() => unheard.pipe(Effect.tapError(logStoreFailure), Effect.ignore)),
   );
+  // Counted once the hand-off stands, since a failed one takes the thread back above.
+  if (outcome === INBOX_MESSAGE_OUTCOME.WRITTEN) {
+    yield* recordServerEvent(SERVER_EVENT.THREAD_POST, userId, {
+      answered_ask: false,
+      has_media: attachments.length > 0,
+    });
+  }
   // Note that only the write that started the thread titles it, so a repeat asks no model again.
   if (!asked.titled && outcome === INBOX_MESSAGE_OUTCOME.WRITTEN) {
     yield* afterResponse(
