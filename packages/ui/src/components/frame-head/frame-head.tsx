@@ -1,10 +1,12 @@
 import { AttentionMark } from "../attention-mark/attention-mark.js";
 import { BUTTON_SHAPE, BUTTON_SIZE, BUTTON_VARIANT, Button } from "../button/button.js";
 import { CHIP_LOOK, Chip, ChipName } from "../chip/chip.js";
+import { OneLine } from "../one-line/one-line.js";
 import { SKELETON_SHAPE, Skeleton } from "../skeleton/skeleton.js";
+import { ToolbarName, type ToolbarProps } from "../toolbar/toolbar.js";
 
 /**
- * frame-head.tsx -- the head of the frame a task stands in, as a workspace heads a window: the task named as a chip, and what waits on the reader there, which stay on screen whatever is chosen under it.
+ * frame-head.tsx -- the head of the frame a place stands in, as a workspace heads a window: a task named as a chip, and what waits on the reader there, or any other place named by its words, which stay on screen whatever is chosen under it.
  *
  * A task frames its column the way a workspace frames a window in an editor:
  * whichever of its views is chosen under it, this head names the task, so
@@ -20,6 +22,12 @@ import { SKELETON_SHAPE, Skeleton } from "../skeleton/skeleton.js";
  * head's to say and change, not this one's. Nothing here carries the name
  * in an attribute, so session replay, which masks words and not attributes,
  * still records only the layout.
+ *
+ * A place that is no task (the Inbox, an agent's page, Automations) is named
+ * by `FramePlace` in the same row, in the words its own bar would name it
+ * by (`ToolbarName`): its title, the places above it as crumbs, each a press
+ * back to its place, and quiet words after it. A title is the page's
+ * heading; a name picked up from a page that heads itself is words.
  *
  * While the task is read, `FrameHeadSkeleton` stands in the same row
  * through the same frame, one control's block where the chip will be, so
@@ -43,6 +51,9 @@ export interface FrameHeadWaiting {
 /** The task's key in the chip, in the code face as a branch's name is (`ChipName`'s `mono`), but never cut short: the name gives way instead, since the key tells one task from another. */
 const KEY = "luke-frame-head-key flex-none font-mono text-caption leading-[inherit]";
 
+/** Quiet words after a place's name, in the body's type, on one line cut short before the name is. */
+const DETAIL = "luke-frame-head-detail min-w-0 flex-[0_1000_auto] text-body text-muted-foreground";
+
 /** How wide the chip's block stands while the task is read: a settings row's field, about a task's key and a short name. */
 const CHIP_SKELETON_WIDTH = "var(--luke-select-field-width)";
 
@@ -55,13 +66,23 @@ function countWords(count: number, noun: FrameHeadCountNoun): string {
 function FrameHeadFrame({
   named,
   end,
+  words = false,
+  detailed = false,
 }: {
-  /** The task's chip, or its block while the task is read. */
+  /** The task's chip, or its block while the task is read, or a place's name. */
   named: React.ReactNode;
   end?: React.ReactNode;
+  /** Whether the head starts on words, which stand where its column's words start, a row's inset past where its controls do. */
+  words?: boolean;
+  /** Whether quiet words follow the name, on its last baseline. */
+  detailed?: boolean;
 }): React.JSX.Element {
   return (
-    <header className="luke-frame-head">
+    <header
+      className="luke-frame-head"
+      data-start={words ? "words" : undefined}
+      data-detail={detailed ? "" : undefined}
+    >
       <div className="luke-frame-head-named">{named}</div>
       {end}
     </header>
@@ -113,6 +134,28 @@ export function FrameHead({
         </Chip>
       }
       end={<WaitingCount waiting={waiting} />}
+    />
+  );
+}
+
+/** A place's head that is no task: its name as its own bar would say it, and quiet words after it. */
+export function FramePlace({
+  title,
+  trail,
+  pickUp,
+  detail,
+}: Pick<ToolbarProps, "title" | "trail" | "pickUp" | "detail">): React.JSX.Element {
+  const detailed = detail !== undefined && detail !== null && detail !== false && detail !== "";
+  return (
+    <FrameHeadFrame
+      words={trail === undefined || trail.length === 0}
+      detailed={detailed}
+      named={
+        <>
+          <ToolbarName title={title} trail={trail} pickUp={pickUp} />
+          {detailed ? <OneLine className={DETAIL}>{detail}</OneLine> : null}
+        </>
+      }
     />
   );
 }

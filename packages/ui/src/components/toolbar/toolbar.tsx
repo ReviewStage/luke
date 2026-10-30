@@ -243,6 +243,28 @@ function ToolbarPickedUp({ pickUp }: { pickUp: ToolbarPickUp }): React.JSX.Eleme
   );
 }
 
+/**
+ * The page's own name as a bar draws it: crumbs after its trail where it has
+ * one, else its title, else the name picked up from its header; nothing
+ * where none is said. The window's title bar names a place the same way
+ * (`FramePlace`).
+ */
+export function ToolbarName({
+  title,
+  trail,
+  pickUp,
+}: Pick<ToolbarProps, "title" | "trail" | "pickUp">): React.JSX.Element | null {
+  if (trail !== undefined && trail.length > 0 && typeof title === "string" && title !== "") {
+    return <ToolbarTrail trail={trail} title={title} />;
+  }
+  if (trail !== undefined && trail.length > 0 && !said(title) && pickUp !== undefined) {
+    return <ToolbarTrail trail={trail} title={pickUp.name} shown={pickUp.shown} />;
+  }
+  if (said(title)) return <ToolbarTitle title={title} />;
+  if (pickUp !== undefined && pickUp.name !== "") return <ToolbarPickedUp pickUp={pickUp} />;
+  return null;
+}
+
 /** A workspace's bar: its lead, its heading (the title and its tag), and its actions, in that order. */
 export function Toolbar({
   lead,
@@ -276,15 +298,7 @@ export function Toolbar({
     >
       {said(lead) ? <div className={LEAD}>{lead}</div> : null}
       <div className="luke-toolbar-heading">
-        {trail !== undefined && trail.length > 0 && typeof title === "string" && title !== "" ? (
-          <ToolbarTrail trail={trail} title={title} />
-        ) : trail !== undefined && trail.length > 0 && !said(title) && pickUp !== undefined ? (
-          <ToolbarTrail trail={trail} title={pickUp.name} shown={pickUp.shown} />
-        ) : said(title) ? (
-          <ToolbarTitle title={title} />
-        ) : pickUp !== undefined && pickUp.name !== "" ? (
-          <ToolbarPickedUp pickUp={pickUp} />
-        ) : null}
+        <ToolbarName title={title} trail={trail} pickUp={pickUp} />
         {said(detail) ? <OneLine className={DETAIL}>{detail}</OneLine> : null}
         {said(tag) ? <span className={TAG}>{tag}</span> : null}
       </div>

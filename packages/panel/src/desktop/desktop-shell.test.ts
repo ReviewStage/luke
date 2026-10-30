@@ -681,6 +681,32 @@ test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, 
   assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), true);
 });
 
+test("the installed app's wide window names the place in its title bar over the panes, and a browser's tab in the page's own bar", async () => {
+  const automationsView = {
+    ...tasksControl().automationsView,
+    open: true,
+    place: { kind: AUTOMATIONS_PAGE.LIST } as const,
+  };
+  const overrides = { workspaces: [ACME], workspace: ACME, automationsView };
+  handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP));
+  const tab = mount(false, false, overrides);
+  await settle();
+  assert.equal(tab.querySelector(".window-title-bar"), null, "a browser's tab stands no title bar");
+  assert.equal(tab.querySelector(".luke-toolbar h1")?.textContent, "Automations");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const app = mount(false, false, overrides);
+  await settle();
+  assert.equal(app.querySelector(".window-title-bar h1")?.textContent, "Automations");
+  assert.equal(
+    app.querySelector(".luke-toolbar h1"),
+    null,
+    "the page's own bar keeps its acts alone",
+  );
+});
+
 test("a press on the Automations row in a floating sidebar puts the sidebar away, as every row's does", async () => {
   const told: SidebarCollapse["overlay"][] = [];
   const page = mount(false, false, {}, PANEL_TAB.TASKS, ignore, {
@@ -973,7 +999,8 @@ test("while the Automations pages are still loading their frame stands the list 
   );
   const loading = page.querySelector("section[aria-label=Automations]");
   assert.ok(loading, "the pages' frame stands");
-  assert.equal(loading.querySelector("h1")?.textContent, "Automations");
+  // The wide window names the place in its title bar, over the frame.
+  assert.equal(page.querySelector(".window-title-bar h1")?.textContent, "Automations");
   const wait = loading.querySelector("[role=status]");
   assert.equal(wait?.textContent, "Reading your automations…", "the list stands as quiet rows");
   assert.ok((wait?.querySelectorAll(".luke-skeleton").length ?? 0) > 0);

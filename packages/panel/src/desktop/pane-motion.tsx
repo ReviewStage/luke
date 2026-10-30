@@ -5,8 +5,10 @@
  * window lands in the layout at once, on the frame it was asked for, and
  * what that moved replays the journey on `transform` and `clip-path`
  * (docs/DESIGN.md, "Whatever its room displaced replays the journey"): the
- * task's tabs, its document or an agent's tab, and its toolbar's buttons
- * glide from where they were drawn to where they now stand, and so does the
+ * task's tabs, its document or an agent's tab, its toolbar's buttons, and
+ * the place named in the window's title bar, which starts past the title
+ * bar's buttons while the sidebar is folded, glide from where they were
+ * drawn to where they now stand, and so does the
  * task's summary as it is pinned or collapses to its rail, the side panel
  * slides in from the window's right, and a panel that grew over the
  * document is uncovered from its old edge to its new one. A pane leaving holds itself drawn
@@ -33,6 +35,7 @@ const GLIDERS = [
   ".desktop-agent > *",
   ".desktop-empty-region > *",
   ".automation-editor",
+  ".window-title-bar > *",
 ].join(", ");
 
 /** The pane, read before a change whether or not it is leaving, so one brought back mid-exit carries on from where it was. */

@@ -109,6 +109,7 @@ import { useTabViews } from "./strip-tabs.js";
 import { tabCard } from "./tab-card.js";
 import { taskCardOf } from "./task-card.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
+import { PlaceToolbar } from "./title-bar.js";
 
 /**
  * desktop-agent-page.tsx -- one agent's page: an agent an automation started with no plan, drawn in the plan's place as the task column draws an agent's tab.
@@ -323,8 +324,9 @@ function AgentPageBar({
       <PhoneHead place="agent" start={<PhoneBack back={phone.back} />} title={title} end={more} />
     );
   }
+  // The page's name stands in the window's title bar where one stands, the bar under it keeping the page's acts.
   return (
-    <Toolbar
+    <PlaceToolbar
       title={title}
       trail={trail}
       actions={

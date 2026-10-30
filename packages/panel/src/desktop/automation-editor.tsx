@@ -142,7 +142,6 @@ import {
   Text,
   TextArea,
   TextField,
-  Toolbar,
   type ToolbarPickUp,
   Tooltip,
   useConfirmDialog,
@@ -196,6 +195,7 @@ import { useRunsPanel } from "./folded-groups.js";
 import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
 import { PhoneHead } from "./phone-head.js";
+import { PlaceToolbar } from "./title-bar.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
 import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
@@ -1098,7 +1098,7 @@ function EditorToolbarFrame({
 }): React.JSX.Element {
   return (
     <div className="automation-toolbar flex-none @container/automation-toolbar">
-      <Toolbar
+      <PlaceToolbar
         trail={[{ label: AUTOMATIONS_PLACE, icon: <ZapIcon />, onPress: onBack }]}
         pickUp={pickUp}
         actions={children}

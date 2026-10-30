@@ -6,7 +6,6 @@ import {
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
-  Toolbar,
 } from "@luke/ui";
 import {
   BOARD_PROPERTIES,
@@ -46,6 +45,7 @@ import {
   TasksViewOptions,
   VIEW_OPTIONS,
 } from "./tasks-page-options.js";
+import { PlaceToolbar } from "./title-bar.js";
 
 /**
  * tasks-page.tsx -- the window's Tasks page: the listed workspace's tasks as a List or as the Board, chosen by a switch beside its title, narrowed by its Filter and laid out by its View options.
@@ -294,7 +294,7 @@ export function TasksPage({
   const toolbar = phone ? (
     phoneHead
   ) : (
-    <Toolbar
+    <PlaceToolbar
       title={TASKS}
       tag={<ViewSwitch view={view} onView={choose} />}
       actions={
