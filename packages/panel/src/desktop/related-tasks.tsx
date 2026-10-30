@@ -1,10 +1,16 @@
 import type { TaskSummary } from "@luke/features/task-wire";
-import { type ListRowFold, RELATED_TASK_CELLS, TASK_ROW_CELL, TaskRows } from "@luke/ui";
+import {
+  type ListRowFold,
+  RELATED_TASK_CELLS,
+  TASK_ROW_CELL,
+  type TaskRowCell,
+  TaskRows,
+} from "@luke/ui";
 import { childTaskCounts } from "@luke/ui/task-list-model";
 import { type ReactNode, useMemo } from "react";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
-import { TaskListRow } from "./task-list-row.js";
+import { openPullRequests, TaskListRow } from "./task-list-row.js";
 import { useStandingDoor } from "./task-row-parts.js";
 import { useTasksSelection } from "./tasks-selection.js";
 
@@ -15,7 +21,8 @@ import { useTasksSelection } from "./tasks-selection.js";
  * (`TaskRows`), its columns fixed to the few a related task needs: its
  * priority, key, and status before its name, then its assignee, its open
  * pull requests, how many of its sub-tasks are finished, and what its owner
- * stands at its end, a relation's kind, say, before its ⋯. Its chips change the task where it stands, a press
+ * stands at its end, a relation's kind, say, before its ⋯, each of those
+ * last three drawn only where a row fills it. Its chips change the task where it stands, a press
  * opens it, and its ⋯, a right-click, and the menu key open its menu. Its
  * rows are one Tab stop that ↑↓ walk, and are chosen together as the List's
  * are, a row chosen among several offering the List's bar's acts on every
@@ -38,6 +45,23 @@ export interface RelatedTaskRow {
   readonly menu?: readonly (readonly MenuEntry[])[];
 }
 
+/**
+ * The cells the list draws: the related task's own, leaving out a column no
+ * row fills, its pull requests, its sub-tasks' count, or its end, since an
+ * empty column still costs the list a gap, which a narrow column cannot spare.
+ */
+function drawnCells(
+  rows: readonly RelatedTaskRow[],
+  subTasks: ReadonlyMap<string, unknown>,
+): readonly TaskRowCell[] {
+  const filled: Partial<Record<TaskRowCell, boolean>> = {
+    [TASK_ROW_CELL.PULL_REQUESTS]: rows.some(({ task }) => openPullRequests(task).length > 0),
+    [TASK_ROW_CELL.SUB_TASKS]: rows.some(({ task }) => subTasks.has(task.id)),
+    [TASK_ROW_CELL.END]: rows.some(({ end }) => end !== undefined),
+  };
+  return RELATED_TASK_CELLS.filter((cell) => filled[cell] ?? true);
+}
+
 /** The list of `rows`, named by `label`. */
 export function RelatedTasks({
   tasks,
@@ -53,12 +77,13 @@ export function RelatedTasks({
   const selection = useTasksSelection(tasks, new Set(rows.map((row) => row.task.id)));
   const workspaceName = tasks.workspace?.name ?? "";
   const subTasks = useMemo(() => childTaskCounts(tasks.tasks), [tasks.tasks]);
+  const cells = drawnCells(rows, subTasks);
   return (
     <>
       <TaskRows
         id={selection.regionId}
         label={label}
-        cells={RELATED_TASK_CELLS}
+        cells={cells}
         selection={{ selected: selection.selected, onChange: selection.onChange }}
       >
         {rows.map(({ task, end, depth, fold, settled, menu }) => (
@@ -67,7 +92,7 @@ export function RelatedTasks({
             tasks={tasks}
             task={task}
             workspaceName={workspaceName}
-            cells={RELATED_TASK_CELLS}
+            cells={cells}
             subTasks={subTasks.get(task.id)}
             content={{ [TASK_ROW_CELL.END]: end }}
             chosen={selection.chosenOf(task.id)}

@@ -71,11 +71,16 @@ function stillOpen(
   return open && pullRequest.url !== undefined;
 }
 
+/** A task's pull requests still open on GitHub, which its row draws a chip for each of. */
+export function openPullRequests(task: TaskSummary) {
+  return (task.agents?.pullRequests ?? []).filter(stillOpen);
+}
+
 /** Each of a task's open pull requests as its chip, hanging its card; nothing where it has none. */
 function OpenPullRequests({ task }: { task: TaskSummary }): React.JSX.Element | null {
   // Its page opens as a link to it does: in its agent's Pull request tab where the window knows the agent, else on GitHub.
   const openLink = useOpenLink();
-  const open = (task.agents?.pullRequests ?? []).filter(stillOpen);
+  const open = openPullRequests(task);
   if (open.length === 0) return null;
   return (
     <>

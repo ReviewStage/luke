@@ -9,7 +9,6 @@ import {
   CHIP_LOOK,
   CHIP_SIZE,
   Chip,
-  ChipName,
   type FootRow,
   GROUP_HEADING,
   GroupHeader,
@@ -18,6 +17,7 @@ import {
   POPOVER_ALIGN,
   SearchableMenu,
   STATUS_TONE,
+  Tooltip,
 } from "@luke/ui";
 import {
   CornerDownRightIcon,
@@ -173,8 +173,9 @@ function relationMenu(kind: TaskRelationKind, doors: RelationDoors): readonly Me
 }
 
 /**
- * A relation's kind at its row's end: a compact pill by the kind's icon,
- * its words, and a chevron, in the attention tone for a blocker still open,
+ * A relation's kind at its row's end: a compact pill by the kind's icon and
+ * a chevron, its words its name and its hover's, since a side panel's row
+ * has no room to spare its name for them, in the attention tone for a blocker still open,
  * dropping the four kinds, the current one checked, and Remove relation
  * pinned under them.
  */
@@ -212,21 +213,22 @@ function RelationKindPill({
   ];
   return (
     <span className="plan-relation-kind relative inline-flex items-center" ref={box}>
-      <Chip
-        ref={chip}
-        look={CHIP_LOOK.PILL}
-        size={CHIP_SIZE.COMPACT}
-        tone={attention ? STATUS_TONE.ATTENTION : undefined}
-        chevron
-        aria-label={`Relation: ${words}`}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        onClick={() => setOpen(!open)}
-      >
-        <TaskRelationIcon kind={kind} />
-        <ChipName>{words}</ChipName>
-      </Chip>
+      <Tooltip label={open ? undefined : words}>
+        <Chip
+          ref={chip}
+          look={CHIP_LOOK.PILL}
+          size={CHIP_SIZE.COMPACT}
+          tone={attention ? STATUS_TONE.ATTENTION : undefined}
+          chevron
+          aria-label={`Relation: ${words}`}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          onClick={() => setOpen(!open)}
+        >
+          <TaskRelationIcon kind={kind} />
+        </Chip>
+      </Tooltip>
       {drawn.mounted ? (
         <SearchableMenu
           leaving={drawn.leaving}
