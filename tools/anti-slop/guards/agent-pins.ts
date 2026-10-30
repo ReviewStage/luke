@@ -9,7 +9,10 @@ import { loadModule, type RepositoryGuard, readJson, record, text } from "./guar
  *
  * The runner bundles the Agent SDK `CLAUDE_CODE_PIN` names, and the image
  * checks for the `claude` that SDK carries; the Codex protocol types were
- * generated from the Codex `CODEX_PIN` installs; and the coding agent's
+ * generated from the Codex `CODEX_PIN` installs; every host fetches its own
+ * Claude Code and Codex of the same releases, each pin's address, size, and
+ * digests read off its release, so one left behind by a bump is refused on
+ * every host as it fetches; and the coding agent's
  * sandbox template, and the OCI image built from the same preparation, start
  * from the base images of the eve the service runs.
  * A pin moved on one side alone builds, typechecks, and fails only in a
@@ -22,6 +25,13 @@ const SERVICE = "packages/service";
 const EVE_BASE_IMAGE_REPOSITORY = "vcr.vercel.com/vercel/eve/base";
 const EVE_PUBLIC_IMAGE_REPOSITORY = "ghcr.io/vercel/eve";
 
+/** A host's own build of an agent CLI as the guard reads its pin: its name in `pins.ts`, its release, and its address. */
+export interface HostCliPin {
+  readonly name: string;
+  readonly version: string;
+  readonly archive: string;
+}
+
 /** The versions each side states, as the guard reads them. */
 export interface AgentPins {
   readonly runnerSdkDependency: string | undefined;
@@ -31,6 +41,8 @@ export interface AgentPins {
   readonly installedSdkClaude: string;
   readonly codexProtocol: string;
   readonly pinnedCodex: string;
+  readonly hostClaudePins: readonly HostCliPin[];
+  readonly hostCodexPins: readonly HostCliPin[];
   readonly eveBaseImage: string;
   readonly ociBaseImage: string;
   readonly installedEve: string;
@@ -58,6 +70,19 @@ export function pinProblems(pins: AgentPins): readonly string[] {
     pins.pinnedClaude,
   );
   differ("CODEX_PROTOCOL_VERSION against CODEX_PIN.VERSION", pins.codexProtocol, pins.pinnedCodex);
+  const hostPins = [
+    { pins: pins.hostClaudePins, against: "CLAUDE_CODE_PIN.SDK_VERSION", pinned: pins.pinnedSdk },
+    { pins: pins.hostCodexPins, against: "CODEX_PIN.VERSION", pinned: pins.pinnedCodex },
+  ];
+  for (const { pins: each, against, pinned } of hostPins) {
+    for (const pin of each) {
+      differ(`${pin.name}.VERSION against ${against}`, pin.version, pinned);
+      // Note that a pin's address is checked to name its release too, since its size and digests are read off that address.
+      if (!pin.archive.includes(pin.version)) {
+        problems.push(`${pin.name}.ARCHIVE names no ${pin.version}: ${pin.archive}`);
+      }
+    }
+  }
   // Note that an eve version may carry build metadata (`+…`), which no image tag does.
   const eveVersion = pins.installedEve.split("+")[0] ?? "";
   differ(
@@ -83,6 +108,23 @@ function installedManifest(root: string, workspace: string, name: string): Recor
   return record(JSON.parse(readFileSync(manifest, "utf8")), manifest);
 }
 
+/** The host builds a pin of `pins.ts` names, one for a Mac's pin and one per architecture for a Linux host's. */
+function hostCliPins(pins: Record<string, unknown>, mac: string, linux: string): HostCliPin[] {
+  const read = (name: string, value: unknown): HostCliPin => {
+    const pin = record(value, name);
+    return {
+      name,
+      version: text(pin.VERSION, `${name}.VERSION`),
+      archive: text(pin.ARCHIVE, `${name}.ARCHIVE`),
+    };
+  };
+  const builds = record(pins[linux], linux);
+  return [
+    read(mac, pins[mac]),
+    ...Object.entries(builds).map(([arch, pin]) => read(`${linux}.${arch}`, pin)),
+  ];
+}
+
 async function readPins(root: string): Promise<AgentPins> {
   const pins = await loadModule(root, `${RUNNER}/src/pins.ts`);
   const claude = record(pins.CLAUDE_CODE_PIN, "CLAUDE_CODE_PIN");
@@ -105,6 +147,8 @@ async function readPins(root: string): Promise<AgentPins> {
     installedSdkClaude: text(sdk.claudeCodeVersion, `${SDK}'s claudeCodeVersion`),
     codexProtocol: text(generated.CODEX_PROTOCOL_VERSION, "CODEX_PROTOCOL_VERSION"),
     pinnedCodex: text(codex.VERSION, "CODEX_PIN.VERSION"),
+    hostClaudePins: hostCliPins(pins, "CLAUDE_CODE_MAC_PIN", "CLAUDE_CODE_LINUX_PINS"),
+    hostCodexPins: hostCliPins(pins, "CODEX_MAC_PIN", "CODEX_LINUX_PINS"),
     eveBaseImage: text(template.EVE_BASE_IMAGE, "EVE_BASE_IMAGE"),
     ociBaseImage: text(
       record(oci.SANDBOX_OCI_IMAGE, "SANDBOX_OCI_IMAGE").BASE,

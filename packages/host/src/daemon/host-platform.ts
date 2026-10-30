@@ -5,7 +5,8 @@ import {
   DEVICE_ISOLATION,
   type DeviceArch,
 } from "@luke/features/device-agent-wire";
-import type { LocalAgentPlatformSeam } from "../effect/seams.js";
+import type { LocalAgentClis, LocalAgentPlatformSeam } from "../effect/seams.js";
+import { localAgentClis } from "../local-agent-setup.js";
 import { openAgentState, sealAgentState } from "../node/agent-state-seal.js";
 import { diskFree } from "../node/disk-free.js";
 import { agentWorktreeScript, cloneFolder, worktreesRoot } from "../node/open-on-mac.js";
@@ -29,6 +30,13 @@ import type { HostOs } from "./host-os.js";
  * registers as, its name, nesting, whether agents ran directly on it
  * before, and whether its agents' folders and VMs are its own alone, comes
  * from its description (`HostOs`).
+ *
+ * Every host also keeps its own Claude Code, Codex, and GitHub CLI, the
+ * pinned builds for its OS and architecture (`HostOs.agentClis`), fetched
+ * under the daemon's state before it registers ready (`clis`). Its agents
+ * still run on the image's own in their VMs, so the device registers the
+ * VM's paths (`LocalAgentSandbox.tools`); `clis.paths` is where the kept
+ * builds stand for the device to register once its agents run on the box.
  */
 
 /** The runner's bundle, in the folder the host's OS names for it (`HostOs.runnerFolder`). */
@@ -48,6 +56,8 @@ export interface HostPlatformOptions {
   readonly smolvm: string | AgentToolPin;
   /** The user every command in a VM runs as, so it writes the agent's folder as its owner. */
   readonly user: { readonly uid: number; readonly gid: number };
+  /** The agent CLIs where something other than the OS's pins names them: a suite's own, which fetches nothing. */
+  readonly clis?: LocalAgentClis | undefined;
 }
 
 /** A host's local agent platform, for the release installed in the folder given. */
@@ -63,6 +73,7 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
   return {
     launch: vm.launch,
     sandbox: vm.sandbox,
+    clis: options.clis ?? localAgentClis(options.stateRoot, options.os.agentClis(options.arch)),
     runnerBundle: `${vm.runnerFolder}/${RUNNER_BUNDLE}`,
     runnerEnv: { [RUNNER_ENV.PLACE]: RUNNER_PLACE.HOST },
     formerlyDirect: options.os.formerlyDirect,
