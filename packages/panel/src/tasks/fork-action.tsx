@@ -6,6 +6,8 @@ import {
   CARD_PADDING,
   Card,
   IconButton,
+  NOTE_LINE_LOOK,
+  NoteLine,
   ONE_LINE_END,
   OneLine,
   TextButton,
@@ -213,16 +215,12 @@ export function ForkMessageAction({
   );
 }
 
-/** The quiet line under a message naming the agents forked at it; nothing where none was. */
+/** The quiet trail under a message naming the agents forked at it, a list's gap under its foot (tasks.css); nothing where none was. */
 export function ForkedToLine({ messageId }: { messageId: string }): ReactNode {
   const chips = useContext(ForkContext)?.forkedTo(messageId) ?? [];
   if (chips.length === 0) return null;
   return (
-    <p
-      className="mx-0 mt-list-gap mb-0 flex flex-wrap items-center gap-tight-gap text-caption-inline text-muted-foreground"
-      data-forked-to=""
-    >
-      <SplitIcon className="size-control-icon flex-none" aria-hidden="true" />
+    <NoteLine look={NOTE_LINE_LOOK.TRAIL} glyph={<SplitIcon />} data-forked-to="">
       <span>{FORK_WORDS.TO}</span>
       {chips.map((chip, index) => (
         // Note that each chip holds the comma after it, so no gap opens before the comma.
@@ -231,7 +229,7 @@ export function ForkedToLine({ messageId }: { messageId: string }): ReactNode {
           {index === chips.length - 1 ? null : <span aria-hidden="true">,</span>}
         </span>
       ))}
-    </p>
+    </NoteLine>
   );
 }
 

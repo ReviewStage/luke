@@ -20,7 +20,10 @@ import { ICON_SIZE, type IconSize } from "../../icons/icon-size.js";
  *
  * A slot takes its size from the seat it names (`ICON_SIZE`: 12, 16, 20, or
  * 40 for an empty state) where the caller has one, so an icon is drawn at a
- * seat rather than a size of its own; with none, the size above stands.
+ * seat rather than a size of its own; with none, the size above stands. A
+ * glyph that would read larger than the round marks beside it, a page's
+ * outline in a person's avatar's place, stands `inset`, a hairline step
+ * inside its slot on every side, rather than filling it.
  *
  * A glyph that arrives as its line changes, a step taken up or done, rides
  * in on its `arrival` when the slot mounts: a small scale for a step, a
@@ -52,9 +55,14 @@ export const GLYPH_ARRIVAL = {
 
 export type GlyphArrival = (typeof GLYPH_ARRIVAL)[keyof typeof GLYPH_ARRIVAL];
 
-/** The slot's square, or a line's height before words that may wrap, its glyph centred in it and filling it. */
-const SLOT_BASE =
-  "luke-glyph-slot inline-flex flex-none items-center justify-center [&>:is(svg,img)]:size-glyph";
+/** The slot's square, or a line's height before words that may wrap, its glyph centred in it. */
+const SLOT_BASE = "luke-glyph-slot inline-flex flex-none items-center justify-center";
+
+/** How the glyph stands in its slot: filling it, or a step inside it. */
+const FIT_CLASS = {
+  fill: "[&>:is(svg,img)]:size-glyph",
+  inset: "[&>:is(svg,img)]:size-glyph-inset",
+} as const;
 
 /** The size each seat sets, from the icon scale (`tokens/scale.css`). */
 const SEAT_CLASS = {
@@ -72,10 +80,16 @@ const INK_CLASS = {
   [GLYPH_INK.VOICE]: "text-working",
 } as const satisfies Record<GlyphInk, string>;
 
-/** The classes a slot of `ink`, `size`, and `line` is drawn in. */
-function slotClass(ink: GlyphInk, size: IconSize | undefined, line: boolean): string {
+/** The classes a slot of `ink`, `size`, `line`, and `inset` is drawn in. */
+function slotClass(
+  ink: GlyphInk,
+  size: IconSize | undefined,
+  line: boolean,
+  inset: boolean,
+): string {
   return [
     SLOT_BASE,
+    inset ? FIT_CLASS.inset : FIT_CLASS.fill,
     line ? "w-glyph h-lh" : "size-glyph",
     size === undefined ? "" : SEAT_CLASS[size],
     INK_CLASS[ink],
@@ -89,6 +103,7 @@ export function GlyphSlot({
   ink = GLYPH_INK.MUTED,
   size,
   line = false,
+  inset = false,
   label,
   arrival,
   children,
@@ -98,6 +113,8 @@ export function GlyphSlot({
   size?: IconSize | undefined;
   /** Whether it stands as tall as the line it leads, centred on its first line, rather than square. */
   line?: boolean | undefined;
+  /** Whether its glyph stands a step inside the slot rather than filling it, so an outline reads as large as a round mark. */
+  inset?: boolean | undefined;
   /** What the glyph says that its words do not; none where it only repeats them. */
   label?: string | undefined;
   /** How the glyph rides in as the slot mounts on a change; none for one drawn as it stands. */
@@ -108,7 +125,7 @@ export function GlyphSlot({
   if (label === undefined) {
     return (
       <span
-        className={slotClass(ink, size, line)}
+        className={slotClass(ink, size, line, inset)}
         data-ink={ink}
         data-size={size}
         data-line={line ? "true" : undefined}
@@ -121,7 +138,7 @@ export function GlyphSlot({
   }
   return (
     <span
-      className={slotClass(ink, size, line)}
+      className={slotClass(ink, size, line, inset)}
       data-ink={ink}
       data-size={size}
       data-line={line ? "true" : undefined}

@@ -10,6 +10,7 @@ import {
   Disclosure,
   DisclosureBody,
   DisclosureSummary,
+  GlyphSlot,
   Inline,
   MESSAGE_LINE_ALIGN,
   MessageHead,
@@ -23,6 +24,7 @@ import {
   TextLink,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
+import { ICON_SIZE } from "@luke/ui/icons";
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
@@ -363,7 +365,9 @@ function SummaryRow({ line, text }: { line: string; text: string }): React.JSX.E
   return (
     <Disclosure data-replay-summary="">
       <DisclosureSummary>
-        <TextQuoteIcon aria-hidden="true" />
+        <GlyphSlot size={ICON_SIZE.MEDIUM}>
+          <TextQuoteIcon />
+        </GlyphSlot>
         {line}
       </DisclosureSummary>
       <DisclosureBody inset={DISCLOSURE_BODY.FLUSH}>

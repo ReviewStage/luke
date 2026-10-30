@@ -33,7 +33,23 @@
     margin: var(--luke-space-4) var(--luke-row-inset);
   }
 
+  /* A trail keeps the leading of the line that holds it, so its chips stand
+     as they do in its holder's words, and is centred on its glyph's seat. */
+  .luke-note-line[data-look="trail"] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--luke-tight-gap);
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+  }
+
   .luke-note-line[data-fill] {
     flex: 1;
+  }
+
+  .luke-note-line[data-selectable] {
+    -webkit-user-select: text;
+    user-select: text;
   }
 }

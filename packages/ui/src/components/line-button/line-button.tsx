@@ -30,6 +30,11 @@ import { useDisclosureState, useDisclosureSummaryClick } from "../disclosure/dis
  *   as a link's are, as a review card's line naming the file and lines it
  *   is on.
  *
+ * A line row is the `row` look's line pressed by nothing: a call's or a
+ * subagent's row where what it names opens nowhere, its box, type, and ink
+ * a row's, with no fill under the pointer and no finger's height, so a row
+ * that opens something and one that opens nothing stand as one list.
+ *
  * The caller draws what stands in the line (a glyph, its words, a state
  * mark) with its own classes, and the line lays them out in a row. It takes
  * no class or style, and its outer spacing is its container's; a caller
@@ -47,14 +52,18 @@ export const LINE_BUTTON_LOOK = {
 
 export type LineButtonLook = (typeof LINE_BUTTON_LOOK)[keyof typeof LINE_BUTTON_LOOK];
 
+/** A line's layout, pressed or not: its column's width, what it holds in a row, and a glyph keeping its seat however long the words beside it run. */
+const LINE_LAYOUT = "flex w-full min-w-0 items-center gap-icon-gap [&>svg]:flex-none";
+
 /**
- * A line's box: its column's width, one line tall, in its container's type
- * and ink, with no box of its own but its look's. Note that a summary draws
- * no marker of its own: a row's chevron, where it has one, is the caller's;
- * and that a glyph keeps its seat however long the words beside it run.
+ * A line's box: one line tall, in its container's type and ink, with no box
+ * of its own but its look's. Note that a summary draws no marker of its
+ * own: a row's chevron, where it has one, is the caller's.
  */
-const LINE =
-  "luke-line-button flex w-full min-w-0 items-center gap-icon-gap m-0 p-0 [border:0] bg-transparent bg-none text-inherit [font:inherit] text-start list-none select-none cursor-press transition-[color,background-color,opacity] duration-(--luke-duration-hover) ease-motion-exit [&::-webkit-details-marker]:hidden [&>svg]:flex-none";
+const LINE = `luke-line-button ${LINE_LAYOUT} m-0 p-0 [border:0] bg-transparent bg-none text-inherit [font:inherit] text-start list-none select-none cursor-press transition-[color,background-color,opacity] duration-(--luke-duration-hover) ease-motion-exit [&::-webkit-details-marker]:hidden`;
+
+/** A call's row's box, pressed or not: at least 28px tall, its words held in by a hairline at its ends, in the muted ink. */
+const ROW_BOX = "min-h-[28px] py-0.5 px-1 rounded-luke-6 text-muted-foreground";
 
 /**
  * Each look's own. A call's row is at least 28px tall (a finger's 44px on a
@@ -72,7 +81,7 @@ const LINE =
  * outweighs the box's `font: inherit`.
  */
 const LINE_LOOK = {
-  row: "min-h-[28px] pointer-coarse:min-h-touch py-0.5 px-1 rounded-luke-6 text-muted-foreground data-[look=row]:text-caption [&:hover:not(:active)]:bg-fill-strong [&:active]:bg-fill-pressed data-[brightens=true]:[&:hover]:text-foreground",
+  row: `${ROW_BOX} pointer-coarse:min-h-touch data-[look=row]:text-caption [&:hover:not(:active)]:bg-fill-strong [&:active]:bg-fill-pressed data-[brightens=true]:[&:hover]:text-foreground`,
   quote:
     "line-clamp-2 [line-clamp:2] wrap-anywhere [&:hover]:text-foreground [&:active]:opacity-70",
   band: "decoration-1 underline-offset-[0.24em] [&:hover]:bg-muted [&:is(:hover,:focus-visible)]:text-foreground [&:is(:hover,:focus-visible)]:underline",
@@ -136,6 +145,20 @@ export function LineButton({
     >
       {children}
     </ButtonPrimitive>
+  );
+}
+
+/** A call's row that opens nothing: the `row` line, pressed by nothing. */
+export function LineRow({
+  children,
+  ...props
+}: DataMarks & {
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <div {...props} className={`luke-line-row ${LINE_LAYOUT} ${ROW_BOX} text-caption`}>
+      {children}
+    </div>
   );
 }
 
