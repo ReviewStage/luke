@@ -1003,8 +1003,8 @@ and asks Vercel Connect to revoke the grant; what agents already sent or
 changed in Slack, and the record of it, stays, and a grant Vercel Connect
 could not revoke stays until you remove Luke in Slack's own settings.
 
-**Granola, Mercury, Neon, PostHog, Supabase, Vercel, and Y Combinator, if you
-connect them.** Connecting one signs you in to it in your browser through
+**Granola, Mercury, Neon, PostHog, Stripe, Supabase, Vercel, and Y Combinator,
+if you connect them.** Connecting one signs you in to it in your browser through
 Vercel Connect, which stores its token for your account, encrypted, and renews
 it. Our service handles each token as it does Linear's, and keeps the same
 record of your connection. While you are connected, the agents, as for
@@ -1015,7 +1015,11 @@ cards, recipients, and statements, with account and routing numbers,
 categorize and annotate transactions, and request payments and transfers,
 which an approver still confirms in Mercury; manage your Neon and Supabase
 projects and databases and run SQL on them; query and change your PostHog
-analytics, feature flags, and experiments; manage your Vercel projects,
+analytics, feature flags, and experiments; read and change your Stripe
+customers, payments, subscriptions, invoices, products, prices, and payment
+links in the accounts and sandboxes you grant on Stripe's consent page, and
+request refunds and movements of money, which Stripe holds until you approve
+them in its Dashboard; manage your Vercel projects,
 deployments, domains, and environment variables; and use Y Combinator's
 Bookface as your YC account can. What a service answers can include a
 credential it hands out, such as a database connection string or password, a
@@ -1497,8 +1501,8 @@ only when you press Send.
   Executor's token, and our service sends each Executor call, with its input,
   to Executor's MCP server, which keeps it under Executor's own policy and
   passes it on to the app it names.
-- Vercel Connect and Granola, Mercury, Neon, PostHog, Supabase, Vercel, or Y
-  Combinator, for each you connect: Vercel Connect keeps its token, and our
+- Vercel Connect and Granola, Mercury, Neon, PostHog, Stripe, Supabase,
+  Vercel, or Y Combinator, for each you connect: Vercel Connect keeps its token, and our
   service sends each call, with its input, to that service's MCP server,
   which keeps it under that service's own policy.
 - Vercel, which runs our service and the sandboxes, and Neon, which hosts our
