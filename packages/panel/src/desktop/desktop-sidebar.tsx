@@ -1877,8 +1877,9 @@ function SidebarColumn({
   };
   const folds = useFoldedGroups(sidebar.staged);
   const taskView = useTaskListView(tasks.workspace?.id, sidebar.staged);
-  // The Tasks head's right-click menu, which offers New section.
+  // The Tasks head's menu, which offers New section, from its ⋯, a right-click, and a long press.
   const tasksHeadMenu = useMenu(tasks.shown && overlay.inSight);
+  const tasksHeadEllipsis = useRef<HTMLButtonElement | null>(null);
   const reader = useMemberDirectory();
   // Only a workspace somebody shares has people to filter by, so one nobody shares lists every task.
   const { memberCount } = tasks.workspace ?? {};
@@ -1998,7 +1999,7 @@ function SidebarColumn({
   const { chosen } = overlay;
   // The reader's own tasks, which the list holds until the reader chooses otherwise, and the chip's × lists again.
   const mine: AssignedTo = { kind: ASSIGNED_TO.ME };
-  // New section stands in the Tasks head's right-click menu while the account keeps sections.
+  // New section stands in the Tasks head's menu while the account keeps sections.
   const tasksHeadGroups: MenuAction[][] =
     sectionsShown && tasks.workspace !== undefined
       ? [
@@ -2376,15 +2377,27 @@ function SidebarColumn({
                         label="Tasks"
                         menuOpen={tasksHeadMenu.open !== undefined}
                         contextMenu={
-                          tasksHeadGroups.length === 0 ? undefined : tasksHeadMenu.contextMenu()
+                          tasksHeadGroups.length === 0
+                            ? undefined
+                            : tasksHeadMenu.contextMenu(tasksHeadEllipsis)
                         }
                         actions={
-                          <TaskViewOptions
-                            shown={tasks.shown && overlay.inSight}
-                            control={taskView}
-                            shared={shared}
-                            filtered={shared && assignedTo.kind !== mine.kind}
-                          />
+                          <>
+                            {tasksHeadGroups.length === 0 ? null : (
+                              <MoreButton
+                                ref={tasksHeadEllipsis}
+                                thing="Tasks"
+                                size={BUTTON_SIZE.COMPACT}
+                                {...tasksHeadMenu.trigger()}
+                              />
+                            )}
+                            <TaskViewOptions
+                              shown={tasks.shown && overlay.inSight}
+                              control={taskView}
+                              shared={shared}
+                              filtered={shared && assignedTo.kind !== mine.kind}
+                            />
+                          </>
                         }
                       />
                     ) : null}
@@ -2405,6 +2418,7 @@ function SidebarColumn({
                     ) : null}
                     {assignedTo.kind !== ASSIGNED_TO.ANYONE &&
                     rows.length === 0 &&
+                    shownSections.every((drawn) => drawn.rows.length === 0) &&
                     !unlisted &&
                     tasks.listRead &&
                     !tasks.listFailed ? (
