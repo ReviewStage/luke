@@ -837,6 +837,7 @@ const findTaskHeader = SqlSchema.findOneOption({
     deviceId: Schema.NullOr(Schema.String),
     parentTaskId: Schema.NullOr(Schema.String),
     mode: taskModeSchema,
+    assigneeId: Schema.NullOr(Schema.String),
   }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
@@ -851,6 +852,7 @@ const findTaskHeader = SqlSchema.findOneOption({
           deviceId: task.deviceId,
           parentTaskId: task.parentTaskId,
           mode: task.mode,
+          assigneeId: task.assigneeId,
         })
         .from(task)
         .where(reachableTask(userId, taskId))
@@ -1207,6 +1209,8 @@ export interface TaskHeader {
   readonly parentTaskId: string | null;
   /** How the task is worked. */
   readonly mode: TaskMode;
+  /** The member it is assigned to; null for none. */
+  readonly assigneeId: string | null;
 }
 
 /**
@@ -1230,6 +1234,7 @@ export function readTaskHeader(
       runsOn: { machine: row.machine, deviceId: row.deviceId },
       parentTaskId: row.parentTaskId,
       mode: row.mode,
+      assigneeId: row.assigneeId,
     })),
   );
 }
