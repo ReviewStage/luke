@@ -1,9 +1,8 @@
 /**
  * agent-enter.ts -- what Enter does in an agent's message box while its turn runs: steer the turn, or queue the message behind it.
  *
- * ⌘↩ (Ctrl+↩ elsewhere) does the other, holding ⌘ turns Send into the other's
- * button, and the chevron beside Send offers both. With no turn running,
- * either key just sends, opening a turn.
+ * ⌘↩ (Ctrl+↩ elsewhere) does the other, and holding ⌘ turns Send into the
+ * other's button. With no turn running, either key just sends, opening a turn.
  */
 
 import type { UnparsedWireValue } from "@luke/wire";
