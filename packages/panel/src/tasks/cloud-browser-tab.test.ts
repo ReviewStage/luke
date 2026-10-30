@@ -275,7 +275,11 @@ test("a listed cloud Browser tab stands in the strip, stays chosen while the lis
 
   act(() => current().onChoose({ cloudBrowser: OTHER_TAB }));
   panel.rerender(createElement(Probe, { listed: [] }));
-  assert.equal(current().tab, SIDE_PANEL_TAB.PLAN, "a tab the service no longer lists gives way");
+  assert.equal(
+    current().tab,
+    SIDE_PANEL_TAB.COMMENTS,
+    "a tab the service no longer lists gives way",
+  );
 });
 
 test("a cloud Browser tab's pane spins while it waits for the page, draws it once a frame arrives, and takes the tab over and hands it back", async () => {

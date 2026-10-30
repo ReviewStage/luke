@@ -80,7 +80,7 @@ import { tasklessRowSubject } from "../tasks/agent-ref.js";
 import { CHANNEL_SHOWN, channelShown } from "../tasks/channels-model.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { useChannelPlace, useChannels, useInboxNarrowed } from "../tasks/use-channels.js";
-import type { MainTab } from "../tasks/use-main-tabs.js";
+import { isOverviewTab, type MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useCapability } from "../use-app-state.js";
@@ -166,8 +166,9 @@ interface CardLook extends KindLook {
   readonly endMark?: React.JSX.Element | undefined;
 }
 
-/** A tab's look where its strip never drew it in this window: its kind's glyph and word, the Plan's named for its task where the window lists it. */
+/** A tab's look where its strip never drew it in this window: its kind's glyph and word, Overview's its own, the Plan's named for its task where the window lists it. */
 function tabWordLook(tab: SidePanelTab | MainTab, task: TaskSummary | undefined): KindLook {
+  if (isOverviewTab(tab)) return tabLook({ kind: TAB_KIND.OVERVIEW });
   if (typeof tab === "string") {
     const plan = task === undefined ? undefined : { name: task.name, status: task.status };
     return tabLook({ kind: TAB_KIND.PANEL, tab, plan });

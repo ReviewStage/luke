@@ -1706,7 +1706,9 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
   });
 
   // The task's menu is its Plan tab's, in the side panel's bar; Mark done is the plan's status chip's there, and a row's.
-  const more = host.querySelector<HTMLButtonElement>(".side-panel-bar .toolbar-tab-actions button");
+  const more = host.querySelector<HTMLButtonElement>(
+    ".desktop-task-main .toolbar-tab-actions button",
+  );
   assert.ok(more, "the Plan tab's ⋯ is drawn");
   act(() => more.click());
   assert.equal(deleteKeys, "⌘⌫");

@@ -118,7 +118,7 @@ import {
   useInboxTask,
   useShownChannel,
 } from "./tasks/use-channels.js";
-import type { MainTab } from "./tasks/use-main-tabs.js";
+import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs.js";
 import type { HistorySpot } from "./tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
@@ -454,7 +454,7 @@ function tabSurface(taskId: string, tab: StripTab, side: boolean): OpenSurface {
   }
   if (isCloudBrowserTab(tab)) return { surface: PRODUCT_SURFACE.BROWSER, of, side };
   if (isPageTab(tab)) return { surface: PRODUCT_SURFACE.PAGE, of, side };
-  // A word of the side panel's own: the plan, the task's Inbox, or its comments.
+  // A word of a strip's own: the column's Overview, which shows the task, the task's Inbox, or its comments.
   if (tab === SIDE_PANEL_TAB.INBOX) return { surface: PRODUCT_SURFACE.INBOX, of: taskId, side };
   if (tab === SIDE_PANEL_TAB.COMMENTS) {
     return { surface: PRODUCT_SURFACE.COMMENTS, of: taskId, side };
@@ -485,7 +485,7 @@ function surfacesOf(
       const sideSurface = side === undefined ? [] : [tabSurface(place.taskId, side, true)];
       if (place.panel?.open === true) return sideSurface;
       const column = columnKnown
-        ? [tabSurface(place.taskId, place.column ?? SIDE_PANEL_TAB.PLAN, false)]
+        ? [tabSurface(place.taskId, place.column ?? MAIN_TAB.OVERVIEW, false)]
         : [];
       return [...column, ...sideSurface];
     }

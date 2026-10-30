@@ -6,6 +6,7 @@ import {
   isDraftTab,
   movedOrder,
   replacementOf,
+  type StripTab,
   sameTab,
   stampedViewed,
   type ViewedAt,
@@ -16,19 +17,21 @@ import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
- * use-main-tabs.ts -- the task's column's tabs: each of its agents and its draft agent, which is chosen, and the order they stand in, kept per task across launches.
+ * use-main-tabs.ts -- the task's column's tabs: its Overview, each of its agents, and its draft agent, which is chosen, and the order they stand in, kept per task across launches.
  *
- * The column is the agents': each agent started on the task under a tab of
- * its own, as an editor draws its files, so an agent's transcript, its calls,
- * and its composer take the room the task is worked in. What supports them,
- * the plan's document and the task's Inbox among it, stands in the side panel
- * (`use-side-panel.ts`). The agents' tabs stand one per agent in the order
- * started, and a draft agent's, opened from the column's "+", after them
- * while the open task holds the draft. A task none of whose tabs viewed
- * still stands shows its strip's last once its agents are read, and one
- * with no tab standing at all opens a draft (`use-tasks-tab.ts`), so a task
- * with no agent, or whose last tab closed, lands in a new agent's composer;
- * while its agents are on their way, the column is empty beside the plan.
+ * The task frames the column, as a workspace frames an editor's: its
+ * Overview leads the strip, holding the task's plan document, its head, its
+ * agents, and its body, and each agent started on the task stands under a
+ * tab of its own after it, as an editor draws its files, so an agent's
+ * transcript, its calls, and its composer take the room the task is worked
+ * in. What supports them, the task's Inbox and the plan's comments among it,
+ * stands in the side panel (`use-side-panel.ts`). Overview always stands
+ * and never closes nor moves; the agents' tabs stand one per agent in the
+ * order started, and a draft agent's, opened from the column's "+", after
+ * them while the open task holds the draft. A task none of whose tabs viewed
+ * still stands shows its Overview, and one with no agent's tab standing
+ * opens a draft beside it (`use-tasks-tab.ts`), so a new agent's composer is
+ * one tab away.
  *
  * An agent's tab closes as an editor's does, which closes the view and
  * leaves the agent running, and the "+" opens it again; the agents whose
@@ -45,22 +48,24 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * agent a notification, a pin, or a Start names is shown by viewing it on
  * its task. An agent's tab stands only once the task's agents are read and
  * hold it, so the column never shows an agent its strip draws no tab for: a
- * task opened on an agent shows its plan while the list is on its way, and
- * stays on it where the read fails. Before the list answers, the task's row
+ * task opened on an agent waits on the list in the agent's shape, and shows
+ * its Overview where the read fails. Before the list answers, the task's row
  * in the sidebar may already settle which tab it will be (`NamedAgents`):
  * the agent last viewed, where the row names it, or the task's one agent,
  * where none viewed stands. The column then shows it
  * at once, its transcript read beside the list, and only where the row
  * cannot settle it does the column wait.
  *
- * The tabs are dragged or moved from the keyboard among themselves, and the
- * task keeps the order from then on: an agent's tab closed and opened again
- * stands where it stood, and one never moved stands after those that were.
+ * The agents' tabs are dragged or moved from the keyboard among themselves,
+ * always after Overview, and the task keeps the order from then on: an
+ * agent's tab closed and opened again stands where it stood, and one never
+ * moved stands after those that were.
  *
  * These facts are this window's preference rather than anything main
  * holds, so they are kept in the renderer's own storage, read once at
  * mount. The plan's own tab, the Inbox, the task's Call, and its Chat once
- * stood here (`RETIRED_MAIN_TAB`); what
+ * stood here (`RETIRED_MAIN_TAB`), the plan's under the word `plan`, which
+ * is why Overview, holding the plan now, is kept under a word of its own; what
  * a launch kept of them reads and is let go, so every other choice it holds
  * still stands. The agents' tabs once stood in
  * the side panel, whose record kept them; a window with no record of its own
@@ -76,9 +81,26 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  */
 
 /**
+ * The column's own tabs, named by a word: the task's Overview, holding its
+ * plan document, which leads the strip on every task. Note that it is not
+ * spelled `plan`, the word a retired tab was kept under below.
+ */
+export const MAIN_TAB = {
+  OVERVIEW: "overview",
+} as const;
+
+/** The task's Overview tab. */
+export type OverviewTab = typeof MAIN_TAB.OVERVIEW;
+
+/** Whether a tab is the task's Overview. */
+export function isOverviewTab(tab: StripTab | undefined): tab is OverviewTab {
+  return tab === MAIN_TAB.OVERVIEW;
+}
+
+/**
  * The column's own tabs an earlier version had and this one does not, which
- * what it kept may still name: the plan's own and the Inbox, which stand in
- * the side panel now, the task's Call, whose calls every agent's tab takes
+ * what it kept may still name: the plan's own, whose document Overview
+ * holds now, and the Inbox, which stands in the side panel, the task's Call, whose calls every agent's tab takes
  * now, and the task's Chat, gone with Chat. Note that a
  * kind is retired here rather than deleted, because a kept state naming one
  * would otherwise not read at all and lose every other choice it holds.
@@ -92,8 +114,8 @@ const RETIRED_MAIN_TAB = {
 
 const RETIRED_MAIN_TABS: ReadonlySet<unknown> = new Set(Object.values(RETIRED_MAIN_TAB));
 
-/** A tab of the task's column: one agent's, or the draft agent's. */
-export type MainTab = AgentStripTab | DraftStripTab;
+/** A tab of the task's column: its Overview, one agent's, or the draft agent's. */
+export type MainTab = OverviewTab | AgentStripTab | DraftStripTab;
 
 /** Where the preference is kept in the renderer's storage. */
 const STORAGE_KEY = "luke.mainTabs";
@@ -129,8 +151,11 @@ const TASKS_KEPT = 500;
  */
 const VIEWED_KEPT = 50;
 
-/** A tab as it is kept across a launch: an agent's; a draft's is kept nowhere. */
-const keptTabSchema = Schema.Struct({ agent: Schema.String });
+/** A tab as it is kept across a launch: Overview or an agent's; a draft's is kept nowhere. */
+const keptTabSchema = Schema.Union([
+  Schema.Struct({ agent: Schema.String }),
+  Schema.Literal(MAIN_TAB.OVERVIEW),
+]);
 
 /** When a kept tab was last viewed, in epoch milliseconds. */
 const keptViewedSchema = Schema.Struct({ tab: keptTabSchema, at: Schema.Number });
@@ -233,9 +258,9 @@ const NO_STAMPS: readonly ViewedAt<MainTab>[] = [];
 
 /** What the column draws and hands back. */
 export interface MainTabsControl {
-  /** The column's tabs in the strip's order: the open agents' and the draft's, in the task's order. */
+  /** The column's tabs in the strip's order: Overview, then the open agents' and the draft's, in the task's order. */
   tabs: readonly MainTab[];
-  /** The tab shown; none where no tab stands, which leaves the column empty beside the plan. */
+  /** The tab shown; none while the agents are read and the tab the task will show waits on them. */
   tab: MainTab | undefined;
   /** The task's agents whose tabs are open, in the order started; nothing while the agents are unread. */
   openAgents: readonly string[] | undefined;
@@ -245,9 +270,9 @@ export interface MainTabsControl {
   onChoose: (tab: MainTab) => void;
   /** Shows the tab on the task given, as `onChoose` does on the open task: what a pin, a notification, or the call card asks, the task opened beside it. */
   onShow: (taskId: string, tab: MainTab) => void;
-  /** Closes the tab, and only the view: an agent goes on as it was. */
+  /** Closes the tab, and only the view: an agent goes on as it was; Overview never closes. */
   onClose: (tab: MainTab) => void;
-  /** Moves a tab to the place `to` among them, leaving the chosen one chosen. */
+  /** Moves a tab to the place `to` among the tabs after Overview, leaving the chosen one chosen; Overview stays where it leads. */
   onMove: (tab: MainTab, to: number) => void;
   /** Asks the column's "+" to open its menu, as ⌘T does. */
   onNewTab: () => void;
@@ -320,13 +345,18 @@ function openAgentsOf(held: HeldState, agents: readonly string[] | undefined) {
   return agents?.filter((agent) => !held.closedAgents.includes(agent));
 }
 
-/** The strip in its order: the open agents' and the draft's, in the task's order. */
-function stripOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
+/** The tabs that move in their order: the open agents' and the draft's, in the task's order. */
+function movableOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
   const choices = choicesOn(held, drawn.taskId);
   const agents = (openAgentsOf(held, drawn.agents) ?? []).map((agent) => ({ agent }));
   const draft = drawn.draft === undefined ? [] : [{ draft: drawn.draft }];
   const order = choices.order ?? NO_TABS;
   return inTaskOrder([...agents, ...draft], order, (tab) => tab);
+}
+
+/** The strip in its order: Overview, then the tabs that move (`movableOf`). */
+function stripOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
+  return [MAIN_TAB.OVERVIEW, ...movableOf(held, drawn)];
 }
 
 /** Whether the tab stands in the task's strip now. */
@@ -335,18 +365,16 @@ function stands(held: HeldState, drawn: DrawnTabs, tab: MainTab): boolean {
 }
 
 /**
- * The tab shown on the task: the latest it viewed that still stands, else,
- * once its agents are read, the strip's last, an agent's or the draft's,
- * else none. Note that a fallback is not counted viewed until it is chosen,
- * and waits on the agents' read, so a task opened on an agent it viewed
- * never shows another first.
+ * The tab shown on the task: the latest it viewed that still stands, else
+ * its Overview; none with no task open. Note that a fallback is not counted viewed until it is
+ * chosen, and an agent viewed waits on the agents' read, so a task opened on
+ * an agent it viewed never shows another first.
  */
 function shownIn(held: HeldState, drawn: DrawnTabs): MainTab | undefined {
+  if (drawn.taskId === undefined) return undefined;
   if (drawn.agents === undefined) return shownBeforeList(held, drawn);
   const recent = choicesOn(held, drawn.taskId).recent ?? NO_TABS;
-  const viewed = recent.findLast((tab) => stands(held, drawn, tab));
-  if (viewed !== undefined) return viewed;
-  return stripOf(held, drawn).at(-1);
+  return recent.findLast((tab) => stands(held, drawn, tab)) ?? MAIN_TAB.OVERVIEW;
 }
 
 /**
@@ -358,29 +386,19 @@ function namesAll(named: NamedAgents): boolean {
 }
 
 /**
- * The task's agents in the order started, where its row says it: one agent,
- * or none. Note that the row's order cannot stand for more, because two
- * agents started in the same moment stand in the row by id the other way
- * round from the list's.
- */
-function wholeOrderOf(named: NamedAgents): readonly string[] | undefined {
-  return namesAll(named) && named.total <= 1 ? named.ids : undefined;
-}
-
-/**
  * The tab the task will show once its agents are read, where its row
  * already settles it, else none, which waits on the read. The latest tab
- * viewed that the row shows standing is it; one the row cannot place, an
- * agent it does not name among more than it names, leaves the choice to the
- * read, as does a task none of whose tabs viewed stands but whose order the
- * row cannot tell (`wholeOrderOf`), which is any with more than one agent.
+ * viewed that the row shows standing is it, Overview among them, which
+ * always stands; one the row cannot place, an agent it does not name among
+ * more than it names, leaves the choice to the read. A task none of whose
+ * tabs viewed stands shows its Overview at once.
  */
 function shownBeforeList(held: HeldState, drawn: DrawnTabs): MainTab | undefined {
   const { named } = drawn;
   const all = named !== undefined && namesAll(named);
-  const whole = named === undefined ? undefined : wholeOrderOf(named);
   const recent = choicesOn(held, drawn.taskId).recent ?? NO_TABS;
   for (const tab of [...recent].reverse()) {
+    if (isOverviewTab(tab)) return tab;
     if (isDraftTab(tab)) {
       if (tab.draft === drawn.draft) return tab;
       continue;
@@ -390,7 +408,7 @@ function shownBeforeList(held: HeldState, drawn: DrawnTabs): MainTab | undefined
     // An agent the row does not name may stand where the row names only some of the agents.
     if (!all) return undefined;
   }
-  return whole === undefined ? undefined : stripOf(held, { ...drawn, agents: whole }).at(-1);
+  return MAIN_TAB.OVERVIEW;
 }
 
 /** The state with the tabs viewed on the task, in the order given, as its latest. */
@@ -464,12 +482,13 @@ function withShown(held: HeldState, on: string, tab: MainTab, drawn: DrawnTabs):
 /**
  * The state with the tab closed, gone from those viewed on the task, and
  * the tab viewed before it, or its neighbour, viewed in its place where it
- * was the one shown, or none, the plan, where no other stands. Closing an
+ * was the one shown, Overview where no other stands. Overview never closes. Closing an
  * agent's tab closes nothing of the agent's own, and closing a draft's leaves
  * the draft its owner's to let go. An agent's tab closed `dozing`, for being
  * idle, opens again as the agent wakes; one closed by hand does not.
  */
 function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs, dozing = false): HeldState {
+  if (isOverviewTab(tab)) return held;
   const before = stripOf(held, drawn);
   const closed = isAgentTab(tab)
     ? {
@@ -495,9 +514,13 @@ function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs, dozing = fa
   return replacement === undefined ? forgotten : withViewed(forgotten, drawn.taskId, [replacement]);
 }
 
-/** The state with the tab moved to `to` among the tabs, kept as the task's order (`movedOrder`). */
+/**
+ * The state with the tab moved to `to` among the tabs after Overview, kept
+ * as the task's order (`movedOrder`); Overview leads where it stands.
+ */
 function withTabAt(held: HeldState, tab: MainTab, to: number, drawn: DrawnTabs): HeldState {
-  const movable = stripOf(held, drawn);
+  if (isOverviewTab(tab)) return held;
+  const movable = movableOf(held, drawn);
   const was = choicesOn(held, drawn.taskId).order ?? NO_TABS;
   const order = movedOrder(was, movable, tab, to);
   return order === undefined
@@ -505,7 +528,7 @@ function withTabAt(held: HeldState, tab: MainTab, to: number, drawn: DrawnTabs):
     : withChoices(held, drawn.taskId, (choices) => ({ ...choices, order }));
 }
 
-/** Whether a tab is kept across a launch: an agent's, the kind that stands again after it. */
+/** Whether a tab is kept across a launch: Overview or an agent's, the kinds that stand again after it. */
 function keptTab(tab: MainTab): tab is Exclude<MainTab, DraftStripTab> {
   return !isDraftTab(tab);
 }
@@ -607,14 +630,30 @@ function readStored(): HeldState {
 }
 
 /**
+ * The state a fixture run's column draws from: the one it staged, its task
+ * viewed on the tab the run names until a tab is chosen on it.
+ */
+function stagedOn(
+  staged: HeldState,
+  taskId: string | undefined,
+  tab: MainTab | undefined,
+): HeldState {
+  if (tab === undefined || taskId === undefined || staged.tasks[taskId] !== undefined) {
+    return staged;
+  }
+  return withViewed(staged, taskId, [tab]);
+}
+
+/**
  * The column's tabs over the open task: `taskId`, none while no task is
  * open, `agents` its agents by id in the order started, or nothing while
  * unread, `named` what its row names of them meanwhile, and `draft` its
  * draft agent's key, if it holds one. A fixture run's column keeps nothing,
- * and starts from nothing.
+ * and starts from the tab the run names (`fixture`), its Overview where it
+ * names none.
  */
 export function useMainTabs(
-  fixture: boolean,
+  fixture: { readonly tab: MainTab | undefined } | undefined,
   taskId: string | undefined,
   agents: readonly string[] | undefined,
   named: NamedAgents | undefined,
@@ -626,22 +665,29 @@ export function useMainTabs(
   const [kept, setKept] = useState<HeldState>(readStored);
   const [staged, setStaged] = useState<HeldState>(NOTHING_KEPT);
   const [newTabAsked, setNewTabAsked] = useState(false);
-  const state = fixture ? staged : kept;
+  const staging = fixture !== undefined;
+  const fixtureTab = fixture?.tab;
+  const fixtureState = useMemo(
+    () => stagedOn(staged, taskId, fixtureTab),
+    [staged, taskId, fixtureTab],
+  );
+  const state = staging ? fixtureState : kept;
   const update = useCallback(
-    (change: (held: HeldState) => HeldState) => (fixture ? setStaged : setKept)(change),
-    [fixture],
+    (change: (held: HeldState) => HeldState) =>
+      staging ? setStaged((held) => change(stagedOn(held, taskId, fixtureTab))) : setKept(change),
+    [staging, taskId, fixtureTab],
   );
   const drawn = useMemo(() => ({ taskId, agents, named, draft }), [taskId, agents, named, draft]);
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
   useEffect(() => {
-    if (fixture) return;
+    if (staging) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, encodeStored(stored(kept)));
     } catch {
       // The column keeps working on the state it holds.
     }
-  }, [fixture, kept]);
+  }, [staging, kept]);
 
   const tabs = useMemo(() => stripOf(state, drawn), [state, drawn]);
   const openAgents = useMemo(() => openAgentsOf(state, agents), [state, agents]);

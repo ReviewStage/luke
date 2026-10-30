@@ -152,6 +152,7 @@ import {
 import type { AgentsControl } from "../tasks/use-agents.js";
 import { PullRequestsOnGitHub } from "../tasks/use-open-link.js";
 import {
+  DRAWN_KINDS,
   type DrawnTabs,
   drawsChanges,
   drawsSubagent,
@@ -164,7 +165,6 @@ import {
   PULL_REQUEST_VIEW,
   type PullRequestView,
   SIDE_PANEL_TAB,
-  SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
   type SidePanelControl,
   type SidePanelTab,
@@ -321,9 +321,9 @@ const NO_TERMINALS: readonly TerminalStripTab[] = [];
 /** An agent's page's one fixed kind: its own Inbox, the plan's and its comments' being a task's alone. */
 const AGENT_KINDS: readonly FixedSidePanelTab[] = [SIDE_PANEL_TAB.INBOX];
 
-/** The fixed kinds each holder's panel offers. */
+/** The fixed kinds each holder's panel offers: a task's every one it draws, never the plan's, which the column's Overview holds. */
 const HOLDER_KINDS = {
-  [SIDE_PANEL_HOLDER.TASK]: SIDE_PANEL_TABS,
+  [SIDE_PANEL_HOLDER.TASK]: DRAWN_KINDS,
   [SIDE_PANEL_HOLDER.AGENT]: AGENT_KINDS,
   [SIDE_PANEL_HOLDER.INBOX]: NO_KINDS,
 } as const satisfies Record<SidePanelHolder, readonly FixedSidePanelTab[]>;

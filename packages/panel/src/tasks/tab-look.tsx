@@ -36,8 +36,9 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * stand (`AgentGlyph`, `SubagentGlyph`) in every one of those places, the
  * "+" menus' rows included: a row is
  * offered beside a strip that may not hold its tab. A task wears its
- * status's mark (`PlanGlyph`), and so does its Plan tab, which is named
- * for the task wherever the place knows it. Each place adds what
+ * status's mark (`PlanGlyph`), and so does a pin of its Plan tab, which is
+ * named for the task wherever the place knows it; the task's Overview, which
+ * holds its plan in its column, wears the document's glyph and its word. Each place adds what
  * only it says beside the look: a tab's card and end mark, a row's detail
  * and section, ⌘K's task name.
  */
@@ -51,6 +52,8 @@ export const TAB_KIND = {
   INBOX: "inbox",
   /** A coding agent not yet started, and the "+" row that opens one. */
   DRAFT: "draft",
+  /** The task's Overview, which leads its column and shows its plan document. */
+  OVERVIEW: "overview",
   AGENT: "agent",
   SUBAGENT: "subagent",
   CHANGES: "changes",
@@ -91,6 +94,7 @@ export type TabSubject =
   | ({ readonly kind: typeof TAB_KIND.PLAN } & PlanStanding)
   | { readonly kind: typeof TAB_KIND.INBOX }
   | { readonly kind: typeof TAB_KIND.DRAFT }
+  | { readonly kind: typeof TAB_KIND.OVERVIEW }
   | {
       readonly kind: typeof TAB_KIND.AGENT;
       /** Its tab's label (`agentName`), or what a pin last called it; the word for an agent where none is known. */
@@ -233,6 +237,8 @@ export function tabLook(subject: TabSubject): KindLook {
       return { icon: <InboxIcon />, label: TAB_WORDS.INBOX };
     case TAB_KIND.DRAFT:
       return { icon: <PlusIcon />, label: TAB_WORDS.NEW_AGENT };
+    case TAB_KIND.OVERVIEW:
+      return { icon: <DocumentIcon />, label: TAB_WORDS.OVERVIEW };
     case TAB_KIND.AGENT:
       return {
         icon: <AgentGlyph agent={subject.agent} />,

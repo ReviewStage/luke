@@ -18,7 +18,7 @@ import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
 import { useHoldChordLinks } from "./copy-link-item.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { type ShownChannel, useInboxTask, useShownChannel } from "./tasks/use-channels.js";
-import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
+import type { SidePanelTab } from "./tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/use-tasks-tab.js";
 
 /**
@@ -137,7 +137,8 @@ function slugOf(workspaces: readonly Workspace[], workspaceId: string | undefine
 /**
  * The place a tab of the side panel shows, on the task or the agent's page
  * that holds the panel; none for a tab whose thing has no link of its own:
- * a file's, the board, the code, the Inbox, a terminal, a pull request
+ * a file's, the Inbox, the comments, a terminal, the plan's of old,
+ * whose task is the column's Overview and linked as the task, a pull request
  * the agent did not open, and a worker of Luke's own, which is drawn
  * nowhere a link opens. Note that a Changes or a
  * worker's tab is the agent's, so it is linked by the agent alone, on a
@@ -148,9 +149,6 @@ export function panelTabPlace(
   tab: SidePanelTab | undefined,
 ): LinkPlace | undefined {
   if (tab === undefined) return undefined;
-  if (tab === SIDE_PANEL_TAB.PLAN) {
-    return "taskId" in holder ? { kind: LINK_PLACE.TASK, planId: holder.taskId } : undefined;
-  }
   if (isPageTab(tab)) {
     return "taskId" in holder
       ? { kind: LINK_PLACE.PAGE, planId: holder.taskId, pageId: tab.page }
@@ -237,6 +235,7 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
           task,
         ];
   }
+  // Note that the column's Overview is the task itself, so it adds no link past the task's.
   const shown = tasks.mainTabs.tab;
   const agentId = shown !== undefined && isAgentTab(shown) ? shown.agent : undefined;
   const agent: LinkAtHand | undefined =

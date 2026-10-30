@@ -18,8 +18,9 @@ import { KEPT } from "../act.js";
 import type { SummaryPin } from "../desktop/task-summary.js";
 import type { TranscriptFollower } from "../tasks/use-agent-transcript.js";
 import { type AgentsControl, MODELS_READ } from "../tasks/use-agents.js";
+import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
-import { SIDE_PANEL_TAB, SIDE_PANEL_TABS, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
+import { DRAWN_KINDS, SIDE_PANEL_TAB, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
   type TasksControl,
@@ -274,8 +275,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     copy: { onPress: ignore },
     edit: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
     mainTabs: {
-      tabs: [],
-      tab: undefined,
+      tabs: [MAIN_TAB.OVERVIEW],
+      tab: MAIN_TAB.OVERVIEW,
       openAgents: undefined,
       newTabAsked: false,
       onChoose: ignore,
@@ -294,10 +295,10 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       fullScreen: false,
       fullScreenOnly: false,
       newTabAsked: false,
-      tabs: SIDE_PANEL_TABS,
+      tabs: DRAWN_KINDS,
       order: [],
       closedTabs: [],
-      used: SIDE_PANEL_TABS,
+      used: DRAWN_KINDS,
       pins: [],
       carried: [],
       onCarried: ignore,
@@ -309,7 +310,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       lastTerminal: undefined,
       pullRequestViews: new Map(),
       onPullRequestView: () => undefined,
-      strip: SIDE_PANEL_TABS,
+      strip: DRAWN_KINDS,
       tab: SIDE_PANEL_TAB.COMMENTS,
       preview: undefined,
       width: SIDE_PANEL_WIDTH.DEFAULT,

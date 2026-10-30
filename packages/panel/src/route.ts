@@ -54,8 +54,10 @@ import {
  *   anything else leaves for the browser, as everything does outside the
  *   window.
  * - The Tasks tab previews a page, an agent's Changes, a worker, or a review
- *   thread of the task it shows with nothing standing over its plan, and goes
- *   to any other.
+ *   thread of the task it shows with nothing standing over its plan, chooses
+ *   that task's Overview for the task itself, one of its plan's sections, or
+ *   one of its comments, at the section or the comment, and goes to any
+ *   other.
  */
 
 /** The kinds of address a press names. */
@@ -212,6 +214,8 @@ export const ROUTE = {
   PREVIEW: "preview",
   /** The window goes to a place. */
   GO: "go",
+  /** The task shown chooses its column's Overview, at the section or the comment the place names. */
+  OVERVIEW: "overview",
   /** Leaves for the browser. */
   EXTERNAL: "external",
   /** The surface opens nothing of it, and whatever stands around it is asked. */
@@ -222,8 +226,15 @@ export const ROUTE = {
 export type Route =
   | { readonly kind: typeof ROUTE.PREVIEW; readonly thing: Thing }
   | { readonly kind: typeof ROUTE.GO; readonly link: ReadLink }
+  | { readonly kind: typeof ROUTE.OVERVIEW; readonly place: OverviewPlace }
   | { readonly kind: typeof ROUTE.EXTERNAL; readonly href: string }
   | { readonly kind: typeof ROUTE.NOTHING };
+
+/** A place the task's Overview shows: the task itself, one of its plan's sections, or one of its comments. */
+export type OverviewPlace = Extract<
+  LinkPlace,
+  { readonly kind: typeof LINK_PLACE.TASK | typeof LINK_PLACE.SECTION | typeof LINK_PLACE.COMMENT }
+>;
 
 type InboxItemHere = Extract<Here, { readonly kind: typeof HERE.INBOX_ITEM }>;
 type WindowHere = Extract<Here, { readonly kind: typeof HERE.WINDOW }>;
@@ -434,13 +445,29 @@ function taskThingOf(place: LinkPlace): Thing | undefined {
   }
 }
 
-/** A place the Tasks tab goes to: a thing of the task it shows with nothing over its plan opens as the panel's preview, as any link pressed there does; one of another task's, or any other place, goes there. */
+/** Whether a place is one the task's Overview shows (`OverviewPlace`). */
+function overviewPlaceOf(place: LinkPlace): place is OverviewPlace {
+  return (
+    place.kind === LINK_PLACE.TASK ||
+    place.kind === LINK_PLACE.SECTION ||
+    place.kind === LINK_PLACE.COMMENT
+  );
+}
+
+/**
+ * A place the Tasks tab goes to: of the task it shows with nothing over its
+ * plan, a thing opens as the panel's preview, as any link pressed there
+ * does, and the task itself, a section, or a comment chooses its Overview;
+ * one of another task's, or any other place, goes there.
+ */
 function onTasksTab(address: Address, here: TasksTabHere): Route {
   if (address.kind !== ADDRESS.PLACE) return NOTHING;
   const { place } = address.link;
-  const thing = taskThingOf(place);
   const standing = here.taskId !== undefined && "planId" in place && place.planId === here.taskId;
-  return thing !== undefined && standing ? preview(thing) : go(address.link);
+  if (!standing) return go(address.link);
+  if (overviewPlaceOf(place)) return { kind: ROUTE.OVERVIEW, place };
+  const thing = taskThingOf(place);
+  return thing === undefined ? go(address.link) : preview(thing);
 }
 
 /**

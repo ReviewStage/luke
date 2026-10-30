@@ -70,10 +70,10 @@ import { FIXTURE_IDS, FIXTURE_PAGE } from "@luke/host/fixture-stage";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { AsyncIteratorClass } from "@orpc/client";
 import { longRunPicture, longRunStream } from "./agent-long-run-fixture.js";
+import { MAIN_TAB, type MainTab } from "./use-main-tabs.js";
 import {
   PULL_REQUEST_VIEW,
   type PullRequestView,
-  SIDE_PANEL_TAB,
   type SidePanelState,
   type StagedSidePanel,
 } from "./use-side-panel.js";
@@ -1101,11 +1101,25 @@ export function agentTasksView(profile: string, open: TasksView): TasksView | un
   };
 }
 
+/** The fixture agent's tab, one object across draws, as a tab staged must be. */
+const FIXTURE_AGENT_TAB: MainTab = { agent: FIXTURE_AGENT_ID };
+
+/**
+ * The tab the task's column opens on under an agent profile: the agent's,
+ * or Overview, where the task's plan stands, under the profile that stages
+ * the plan; none under any other profile.
+ */
+export function agentColumnTab(profile: string): MainTab | undefined {
+  const stage = AGENT_STAGES.get(profile);
+  if (stage === undefined) return undefined;
+  return "plan" in stage ? MAIN_TAB.OVERVIEW : FIXTURE_AGENT_TAB;
+}
+
 /**
  * The side panel an agent profile opens with, from the panel the tasks
  * profiles open: the agent's Pull request tab on the profile's view, the
- * file's tab, the page's, or the agent's Terminal; none under any other
- * profile.
+ * file's tab, the page's, or the agent's Terminal, or shut beside the plan;
+ * none under any other profile.
  */
 export function agentSidePanel(
   profile: string,
@@ -1134,7 +1148,8 @@ export function agentSidePanel(
     const page = { page: stage.page };
     return { ...panel, tab: page, pages: [page] };
   }
-  if ("plan" in stage) return { ...panel, tab: SIDE_PANEL_TAB.PLAN };
+  // The plan stands in the column's Overview, so the panel beside it is shut (`agentColumnTab`).
+  if ("plan" in stage) return { ...panel, open: false, tab: undefined };
   const terminal = { terminal: FIXTURE_AGENT_ID };
   return { ...panel, tab: terminal, terminals: [terminal] };
 }

@@ -47,20 +47,21 @@ import {
 /**
  * use-side-panel.ts -- the open task's side panel: whether it is shown, which tabs it holds and which is chosen, and how wide, kept across launches.
  *
- * The task's column is the agents': its coding agents (`use-main-tabs.ts`);
- * everything else (the plan's document, the task's Inbox and the plan's
- * comments) stands in a panel at the window's right that the developer
+ * The task's column is the task's own: its Overview, holding the plan's
+ * document, and its coding agents (`use-main-tabs.ts`); everything else
+ * (the task's Inbox, the plan's comments, and what its agents made) stands
+ * in a panel at the window's right that the developer
  * opens and closes, as every devtool window's secondary sidebar does. What
  * opens it on its own is an Inbox item the developer has not seen
  * (`onInboxRead`); a subagent's tab opened from an
- * agent's transcript opens it too. A task New task started with an agent
- * opens on the agent alone, its plan's tab closed there (`use-tasks-tab.ts`),
- * so the panel stands as it stood on every other task. Not to be confused
+ * agent's transcript opens it too. Not to be confused
  * with "the panel", which in this renderer is Luke's whole surface.
  *
  * A fixed tab stands in the strip only once the open task has used it: a
- * comment was left on its plan. The plan's own tab is used on every task, so it stands on each
- * until closed there. The Inbox stands only once it has something to show:
+ * comment was left on its plan. The plan's own tab once stood here on every
+ * task; it is drawn and offered nowhere now, since the column's Overview
+ * holds the plan, and what an earlier version kept of it reads and opens
+ * nothing (`DRAWN_KINDS`). The Inbox stands only once it has something to show:
  * it is closed on a task until an item the developer has not seen waits
  * there, and then opens and is chosen as an arrival is (in a narrow room it
 opens without being chosen, since the panel there would stand over the
@@ -68,7 +69,7 @@ plan); an item has not
  * been seen where it did not wait at the task's last read, and a task with
  * no agent has no Inbox, since only an agent posts, unless main's read of
  * what waits across the account says an item waits on it. So a new task
- * has the plan's tab alone,
+ * has no tab,
  * and what arrives on it adds its tab at the strip's end as it arrives,
  * never taking the chosen one's place. Beside the window's Inbox the panel
  * draws none of them. The developer's own choices lie
@@ -178,9 +179,14 @@ plan); an item has not
  * holds the window's focus, which stands until the "+" opens its menu.
  */
 
-/** The panel's kinds of tab, the fixed four. A kind is one entry here, one row below, and one case where the panel draws it. */
+/** The panel's kinds of tab, the fixed three. A kind is one entry here, one row below, and one case where the panel draws it. */
 export const SIDE_PANEL_TAB = {
-  /** The task's plan, its document (`plan-body.tsx`). */
+  /**
+   * The task's plan, which the column's Overview holds now
+   * (`use-main-tabs.ts`). Note that it is kept here, drawn and offered
+   * nowhere (`DRAWN_KINDS`), because what an earlier version kept and pinned
+   * names it, and a pin or a link naming it opens Overview instead.
+   */
   PLAN: "plan",
   /** Everything the task's agents need of the developer, answered in place (`inbox-pane.tsx`). */
   INBOX: "inbox",
@@ -287,6 +293,11 @@ export const SIDE_PANEL_TAB_KIND = {
 export const SIDE_PANEL_TABS: readonly FixedSidePanelTab[] = Object.values(SIDE_PANEL_TAB);
 
 const FIXED_TABS: ReadonlySet<StripTab> = new Set(SIDE_PANEL_TABS);
+
+/** The kinds the panel draws, every one but the plan's, which the column's Overview holds. */
+export const DRAWN_KINDS: readonly FixedSidePanelTab[] = SIDE_PANEL_TABS.filter(
+  (kind) => kind !== SIDE_PANEL_TAB.PLAN,
+);
 
 /** Whether a tab is one of the fixed kinds. */
 function isFixedTab(tab: SidePanelTab): tab is FixedSidePanelTab {
@@ -842,16 +853,20 @@ function orderOn(held: HeldState, taskId: string | undefined): readonly SidePane
 
 /**
  * The task's fixed tabs in the strip's order: each it holds something of and
- * was not closed on, and each opened on it. The Inbox stands only opened, and
- * only on a task that may draw one.
+ * was not closed on, and each opened on it, of the kinds the panel draws
+ * (`DRAWN_KINDS`). The Inbox stands only opened, and only on a task that may
+ * draw one.
  */
 function drawnFixed(held: HeldState, task: OpenTask): readonly FixedSidePanelTab[] {
   if (task.bare === true) return NO_FIXED;
   const chosen = taskTabs(held, task.id);
-  const open = held.tabs.filter((tab) =>
-    tab === SIDE_PANEL_TAB.INBOX
-      ? chosen.opened.includes(tab) && task.holds[tab] === true
-      : chosen.opened.includes(tab) || (!chosen.closed.includes(tab) && task.holds[tab] === true),
+  const open = held.tabs.filter(
+    (tab) =>
+      DRAWN_KINDS.includes(tab) &&
+      (tab === SIDE_PANEL_TAB.INBOX
+        ? chosen.opened.includes(tab) && task.holds[tab] === true
+        : chosen.opened.includes(tab) ||
+          (!chosen.closed.includes(tab) && task.holds[tab] === true)),
   );
   return inTaskOrder(open, orderOn(held, task.id), (tab) => tab);
 }
@@ -2034,7 +2049,7 @@ export function useSidePanel(
   // it is the same array until something it is drawn from changes.
   const tabs = useMemo(() => drawnFixed(state, seen), [state, seen]);
   const used = useMemo(
-    () => SIDE_PANEL_TABS.filter((kind) => tabs.includes(kind) || seen.holds[kind] === true),
+    () => DRAWN_KINDS.filter((kind) => tabs.includes(kind) || seen.holds[kind] === true),
     [tabs, seen],
   );
   const drawn = useMemo(
