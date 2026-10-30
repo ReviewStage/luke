@@ -37,7 +37,7 @@ import {
   useLeaving,
   useMenu,
 } from "@luke/ui";
-import { FolderOutputIcon, GLYPH, MailOpenIcon } from "@luke/ui/icons";
+import { FolderOutputIcon, FolderPlusIcon, GLYPH, MailOpenIcon } from "@luke/ui/icons";
 import { type DrawnTaskRow, TASK_ROW, type TaskRow, taskRowKey } from "@luke/ui/task-list-model";
 import {
   memberSection,
@@ -103,6 +103,9 @@ const TITLE_ASKED = "Name the section.";
 
 /** What the toast says once a section is deleted. */
 const SECTION_DELETED = "Section deleted";
+
+/** What makes a section, as the Tasks head's button and every Move to section name it. */
+export const NEW_SECTION = "New section";
 
 /** What the dialog was opened to do: make a section in a workspace, then perhaps more with it, or edit one. */
 type SectionAsk =
@@ -299,9 +302,14 @@ export function rowMember(row: TaskRow): SectionMember {
     : { agent: true, id: row.agent.id };
 }
 
+/** The New section row of a menu, which asks for a section and runs `onSelect`'s ask. */
+export function newSectionAction(onSelect: () => void): MenuAction {
+  return { label: NEW_SECTION, icon: <FolderPlusIcon />, onSelect };
+}
+
 /**
  * The Move to section of a task's menu or an agent's: the row's workspace's
- * sections, the one it stands in checked, New section… to make one with the
+ * sections, the one it stands in checked, New section to make one with the
  * row in it, and Remove from section while it stands in one. A row moved
  * here lands on top of its new section, as one dragged onto its header
  * would.
@@ -338,11 +346,7 @@ export function moveToSectionEntry(
         ];
   return {
     ...commandHead(PANEL_COMMAND.MOVE_TO_SECTION),
-    items: [
-      ...sections,
-      { label: "New section…", onSelect: () => askNew(workspaceId, put) },
-      ...remove,
-    ],
+    items: [...sections, newSectionAction(() => askNew(workspaceId, put)), ...remove],
   };
 }
 
@@ -388,7 +392,7 @@ interface SectionDoors {
 }
 
 /**
- * Move all to section: the workspace's other sections and New section…, each
+ * Move all to section: the workspace's other sections and New section, each
  * taking every row of the section, its agents' with its tasks', in its
  * order, onto the top of the one chosen.
  */
@@ -411,10 +415,7 @@ function moveTasksEntry(drawn: DrawnSection, context: SectionContext): MenuEntry
   return {
     label: "Move all to section",
     icon: <GLYPH.MOVE />,
-    items: [
-      ...others,
-      { label: "New section…", onSelect: () => dialogs.askNew(section.workspaceId, put) },
-    ],
+    items: [...others, newSectionAction(() => dialogs.askNew(section.workspaceId, put))],
   };
 }
 
