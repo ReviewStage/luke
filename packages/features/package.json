@@ -65,6 +65,7 @@
     "./inbox-wire": "./src/inbox-wire.js",
     "./inbox-writes": "./src/inbox-writes.js",
     "./device-agent-wire": "./src/device-agent-wire.js",
+    "./host-pairing-view": "./src/host-pairing-view.js",
     "./host-wire": "./src/host-wire.js",
     "./host-release": "./src/host-release.js",
     "./mac-command-wire": "./src/mac-command-wire.js",

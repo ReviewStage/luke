@@ -1,5 +1,5 @@
 /**
- * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: a desktop's own sign-in is refused as needing an upgrade, a Mac enrolls on that sign-in, created where Luke never saw it and never under another account, and a host enrolls on its member's install token and calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed; and a host saves its own agents' state, from their newest generation alone, until the sweep deletes it seven days after its last save.
+ * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: a desktop's own sign-in is refused as needing an upgrade, a Mac enrolls on that sign-in, created where Luke never saw it and never under another account, and a host enrolls on its member's install token and calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed; a box pairs with a code a member approves, its secret handed over once, or is denied, or lapses, polled no faster than the interval, while an account that guesses too many codes is held; and a host saves its own agents' state, from their newest generation alone, until the sweep deletes it seven days after its last save.
  *
  * Synthetic accounts, bearers, tokens, Macs, hosts, keys, and digests
  * throughout; the store of saved state is a double with no store behind it.
@@ -54,6 +54,11 @@ const PATH = {
   HOST_REMOVE: "/api/hosts/remove",
   STATE_SAVE: "/api/device-agents/state/save",
   STATE_COMMIT: "/api/device-agents/state/commit",
+  PAIRING_START: "/api/device-agents/pairing",
+  PAIRING_POLL: "/api/device-agents/pairing/poll",
+  PAIRING: "/api/hosts/pairing",
+  PAIRING_APPROVE: "/api/hosts/pairing/approve",
+  PAIRING_DENY: "/api/hosts/pairing/deny",
 } as const;
 
 /** A daemon below the floor. */
@@ -87,19 +92,26 @@ const countedProperties = (userId: string, name: string) =>
 /** The store of agents' saved state every case's routes and sweeps reach, and the paths it was asked to delete. */
 const stateStore = agentStateBlobsFake();
 
-/** One request of the device's, on the bearer given (an account's, or a host's secret), its body as JSON or its device in the query, and a daemon's version where one is given. */
+/** One request of the device's, on the bearer given (an account's, or a host's secret), its body as JSON or its device in the query, a daemon's version where one is given, and the address the platform names where one is given; a POST with no body where asked. */
 function request(
   bearer: string | undefined,
   path: string,
-  init: { readonly body?: object; readonly deviceId?: string; readonly version?: string } = {},
+  init: {
+    readonly body?: object;
+    readonly deviceId?: string;
+    readonly version?: string;
+    readonly ip?: string;
+    readonly post?: true;
+  } = {},
 ): Request {
   const url = new URL(path, ORIGIN);
   if (init.deviceId !== undefined) url.searchParams.set("deviceId", init.deviceId);
   return new Request(url, {
-    method: init.body === undefined ? "GET" : "POST",
+    method: init.body === undefined && init.post === undefined ? "GET" : "POST",
     headers: {
       ...(bearer === undefined ? {} : { authorization: `Bearer ${bearer}` }),
       ...(init.version === undefined ? {} : { [HOST_WIRE.VERSION_HEADER]: init.version }),
+      ...(init.ip === undefined ? {} : { "x-real-ip": init.ip }),
       ...(init.body === undefined ? {} : { "content-type": "application/json" }),
     },
     ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
@@ -324,6 +336,42 @@ const savedState = (
   });
 
 const STALE = { status: HOSTED_HTTP_STATUS.CONFLICT, body: { error: "agent-state-stale" } };
+
+/** A box's pairing start with no credential, from the address given where one is, at the version given or the floor's. */
+function startPairing(init: { readonly version?: string; readonly ip?: string } = {}) {
+  return request(undefined, PATH.PAIRING_START, {
+    version: init.version ?? HOST_VERSION.FLOOR,
+    ...(init.ip === undefined ? {} : { ip: init.ip }),
+    body: { name: "fra-01", platform: DEVICE_PLATFORM.LINUX, arch: DEVICE_ARCH.X64 },
+  });
+}
+
+/** A pairing box's poll on its poll secret, at the floor's version. */
+function pollPairing(pollSecret: string) {
+  return answerOf(
+    request(pollSecret, PATH.PAIRING_POLL, { version: HOST_VERSION.FLOOR, post: true }),
+  );
+}
+
+/** A member's read, approve, or deny of a pairing by its code, on their bearer. */
+function byCode(bearer: string, path: string, code: string) {
+  return answerOf(request(bearer, path, { body: { code } }));
+}
+
+/** A pairing started: its poll secret and the code it shows. */
+const startedPairing = Effect.gen(function* () {
+  const started = yield* answerOf(startPairing());
+  assert.equal(started.status, HOSTED_HTTP_STATUS.OK);
+  const { pollSecret, userCode }: { pollSecret: string; userCode: string } = started.body;
+  return { pollSecret, userCode };
+});
+
+/** A code no pending pairing has: seven Bs and the letter given. */
+function unusedCode(last: string) {
+  return `BBBB-BBB${last}`;
+}
+
+const NOT_FOUND = { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: "not-found" } };
 
 it.layer(
   Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT), stateStore.layer),
@@ -711,6 +759,152 @@ it.layer(
         ]);
         assert.equal(othersPath.status, HOSTED_HTTP_STATUS.BAD_REQUEST);
         assert.ok(Option.isNone(yield* newestAgentState(owner, agentId)), "nothing was kept");
+      }),
+  );
+
+  it.effect(
+    "a box pairs with a code: a start below the floor is refused, a member reads and approves the code, the host is listed at once, and the box's next poll alone is handed its secret, counted as an install",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* account();
+        const startedAt = yield* Clock.currentTimeMillis;
+        const old = yield* statusOf(startPairing({ version: OLD_VERSION }));
+        const started = yield* answerOf(startPairing({ ip: "203.0.113.7" }));
+        const { pollSecret, userCode }: { pollSecret: string; userCode: string } = started.body;
+
+        const waiting = yield* pollPairing(pollSecret);
+        // Note that a code is matched whatever its case and dash.
+        const read = yield* byCode(owner, PATH.PAIRING, userCode.replace("-", "").toLowerCase());
+        const approved = yield* byCode(owner, PATH.PAIRING_APPROVE, userCode);
+        const deviceId: string = approved.body.deviceId;
+        const listed = yield* answerOf(request(owner, PATH.HOSTS));
+        yield* TestClock.adjust("5 seconds");
+        const handed = yield* pollPairing(pollSecret);
+        yield* TestClock.adjust("5 seconds");
+        const again = yield* pollPairing(pollSecret);
+        const secret: string = handed.body.deviceSecret;
+        const register = yield* statusOf(
+          request(secret, PATH.DEVICES, {
+            version: HOST_VERSION.FLOOR,
+            body: { ...registered(deviceId), platform: DEVICE_PLATFORM.LINUX, home: "/srv/luke" },
+          }),
+        );
+
+        assert.equal(old, HOSTED_HTTP_STATUS.UPGRADE_REQUIRED);
+        assert.match(userCode, /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/u);
+        assert.ok(pollSecret.startsWith("lkp_"));
+        assert.deepEqual(
+          { url: started.body.url, ms: [started.body.expiresInMs, started.body.intervalMs] },
+          { url: `${ORIGIN}/connect/${userCode}`, ms: [10 * 60 * 1_000, 5_000] },
+        );
+        assert.deepEqual(waiting.body, { status: "pending" });
+        assert.deepEqual(read, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            name: "fra-01",
+            platform: DEVICE_PLATFORM.LINUX,
+            arch: DEVICE_ARCH.X64,
+            ip: "203.0.113.7",
+            expiresAt: startedAt + 10 * 60 * 1_000,
+          },
+        });
+        assert.deepEqual(
+          listed.body.hosts.map((host: { readonly id: string }) => host.id),
+          [deviceId],
+        );
+        assert.equal(handed.body.status, "approved");
+        assert.equal(handed.body.deviceId, deviceId);
+        assert.ok(secret.startsWith("lkd_"));
+        assert.deepEqual(again.body, { status: "expired" }, "the secret is handed over once");
+        assert.equal(register, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_INSTALL), [
+          { kind: "luke_host" },
+        ]);
+      }),
+  );
+
+  it.effect("a member denies a code, and the box's poll is answered denied", () =>
+    Effect.gen(function* () {
+      const owner = yield* account();
+      const { pollSecret, userCode } = yield* startedPairing;
+
+      const denied = yield* byCode(owner, PATH.PAIRING_DENY, userCode);
+      const polled = yield* pollPairing(pollSecret);
+
+      assert.deepEqual(denied, { status: HOSTED_HTTP_STATUS.OK, body: { done: true } });
+      assert.deepEqual(polled.body, { status: "denied" });
+      assert.deepEqual((yield* answerOf(request(owner, PATH.HOSTS))).body.hosts, []);
+    }),
+  );
+
+  it.effect(
+    "a code lapses ten minutes after its start: a member's read and approve find nothing, and the box's poll is answered expired",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* account();
+        const { pollSecret, userCode } = yield* startedPairing;
+
+        yield* TestClock.adjust("10 minutes");
+
+        assert.deepEqual(yield* byCode(owner, PATH.PAIRING, userCode), NOT_FOUND);
+        assert.deepEqual(yield* byCode(owner, PATH.PAIRING_APPROVE, userCode), NOT_FOUND);
+        assert.deepEqual((yield* pollPairing(pollSecret)).body, { status: "expired" });
+      }),
+  );
+
+  it.effect(
+    "an account that named ten codes no pending pairing has is held, a pending code's read included, until its window ends fifteen minutes on, while another account is not",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* account();
+        const other = yield* account();
+        const { userCode } = yield* startedPairing;
+        const firstGuessAt = yield* Clock.currentTimeMillis;
+
+        const misses = [];
+        for (const last of "BCDFGHJKLM") {
+          misses.push(
+            yield* statusOf(request(owner, PATH.PAIRING, { body: { code: unusedCode(last) } })),
+          );
+        }
+        const held = yield* byCode(owner, PATH.PAIRING, userCode);
+        const othersRead = yield* statusOf(
+          request(other, PATH.PAIRING, { body: { code: userCode } }),
+        );
+        yield* TestClock.adjust("15 minutes");
+        const fresh = yield* startedPairing;
+        const after = yield* statusOf(
+          request(owner, PATH.PAIRING, { body: { code: fresh.userCode } }),
+        );
+
+        assert.deepEqual(
+          misses,
+          Array.from({ length: 10 }, () => HOSTED_HTTP_STATUS.NOT_FOUND),
+        );
+        assert.deepEqual(held, {
+          status: HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS,
+          body: { error: "host-pairing-held", heldUntil: firstGuessAt + 15 * 60 * 1_000 },
+        });
+        assert.equal(othersRead, HOSTED_HTTP_STATUS.OK);
+        assert.equal(after, HOSTED_HTTP_STATUS.OK);
+      }),
+  );
+
+  it.effect(
+    "a poll sooner than the interval after the last is answered slow down, and one after it pending",
+    () =>
+      Effect.gen(function* () {
+        const { pollSecret } = yield* startedPairing;
+
+        const first = yield* pollPairing(pollSecret);
+        const soon = yield* pollPairing(pollSecret);
+        yield* TestClock.adjust("5 seconds");
+        const later = yield* pollPairing(pollSecret);
+
+        assert.deepEqual(
+          [first.body, soon.body, later.body],
+          [{ status: "pending" }, { status: "slow-down" }, { status: "pending" }],
+        );
       }),
   );
 

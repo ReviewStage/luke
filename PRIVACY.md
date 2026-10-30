@@ -573,6 +573,19 @@ place of it only on HTTPS requests to GitHub. The token is never logged and
 never written to the conversation's record. As on This Mac, a Claude Code agent's plan
 token or key is handed into its machine, where a command it runs can read it.
 
+**Connecting a host with a code.** A host can also join your account with a
+code rather than an install token. The box asks our service for a code with no
+credential, and our service keeps, beside the code, the name, operating
+system, and processor the box gives, its version of Luke's host program, and
+the IP address it asked from, for the code's ten minutes. Anyone signed in to
+Luke who opens the code's link is shown them, so you can tell whether the box
+is yours before you approve it. Approving it adds the box to your hosts under
+that name; denying it, or letting the code lapse, adds nothing. What was kept
+with the code, its IP address included, is deleted once the box collects its
+secret, or within a few minutes of the code lapsing. To stop codes being
+guessed, our service also counts, for 15 minutes at a time, how many codes
+your account named that matched none.
+
 **An agent that runs on Claude Code.** For the accounts in the early
 test of Claude plans, an agent your Claude plan pays for runs on
 Anthropic's Claude Code, and so does a Claude agent your own Anthropic

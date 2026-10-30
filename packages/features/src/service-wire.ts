@@ -171,6 +171,8 @@ export const HOSTED_API_ERROR = {
   TASK_BLOCK_CYCLE: "task-block-cycle",
   /** A device agent's save named a generation that is no longer the agent's newest, since a newer save landed; nothing was granted or committed. */
   AGENT_STATE_STALE: "agent-state-stale",
+  /** The account named too many pairing codes that no pending pairing has, so its reads, approves, and denies by code are refused until the time the refusal names; nothing was read or written. */
+  HOST_PAIRING_HELD: "host-pairing-held",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

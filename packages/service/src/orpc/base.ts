@@ -37,6 +37,7 @@ import {
   hostCallerOf,
   presentedHostVersion,
   presentedInstallToken,
+  presentedPollSecret,
 } from "../auth/device-secret.js";
 import { sessionCredential } from "../auth/session-credential.js";
 import { HostedEnvironment } from "../environment.js";
@@ -219,6 +220,45 @@ export const installTokenMiddleware = middlewareGen<HostedContext, EnrollingHost
   if (installToken === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   const hostVersion = yield* admittedHostVersion(presentedHostVersion(context.request));
   return yield* next({ context: { installToken, hostVersion } });
+});
+
+/** A pairing box's caller: no credential, and its daemon's version, at or past the floor. */
+export interface PairingHost {
+  readonly hostVersion: string;
+}
+
+/**
+ * The caller as a box starting a pairing: no credential is read, and its
+ * daemon's version is refused as needing an upgrade below the floor, as
+ * an enroll's is (`installTokenMiddleware`).
+ */
+export const pairingHostMiddleware = middlewareGen<HostedContext, PairingHost>(function* ({
+  context,
+  next,
+}) {
+  const hostVersion = yield* admittedHostVersion(presentedHostVersion(context.request));
+  return yield* next({ context: { hostVersion } });
+});
+
+/** A pairing box's poll: the poll secret its bearer carries, and its daemon's version, at or past the floor. */
+export interface PollingHost extends PairingHost {
+  readonly pollSecret: string;
+}
+
+/**
+ * The caller as a pairing box polling: a poll secret as its bearer, or
+ * refused as unauthenticated, then its daemon's version, refused as needing
+ * an upgrade below the floor. Which pairing the secret names, if any, is
+ * the poll's to read.
+ */
+export const pollSecretMiddleware = middlewareGen<HostedContext, PollingHost>(function* ({
+  context,
+  next,
+}) {
+  const pollSecret = presentedPollSecret(context.request);
+  if (pollSecret === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  const hostVersion = yield* admittedHostVersion(presentedHostVersion(context.request));
+  return yield* next({ context: { pollSecret, hostVersion } });
 });
 
 /** The deployment's ring, handed on as the procedure's, or the request refused as unavailable where it holds none it can parse. */
