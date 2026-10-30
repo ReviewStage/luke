@@ -153,10 +153,13 @@ import type { ThreadReveal } from "./thread-reveal.js";
 import { type AgentsControl, type ModelsRead, readAgentById, useAgents } from "./use-agents.js";
 import {
   chooseChannel,
+  chooseInboxTask,
   leaveChannel,
+  leaveInboxTask,
   listChannelWorkspace,
   openChannelThread,
-  standChannelPlace,
+  openTaskThread,
+  standInboxPlace,
 } from "./use-channels.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxPages } from "./use-inbox-pages.js";
@@ -696,7 +699,9 @@ export interface TasksControl {
   /** The task took the ask, so a later visit to the task does not open the item again. */
   onInboxItemRevealed: (ask: number) => void;
   /** Opens a task on its Inbox tab the same way, opening the tab where it was closed: what ⌘K's Inbox row asks. */
-  onShowInbox: (taskId: string) => void;
+  onShowInboxTab: (taskId: string) => void;
+  /** Opens the window's Inbox narrowed to one task's items, on nothing chosen: what a task's "needs you" count asks. */
+  onShowInbox: (narrowed: { readonly taskId: string }) => void;
   /** What waits on the developer across the account's tasks, as main's read last answered: each task with an open inbox item, and its items. */
   inbox: readonly AppInboxTask[];
   /** The task whose Inbox is on screen, or the agent whose own page's Inbox tab is, or none. */
@@ -2884,6 +2889,8 @@ export function useTasksTab(input: {
     }
     // Note that a link names the thread and not its channel, which an Inbox narrowed to a channel follows once its item is read (`useThreadChannel`).
     if (channelsOn) openChannelThread(place.itemId);
+    // Note that an item of a task opens in the task's own Inbox tab above, so one here is on no task and leaves any task the Inbox is narrowed to.
+    openTaskThread(undefined);
     standInFor({
       kind: STAND_IN.INBOX,
       chosen:
@@ -2979,8 +2986,10 @@ export function useTasksTab(input: {
         return;
       }
       case LINK_PLACE.INBOX: {
-        // Note that a link to the Inbox opens it as its sidebar row does, on nothing chosen.
+        // Note that a link to the Inbox opens it as its sidebar row does, on nothing chosen, narrowed to the task it names or to none.
         listLinked(workspace);
+        if (place.planId === undefined) leaveInboxTask();
+        else chooseInboxTask(place.planId);
         timeInboxOpen();
         standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
         return;
@@ -2992,7 +3001,7 @@ export function useTasksTab(input: {
       case LINK_PLACE.CHANNEL: {
         listLinked(workspace);
         if (!channelsOn) return;
-        standChannelPlace(place.channelId);
+        standInboxPlace({ channelId: place.channelId });
         // Note that a channel's link opens it as its row does: on no item.
         timeInboxOpen();
         standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
@@ -3382,10 +3391,11 @@ export function useTasksTab(input: {
       open: inboxView !== undefined,
       chosen: inboxChosen,
       // Note that it opens on nothing chosen, so one column shows the list and two an empty pane beside it (`inbox-columns.ts`).
-      // With Channels on, it leaves any channel shown, so the Inbox lists every channel's items.
+      // It leaves any task it was narrowed to, and with Channels on any channel shown, so the Inbox lists every item.
       onOpen: guard(() => {
         timeInboxOpen();
         setHistoryFor(undefined);
+        leaveInboxTask();
         if (channelsOn) leaveChannel();
         setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });
       }),
@@ -3395,6 +3405,7 @@ export function useTasksTab(input: {
       onOpenItem: guard((chosen: InboxChoice, channelId?: string) => {
         setHistoryFor(undefined);
         if (channelsOn) openChannelThread(chosen.itemId, channelId);
+        openTaskThread("taskId" in chosen ? chosen.taskId : undefined);
         // An item opened by a press is a place of its own, as a link's is, not the Inbox rested on.
         setRested(undefined);
         setStandIn((held) =>
@@ -3512,7 +3523,13 @@ export function useTasksTab(input: {
     // Only the ask shown is let go; a newer one stands until its own task shows it.
     onSectionRevealed: (ask) =>
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),
-    onShowInbox: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.INBOX)),
+    onShowInboxTab: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.INBOX)),
+    onShowInbox: guard(({ taskId }: { readonly taskId: string }) => {
+      timeInboxOpen();
+      setHistoryFor(undefined);
+      chooseInboxTask(taskId);
+      setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });
+    }),
     // A pinned tab is in one of the task's columns, so a version history over it gives way as well.
     onOpenPinnedTab: guard((pin: SidebarPin) => {
       const { tab } = pin;

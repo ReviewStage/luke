@@ -33,12 +33,14 @@ import { SHELL_ROOM } from "./shell-room.js";
 import {
   type ChannelPlaceControl,
   chooseChannel,
+  chooseInboxTask,
   leaveChannel,
   listChannelWorkspace,
   openChannelThread,
   useArchivedChannels,
   useChannelPlace,
   useChannels,
+  useInboxTask,
 } from "./tasks/use-channels.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
@@ -1284,6 +1286,42 @@ test("with Channels on, a channel chosen from the Inbox is a step of its own, wh
   act(() => window.history().onBack());
   assert.equal(place().channelId, undefined, "Back shows the Inbox again");
   handState({});
+});
+
+test("a task the Inbox is narrowed to, Channels off, is a step linked by it, which Back leaves for the Inbox and Forward narrows to again", async () => {
+  const workspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    slug: "acme",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const taskId = "a1000001-0000-4000-8000-0000000000b1";
+  leaveChannel();
+  let narrowed: string | undefined;
+  const Reader = () => {
+    narrowed = useInboxTask();
+    return null;
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(createElement(Reader)));
+  const base = tasksControl();
+  const onInbox = tasksControl({
+    workspace,
+    workspaces: [workspace],
+    inboxView: { ...base.inboxView, open: true, onOpen: leaveChannel, onChoose: () => undefined },
+  });
+  const window = mount(onInbox, memoryHistory(), stepTitleOf);
+  await settle();
+  press();
+  act(() => chooseInboxTask(taskId));
+
+  assert.deepEqual(window.addresses(), ["/acme/inbox", `/acme/inbox/plan/${taskId}`]);
+  act(() => window.history().onBack());
+  assert.equal(narrowed, undefined, "Back shows every task's items");
+  act(() => window.history().onForward());
+  assert.equal(narrowed, taskId, "Forward narrows to the task again");
 });
 
 test("with Channels on, an archived channel shown, once the Inbox read the archived channels, is a step named and linked by it", async () => {

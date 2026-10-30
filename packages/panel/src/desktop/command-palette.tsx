@@ -990,7 +990,7 @@ function agentRows(
   const taskId = tasks.activeTaskId;
   if (taskId === undefined) return [];
   const taskName = tasks.tasks.find((task) => task.id === taskId)?.name;
-  const inbox = inboxEntries(tasks.agents, () => tasks.onShowInbox(taskId));
+  const inbox = inboxEntries(tasks.agents, () => tasks.onShowInboxTab(taskId));
   const agents = agentEntries(tasks.mainTabs, tasks.agents).map((entry) => ({
     ...entry,
     onPick: () => tasks.onShowAgent(taskId, entry.row.id),

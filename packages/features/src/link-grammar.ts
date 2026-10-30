@@ -29,7 +29,8 @@ import { parsedUrl } from "./parsed-url.js";
  *   `/message/<messageId>`, and, on no task, a page it showed,
  *   `/page/<pageId>`; which task's panel it opens in is the reader's to
  *   find, by the agent;
- * - the Inbox, `/inbox`, and an item in it under the agent that posted it,
+ * - the Inbox, `/inbox`, the Inbox narrowed to one task's items,
+ *   `/inbox/plan/<taskId>`, and an item in it under the agent that posted it,
  *   `/agent/<agentId>/inbox/<itemId>`, whose task, where it has one, is the
  *   reader's to find, by the agent, to open the item in that task's Inbox;
  * - a channel of the workspace, `/channel/<channelId>`, whose threads are
@@ -355,7 +356,10 @@ const linkPlaceSchema = EffectSchema.Union([
     agentId: idSchema,
     messageId: idSchema,
   }),
-  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.INBOX) }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(LINK_PLACE.INBOX),
+    planId: EffectSchema.optionalKey(idSchema),
+  }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.INBOX_ITEM),
     planId: idSchema,
@@ -528,7 +532,7 @@ function placeFields(steps: readonly string[]) {
     case STEP.AGENT:
       return id === undefined ? undefined : agentFields(undefined, id, rest);
     case STEP.INBOX:
-      return id === undefined ? { kind: LINK_PLACE.INBOX } : undefined;
+      return inboxFields(id, rest);
     case STEP.CHANNEL:
       return id === undefined || rest.length > 0
         ? undefined
@@ -555,6 +559,14 @@ function placeFields(steps: readonly string[]) {
     default:
       return undefined;
   }
+}
+
+/** The Inbox's fields past its step: the Inbox, or the Inbox narrowed to one task, `plan/<taskId>`. */
+function inboxFields(step: string | undefined, rest: readonly string[]) {
+  if (step === undefined) return { kind: LINK_PLACE.INBOX };
+  const [taskId, ...more] = rest;
+  if (!TASK_STEPS.has(step) || taskId === undefined || more.length > 0) return undefined;
+  return { kind: LINK_PLACE.INBOX, planId: taskId };
 }
 
 /** The Admin place's fields past its step: its Overview, a section, an account's page, or a day's. */
@@ -609,7 +621,7 @@ function placePath(place: LinkPlace): readonly string[] {
     case LINK_PLACE.MESSAGE:
       return [...agentPath(place.planId, place.agentId), STEP.MESSAGE, place.messageId];
     case LINK_PLACE.INBOX:
-      return [STEP.INBOX];
+      return place.planId === undefined ? [STEP.INBOX] : [STEP.INBOX, STEP.PLAN, place.planId];
     case LINK_PLACE.INBOX_ITEM:
       return "planId" in place
         ? [STEP.PLAN, place.planId, STEP.INBOX, place.itemId]

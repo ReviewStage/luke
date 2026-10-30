@@ -97,6 +97,7 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
     `${HOME}/agent/${AGENT}/page/${OTHER}`,
   ],
   [{ kind: LINK_PLACE.INBOX }, `${HOME}/inbox`],
+  [{ kind: LINK_PLACE.INBOX, planId: TASK }, `${HOME}/inbox/plan/${TASK}`],
   [
     { kind: LINK_PLACE.INBOX_ITEM, planId: TASK, itemId: OTHER },
     `${HOME}/plan/${TASK}/inbox/${OTHER}`,

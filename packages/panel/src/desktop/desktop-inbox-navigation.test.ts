@@ -32,7 +32,7 @@ import { beforeAll, test } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
-import { chooseChannel, leaveChannel } from "../tasks/use-channels.js";
+import { chooseChannel, chooseInboxTask, leaveChannel } from "../tasks/use-channels.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import {
   type AnyAct,
@@ -1378,6 +1378,33 @@ test("a channel narrows the Inbox to its own threads, everyone's, under its name
     rowTitles(page),
     [EXPIRY.title, THRESHOLD.title],
     "#general's threads alone, a teammate's among them, the latest first",
+  );
+});
+
+test("a task chosen narrows the Inbox to its own items under a chip naming it, whose × lists every task's items again", async () => {
+  world.inboxes = new Map([
+    [BILLING.id, [THRESHOLD, RETRY]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  showScope(page, "All");
+  await settle();
+
+  act(() => chooseInboxTask(BILLING.id));
+  await settle();
+  const narrowed = rowTitles(page).toSorted();
+  const chip = page.querySelector<HTMLElement>('[aria-label="Show every task\'s items"]');
+  const named = chip?.closest(".inbox-tasks-chips")?.textContent;
+  await act(async () => chip?.click());
+  await settle();
+
+  assert.deepEqual(narrowed, [RETRY.title, THRESHOLD.title].toSorted(), "Billing's items alone");
+  assert.ok(named?.includes(BILLING.name), `the chip names the task: ${named}`);
+  assert.deepEqual(
+    rowTitles(page).toSorted(),
+    [EXPIRY.title, RETRY.title, THRESHOLD.title].toSorted(),
+    "the × lists every task's items again",
   );
 });
 

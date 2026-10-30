@@ -363,6 +363,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     inboxItemReveal: undefined,
     onInboxItemRevealed: ignore,
     onSectionRevealed: ignore,
+    onShowInboxTab: ignore,
     onShowInbox: ignore,
     inbox: [],
     inboxShown: null,

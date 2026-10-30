@@ -17,7 +17,7 @@ import { useAppCommand } from "./app-commands.js";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
 import { useHoldChordLinks } from "./copy-link-item.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
-import { type ShownChannel, useShownChannel } from "./tasks/use-channels.js";
+import { type ShownChannel, useInboxTask, useShownChannel } from "./tasks/use-channels.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/use-tasks-tab.js";
 
@@ -56,7 +56,9 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/u
  *
  * With Channels on, an Inbox narrowed to a channel has the channel's link
  * in the Inbox's, and its chosen thread's link is at hand before it as an
- * item's is, naming the step in its place where it stands alone.
+ * item's is, naming the step in its place where it stands alone. An Inbox
+ * narrowed to a task, Channels on or off, has the task's Inbox link,
+ * `/inbox/plan/<taskId>`, in the Inbox's.
  */
 
 /** The side panel's own element, inside which the keyboard makes its tab the thing at hand. */
@@ -115,6 +117,8 @@ export interface WindowAt {
   readonly narrow?: boolean;
   /** The channel the Inbox is narrowed to, with Channels on. */
   readonly channel?: ShownChannel | undefined;
+  /** The task the Inbox is narrowed to, Channels on or off. */
+  readonly inboxTask?: string | undefined;
 }
 
 const PageWorkspaceContext = createContext<(held: PageWorkspace | undefined) => void>(
@@ -317,16 +321,18 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     );
   }
   if (tasks.inboxView.open) {
-    const inbox = at_({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX);
+    // An Inbox narrowed to a task is linked by it, so a copied link or a reload opens it narrowed again.
+    const inboxPlace: LinkPlace =
+      at.inboxTask === undefined
+        ? { kind: LINK_PLACE.INBOX }
+        : { kind: LINK_PLACE.INBOX, planId: at.inboxTask };
+    const inbox = at_(inboxPlace, LINK_THING.INBOX);
     const { chosen } = tasks.inboxView;
     if (chosen === undefined) return [inbox];
     const item = inboxItemPlace(chosen);
     // An item standing alone, in a narrow room or an Inbox showing one column by its own width, is a step of its own.
     if (at.narrow === true || tasks.inboxView.single === true) {
-      return [
-        at_(item, LINK_THING.INBOX_ITEM),
-        within({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX),
-      ];
+      return [at_(item, LINK_THING.INBOX_ITEM), within(inboxPlace, LINK_THING.INBOX)];
     }
     return [within(item, LINK_THING.INBOX_ITEM), inbox];
   }
@@ -406,6 +412,7 @@ export function useCopyLink(
     copyWords(linkOf(held.link.place, held.link.workspace), LINK_COPY.COPIED);
   const [pageWorkspace, onPageWorkspace] = useState<PageWorkspace | undefined>(undefined);
   const channel = useShownChannel(tasks.workspace?.id);
+  const inboxTask = useInboxTask();
   const linksAt = (sidePanelFocused: boolean) =>
     linksAtHand(tasks, {
       settings,
@@ -413,6 +420,7 @@ export function useCopyLink(
       pageWorkspace,
       narrow: room === SHELL_ROOM.NARROW,
       channel,
+      inboxTask,
     });
   useAppCommand(
     APP_COMMAND.COPY_LINK,

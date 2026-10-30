@@ -1604,6 +1604,13 @@ export function channelGroups(
   });
 }
 
+/** The groups of an Inbox narrowed to one task: that task's alone, as a task's "needs you" count opens it. */
+export function taskGroups(groups: readonly InboxGroup[], taskId: string): readonly InboxGroup[] {
+  return groups.filter(
+    ({ holder }) => holder.kind === INBOX_HOLDER.TASK && holder.task.id === taskId,
+  );
+}
+
 /**
  * Every open item, whoever's, the latest changed first, as Home and a
  * person's page list what waits (`use-waiting-items.ts`).
