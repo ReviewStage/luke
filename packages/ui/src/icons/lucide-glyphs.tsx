@@ -1,6 +1,7 @@
 import {
   AudioLines,
   Bold,
+  Bot,
   CircleAlert,
   CircleCheck,
   Code,
@@ -41,7 +42,9 @@ import { lucideGlyph } from "./lucide-glyph.js";
  * Tabler's (the plug and both pins), each beside a Lucide glyph of the same
  * meaning. They are Lucide's drawing now, in our stroke (`lucide-glyph.tsx`),
  * so there is one drawing of each. A name here goes when the last screen that
- * imports it draws the glyph through `GLYPH` instead.
+ * imports it draws the glyph through `GLYPH` instead. The one name that is
+ * no copy is `AgentPlaceholderIcon`, Lucide's robot in the muted ink, which
+ * stands where `glyphs.tsx` once held an agent's mark's box empty.
  */
 
 /** Two halves of a plug joined, for the services an account connects: Settings' Integrations page. */
@@ -73,6 +76,14 @@ export const CommentsIcon = lucideGlyph(MessageSquare, "icon-button-glyph");
 
 /** A sound wave's bars: a call into an agent, which starts one where none is up. */
 export const WaveformIcon = lucideGlyph(AudioLines, "icon-button-glyph");
+
+/**
+ * The worker's robot in the muted ink: an agent whose harness is not known
+ * yet, until the harness's mark takes its place. Note that it is muted,
+ * because beside the harnesses' coloured marks a robot in the full ink would
+ * read as the agent's own mark rather than a stand-in for one.
+ */
+export const AgentPlaceholderIcon = lucideGlyph(Bot, "settings-icon text-muted-foreground");
 
 /*
  * The writing glyphs: what the format toolbar, Turn into, and the `/` menu

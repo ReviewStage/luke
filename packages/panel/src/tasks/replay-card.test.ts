@@ -16,6 +16,7 @@ import {
   type AgentTranscriptMessage,
 } from "@luke/features/agent-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
@@ -400,11 +401,11 @@ test("on an agent's own page, which lists no source, the card names the source a
     false,
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
-  // The read named the source's model, so its chip wears its harness's mark rather than the empty box of none known.
+  // The read named the source's model, so its chip wears its harness's mark rather than the robot of none known.
   const mark = container.querySelector(
     "[data-replay-card] ~ .luke-disclosure-actions .actor-mark svg",
   );
-  assert.ok((mark?.childElementCount ?? 0) > 0);
+  assert.equal(mark?.getAttribute("data-provider"), MODEL_PROVIDER.ANTHROPIC);
   press(container.querySelector("[data-replay-card] ~ .luke-disclosure-actions [data-actor-ref]"));
   assert.deepEqual(opened, []);
   assert.deepEqual(places, [{ kind: LINK_PLACE.AGENT, planId: TASK_ID, agentId: SOURCE.id }]);

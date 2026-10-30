@@ -245,7 +245,7 @@ export function archivedByReading(
 
 /**
  * A subagent or a brain's worker as its card's tile draws it: the harness
- * its model runs in, or the empty box where the model is not known, giving
+ * its model runs in, or the muted robot where the model is not known, giving
  * way to the working mark while it works, as an agent's tile does.
  */
 export function subagentActor(model: string | undefined, state: GlyphState, name: string): Actor {
