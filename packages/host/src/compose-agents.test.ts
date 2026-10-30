@@ -486,6 +486,17 @@ function fakeService() {
         asked.push(`pull-request-viewed:${agentId}`);
         return { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
       }),
+    // Note that a pull request by its repository is no concern of these tests, so each of its reads answers nothing.
+    repositoryPullRequest: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    repositoryChanges: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    repositoryOverviewPullRequest: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    repositoryOverviewChecks: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    repositoryOverviewConversation: () =>
+      Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    repositoryPullRequestAction: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    repositoryPullRequestViewed: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    repositoryChapters: () => Effect.succeed(CHAPTERS),
+    repositoryGenerateChapters: () => Effect.succeed(CHAPTERS),
     githubImage: (agentId, src) =>
       Effect.sync(() => {
         asked.push(`github-image:${agentId}:${src}`);

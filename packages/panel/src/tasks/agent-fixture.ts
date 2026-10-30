@@ -25,6 +25,7 @@ import {
   AGENT_SENDER,
   AGENT_STATUS,
   type AgentChangedFile,
+  type AgentPullRequestAnswer,
   type AgentSummary,
   type AgentTranscriptMessage,
   CHANGED_FILE_STATUS,
@@ -953,6 +954,29 @@ function terminalStage(stage: AgentStage): TerminalStage | undefined {
   return "terminal" in stage ? stage.terminal : undefined;
 }
 
+/** What the agent published: its branch and the pull request from it. */
+const PUBLISHED: AgentPullRequestAnswer = {
+  repository: REPOSITORY,
+  branch: PULL_REQUEST.head,
+  pullRequest: {
+    number: PULL_REQUEST.number,
+    title: PULL_REQUEST.title,
+    url: PULL_REQUEST.url,
+    state: PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: ADDITIONS,
+    deletions: DELETIONS,
+    changedFiles: CHANGED_FILES.length,
+    queued: true,
+  },
+};
+
+/** Which of the pull request's files the member marked viewed on GitHub. */
+const VIEWED = {
+  outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+  files: [{ path: "src/db/schema/memberships.ts", state: FILE_VIEWED_STATE.VIEWED }],
+};
+
 /** One kind's answer, from its payload and the profile's stage. */
 type StagedAnswer<Kind extends PortActKind> = (
   payload: PortActPayload<Kind>,
@@ -969,21 +993,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     failure: AGENT_CALL_FAILURE.NOT_FOUND,
   }),
   [ACT_KIND.AGENTS_PICTURE]: () => longRunPicture(),
-  [ACT_KIND.AGENTS_PULL_REQUEST]: () => ({
-    repository: REPOSITORY,
-    branch: PULL_REQUEST.head,
-    pullRequest: {
-      number: PULL_REQUEST.number,
-      title: PULL_REQUEST.title,
-      url: PULL_REQUEST.url,
-      state: PULL_REQUEST_STATE.OPEN,
-      checks: CHECK_SUMMARY.PASSING,
-      additions: ADDITIONS,
-      deletions: DELETIONS,
-      changedFiles: CHANGED_FILES.length,
-      queued: true,
-    },
-  }),
+  [ACT_KIND.AGENTS_PULL_REQUEST]: () => PUBLISHED,
   [ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST]: () => OVERVIEW_PULL_REQUEST,
   [ACT_KIND.AGENTS_OVERVIEW_CHECKS]: () => OVERVIEW_CHECKS,
   [ACT_KIND.AGENTS_OVERVIEW_CONVERSATION]: () => OVERVIEW_CONVERSATION,
@@ -993,11 +1003,16 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     teams: [],
   }),
   [ACT_KIND.AGENTS_CHANGES]: () => CHANGES,
-  [ACT_KIND.AGENTS_PULL_REQUEST_VIEWED]: () => ({
-    outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
-    files: [{ path: "src/db/schema/memberships.ts", state: FILE_VIEWED_STATE.VIEWED }],
-  }),
+  [ACT_KIND.AGENTS_PULL_REQUEST_VIEWED]: () => VIEWED,
   [ACT_KIND.CHAPTERS_READ]: () => CHAPTERS,
+  // Note that the same pull request read by its repository and number answers as the agent's does.
+  [ACT_KIND.PULL_REQUESTS_READ]: () => PUBLISHED,
+  [ACT_KIND.PULL_REQUESTS_OVERVIEW_PULL_REQUEST]: () => OVERVIEW_PULL_REQUEST,
+  [ACT_KIND.PULL_REQUESTS_OVERVIEW_CHECKS]: () => OVERVIEW_CHECKS,
+  [ACT_KIND.PULL_REQUESTS_OVERVIEW_CONVERSATION]: () => OVERVIEW_CONVERSATION,
+  [ACT_KIND.PULL_REQUESTS_CHANGES]: () => CHANGES,
+  [ACT_KIND.PULL_REQUESTS_VIEWED]: () => VIEWED,
+  [ACT_KIND.PULL_REQUESTS_CHAPTERS]: () => CHAPTERS,
   [ACT_KIND.TASKS_FILE]: ({ path, firstLine, lastLine, raw }) => {
     const lines = FILES.get(path);
     if (lines === undefined) return { refusal: TASK_FILE_REFUSAL.MISSING };

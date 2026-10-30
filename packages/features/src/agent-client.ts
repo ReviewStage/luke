@@ -56,6 +56,7 @@ import {
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
+  type RepositoryPullRequestParams,
 } from "./agent-view.js";
 import {
   AGENT_LIST_ARCHIVED,
@@ -229,6 +230,13 @@ const ROW_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
 } satisfies NamedRefusals;
 
+/** The refusals a read or a change of a pull request by its repository can answer with: no such pull request to the caller, its repository out of the workspace's reach, or GitHub not answering. */
+const REPOSITORY_PULL_REQUEST_REFUSALS = {
+  [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
+} satisfies NamedRefusals;
+
 /** The refusals an archive or a delete can answer with: the agent gone, or one still starting or awaiting its turn, which has no turn to stop yet. */
 const ARCHIVE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
@@ -395,6 +403,15 @@ function wireRequestOf<Request, Encoded>(
   const admitted = Result.getOrUndefined(readEither(schema)(request));
   if (admitted === undefined) return undefined;
   return Option.getOrUndefined(Schema.encodeOption(schema)(admitted));
+}
+
+/** A pull request named by its repository and number, as the query of a read by them spells it. */
+function numberedQuery(place: RepositoryPullRequestParams) {
+  return {
+    workspaceId: place.workspaceId,
+    repository: place.repository,
+    number: String(place.number),
+  };
 }
 
 /** The agent and, where the tab names one, the pull request of its repository a read is about, the number as its query spells it. */
@@ -1314,6 +1331,101 @@ export class HostedAgentClient {
     return hostedAnswer(
       askHosted(this.#hosted.agentPullRequests.viewed, pullRequestRead(agentId, number)),
       ROW_REFUSALS,
+    );
+  }
+
+  /** A pull request of a workspace's repository by its number, no agent's, as GitHub holds it now, with the branch it is from. */
+  repositoryPullRequest(
+    place: RepositoryPullRequestParams,
+  ): Effect.Effect<AgentPullRequestAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(this.#hosted.pullRequests.pullRequest, numberedQuery(place)),
+      REPOSITORY_PULL_REQUEST_REFUSALS,
+    );
+  }
+
+  /** That pull request's changed files as GitHub holds them now. */
+  repositoryChanges(
+    place: RepositoryPullRequestParams,
+  ): Effect.Effect<AgentChangesAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(this.#hosted.pullRequests.changes, numberedQuery(place)),
+      REPOSITORY_PULL_REQUEST_REFUSALS,
+    );
+  }
+
+  /** That pull request itself as its overview draws it. */
+  repositoryOverviewPullRequest(
+    place: RepositoryPullRequestParams,
+  ): Effect.Effect<AgentOverviewPullRequestAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(this.#hosted.pullRequests.overviewPullRequest, numberedQuery(place)),
+      REPOSITORY_PULL_REQUEST_REFUSALS,
+    );
+  }
+
+  /** The checks on that pull request's head as GitHub holds them now. */
+  repositoryOverviewChecks(
+    place: RepositoryPullRequestParams,
+  ): Effect.Effect<AgentOverviewChecksAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(this.#hosted.pullRequests.overviewChecks, numberedQuery(place)),
+      REPOSITORY_PULL_REQUEST_REFUSALS,
+    );
+  }
+
+  /** That pull request's conversation and where its reviewers stand. */
+  repositoryOverviewConversation(
+    place: RepositoryPullRequestParams,
+  ): Effect.Effect<AgentOverviewConversationAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(this.#hosted.pullRequests.overviewConversation, numberedQuery(place)),
+      REPOSITORY_PULL_REQUEST_REFUSALS,
+    );
+  }
+
+  /** One change to that pull request, made on GitHub as the account on its own sign-in, as `pullRequestAction` makes one to an agent's. */
+  repositoryPullRequestAction(
+    place: RepositoryPullRequestParams,
+    request: PullRequestActionRequest,
+  ): Effect.Effect<AgentPullRequestWriteAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(pullRequestActionRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(
+      askHosted(this.#hosted.pullRequests.action, { query: numberedQuery(place), body: admitted }),
+      REPOSITORY_PULL_REQUEST_REFUSALS,
+    );
+  }
+
+  /** Which of that pull request's files the member marked viewed on GitHub, read on their own sign-in. */
+  repositoryPullRequestViewed(
+    place: RepositoryPullRequestParams,
+  ): Effect.Effect<AgentPullRequestViewedAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(this.#hosted.pullRequests.viewed, numberedQuery(place)),
+      REPOSITORY_PULL_REQUEST_REFUSALS,
+    );
+  }
+
+  /** The workspace's newest chapters of that pull request; nothing is generated by the read. */
+  repositoryChapters(
+    place: RepositoryPullRequestParams,
+  ): Effect.Effect<PullRequestChaptersAnswerView, never, HttpClient.HttpClient> {
+    return chaptersAnswer(
+      askHosted(this.#hosted.pullRequestChapters.repositoryRead, numberedQuery(place)),
+    );
+  }
+
+  /** That pull request's chapters generated for its head now, or the generation already under way, as `generateChapters` answers; held for as long as a generation may take. */
+  repositoryGenerateChapters(
+    place: RepositoryPullRequestParams,
+  ): Effect.Effect<PullRequestChaptersAnswerView, never, HttpClient.HttpClient> {
+    return chaptersAnswer(
+      askHosted(
+        this.#hosted.pullRequestChapters.repositoryGenerate,
+        { query: numberedQuery(place) },
+        HOSTED_DEADLINE.CHAPTERS,
+      ),
     );
   }
 

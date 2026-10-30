@@ -78,6 +78,9 @@ import {
   providerKeyForAgentsParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
+  type RepositoryPullRequestParams,
+  repositoryPullRequestActionParamsSchema,
+  repositoryPullRequestParamsSchema,
   TRANSCRIPT_KIND,
 } from "@luke/features/agent-view";
 import { AGENT_ARCHIVER, CONTEXT_WINDOW } from "@luke/features/agent-wire";
@@ -105,6 +108,7 @@ import {
   invalid,
   readParams,
 } from "@luke/gateway";
+import type { WireRecord } from "@luke/wire";
 import { Effect, Equal, FiberHandle, FiberMap, Option, RcMap, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
@@ -219,6 +223,15 @@ export type AgentClient = Pick<
   | "githubImage"
   | "pullRequestAction"
   | "pullRequestViewed"
+  | "repositoryPullRequest"
+  | "repositoryChanges"
+  | "repositoryOverviewPullRequest"
+  | "repositoryOverviewChecks"
+  | "repositoryOverviewConversation"
+  | "repositoryPullRequestAction"
+  | "repositoryPullRequestViewed"
+  | "repositoryChapters"
+  | "repositoryGenerateChapters"
   | "readProviderKeys"
   | "saveProviderKey"
   | "removeProviderKey"
@@ -444,6 +457,22 @@ function composed(
       (answered): RowWritten<AgentRow, AgentAgentAnswer> | RowRefused<AgentAgentAnswer> =>
         "agent" in answered ? { answer: answered, txid: answered.txid } : { refused: answered },
     );
+
+  /** A read of a pull request named by its repository and number, no agent's: its params read, then the service's answer carried as it came. */
+  const byRepository = <Answer>(
+    params: WireRecord,
+    read: (
+      place: RepositoryPullRequestParams,
+    ) => Effect.Effect<Answer, never, HttpClient.HttpClient>,
+  ) =>
+    Effect.gen(function* () {
+      const place = yield* readParams(
+        repositoryPullRequestParamsSchema,
+        params,
+        "a pull request by its repository names the workspace, the repository, and the number",
+      );
+      return carried(yield* asked(read(place)));
+    });
 
   /** What this host holds of one transcript for the account signed in as the follow opens; nothing is held while nobody is. */
   const memoryOf = (key: TranscriptKey): TranscriptMemory => {
@@ -1010,6 +1039,32 @@ function composed(
         );
         const answer = yield* asked(client.githubImage(agentId, src));
         return carried<AgentGitHubImageView>(answer);
+      }),
+    [GATEWAY_METHOD.PULL_REQUESTS_READ]: (params) =>
+      byRepository(params, (place) => client.repositoryPullRequest(place)),
+    [GATEWAY_METHOD.PULL_REQUESTS_CHANGES]: (params) =>
+      byRepository(params, (place) => client.repositoryChanges(place)),
+    [GATEWAY_METHOD.PULL_REQUESTS_OVERVIEW_PULL_REQUEST]: (params) =>
+      byRepository(params, (place) => client.repositoryOverviewPullRequest(place)),
+    [GATEWAY_METHOD.PULL_REQUESTS_OVERVIEW_CHECKS]: (params) =>
+      byRepository(params, (place) => client.repositoryOverviewChecks(place)),
+    [GATEWAY_METHOD.PULL_REQUESTS_OVERVIEW_CONVERSATION]: (params) =>
+      byRepository(params, (place) => client.repositoryOverviewConversation(place)),
+    [GATEWAY_METHOD.PULL_REQUESTS_VIEWED]: (params) =>
+      byRepository(params, (place) => client.repositoryPullRequestViewed(place)),
+    [GATEWAY_METHOD.PULL_REQUESTS_CHAPTERS]: (params) =>
+      byRepository(params, (place) => client.repositoryChapters(place)),
+    [GATEWAY_METHOD.PULL_REQUESTS_CHAPTERS_GENERATE]: (params) =>
+      byRepository(params, (place) => client.repositoryGenerateChapters(place)),
+    [GATEWAY_METHOD.PULL_REQUESTS_ACTION]: (params) =>
+      Effect.gen(function* () {
+        const { request, ...place } = yield* readParams(
+          repositoryPullRequestActionParamsSchema,
+          params,
+          "changing a pull request by its repository names it and the change",
+        );
+        const answer = yield* asked(client.repositoryPullRequestAction(place, request));
+        return carried<AgentPullRequestWriteAnswerView>(answer);
       }),
     // Note that the windows' hold on a scope is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AGENTS_INBOX_FOLLOW]: (params) =>
