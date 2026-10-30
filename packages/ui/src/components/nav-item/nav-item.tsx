@@ -82,9 +82,9 @@ const STEP_NAME = "luke-nav-item-name min-w-0 line-clamp-2 wrap-break-word";
 /** A step's name and its meta line, one over the other in the room the glyph and the end leave. */
 const STEP_WORDS = "luke-nav-item-words flex min-w-0 flex-1 flex-col";
 
-/** A menu's chevron at the end is the small, muted one a chip's is. */
+/** A menu's chevron at the end is the small, muted one a chip's is, centred in a glyph's room so it stands on the column the row ends' glyphs share. */
 const MARK =
-  "luke-nav-item-mark inline-flex [&>svg.settings-chevron]:size-luke-12 [&>svg.settings-chevron]:text-muted-foreground";
+  "luke-nav-item-mark inline-flex [&>svg.settings-chevron]:mx-luke-2 [&>svg.settings-chevron]:size-luke-12 [&>svg.settings-chevron]:text-muted-foreground";
 
 /** What a nav item is: a place, or who or where. A fold's head is `GroupHeader`. */
 export const NAV_ITEM_VARIANT = {
