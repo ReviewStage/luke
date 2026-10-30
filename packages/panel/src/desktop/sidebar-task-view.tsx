@@ -90,6 +90,8 @@ function assignedToChoices(
             ? { kind: ASSIGNED_TO.ME }
             : { kind: ASSIGNED_TO.MEMBER, userId: filter.userId },
       ),
+    // Me is the list's default, so it is offered and checked even before the reader's id is read.
+    meWithoutId: true,
     meFirst: true,
   });
   return [...people, ...memberReadNotice(reader)];
