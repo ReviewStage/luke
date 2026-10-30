@@ -1220,7 +1220,7 @@ const NO_REPLIES: readonly QueuedReply[] = [];
 
 /** A reply queue held for as long as the component holding it is mounted. */
 function useOwnReplyQueue(): ReplyQueue {
-  const { after } = useSendQueue();
+  const { after, settled } = useSendQueue();
   const [lines, setLines] = useState(NO_REPLIES);
   const held = useRef(lines);
   const now = useCallback(() => held.current, []);
@@ -1228,7 +1228,7 @@ function useOwnReplyQueue(): ReplyQueue {
     held.current = next(held.current);
     setLines(held.current);
   }, []);
-  return useMemo(() => ({ after, lines, now, change }), [after, lines, now, change]);
+  return useMemo(() => ({ after, settled, lines, now, change }), [after, settled, lines, now, change]);
 }
 
 /** The reply queue the comments' scope holds (`CommentFocusScope`), which every thread's field shares. */
