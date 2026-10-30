@@ -171,6 +171,8 @@ import { useSidebarReadAll } from "./sidebar-read-all.js";
 import {
   type DrawnSection,
   moveToSectionEntry,
+  NEW_SECTION,
+  newSectionAction,
   PINNED_DROP_ZONE,
   rowMember,
   SidebarSections,
@@ -1834,9 +1836,9 @@ function SidebarColumn({
   };
   const folds = useFoldedGroups(sidebar.staged);
   const taskView = useTaskListView(tasks.workspace?.id, sidebar.staged);
-  // The Tasks head's menu, which offers New section, from its ⋯, a right-click, and a long press.
+  // The Tasks head's New section, pressed on its button, or offered on a right-click and a long press.
   const tasksHeadMenu = useMenu(tasks.shown && overlay.inSight);
-  const tasksHeadEllipsis = useRef<HTMLButtonElement | null>(null);
+  const newSectionButton = useRef<HTMLButtonElement | null>(null);
   const reader = useMemberDirectory();
   // Only a workspace somebody shares has people to filter by, so one nobody shares lists every task.
   const { memberCount } = tasks.workspace ?? {};
@@ -1956,22 +1958,13 @@ function SidebarColumn({
   const { chosen } = overlay;
   // The reader's own tasks, which the list holds until the reader chooses otherwise, and the chip's × lists again.
   const mine: AssignedTo = { kind: ASSIGNED_TO.ME };
-  // New section stands in the Tasks head's menu while the account keeps sections.
+  // New section stands on the Tasks head while the account keeps sections.
+  const askNewSection = chosen(() => {
+    const { workspace } = tasks;
+    if (workspace !== undefined) sectionDialogs.askNew(workspace.id);
+  });
   const tasksHeadGroups: MenuAction[][] =
-    sectionsShown && tasks.workspace !== undefined
-      ? [
-          [
-            {
-              label: "New section…",
-              icon: <FolderPlusIcon />,
-              onSelect: chosen(() => {
-                const { workspace } = tasks;
-                if (workspace !== undefined) sectionDialogs.askNew(workspace.id);
-              }),
-            },
-          ],
-        ]
-      : [];
+    sectionsShown && tasks.workspace !== undefined ? [[newSectionAction(askNewSection)]] : [];
   // Note that the count reads every listed task, not the rows the view draws, which hides the finished ones by default.
   const childCounts = useMemo(() => childTaskCounts(tasks.listed.tasks), [tasks.listed.tasks]);
   const context: RowContext = {
@@ -2353,17 +2346,20 @@ function SidebarColumn({
                         contextMenu={
                           tasksHeadGroups.length === 0
                             ? undefined
-                            : tasksHeadMenu.contextMenu(tasksHeadEllipsis)
+                            : tasksHeadMenu.contextMenu(newSectionButton)
                         }
                         actions={
                           <>
                             {tasksHeadGroups.length === 0 ? null : (
-                              <MoreButton
-                                ref={tasksHeadEllipsis}
-                                thing="Tasks"
-                                size={BUTTON_SIZE.COMPACT}
-                                {...tasksHeadMenu.trigger()}
-                              />
+                              <Tooltip label={NEW_SECTION}>
+                                <IconButton
+                                  ref={newSectionButton}
+                                  icon={<FolderPlusIcon />}
+                                  label={NEW_SECTION}
+                                  size={BUTTON_SIZE.COMPACT}
+                                  onClick={askNewSection}
+                                />
+                              </Tooltip>
                             )}
                             <TaskViewOptions
                               shown={tasks.shown && overlay.inSight}
