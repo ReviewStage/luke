@@ -49,11 +49,9 @@ import {
   SUBJECT_FIT,
   TaskStatusMark,
   TEXT_ELEMENT,
-  TEXT_LINK_LOOK,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  TextLink,
   useAnnounce,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
@@ -174,7 +172,7 @@ import { EditComposer } from "./edit-composer.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
 import { GitHubLineCard, ThreadLineHead, TranscriptAgent } from "./line-cards.js";
-import { linkChip } from "./mention-chip.js";
+import { CHIP_OR_LINK_FRAME, ChipOrLink } from "./mention-chip.js";
 import {
   agentMessagePlace,
   MESSAGE_GONE,
@@ -183,7 +181,7 @@ import {
 } from "./message-links.js";
 import { PilotComposerNote } from "./pilot-note.js";
 import { PlanPictures } from "./plan-pictures.js";
-import { ORIGIN_CHIP, ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
+import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection.js";
 import { REWIND_ACTION, RewindProvider, rewindPoints, useMessageEdit } from "./rewind-action.js";
@@ -1161,21 +1159,14 @@ function OriginSubject({
         {words}
       </OneLine>
     );
-  const chip = linkChip(url, words, doors);
-  if (chip !== undefined) return <span className={ORIGIN_CHIP}>{chip}</span>;
   return (
-    <OneLine className="agent-origin-subject" words={words}>
-      <TextLink
-        href={url}
-        look={TEXT_LINK_LOOK.UNDERLINED}
-        onClick={(event) => {
-          event.preventDefault();
-          openGitHub(url);
-        }}
-      >
-        {words}
-      </TextLink>
-    </OneLine>
+    <ChipOrLink
+      href={url}
+      words={words}
+      doors={doors}
+      onOpen={openGitHub}
+      frame={CHIP_OR_LINK_FRAME.SUBJECT}
+    />
   );
 }
 

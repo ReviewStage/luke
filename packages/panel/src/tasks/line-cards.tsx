@@ -12,8 +12,6 @@ import {
   EventNotes,
   type SubjectFit,
   SubjectLine,
-  TEXT_LINK_LOOK,
-  TextLink,
 } from "@luke/ui";
 import { CircleCheckIcon, CircleSlashIcon, GLYPH } from "@luke/ui/icons";
 import {
@@ -35,11 +33,10 @@ import {
 } from "./agent-model.js";
 import { CheckList, CheckRow } from "./agent-pull-request-tab.js";
 import { FileTypeIcon } from "./file-type-icon.js";
-import { linkChip, type MentionDoors } from "./mention-chip.js";
+import { ChipOrLink, linkChip, type MentionDoors } from "./mention-chip.js";
 import { ReviewBadge } from "./pull-request-people.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
-import { useOpenLink } from "./use-open-link.js";
 
 /**
  * line-cards.tsx -- a line steered into an agent drawn from what its metadata says carried it: a thread's line under its head, and GitHub's word as its card.
@@ -59,34 +56,6 @@ import { useOpenLink } from "./use-open-link.js";
  * card with nothing under its head is its head alone, with no chevron. The
  * instructions and the fence are left to the agent.
  */
-
-/** A link in a card's words, opened as the window opens links: the chip of what it names where the transcript draws one (`linkChip`) and `doors` are given, else the link. */
-function CardLink({
-  href,
-  label,
-  doors,
-}: {
-  href: string;
-  label: string;
-  /** The doors a chip opens through; none for a link that stays a link, as a note's place does, whose page is a line of the pull request rather than the pull request. */
-  doors?: MentionDoors | undefined;
-}): ReactNode {
-  const openLink = useOpenLink();
-  const chip = doors === undefined ? undefined : linkChip(href, label, doors);
-  if (chip !== undefined) return chip;
-  return (
-    <TextLink
-      href={href}
-      look={TEXT_LINK_LOOK.UNDERLINED}
-      onClick={(event) => {
-        event.preventDefault();
-        openLink(href);
-      }}
-    >
-      {label}
-    </TextLink>
-  );
-}
 
 /** The agent whose transcript is drawn, whose threads its thread lines are on; none where no transcript says. */
 export const TranscriptAgent = createContext<string | undefined>(undefined);
@@ -239,7 +208,7 @@ function commentNote(
     glyph: <FileTypeIcon name={name} />,
     where: (
       <>
-        <CardLink href={comment.url} label={comment.path} />
+        <ChipOrLink href={comment.url} words={comment.path} />
         {comment.line === undefined ? null : (
           <span className="text-muted-foreground"> L{comment.line}</span>
         )}
@@ -322,7 +291,7 @@ export function GitHubLineCard({
             {sender == null ? null : <span className="inline-flex min-w-0">{sender}</span>}
             <span className="flex-none text-muted-foreground">{head.does}</span>
             <span className="inline-flex flex-none">
-              <CardLink href={pullRequestPage(line)} label={head.target} doors={doors} />
+              <ChipOrLink href={pullRequestPage(line)} words={head.target} doors={doors} />
             </span>
           </span>
           {count === "" ? null : <span className="flex-none text-muted-foreground">{count}</span>}

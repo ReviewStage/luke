@@ -45,6 +45,9 @@ import {
   HoverCardNote,
   INLINE_REF_LOOK,
   InlineRef,
+  OneLine,
+  TEXT_LINK_LOOK,
+  TextLink,
   useMinute,
 } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
@@ -912,6 +915,77 @@ export function linkChip(
       doors={placed}
     />
   );
+}
+
+/**
+ * A chip naming what a transcript's opening came from, as the transcript
+ * draws one, which cuts its own name to the line: held to the line's width
+ * so a narrow line cuts the title, never the state after it.
+ */
+export const ORIGIN_CHIP = "agent-origin-chip inline-flex min-w-0 max-w-full";
+
+/** How a place frames what `ChipOrLink` draws. */
+export const CHIP_OR_LINK_FRAME = {
+  /** Either as it stands among the words around it, as a card's words hold it. */
+  BARE: "bare",
+  /** Either held to its line's width (`ORIGIN_CHIP`), as a replay's foot holds its pull request. */
+  ORIGIN: "origin",
+  /** A chip held to its line's width; a link one line, cut short, as an opening's subject is. */
+  SUBJECT: "subject",
+} as const;
+
+export type ChipOrLinkFrame = (typeof CHIP_OR_LINK_FRAME)[keyof typeof CHIP_OR_LINK_FRAME];
+
+/**
+ * A link named in a transcript's line, as the window draws one: the chip of
+ * what it names (`linkChip`), where it names one and `doors` are given;
+ * else its words, underlined, opening it through `onOpen`, or as the window
+ * opens links where none is given; framed as its place asks (`frame`).
+ */
+export function ChipOrLink({
+  href,
+  words,
+  doors,
+  onOpen,
+  frame = CHIP_OR_LINK_FRAME.BARE,
+}: {
+  href: string;
+  words: string;
+  /** The doors a chip opens through; none for a link that stays a link. */
+  doors?: MentionDoors | undefined;
+  /** Opens the link where it is no chip; none to open it as the window opens links (`useOpenLink`). */
+  onOpen?: ((href: string) => void) | undefined;
+  frame?: ChipOrLinkFrame;
+}): ReactNode {
+  const openLink = useOpenLink();
+  const chip = doors === undefined ? undefined : linkChip(href, words, doors);
+  if (chip !== undefined) {
+    return frame === CHIP_OR_LINK_FRAME.BARE ? chip : <span className={ORIGIN_CHIP}>{chip}</span>;
+  }
+  const link = (
+    <TextLink
+      href={href}
+      look={TEXT_LINK_LOOK.UNDERLINED}
+      onClick={(event) => {
+        event.preventDefault();
+        (onOpen ?? openLink)(href);
+      }}
+    >
+      {words}
+    </TextLink>
+  );
+  switch (frame) {
+    case CHIP_OR_LINK_FRAME.BARE:
+      return link;
+    case CHIP_OR_LINK_FRAME.ORIGIN:
+      return <span className={ORIGIN_CHIP}>{link}</span>;
+    case CHIP_OR_LINK_FRAME.SUBJECT:
+      return (
+        <OneLine className="agent-origin-subject" words={words}>
+          {link}
+        </OneLine>
+      );
+  }
 }
 
 /** What draws a link in Markdown as its chip through the doors given (`linkChip`); a link where it names nothing. */
