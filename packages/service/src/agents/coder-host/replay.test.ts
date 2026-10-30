@@ -35,6 +35,7 @@ const source: Agent = {
   organizationId: randomUUID(),
   automationId: null,
   automationOrigin: null,
+  automationRunId: null,
   startedFrom: null,
   startedByAgentId: null,
   conversationId: randomUUID(),

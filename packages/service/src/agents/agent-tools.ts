@@ -1844,6 +1844,11 @@ export function runStartAgent(
         summaryModel: call.summaryModel,
         noteHeading: START_NOTE_HEADING.AGENT,
         startedBy: caller.agent,
+        // One that lands on no task belongs to the caller's run, if any; one on a task is the task's.
+        // Note that the automation and its origin are not handed on, because either would make it an
+        // automation's agent, which changes who it commits as and how its start is counted.
+        automationRunId:
+          place.taskId === null ? (caller.agent.automationRunId ?? undefined) : undefined,
       }).pipe(Effect.result);
       if (Result.isFailure(started)) {
         const refusal = started.failure;

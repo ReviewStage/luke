@@ -883,6 +883,11 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         assert.equal(agent.model, SOL);
         assert.equal(agent.effort, "low");
         assert.equal(agent.automationId, automation.id, "the agent names the automation it ran");
+        assert.equal(
+          agent.automationRunId,
+          run?.id,
+          "the agent belongs to the run that started it",
+        );
         assert.deepEqual(
           [agent.taskId, agent.organizationId, agent.repository],
           [null, workspaceId, `${RELAY.owner}/${RELAY.name}`],

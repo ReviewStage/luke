@@ -641,6 +641,7 @@ const startClaimed = Effect.fnUntraced(function* (
       serverWords: automation.action.prompt,
       automationId: automation.id,
       automationOrigin: handed.origin,
+      automationRunId: run.id,
       title: subjectTitle(run.firing),
     }),
   );

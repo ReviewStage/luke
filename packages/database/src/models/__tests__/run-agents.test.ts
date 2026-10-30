@@ -80,7 +80,7 @@ it.layer(getTestDB())("a run's agents", (it) => {
             }),
             (recorded) => Option.getOrThrow(recorded).id,
           );
-        const agentOf = (title: string) =>
+        const agentOf = (title: string, automationRunId: string) =>
           Effect.map(
             createAgent(owner, {
               taskId: null,
@@ -88,6 +88,7 @@ it.layer(getTestDB())("a run's agents", (it) => {
               planSnapshot: null,
               prompt: "Triage the new issues.",
               automationId: made.id,
+              automationRunId,
               title,
               idempotencyKey: randomUUID(),
               model: "anthropic/claude-opus-5.5",
@@ -98,20 +99,19 @@ it.layer(getTestDB())("a run's agents", (it) => {
           );
         const run = yield* runOf("manual-1");
         const otherRun = yield* runOf("manual-2");
-        const first = yield* agentOf("Triage run");
-        const second = yield* agentOf("Fix the flaky test");
-        const elsewhere = yield* agentOf("Another run");
-        // Note that nothing writes the column on a start yet, so each row is pointed at its run here,
-        // with a start instant of its own so the order does not hang on the clock's resolution.
+        const first = yield* agentOf("Triage run", run);
+        const second = yield* agentOf("Fix the flaky test", run);
+        const elsewhere = yield* agentOf("Another run", otherRun);
+        // Each row gets a start instant of its own, so the order does not hang on the clock's resolution.
         const db = yield* Database;
-        const belongs = (agentId: string, runId: string, createdAt: string) =>
+        const startedAt = (agentId: string, createdAt: string) =>
           db
             .update(agentTable)
-            .set({ automationRunId: runId, createdAt: new Date(createdAt) })
+            .set({ createdAt: new Date(createdAt) })
             .where(eq(agentTable.id, agentId));
-        yield* belongs(second, run, "2026-10-30T10:05:00Z");
-        yield* belongs(first, run, "2026-10-30T10:00:00Z");
-        yield* belongs(elsewhere, otherRun, "2026-10-30T09:00:00Z");
+        yield* startedAt(second, "2026-10-30T10:05:00Z");
+        yield* startedAt(first, "2026-10-30T10:00:00Z");
+        yield* startedAt(elsewhere, "2026-10-30T09:00:00Z");
 
         const read = yield* readRunAgents(owner, run);
         assert.deepEqual(
