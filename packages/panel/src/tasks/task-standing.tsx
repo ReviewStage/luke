@@ -45,7 +45,7 @@ import { Highlighted } from "../search-field.js";
 import { Picker } from "../settings/picker-row.js";
 import { useTaskCard } from "./chip-cards.js";
 import { type RepositoryChooser, useRepositoryMenu } from "./repository-chip.js";
-import { TaskBlockLines, type TaskBlocksDoor } from "./task-blocks.js";
+import { TaskBlockAdd, TaskBlockLines, type TaskBlocksDoor } from "./task-blocks.js";
 
 /**
  * task-standing.tsx -- a task's head over its plan: the path to it, then the chips that say and change where it stands, how much it matters, and who is on it.
@@ -62,8 +62,9 @@ import { TaskBlockLines, type TaskBlocksDoor } from "./task-blocks.js";
  * window's own menu (`picker-row.tsx`): the status, each of the five with
  * its mark, the priority, each with its bars, and the assignee, each member
  * of the workspace by face and name, the reader first, and No assignee on
- * the dashed unassigned mark; and under them, where the page hands their
- * door, the task's blocks on lines of their own (`task-blocks.tsx`). A pick
+ * the dashed unassigned mark; then, where the page hands their door, Add
+ * relation, until the task's menu adds a block instead, with the task's
+ * blocks on lines of their own under the chips (`task-blocks.tsx`). A pick
  * is handed back for the page to send; without a door to send it, as on an
  * archived task, the chips only say. S, pressed while not typing, opens the
  * status chip's menu, as Linear's S does, and a task row's menu lists what
@@ -470,8 +471,8 @@ function TaskStatusPicker({
 
 /**
  * The task's status, priority, and assignee chips on one line under its
- * title, each a toolbar's chip, and under them the task's blocks where the
- * page hands their door. A task from a service before statuses draws no
+ * title, each a toolbar's chip, then Add relation, and under them the
+ * task's blocks, where the page hands their door. A task from a service before statuses draws no
  * chips, and still its blocks.
  */
 export function TaskStandingChips({
@@ -529,6 +530,9 @@ export function TaskStandingChips({
           assignee={task.assignee}
           onPick={onSet === undefined ? undefined : (assigneeId) => onSet({ assigneeId })}
         />
+        {blocks?.onChange === undefined ? null : (
+          <TaskBlockAdd task={task} door={blocks} onChange={blocks.onChange} />
+        )}
       </Inline>
       {lines}
     </div>
