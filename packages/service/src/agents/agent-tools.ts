@@ -323,8 +323,9 @@ export const UPDATE_TASK_REFUSAL = {
   OPEN_ASK:
     "Not run: a thread of that task still holds an ask open for the developer, which marking " +
     `it done would withdraw. Withdraw each ask of yours it no longer needs with ${AGENT_TOOL.WITHDRAW_ASK} ` +
-    `(${AGENT_TOOL.READ_THREADS} lists them), then mark it done; or leave it as it stands, and ` +
-    "Luke marks it done by itself once they are answered and its work is finished.",
+    `(${AGENT_TOOL.READ_THREADS} lists them), then mark it done; or leave it as it stands until ` +
+    "they are answered: Luke then marks a task whose pull request merged done by itself, and " +
+    "you mark any other done once the answer reaches you.",
   NOT_MEMBER:
     "Not run: that assignee is no member of the task's workspace, or names no person; name a " +
     `member by the mention link ${AGENT_TOOL.LIST_TASKS} hands you, or null for no one.`,
