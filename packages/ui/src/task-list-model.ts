@@ -441,6 +441,21 @@ function finished(task: TaskSummary): boolean {
   return task.status === TASK_STATUS.DONE || task.status === TASK_STATUS.CANCELED;
 }
 
+/** A task's direct sub-tasks, oldest first, so they read in the order they were made; never itself, which no one writes. */
+export function subTasksOf(
+  tasks: readonly TaskSummary[],
+  parentId: string,
+): readonly TaskSummary[] {
+  return tasks
+    .filter((task) => task.parentTaskId === parentId && task.id !== parentId)
+    .toSorted((one, other) => one.createdAt - other.createdAt);
+}
+
+/** How many of `subTasks` are finished (done or canceled), of all of them. */
+export function subTaskCount(subTasks: readonly TaskSummary[]): ChildTaskCount {
+  return { finished: subTasks.filter(finished).length, total: subTasks.length };
+}
+
 /**
  * How many of each parent's child tasks are finished (done or canceled),
  * by the parent's id, for the parents with any. Note that only a task's

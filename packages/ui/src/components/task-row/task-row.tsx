@@ -2,7 +2,7 @@ import { type KeyboardEvent, type ReactNode, type RefObject, useId, useRef } fro
 import { cssCustomProperties } from "../../css.js";
 import { FoldChevronIcon } from "../../face/glyphs.js";
 import { pulseOnPress } from "../../press-pulse.js";
-import { TASK_PROPERTY } from "../../tasks-page-model.js";
+import { LIST_COLUMN, TASK_PROPERTY } from "../../tasks-page-model.js";
 import { BUTTON_SIZE } from "../button/button.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, CARD_SHADOW, Card } from "../card/card.js";
 import { CardPress, SELECT_BOX_PLACE } from "../card-press/card-press.js";
@@ -29,11 +29,12 @@ import { SelectionRegion } from "../selection/selection-region.js";
  *
  * The row's press reaches every edge of it (`CardPress`), opening the task,
  * its name on one line in the label's weight, what the eye reads in the
- * cells said after the name to a reader (`said`). The cells that hold a
- * control stand over the press, and the rest let the pointer through to it;
- * a cell of its owner's, the pull requests and the end, lifts only the
- * links and buttons in it, so a press anywhere but a chip or the ⋯, a
- * related task's kind among it, opens the task. Its box comes in
+ * cells said after the name to a reader (`said`), and a mark that stands
+ * beside the name (`beside`). The cells that hold a control stand over the
+ * press, and the rest let the pointer through to it; a cell of its owner's,
+ * the pull requests and the end, lifts only the links and buttons in it, so a
+ * press anywhere but a chip or the ⋯, a related task's kind among it, opens
+ * the task. Its box comes in
  * under the pointer in the gutter at its start (`SELECT_BOX_PLACE.GUTTER`),
  * where its list chooses rows, and stays while any is chosen. Its menu
  * (`menu`) is opened alike by its ⋯, shown while the row is in hand, a
@@ -63,6 +64,8 @@ export const TASK_ROW_CELL = {
   CREATOR: TASK_PROPERTY.CREATOR,
   AGENTS: TASK_PROPERTY.AGENTS,
   PULL_REQUESTS: "pullRequests",
+  /** How many of the task's sub-tasks are finished, of all of them ("1/3"). */
+  SUB_TASKS: LIST_COLUMN.SUB_TASKS,
   UPDATED: TASK_PROPERTY.UPDATED,
   /** What the row's owner stands at its end, before its ⋯: a related task's kind, say. */
   END: "end",
@@ -80,13 +83,14 @@ const LEADING: readonly TaskRowCell[] = [
   TASK_ROW_CELL.STATUS,
 ];
 
-/** The cells a related task's row draws, in its own list: its chips, its key, its assignee, its pull requests, and its owner's end. */
+/** The cells a related task's row draws, in its own list: its chips, its key, its assignee, its pull requests, how many of its sub-tasks are finished, and its owner's end. */
 export const RELATED_TASK_CELLS: readonly TaskRowCell[] = [
   TASK_ROW_CELL.PRIORITY,
   TASK_ROW_CELL.KEY,
   TASK_ROW_CELL.STATUS,
   TASK_ROW_CELL.ASSIGNEE,
   TASK_ROW_CELL.PULL_REQUESTS,
+  TASK_ROW_CELL.SUB_TASKS,
   TASK_ROW_CELL.END,
 ];
 
@@ -101,6 +105,7 @@ const COLUMN_WIDTH = {
   [TASK_ROW_CELL.CREATOR]: "auto",
   [TASK_ROW_CELL.AGENTS]: "auto",
   [TASK_ROW_CELL.PULL_REQUESTS]: "auto",
+  [TASK_ROW_CELL.SUB_TASKS]: "auto",
   [TASK_ROW_CELL.UPDATED]: "auto",
   [TASK_ROW_CELL.END]: "auto",
 } as const satisfies Record<TaskRowCell, string>;
@@ -138,12 +143,13 @@ const CELL_PLACE = {
   [TASK_ROW_CELL.CREATOR]: "pointer-events-none order-8",
   [TASK_ROW_CELL.AGENTS]: "pointer-events-none order-9",
   [TASK_ROW_CELL.PULL_REQUESTS]: `${OVER_ITS_CONTROLS} order-10`,
-  [TASK_ROW_CELL.UPDATED]: "pointer-events-none order-11 justify-end",
-  [TASK_ROW_CELL.END]: `${OVER_ITS_CONTROLS} order-12`,
+  [TASK_ROW_CELL.SUB_TASKS]: "pointer-events-none order-11",
+  [TASK_ROW_CELL.UPDATED]: "pointer-events-none order-12 justify-end",
+  [TASK_ROW_CELL.END]: `${OVER_ITS_CONTROLS} order-13`,
 } as const satisfies Record<TaskRowCell, string>;
 
 /** The ⋯'s cell, at a row's end, standing over its press. */
-const MORE_CELL = `${CELL} pointer-events-auto relative z-1 order-13`;
+const MORE_CELL = `${CELL} pointer-events-auto relative z-1 order-14`;
 
 /**
  * A row: a subgrid of the list's columns a little taller than a control,
@@ -169,6 +175,9 @@ const NESTED = "ps-list-row-nest";
 
 /** What a row's press shows: its name on one line, in the label's weight. */
 const PRESS = "luke-task-row-press flex min-w-0 items-center font-luke-medium";
+
+/** A mark beside the name, a gap from its last letter. */
+const BESIDE = "luke-task-row-beside ms-icon-gap inline-flex flex-none items-center";
 
 /** Where a row's name gives way to its field while it is renamed. */
 const EDITOR = "luke-task-row-press flex min-w-0 items-center font-luke-regular";
@@ -222,6 +231,7 @@ export function TaskRow({
   taskId,
   name,
   said,
+  beside,
   cells,
   content,
   editor,
@@ -240,6 +250,8 @@ export function TaskRow({
   name: string;
   /** What a reader hears after the name that the eye reads in the cells: the key and status, say. */
   said?: ReactNode;
+  /** A mark that stands beside the name, which says in the press what it says to the eye: a blocked task's stop sign. */
+  beside?: ReactNode;
   /** The cells its list draws, the same for every row of it. */
   cells: readonly TaskRowCell[];
   /** What stands in each cell; a cell with none stands empty. */
@@ -291,6 +303,7 @@ export function TaskRow({
         >
           <span id={nameId} className={PRESS}>
             <OneLine>{name}</OneLine>
+            {beside === undefined ? null : <span className={BESIDE}>{beside}</span>}
             {said}
           </span>
         </CardPress>

@@ -1,6 +1,7 @@
 import type { TaskSummary } from "@luke/features/task-wire";
 import { type ListRowFold, RELATED_TASK_CELLS, TASK_ROW_CELL, TaskRows } from "@luke/ui";
-import type { ReactNode } from "react";
+import { childTaskCounts } from "@luke/ui/task-list-model";
+import { type ReactNode, useMemo } from "react";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { TaskListRow } from "./task-list-row.js";
 import { useStandingDoor } from "./task-row-parts.js";
@@ -12,8 +13,8 @@ import { useTasksSelection } from "./tasks-selection.js";
  * Each row is the List's own (`task-list-row.tsx`) in a list of its own
  * (`TaskRows`), its columns fixed to the few a related task needs: its
  * priority, key, and status before its name, then its assignee, its open
- * pull requests, and what its owner stands at its end, a relation's kind,
- * say, before its ⋯. Its chips change the task where it stands, a press
+ * pull requests, how many of its sub-tasks are finished, and what its owner
+ * stands at its end, a relation's kind, say, before its ⋯. Its chips change the task where it stands, a press
  * opens it, and its ⋯, a right-click, and the menu key open its menu. Its
  * rows are one Tab stop that ↑↓ walk, and are chosen together as the List's
  * are, a row chosen among several offering the List's bar's acts on every
@@ -45,6 +46,7 @@ export function RelatedTasks({
   const setStanding = useStandingDoor(tasks);
   const selection = useTasksSelection(tasks, new Set(rows.map((row) => row.task.id)));
   const workspaceName = tasks.workspace?.name ?? "";
+  const subTasks = useMemo(() => childTaskCounts(tasks.tasks), [tasks.tasks]);
   return (
     <>
       <TaskRows
@@ -60,6 +62,7 @@ export function RelatedTasks({
             task={task}
             workspaceName={workspaceName}
             cells={RELATED_TASK_CELLS}
+            subTasks={subTasks.get(task.id)}
             content={{ [TASK_ROW_CELL.END]: end }}
             chosen={selection.chosenOf(task.id)}
             onOpen={() => tasks.onSelect(task.id)}

@@ -9,10 +9,12 @@ import {
   AVATAR_SIZE,
   Avatar,
   Badge,
+  BlockedMark,
   CHIP_LOOK,
   CHIP_SIZE,
   Chip,
   ChipName,
+  ListRowCount,
   type MenuEntry,
   PencilIcon,
   PULL_REQUEST_GLYPH,
@@ -38,7 +40,8 @@ import { CatalogSection } from "../section";
  * task-rows.tsx -- a task's related tasks as a list of their own: each row
  * as the Tasks page's List draws it, its priority, key, and status before
  * its name, its assignee and its open pull requests after it, then the
- * relation's kind and its ⋯; one row nested under another that folds it,
+ * relation's kind and its ⋯; a blocked task wearing its stop sign beside its
+ * name and a parent its count of finished sub-tasks; one row nested under another that folds it,
  * rows chosen by their box, ⌘-click, and ⇧-click, and a menu their ⋯, a
  * right-click, and the menu key open; and a quick add's draft raised as a
  * card over a row, its chips in their cells. Synthetic tasks.
@@ -57,6 +60,10 @@ interface CatalogTask {
   readonly assignee: string | undefined;
   readonly pullRequests: readonly number[];
   readonly kind: string;
+  /** Whether another task it waits on is still open. */
+  readonly blocked?: boolean;
+  /** How many of its sub-tasks are finished, of all of them. */
+  readonly subTasks?: { readonly finished: number; readonly total: number };
 }
 
 const PARENT: CatalogTask = {
@@ -68,6 +75,8 @@ const PARENT: CatalogTask = {
   assignee: "Ada Lovelace",
   pullRequests: [612],
   kind: "Blocks",
+  blocked: true,
+  subTasks: { finished: 1, total: 3 },
 };
 
 const CHILD: CatalogTask = {
@@ -141,6 +150,7 @@ function CatalogTaskRow({
     <TaskRow
       taskId={task.id}
       name={task.name}
+      beside={task.blocked === true ? <BlockedMark aria-hidden="true" /> : undefined}
       cells={RELATED_TASK_CELLS}
       content={{
         [TASK_ROW_CELL.PRIORITY]: (
@@ -163,6 +173,14 @@ function CatalogTaskRow({
         [TASK_ROW_CELL.PULL_REQUESTS]: task.pullRequests.map((number) => (
           <PullRequest key={number} number={number} />
         )),
+        [TASK_ROW_CELL.SUB_TASKS]:
+          task.subTasks === undefined ? null : (
+            <ListRowCount
+              settled={task.subTasks.finished}
+              total={task.subTasks.total}
+              label={`${task.subTasks.finished} of ${task.subTasks.total} sub-tasks finished`}
+            />
+          ),
         [TASK_ROW_CELL.END]: <Badge tone={STATUS_TONE.NEUTRAL}>{task.kind}</Badge>,
       }}
       menu={{ thing: "Task", groups: taskMenu(task.name) }}
