@@ -2,7 +2,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
-import type { AccountLink, ReadLink, ShownLink } from "@luke/features/link-grammar";
+import type { AccountLink, ReadLink } from "@luke/features/link-grammar";
 import type { ModelProvider } from "@luke/features/models-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
@@ -440,11 +440,14 @@ function AppWindow(): React.JSX.Element {
   // the account's workspaces are read, since a link's slug is read against them (every account
   // holds its own workspace, so none read means none read yet).
   const workspacesUnread = tasks.workspaces.length === 0 && !tasks.listFailed;
-  const openShownLink = useSteadyDoor((link: ShownLink) =>
-    "workspace" in link ? openLukeLink(link) : openAccountLink(link),
+  const openLink = useLinkOpener(accountGated || workspacesUnread, openLukeLink);
+  // A link of the account's own names no workspace, so it waits on the sign-in alone.
+  const openAccount = useLinkOpener(accountGated, openAccountLink);
+  useEffect(
+    () =>
+      appBridge().onShowLink((link) => ("workspace" in link ? openLink(link) : openAccount(link))),
+    [openLink, openAccount],
   );
-  const openLink = useLinkOpener(accountGated || workspacesUnread, openShownLink);
-  useEffect(() => appBridge().onShowLink(openLink), [openLink]);
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({
