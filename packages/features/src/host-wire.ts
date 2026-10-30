@@ -1,5 +1,10 @@
 import { Duration, Schema as EffectSchema } from "effect";
-import { DEVICE_ARCH, DEVICE_PLATFORM } from "./device-agent-wire.js";
+import {
+  DEVICE_ARCH,
+  DEVICE_PLATFORM,
+  DEVICE_SETUP_FAILURE_MAX_CHARS,
+  deviceSetupSchema,
+} from "./device-agent-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -160,7 +165,13 @@ export const hostUpgradeNeededDataSchema = EffectSchema.Struct({
  * milliseconds it was last seen, which a reader holds against its own clock
  * as a Mac's, which a window does not judge by (`deviceStanding`), the daemon version it last called with, none before its
  * first call that carried one, and whether that version is below the
- * service's floor.
+ * service's floor. A machine still setting itself up says where that
+ * stands (`DEVICE_SETUP`), and why for one that failed, as Start's offer of
+ * it does (`macOfferSchema`); both are absent for a ready one. A Mac names
+ * the user it runs as (`loginName`), by its home folder's name under
+ * `/Users`, since a Mac's host runs only while that user is logged in;
+ * absent for a Linux machine. All three are absent from a service older
+ * than them.
  */
 const hostSchema = EffectSchema.Struct({
   id: wireUuidSchema,
@@ -169,6 +180,11 @@ const hostSchema = EffectSchema.Struct({
   seenAt: countedNumber,
   version: EffectSchema.NullOr(EffectSchema.String),
   upgradeNeeded: EffectSchema.Boolean,
+  setup: EffectSchema.optionalKey(deviceSetupSchema),
+  setupFailure: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(DEVICE_SETUP_FAILURE_MAX_CHARS)),
+  ),
+  loginName: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type Host = typeof hostSchema.Type;

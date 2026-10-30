@@ -16,7 +16,12 @@ import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
 import { AGENT_MACHINE } from "@luke/features/agent-wire";
-import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
+import {
+  DEVICE_ARCH,
+  DEVICE_PLATFORM,
+  DEVICE_SETUP,
+  type DeviceSetup,
+} from "@luke/features/device-agent-wire";
 import { HOST_WIRE } from "@luke/features/host-wire";
 import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
@@ -163,11 +168,15 @@ function enrollOwn(bearer: string, deviceId: string) {
   });
 }
 
-/** A Mac's register on its own secret, as its host program's first call is. */
-function macRegister(secret: string, deviceId: string) {
+/** A Mac's register on its own secret, as its host program's first call is, with where its setup stands where it is not ready. */
+function macRegister(
+  secret: string,
+  deviceId: string,
+  setup: { readonly setup?: DeviceSetup; readonly setupFailure?: string } = {},
+) {
   return request(secret, PATH.DEVICES, {
     version: HOST_VERSION.FLOOR,
-    body: registered(deviceId),
+    body: { ...registered(deviceId), ...setup },
   });
 }
 
@@ -570,7 +579,7 @@ it.layer(
   );
 
   it.effect(
-    "a desktop enrolls its own Mac on its sign-in, created where Luke never saw it, which then calls on its secret, is listed as a Mac, and is removed as any machine; no other account enrolls it",
+    "a desktop enrolls its own Mac on its sign-in, created where Luke never saw it, which then calls on its secret, is listed as a Mac with its user and why its setup failed, and is removed as any machine; no other account enrolls it",
     () =>
       Effect.gen(function* () {
         const owner = yield* account();
@@ -583,7 +592,12 @@ it.layer(
         const enrolled = yield* answerOf(enrollOwn(owner, deviceId));
         const byOther = yield* statusOf(enrollOwn(other, deviceId));
         const secret: string = enrolled.body.deviceSecret;
-        const register = yield* statusOf(macRegister(secret, deviceId));
+        const register = yield* statusOf(
+          macRegister(secret, deviceId, {
+            setup: DEVICE_SETUP.FAILED,
+            setupFailure: "Claude Code could not be installed",
+          }),
+        );
         const listed = yield* answerOf(request(owner, PATH.HOSTS));
         const removed = yield* statusOf(
           request(owner, PATH.HOST_REMOVE, { body: { id: deviceId } }),
@@ -601,13 +615,33 @@ it.layer(
         assert.equal(register, HOSTED_HTTP_STATUS.OK, "the Mac registers on its new secret");
         assert.deepEqual(
           listed.body.hosts.map(
-            (each: { readonly id: string; readonly name: string; readonly platform: string }) => [
+            (each: {
+              readonly id: string;
+              readonly name: string;
+              readonly platform: string;
+              readonly loginName: string;
+              readonly setup: string;
+              readonly setupFailure: string;
+            }) => [
               each.id,
               each.name,
               each.platform,
+              each.loginName,
+              each.setup,
+              each.setupFailure,
             ],
           ),
-          [[deviceId, "Studio", DEVICE_PLATFORM.DARWIN]],
+          // Note that the fixture's home is /Users/fixture, so the Mac runs as fixture.
+          [
+            [
+              deviceId,
+              "Studio",
+              DEVICE_PLATFORM.DARWIN,
+              "fixture",
+              DEVICE_SETUP.FAILED,
+              "Claude Code could not be installed",
+            ],
+          ],
         );
         assert.equal(removed, HOSTED_HTTP_STATUS.OK);
         assert.equal(beatAfterRemove, HOSTED_HTTP_STATUS.UNAUTHORIZED, "Remove refuses its secret");

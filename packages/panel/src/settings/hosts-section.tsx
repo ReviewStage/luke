@@ -1,5 +1,9 @@
-import { DEVICE_STANDING } from "@luke/features/agent-wire";
-import { DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
+import { DEVICE_STANDING, type DeviceStanding } from "@luke/features/agent-wire";
+import {
+  DEVICE_PLATFORM,
+  DEVICE_SETUP,
+  type DevicePlatform,
+} from "@luke/features/device-agent-wire";
 import {
   HOST_UNINSTALL_COMMAND,
   HOST_WIRE,
@@ -28,6 +32,7 @@ import {
   ErrorState,
   GAP,
   PlusIcon,
+  SETTINGS_ROW_STATE,
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   type SettingsRowSkeletonShape,
@@ -46,7 +51,7 @@ import { Base64Url, Hex } from "effect/encoding";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
-import { DEVICE_PLATFORM_NAME } from "../device-platform.js";
+import { DEVICE_PLATFORM_NAME, macSessionWords } from "../device-platform.js";
 import {
   type PresenceBook,
   presenceAgeMs,
@@ -56,10 +61,12 @@ import {
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { MenuRow } from "./menu-row.js";
 import {
+  type HostLine,
+  HostStateLine,
+  setupLineOf,
   ThisMacAct,
   type ThisMacHost,
   ThisMacHostRow,
-  ThisMacStateLine,
   useThisMacHost,
 } from "./this-mac-host-row.js";
 
@@ -71,12 +78,17 @@ import {
  * command, or a Mac its desktop enrolled. The list names each, what it is by
  * its platform (`DEVICE_PLATFORM_NAME`), whether it is online, held against
  * the window's own clock as a Mac's label is (`macOnline`), when it was last
- * seen otherwise, and, where its host program is below the service's floor,
- * Upgrade needed with how to upgrade it: a server's command, or a Mac's app
- * updated. Remove, behind the row's ⋯, refuses that machine at once, after
- * asking with the command that takes Luke off the machine itself where the
- * install command may have set it up. Adding takes a Linux server and a Mac
- * alike, through one command.
+ * seen otherwise, where its setup stands while it is not ready, getting
+ * ready or couldn't set up and why, in the words This Mac's row says them
+ * in (`setupLineOf`), for a Mac that it runs while its user is logged in,
+ * since its host runs in their login session, and, where its host program
+ * is below the service's floor, Upgrade needed with how to upgrade it: the
+ * install command's upgrade, this Mac's app updated, or, for another Mac,
+ * either, since the service lists no word of how a Mac joined. Remove,
+ * behind the row's ⋯, refuses that machine at once, after asking with the
+ * command that takes Luke off the machine itself where the install command
+ * may have set it up. Adding takes a Linux server and a Mac alike, through
+ * one command.
  *
  * In the desktop app this Mac stands first, with where its `luke-host`
  * stands under it (`this-mac-host-row.tsx`) and Retry where it failed: on
@@ -103,6 +115,9 @@ const INSTALL_TOKEN_BYTES = 32;
 /** `useMinute` counts in milliseconds, so the minute the list stands on is read off it in whole ones. */
 const MINUTE_MS = 60_000;
 
+/** How often the list is read while a host is getting ready, as often as This Mac's row reads its own. */
+const SETTING_UP_READ_EVERY_MS = 5_000;
+
 /**
  * The class PostHog's recorder leaves out of a recording, element and children
  * alike, and a size containment: the commands do not wrap, so without it
@@ -124,6 +139,8 @@ const WORDS = {
   UPGRADE_NEEDED: "Upgrade needed",
   UPGRADE_TITLE: "Run this on the host to upgrade it",
   MAC_UPGRADE: "Update the Luke app on this Mac to upgrade it.",
+  OTHER_MAC_UPGRADE: "If you added it from the Luke app on it, update the app there.",
+  OTHER_MAC_UPGRADE_TITLE: "If you used the install command, run this on it",
   INSTALL_TITLE: "Run this on each host",
   REVOKE: "Revoke this command",
 } as const;
@@ -159,16 +176,60 @@ async function mintedInstallToken(): Promise<{ installToken: string; tokenHash: 
   return { installToken, tokenHash: Hex.encode(new Uint8Array(digest)) };
 }
 
+/** Where a host stands now; one the read does not name, though it is the account's own, is gone. */
+function hostStanding(host: Host, book: PresenceBook): DeviceStanding {
+  return presenceStanding(book, host.id) ?? DEVICE_STANDING.OFFLINE;
+}
+
 /** A host's line under its name: online, or when it was last seen. */
 function seenWords(host: Host, book: PresenceBook, now: number): string {
-  // Note that a host the read does not name, though it is the account's own, is gone.
-  const standing = presenceStanding(book, host.id) ?? DEVICE_STANDING.OFFLINE;
+  const standing = hostStanding(host, book);
   if (standing === DEVICE_STANDING.ONLINE) return WORDS.ONLINE;
   if (standing === DEVICE_STANDING.CHECKING) return WORDS.CHECKING;
   const age = presenceAgeMs(book, host.id);
   // Note that the age is the service's, so the moment is made from the window's clock and the age alone.
   const lastSeen = age === undefined ? "" : ` · last seen ${agoText(now - age, now)}`;
   return `${standing === DEVICE_STANDING.OFFLINE ? "Offline" : WORDS.UNKNOWN}${lastSeen}`;
+}
+
+/**
+ * Where a host that is not this Mac stands in its setup: getting ready, or
+ * couldn't set up and why; nothing for one that is ready, or offline,
+ * whose last word of its setup may no longer hold. It offers no Retry,
+ * since nothing here can ask another machine's host to try again.
+ */
+function setupLine(host: Host, standing: DeviceStanding): HostLine | null {
+  if (host.setup === undefined || standing === DEVICE_STANDING.OFFLINE) return null;
+  return setupLineOf(host.setup, host.setupFailure);
+}
+
+/** How a host is upgraded, under its Upgrade needed: this Mac's app updated, the install command's upgrade run on a server, and either for another Mac. */
+function UpgradeHow({
+  platform,
+  thisMac,
+  installScriptUrl,
+}: {
+  platform: DevicePlatform;
+  thisMac: boolean;
+  installScriptUrl: string;
+}): React.JSX.Element {
+  if (thisMac) return <Text>{WORDS.MAC_UPGRADE}</Text>;
+  const mac = platform === DEVICE_PLATFORM.DARWIN;
+  const command = (
+    <CodeCard
+      title={mac ? WORDS.OTHER_MAC_UPGRADE_TITLE : WORDS.UPGRADE_TITLE}
+      titleIs={CODE_CARD_TITLE.WORDS}
+      code={hostUpgradeCommand(installScriptUrl)}
+      copy={copyThroughShell}
+    />
+  );
+  if (!mac) return command;
+  return (
+    <Stack gap={GAP.CONTROL}>
+      <Text>{WORDS.OTHER_MAC_UPGRADE}</Text>
+      {command}
+    </Stack>
+  );
 }
 
 /** What Remove says goes, whatever the machine. */
@@ -193,7 +254,7 @@ const REMOVE_WORDS = {
   },
 } as const;
 
-/** One machine's row: its name, what it is and whether it is online, Upgrade needed with how to upgrade it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
+/** One machine's row: its name, what it is and whether it is online, where its setup stands while it is not ready, for a Mac whose login it runs in, Upgrade needed with how to upgrade it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
 function HostRow({
   host,
   book,
@@ -224,7 +285,12 @@ function HostRow({
       : platform === DEVICE_PLATFORM.DARWIN
         ? REMOVE_WORDS.MAC
         : REMOVE_WORDS.SERVER;
-  const line = thisMac?.line ?? null;
+  // Note that this Mac's own line is its app's reading of its `luke-host`, which says its setup and more, with Retry.
+  const line = thisMac !== undefined ? thisMac.line : setupLine(host, hostStanding(host, book));
+  const session: HostLine | null =
+    platform === DEVICE_PLATFORM.DARWIN
+      ? { words: macSessionWords(host.loginName), state: SETTINGS_ROW_STATE.PLAIN }
+      : null;
   return (
     <>
       <MenuRow
@@ -249,18 +315,16 @@ function HostRow({
               {host.upgradeNeeded && host.version !== null
                 ? `${seen} · runs ${host.version}`
                 : seen}
-              {line === null ? null : <ThisMacStateLine line={line} />}
+              {session === null ? null : <HostStateLine line={session} />}
+              {line === null ? null : <HostStateLine line={line} />}
             </>
           ),
           control: thisMac === undefined ? undefined : <ThisMacAct thisMac={thisMac} />,
-          below: !host.upgradeNeeded ? undefined : platform === DEVICE_PLATFORM.DARWIN ? (
-            <Text>{WORDS.MAC_UPGRADE}</Text>
-          ) : (
-            <CodeCard
-              title={WORDS.UPGRADE_TITLE}
-              titleIs={CODE_CARD_TITLE.WORDS}
-              code={hostUpgradeCommand(installScriptUrl)}
-              copy={copyThroughShell}
+          below: !host.upgradeNeeded ? undefined : (
+            <UpgradeHow
+              platform={platform}
+              thisMac={thisMac !== undefined}
+              installScriptUrl={installScriptUrl}
             />
           ),
         }}
@@ -385,10 +449,13 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   }, [act, signedIn, attempt]);
 
   // A server that joins while the page stands is drawn within a minute, with no skeleton over the list the member is reading.
+  // Note that while a host is getting ready the list is read every few seconds instead, so it reads ready, or why it couldn't set up, about as soon as This Mac's row would.
+  const settingUp = hosts?.some((host) => host.setup === DEVICE_SETUP.PREPARING) ?? false;
+  const period = settingUp ? Math.floor(now / SETTING_UP_READ_EVERY_MS) : minute;
   const mountMinute = useRef(minute);
   useEffect(() => {
     // The mount's own read is the effect above, so the minute it began in stands as it is.
-    if (!signedIn || minute === mountMinute.current) return;
+    if (!signedIn || (!settingUp && period === mountMinute.current)) return;
     let live = true;
     act(ACT_KIND.HOSTS_LIST).then(
       (answer) => {
@@ -400,7 +467,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
     return () => {
       live = false;
     };
-  }, [act, signedIn, minute]);
+  }, [act, signedIn, settingUp, period]);
 
   const add = useCallback(() => {
     setAdding(true);
