@@ -58,9 +58,9 @@ import {
 import { taskLinkPlace, useOfferTaskRename } from "../tasks/task-menu-items.js";
 import type { TaskRepositoryDoor, TaskStandingDoor } from "../tasks/task-standing.js";
 import { TerminalCommands } from "../tasks/terminal-commands.js";
-import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
+import { placeOfTaskTarget, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
-import { OpenHereProvider, openPullRequestsHere } from "../tasks/use-open-link.js";
+import { OpenHereProvider, openPullRequestsHere, useOpenPlace } from "../tasks/use-open-link.js";
 import { usePlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { useTaskInbox } from "../tasks/use-task-inbox.js";
@@ -562,8 +562,9 @@ function PlanDocument({
   // A call's row in a transcript opens what the call is about where the
   // window already draws it: an agent in this column, the plan and the
   // Inbox in the side panel, the Inbox on the item a call names, posted by
-  // the agent whose row it was (`from`), another task as the sidebar opens
-  // it, the rest in the side panel.
+  // the agent whose row it was (`from`), another task as a link to it opens
+  // (`route.ts`), the rest in the side panel.
+  const openPlace = useOpenPlace();
   const openTarget = (target: ToolTarget, from?: string) => {
     switch (target.kind) {
       case TOOL_TARGET.AGENT:
@@ -578,9 +579,7 @@ function PlanDocument({
       case TOOL_TARGET.PAGE:
         return sidePanel.onPreview({ page: target.page });
       case TOOL_TARGET.TASK:
-        return target.agent === undefined
-          ? tasks.onShowTask(target.task)
-          : tasks.onShowAgent(target.task, target.agent);
+        return openPlace?.(placeOfTaskTarget(target));
     }
   };
   // A delegation's row in an agent's transcript opens its worker in the side

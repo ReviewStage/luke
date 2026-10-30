@@ -11,7 +11,17 @@ import {
   useMemo,
 } from "react";
 import { appPlatform } from "../app-platform.js";
-import { addressOf, HERE, type Here, type Listed, ROUTE, route, THING } from "../route.js";
+import {
+  ADDRESS,
+  type Address,
+  addressOf,
+  HERE,
+  type Here,
+  type Listed,
+  ROUTE,
+  route,
+  THING,
+} from "../route.js";
 import { useSteadyDoor } from "../steady-door.js";
 
 /**
@@ -37,7 +47,10 @@ import { useSteadyDoor } from "../steady-door.js";
  * A place may open some links where it stands before the window does
  * (`OpenHereProvider`), as the window's Inbox opens a file, a page, or a pull
  * request of the item's task in the panel beside the item rather than
- * leaving for the task, and a task, or an agent with no task, opens a pull
+ * leaving for the task, and a place a part names rather than a link writes,
+ * an agent a message's sender names or a review thread a Pull request tab
+ * jumps to, is asked of it the same way (`useOpenPlace`,
+ * `OpenAddressesHere`); a task, or an agent with no task, opens a pull
  * request one of its agents opened in that agent's Pull request tab, and any
  * other pull request of its repository in a Pull request tab by its number,
  * rather than on GitHub (`openPullRequestsHere`). Past the place, the window opens
@@ -62,10 +75,30 @@ export function useReadLinkOpener(): ((link: ReadLink) => void) | undefined {
 /** Opens a link where the place stands, answering whether it did; one it did not is the window's to open. */
 export type OpenHere = (href: string) => boolean;
 
-const OpenHereContext = createContext<OpenHere | undefined>(undefined);
+/** Opens an address where the place stands, a place handed rather than written among them, answering whether it did; one it did not is the window's to open. */
+export type OpenAddressHere = (address: Address) => boolean;
 
-/** Hands everything under it the place's own opener, asked first of every link opened there. */
-export const OpenHereProvider = OpenHereContext.Provider;
+const OpenHereContext = createContext<OpenAddressHere | undefined>(undefined);
+
+/** Hands everything under it the place's own opener of addresses, asked first of every link opened there and every place a part there names. */
+export const OpenAddressesHere = OpenHereContext.Provider;
+
+/** Only what a link writes, which a place handed rather than written never is. */
+function ofLinks(open: OpenHere): OpenAddressHere {
+  return (address) => address.href !== undefined && open(address.href);
+}
+
+/** Hands everything under it the place's own opener of links, asked first of every link opened there. */
+export function OpenHereProvider({
+  value,
+  children,
+}: {
+  value: OpenHere;
+  children?: ReactNode;
+}): ReactNode {
+  const open = useMemo(() => ofLinks(value), [value]);
+  return createElement(OpenHereContext.Provider, { value: open }, children);
+}
 
 /**
  * Under it, `open` is asked first of every link opened, and any place's own
@@ -80,8 +113,8 @@ export function OpenHereFirst({
   children: ReactNode;
 }): ReactNode {
   const around = useContext(OpenHereContext);
-  const first = useCallback<OpenHere>(
-    (href) => open(href) || around?.(href) === true,
+  const first = useCallback<OpenAddressHere>(
+    (address) => ofLinks(open)(address) || around?.(address) === true,
     [open, around],
   );
   return createElement(OpenHereContext.Provider, { value: first }, children);
@@ -115,12 +148,19 @@ export function ListedPullRequests({
 /**
  * Under it, a link to a pull request leaves for GitHub, neither the place
  * nor the window opening it in a tab: as inside a pull request's own tab,
- * which already is that pull request.
+ * which already is that pull request. Any other address is still the
+ * place's to open first, as a review thread the tab jumps to is beside an
+ * Inbox item.
  */
 export function PullRequestsOnGitHub({ children }: { children: ReactNode }): ReactNode {
+  const around = useContext(OpenHereContext);
+  const open = useCallback<OpenAddressHere>(
+    (address) => address.kind !== ADDRESS.PULL_REQUEST && around?.(address) === true,
+    [around],
+  );
   return createElement(
     OpenHereContext.Provider,
-    { value: undefined },
+    { value: around === undefined ? undefined : open },
     createElement(ListedTasksContext.Provider, { value: undefined }, children),
   );
 }
@@ -144,30 +184,63 @@ export function openPullRequestsHere(
 }
 
 /** The place a mention of a plan, or of one of its sections, names. */
-function placeOfMention(mention: PlanMention): LinkPlace {
+export function placeOfMention(mention: PlanMention): LinkPlace {
   return mention.kind === MENTION_KIND.TASK
     ? { kind: LINK_PLACE.TASK, planId: mention.taskId }
     : { kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor: mention.anchor };
 }
 
-/** The window's opener for a plan, or one of its sections, as a mention's chip names it; nothing outside the window. */
+/** Opens an address where the place it is pressed on opens it, else where the window does (`route.ts`): a place in Luke there, a listed task's or a listed agent's on no task's pull request in its Pull request tab, anything else in the browser. */
+function openAddress(
+  address: Address,
+  doors: {
+    readonly openPlace: ((link: ReadLink) => void) | undefined;
+    readonly openHere: OpenAddressHere | undefined;
+    readonly listed: ListedTasksReader | undefined;
+  },
+): void {
+  const { openPlace, openHere, listed } = doors;
+  if (openHere?.(address) === true) return;
+  const routed = route(address, {
+    kind: HERE.WINDOW,
+    opensPlaces: openPlace !== undefined,
+    listed: listed?.(),
+  });
+  if (routed.kind === ROUTE.GO) {
+    openPlace?.(routed.link);
+  } else if (routed.kind !== ROUTE.EXTERNAL) {
+    return;
+  } else if (isGitHubAddress(routed.href)) {
+    appPlatform().openGitHub(routed.href);
+  } else {
+    appPlatform().openWeb(routed.href);
+  }
+}
+
+/** The opener for a plan, or one of its sections, as a mention's chip names it: where the place it is pressed on opens it, else in the window; nothing outside the window. */
 export function useOpenTask(): ((mention: PlanMention) => void) | undefined {
-  const open = useContext(OpenLinkContext);
+  const open = useOpenPlace();
   return useMemo(
     () =>
-      open === undefined
-        ? undefined
-        : (mention: PlanMention) => open({ workspace: "", place: placeOfMention(mention) }),
+      open === undefined ? undefined : (mention: PlanMention) => open(placeOfMention(mention)),
     [open],
   );
 }
 
-/** The window's opener for a place in Luke, as a link to it would open it, one of an agent's messages among them; nothing outside the window. */
+/** The opener for a place in Luke a part names rather than a link writes, as a link to it would open it, one of an agent's messages among them: where the place it is pressed on opens it, else in the window; nothing outside the window. */
 export function useOpenPlace(): ((place: LinkPlace) => void) | undefined {
-  const open = useContext(OpenLinkContext);
+  const openPlace = useContext(OpenLinkContext);
+  const openHere = useContext(OpenHereContext);
   return useMemo(
-    () => (open === undefined ? undefined : (place: LinkPlace) => open({ workspace: "", place })),
-    [open],
+    () =>
+      openPlace === undefined
+        ? undefined
+        : (place: LinkPlace) =>
+            openAddress(
+              { kind: ADDRESS.PLACE, link: { workspace: "", place } },
+              { openPlace, openHere, listed: undefined },
+            ),
+    [openPlace, openHere],
   );
 }
 
@@ -186,23 +259,7 @@ export function useOpenLink(): (href: string) => void {
   const openHere = useContext(OpenHereContext);
   const listed = useContext(ListedTasksContext);
   return useCallback(
-    (href: string) => {
-      if (openHere?.(href) === true) return;
-      const routed = route(addressOf(href), {
-        kind: HERE.WINDOW,
-        opensPlaces: openPlace !== undefined,
-        listed: listed?.(),
-      });
-      if (routed.kind === ROUTE.GO) {
-        openPlace?.(routed.link);
-      } else if (routed.kind !== ROUTE.EXTERNAL) {
-        return;
-      } else if (isGitHubAddress(routed.href)) {
-        appPlatform().openGitHub(routed.href);
-      } else {
-        appPlatform().openWeb(routed.href);
-      }
-    },
+    (href: string) => openAddress(addressOf(href), { openPlace, openHere, listed }),
     [openPlace, openHere, listed],
   );
 }

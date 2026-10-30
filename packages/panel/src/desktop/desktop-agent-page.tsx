@@ -62,7 +62,7 @@ import {
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
 import { TerminalCommands } from "../tasks/terminal-commands.js";
-import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
+import { placeOfTaskTarget, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import { type AgentsControl, useAgents } from "../tasks/use-agents.js";
 import { WordsWorkspace } from "../tasks/use-link-standing.js";
@@ -70,6 +70,7 @@ import {
   OpenHereProvider,
   OpenLinkProvider,
   openPullRequestsHere,
+  useOpenPlace,
   useReadLinkOpener,
 } from "../tasks/use-open-link.js";
 import { type PinHolder, PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
@@ -479,17 +480,15 @@ export function DesktopAgentPage({
     [onOpenAutomations],
   );
   // Note that an inbox call and a page are the rows of a coding agent's own that open a tab, and a task's archive the one
-  // that opens another task, as the sidebar opens it, a worker's opening through its delegation.
+  // that opens another task, as a link to it opens (`route.ts`), a worker's opening through its delegation.
+  const openPlace = useOpenPlace();
   const openTarget = useSteadyDoor((target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.INBOX) {
       if (target.key !== undefined) setInboxAsk({ taskId: agentId, key: target.key, agentId });
       sidePanel.onChoose(SIDE_PANEL_TAB.INBOX);
       setFocus(COLUMN.SIDE);
     }
-    if (target.kind === TOOL_TARGET.TASK) {
-      if (target.agent === undefined) tasks.onShowTask(target.task);
-      else tasks.onShowAgent(target.task, target.agent);
-    }
+    if (target.kind === TOOL_TARGET.TASK) openPlace?.(placeOfTaskTarget(target));
     // An agent's chip, such as one it was continued or forked to, opens that agent's own page.
     if (target.kind === TOOL_TARGET.AGENT) tasks.agentView.onOpen(target.agent);
     // A page the agent showed on itself opens in the panel beside it, as a task's opens beside its plan.

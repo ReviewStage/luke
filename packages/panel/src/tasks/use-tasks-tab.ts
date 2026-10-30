@@ -670,10 +670,17 @@ export interface TasksControl {
   messageReveal: MessageReveal | undefined;
   /** The agent's tab answered the ask, so a later visit to the agent does not answer it again. */
   onMessageRevealed: (ask: number) => void;
+  /** Asks the agent's transcript, wherever it is drawn, to bring one of its messages into view, going nowhere: what a link to it opened beside an Inbox item asks. */
+  onRevealMessage: (place: AgentPlaceOf<typeof LINK_PLACE.MESSAGE>) => void;
   /** The last ask to bring one review thread of an agent's pull request into view, which a link to it makes; let go once its Pull request tab takes it (`thread-reveal.tsx`). */
   threadReveal: ThreadReveal | undefined;
   /** The agent's Pull request tab took the ask, so a later visit to the tab does not answer it again. */
   onThreadRevealed: (ask: number) => void;
+  /** Asks the Pull request tab of `changes`, wherever it is drawn, to bring one review thread into view, going nowhere: what a link to it opened beside an Inbox item asks. */
+  onRevealThread: (
+    changes: string,
+    place: AgentPlaceOf<typeof LINK_PLACE.PULL_REQUEST_THREAD>,
+  ) => void;
   /** The last ask to show a section, under the task it was asked of, so a section of a task not yet open is shown once it is drawn; let go once shown. */
   sectionReveal: { readonly taskId: string; readonly reveal: SectionReveal } | undefined;
   /** The task's page showed the section an ask named, so a later visit to the task does not show it again. */
@@ -3491,9 +3498,11 @@ export function useTasksTab(input: {
     messageReveal,
     // Only the ask answered is let go; a newer one stands until its agent's tab answers it.
     onMessageRevealed: (ask) => setMessageReveal((last) => (last?.ask === ask ? undefined : last)),
+    onRevealMessage: revealMessage,
     threadReveal,
     // Only the ask taken is let go; a newer one stands until its tab takes it.
     onThreadRevealed: (ask) => setThreadReveal((last) => (last?.ask === ask ? undefined : last)),
+    onRevealThread: revealThread,
     sectionReveal,
     commentReveal,
     inboxItemReveal,
