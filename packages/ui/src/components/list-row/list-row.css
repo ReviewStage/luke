@@ -77,8 +77,10 @@
   }
 
   /* A row chosen in its list's selection is filled as a Mac's list fills
-     the rows chosen, over the open row's ground where it is both. */
-  .luke-list-row[data-selected="true"] {
+     the rows chosen, over the open row's fill where it is both. Note that
+     it names the look too, so it matches the open row's rules in weight and
+     wins by standing after them. */
+  .luke-list-row[data-selected="true"][data-current-look] {
     background: var(--luke-color-fill-selected);
   }
 
