@@ -233,6 +233,19 @@ test("a path too wide for its bar folds its first crumbs into one … naming the
   );
 });
 
+test("a path led by a crumb that drops a menu keeps it and folds the crumbs after it", () => {
+  layOut(250);
+  const container = draw({
+    label: "Path",
+    crumbs: [
+      { label: "acme/relay", popup: BREADCRUMB_POPUP.DIALOG, onPress: () => undefined },
+      ...THREE_CRUMBS,
+    ],
+  });
+  const items = [...container.querySelectorAll("ol > li")].map((item) => item.textContent);
+  expect(items).toEqual(["acme/relay", "…", "What the expired invite page says"]);
+});
+
 test("a path that fits its bar folds nothing", () => {
   layOut(1000);
   const container = draw({ label: "Path", crumbs: THREE_CRUMBS });

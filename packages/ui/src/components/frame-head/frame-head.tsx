@@ -1,28 +1,33 @@
-import { AttentionMark } from "../attention-mark/attention-mark.js";
-import { BUTTON_SHAPE, BUTTON_SIZE, BUTTON_VARIANT, Button } from "../button/button.js";
-import { CHIP_LOOK, Chip, ChipName } from "../chip/chip.js";
+import type { TaskStatus } from "@luke/features/task-wire";
+import type { ReactNode, RefObject } from "react";
+import { TaskStatusMark } from "../../marks/task-marks.js";
+import { BREADCRUMBS_VARIANT, Breadcrumbs, type Crumb } from "../breadcrumbs/breadcrumbs.js";
 import { OneLine } from "../one-line/one-line.js";
 import { SKELETON_SHAPE, Skeleton } from "../skeleton/skeleton.js";
 import type { ToolbarProps } from "../toolbar/toolbar.js";
 import { ToolbarName } from "../toolbar/toolbar-name.js";
 
 /**
- * frame-head.tsx -- the head of the frame a place stands in, as a workspace heads a window: a task named as a chip, and what waits on the reader there, or any other place named by its words, which stay on screen whatever is chosen under it.
+ * frame-head.tsx -- the head of the frame a place stands in, as a workspace heads a window: a task named by its path, as Luke draws a task, or any other place named by its words, which stay on screen whatever is chosen under it.
  *
  * A task frames its column the way a workspace frames a window in an editor:
  * whichever of its views is chosen under it, this head names the task, so
- * the reader always knows which task they are in. It is one row:
+ * the reader always knows which task they are in. It is one path of quiet
+ * presses (`Breadcrumbs`' `CONTROL` look), each lit only under the pointer
+ * and outlined never:
  *
- * - the task as a chip, its key (`ACME-42`) in the code face before its
- *   name, a press that opens the task itself;
- * - at the row's end, `waiting`'s count, "2 need you", a press that goes
- *   to what waits, said only while something does, since "0 need you" is
- *   no news.
+ * - the task's repository, where the page hands its crumb, which drops the
+ *   repository's menu the plan's own path drops;
+ * - the tasks it is a child of, eldest first, each a press that opens it,
+ *   the path folding the eldest into one "…" before it cuts a name short;
+ * - the task itself, last and current, a press that opens it.
  *
- * Where the task stands, its status, assignee, and the rest, is the plan's
- * head's to say and change, not this one's. Nothing here carries the name
- * in an attribute, so session replay, which masks words and not attributes,
- * still records only the layout.
+ * A task is drawn as ⌘K's row draws one: its status mark, its name, and its
+ * key (`ACME-42`) muted after it, kept whole while the name gives way.
+ * Where the task stands beyond its mark, its assignee and the rest, is the
+ * plan's head's to say and change, not this one's. Nothing here carries the
+ * name in an attribute, so session replay, which masks words and not
+ * attributes, still records only the layout.
  *
  * A place that is no task (the Inbox, an agent's page, Automations) is named
  * by `FramePlace` in the same row, in the words its own bar would name it
@@ -31,110 +36,117 @@ import { ToolbarName } from "../toolbar/toolbar-name.js";
  * heading; a name picked up from a page that heads itself is words.
  *
  * While the task is read, `FrameHeadSkeleton` stands in the same row
- * through the same frame, one control's block where the chip will be, so
- * the head lands without a jump. The head owns its band's inset and no room
- * around it, and takes no class or style.
+ * through the same frame, one control's block where the task's crumb will
+ * be, so the head lands without a jump. A task's head starts on its frame's
+ * edge, as the tabs under it do, and any other place's at its column's
+ * inset; the head owns its band's inset and no room around it, and takes no
+ * class or style.
  */
 
-/** What the count's words say after its figure, by how many wait. */
-export interface FrameHeadCountNoun {
-  readonly one: string;
-  readonly many: string;
-}
-
-/** What waits on the reader in the task: how many, the words after the figure, and the press that goes to them. */
-export interface FrameHeadWaiting {
-  readonly count: number;
-  readonly noun: FrameHeadCountNoun;
+/** A task as its head names it: its status mark, its name, and its key, a press that opens it, and the card its hint hangs. */
+export interface FrameHeadTask {
+  readonly name: string;
+  /** The task's key (`ACME-42`); none for a task from a service before keys. */
+  readonly taskKey?: string | undefined;
+  /** Where it stands, drawn as its mark; none for a task from a service before statuses. */
+  readonly status?: TaskStatus | undefined;
   readonly onOpen: () => void;
+  /** The task's card, hung in its hint's place; none where the page hangs none. */
+  readonly card?: ReactNode;
 }
 
-/** The task's key in the chip, in the code face as a branch's name is (`ChipName`'s `mono`), but never cut short: the name gives way instead, since the key tells one task from another. */
-const KEY = "luke-frame-head-key flex-none font-mono text-caption leading-[inherit]";
+/** Where a head's first mark stands: its frame's edge, as a task's crumbs do the tabs' under them, a control at its column's inset, or words where its column's words start. */
+const FRAME_START = {
+  EDGE: "edge",
+  CONTROL: "control",
+  WORDS: "words",
+} as const;
+
+type FrameStart = (typeof FRAME_START)[keyof typeof FRAME_START];
+
+/** What the task's path is named for a reader moving between landmarks. */
+const PATH_LABEL = "Task path";
 
 /** Quiet words after a place's name, in the body's type, on one line cut short before the name is. */
 const DETAIL = "luke-frame-head-detail min-w-0 flex-[0_1000_auto] text-body text-muted-foreground";
 
-/** How wide the chip's block stands while the task is read: a settings row's field, about a task's key and a short name. */
-const CHIP_SKELETON_WIDTH = "var(--luke-select-field-width)";
+/** How wide the task's crumb's block stands while the task is read: a settings row's field, about a short name and a task's key. */
+const CRUMB_SKELETON_WIDTH = "var(--luke-select-field-width)";
 
-/** A count with its words: "1 needs you", "3 need you". */
-function countWords(count: number, noun: FrameHeadCountNoun): string {
-  return `${count} ${count === 1 ? noun.one : noun.many}`;
-}
-
-/** The head's band: what names the task, and what stands at the row's end. */
+/** The head's band: what names the place, standing where `start` says. */
 function FrameHeadFrame({
   named,
-  end,
-  words = false,
+  start = FRAME_START.CONTROL,
   detailed = false,
+  room,
 }: {
-  /** The task's chip, or its block while the task is read, or a place's name. */
-  named: React.ReactNode;
-  end?: React.ReactNode;
-  /** Whether the head starts on words, which stand where its column's words start, a row's inset past where its controls do. */
-  words?: boolean;
+  /** The task's path, or its block while the task is read, or a place's name. */
+  named: ReactNode;
+  start?: FrameStart;
   /** Whether quiet words follow the name, on its last baseline. */
   detailed?: boolean;
+  /** The box a crumb's menu hangs from, which holds the name. */
+  room?: RefObject<HTMLDivElement | null> | undefined;
 }): React.JSX.Element {
   return (
-    <header
-      className="luke-frame-head"
-      data-start={words ? "words" : undefined}
-      data-detail={detailed ? "" : undefined}
-    >
-      <div className="luke-frame-head-named">{named}</div>
-      {end}
+    <header className="luke-frame-head" data-start={start} data-detail={detailed ? "" : undefined}>
+      <div className="luke-frame-head-named" ref={room}>
+        {named}
+      </div>
     </header>
   );
 }
 
-/** The count of what waits on the reader, a press that goes to it; nothing while none waits. */
-function WaitingCount({
-  waiting,
-}: {
-  waiting: FrameHeadWaiting | undefined;
-}): React.JSX.Element | null {
-  if (waiting === undefined || waiting.count === 0) return null;
-  return (
-    <Button
-      variant={BUTTON_VARIANT.OUTLINE}
-      shape={BUTTON_SHAPE.ROUND}
-      size={BUTTON_SIZE.COMPACT}
-      icon={<AttentionMark />}
-      onClick={waiting.onOpen}
-    >
-      {countWords(waiting.count, waiting.noun)}
-    </Button>
-  );
+/** A task's crumb: its status mark, its name, its key after it, and its press. */
+function taskCrumb(task: FrameHeadTask, current: boolean): Crumb {
+  return {
+    label: task.name,
+    glyph: task.status === undefined ? undefined : <TaskStatusMark status={task.status} />,
+    detail: task.taskKey,
+    card: task.card,
+    current,
+    onPress: task.onOpen,
+  };
 }
 
-/** A task's head: the task as a chip, which opens it, and what waits on the reader at the row's end. */
+/**
+ * A task's head: its path, its repository's crumb where the page hands one,
+ * the tasks it is a child of, and the task itself, each task a press that
+ * opens it. A crumb that drops a menu, the repository's, hangs it from the
+ * head's own box (`room`, `menu`), since the path clips what stands inside it.
+ */
 export function FrameHead({
-  taskKey,
-  name,
-  onOpen,
-  waiting,
+  repository,
+  ancestors = [],
+  task,
+  room,
+  menu,
 }: {
-  /** The task's key (`ACME-42`); none for a task from a service before keys. */
-  taskKey?: string | undefined;
-  /** The task's name. */
-  name: string;
-  /** Opens the task itself, a press on its chip. */
-  onOpen: () => void;
-  /** What waits on the reader here, and where a press goes; nothing is said while none waits. */
-  waiting?: FrameHeadWaiting | undefined;
+  /** The repository's crumb, which drops its menu; none where the page hands none. */
+  repository?: Crumb | undefined;
+  /** The tasks the task is a child of, eldest first. */
+  ancestors?: readonly FrameHeadTask[];
+  task: FrameHeadTask;
+  /** The box a crumb's menu hangs from. */
+  room?: RefObject<HTMLDivElement | null> | undefined;
+  /** What a crumb drops, drawn in `room`. */
+  menu?: ReactNode;
 }): React.JSX.Element {
+  const crumbs = [
+    ...(repository === undefined ? [] : [repository]),
+    ...ancestors.map((each) => taskCrumb(each, false)),
+    taskCrumb(task, true),
+  ];
   return (
     <FrameHeadFrame
+      start={FRAME_START.EDGE}
+      room={room}
       named={
-        <Chip look={CHIP_LOOK.PILL} onClick={onOpen}>
-          {taskKey === undefined ? null : <span className={KEY}>{taskKey}</span>}
-          <ChipName>{name}</ChipName>
-        </Chip>
+        <>
+          <Breadcrumbs label={PATH_LABEL} variant={BREADCRUMBS_VARIANT.CONTROL} crumbs={crumbs} />
+          {menu}
+        </>
       }
-      end={<WaitingCount waiting={waiting} />}
     />
   );
 }
@@ -149,7 +161,7 @@ export function FramePlace({
   const detailed = detail !== undefined && detail !== null && detail !== false && detail !== "";
   return (
     <FrameHeadFrame
-      words={trail === undefined || trail.length === 0}
+      start={trail === undefined || trail.length === 0 ? FRAME_START.WORDS : FRAME_START.CONTROL}
       detailed={detailed}
       named={
         <>
@@ -161,11 +173,12 @@ export function FramePlace({
   );
 }
 
-/** The head while its task is read: one control's block where the task's chip will be. */
+/** The head while its task is read: one control's block where the task's crumb will be. */
 export function FrameHeadSkeleton(): React.JSX.Element {
   return (
     <FrameHeadFrame
-      named={<Skeleton shape={SKELETON_SHAPE.CONTROL} width={CHIP_SKELETON_WIDTH} />}
+      start={FRAME_START.EDGE}
+      named={<Skeleton shape={SKELETON_SHAPE.CONTROL} width={CRUMB_SKELETON_WIDTH} />}
     />
   );
 }

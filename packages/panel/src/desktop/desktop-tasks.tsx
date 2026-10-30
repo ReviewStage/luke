@@ -4,7 +4,6 @@ import { planSections } from "@luke/features/plan-document";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskBlockRequest, TaskStanding } from "@luke/features/task-wire";
 import { readingWords } from "@luke/features/words";
-import { taskKey } from "@luke/features/workspace-key";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -14,7 +13,6 @@ import {
   FailureNote,
   FILL_ELEMENT,
   Fill,
-  FrameHead,
   FrameHeadSkeleton,
   NOT_FOUND_THING,
   NotFound,
@@ -45,7 +43,7 @@ import { agentActor, agentName, type SentLine, startsOwnAgents } from "../tasks/
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
-import { NEEDS_YOU, taskHolder } from "../tasks/inbox-model.js";
+import { taskHolder } from "../tasks/inbox-model.js";
 import { PlanBody, type SectionLinks, type TitleRename } from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
@@ -59,7 +57,11 @@ import {
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
 import { taskLinkPlace, useOfferTaskRename } from "../tasks/task-menu-items.js";
-import type { TaskRepositoryDoor, TaskStandingDoor } from "../tasks/task-standing.js";
+import {
+  TaskFrameHead,
+  type TaskRepositoryDoor,
+  type TaskStandingDoor,
+} from "../tasks/task-standing.js";
 import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { placeOfTaskTarget, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { isOverviewTab, MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
@@ -130,13 +132,12 @@ import { TitleBarPlace } from "./title-bar.js";
  * the repository chip only while the task has none, and otherwise only the
  * chip's menu, which Change repository opens.
  *
- * The task's head names the task whichever tab is chosen (`FrameHead`): the
- * task as a chip, its key and name, which shows its plan, and how many of
- * its Inbox items wait on the reader, a press that opens the window's Inbox
- * narrowed to the task. It stands in the window's title bar, over the
- * toolbar, where one stands (`title-bar.tsx`), and under the toolbar over
- * every tab of the column where none does. A phone heads the task with its
- * own row instead (`TaskHead`).
+ * The task's head names the task whichever tab is chosen (`TaskFrameHead`):
+ * its path, its repository, the tasks it is a child of, and the task by its
+ * status mark, name, and key, which opens its Overview. It stands in the
+ * window's title bar, over the toolbar, where one stands (`title-bar.tsx`),
+ * and under the toolbar over every tab of the column where none does. A
+ * phone heads the task with its own row instead (`TaskHead`).
  *
  * The column's summary stands at its right, under the toolbar, listing what
  * both "+" menus open, with its button last in the
@@ -1227,19 +1228,11 @@ function PlanDocument({
             or over every tab of the column where none stands; a phone heads the task with its own row (`TaskHead`). */}
                         {switched ? null : (
                           <TitleBarPlace inline>
-                            <FrameHead
-                              taskKey={
-                                task.number === undefined
-                                  ? undefined
-                                  : taskKey(workspaceName, task.number)
-                              }
-                              name={listed.name}
+                            <TaskFrameHead
+                              task={task}
+                              shown={listed}
+                              door={standing}
                               onOpen={openOverview}
-                              waiting={{
-                                count: inbox.board.waiting.length,
-                                noun: NEEDS_YOU.COUNT,
-                                onOpen: () => tasks.onShowInbox({ taskId: task.id }),
-                              }}
                             />
                           </TitleBarPlace>
                         )}

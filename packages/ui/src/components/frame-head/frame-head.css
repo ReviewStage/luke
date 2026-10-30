@@ -1,6 +1,6 @@
-/* frame-head.css -- the head of a place's frame: one row across its column
-   at the column's inset, the task's chip or the place's name leading and
-   what waits at the row's end. */
+/* frame-head.css -- the head of a place's frame: one row across its column,
+   the task's path on its frame's edge or the place's name at the column's
+   inset. */
 
 @layer components {
   .luke-frame-head {
@@ -13,15 +13,20 @@
   }
 
   /* A head that starts on a place's words stands them where its column's
-     words start, as a bar does; one that starts on a control, a chip or a
-     crumb, stands it at the column's inset. */
+     words start, as a bar does; one that starts on a control, a crumb,
+     stands it at the column's inset; and a task's path stands on its
+     frame's edge, where the first tab under it stands. */
   .luke-frame-head[data-start="words"] {
     padding-left: calc(var(--luke-space-12) + var(--luke-row-inset));
   }
 
-  /* Note that the chip gives way, its name cut short, before the count
-     does, since the count is a press the reader is asked to make. */
+  .luke-frame-head[data-start="edge"] {
+    padding-left: 0;
+  }
+
+  /* Note that it is placed, because a crumb's menu hangs from it. */
   .luke-frame-head-named {
+    position: relative;
     display: flex;
     flex: 1 1 auto;
     min-width: 0;
@@ -36,9 +41,5 @@
 
   .luke-frame-head[data-detail] > .luke-frame-head-named > * {
     min-width: 0;
-  }
-
-  .luke-frame-head > :not(.luke-frame-head-named) {
-    flex: none;
   }
 }

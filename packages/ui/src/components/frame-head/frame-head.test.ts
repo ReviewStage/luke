@@ -6,11 +6,10 @@ import { afterEach, expect, test } from "vitest";
 import { FrameHead, FramePlace } from "./frame-head.js";
 
 /**
- * frame-head.test.ts -- a task's head names the task by its key and name in
- * a chip that opens it, says how many things wait on the reader in words
- * that agree with the count, takes a press on that count to go to them, and
- * says nothing of a count of none; and a place that is no task is named as
- * the page's heading, the places above it before it, each a press back.
+ * frame-head.test.ts -- a task's head names the task by its path, the tasks
+ * it is a child of then the task, each by its name and key and a press that
+ * opens it, the task current; and a place that is no task is named as the
+ * page's heading, the places above it before it, each a press back.
  * Synthetic tasks.
  */
 
@@ -31,45 +30,23 @@ function draw(element: ReactNode): HTMLElement {
   return container;
 }
 
-const NOUN = { one: "needs you", many: "need you" } as const;
-
 /** The head's button whose words are `words`. */
 function press(head: HTMLElement, words: string): HTMLButtonElement | undefined {
   return [...head.querySelectorAll("button")].find((button) => button.textContent === words);
 }
 
-test("names the task by its key and name in a chip that opens it, and goes to what waits on a press", () => {
+test("names a child task by its path, its parent then the task, each by name and key and a press that opens it", () => {
   const opened: string[] = [];
   const head = draw(
     createElement(FrameHead, {
-      taskKey: "ACME-42",
-      name: "Launch checklist",
-      onOpen: () => opened.push("task"),
-      waiting: { count: 3, noun: NOUN, onOpen: () => opened.push("inbox") },
+      ancestors: [{ name: "Launch", taskKey: "ACME-40", onOpen: () => opened.push("parent") }],
+      task: { name: "Launch checklist", taskKey: "ACME-42", onOpen: () => opened.push("task") },
     }),
   );
-  act(() => press(head, "ACME-42Launch checklist")?.click());
-  act(() => press(head, "3 need you")?.click());
-  expect(opened).toEqual(["task", "inbox"]);
-});
-
-test("says one waiting thing in the singular, and nothing at all of none", () => {
-  const one = draw(
-    createElement(FrameHead, {
-      name: "Launch checklist",
-      onOpen: () => undefined,
-      waiting: { count: 1, noun: NOUN, onOpen: () => undefined },
-    }),
-  );
-  expect(press(one, "1 needs you")).toBeDefined();
-  const none = draw(
-    createElement(FrameHead, {
-      name: "Launch checklist",
-      onOpen: () => undefined,
-      waiting: { count: 0, noun: NOUN, onOpen: () => undefined },
-    }),
-  );
-  expect(none.textContent).toBe("Launch checklist");
+  act(() => press(head, "Launch checklistACME-42")?.click());
+  act(() => press(head, "LaunchACME-40")?.click());
+  expect(opened).toEqual(["task", "parent"]);
+  expect(head.querySelector("[aria-current='page']")?.textContent).toBe("Launch checklistACME-42");
 });
 
 test("names a place that is no task as the page's heading, the places above it before it, each a press back", () => {

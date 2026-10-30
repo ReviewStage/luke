@@ -1412,6 +1412,14 @@ body,
   padding-left: calc(var(--sidebar-toggle-clearance) - var(--column-inset));
 }
 
+/* A task's path stands on its frame's edge (`FrameHead`), where the first
+   tab under it stands: past the buttons while the sidebar is folded, as the
+   tab row is below. */
+.desktop-shell[data-sidebar-collapsed="true"]
+> .window-title-bar:has(.luke-frame-head[data-start="edge"]) {
+  padding-left: var(--sidebar-toggle-clearance);
+}
+
 .desktop-shell[data-panel-toggle="true"] > .window-title-bar {
   padding-right: calc(
     var(--panel-toggle-right) +
@@ -1435,9 +1443,10 @@ body,
 
 /* Under the title bar every pane's top row is an ordinary bar, the window's
    handle no longer, and the title bar's buttons stand over none of them: the
-   plan's first tab starts on one line with its sheet's edge, folded or not,
-   the side panel's row ends at its own, and nothing below keeps room for
-   the buttons above. */
+   side panel's row ends at its own sheet's edge, and nothing below keeps
+   room for the buttons above but the task's tab row, whose first tab starts
+   where the task's path above it does, on its sheet's edge, or past the
+   buttons while the sidebar is folded (above, `.desktop-task-main`). */
 [data-luke-profile="desktop"] .desktop-shell[data-title-bar="true"] > .desktop-main {
   --luke-toolbar-app-region: no-drag;
 }
@@ -1455,12 +1464,6 @@ body,
 
 .desktop-shell[data-title-bar="true"][data-sidebar-collapsed="true"] > .desktop-main {
   --luke-toolbar-start-at: initial;
-}
-
-.desktop-shell[data-title-bar="true"][data-sidebar-collapsed="true"]
-  > .desktop-main
-  .desktop-task-main {
-  --luke-toolbar-start-at: 0px;
 }
 
 .desktop-shell[data-title-bar="true"][data-sidebar-collapsed="true"]
