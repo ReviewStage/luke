@@ -1312,7 +1312,7 @@ export const PlanBody = memo(function PlanBody({
               <TaskStandingChips
                 task={task}
                 onSet={taskStanding.onSet}
-                blocks={taskStanding.blocks}
+                relations={taskStanding.relations}
                 inSight={taskStanding.inSight}
               />
             )}

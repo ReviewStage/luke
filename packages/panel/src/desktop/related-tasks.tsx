@@ -3,6 +3,7 @@ import { type ListRowFold, RELATED_TASK_CELLS, TASK_ROW_CELL, TaskRows } from "@
 import { childTaskCounts } from "@luke/ui/task-list-model";
 import { type ReactNode, useMemo } from "react";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import type { MenuEntry } from "./action-menu.js";
 import { TaskListRow } from "./task-list-row.js";
 import { useStandingDoor } from "./task-row-parts.js";
 import { useTasksSelection } from "./tasks-selection.js";
@@ -20,7 +21,8 @@ import { useTasksSelection } from "./tasks-selection.js";
  * are, a row chosen among several offering the List's bar's acts on every
  * one chosen. A row may stand nested under another (`depth`), and fold the
  * rows nested under it (`fold`), whose owner keeps whether they stand open
- * and hands only the rows drawn.
+ * and hands only the rows drawn. A row may stand settled, its name muted,
+ * and lead its menu with groups of its owner's (`menu`).
  */
 
 /** One row of the list: the task, what stands at its end, how deep it is nested, and the rows it folds. */
@@ -30,6 +32,10 @@ export interface RelatedTaskRow {
   readonly end?: ReactNode;
   readonly depth?: number;
   readonly fold?: ListRowFold;
+  /** Whether it stands settled beside the rows still open, its name muted: a blocker that is done. */
+  readonly settled?: boolean;
+  /** Groups leading its menu, ahead of the task's own: its relation to change or take away. */
+  readonly menu?: readonly (readonly MenuEntry[])[];
 }
 
 /** The list of `rows`, named by `label`. */
@@ -55,7 +61,7 @@ export function RelatedTasks({
         cells={RELATED_TASK_CELLS}
         selection={{ selected: selection.selected, onChange: selection.onChange }}
       >
-        {rows.map(({ task, end, depth, fold }) => (
+        {rows.map(({ task, end, depth, fold, settled, menu }) => (
           <TaskListRow
             key={task.id}
             tasks={tasks}
@@ -69,6 +75,8 @@ export function RelatedTasks({
             onStanding={(standing) => setStanding(task, standing)}
             depth={depth}
             fold={fold}
+            settled={settled}
+            menuGroups={menu}
           />
         ))}
       </TaskRows>

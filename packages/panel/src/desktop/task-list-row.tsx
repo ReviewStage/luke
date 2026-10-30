@@ -33,7 +33,7 @@ import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
-import { rowMenu } from "./action-menu.js";
+import { type MenuEntry, rowMenu } from "./action-menu.js";
 import { TASK_MENU_SURFACE, useTaskMenuItems } from "./task-actions.js";
 import { AssigneeChip, PriorityChip, StatusChip, statusOf, taskSubject } from "./task-row-parts.js";
 import { type ChosenTasks, chosenRowMenu } from "./tasks-selection.js";
@@ -55,7 +55,8 @@ import { type ChosenTasks, chosenRowMenu } from "./tasks-selection.js";
  * which the press says after the status, and in its own cell how many of
  * its sub-tasks are finished, "1/3", as the sidebar's row says it.
  *
- * Its menu is the task's own, whose Rename makes its name its field until
+ * Its menu is the task's own, after any groups its list leads it with (a
+ * related task's Change relation), whose Rename makes its name its field until
  * the edit ends; chosen among several, its ⋯, right-click, and menu key
  * offer the selection bar's acts on every task chosen, as a Mac's list
  * does, and one not chosen keeps its own menu.
@@ -111,6 +112,8 @@ export function TaskListRow({
   onStanding,
   depth,
   fold,
+  settled,
+  menuGroups = [],
 }: {
   tasks: TasksControl;
   task: TaskSummary;
@@ -133,6 +136,10 @@ export function TaskListRow({
   depth?: number | undefined;
   /** The rows nested under it, which it folds; none where it holds none. */
   fold?: ListRowFold | undefined;
+  /** Whether it stands settled beside the rows still open, its name muted. */
+  settled?: boolean | undefined;
+  /** Its list's own groups, ahead of the task's menu: a related task's relation to change. */
+  menuGroups?: readonly (readonly MenuEntry[])[] | undefined;
 }): React.JSX.Element {
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
@@ -150,7 +157,7 @@ export function TaskListRow({
       ? undefined
       : (repositoryName ?? repositoryLabel(task.repository, [{ repository: task.repository }]));
   const own = {
-    ...rowMenu("Task", actions.groups(), tasks.shown),
+    ...rowMenu("Task", [...menuGroups, ...actions.groups()], tasks.shown),
     footer: actions.footer,
     subject: taskSubject(task, repository, key),
   };
@@ -229,6 +236,7 @@ export function TaskListRow({
       pressRef={press}
       depth={depth}
       fold={fold}
+      settled={settled}
     >
       {actions.dialog}
     </TaskRow>

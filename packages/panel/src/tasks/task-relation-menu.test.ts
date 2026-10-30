@@ -12,8 +12,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import type { TaskBlocksDoor } from "./task-blocks.js";
-import type { TaskRelationAsk } from "./task-relation-menu.js";
+import type { TaskRelationAsk, TaskRelationDoor } from "./task-relation-menu.js";
 import { TaskStandingChips } from "./task-standing.js";
 
 /**
@@ -74,7 +73,7 @@ afterEach(() => {
 
 /** Draws the task's head with its relations' door, answering each ask as it stands; drawing again hands the head the next ask. */
 function head(
-  door: Omit<TaskBlocksDoor, "ask">,
+  door: TaskRelationDoor,
   task: Task = TASK,
 ): (ask: TaskRelationAsk) => void {
   const host = document.createElement("div");
@@ -87,7 +86,7 @@ function head(
         createElement(TaskStandingChips, {
           task,
           onSet: undefined,
-          blocks: { ...door, ask },
+          relations: { ...door, ask },
         }),
       ),
     );
@@ -105,7 +104,6 @@ function row(name: string): HTMLElement {
 const DOOR = {
   workspaceName: "Acme",
   tasks: [ROOT, PARENT, PEER, ELSEWHERE, { ...summary(TASK.id, TASK.name, TASK.repository) }],
-  onOpen: () => undefined,
   onChange: () => undefined,
 };
 
