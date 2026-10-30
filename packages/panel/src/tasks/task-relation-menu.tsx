@@ -45,8 +45,8 @@ import { useEffect, useId, useRef, useState } from "react";
  * group's + may draw it on a kind of its own.
  */
 
-/** Each kind as the menu's kind row, its submenu, and the task's menus name it. */
-const TASK_RELATION_WORDS = {
+/** Each kind as the menu's kind row, its submenu, the task's menus, and a related row's pill name it. */
+export const TASK_RELATION_WORDS = {
   [TASK_RELATION_KIND.SUB_TASK]: "Sub-task",
   [TASK_RELATION_KIND.PARENT]: "Parent",
   [TASK_RELATION_KIND.BLOCKED_BY]: "Blocked by",
@@ -104,6 +104,12 @@ export interface TaskRelationDoor {
 export interface TaskRelationAsk {
   readonly kind: TaskRelationKind;
   readonly request: number;
+}
+
+/** What the page hands the task's head: the menu's door, and the ask from the task's menus or ⌘K to open it, handed back once answered. */
+export interface TaskRelationsDoor extends TaskRelationDoor {
+  readonly ask?: TaskRelationAsk | undefined;
+  readonly onAsked?: ((request: number) => void) | undefined;
 }
 
 /** Whether the door can send a kind at all. */

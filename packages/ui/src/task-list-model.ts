@@ -437,7 +437,7 @@ export interface ChildTaskCount {
 }
 
 /** Whether a task has settled: done, or canceled, which is as settled as done. */
-function finished(task: TaskSummary): boolean {
+export function taskFinished(task: TaskSummary): boolean {
   return task.status === TASK_STATUS.DONE || task.status === TASK_STATUS.CANCELED;
 }
 
@@ -453,7 +453,7 @@ export function subTasksOf(
 
 /** How many of `subTasks` are finished (done or canceled), of all of them. */
 export function subTaskCount(subTasks: readonly TaskSummary[]): ChildTaskCount {
-  return { finished: subTasks.filter(finished).length, total: subTasks.length };
+  return { finished: subTasks.filter(taskFinished).length, total: subTasks.length };
 }
 
 /**
@@ -472,7 +472,7 @@ export function childTaskCounts(
     if (parentTaskId === undefined || parentTaskId === id) continue;
     const was = counts.get(parentTaskId) ?? { finished: 0, total: 0 };
     counts.set(parentTaskId, {
-      finished: was.finished + (finished(task) ? 1 : 0),
+      finished: was.finished + (taskFinished(task) ? 1 : 0),
       total: was.total + 1,
     });
   }

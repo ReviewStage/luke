@@ -166,9 +166,12 @@ const ROW = `${ROW_FRAME} px-row-inset ps-select-gutter`;
 /** A draft's row, raised as a card, its hairline taken out of its inset so its cells stand on the rows' lines. */
 const DRAFT_ROW = `${ROW_FRAME} px-task-row-draft luke-task-row-draft`;
 
-/** The name's cell, the one that takes the row's press. */
+/** The name's cell, the one that takes the row's press, in the text's ink. */
 const NAME_CELL =
-  "luke-task-row-cell pointer-events-auto order-4 flex min-w-0 flex-col items-stretch gap-0 text-label text-foreground tabular-nums whitespace-nowrap";
+  "luke-task-row-cell pointer-events-auto order-4 flex min-w-0 flex-col items-stretch gap-0 text-label tabular-nums whitespace-nowrap";
+
+/** The name's ink: the text's, or the muted ink for a row whose task is settled. */
+const NAME_INK = { REST: "text-foreground", SETTLED: "text-muted-foreground" } as const;
 
 /** A nested row's name, in by a nest for each level it stands at. */
 const NESTED = "ps-list-row-nest";
@@ -242,6 +245,7 @@ export function TaskRow({
   pressRef,
   depth = 0,
   fold,
+  settled = false,
   children,
 }: {
   /** The task, which keys the row's motion, its choosing, and its box. */
@@ -271,6 +275,8 @@ export function TaskRow({
   depth?: number | undefined;
   /** The rows nested under it, which it folds; none where it holds none. */
   fold?: ListRowFold | undefined;
+  /** Whether it stands settled beside the rows still open, its name in the muted ink: a blocker that is done. */
+  settled?: boolean | undefined;
   /** What stands beside its cells and draws nothing in the grid: a dialog its menu opens. */
   children?: ReactNode;
 }): React.JSX.Element {
@@ -321,9 +327,14 @@ export function TaskRow({
       {...rowMenu.props}
       data-editing={editor === undefined ? undefined : "true"}
       data-depth={depth === 0 ? undefined : depth}
+      data-settled={settled ? "true" : undefined}
     >
       <span
-        className={depth === 0 ? NAME_CELL : `${NAME_CELL} ${NESTED}`}
+        className={[
+          NAME_CELL,
+          settled ? NAME_INK.SETTLED : NAME_INK.REST,
+          depth === 0 ? "" : NESTED,
+        ].join(" ")}
         data-cell="name"
         style={depth === 0 ? undefined : cssCustomProperties({ "--luke-list-row-depth": depth })}
       >
@@ -395,7 +406,7 @@ export function TaskRowDraft({
       data-quick-add={drafting ? "" : undefined}
       data-pending={pending ? "true" : undefined}
     >
-      <span className={NAME_CELL} data-cell="name">
+      <span className={`${NAME_CELL} ${NAME_INK.REST}`} data-cell="name">
         {note === undefined ? (
           <span className={PRESS}>{name}</span>
         ) : (
