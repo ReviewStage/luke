@@ -187,7 +187,9 @@ export function repositoryPullRequestProcedures(seams: RepositoryPullRequestProc
      * What the reviewer and label pickers offer, of the repository rather than
      * the pull request, as an agent's are (`agents-procedures.ts`): the number
      * is decoded with the rest of the query and names nothing more, so a number
-     * the repository holds none under still answers.
+     * the repository holds none under still answers. Note that it is left
+     * unchecked, because reading the pull request would cost a GitHub call on
+     * every picker read for no gain: a non-member is refused all the same.
      */
     reviewOptions: signedIn.reviewOptions.effect(function* ({ input, context }) {
       const { token, access, subject } = yield* reachedRepository(context.userId, input);
