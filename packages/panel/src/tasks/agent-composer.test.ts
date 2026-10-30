@@ -977,3 +977,60 @@ test("while the agent's turn is starting, its status not yet running, a box that
 
   assert.ok(container.querySelector('button[aria-label="Queue"]'), "Send reads Queue");
 });
+
+test("while the agent's turn runs, a touch held on Send sends the other way: a box whose Enter steers queues", async () => {
+  const done: string[] = [];
+  /** The box while a turn runs, Enter steering, each way a message leaves recorded. */
+  function Running(): ReactNode {
+    const composer = useAgentComposer({
+      agentId: "agent-1",
+      taskId: "plan-1",
+      messages: [],
+      send: (_agentId, text) => {
+        done.push(`sent ${text}`);
+        return new Promise(ignore);
+      },
+    });
+    return createElement(AgentComposer, {
+      ...QUIET_COMPOSER,
+      composer,
+      queueing: {
+        working: true,
+        enterQueues: false,
+        onQueue: () => done.push("queued"),
+        editing: false,
+        onSave: ignore,
+        onSteer: ignore,
+        onCancel: ignore,
+      },
+    });
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Running))));
+  await settle();
+  typeInComposer(container, "Then open the pull request.");
+  await settle();
+  const send =
+    container.querySelector<HTMLButtonElement>('button[aria-label="Send"]') ??
+    assert.fail("Send is drawn");
+
+  vi.useFakeTimers();
+  try {
+    act(() => {
+      send.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch", isPrimary: true }),
+      );
+    });
+    act(() => vi.advanceTimersByTime(1000));
+    act(() => {
+      send.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }));
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+
+  assert.deepEqual(done, ["queued"]);
+});
