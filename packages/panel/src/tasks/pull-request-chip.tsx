@@ -1,11 +1,14 @@
-import { CHIP_LOOK, CHIP_SIZE, Chip, ChipName, Tooltip } from "@luke/ui";
+import {
+  CHIP_LOOK,
+  CHIP_SIZE,
+  Chip,
+  ChipName,
+  pullRequestMarkState,
+  Tooltip,
+} from "@luke/ui";
 import type { ReactNode } from "react";
 import { pullRequestNumberLabel } from "./agent-model.js";
-import {
-  PullRequestMark,
-  type PullRequestMarked,
-  pullRequestMarkState,
-} from "./pull-request-mark.js";
+import { PullRequestMark, type PullRequestMarked } from "./pull-request-mark.js";
 
 /**
  * pull-request-chip.tsx -- a pull request as a compact chip: GitHub's mark in GitHub's colour for where it stands, and its number.

@@ -315,7 +315,7 @@ test("a message refused after the developer wrote on stays where it went, marked
   assert.equal(composerEditor(tab.container).textContent, "Then fix CI");
 });
 
-test("a line another hand sent after a stopped turn, its page saying the agent runs, puts the tab to work: no Stopped under it, and the box offers Queue", async () => {
+test("a line another hand sent after a stopped turn, its page saying the agent runs, puts the tab to work: no Stopped under it, and ⌘ turns Send into Queue", async () => {
   const handedOn: AgentTranscriptMessage = {
     id: "row-queued",
     role: MESSAGE_ROLE.USER,
@@ -335,8 +335,9 @@ test("a line another hand sent after a stopped turn, its page saying the agent r
   await settle();
 
   assert.doesNotMatch(tab.container.textContent ?? "", /Stopped/u);
+  await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { metaKey: true })));
   assert.ok(
-    tab.container.querySelector('button[aria-label="Send options"]'),
-    "the box offers Queue beside Send",
+    tab.container.querySelector('button[aria-label="Queue"]'),
+    "holding ⌘ turns Send into Queue",
   );
 });

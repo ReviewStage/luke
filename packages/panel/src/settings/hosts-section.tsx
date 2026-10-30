@@ -60,6 +60,7 @@ import {
   useDevicePresence,
 } from "../device-presence.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
+import { HostConnectDialog, useHostConnect } from "./host-connect-dialog.js";
 import { MenuRow } from "./menu-row.js";
 import {
   type HostLine,
@@ -107,7 +108,11 @@ import {
  * moving by itself from connecting through getting ready to ready or
  * couldn't set up and why (`joinedLine`). A host so named is approved,
  * since the service lists no box before its approve, so the dialog never
- * names one that is not. The page stands only while the Bring your own host
+ * names one that is not. A pairing's link opened in this window stands its
+ * dialog over the page, Add hosts among it (`host-connect-dialog.tsx`), and
+ * once Connect makes the host the list is read again over the rows
+ * standing, so an open Add hosts names it and moves on by itself. The page
+ * stands only while the Bring your own host
  * experiment is on (`settings-rows.ts`'s `PAGE_EXPERIMENT`), so while it is
  * off nothing here is drawn, read, or turned on.
  */
@@ -441,6 +446,9 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   // The ids of the account's hosts as Add hosts opened, while its dialog stands.
   const [adding, setAdding] = useState<ReadonlySet<string> | undefined>(undefined);
   const thisMac = useThisMacHost(signedIn);
+  const [connecting, closeConnect] = useHostConnect();
+  // A pairing's question does not outlive the page it was asked over.
+  useEffect(() => closeConnect, [closeConnect]);
 
   // The page opening reads the hosts the service holds now, which a server may just have joined.
   useEffect(() => {
@@ -584,6 +592,15 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
           hosts={hosts}
           installScriptUrl={installScriptUrl}
           onClose={closeAdd}
+        />
+      )}
+      {/* Note that a pairing's dialog comes after Add hosts, so it stands over it where both are open. */}
+      {connecting === undefined || !signedIn ? null : (
+        <HostConnectDialog
+          key={connecting}
+          code={connecting}
+          onClose={closeConnect}
+          onConnected={() => relist(() => true)}
         />
       )}
     </>

@@ -129,6 +129,18 @@ export const TASK_PROPERTY = {
 
 export type TaskProperty = (typeof TASK_PROPERTY)[keyof typeof TASK_PROPERTY];
 
+/**
+ * A column the List draws beside the properties its display chose, which no
+ * display turns on or off: how many of a task's sub-tasks are finished. It
+ * folds away with the width as the properties do (`LIST_FOLD_ORDER`).
+ */
+export const LIST_COLUMN = {
+  SUB_TASKS: "subTasks",
+} as const;
+
+/** A column a List's row has room counted for: a property its display chose, or one of the List's own. */
+export type ListColumn = TaskProperty | (typeof LIST_COLUMN)[keyof typeof LIST_COLUMN];
+
 /** Every property, in the order a row draws them and the menu lists them. */
 export const TASK_PROPERTY_ORDER: readonly TaskProperty[] = Object.values(TASK_PROPERTY);
 
@@ -259,13 +271,15 @@ export const DEFAULT_LIST_DISPLAY: TasksDisplay = {
 
 /**
  * The properties a List's row folds away as the list's width runs short,
- * the first folded first: who made it, its agents' work, its repository,
- * its key, and what waits on the reader. Its chips and its time never fold,
+ * the first folded first: who made it, its agents' work, how many of its
+ * sub-tasks are finished, its repository, its key, and what waits on the
+ * reader. Its chips and its time never fold,
  * so a phone's List, which has no room for any of these, draws those alone.
  */
-export const LIST_FOLD_ORDER: readonly TaskProperty[] = [
+export const LIST_FOLD_ORDER: readonly ListColumn[] = [
   TASK_PROPERTY.CREATOR,
   TASK_PROPERTY.AGENTS,
+  LIST_COLUMN.SUB_TASKS,
   TASK_PROPERTY.REPOSITORY,
   TASK_PROPERTY.KEY,
   TASK_PROPERTY.WAITING,
@@ -281,8 +295,9 @@ const LIST_COLUMN_ROOM = {
   [TASK_PROPERTY.ASSIGNEE]: 32,
   [TASK_PROPERTY.CREATOR]: 140,
   [TASK_PROPERTY.AGENTS]: 100,
+  [LIST_COLUMN.SUB_TASKS]: 44,
   [TASK_PROPERTY.UPDATED]: 76,
-} as const satisfies Record<TaskProperty, number>;
+} as const satisfies Record<ListColumn, number>;
 
 /** The room a List's row takes whatever it draws, in CSS pixels: its insets, and its ⋯ with the gap before it. */
 const LIST_ROW_ROOM = 52;
@@ -298,11 +313,11 @@ const LIST_NAME_ROOM = 240;
  * name. Each column is counted at its widest, so a name never stands
  * squeezed for a column that turned out narrower than counted.
  */
-export function listPropertiesFitting(
-  properties: readonly TaskProperty[],
+export function listPropertiesFitting<Column extends ListColumn>(
+  properties: readonly Column[],
   width: number,
-): readonly TaskProperty[] {
-  const needs = (shown: readonly TaskProperty[]) =>
+): readonly Column[] {
+  const needs = (shown: readonly Column[]) =>
     shown.reduce((room, property) => room + LIST_COLUMN_ROOM[property], LIST_ROW_ROOM);
   return LIST_FOLD_ORDER.reduce(
     (shown, folding) =>

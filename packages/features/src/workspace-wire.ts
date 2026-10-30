@@ -102,6 +102,7 @@ export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([
   "auth",
   "blog",
   "changelog",
+  "connect",
   "connect-github",
   "consent",
   "desktop-session",

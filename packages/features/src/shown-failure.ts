@@ -110,6 +110,8 @@ export const FAILURE_SURFACE = {
   GITHUB_TOKEN_REMOVE: "github_token.remove",
   GITHUB_TOKEN_SAVE: "github_token.save",
   HOSTS_READ: "hosts.read",
+  HOST_PAIRING_ANSWER: "host_pairing.answer",
+  HOST_PAIRING_READ: "host_pairing.read",
   HOST_REMOVE: "host.remove",
   INBOX_ANSWER: "inbox.answer",
   INBOX_CLOSE: "inbox.close",

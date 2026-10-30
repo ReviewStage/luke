@@ -1,6 +1,5 @@
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { IconButton, Tooltip } from "@luke/ui";
-import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { PAGER_AXIS, Pager } from "@luke/ui";
 import { useAppCommand } from "../app-commands.js";
 import { type InboxListed, type InboxListView, inboxEnds, inboxSteps } from "./inbox-model.js";
 
@@ -63,33 +62,22 @@ export function useInboxPager(
   };
 }
 
-/** The pager at the end of an item's bar: "2 of 8" where the item has a row, then the arrows up and down the list, each naming its key, stepped back where there is nowhere to go. Note that an arrow stepped back keeps the keyboard, because a step that reaches an end leaves focus on it. */
+/** The pager at the end of an item's bar: "2 of 8" where the item has a row, then the arrows up and down the list, each naming its key, stepped back where there is nowhere to go. */
 export function InboxPagerControls({ pager }: { pager: InboxPager }): React.JSX.Element {
   return (
-    <div className="inbox-pager flex items-center">
-      {pager.count === undefined ? null : (
-        <span className="inbox-pager-count mr-item-gap whitespace-nowrap text-caption-inline text-muted-foreground tabular-nums">
-          {pager.count.at} of {pager.count.total}
-        </span>
-      )}
-      <Tooltip label="Previous item" command={APP_COMMAND.PREVIOUS_INBOX_ITEM}>
-        <IconButton
-          icon={<ChevronUpIcon />}
-          label="Previous item"
-          disabled={pager.onPrevious === undefined}
-          focusableWhenDisabled
-          onClick={pager.onPrevious}
-        />
-      </Tooltip>
-      <Tooltip label="Next item" command={APP_COMMAND.NEXT_INBOX_ITEM}>
-        <IconButton
-          icon={<ChevronDownIcon />}
-          label="Next item"
-          disabled={pager.onNext === undefined}
-          focusableWhenDisabled
-          onClick={pager.onNext}
-        />
-      </Tooltip>
-    </div>
+    <Pager
+      axis={PAGER_AXIS.VERTICAL}
+      place={pager.count}
+      previous={{
+        label: "Previous item",
+        chord: APP_SHORTCUTS[APP_COMMAND.PREVIOUS_INBOX_ITEM].chord,
+        onStep: pager.onPrevious,
+      }}
+      next={{
+        label: "Next item",
+        chord: APP_SHORTCUTS[APP_COMMAND.NEXT_INBOX_ITEM].chord,
+        onStep: pager.onNext,
+      }}
+    />
   );
 }

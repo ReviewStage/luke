@@ -707,19 +707,19 @@
 
 /* The Chapters view (agent-chapters-tab.tsx): the chapters' rail docked at
    its left, as Files changed's tree docks at its right, and the chapter
-   chosen beside it, its head over its own Files changed list and its foot
-   under it. The rail is as wide as the tree stands by default, slides in
-   past the view's left edge and out over the chapter (`usePaneSlide`), so
-   the body clips what stands past it, with `clip` rather than `hidden`, and
-   leaves a strip of one mark a chapter while hidden. */
+   chosen beside it, its head over its own Files changed list. The rail is
+   as wide as the tree stands by default, slides in past the view's left
+   edge and out over the chapter (`usePaneSlide`), so the body clips what
+   stands past it, with `clip` rather than `hidden`, and leaves a strip of
+   one mark a chapter while hidden. */
 .chapters-view {
   --chapter-rail-width: calc(var(--luke-space-64) * 4);
-  /* The least the chapter reads at: its bar, three lines of its brief, the
-     least of its files (below), and its foot. Its strip is as wide as keeps
-     each mark clear of the edge it stands at, a window's or the panel's. */
+  /* The least the chapter reads at: its bar, three lines of its brief, and
+     the least of its files (below). Its strip is as wide as keeps each mark
+     clear of the edge it stands at, a window's or the panel's. */
   --chapter-brief-least: calc(3 * var(--luke-type-body-leading) + var(--luke-list-inset));
   --chapter-reading-least: calc(
-    4 *
+    3 *
     var(--luke-pane-bar-height) +
     var(--luke-row-inset) +
     var(--chapter-brief-least)
@@ -729,7 +729,7 @@
 
 /* Note that the body never stands shorter than the chapter's least, so a
    window too short for it lets the Pull request tab scroll (below) rather
-   than slicing the brief or pushing the foot out past the body's clip. */
+   than slicing the brief or pushing its files out past the body's clip. */
 .chapters-body {
   position: relative;
   min-height: var(--chapter-reading-least);
@@ -792,50 +792,11 @@
 
 /* The chapter's files under the brief keep at least their own bar and a
    bar's height of the diff, so in a short window the brief gives way to
-   them rather than squeezing their bar out over the foot, and whatever
+   them rather than squeezing their bar out past the body, and whatever
    they still cannot fit is cut at their own edge, never drawn over it. */
 .chapter-reading > .file-view {
   min-height: calc(2 * var(--luke-pane-bar-height));
   overflow: clip;
-}
-
-/* The chapter's foot says its place whole, "Chapter 1 of 2", before its
-   buttons take room: the place never shrinks, so the buttons give way
-   first, folding to their glyphs (`FoldingButton`), and only where even the
-   place will not fit does it drop its noun for a reader and say "1 of 2". */
-.chapter-reading {
-  container: chapter-reading / inline-size;
-}
-
-/* off-scale: 480px, where Previous chapter and Next chapter no longer fit beside the place */
-@container chapter-reading (width < 480px) {
-  .chapter-reading > .luke-pane-bar:last-child {
-    --luke-fold: folded;
-  }
-}
-
-/* off-scale: 240px, where the place no longer fits with its noun */
-@container chapter-reading (width < 240px) {
-  .chapter-place-noun {
-    position: absolute;
-    overflow: hidden;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    border: 0;
-    clip-path: inset(50%);
-  }
-}
-
-/* A key change's card, `@luke/ui`'s outlined Card: the words take its
-   width; the press to its lines hugs its own. */
-.chapter-key-change {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--luke-list-gap);
-  padding: var(--luke-item-gap) var(--luke-row-inset);
 }
 
 /* While chapters are being made, the placeholder's region takes the room under the line, as the

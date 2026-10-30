@@ -1,6 +1,10 @@
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
-import { SETTINGS_PAGE as SETTINGS_VIEW, type SettingsPage as SettingsView } from "@luke/settings";
-import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
+import {
+  EXPERIMENT,
+  SETTINGS_PAGE as SETTINGS_VIEW,
+  type SettingsPage as SettingsView,
+} from "@luke/settings";
+import { EXPERIMENT_ANCHOR, SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 
 export type { SettingsView };
 /**
@@ -95,6 +99,8 @@ export const SETTINGS_SECTION = {
   CLAUDE: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
   /** Codex's row on Agents: the account's ChatGPT plan and OpenAI key, which dictation runs on too. */
   CODEX: SETTINGS_SEARCH_ROW.API_KEY_OPENAI,
+  /** Bring your own host's row on Experimental, which a pairing's link lands on while the account has it off. */
+  BRING_YOUR_OWN_HOST: EXPERIMENT_ANCHOR[EXPERIMENT.BRING_YOUR_OWN_HOST],
 } as const;
 
 type SettingsSection = (typeof SETTINGS_SECTION)[keyof typeof SETTINGS_SECTION];

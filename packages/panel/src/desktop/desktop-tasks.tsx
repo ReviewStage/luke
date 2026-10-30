@@ -692,14 +692,14 @@ function PlanDocument({
     }),
     [],
   );
-  // The repository chip's doors (`task-standing.tsx`): a pick is sent
+  // The repository crumb's doors (`task-standing.tsx`): a pick is sent
   // through the task's own door, which answers why the service refused it,
-  // said beside the chip under the task it was about and no other. ⌘K's
-  // Change repository asks the chip to open its menu, each ask counted so
-  // the same press opens it again: the ask stands until the chip answers it
-  // (`onAsked`), so a chip drawn again later does not open on an ask already
+  // said under the path of the task it was about and no other. ⌘K's
+  // Change repository asks the crumb to open its menu, each ask counted so
+  // the same press opens it again: the ask stands until the crumb answers it
+  // (`onAsked`), so a crumb drawn again later does not open on an ask already
   // answered, and the plan is shown first where the panel hides it, since
-  // the chip stands in the plan.
+  // the crumb stands in the plan.
   const chooseRepository = useSteadyDoor((repository: string) => {
     if (opened === undefined) return;
     const { id: taskId } = opened;
@@ -735,7 +735,7 @@ function PlanDocument({
     if (!planShown) choosePanelTab(SIDE_PANEL_TAB.PLAN);
     setActivityAsked(undefined);
   }, [menuRequest, planShown, planInSight, choosePanelTab]);
-  // Note that the chip is handed the ask only once the plan is in sight, so its menu never opens behind a list.
+  // Note that the crumb is handed the ask only once the plan is in sight, so its menu never opens behind a list.
   const openRequest = planInSight ? menuRequest : undefined;
   const repositoryDoor = useMemo<TaskRepositoryDoor | undefined>(
     () =>
@@ -773,10 +773,12 @@ function PlanDocument({
       workspaceName,
       onSet: setStanding,
       repository: repositoryDoor,
+      tasks: blockTasks,
+      onOpenTask: selectTask,
       blocks,
       inSight: planInSight,
     }),
-    [workspaceName, setStanding, repositoryDoor, blocks, planInSight],
+    [workspaceName, setStanding, repositoryDoor, blockTasks, selectTask, blocks, planInSight],
   );
   const reveal = revealed?.taskId === openedId ? revealed?.reveal : undefined;
   const { onSectionRevealed } = tasks;
@@ -803,17 +805,21 @@ function PlanDocument({
       pullRequestCardDoor,
     ],
   );
-  // The task's agents head its plan, a row opening its agent in this column as its tab does.
+  // The task's agents head its plan, a row opening its agent in this column as its tab does,
+  // keyed by the task, so another task's group starts folded rather than as this one was left.
   const planAgents = useMemo(
     () => (
       <PlanAgents
+        key={openedId}
         agents={agents}
         held={views.held}
-        main={{ tab, onChoose: openAgentTab }}
+        tab={tab}
+        runsOn={opened?.runsOn}
+        onOpenAgent={(agentId) => openAgentTab({ agent: agentId })}
         onOpenPullRequest={openPullRequestDoor}
       />
     ),
-    [agents, views.held, tab, openAgentTab, openPullRequestDoor],
+    [openedId, agents, views.held, tab, opened?.runsOn, openAgentTab, openPullRequestDoor],
   );
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.

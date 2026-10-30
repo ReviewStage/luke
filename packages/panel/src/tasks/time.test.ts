@@ -73,11 +73,11 @@ test("a plan's Edited line says its age as its sidebar row does, a month old as 
   // Note that only the date is fixed, so the task's minute reads `NOW` and nothing waits on a timer.
   vi.useFakeTimers({ now: NOW, toFake: ["Date"] });
 
-  assert.deepEqual(saidOf(NOW - 10 * SECOND), { row: "now", edited: "Last edited by you · now" });
-  assert.deepEqual(saidOf(NOW - 3 * DAY), { row: "3d", edited: "Last edited by you · 3d ago" });
+  assert.deepEqual(saidOf(NOW - 10 * SECOND), { row: "now", edited: "Edited now" });
+  assert.deepEqual(saidOf(NOW - 3 * DAY), { row: "3d", edited: "Edited 3d ago" });
   assert.deepEqual(saidOf(NOW - 45 * DAY), {
     row: "Aug 30",
-    edited: "Last edited by you · Aug 30",
+    edited: "Edited Aug 30",
   });
 });
 
