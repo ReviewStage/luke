@@ -23,6 +23,8 @@ import { Effect, Schema } from "effect";
 import { act } from "react";
 import { beforeAll, test } from "vitest";
 import { appBridge } from "../app-bridge.js";
+import { sideBundles } from "../bundle-loader.js";
+import { planEditor } from "../plan-editor/index.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -278,6 +280,27 @@ test("an item gone from under its open box, as a teammate's delete takes it, let
   await settle();
 
   assert.equal(composerEditor(itemPane(page)).textContent, "", "the gone item's draft is let go");
+});
+
+test("an answer box whose editor bundle could not be loaded says so beside Retry, and Retry mounts the editor once the bundle lands", async () => {
+  // Note that the chunk fails the first time it is asked for and lands the next, as a connection that dropped for a moment does.
+  let failed = false;
+  const bundles = sideBundles({
+    planEditor: () => {
+      if (failed) return Promise.resolve(planEditor);
+      failed = true;
+      return Promise.reject(new Error("The chunk could not be loaded."));
+    },
+  });
+  const { page } = mount([], { chosen: ON_THRESHOLD, bundles });
+  await settle();
+  const note = page.querySelector(".luke-composer-foot-note");
+  assert.equal(note?.textContent, "The answer box could not be loaded.Retry");
+
+  await act(async () => note?.querySelector("button")?.click());
+  await settle();
+
+  assert.equal(page.querySelector(".luke-composer-foot-note"), null, "the note is gone");
 });
 
 test("a waiting choice wears a Recommended badge at the head of the option its agent recommends and of no other, and a choice recommending nothing wears none", async () => {

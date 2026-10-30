@@ -64,6 +64,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, assert, beforeEach, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { useAppKeymap } from "../app-commands.js";
+import type { SideBundles } from "../bundle-loader.js";
 import { useDraftsOwner } from "../composer-drafts.js";
 import { DesktopInbox } from "../desktop/desktop-inbox.js";
 import { DesktopSidebar } from "../desktop/desktop-sidebar.js";
@@ -97,6 +98,7 @@ import { sidebarProps } from "./desktop-sidebar.js";
 import { restOn } from "./hint-rest.js";
 import { relayout } from "./resize-observer.js";
 import { installScrollIntoView } from "./scroll-into-view.js";
+import { onSideBundles } from "./side-bundles.js";
 import { agentHoldingsOf, tasksControl, waitingOf } from "./tasks-control.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -752,6 +754,7 @@ export function mount(
     chosen: firstChosen,
     drawnWhileOpen = false,
     agents: firstAgents = agentHoldingsOf(firstTaskless),
+    bundles,
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
@@ -776,6 +779,8 @@ export function mount(
     drawnWhileOpen?: boolean;
     /** Main's first word of the agents with no task holding items; those the items given name where none are given. */
     agents?: readonly AppInboxAgentHolding[];
+    /** The bundles the window's surfaces load, where the test hands importers of its own; the window's where none are handed. */
+    bundles?: SideBundles;
   } = {},
 ) {
   // Note that a mount is a fresh window over a fresh host, holding no inbox yet, so a test mounting again reads what its knobs say now.
@@ -893,7 +898,8 @@ export function mount(
     room === undefined || panel !== undefined
       ? createElement(Page, { sidePanel: panel })
       : createElement(Panelled, { at: room });
-  const page = toasts ? createElement(Fragment, null, inbox, createElement(ToastHost)) : inbox;
+  const shown = toasts ? createElement(Fragment, null, inbox, createElement(ToastHost)) : inbox;
+  const page = bundles === undefined ? shown : onSideBundles(bundles, shown);
   if (channels) chooseChannel(GENERAL.id);
   act(() => world.root?.render(onRegistry(AtomRegistry.make(), page)));
   return { page: container, asked };
