@@ -987,7 +987,7 @@ test(
 );
 
 test(
-  "a discard finds work in an agent's worktree only where it is changed, ahead of its upstream, on no remote branch, or has files and no repository",
+  "a discard finds work in an agent's worktree only where it is changed, ahead of its upstream, on no remote branch, on a branch left checked out or not, stashed, or has files and no repository",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
@@ -1029,7 +1029,13 @@ test(
 
     git(worktree, ["checkout", "--quiet", "-b", "unpublished", "origin/luke/fix-relay"]);
     git(worktree, ["branch", "--unset-upstream"]);
+    assert.match(found(), /a branch with commits/u, "a branch left for another keeps its commits");
+    git(worktree, ["branch", "--quiet", "-D", "mine"]);
     assert.equal(found(), "", "a branch with no upstream and no commits of its own holds nothing");
+    writeFileSync(path.join(worktree, "README.md"), "stashed\n");
+    git(worktree, ["stash", "--quiet"]);
+    assert.match(found(), /stashed/u);
+    git(worktree, ["stash", "drop", "--quiet"]);
     commit("local.md");
     assert.match(found(), /no remote branch/u);
 

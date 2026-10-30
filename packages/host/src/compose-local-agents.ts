@@ -160,9 +160,12 @@ import type { RunMode } from "./run-mode.js";
  * agent's home and caches there (`local-agent-box.ts`). Stopping it signals
  * its group alone, and kills the group once `KILL_GRACE` has passed, so
  * nothing of the host's or of any other agent's is stopped with it. Its
- * folder stays for the agent's life: a turn's end lets go of its GitHub
+ * folder stays between its turns: a turn's end lets go of its GitHub
  * token and empties its `tmp`, and the next turn's runner goes on from the
- * rest, its repository and its harness's session. A launch that finds none
+ * rest, its repository and its harness's session, until the agent is let
+ * go of, or a pass finds its folder past the `FOLDERS_KEPT` this machine's
+ * agents used most recently, by when each last launched, ended a turn, or
+ * had files written, with all its work on GitHub, and clears it. A launch that finds none
  * of the agent's work in its folder, which was cleared since, and would
  * continue a harness's session, starts the agent afresh with none, from a
  * repository made anew, and tells it so (`LAUNCH_NOTE.CLEARED`). For an
@@ -244,6 +247,12 @@ import type { RunMode } from "./run-mode.js";
  * never reached: archived while the device was away, whose line expired,
  * discarded by a run that crashed, or deleted with its task. One that ran
  * on the developer's own logins is checked on the device as the rest are.
+ * On the box, a pass then clears the folders of idle agents past the
+ * `FOLDERS_KEPT` most recently used, oldest first, where the platform's
+ * check finds all their work on GitHub, a local branch and a stash among
+ * it, checking at most `FOLDER_CHECKS_PER_PASS` a pass and never again one
+ * it found work in until its agent is used since; the agent stays this
+ * machine's, and its next launch starts afresh.
  *
  * Requests are each answered on a fiber of their own, inside the agent's
  * folder alone (`local-agent-requests.ts`). Turning the experiment off,
@@ -300,6 +309,10 @@ const KEPT_FOR = Duration.days(7);
 const ORPHAN_AFTER = 2;
 /** How many agents one pass lets go of at most, so a backlog clears over a few passes rather than in one long one. */
 const ORPHANS_PER_PASS = 5;
+/** How many of this machine's agents' folders, the most recently used, a pass never clears, so a box that runs agents for weeks does not fill its disk with folders nobody messages again. */
+const FOLDERS_KEPT = 15;
+/** How many folders past the most recently used one pass checks at most before it clears them, so a backlog clears over a few passes rather than in one long one. */
+const FOLDER_CHECKS_PER_PASS = 5;
 /** How long a folder a pass could not save waits before a pass tries it again: the first wait, doubled after each failed try up to the last. */
 const SAVE_RETRY = { FIRST: Duration.minutes(10), LAST: Duration.hours(6) } as const;
 /** What an agent's id is, and so the one name a folder or machine must have to be taken for an agent's. */
@@ -307,6 +320,14 @@ const AGENT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 /** How a discard ended: everything removed, the folder kept for work in it, or a step that failed, which a later pass tries again. */
 const DISCARD_END = { REMOVED: "removed", KEPT: "kept", FAILED: "failed" } as const;
+
+/** How a pass's clearing of a folder past the most recently used ended: removed, kept for work in it, passed over for a use since the pass ranked it, or a removal that failed. */
+const CLEAR_END = {
+  REMOVED: "removed",
+  KEPT: "kept",
+  PASSED_OVER: "passed-over",
+  FAILED: "failed",
+} as const;
 
 /** What lets an agent go: its discard line, a sweep of it once the service no longer lists it, or a sweep of its folder kept `KEPT_FOR` since, which goes whatever it holds. */
 const LET_GO = { LINE: "line", SWEEP: "sweep", KEPT_PAST: "kept-past" } as const;
@@ -526,6 +547,74 @@ export function composeLocalAgents(
         yield* updateState((current) => ({
           ...current,
           launches: current.launches.filter((launch) => launch.id !== id),
+        }));
+      });
+
+    /**
+     * The agent stamped as used now, by a launch, a turn's end, or files
+     * written, which ranks its folder among the most recently used a pass
+     * keeps (`FOLDERS_KEPT`). Note that the stamp is whole milliseconds,
+     * because the state holds no fraction of one and a clock may read one.
+     */
+    const usedNow = (agentId: string) =>
+      Effect.flatMap(Clock.currentTimeMillis, (at) =>
+        updateState((current) => ({
+          ...current,
+          lastUsed: { ...current.lastUsed, [agentId]: Math.floor(at) },
+        })),
+      );
+
+    /** The agent's stamp of its last use let go of, as its folder goes. */
+    const usedForgotten = (agentId: string) =>
+      Effect.gen(function* () {
+        if ((yield* Ref.get(state)).lastUsed?.[agentId] === undefined) return;
+        yield* updateState(({ lastUsed, ...current }) => ({
+          ...current,
+          lastUsed: Object.fromEntries(
+            Object.entries(lastUsed ?? {}).filter(([id]) => id !== agentId),
+          ),
+        }));
+      });
+
+    /**
+     * When the agent was last used here, where its folder under the home
+     * folder given stands: its stamp, or, for a folder from before the
+     * stamp, the end of its last turn its save record names, else the last
+     * change to its folder; none where its folder stands no more.
+     */
+    const usedAt = (folder: string, agentId: string) =>
+      Effect.gen(function* () {
+        const layout = deviceAgentLayout(folder, agentId);
+        const info = yield* Effect.option(fileSystem.stat(layout.folder));
+        if (Option.isNone(info)) return Option.none<number>();
+        const current = yield* Ref.get(state);
+        const stamped = current.lastUsed?.[agentId] ?? current.saves?.[agentId]?.endedAt;
+        if (stamped !== undefined) return Option.some(stamped);
+        const changed = Option.getOrUndefined(info.value.mtime);
+        return Option.some(changed === undefined ? 0 : changed.getTime());
+      });
+
+    /**
+     * Every agent this machine made whose folder under the home folder given
+     * stands with no stamp of its use, from before the stamp, stamped with
+     * when it was last used as its folder says (`usedAt`). Note that this
+     * runs as the gate opens before any turn is let go of, because letting
+     * one go makes the agent's `tmp` anew, which moves its folder's last
+     * change to the gate's opening.
+     */
+    const unstampedStamped = (folder: string) =>
+      Effect.gen(function* () {
+        const found: Record<string, number> = {};
+        for (const agentId of yield* ownedAgents(kernel.stateRoot)) {
+          if (!AGENT_UUID.test(agentId)) continue;
+          if ((yield* Ref.get(state)).lastUsed?.[agentId] !== undefined) continue;
+          const at = yield* usedAt(folder, agentId);
+          if (Option.isSome(at)) found[agentId] = at.value;
+        }
+        if (Object.keys(found).length === 0) return;
+        yield* updateState((current) => ({
+          ...current,
+          lastUsed: { ...found, ...current.lastUsed },
         }));
       });
 
@@ -1152,6 +1241,7 @@ export function composeLocalAgents(
             }
             // Note that the agent is kept as this machine's before its folder or VM is made, so an uninstall finds whatever a launch cut off left.
             yield* keepOwnedAgent(kernel.stateRoot, agentId);
+            yield* usedNow(agentId);
             const generation = payload.value.stateGeneration;
             const unfinished = savesState ? yield* saves.restoring(agentId) : undefined;
             const cold =
@@ -1224,12 +1314,15 @@ export function composeLocalAgents(
             const temp = layout.temp;
             yield* Effect.ignore(fileSystem.makeDirectory(temp, { recursive: true, mode: 0o700 }));
             const runnerScope = yield* Scope.fork(agentScope);
-            // Note that the runner holds its VM for as long as its scope stands, so the VM is let go of last as the scope closes, once the runner has ended; on the box the turn is let go of so too.
+            // Note that the runner holds its VM for as long as its scope stands, so the VM is let go of last as the scope closes, once the runner has ended; on the box the turn is let go of so too, and the agent stamped as used.
             // Note that smolvm's reason names no secret, since its credentials are only ever references to their files.
             const refused = direct
               ? yield* Scope.addFinalizer(
                   runnerScope,
-                  Effect.provideContext(boxTurnEnded(layout), services),
+                  Effect.provideContext(
+                    Effect.andThen(boxTurnEnded(layout), usedNow(agentId)),
+                    services,
+                  ),
                 ).pipe(
                   Effect.andThen(agentFoldersMade(layout.folder)),
                   Effect.as(Option.none<string>()),
@@ -1496,6 +1589,7 @@ export function composeLocalAgents(
             }
             yield* fileSystem.remove(layout.folder, { recursive: true, force: true });
             yield* saves.forgotten(userId, agentId);
+            yield* usedForgotten(agentId);
             // Note that a VM left standing keeps the agent in the record, so an uninstall deletes it yet, and a later pass tries it again.
             if (vmGone) yield* forgetOwnedAgent(kernel.stateRoot, agentId);
             // Note that a folder kept keeps its record too, so the agent, launched again, runs the way it ran.
@@ -1528,6 +1622,8 @@ export function composeLocalAgents(
             const files = decodeFiles(payload);
             if (Option.isNone(files)) return;
             yield* keepOwnedAgent(kernel.stateRoot, agentId);
+            // Note that files a later line names use the agent's folder already, so no pass clears it before that line.
+            yield* usedNow(agentId);
             const layout = deviceAgentLayout(folder, agentId);
             for (const file of files.value.files) {
               const target = path.normalize(file.path);
@@ -2019,6 +2115,92 @@ export function composeLocalAgents(
             }
           });
 
+        /** The use (`usedAt`) each agent's folder stood at when a pass's check found work in it, or could not say, so it is checked again only once the agent has been used since. */
+        const holdingWork = new Map<string, number>();
+
+        /**
+         * The agent's folder, past the most recently used, removed whole
+         * where it still stands at the use `at` the pass ranked it by and the
+         * platform's check finds all its work on GitHub (`unsavedWork`), so
+         * its next launch starts afresh from its branch
+         * (`LAUNCH_NOTE.CLEARED`); its stamp goes with it, but the agent
+         * stays this machine's, and its mode stays, since it is not archived.
+         * One whose check finds work, or cannot say, is recorded so
+         * (`holdingWork`) and kept.
+         */
+        const folderCleared = (agentId: string, at: number) =>
+          Effect.gen(function* () {
+            // Note that an agent used since the pass ranked it, as a files line ahead of its launch uses it, is no longer among the oldest.
+            if (!Option.exists(yield* usedAt(folder, agentId), (now) => now === at)) {
+              return CLEAR_END.PASSED_OVER;
+            }
+            const layout = deviceAgentLayout(folder, agentId);
+            const unsaved = yield* unsavedWork(agentId, layout, undefined);
+            if (Option.isSome(unsaved)) {
+              holdingWork.set(agentId, at);
+              report(
+                `a local agent's folder past the ${FOLDERS_KEPT} most recently used was kept, since ${unsaved.value}: ${agentId}`,
+              );
+              return CLEAR_END.KEPT;
+            }
+            yield* fileSystem.remove(layout.folder, { recursive: true, force: true });
+            yield* usedForgotten(agentId);
+            holdingWork.delete(agentId);
+            report(
+              `a local agent's folder past the ${FOLDERS_KEPT} most recently used was removed, its work all on GitHub: ${agentId}`,
+            );
+            return CLEAR_END.REMOVED;
+          }).pipe(
+            Effect.catch(() =>
+              Effect.sync(() => {
+                report(`a local agent's folder could not be removed: ${agentId}`);
+                return CLEAR_END.FAILED;
+              }),
+            ),
+          );
+
+        /**
+         * The folders of the agents given, this machine's as the pass read
+         * them, past the `FOLDERS_KEPT` most recently used (`usedAt`), only
+         * those that stand counted, cleared oldest first (`folderCleared`),
+         * each only while its agent stands idle (`whileIdle`), so never a
+         * running one's. Never one a VM still mounts, one kept for work since
+         * its agent was left out (`kept`), one that ran on the developer's own
+         * logins, whose launch is refused for good, or one whose check found
+         * work, or could not say, at the use it stands at (`holdingWork`); and
+         * at most `FOLDER_CHECKS_PER_PASS` checks run a pass. It runs last in
+         * a pass on a device whose agents run on the box (`swept`), so a read
+         * that was not answered clears no folder either.
+         */
+        const capped = (agentIds: readonly string[], vmStands: ReadonlySet<string>) =>
+          Effect.gen(function* () {
+            const mine = new Set(agentIds);
+            for (const id of [...holdingWork.keys()]) {
+              if (!mine.has(id)) holdingWork.delete(id);
+            }
+            const used: { readonly id: string; readonly at: number }[] = [];
+            for (const id of agentIds) {
+              const at = yield* usedAt(folder, id);
+              if (Option.isSome(at)) used.push({ id, at: at.value });
+            }
+            const past = used
+              .sort((one, other) => other.at - one.at)
+              .slice(FOLDERS_KEPT)
+              .reverse();
+            const keptAt = (yield* Ref.get(state)).kept ?? {};
+            let checks = 0;
+            for (const { id, at } of past) {
+              if (checks >= FOLDER_CHECKS_PER_PASS) return;
+              if (vmStands.has(id) || keptAt[id] !== undefined || holdingWork.get(id) === at) {
+                continue;
+              }
+              const ran = yield* ranAs(id, deviceAgentLayout(folder, id).checkoutPath);
+              if (Option.exists(ran, (mode) => mode === DEVICE_ISOLATION.BARE)) continue;
+              const ended = yield* whileIdle(id, folderCleared(id, at));
+              if (Option.exists(ended, (end) => end !== CLEAR_END.PASSED_OVER)) checks += 1;
+            }
+          });
+
         /**
          * One pass over the agents this machine made (`ownedAgents`), never
          * another Luke install's, each left be while it is not idle
@@ -2127,6 +2309,8 @@ export function composeLocalAgents(
           if (savesState) {
             yield* backfilled(owned.filter((id) => standing.has(id) && !vmStands.has(id)));
           }
+          // Note that the folders are counted once the agents left out are let go of, so none of theirs takes a place among the most recently used.
+          if (direct) yield* capped(owned, vmStands);
         });
 
         yield* Effect.forkScoped(linesFollowed);
@@ -2233,6 +2417,7 @@ export function composeLocalAgents(
         if (savesState) yield* saves.straysLetGo(userId);
         // Note that the agents this install ran are kept as its own before its kept launches are settled and forgotten, and before any of its VMs is deleted or its first pass runs.
         yield* adopted(folder);
+        yield* unstampedStamped(folder);
         const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
         for (const launch of left) {
           // Note that a runner that ended with the app saved nothing of its turn, so its folder holds state no save committed.

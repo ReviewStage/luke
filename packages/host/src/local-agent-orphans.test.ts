@@ -1,5 +1,5 @@
 /**
- * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, its agents run straight on the box and their folders kept for their life: a VM a run from before left deleted; an agent two answered reads in a row leave out removed whole, but kept, for a week, where the box's check finds work in its folder, whatever a save record from before says; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a folder with unsaved work kept once and never checked again, a listed folder never let go of past a warm window, a box with no smolvm never held up by it, and a pass that died never the last; and the agents an install ran before it kept its record of them taken as its own as the gate opens, a Mac's by its own state alone and never by the store it shares, a Linux host's by its folders and machines.
+ * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, its agents run straight on the box and their folders kept between turns: a VM a run from before left deleted; an agent two answered reads in a row leave out removed whole, but kept, for a week, where the box's check finds work in its folder, whatever a save record from before says; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a folder with unsaved work kept once and never checked again, a listed folder never let go of past a warm window, a box with no smolvm never held up by it, and a pass that died never the last; the folders past the 15 used most recently, a folder from before the stamp ranked by its last change, cleared where their work is all on GitHub, the agent kept as this machine's, but never a running agent's, nor one with unpushed work, which is checked once while its agent stays idle; and the agents an install ran before it kept its record of them taken as its own as the gate opens, a Mac's by its own state alone and never by the store it shares, a Linux host's by its folders and machines.
  *
  * The follower runs the real smolvm sandbox over a fake `smolvm` that keeps
  * its machines in a set, on a real temporary folder, against a fake service
@@ -12,7 +12,14 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
@@ -64,6 +71,9 @@ const AGENT = {
   FROM_BEFORE: "607182a3-a4b5-4c63-8f70-8b9c0d1e2f30",
 } as const;
 
+/** A day, which the tests' stamps of each agent's last use stand apart by. */
+const DAY = Duration.toMillis(Duration.days(1));
+
 /** How many turns in a row must find nothing asked of the disk unanswered before the follower is taken to wait on the clock alone. */
 const QUIET_TURNS = 3;
 
@@ -88,6 +98,23 @@ const settled = Effect.gen(function* () {
 const agentNumbered = (index: number) =>
   `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
 
+/** A launch line, under the line id given, for an agent with no repository, whose runner runs until the test ends. */
+const launchOf = (home: string, agentId: string, lineId: string): DeviceAgentClaimedLine => ({
+  line: {
+    id: lineId,
+    agentId,
+    seq: 1,
+    kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
+    payload: {
+      checkoutPath: deviceAgentLayout(home, agentId).checkoutPath,
+      repository: null,
+      startBranch: null,
+      firstSequence: 0,
+    },
+  },
+  secrets: { env: {}, stdin: "{}\n" },
+});
+
 /** The agents a device holds things for, as a test lays them out before the follower starts. */
 interface Held {
   /** Agents with a VM a run from before left, its credentials, and a folder holding a worktree. */
@@ -108,7 +135,9 @@ interface Held {
  * record, in a folder and smolvm store shared with another install, as a
  * Mac's are, or its own alone where `storesOwned` says, as a Linux host's
  * are; with the save records `savedBefore` names, as a host that saved its
- * agents' state left them, and kept since when `kept` says; its check of a
+ * agents' state left them, and kept since when `kept` says; each agent
+ * last used when `used` says, and each folder from before that record last
+ * changed when `changedAt` says; its check of a
  * worktree printing what `unsavedWork` names for its agent, and nothing for
  * any other; its live-agents read answering `reads` one after another; and
  * smolvm, where the box has it, as it does but where `noSmolvm` says,
@@ -125,6 +154,8 @@ const following = (input: {
   readonly mac?: boolean;
   readonly savedBefore?: readonly string[];
   readonly kept?: Readonly<Record<string, number>>;
+  readonly used?: Readonly<Record<string, number>>;
+  readonly changedAt?: Readonly<Record<string, number>>;
   readonly reads: readonly (readonly string[] | undefined)[];
   readonly unsavedWork?: Readonly<Record<string, string>>;
   readonly noSmolvm?: boolean;
@@ -153,6 +184,9 @@ const following = (input: {
     for (const agentId of [...(input.held.whole ?? []), ...(input.held.folderOnly ?? [])]) {
       mkdirSync(deviceAgentLayout(home, agentId).checkoutPath, { recursive: true });
     }
+    for (const [agentId, at] of Object.entries(input.changedAt ?? {})) {
+      utimesSync(deviceAgentLayout(home, agentId).folder, new Date(at), new Date(at));
+    }
     const owned = [
       ...(input.held.whole ?? []),
       ...(input.held.vmOnly ?? []),
@@ -175,6 +209,7 @@ const following = (input: {
         launches: (input.keptLaunches ?? []).map((launch) => ({ userId: USER_ID, ...launch })),
         saves,
         ...(input.kept === undefined ? {} : { kept: input.kept }),
+        ...(input.used === undefined ? {} : { lastUsed: input.used }),
         // Note that This Mac records how each of its agents ran, these in VMs before they ran on the box.
         ...(input.mac === true
           ? {
@@ -410,23 +445,7 @@ it.effect("an agent whose runner runs, or whose launch is still kept, is left be
         held: { whole: [AGENT.LAUNCH_KEPT], folderOnly: [AGENT.ORPHAN] },
         reads: [[], []],
         keptLaunches: [{ id: "4d5e6f70-8192-4a3b-8c4d-5e6f7a8b9c0d", agentId: AGENT.LAUNCH_KEPT }],
-        launches: (home) => [
-          {
-            line: {
-              id: "5e6f7081-92a3-4b4c-9d5e-6f7a8b9c0d1e",
-              agentId: AGENT.RUNNING,
-              seq: 1,
-              kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
-              payload: {
-                checkoutPath: deviceAgentLayout(home, AGENT.RUNNING).checkoutPath,
-                repository: null,
-                startBranch: null,
-                firstSequence: 0,
-              },
-            },
-            secrets: { env: {}, stdin: "{}\n" },
-          },
-        ],
+        launches: (home) => [launchOf(home, AGENT.RUNNING, "5e6f7081-92a3-4b4c-9d5e-6f7a8b9c0d1e")],
       });
       yield* device.passed(2);
 
@@ -658,6 +677,68 @@ it.effect.each([
 
         assert.deepEqual(device.holdsOf(AGENT.ORPHAN), NOTHING);
         assert.deepEqual(device.ownedRecorded(), []);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a pass keeps the 15 folders used most recently, a folder from before the stamp ranked by its last change, and of the rest clears those whose work is all on GitHub, its agent still this machine's",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const recent = Array.from({ length: 15 }, (_, index) => agentNumbered(index + 1));
+        const [oldest, fromBefore] = [agentNumbered(16), agentNumbered(17)];
+        const everyone = [...recent, oldest, fromBefore];
+        const device = yield* following({
+          held: { folderOnly: everyone },
+          used: {
+            ...Object.fromEntries(recent.map((agentId, index) => [agentId, DAY * (100 + index)])),
+            [oldest]: DAY * 10,
+          },
+          changedAt: { [fromBefore]: DAY * 20 },
+          reads: [everyone],
+        });
+        yield* device.passed(1);
+
+        assert.deepEqual(
+          recent.filter((agentId) => !device.holdsOf(agentId).folder),
+          [],
+          "every folder of the 15 used most recently stays",
+        );
+        assert.deepEqual(device.holdsOf(oldest), NOTHING);
+        assert.deepEqual(device.holdsOf(fromBefore), NOTHING);
+        assert.deepEqual(device.ownedRecorded(), [...everyone].sort());
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a pass never clears a running agent's folder past the 15 used most recently, nor one with unpushed work, which it checks once while that agent stays idle",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const recent = Array.from({ length: 15 }, (_, index) => agentNumbered(index + 1));
+        const device = yield* following({
+          held: { folderOnly: [...recent, AGENT.UNSAVED] },
+          used: {
+            ...Object.fromEntries(recent.map((agentId, index) => [agentId, DAY * (100 + index)])),
+            [AGENT.UNSAVED]: DAY * 10,
+          },
+          unsavedWork: { [AGENT.UNSAVED]: "it has commits on no remote branch\n" },
+          // Note that the running agent is stamped as it launches, by the test's clock, long before any other's use.
+          launches: (home) => [
+            launchOf(home, AGENT.RUNNING, "5e6f7081-92a3-4b4c-9d5e-6f7a8b9c0d1e"),
+          ],
+          reads: [
+            [...recent, AGENT.UNSAVED, AGENT.RUNNING],
+            [...recent, AGENT.UNSAVED, AGENT.RUNNING],
+          ],
+        });
+        yield* device.passed(2);
+
+        assert.equal(device.holdsOf(AGENT.RUNNING).folder, true);
+        assert.equal(device.holdsOf(AGENT.UNSAVED).folder, true);
+        assert.equal(device.checksRun(), 1);
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );

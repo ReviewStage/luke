@@ -3,7 +3,7 @@ import { Effect, Option, Path, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 
 /**
- * local-agent-state.ts -- what a machine keeps of its local agents between runs (`local-agents.json` in its state): the device id each account registered under, the launches no exit has settled yet, how each agent has run there, where each agent's saved state stands, and the agents whose folders a discard kept, and since when; read and written alike by the follower (`compose-local-agents.ts`) and by This Mac's turn-on (`compose-this-mac-host.ts`). Beside it, which agents' folders and VMs this machine made (`owned-agents`).
+ * local-agent-state.ts -- what a machine keeps of its local agents between runs (`local-agents.json` in its state): the device id each account registered under, the launches no exit has settled yet, how each agent has run there, where each agent's saved state stands, the agents whose folders a discard kept, and since when, and when each agent was last used there; read and written alike by the follower (`compose-local-agents.ts`) and by This Mac's turn-on (`compose-this-mac-host.ts`). Beside it, which agents' folders and VMs this machine made (`owned-agents`).
  *
  * The follower holds the state while it follows and writes it whole; This
  * Mac's turn-on, in the app, reads and changes it in place, never while the
@@ -109,11 +109,15 @@ export function savedSince(save: AgentSave | undefined): Option.Option<number> {
  * settle of, each with the agent whose VM it ran in, absent from a launch
  * kept before it, on a device whose agents may have run directly on it
  * (`formerlyDirect`), how each agent has run here, in a VM or directly,
- * where each agent's saved state stands, by agent id, and the agents the
+ * where each agent's saved state stands, by agent id, the agents the
  * service no longer lists whose folders a discard kept for work in them,
  * each with when it was first kept (epoch milliseconds), which the follower
- * never checks again while they stand and lets go of whole a week after;
- * each of the last three absent from a state file from before it.
+ * never checks again while they stand and lets go of whole a week after,
+ * and when each agent whose folder stands was last used here (epoch
+ * milliseconds): its last launch, turn's end, or files written, or, for a
+ * folder from before the record, when its folder says, which ranks the
+ * folders a pass keeps; each of the last four absent from a state file from
+ * before it.
  */
 const LocalAgentStateSchema = Schema.Struct({
   devices: Schema.Record(Schema.String, Schema.String),
@@ -129,6 +133,7 @@ const LocalAgentStateSchema = Schema.Struct({
   ),
   saves: Schema.optionalKey(Schema.Record(Schema.String, AgentSaveSchema)),
   kept: Schema.optionalKey(Schema.Record(Schema.String, Schema.Int)),
+  lastUsed: Schema.optionalKey(Schema.Record(Schema.String, Schema.Int)),
 });
 
 export type LocalAgentState = typeof LocalAgentStateSchema.Type;
