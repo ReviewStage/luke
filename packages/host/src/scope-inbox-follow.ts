@@ -1,7 +1,6 @@
 import { AGENT_CALL_FAILURE, type INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import {
-  inboxInOrder,
   inboxOfLiveRows,
   LIVE_SIGNED_OUT,
   type ScopeInboxLiveAnswer,
@@ -100,27 +99,23 @@ export function scopeInboxes(
           return { kind: LIVE_STATE.REFUSED, failure } as const;
         }
         const inbox = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
-        const read = itemsRead(dependencies.reads);
+        const read = yield* itemsRead(dependencies.reads);
         let wait: TxWait | undefined;
         let answered = false;
-        /** The items as last drawn, in the order the held read answers them, each the very object drawn before where it did not move. */
-        const inOrder = () => inboxInOrder([...read.items().values()]);
         // Note that nothing is told before the read first answers, since a write drawn on no items shows nothing of the scope.
-        const drawn = (ids: readonly string[]) =>
-          Effect.suspend(() => {
-            read.redrawn(ids);
-            return answered
-              ? SubscriptionRef.set(inbox, {
-                  kind: LIVE_STATE.STANDING,
-                  inbox: { items: inOrder() },
-                })
-              : Effect.void;
-          });
+        const drawn = Effect.suspend(() =>
+          answered
+            ? SubscriptionRef.set(inbox, {
+                kind: LIVE_STATE.STANDING,
+                inbox: { items: read.inOrder() },
+              })
+            : Effect.void,
+        );
         yield* dependencies.reads.stand({
           shown: read.shown,
           take: read.take,
           txWait: () => wait,
-          drawn,
+          drawn: () => drawn,
           accountWide: false,
         });
         const taken = followTakingRows(
@@ -134,9 +129,9 @@ export function scopeInboxes(
           scopeInboxLiveRowsSchema,
           (rows) =>
             Effect.suspend(() => {
-              read.answer(inboxOfLiveRows(rows));
+              read.items.answer(inboxOfLiveRows(rows));
               answered = true;
-              return drawn([]);
+              return drawn;
             }),
         );
         yield* Effect.forkScoped(

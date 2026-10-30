@@ -154,7 +154,7 @@ const NO_ITEMS: AppInboxItems = { [INBOX_SCOPE_KIND.PLAN]: {}, [INBOX_SCOPE_KIND
 /**
  * The holders `told` once the items `moved` names are drawn again: each
  * holder one of them stood on in `was`, or stands on in `held`, holds what
- * `held` puts on it now, each as `drawn` holds it, in the order its own read
+ * `held` puts on it now, each as `drawnOf` draws it, in the order its own read
  * answers them, and is gone where it holds none; every other holder's list
  * is the very one told.
  */
@@ -163,7 +163,7 @@ function inboxItemsPatched(
   moved: Iterable<string>,
   was: Held,
   held: Held,
-  drawn: ReadonlyMap<string, InboxItem>,
+  drawnOf: (id: string) => InboxItem | undefined,
 ): AppInboxItems {
   const touched = {
     [INBOX_SCOPE_KIND.PLAN]: new Set<string>(),
@@ -180,7 +180,7 @@ function inboxItemsPatched(
   for (const [id, { item, kind, holder }] of held) {
     if (!touched[kind].has(holder)) continue;
     const items = lists[kind].get(holder);
-    const shown = drawn.get(id) ?? item;
+    const shown = drawnOf(id) ?? item;
     if (items === undefined) lists[kind].set(holder, [shown]);
     else items.push(shown);
   }
@@ -222,7 +222,7 @@ export function followAccountItems(
         return true;
       }
       const asking = yield* Ref.make<Asking>({ since: undefined, again: false });
-      const read = itemsRead(dependencies.reads);
+      const read = yield* itemsRead(dependencies.reads);
       let wait: TxWait | undefined;
       /** Every item as the read last answered it, with the stamp it was sent with and its holder. */
       let held: Held | undefined;
@@ -240,7 +240,7 @@ export function followAccountItems(
       const drawn = (ids: readonly string[]) =>
         Effect.suspend(() => {
           if (held !== undefined) {
-            told = inboxItemsPatched(told, read.redrawn(ids), held, held, read.items());
+            told = inboxItemsPatched(told, ids, held, held, read.drawnOf);
           }
           return toldNow;
         });
@@ -257,13 +257,13 @@ export function followAccountItems(
           const was = held ?? new Map<string, HeldItem>();
           const after = heldAfter(was, decoded);
           held = after.held;
-          const moved = read.answer([...after.held.values()].map((kept) => kept.item));
+          const moved = read.items.answer([...after.held.values()].map((kept) => kept.item));
           told = inboxItemsPatched(
             told,
             [...moved, ...after.placed],
             was,
             after.held,
-            read.items(),
+            read.drawnOf,
           );
           const unsent = after.unsent.length === 0 ? undefined : JSON.stringify(after.unsent);
           const again = unsent !== undefined && unsent !== askedFor;
