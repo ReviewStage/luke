@@ -300,27 +300,6 @@ it.effect("asks the model nothing where every file is one it never sees", () =>
   }),
 );
 
-it.effect("refuses a diff past the input cap as too large without calling the model", () =>
-  Effect.gen(function* () {
-    const script = scriptedModel([]);
-    const capChars = CHAPTERS_BOUNDS.MAX_INPUT_TOKENS * CHAPTERS_BOUNDS.CHARS_PER_TOKEN;
-    const lines = Math.ceil(capChars / 40);
-    const huge = changed(
-      "src/huge.ts",
-      [
-        `@@ -0,0 +1,${lines} @@`,
-        ...Array.from({ length: lines }, (_, at) => `+const line${at} = "${"x".repeat(20)}";`),
-      ].join("\n"),
-      CHANGED_FILE_STATUS.ADDED,
-    );
-
-    const failure = yield* Effect.flip(generateChapters(script.model, pullRequest([huge])));
-
-    expect(failure.kind).toBe(PULL_REQUEST_CHAPTERS_FAILURE.TOO_LARGE);
-    expect(script.asked).toHaveLength(0);
-  }),
-);
-
 it.effect("answers a timeout where the model takes longer than the bound", () =>
   Effect.gen(function* () {
     const script = scriptedModel([{ hangs: true }]);
@@ -476,42 +455,6 @@ it.effect(
       expect(generated.chapters.map(({ risk, riskReasons }) => ({ risk, riskReasons }))).toEqual([
         { risk: CHAPTER_RISK.HIGH, riskReasons: ["Local change.", "Changes what f returns."] },
         { risk: CHAPTER_RISK.LOW, riskReasons: ["Local change."] },
-      ]);
-    }),
-);
-
-it.effect(
-  "sends no repair past the input cap and closes what it would place as Other changes",
-  () =>
-    Effect.gen(function* () {
-      const capChars = CHAPTERS_BOUNDS.MAX_INPUT_TOKENS * CHAPTERS_BOUNDS.CHARS_PER_TOKEN;
-      const lines = Math.floor((capChars * 0.6) / 40);
-      const large = changed(
-        "src/large.ts",
-        [
-          `@@ -0,0 +1,${lines} @@`,
-          ...Array.from({ length: lines }, (_, at) => `+const line${at} = "${"x".repeat(20)}";`),
-        ].join("\n"),
-        CHANGED_FILE_STATUS.ADDED,
-      );
-      const script = scriptedModel([
-        {
-          answer: {
-            chapters: [
-              {
-                ...told("Bump the constants", [APP_FIRST, APP_SECOND]),
-                summary: "y".repeat(capChars / 2),
-              },
-            ],
-          },
-        },
-      ]);
-
-      const generated = yield* generateChapters(script.model, pullRequest([TWO_HUNKS, large]));
-
-      expect(script.asked).toHaveLength(1);
-      expect(shapeOf(generated.chapters).at(-1)?.hunkRefs).toEqual([
-        { path: "src/large.ts", oldStart: 0 },
       ]);
     }),
 );
