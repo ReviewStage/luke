@@ -45,7 +45,8 @@ import { Skeleton } from "../skeleton/skeleton.js";
  * its own takes their ⋯ as `actions`, which stands beside the press rather
  * than inside it, over the row's end: hidden at rest, it comes in while the
  * row is hovered, holds the keyboard, or the menu it dropped stands, and
- * takes the count's and the mark's place then, as a task row's ⋯ does. A
+ * takes the count's and the mark's place then, as a task row's ⋯ does; a
+ * right-click on the ⋯ opens the row's menu as one on the row does. A
  * row with both a chord and a ⋯ draws the chord beside the ⋯ rather than
  * under it, so a hover shows the row's chord and its acts together. It takes an app's hint's
  * handlers and chord as a Button does, and keeps the focus where it is
@@ -365,6 +366,8 @@ export function NavItem({
   fold,
   ...props
 }: NavItemProps): React.JSX.Element {
+  // Note that a row standing in a frame beside its ⋯ or its chevron carries its menu on the frame, so a right-click on either opens it too.
+  const framed = said(actions) || fold !== undefined;
   const press = (
     <button
       type="button"
@@ -387,7 +390,9 @@ export function NavItem({
       onFocus={props.onFocus}
       onBlur={props.onBlur}
       onClick={pulseOnPress(menu?.onClick ?? onClick, PRESS_PULSE.QUIET)}
-      {...withContextMenu(props.contextMenu, { onPointerDown: props.onPointerDown })}
+      {...withContextMenu(framed ? undefined : props.contextMenu, {
+        onPointerDown: props.onPointerDown,
+      })}
       onKeyDown={props.onKeyDown}
       {...(roving === true ? rovingItem() : undefined)}
     >
@@ -398,12 +403,13 @@ export function NavItem({
       {said(shortcut) ? <span className="luke-nav-item-shortcut ml-auto">{shortcut}</span> : null}
     </button>
   );
-  if (!said(actions) && fold === undefined) return press;
+  if (!framed) return press;
   return (
     <div
       className="luke-nav-item-frame relative flex min-w-0"
       data-folds={fold === undefined ? undefined : "true"}
       data-actions={said(actions) ? "true" : undefined}
+      {...withContextMenu<HTMLDivElement>(props.contextMenu, {})}
     >
       {press}
       {fold === undefined ? null : <FoldToggle fold={fold} />}

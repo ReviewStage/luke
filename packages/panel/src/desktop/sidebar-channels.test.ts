@@ -286,3 +286,19 @@ test("the Inbox's chevron folds the channels under it, the channel shown still s
   act(() => button("Channels").click());
   assert.deepEqual(rows(), ["general", "app", "launch"]);
 });
+
+test("a right-click on the Inbox's chevron opens the Inbox's menu, as one on its row does", () => {
+  mount([channel("c-general", "general")], []);
+  act(() => {
+    button("Channels").dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, clientX: 4, clientY: 4 }),
+    );
+  });
+  assert.deepEqual(menuWords(), [
+    "New channel",
+    "New project channel",
+    "—",
+    "Browse archived channels",
+    "Browse archived project channels",
+  ]);
+});
