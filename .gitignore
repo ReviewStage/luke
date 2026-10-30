@@ -53,5 +53,3 @@ artifacts/
 !.claude/rules/
 !.claude/settings.json
 !.claude/skills/
-.conductor/settings.local.json
-.conductor/settings.local.toml
