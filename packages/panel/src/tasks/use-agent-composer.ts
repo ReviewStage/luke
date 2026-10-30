@@ -511,7 +511,6 @@ export function useAgentComposer(input: {
     revert,
     cut: held.cut,
     going: new Set(held.sent.filter((line) => line.taken !== true).map((line) => line.id)),
-    sendsSettled: () =>
-      (queues.current.get(latest.current.agentId) ?? Promise.resolve()).catch(() => undefined),
+    sendsSettled: () => queue.settled(latest.current.agentId),
   };
 }

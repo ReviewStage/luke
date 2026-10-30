@@ -25,6 +25,13 @@ import { useState } from "react";
 export interface SendQueue {
   /** Runs `send` once every send asked under `key` before it has answered; the answer is `send`'s own to take. */
   readonly after: (key: string, send: () => Promise<void>) => void;
+  /** Settles once every send asked under `key` so far has answered, however it did, which work that must not go ahead of them waits for. */
+  readonly settled: (key: string) => Promise<void>;
+}
+
+/** Nothing, in place of a send's answer or throw, so a wait on the queue settles either way. */
+function done(): undefined {
+  return undefined;
 }
 
 /** A send queue of its own, which a component holds through `useSendQueue`. */
@@ -38,6 +45,7 @@ function sendQueue(): SendQueue {
       const before = newest.get(key) ?? Promise.resolve();
       newest.set(key, before.then(send));
     },
+    settled: (key) => (newest.get(key) ?? Promise.resolve()).then(done, done),
   };
 }
 
