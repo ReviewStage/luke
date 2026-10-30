@@ -2,7 +2,9 @@
    here: its inks at rest, under the pointer, open, and unread, which a
    strip's chosen tab is held to (`tabs-frame.test.ts`); its detail's
    ellipsis; and its end, whose count and chord trade places under the
-   pointer and the keyboard, through `:has()` and the pointer's media; and
+   pointer and the keyboard, through `:has()` and the pointer's media; a
+   step's meta line under its name, and its glyph and end level with the
+   name's first line; and
    its actions' ⋯, which comes in over that end the same way. The
    keyboard's ring is the app's reset's, as it is for every control. */
 
@@ -48,6 +50,18 @@
     font-size: var(--luke-type-caption-size);
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* A step's meta line stands whole under its name, in the caption's line,
+     rather than giving way beside it. */
+  .luke-nav-item[data-variant="step"] .luke-nav-item-detail {
+    flex: none;
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  /* A step's glyph and end stand level with its name's first line. */
+  .luke-nav-item[data-variant="step"] > :is(.luke-nav-item-glyph, .luke-nav-item-rest) {
+    height: var(--luke-type-label-leading);
   }
 
   /* A place's end stands at the row's end. */
