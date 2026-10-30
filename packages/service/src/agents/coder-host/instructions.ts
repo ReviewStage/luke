@@ -420,7 +420,7 @@ const PILOT_TASK_PLACE_WORDS = {
 
 ## Your task's status
 
-Keep your task's status current with \`${CODER_TOOL.UPDATE_TASK}\` and your task's id, and each child task's by its own. Starting you moved your task to in-progress. A child task stands in todo until you start its agent, moves to in-progress by itself when you start its agent, is done once its pull request merges, and is canceled once you cut it; one with a pilot of its own is marked done by that pilot. Mark your own task done once every child task is done or canceled and every agent you started is archived, or, on a task you did yourself, once its pull request merged, and never cancel it yourself. Say in your message when you change a status.`,
+Keep your task's status current with \`${CODER_TOOL.UPDATE_TASK}\` and your task's id, and each child task's by its own. Starting you moved your task to in-progress. A child task stands in todo until you start its agent, moves to in-progress by itself when you start its agent, is done once its pull request merges, and is canceled once you cut it; one with a pilot of its own is marked done by that pilot. Mark your own task done once every child task is done or canceled, every agent you started is archived, and any pull request you opened yourself has merged, and never cancel it yourself. Say in your message when you change a status.`,
 } as const;
 
 /** What the agent is told of updating its task's plan with `edit_plan`, and where a decision it settles goes; nothing for an agent handed a prompt on no task, which has no plan. */
@@ -816,10 +816,15 @@ const PILOT_KEEPS =
 /**
  * How a pilot merges the pull request it opened on a task it does itself: as
  * its own step 6 has a coding agent merge, under its task's merge policy,
- * asking the go itself where a coding agent would ask it.
+ * asking the go itself where a coding agent would ask it; or, where its
+ * credential is its starter's own token, which reaches no `gh pr` command
+ * (`PULL_REQUEST_WORDS.rest`) and so arms no merge, by asking the developer
+ * to merge it on GitHub.
  */
-const PILOT_OWN_MERGE =
-  "Merge it as your task's merge policy says, as step 6 of How you work has a coding agent merge its own: arm `gh pr merge --auto` on merge on green unless step 6 holds it, and where it holds, or on hold every PR, ask for its go once its checks pass, in a thread, or, where a pilot started you, in a message to it. On a switch to hold, cancel your own armed merge with `gh pr merge --disable-auto`.";
+const PILOT_OWN_MERGE = {
+  cli: "Merge it as your task's merge policy says, as step 6 of How you work has a coding agent merge its own: arm `gh pr merge --auto` on merge on green unless step 6 holds it, and where it holds, or on hold every PR, ask for its go once its checks pass, in a thread, or, where a pilot started you, in a message to it. On a switch to hold, cancel your own armed merge with `gh pr merge --disable-auto`.",
+  rest: "Your credential arms no merge from here, so once its checks pass, and where your task's merge policy holds it (step 6 of How you work) once it has its go, ask the developer in a thread, or, where a pilot started you, in a message to it, to merge it on GitHub.",
+} as const;
 
 /** What a pilot does where its own work turns out bigger than one small pull request. */
 const PILOT_OWN_GROWS =
@@ -832,7 +837,11 @@ const PILOT_OWN_GROWS =
  * a coder's thread; or, with no repository, the work in its sandbox, and no
  * pull request.
  */
-function pilotOwnWorkWords(build: BuildWords | null, brief: AgentBrief): string {
+function pilotOwnWorkWords(
+  build: BuildWords | null,
+  brief: AgentBrief,
+  memberToken: boolean,
+): string {
   const opening =
     "On a task too small to split, once your top task is started, do the work yourself as a coding agent would, on this same task. Stop halts it as it halts any agent's, and Start again carries it on.";
   if (build === null) {
@@ -850,7 +859,7 @@ ${opening}
 2. ${build.authorship}
 3. ${build.change}
 4. ${build.check}
-5. ${build.publish} ${PILOT_OWN_MERGE}
+5. ${build.publish} ${memberToken ? PILOT_OWN_MERGE.rest : PILOT_OWN_MERGE.cli}
    ${build.writeUp}
 6. ${build.ci}
 7. ${PILOT_OWN_GROWS}
@@ -889,6 +898,7 @@ function pilotWords(
   brief: AgentBrief,
   build: BuildWords | null,
   startBranch: string | null,
+  memberToken: boolean,
   machine: CoderMachine,
 ): WorkWords {
   const where = repository === null ? "" : `, in the GitHub repository \`${repository}\``;
@@ -922,9 +932,9 @@ ${tools.browser}## How you work
 6. Merge as your task's merge policy says, which \`${CODER_TOOL.READ_TASK}\` reads. On merge on green, a coding agent arms \`gh pr merge --auto\` once its pull request is open against the default branch, and a stacked one only once the one beneath it merged and a restack moved it onto the default branch; it holds instead one that changes data or infrastructure irreversibly, settles a product, design, or security question the plan left open, or changes what users see in a way the plan did not spell out; once a held pull request is green, ask the developer for its go in a thread and relay it. On hold every PR, none merges until the developer gives its go, which you ask for in a thread once its checks pass. A change of policy reaches you as a message whose first line opens "Merge policy is now": on a switch to hold, tell every coding agent that armed a merge to cancel it with \`gh pr merge --disable-auto\`; on a switch back, give each pull request the policy alone held its go; and pass the change down to each pilot you started, which hears of it from you alone. A change that reaches you while your top task is stopped you relay to your agents and pilots as soon as it is started again.
 7. Follow the work through its agents' messages, which each reach you as a turn, never by polling. A pull request opened: start what waited on it. A fix pushed or a merge beneath a stack: restack it (step 8). A merge: mark its child task done and archive its agent. A question: answer it from the plan, or take it to the developer and relay their answer. A leaf too big for one pull request: split it. A line from Luke that an agent ended before it reported: read it with \`${CODER_TOOL.READ_AGENT}\` and continue it with \`${CODER_TOOL.START_AGENT}\`'s \`from\`, never a fresh agent in its place. An agent quiet far longer than its work should take: message it once, then read it. A review, a comment, or a check on a pull request goes to its coding agent, not to you, but on a pull request you opened yourself, which is yours.
 8. Restack one stack at a time, through a short-lived restack worker. Tell every agent on the stack that a restack is pending, and wait for each to answer holding. Start a coding agent on your own task, on the default branch, whose brief has it fetch every branch (\`git remote set-branches origin '*'\` and \`git fetch origin\`, with \`--unshallow\` where its clone is shallow); names the stack's trunk, every unmerged branch bottom to top, and, after a merge, the pull request to retarget onto the default branch with \`gh pr edit <number> --base\`; and has it rebase the stack in one pass with \`gh stack sync\`, or, where \`gh stack\` is missing, \`git rebase --update-refs --onto\` past a squash-merged pull request's last head, push each branch with \`--force-with-lease\`, open no pull request, and report when done. Then archive it, and tell each held agent to run \`git fetch origin <branch>\` and \`git reset --hard FETCH_HEAD\` before it goes on.
-9. Archive every agent you started as soon as its work is done: a coding agent once its pull request merged, or closed because you cut it; a pilot once its task is done; a restack worker once it reports; and an agent a continuation took over from. Once every child task is done or canceled, or the pull request you opened yourself merged, report once, in a thread or, where a pilot started you, to it, mentioning each merged pull request, what was cut or changed from the plan, and any follow-up, and mark your task done.
+9. Archive every agent you started as soon as its work is done: a coding agent once its pull request merged, or closed because you cut it; a pilot once its task is done; a restack worker once it reports; and an agent a continuation took over from. Once every child task is done or canceled and any pull request you opened yourself has merged, report once, in a thread or, where a pilot started you, to it, mentioning each merged pull request, what was cut or changed from the plan, and any follow-up, and mark your task done.
 
-${pilotOwnWorkWords(build, brief)}`,
+${pilotOwnWorkWords(build, brief, memberToken)}`,
     worker: { ...agent.worker, keeps: PILOT_KEEPS },
   };
 }
@@ -1186,7 +1196,7 @@ export function coderInstructions(
   const work = operator
     ? operatorWords(tools)
     : pilot
-      ? pilotWords(tools, agent, repository, words, brief, build, startBranch, machine)
+      ? pilotWords(tools, agent, repository, words, brief, build, startBranch, memberToken, machine)
       : agent;
   const place = { ...task, ...work };
   const editing = editPlanTold(
