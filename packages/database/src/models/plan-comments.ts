@@ -83,7 +83,12 @@ export const PLAN_COMMENT_OUTCOME = {
 } as const;
 
 export type PlanCommentOutcome =
-  | { readonly status: typeof PLAN_COMMENT_OUTCOME.DONE; readonly answer: PlanCommentThreadAnswer }
+  | {
+      readonly status: typeof PLAN_COMMENT_OUTCOME.DONE;
+      readonly answer: PlanCommentThreadAnswer;
+      /** Set where the write was a retry of one under the same key, which wrote nothing this time. */
+      readonly repeated?: true;
+    }
   | { readonly status: typeof PLAN_COMMENT_OUTCOME.NO_TASK }
   | { readonly status: typeof PLAN_COMMENT_OUTCOME.NO_THREAD };
 
@@ -533,6 +538,13 @@ function answered(taskId: string, threadId: string): TaskStoreEffect<PlanComment
   );
 }
 
+/** The thread answered as a retry under a key already taken: as it stands, marked as having written nothing. */
+function answeredAgain(taskId: string, threadId: string): TaskStoreEffect<PlanCommentOutcome> {
+  return Effect.map(answered(taskId, threadId), (outcome) =>
+    outcome.status === PLAN_COMMENT_OUTCOME.DONE ? { ...outcome, repeated: true } : outcome,
+  );
+}
+
 function refused(refusal: PlanCommentRefusal): PlanCommentOutcome {
   return { status: PLAN_COMMENT_OUTCOME.DONE, answer: { refused: refusal } };
 }
@@ -592,7 +604,7 @@ export function startPlanCommentThread(
       const locked = yield* lockOpenPlanText({ userId: writer.userId, taskId });
       if (Option.isNone(locked)) return { status: PLAN_COMMENT_OUTCOME.NO_TASK } as const;
       const taken = yield* findKeyedThread({ taskId, clientKey: request.clientKey });
-      if (Option.isSome(taken)) return yield* answered(taskId, taken.value.threadId);
+      if (Option.isSome(taken)) return yield* answeredAgain(taskId, taken.value.threadId);
       const { count } = yield* countThreads({ taskId }).pipe(
         Effect.catchTag("NoSuchElementError", Effect.die),
       );
@@ -662,7 +674,7 @@ function replied(
       if (Option.isSome(taken) && taken.value.threadId !== thread.id) {
         return refused(PLAN_COMMENT_REFUSAL.KEY_TAKEN);
       }
-      if (Option.isSome(taken)) return yield* answered(taskId, thread.id);
+      if (Option.isSome(taken)) return yield* answeredAgain(taskId, thread.id);
     }
     const comments = thread.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT);
     if (comments.length >= PLAN_COMMENT_BOUNDS.MAX_ENTRIES_PER_THREAD) {

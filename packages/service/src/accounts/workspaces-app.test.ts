@@ -670,6 +670,11 @@ it.effect(
             GITHUB_INSTALL_STATUS.CONNECTED,
           ],
         );
+        assert.equal(
+          countedProperties(ada, SERVER_EVENT.GITHUB_APP_INSTALL).length,
+          2,
+          "each installation counts once, and reconnecting the first is no new connection",
+        );
         const [workspace] = (yield* workspacesOf(seams, github, ada)).filter(
           (one) => one.id === acme.id,
         );

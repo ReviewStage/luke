@@ -130,10 +130,12 @@ const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
 ) {
   const answer = yield* outcomeAnswer(outcome);
   if (!("thread" in answer)) return answer;
-  // Note that the same words sent again under their key answer the thread and count again, since the store does not say which write was new.
-  yield* recordServerEvent(SERVER_EVENT.PLAN_COMMENT, comment.userId, {
-    is_reply: comment.isReply,
-  });
+  // Note that a retry under the key already taken wrote nothing, so it is not counted again.
+  if (outcome.status === PLAN_COMMENT_OUTCOME.DONE && outcome.repeated !== true) {
+    yield* recordServerEvent(SERVER_EVENT.PLAN_COMMENT, comment.userId, {
+      is_reply: comment.isReply,
+    });
+  }
   const { thread } = answer;
   const unsent = thread.entries.some(
     (entry) =>

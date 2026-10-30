@@ -64,6 +64,7 @@ import {
 import {
   type ConnectedInstallation,
   GITHUB_CONNECT_ROLES,
+  installationsOfWorkspace,
   LINK_OUTCOME,
   type LinkOutcome,
   linkInstallationAs,
@@ -220,9 +221,13 @@ const connectInstallation = /* @__PURE__ */ Effect.fn("web/connectInstallation")
     redirectUri: callback,
   });
   if (Option.isNone(installation)) return GITHUB_INSTALL_STATUS.NOT_FOUND;
+  // Note that a connect repeated for an installation the workspace holds links it as before, which is no new connection, so what it holds is read first.
+  const held = yield* installationsOfWorkspace(organizationId);
   const linked = yield* linkInstallationAs(userId, organizationId, installation.value);
-  // Counted only where this link made the connection, not where it stood already.
-  if (linked === LINK_OUTCOME.LINKED) {
+  if (
+    linked === LINK_OUTCOME.LINKED &&
+    !held.some((each) => each.installationId === installationId)
+  ) {
     yield* recordServerEvent(SERVER_EVENT.GITHUB_APP_INSTALL, userId, {});
   }
   return LANDED_ON_LINK[linked];

@@ -560,6 +560,11 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
             "Dean Stratakos sent you a comment thread",
           ),
         );
+        assert.deepEqual(
+          countedProperties(owner, SERVER_EVENT.PLAN_COMMENT),
+          [{ is_reply: true }, { is_reply: true }],
+          "the retry under the first key is not counted again",
+        );
         assert.equal(
           elsewhere.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.ASKED).length,
           1,
