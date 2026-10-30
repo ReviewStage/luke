@@ -18,7 +18,7 @@ import { groupCount } from "./sidebar-fold.js";
 import { ReadAllMenu, type SidebarReadAll } from "./sidebar-read-all.js";
 
 /**
- * sidebar-inbox-row.tsx -- the sidebar's Inbox row, its menu, and, with Channels on, the chevron and the ⋯ it heads the channels with.
+ * sidebar-inbox-row.tsx -- the sidebar's Inbox row, its ⋯ and its menu, and, with Channels on, the chevron it heads the channels with.
  */
 
 /** What the Inbox's ⋯ is named for, and the menu it drops. */
@@ -31,13 +31,13 @@ const INBOX_THING = "Inbox";
  * nothing at none. Its chord takes the count's place
  * while the row is hovered or reached from the keyboard, as New task's and
  * Search's show theirs. A press opens the window's Inbox
- * (`desktop-inbox.tsx`), and the row is the place shown while it stands. A
+ * (`desktop-inbox.tsx`), and the row is the place shown while it stands.
+ * Its ⋯, which comes in beside its chord while it is hovered, a
  * right-click, a long press, or the menu key opens its menu, Mark all as
  * read, which marks every unread thread of the listed workspace read
  * (`sidebar-read-all.tsx`). With Channels on it heads them (`channels`):
- * the chevron that folds them, and a ⋯ beside its chord dropping the same
- * menu, which offers what makes a channel and lists the archived ones
- * after Mark all as read.
+ * the chevron that folds them, and after Mark all as read, its menu offers
+ * what makes a channel and lists the archived ones.
  */
 export function SidebarInboxRow({
   waiting,
@@ -73,7 +73,7 @@ export function SidebarInboxRow({
         disabled={disabled}
         fold={channels?.fold}
         actions={
-          channels === undefined || disabled ? undefined : (
+          disabled ? undefined : (
             <MoreButton
               ref={ellipsis}
               thing={INBOX_THING}
@@ -82,9 +82,7 @@ export function SidebarInboxRow({
             />
           )
         }
-        contextMenu={
-          disabled ? undefined : menu.contextMenu(channels === undefined ? undefined : ellipsis)
-        }
+        contextMenu={disabled ? undefined : menu.contextMenu(ellipsis)}
         onKeyDown={disabled ? undefined : menu.keyMenu}
         onClick={onOpen}
       >

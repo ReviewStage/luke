@@ -364,3 +364,22 @@ test("a right-click on the Inbox's chevron opens the Inbox's menu: Mark all as r
     "Browse archived project channels",
   ]);
 });
+
+test("with Channels off the Inbox's row still wears its ⋯, which drops Mark all as read alone", () => {
+  const tasks = tasksControl({ tasks: [BILLING] });
+  function InboxAlone() {
+    return createElement(SidebarInboxRow, {
+      waiting: 0,
+      current: false,
+      disabled: false,
+      shown: true,
+      readAll: useSidebarReadAll(tasks),
+      onOpen: () => undefined,
+    });
+  }
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(InboxAlone))));
+  act(() => button("Inbox actions").click());
+  assert.deepEqual(menuWords(), ["Mark all as read"]);
+});
