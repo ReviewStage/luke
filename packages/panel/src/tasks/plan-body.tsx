@@ -20,7 +20,6 @@ import {
   Button,
   EDITABLE_BLOCK_CLASS,
   IconButton,
-  motionHeld,
   SavedTick,
   STATUS_TONE,
   TEXT_BUTTON_LINES,
@@ -35,6 +34,7 @@ import { actorName } from "@luke/ui/actor-model";
 import { GLYPH } from "@luke/ui/icons";
 import type { MarkdownTaskToggler } from "@luke/ui/markdown";
 import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
+import { diffArrays } from "diff";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KEPT, type Kept, notKept } from "../act.js";
 import { ActorStack } from "../actor-ref.js";
@@ -50,7 +50,6 @@ import {
 } from "../markdown-message.js";
 import { useCreator } from "../member-directory.js";
 import { PLACEMENT_END, PLAN_PLACEHOLDER, type PlanEditorHandle } from "../plan-editor/contract.js";
-import { centreWithin } from "../scroll-within.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { DocumentByline, DocumentScroll } from "./document-frame.js";
@@ -74,15 +73,6 @@ import {
 } from "./plan-document-editor.js";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";
 import { UNIT_ATTRIBUTED_CLASS, UNIT_BYLINE_CLASS, UNIT_MORE_CLASS } from "./plan-unit-look.js";
-import {
-  type ChaseState,
-  chaseBehind,
-  chaseOpened,
-  chaseRetargeted,
-  chaseStepped,
-  chaseView,
-  type UnitView,
-} from "./task-reveal.js";
 import { TaskKeyLine, TaskStandingChips, type TaskStandingDoor } from "./task-standing.js";
 import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
@@ -98,15 +88,11 @@ import {
 } from "./words-dates.js";
 
 /**
- * plan-body.tsx -- the open task's document as it scrolls between the header and the microphone row, typing in each newer document as it arrives.
+ * plan-body.tsx -- the open task's document as it scrolls between the header and the microphone row, redrawn in place as each newer document arrives.
  *
- * Every document the host hands over for the open task becomes the chase's
- * target, whether a saved plan or a draft still being written, so a stream of
- * drafts is worked in by one continuous hand rather than restarting on each.
- * The view follows the caret, bringing a jump to the middle, unless the
- * developer has scrolled the document themselves, and lights each unit as it settles. Opening
- * a plan draws it whole, and reduced motion draws each document at once. The
- * typing grows the scrolled document and never the surface. Under the title
+ * Every document the host hands over for the open task is drawn whole, each
+ * section keeping its place while its heading stands, so a save redraws the
+ * sections it changed and leaves the scroll where it was. Under the title
  * one muted line says who created the task and how long ago, and, for a plan
  * anyone has written, who last did: a member, Luke (the notetaker), or a
  * coding agent, each on their own face hanging their card (`edit-ref.tsx`),
@@ -127,8 +113,8 @@ import {
  * they dismiss them or leave the task (`use-task-looks.ts`).
  * The task's name is drawn as the title over its text (`task-title.tsx`),
  * and each section is known by its heading, and its link by the heading's
- * anchor (`sectionAnchors`). A Mermaid fence draws as its diagram once Luke
- * has finished typing it (`../plan-diagram.tsx`).
+ * anchor (`sectionAnchors`). A Mermaid fence draws as its diagram
+ * (`../plan-diagram.tsx`).
  *
  * On a task's own page each section has a link: its ⋯, shown while the
  * pointer or the keyboard is on it, copies the section's address
@@ -177,37 +163,22 @@ function revealMargin(scroller: HTMLElement): number {
   return Number.isNaN(padding) ? REVEAL_MARGIN : Math.max(padding, REVEAL_MARGIN);
 }
 
-/**
- * Scrolls `scroller` alone until `target` stands within it, clear of the faded
- * edges its scroll padding reserves, and does nothing while it already does. Note
- * that this is not `scrollIntoView`, which scrolls every box around the
- * target too, and the document stands in a pane that may still be gliding.
- */
-function keepInView(scroller: HTMLElement, target: HTMLElement): void {
-  const box = scroller.getBoundingClientRect();
-  const at = target.getBoundingClientRect();
-  const top = box.top + revealMargin(scroller);
-  // Note that the room below is the scroller's scroll padding, which clears its faded bottom edge.
-  const below = Number.parseFloat(getComputedStyle(scroller).scrollPaddingBottom);
-  const bottom = box.bottom - (Number.isNaN(below) ? 0 : below);
-  if (at.top < top) scroller.scrollTop -= top - at.top;
-  else if (at.bottom > bottom) scroller.scrollTop += at.bottom - bottom;
+/** One section of the text as drawn: its identity while it stands, the heading it is known by, and its words. */
+interface UnitView {
+  /** Minted when the section first appears and kept while it stands, so a view can key it. */
+  readonly id: number;
+  /** The heading the section is known by, empty for the words before the first. */
+  readonly heading: string;
+  readonly words: string;
 }
 
-/** The document the chase was last aimed at, the last edit it was, and where its typing stands. */
-interface Chase {
+/** The document the sections were last cut from, the sections cut from it, and the id the next to appear is given. */
+interface DrawnUnits {
   readonly taskId: string;
   readonly body: string;
-  readonly lastEditAt: number | undefined;
-  readonly state: ChaseState;
-}
-
-/** What the document draws from the chase this frame. */
-interface TaskChase {
+  readonly sections: readonly PlanSection[];
   readonly views: readonly UnitView[];
-  readonly behind: boolean;
-  /** How many times the caret has jumped, so the view can bring a jump to the middle. */
-  readonly jumps: number;
+  readonly nextId: number;
 }
 
 /**
@@ -230,11 +201,6 @@ export function lastEditOf(task: Task): PlanLastEdit | undefined {
 
 /** Nobody, as a capture or a test draws the plan, who reads no edit as theirs. */
 const NO_READER: TaskReader = { readerId: undefined };
-
-/** Whether the reader wrote an edit: where it names their account. */
-function isReader(edit: PlanLastEdit, reader: TaskReader): boolean {
-  return reader.readerId !== undefined && edit.by?.userId === reader.readerId;
-}
 
 /** Opens the plan's version history on the revision that made the save at a moment, or on the plan as it stands. */
 type ShowHistory = (save: number | undefined) => void;
@@ -476,87 +442,88 @@ function pictureNoteOf(marks: SectionMarks, heading: string): React.JSX.Element 
 /** The class every unit of the text wears, one per section in the order the sections stand. */
 const UNIT_CLASS = "plan-unit";
 
-/** The class of the unit the caret is typing in, whose heading wears the writing mark. */
-const WRITING_CLASS = "plan-writing";
-
 /** The class of a section changed since the developer last looked, tinted until they dismiss it. */
 const CHANGED_CLASS =
   "plan-changed relative isolate after:pointer-events-none after:absolute after:-inset-x-luke-6 after:-inset-y-luke-2 after:-z-1 after:rounded-luke-6 after:bg-plan-changed";
 
-/** The presses that say the developer is reading somewhere of their own, which the caret stops following. */
-const SCROLL_INTENT_EVENTS = ["wheel", "pointerdown", "keydown"] as const;
-
 /** The class of the column the title and the text stand in. */
 const BODY_CLASS = "plan-body";
 
-function opened(task: Task): Chase {
-  const { body } = task.document;
-  return {
-    taskId: task.id,
-    body,
-    lastEditAt: task.lastEdit?.at,
-    state: chaseOpened(body),
+/**
+ * Each section of a newer document drawn under the id it had in the older
+ * while its heading stands, so a save redraws a section in place rather than
+ * as a new one. Headings are paired in document order; a run of older
+ * headings the newer document dropped, beside a run it added in the same
+ * place, is the same sections renamed, and pairs one for one. Every other
+ * section is new, and takes the next id.
+ */
+function unitsAfter(
+  previous: readonly UnitView[],
+  sections: readonly PlanSection[],
+  firstId: number,
+): { readonly views: readonly UnitView[]; readonly nextId: number } {
+  const changes = diffArrays(
+    previous.map((view) => view.heading),
+    sections.map((section) => section.heading),
+  );
+  const views: UnitView[] = [];
+  let nextId = firstId;
+  const place = (kept: number | undefined): void => {
+    const section = sections[views.length];
+    if (section === undefined) return;
+    const id = kept ?? nextId;
+    if (kept === undefined) nextId += 1;
+    views.push({ id, heading: section.heading, words: section.text });
   };
-}
-
-/**
- * The chase aimed at the plan as handed over now: a new target for the same
- * task, a fresh start for another. Note that only the reader's own edit lands
- * at once, because a teammate's arrives unseen and types in as Luke's does.
- */
-function aimed(chase: Chase, task: Task, reader: TaskReader): Chase {
-  if (chase.taskId !== task.id) return opened(task);
-  const { body } = task.document;
-  // The reader's own edit lands at once: they watched it being typed already.
-  const lastEditAt = task.lastEdit?.at;
-  const ownEdit =
-    task.lastEdit !== undefined &&
-    task.lastEdit.actor === PLAN_ACTOR.DEVELOPER &&
-    isReader(task.lastEdit, reader) &&
-    lastEditAt !== chase.lastEditAt;
-  // Read at the retarget rather than held, since it is the one moment it decides anything.
-  const aim = { reduced: ownEdit || motionHeld() };
-  const state = chaseRetargeted(chase.state, body, aim);
-  return { taskId: task.id, body, lastEditAt, state };
-}
-
-/**
- * The chase over the plan handed in, stepped once a frame while any unit is
- * behind. A document arriving mid-typing is aimed at from what is shown, so
- * the typing carries on toward it without a jump.
- */
-function useTaskChase(task: Task, reader: TaskReader): TaskChase {
-  const [chase, setChase] = useState(() => opened(task));
-  let current = chase;
-  if (chase.taskId !== task.id || chase.body !== task.document.body) {
-    current = aimed(chase, task, reader);
-    setChase(current);
+  let before = 0;
+  for (let index = 0; index < changes.length; index += 1) {
+    const change = changes[index];
+    if (change === undefined) continue;
+    const count = change.value.length;
+    if (change.added) {
+      for (let at = 0; at < count; at += 1) place(undefined);
+      continue;
+    }
+    if (!change.removed) {
+      for (let at = 0; at < count; at += 1) place(previous[before + at]?.id);
+      before += count;
+      continue;
+    }
+    // A run dropped beside a run added in its place is the same sections renamed, which keep their ids.
+    const beside = changes[index + 1];
+    if (beside?.added === true) {
+      for (let at = 0; at < beside.value.length; at += 1) {
+        place(at < count ? previous[before + at]?.id : undefined);
+      }
+      index += 1;
+    }
+    before += count;
   }
-  const behind = chaseBehind(current.state);
-
-  useEffect(() => {
-    if (!behind) return;
-    let last = performance.now();
-    let frame = requestAnimationFrame(function step(now: number) {
-      const elapsed = now - last;
-      last = now;
-      setChase((held) => ({ ...held, state: chaseStepped(held.state, elapsed) }));
-      frame = requestAnimationFrame(step);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [behind]);
-
-  return {
-    views: chaseView(current.state),
-    behind,
-    jumps: current.state.jumps,
-  };
+  return { views, nextId };
 }
 
-function unitClass(view: UnitView, changed: boolean): string {
-  const lit = changed ? ` ${CHANGED_CLASS}` : "";
-  if (view.writing) return `${UNIT_CLASS} ${WRITING_CLASS}${lit}`;
-  return `${UNIT_CLASS}${lit}`;
+/** A task's document cut into its sections, each keeping its id from the same task's document before. */
+function drawnUnits(task: Task, held: DrawnUnits | undefined): DrawnUnits {
+  const { body } = task.document;
+  const sections = planSections(body);
+  const same = held?.taskId === task.id ? held : undefined;
+  const { views, nextId } = unitsAfter(same?.views ?? [], sections, same?.nextId ?? 0);
+  return { taskId: task.id, body, sections, views, nextId };
+}
+
+/** The sections of the plan handed in, cut again as each newer document arrives. */
+function useDrawnUnits(task: Task): DrawnUnits {
+  const [held, setHeld] = useState(() => drawnUnits(task, undefined));
+  let current = held;
+  if (held.taskId !== task.id || held.body !== task.document.body) {
+    current = drawnUnits(task, held);
+    setHeld(current);
+  }
+  return current;
+}
+
+function unitClass(changed: boolean): string {
+  return changed ? `${UNIT_CLASS} ${CHANGED_CLASS}` : UNIT_CLASS;
 }
 
 /**
@@ -778,22 +745,21 @@ function TitleLink({
 }
 
 /**
- * A unit's edit with the plan's open comments on its words marked, the open
- * one and the one being started among them, the same edit while none of
- * them changes, so the unit's words are not parsed again for nothing.
+ * A unit's words with the plan's open comments on them marked, the open one
+ * and the one being started among them, the same marks while none of them
+ * changes, so the unit's words are not parsed again for nothing.
  */
-function useCommentedEdit(
-  edit: MarkdownEdit | undefined,
+function useCommentMarks(
   section: PlanSection | undefined,
   threads: readonly PlanCommentThread[] | undefined,
   planText: string | undefined,
 ): MarkdownEdit | undefined {
   const { active, pending } = useCommentFocus();
   return useMemo(() => {
-    if (threads === undefined || section === undefined) return edit;
+    if (threads === undefined || section === undefined) return undefined;
     const spans = commentSpansIn(threads, section, active, pending, planText);
-    if (spans.length === 0) return edit;
-    const comments = spans.map((span) => ({
+    if (spans.length === 0) return undefined;
+    const marks = spans.map((span) => ({
       from: span.from,
       to: span.to,
       kind: MARKDOWN_MARK.COMMENT,
@@ -801,34 +767,13 @@ function useCommentedEdit(
       active: span.active,
       block: span.block,
     }));
-    return { ...edit, marks: [...(edit?.marks ?? []), ...comments] };
-  }, [edit, section, threads, active, pending, planText]);
+    return { marks };
+  }, [section, threads, active, pending, planText]);
 }
 
-/** Whether two edits draw the same: the same stretches hidden and selected, the caret in the same place, and the same marks. */
-function sameEdit(left: MarkdownEdit | undefined, right: MarkdownEdit | undefined): boolean {
-  if (left === right) return true;
-  if (left === undefined || right === undefined) return false;
-  const sameSpan = (one: typeof left.hidden, other: typeof left.hidden) =>
-    one === other || (one?.from === other?.from && one?.to === other?.to);
-  return (
-    left.caret === right.caret &&
-    sameSpan(left.hidden, right.hidden) &&
-    sameSpan(left.selection, right.selection) &&
-    left.marks === right.marks
-  );
-}
-
-/** Whether two views of a unit draw the same, as the chase makes each afresh on every frame. */
+/** Whether two views of a unit draw the same, as each save cuts the text afresh. */
 function sameView(left: UnitView, right: UnitView): boolean {
-  return (
-    left.id === right.id &&
-    left.heading === right.heading &&
-    left.words === right.words &&
-    left.writing === right.writing &&
-    left.fresh === right.fresh &&
-    sameEdit(left.edit, right.edit)
-  );
+  return left.id === right.id && left.heading === right.heading && left.words === right.words;
 }
 
 /** Whether two places of a unit's words in the plan's text are one, as the text cut again on each save makes each afresh. */
@@ -846,7 +791,7 @@ function sameSection(left: PlanSection | undefined, right: PlanSection | undefin
 /** What one section of the text is drawn from. */
 interface DocumentUnitProps {
   view: UnitView;
-  /** Where the unit's words stand in the plan's text, where they stand as drawn, which marks the comments on them; none mid-chase. */
+  /** Where the unit's words stand in the plan's text, which marks the comments on them; none off a page that draws comments. */
   section: PlanSection | undefined;
   marks: SectionMarks;
   /** Draws the plan's mentions as chips; links are drawn as words without it. */
@@ -867,8 +812,8 @@ interface DocumentUnitProps {
 
 /**
  * Whether a section is drawn as it was: its view and its place in the text
- * by what they say, since each is made afresh on every frame of the typing
- * and every save, and the rest by identity, which the document holds steady.
+ * by what they say, since each is made afresh on every save, and the rest by
+ * identity, which the document holds steady.
  */
 function sameUnit(left: DocumentUnitProps, right: DocumentUnitProps): boolean {
   return (
@@ -886,11 +831,11 @@ function sameUnit(left: DocumentUnitProps, right: DocumentUnitProps): boolean {
 }
 
 /**
- * One section of the text, drawn as the chase has it, tinted where it
- * changed since the last look, and carrying the byline of the save that
- * last changed it, each by its heading. Note that it is drawn again only
- * when its own words or marks change (`sameUnit`), because drawing it parses
- * its Markdown, and the chase draws the document on every frame it types.
+ * One section of the text, tinted where it changed since the last look,
+ * and carrying the byline of the save that last changed it, each by its
+ * heading. Note that it is drawn again only when its own words or marks
+ * change (`sameUnit`), because drawing it parses its Markdown, and every
+ * save hands every section over afresh.
  */
 const DocumentUnit = memo(function DocumentUnit({
   view,
@@ -907,12 +852,11 @@ const DocumentUnit = memo(function DocumentUnit({
   const changed = marks.changed.has(view.heading);
   const openLink = useOpenLink();
   const picture = usePlanPictureDrawer();
-  const edit = useCommentedEdit(view.edit, section, threads, planText);
+  const edit = useCommentMarks(section, threads, planText);
   const drawn = (
     <MarkdownMessage
       words={view.words}
-      className={unitClass(view, changed)}
-      landed={view.fresh}
+      className={unitClass(changed)}
       edit={edit}
       link={link}
       openLink={openLink}
@@ -934,7 +878,7 @@ interface PlanDates {
   readonly taskId: () => string;
   /** The plan's text as it stands. */
   readonly text: () => string;
-  /** Where a section's words start in the text, while they stand as drawn; none mid-chase or while the editor is open. */
+  /** Where a section's words start in the text; none while the editor is open. */
   readonly from: (section: number) => number | undefined;
   readonly write: (value: string, base: string) => void;
 }
@@ -1060,7 +1004,7 @@ export const PlanBody = memo(function PlanBody({
   /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
   titleActions?: boolean;
 }): React.JSX.Element {
-  const { views, behind, jumps } = useTaskChase(task, reader);
+  const { views, sections: textSections } = useDrawnUnits(task);
   const editable = onEdit !== undefined;
   const text = editable ? task.document.body : undefined;
   const editReader = useEditReader(reader);
@@ -1124,24 +1068,8 @@ export const PlanBody = memo(function PlanBody({
     [linkedWorkspace, task.id, task.repository],
   );
   const { link, doors: mentionDoors } = useMentionChips(linked, anchors, sectionLinks);
-  /** Whether the developer has scrolled since the typing last began, which stops the caret being followed. */
-  const scrolledAway = useRef(false);
-  /** The caret's jumps when the view last followed it. */
-  const followedJumps = useRef(jumps);
   /** The ticks and dates written from the words at rest, each sent once the one before it settles. */
   const writes = useRef<PlanWrites>({ last: Promise.resolve(KEPT), saved: undefined });
-
-  useEffect(() => {
-    const element = scroller.current;
-    if (element === null) return;
-    const intent = () => {
-      scrolledAway.current = true;
-    };
-    for (const kind of SCROLL_INTENT_EVENTS) element.addEventListener(kind, intent);
-    return () => {
-      for (const kind of SCROLL_INTENT_EVENTS) element.removeEventListener(kind, intent);
-    };
-  }, []);
 
   // With nothing focused, the arrows select a block of a document, the first
   // in view going down and the last going up, rather than scroll the page.
@@ -1170,15 +1098,13 @@ export const PlanBody = memo(function PlanBody({
   }, [editable]);
 
   // An ask to show a section scrolls the document's own scroller to it, or
-  // to the top where the plan no longer holds it, and stops the caret being
-  // followed away from where the developer asked to be.
+  // to the top where the plan no longer holds it.
   const revealed = useRef<number | undefined>(undefined);
   useEffect(() => {
     const reveal = sectionLinks?.reveal;
     const element = scroller.current;
     if (reveal === undefined || element === null || revealed.current === reveal.ask) return;
     revealed.current = reveal.ask;
-    scrolledAway.current = true;
     const at = reveal.anchor === undefined ? -1 : anchors.indexOf(reveal.anchor);
     const unit =
       at === -1 ? undefined : element.querySelectorAll<HTMLElement>(`.${UNIT_CLASS}`)[at];
@@ -1192,47 +1118,19 @@ export const PlanBody = memo(function PlanBody({
     sectionLinks?.onRevealed?.(reveal.ask);
   });
 
-  // A pause in the typing hands the view back: the next burst is followed again.
-  useEffect(() => {
-    if (!behind) scrolledAway.current = false;
-  }, [behind]);
-
-  // Note that the caret is scrolled to on every frame it moves, because
-  // "nearest" is nothing while it is already in view. A jump is brought to
-  // the middle instead, so the developer sees where the caret went and what
-  // stands around it.
-  useEffect(() => {
-    const jumped = jumps !== followedJumps.current;
-    followedJumps.current = jumps;
-    if (!behind || scrolledAway.current) return;
-    const caret = scroller.current?.querySelector<HTMLElement>(".markdown-caret");
-    if (scroller.current === null || !caret) return;
-    if (jumped) centreWithin(scroller.current, caret);
-    else keepInView(scroller.current, caret);
-  });
-
-  // The sections as the plan's text holds them, where the chase draws them so, which is where comments are marked and measured.
+  // The sections as the plan's text holds them, which is where comments are marked and measured.
   // Note that comments are the plan's own page's alone, never a version of it.
   const comments = usePlanCommentsControl();
   const commentsHere =
     comments !== undefined && comments.planId === task.id && sectionLinks !== undefined;
-  const textSections = useMemo(() => planSections(task.document.body), [task.document.body]);
-  const drawnSections =
-    commentsHere &&
-    textSections.length === views.length &&
-    textSections.every((section, at) => section.text === views[at]?.words)
-      ? textSections
-      : undefined;
+  const drawnSections = commentsHere ? textSections : undefined;
   // The toolbar over the editor's words selected starts a thread on them where the plan's comments are drawn.
   const commentOnWords = useEditorComment(editorHandle);
   const edited = lastEditOf(task);
-  // A task item is ticked from the drawn plan while its words stand whole and
-  // no editor is open, and saved through the editor's own door.
-  const cut = editable && editing.editor === undefined && !behind ? planSections(text ?? "") : [];
-  const tickable = (section: number): boolean => {
-    const words = views[section]?.words;
-    return onEdit !== undefined && words !== undefined && cut[section]?.text === words;
-  };
+  // A task item is ticked from the drawn plan while no editor is open, and
+  // saved through the editor's own door.
+  const cut = editable && editing.editor === undefined ? textSections : [];
+  const tickable = (section: number): boolean => cut[section] !== undefined;
   // A tick or a date that did not save goes back, and says so here, since nothing beside the box or the chip does.
   const toast = useToast();
   const sayNotSaved = useCallback(
@@ -1250,8 +1148,8 @@ export const PlanBody = memo(function PlanBody({
     [toast],
   );
   // The plan as drawn last, which a tick waiting its turn and a date read as the picker closes are written over.
-  const latestPlan = useRef({ cut, views, id: task.id, body: task.document.body, onEdit });
-  latestPlan.current = { cut, views, id: task.id, body: task.document.body, onEdit };
+  const latestPlan = useRef({ cut, id: task.id, body: task.document.body, onEdit });
+  latestPlan.current = { cut, id: task.id, body: task.document.body, onEdit };
   // Note that ticks are sent one at a time, in the order pressed, each over
   // the text the one before it saved, since that plan may not be drawn yet.
   // A tick is placed by its item's offset and line as drawn at the press, and
@@ -1287,13 +1185,7 @@ export const PlanBody = memo(function PlanBody({
         ? {
             taskId: () => latestPlan.current.id,
             text: () => planTextNow(writes.current, latestPlan.current),
-            from: (section) => {
-              const { cut: now, views: drawn } = latestPlan.current;
-              const unit = now[section];
-              return unit !== undefined && unit.text === drawn[section]?.words
-                ? unit.from
-                : undefined;
-            },
+            from: (section) => latestPlan.current.cut[section]?.from,
             write: (value, base) => {
               const { onEdit: save, id: pickedOn } = latestPlan.current;
               if (save === undefined) return;
@@ -1319,7 +1211,7 @@ export const PlanBody = memo(function PlanBody({
   // Each section's toggler stands across draws and ticks from the plan as drawn last, so a section is not drawn again for a new one.
   const togglers = useRef(new Map<number, MarkdownTaskToggler>());
   const taskToggler = (section: number): MarkdownTaskToggler | undefined => {
-    // Note that a unit with no box has none, so the chase starting and stopping leaves it as drawn.
+    // Note that a unit with no box has none, so the editor opening and closing leaves it as drawn.
     if (!tickable(section) || !TASK_ITEM_ANYWHERE.test(views[section]?.words ?? "")) {
       return undefined;
     }

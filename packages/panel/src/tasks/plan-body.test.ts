@@ -403,3 +403,54 @@ test("an empty plan that cannot be edited draws no line saying to write it", asy
 
   assert.ok(!view.textContent?.includes("Write the plan"), "no line under the byline");
 });
+
+test("a save that writes a section above the one the keyboard stands on leaves Tab entering at that section", async () => {
+  const opened: Task = {
+    ...TASK,
+    document: {
+      body: "## Goal\nInvite a teammate by email.\n\n## Approach\nModel an invite as a pending membership.",
+      assumptions: [],
+    },
+  };
+  const saved: Task = {
+    ...opened,
+    document: {
+      ...opened.document,
+      body: `## Context\nIt came up in support.\n\n${opened.document.body}`,
+    },
+  };
+  fakeAppBridge({});
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  const registry = AtomRegistry.make();
+  const drawPlan = (task: Task) =>
+    act(() =>
+      root?.render(
+        onRegistry(
+          registry,
+          createElement(MemberDirectory, {
+            workspace: ACME,
+            readerId: undefined,
+            children: createElement(PlanBody, {
+              task,
+              onEdit: () => Promise.reject(new Error("Nothing is saved here.")),
+            }),
+          }),
+        ),
+      ),
+    );
+  const entered = () =>
+    [...container.querySelectorAll<HTMLElement>("[role='group'][aria-label]")]
+      .filter((block) => block.tabIndex === 0)
+      .map((block) => block.getAttribute("aria-label"));
+  drawPlan(opened);
+  await settle();
+  const approach = container.querySelector<HTMLElement>("[aria-label='Approach']");
+  act(() => approach?.focus());
+
+  drawPlan(saved);
+  await settle();
+
+  assert.deepEqual(entered(), ["Approach"]);
+});

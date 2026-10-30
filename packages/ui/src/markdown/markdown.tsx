@@ -42,7 +42,6 @@ import {
   type StreamdownProps,
   type UrlTransform,
 } from "streamdown";
-import { landedMark } from "../components/landed/landed.js";
 import { QUOTE_CLASS } from "../quote-face.js";
 import { MARKDOWN_CLASS, markdownClass } from "./markdown-class.js";
 import {
@@ -236,8 +235,6 @@ export interface MarkdownProps {
   look: MarkdownLook;
   /** The place's own class on the root; a document and a line have none, being drawn into the place's own. */
   className?: string | undefined;
-  /** Whether a note was just landed on, lit once as every place landed on is (`landed.ts`). */
-  landed?: boolean | undefined;
   /** Whether a transcript's words are still arriving, read block by block, an unclosed fence or emphasis drawn as written so far. */
   streaming?: boolean | undefined;
   /** The elements the place draws its own way, over the look's own. */
@@ -312,14 +309,13 @@ function WholeWords({
 /**
  * Words drawn as the Markdown they were written in. A note and a document
  * are drawn again only when what they are handed changes, since the words
- * are parsed afresh on every draw, and a plan drawing every section on each
- * frame of its typing would parse them all; a place hands its components
- * and steps memoised for the same reason.
+ * are parsed afresh on every draw, and a plan redrawn on a save would parse
+ * every section; a place hands its components and steps memoised for the
+ * same reason.
  */
 export const Markdown = memo(function Markdown({
   className,
   streaming = false,
-  landed = false,
   ...whole
 }: MarkdownProps): React.JSX.Element {
   const {
@@ -364,7 +360,7 @@ export const Markdown = memo(function Markdown({
     return <WholeWords {...whole} />;
   }
   return (
-    <div className={markdownClass(className)} {...landedMark(landed)}>
+    <div className={markdownClass(className)}>
       <WholeWords {...whole} />
     </div>
   );
