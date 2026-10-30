@@ -44,6 +44,25 @@ test("a long run of slashes is read at once, as any other address no pull reques
   assert.equal(inboxPanelTarget(href, PLACE), undefined);
 });
 
+test("a page of the agent on no task that holds the item opens in the panel, and another agent's page does not", () => {
+  const page = "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b";
+  const place = { ...PLACE, taskId: undefined, agentId: AGENT };
+  assert.deepEqual(
+    inboxPanelTarget(`https://tryluke.dev/acme/agent/${AGENT}/page/${page}`, place),
+    {
+      kind: INBOX_PANEL_TARGET.PAGE,
+      pageId: page,
+    },
+  );
+  assert.equal(
+    inboxPanelTarget(
+      `https://tryluke.dev/acme/agent/5b7d9f1a-3c5e-4a7b-9d1f-2b4c6d8e0f1a/page/${page}`,
+      place,
+    ),
+    undefined,
+  );
+});
+
 test("a file of the item's repository and the task's own page and Pull request tab open in the panel, a file of an agent with no task among them; another task's page does not", () => {
   assert.deepEqual(
     inboxPanelTarget("https://github.com/acme/relay/blob/HEAD/src/invites.ts", PLACE),

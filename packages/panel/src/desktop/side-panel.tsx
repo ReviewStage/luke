@@ -1156,11 +1156,14 @@ function PanelTabs({
   wiring,
   shown,
   transcriptDoors,
+  pagePlace,
 }: {
   panel: SidePanelControl;
   holder: SidePanelHolder;
   /** The open task, which a tab's pin is of. */
   taskId: string;
+  /** What the panel's pages stand on (`SidePanel`'s), which a page row's card previews. */
+  pagePlace: PagePlace;
   /** What an agent's page's tab is pinned on; none where it offers no pin. */
   pinOn: PinHolder | undefined;
   /** The task's name and status, which its Plan tab wears; none where they are not known. */
@@ -1223,7 +1226,7 @@ function PanelTabs({
     copied,
     onOpenAgent,
     shownAgent,
-    pagePlace: holderPlaceOf(holder, taskId),
+    pagePlace,
     plan: task,
     planId: holder === SIDE_PANEL_HOLDER.TASK ? taskId : undefined,
     inboxWaiting: inbox?.waiting.length ?? 0,
@@ -2259,6 +2262,7 @@ export function SidePanel({
   holder,
   taskId,
   pinOn,
+  onAgent = false,
   repository,
   repositoryPlace,
   pages,
@@ -2292,6 +2296,8 @@ export function SidePanel({
    * beside a task's page or the Inbox, whose holder decides it.
    */
   pinOn?: PinHolder | undefined;
+  /** Whether the Inbox's panel stands for an item of an agent on no task, `taskId` its id, whose own pages it reads under the agent. */
+  onAgent?: boolean;
   /** The task's repository, `owner/name`, or none before one is chosen. */
   repository: string | null;
   /** Where the panel stands for no task, an agent's page or an Inbox item of an agent on none: the workspace and repository its File tabs read through; none beside a task, or where no repository is known. */
@@ -2437,6 +2443,10 @@ export function SidePanel({
   });
   // A worker's tab hangs the cards its agent's rows hang, each read as its tab reads its own, the tab chosen here or the agent's followed in the column.
   const chosenTab = panel.tab;
+  const pagePlace = useMemo(
+    () => (onAgent ? { agentId: taskId } : holderPlaceOf(holder, taskId)),
+    [onAgent, holder, taskId],
+  );
   const cards = useMemo(
     () =>
       taskCards({
@@ -2445,9 +2455,9 @@ export function SidePanel({
         chosen: (chosen) =>
           (chosenTab !== undefined && sameTab(chosen, chosenTab)) ||
           (shownAgent !== undefined && sameTab(chosen, { agent: shownAgent })),
-        pages: holderPlaceOf(holder, taskId),
+        pages: pagePlace,
       }),
-    [agents, drawnTranscripts, chosenTab, shownAgent, holder, taskId],
+    [agents, drawnTranscripts, chosenTab, shownAgent, pagePlace],
   );
   // The file tabs of files opened on the task, in the strip's order.
   const files = panel.files.filter((file) => file.browsedOn === taskId);
@@ -2540,7 +2550,7 @@ export function SidePanel({
     cards: {
       agents,
       held: drawnTranscripts,
-      pagePlace: holderPlaceOf(holder, taskId),
+      pagePlace,
       shownAgent,
       onOpenAgent: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
     },
@@ -2575,6 +2585,7 @@ export function SidePanel({
           holder={holder}
           pinOn={pinOn}
           taskId={taskId}
+          pagePlace={pagePlace}
           keys={keys && focused}
           unread={unread}
           agents={agents}
@@ -2669,7 +2680,7 @@ export function SidePanel({
                 taskId={taskId}
                 codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK || repositoryPlace !== undefined}
                 repositoryPlace={repositoryPlace}
-                pagePlace={holderPlaceOf(holder, taskId)}
+                pagePlace={pagePlace}
                 repository={repository}
                 files={files}
                 pages={taskPages}
