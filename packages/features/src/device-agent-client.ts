@@ -20,6 +20,9 @@ import {
 } from "./device-agent-wire.js";
 import {
   type HostEnrollRequest,
+  type HostPairingPollAnswer,
+  type HostPairingStartAnswer,
+  type HostPairingStartRequest,
   hostGithubTokenAnswerSchema,
   type OwnDeviceEnrollRequest,
 } from "./host-wire.js";
@@ -48,7 +51,11 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
  * state, or its commit, refused says whether a newer save made it stale,
  * and one unanswered, or refused as unavailable, is nothing. A host also
  * asks the runner token route for a GitHub token for one of its agents
- * (`githubToken`), on the same credential, its device secret.
+ * (`githubToken`), on the same credential, its device secret. A box with
+ * no secret yet enrolls on an install token (`enrollHost`), or pairs with
+ * a code: it starts a pairing with no credential (`startHostPairing`) and
+ * polls on the poll secret it was answered (`pollHostPairing`) until a
+ * member approves or denies it.
  */
 
 /** A read's bytes as the answer's wire spells them. */
@@ -184,6 +191,94 @@ export function enrollHost(
       ),
     ),
   );
+}
+
+/** How a pairing's start or poll ended. */
+export const HOST_PAIRING_OUTCOME = {
+  /** The service answered: a start its poll secret, code, and link; a poll where the pairing stands. */
+  ANSWERED: "answered",
+  /** The service is taking no more starts from the box's address for now; start again a little later. */
+  BRAKED: "braked",
+  /** The service refused the daemon's version as below its floor (`HOST_WIRE.VERSION_HEADER`). */
+  UPGRADE_NEEDED: "upgrade-needed",
+  /** The service refused the call for any other reason: a malformed start, or a poll on no poll secret. */
+  REFUSED: "refused",
+  /** No answer could be read: the network, the deadline, or a service answering something else. */
+  UNANSWERED: "unanswered",
+} as const;
+
+export type HostPairingOutcome<Answer> =
+  | { readonly outcome: typeof HOST_PAIRING_OUTCOME.ANSWERED; readonly answer: Answer }
+  | { readonly outcome: typeof HOST_PAIRING_OUTCOME.BRAKED }
+  | {
+      readonly outcome: typeof HOST_PAIRING_OUTCOME.UPGRADE_NEEDED;
+      readonly minimumVersion?: string | undefined;
+    }
+  | { readonly outcome: typeof HOST_PAIRING_OUTCOME.REFUSED }
+  | { readonly outcome: typeof HOST_PAIRING_OUTCOME.UNANSWERED };
+
+/** A pairing call's answer, or how it failed, by the refusal's slug. */
+function pairingOutcome<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<HostPairingOutcome<Answer>, never, HttpClient.HttpClient> {
+  return asked.pipe(
+    Effect.map(
+      (answer): HostPairingOutcome<Answer> => ({
+        outcome: HOST_PAIRING_OUTCOME.ANSWERED,
+        answer,
+      }),
+    ),
+    Effect.catch((failed): Effect.Effect<HostPairingOutcome<Answer>> => {
+      if (failed._tag !== "HostedRefused") {
+        return Effect.succeed({ outcome: HOST_PAIRING_OUTCOME.UNANSWERED });
+      }
+      switch (failed.refusal) {
+        case HOSTED_API_ERROR.HOST_UPGRADE_NEEDED:
+          return Effect.succeed({
+            outcome: HOST_PAIRING_OUTCOME.UPGRADE_NEEDED,
+            minimumVersion: failed.data?.minimumVersion,
+          });
+        case HOSTED_API_ERROR.QUOTA_EXHAUSTED:
+          return Effect.succeed({ outcome: HOST_PAIRING_OUTCOME.BRAKED });
+        default:
+          return Effect.succeed({ outcome: HOST_PAIRING_OUTCOME.REFUSED });
+      }
+    }),
+  );
+}
+
+/**
+ * A box's pairing started (`contract/device-agents.ts`'s `startPairing`),
+ * with no credential: answered the poll secret it polls on, the code to
+ * show and the link that opens it, how long the code lasts, and how often
+ * to poll. The daemon's version rides on the caller's own `HttpClient`, as
+ * on every call of a host's.
+ */
+export function startHostPairing(
+  serviceBaseUrl: string,
+  request: HostPairingStartRequest,
+): Effect.Effect<HostPairingOutcome<HostPairingStartAnswer>, never, HttpClient.HttpClient> {
+  const hosted = hostedClient({ baseUrl: serviceBaseUrl, credential: {} });
+  return pairingOutcome(askHosted(hosted.deviceAgents.startPairing, request));
+}
+
+/**
+ * A pairing box's poll on its poll secret, as the call's bearer
+ * (`contract/device-agents.ts`'s `pollPairing`): pending, slow down,
+ * denied, expired, or approved with the box's device id and secret, which
+ * the service answers this once. The daemon's version rides on the
+ * caller's own `HttpClient`.
+ */
+export function pollHostPairing(
+  serviceBaseUrl: string,
+  pollSecret: string,
+): Effect.Effect<HostPairingOutcome<HostPairingPollAnswer>, never, HttpClient.HttpClient> {
+  const bearer = `Bearer ${pollSecret}`;
+  const hosted = hostedClient({
+    baseUrl: serviceBaseUrl,
+    credential: { authorization: () => Effect.succeed(bearer) },
+  });
+  return pairingOutcome(askHosted(hosted.deviceAgents.pollPairing, undefined));
 }
 
 /** The machine an own enroll names, which the service creates the device from where the account never registered its id. */

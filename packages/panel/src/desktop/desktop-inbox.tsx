@@ -38,7 +38,7 @@ import {
   INBOX_VIEW_ITEMS,
   useInboxColumns,
 } from "../tasks/inbox-columns.js";
-import { InboxList, InboxListNote, InboxPaneEmpty } from "../tasks/inbox-list.js";
+import { InboxList, InboxListNote, InboxPaneEmpty, NOTHING_HERE } from "../tasks/inbox-list.js";
 import {
   anyUnread,
   holderAutomationId,
@@ -47,7 +47,7 @@ import {
   type InboxListed,
   itemWorkspaceId,
 } from "../tasks/inbox-model.js";
-import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
+import { useInboxPager } from "../tasks/inbox-pager.js";
 import { type InboxNewThread, InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
 import { useMoveThreadDialog } from "../tasks/move-thread-dialog.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
@@ -143,8 +143,10 @@ import { taskCardOf } from "./task-card.js";
  *
  * With Channels on, a channel chosen from the sidebar narrows the page to
  * its own items, the same list, reading pane, and keys, under the channel's
- * name and purpose (`channel-head.tsx`), on a scope of the channel's own
- * that opens on All of everyone's (`use-inbox-listing.ts`); leaving it stamps the
+ * name and purpose (`channel-head.tsx`), every one of its items listed with no
+ * view's menu (`use-inbox-listing.ts`), and "Nothing here" where it holds
+ * none; Mark all as read, which ⌘K and a phone's ⋯ offer, marks its items
+ * alone; leaving it stamps the
  * reader's look at it; and a row's ⋯ moves its thread to another channel
  * (`move-thread-dialog.tsx`). An item opened into a channel from a link
  * narrows the page to its own channel once read, and a channel archived or
@@ -214,6 +216,8 @@ export const DesktopInbox = memo(function DesktopInbox({
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const narrowed = useInboxNarrowed();
   const channelPlace = useChannelPlace();
+  // The channel the list is narrowed to, chosen whether or not its channel is read yet.
+  const narrowedTo = narrowed ? channelPlace.channelId : undefined;
   const channels = useChannels(channelsOn ? tasks.workspace?.id : undefined);
   // A channel chosen that is open no more is looked for among the archived ones, and shown to read where it is one.
   const chosenGone =
@@ -274,7 +278,7 @@ export const DesktopInbox = memo(function DesktopInbox({
     clear,
     closeItem,
     onRetry,
-  } = useInboxListing(tasks, narrowed ? channelPlace.channelId : undefined);
+  } = useInboxListing(tasks, narrowedTo);
   // An item opened into a channel from a link, which names its item and not its channel, narrows the Inbox to its own channel once read.
   useThreadChannel(narrowed ? chosen?.item : undefined);
   // Leaving a channel is having looked at it, so its row no longer reads unread for what was posted before.
@@ -288,6 +292,11 @@ export const DesktopInbox = memo(function DesktopInbox({
   // Every item standing, which Mark all as read marks and a thread is moved among.
   const standingItems = useMemo(() => standing.flatMap(({ items }) => items), [standing]);
   const unread = useMemo(() => anyUnread(standing), [standing]);
+  // Mark all as read marks the listed workspace's items, or a channel's alone, each on its own, since the service marks a workspace's whole.
+  const { onMarkAll, onMarkEach } = marks;
+  // Note that it asks of the channel chosen rather than the channel read, as the list does, so a channel whose read is still out never marks the workspace's whole.
+  const markAll = () => (narrowedTo === undefined ? onMarkAll : onMarkEach)(standingItems);
+  useAppCommand(APP_COMMAND.MARK_INBOX_READ, tasks.shown && unread ? markAll : undefined);
   // An item's ⋯, its row's and its thread bar's, moves its thread to another open channel, which the channels' counts are read again for.
   const move = useMoveThreadDialog({
     channels: channels.channels ?? NO_CHANNELS,
@@ -337,7 +346,7 @@ export const DesktopInbox = memo(function DesktopInbox({
   );
   const timeOpen = useInboxItemOpenSpan(chosen?.item.id, live.read);
   useInboxOpenSpan(listedRows.length);
-  // A row's press and Next's open their item alike, the keyboard following it.
+  // A row's press opens its item, the keyboard following it.
   const open = (listed: InboxListed) => {
     timeOpen(listed.item.id);
     choose(listed);
@@ -350,16 +359,7 @@ export const DesktopInbox = memo(function DesktopInbox({
     choose(listed);
     columns.onStep();
   };
-  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
-    shown: tasks.shown,
-  });
-  const next = inboxNext(
-    steps,
-    chosen,
-    { models: named.models, readerId: tasks.me },
-    open,
-    direction,
-  );
+  const pager = useInboxPager(steps, list, chosen?.item.id, step, { shown: tasks.shown });
   // Where the chosen item's words are read: its plan's workspace and repository, or, with no plan, its agent's own.
   const place = chosen === undefined ? undefined : answerPlace(chosen, agents, tasks);
   // Where the chosen item's links are written: under its own workspace, by slug once the workspaces are read.
@@ -381,6 +381,7 @@ export const DesktopInbox = memo(function DesktopInbox({
     ? {
         channelOf: landsIn,
         workspaceId: tasks.workspace?.id,
+        onOpenChannel: view.onOpenChannel,
         onStart: (item, start) =>
           startInboxThread({
             agentId: item.agentId,
@@ -562,7 +563,6 @@ export const DesktopInbox = memo(function DesktopInbox({
               hidden={columns.shown === INBOX_COLUMNS.LIST}
               onBack={columns.onBack}
               pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
-              next={next}
               mentions={mentions}
               channelName={channel?.name}
               newThread={newThread}
@@ -645,22 +645,20 @@ export const DesktopInbox = memo(function DesktopInbox({
                 ) : (
                   <InboxList
                     view={list}
-                    scene={narrowed ? channelPlace.channelId : undefined}
+                    scene={narrowedTo}
                     chosen={chosen?.item.id}
                     columns={columns.shown}
                     rows={columns.rows}
                     head={{
                       shown: tasks.shown,
-                      show: choices,
-                      view: { choices },
-                      readAll: {
-                        unread,
-                        onMarkAll: () => marks.onMarkAll(standingItems),
-                      },
+                      view: choices,
                       search,
                       phone:
                         room === SHELL_ROOM.NARROW
-                          ? { start: <NewTaskButton tasks={tasks} /> }
+                          ? {
+                              start: <NewTaskButton tasks={tasks} />,
+                              readAll: { unread, onMarkAll: markAll },
+                            }
                           : undefined,
                       channel: channel === undefined ? undefined : channelHead,
                     }}
@@ -678,7 +676,8 @@ export const DesktopInbox = memo(function DesktopInbox({
                         onList={columns.onList}
                         onRetry={onRetry}
                         searched={searched}
-                        onNewTask={newTask}
+                        onNewTask={narrowedTo === undefined ? newTask : undefined}
+                        none={narrowedTo === undefined ? undefined : NOTHING_HERE}
                       />
                     }
                     onChoose={open}
@@ -717,7 +716,11 @@ export const DesktopInbox = memo(function DesktopInbox({
                       </ErrorState>
                     ) : failed || reading || filteredOut || searched !== undefined ? null : (
                       // Note that the list says the read failed, or what the filter or its search left out, so the pane beside it stands bare.
-                      <InboxPaneEmpty listed={listedRows.length} newTask={newTask} />
+                      <InboxPaneEmpty
+                        listed={listedRows.length}
+                        newTask={narrowedTo === undefined ? newTask : undefined}
+                        none={narrowedTo === undefined ? undefined : NOTHING_HERE}
+                      />
                     )}
                   </section>
                 ) : (

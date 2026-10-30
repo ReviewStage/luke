@@ -37,9 +37,11 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { AGENT } from "../testing/desktop-inbox.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
+import type { EditAgents } from "./edit-ref.js";
 import { PlanBody } from "./plan-body.js";
 import { CommentFocusScope, PlanCommentsTab } from "./plan-comments.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
@@ -155,6 +157,7 @@ function drawn(
   mentions?: TaskMentionsValue,
   me?: string,
   read = true,
+  agents?: EditAgents,
 ) {
   const asked: { thread: string; action: PlanCommentActionRequest }[] = [];
   const started: PlanCommentStartRequest[] = [];
@@ -185,7 +188,7 @@ function drawn(
   const page =
     view === "tab"
       ? createElement(PlanCommentsTab, {
-          doors: { agents: undefined, me: "u-dean" },
+          doors: { agents, me: "u-dean" },
           onShowDocument: () => documentsShown.push(true),
         })
       : createElement(PlanBody, {
@@ -1232,32 +1235,56 @@ test("a thread being started keeps its card through a press away while its words
   );
 });
 
-test("a thread's resolve reads as its writer's own line, drawn as a comment's head, and an empty tab says how a thread starts", () => {
-  const resolved = threadOn(ID.RESOLVED, "teammate", "A guest, too?", {
-    status: PLAN_COMMENT_STATUS.RESOLVED,
-    entries: [
-      ...threadOn(ID.RESOLVED, "teammate", "A guest, too?").entries,
-      {
-        id: `${ID.RESOLVED.slice(0, -4)}bbbb`,
-        kind: PLAN_COMMENT_ENTRY.RESOLVED,
-        writer: {
-          actor: PLAN_COMMENT_ACTOR.MEMBER,
-          by: { userId: "u-dean", name: "Dean Stratakos" },
-        },
-        at: 2,
-      },
-    ],
+test("a thread's resolve reads as its writer's own line, drawn as a comment's head, an agent of another task named as the workspace's list names it, and an empty tab says how a thread starts", () => {
+  const resolvedBy = (id: string, writer: PlanCommentThread["entries"][number]["writer"]) =>
+    threadOn(id, "teammate", "A guest, too?", {
+      status: PLAN_COMMENT_STATUS.RESOLVED,
+      entries: [
+        ...threadOn(id, "teammate", "A guest, too?").entries,
+        { id: `${id.slice(0, -4)}bbbb`, kind: PLAN_COMMENT_ENTRY.RESOLVED, writer, at: 2 },
+      ],
+    });
+  const byMember = resolvedBy(ID.RESOLVED, {
+    actor: PLAN_COMMENT_ACTOR.MEMBER,
+    by: { userId: "u-dean", name: "Dean Stratakos" },
   });
-  const { container } = drawn("tab", [resolved]);
+  const byAgent = resolvedBy(ID.GONE, { actor: PLAN_COMMENT_ACTOR.AGENT, agentId: AGENT.id });
+  // The agent works on another task, so only the window's list across the workspace holds it.
+  const agents: EditAgents = {
+    control: {
+      agents: [],
+      archived: [],
+      listed: [AGENT],
+      models: [],
+      me: "u-dean",
+      pullRequests: new Map(),
+    },
+    onOpen: undefined,
+  };
+  const { container } = drawn(
+    "tab",
+    [byMember, byAgent],
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    true,
+    agents,
+  );
 
   assert.ok(container.querySelector(".luke-empty-state")?.textContent?.includes("No comments"));
   act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Resolved"]')?.click());
-  const event = container.querySelector<HTMLElement>(".comment-event[data-kind='resolved']");
+  const events = [
+    ...container.querySelectorAll<HTMLElement>(".comment-event[data-kind='resolved']"),
+  ];
   assert.ok(
-    event?.querySelector(":scope > .luke-comment > .luke-comment-head"),
+    events[0]?.querySelector(":scope > .luke-comment > .luke-comment-head"),
     "drawn as a comment's head",
   );
-  assert.ok(event?.textContent?.includes("Dean Stratakos resolved this"));
+  const lines = events.map((event) => event.textContent ?? "");
+  assert.ok(lines.some((line) => line.includes("Dean Stratakos resolved this")));
+  assert.ok(lines.some((line) => line.includes(`${AGENT.title} resolved this`)));
 });
 
 test("the line a thread's ask leaves is not drawn, since the mention in its words says who was asked", () => {

@@ -34,6 +34,7 @@ import {
   createTask,
   listTasks,
   readTask,
+  readTaskHeader,
   savePlanText,
   updateTask,
 } from "@luke/database/models/task-store";
@@ -2356,6 +2357,59 @@ test("update_task adds and takes away a task's blocks, which read_task names on 
   );
   assert.equal(removed.already, false, JSON.stringify(removed));
   assert.deepEqual(await blockIds(tasks.billing), { blockedBy: [], blocks: [] });
+});
+
+test("update_task puts a task under a parent and takes it out with null, answering the parent as it then stands, and refuses a parent out of the workspace, in another repository, or under which the task would descend from itself, taking back the call's every change", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const { userId } = agents.caller;
+  const apart = await database.run(
+    createTask(userId, { organizationId: workspaceId, name: "Apart", repository: "acme/apart" }),
+  );
+  const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+  const parentOf = async (taskId: string) =>
+    Option.getOrThrow(await database.run(readTaskHeader(userId, taskId))).parentTaskId;
+
+  const under = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: tasks.billing, parentTaskId: tasks.invitations },
+    "call-1",
+  );
+  assert.ok(isRecord(under.task), JSON.stringify(under));
+  assert.deepEqual([under.already, under.task.parentTaskId], [false, tasks.invitations]);
+  assert.equal(await parentOf(tasks.billing), tasks.invitations);
+
+  const loop = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: tasks.invitations, name: "Seat invitations", parentTaskId: tasks.billing },
+    "call-2",
+  );
+  assert.deepEqual(loop, rejected(UPDATE_TASK_REFUSAL.PARENT_CYCLE));
+  const invitations = Option.getOrThrow(await database.run(readTask(userId, tasks.invitations)));
+  assert.notEqual(
+    invitations.task.name,
+    "Seat invitations",
+    "the refused parent took the rename back",
+  );
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, parentTaskId: apart.id }),
+    rejected(UPDATE_TASK_REFUSAL.PARENT_REPOSITORY),
+  );
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, parentTaskId: tasks.elsewhere }),
+    rejected(UPDATE_TASK_REFUSAL.NO_PARENT),
+  );
+  assert.equal(await parentOf(tasks.billing), tasks.invitations);
+
+  const out = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: tasks.billing, parentTaskId: null },
+    "call-3",
+  );
+  assert.ok(isRecord(out.task), JSON.stringify(out));
+  assert.deepEqual([out.already, out.task.parentTaskId], [false, null]);
+  assert.equal(await parentOf(tasks.billing), null);
 });
 
 test("archive_agent refuses an agent whose turn a Stop was asked of but which still runs, since the turn goes on until eve ends it", async () => {

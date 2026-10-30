@@ -1,5 +1,5 @@
 /**
- * tasks.ts -- the account's plans and each one's own reads and writes: the list, a start, one plan opened, changed, or deleted, its blocks, its edit, and its history.
+ * tasks.ts -- the account's plans and each one's own reads and writes: the list, a start, one plan opened, changed, or deleted, its blocks, its parent, a relation moved, its edit, and its history.
  *
  * Every path names the plan by its id (`{id}`), which the handler reads as
  * the old routes read it: an id that is no UUID names no plan, and answers
@@ -26,6 +26,8 @@ import {
   taskCreateRequestSchema,
   taskDeleteAnswerSchema,
   taskListAnswerSchema,
+  taskParentRequestSchema,
+  taskRelationChangeRequestSchema,
   taskRestoreAnswerSchema,
   taskStartAnswerSchema,
   taskUpdateRequestSchema,
@@ -106,6 +108,20 @@ export const tasksContract = {
     .meta(bodyCap(NAME_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${PLAN}/blocks`, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(taskParams), taskBlockRequestSchema))
+    .output(EffectSchema.flip(taskAnswerSchema)),
+  /** Its parent set, or cleared with null, answered with it as it then stands. */
+  parent: hostedProcedure
+    .meta(bodyCap(NAME_BODY_BYTES))
+    .meta(openapi({ method: HTTP_METHOD.POST, path: `${PLAN}/parent`, inputStructure: "detailed" }))
+    .input(exactBodyInput(EffectSchema.Struct(taskParams), taskParentRequestSchema))
+    .output(EffectSchema.flip(taskAnswerSchema)),
+  /** One relation of it moved to another kind, in one transaction, answered with it as it then stands. */
+  relation: hostedProcedure
+    .meta(bodyCap(NAME_BODY_BYTES))
+    .meta(
+      openapi({ method: HTTP_METHOD.POST, path: `${PLAN}/relation`, inputStructure: "detailed" }),
+    )
+    .input(exactBodyInput(EffectSchema.Struct(taskParams), taskRelationChangeRequestSchema))
     .output(EffectSchema.flip(taskAnswerSchema)),
   delete: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: PLAN }))

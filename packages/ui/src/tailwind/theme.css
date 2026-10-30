@@ -334,6 +334,9 @@
   --spacing-card-line: calc(100% + 2 * var(--luke-row-inset));
   --spacing-tasks-board-column: 320px; /* off-scale: a card's width, as Linear's board stands it */
   --spacing-tasks-list-row: calc(var(--luke-control-height) + var(--luke-space-6));
+  /* A quick add's draft, raised as a card, takes its hairline out of the
+     row's inset, so its cells stand on the rows' lines. */
+  --spacing-task-row-draft: calc(var(--luke-row-inset) - 1px);
   --spacing-tasks-list-maker: 16ch; /* off-scale: a maker's name, cut short at a short name's measure */
   /* A row's box (`SelectBox`): a checkbox's own size, as shadcn/checkbox.tsx
      draws it, and the start of a row that keeps a gutter for it, the box
@@ -725,7 +728,9 @@
   --spacing-workspace-ref-lift: max(0px, calc((14px - 1lh) / 2));
   --spacing-workspace-shared-glyph: 11px; /* off-scale: a people glyph at a caption's x-height */
   --spacing-corner-dot: 5px; /* off-scale: the dot a press wears at its corner (`CornerDot`) */
-  --spacing-corner-badge: var(--luke-space-16); /* the disc a press wears at its corner (`CornerBadge`) */
+  --spacing-corner-badge: var(
+    --luke-space-16
+  ); /* the disc a press wears at its corner (`CornerBadge`) */
   --spacing-corner-badge-glyph: 10px; /* off-scale: the glyph on that disc */
   --spacing-section-icon-scroll: 220px; /* off-scale: the icon grid's room, about seven rows */
   --grid-template-columns-section-icons: repeat(

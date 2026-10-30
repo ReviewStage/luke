@@ -11,7 +11,7 @@ import { Schema as EffectSchema } from "effect";
  * the way by its owner: the settings readers on the service and in the
  * host's preferences client, `modelChoiceSchema` for the default
  * (`models-wire.ts`), `chaptersModelFrom` for the chapters model
- * (`chapters-model-choice.ts`). A write carries any of the five parts and is read the
+ * (`chapters-model-choice.ts`). A write carries any of the six parts and is read the
  * same way, a part the service does not take refused there.
  */
 
@@ -19,6 +19,7 @@ import { Schema as EffectSchema } from "effect";
 export const accountPreferencesAnswerSchema = EffectSchema.Struct({
   preferences: EffectSchema.Record(EffectSchema.String, EffectSchema.Unknown),
   linkOpen: EffectSchema.optionalKey(EffectSchema.Unknown),
+  agentEnter: EffectSchema.optionalKey(EffectSchema.Unknown),
   agent: EffectSchema.optionalKey(EffectSchema.Unknown),
   chaptersModel: EffectSchema.optionalKey(EffectSchema.Unknown),
   experiments: EffectSchema.optionalKey(
@@ -30,10 +31,11 @@ export const accountPreferencesAnswerSchema = EffectSchema.Struct({
 
 export type AccountPreferencesAnswerWire = typeof accountPreferencesAnswerSchema.Type;
 
-/** A write (PUT): any of the snapshot's five parts, each read by its owner on the service. */
+/** A write (PUT): any of the snapshot's six parts, each read by its owner on the service. */
 export const accountPreferencesWriteSchema = EffectSchema.Struct({
   preferences: EffectSchema.optionalKey(EffectSchema.Unknown),
   linkOpen: EffectSchema.optionalKey(EffectSchema.Unknown),
+  agentEnter: EffectSchema.optionalKey(EffectSchema.Unknown),
   agent: EffectSchema.optionalKey(EffectSchema.Unknown),
   chaptersModel: EffectSchema.optionalKey(EffectSchema.Unknown),
   experiments: EffectSchema.optionalKey(EffectSchema.Unknown),

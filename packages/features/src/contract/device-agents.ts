@@ -2,8 +2,10 @@
  * device-agents.ts -- a local agent's Mac (`device-agent-wire.ts`): it registers and beats, reads which of its agents should still stand, holds a read for its lines and one for its requests, claims each, settles a line or answers a request, and saves its agents' state.
  *
  * A host enrolls first (`../host-wire.ts`), trading an install token for
- * its device secret, or a member's own desktop enrolls its device on its
- * sign-in (`enrollOwn`), and calls every other procedure on that secret.
+ * its device secret, or pairing with a code (`startPairing`, then
+ * `pollPairing` until a member approves it), or a member's own desktop
+ * enrolls its device on its sign-in (`enrollOwn`), and calls every other
+ * procedure on that secret.
  * Every procedure names the Mac's device id, in the query of a held read
  * and in the body of every other call. The outputs are the wire schemas
  * flipped, so oRPC's output check encodes the handler's value into the
@@ -36,6 +38,9 @@ import {
 import {
   hostEnrollAnswerSchema,
   hostEnrollRequestSchema,
+  hostPairingPollAnswerSchema,
+  hostPairingStartAnswerSchema,
+  hostPairingStartRequestSchema,
   ownDeviceEnrollRequestSchema,
 } from "../host-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
@@ -54,6 +59,14 @@ export const deviceAgentsContract = {
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_ENROLL }))
     .input(exactInput(hostEnrollRequestSchema))
     .output(EffectSchema.flip(hostEnrollAnswerSchema)),
+  startPairing: hostedProcedure
+    .meta(bodyCap(SMALL_BODY_BYTES))
+    .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.HOST_PAIRING_START }))
+    .input(exactInput(hostPairingStartRequestSchema))
+    .output(EffectSchema.flip(hostPairingStartAnswerSchema)),
+  pollPairing: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.HOST_PAIRING_POLL }))
+    .output(EffectSchema.flip(hostPairingPollAnswerSchema)),
   enrollOwn: hostedProcedure
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_ENROLL_OWN }))

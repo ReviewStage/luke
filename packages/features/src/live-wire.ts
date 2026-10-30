@@ -406,6 +406,8 @@ export const agentTranscriptLiveAnswerSchema = EffectSchema.Struct({
     workers: sealedLiveQuerySchema,
     window: sealedLiveQuerySchema,
     windowParts: sealedLiveQuerySchema,
+    /** The agent's queue as its revision, which every change to the queue moves on; absent from a service older than the queue. */
+    queueRevision: EffectSchema.optionalKey(sealedLiveQuerySchema),
   }),
 });
 
@@ -443,6 +445,10 @@ export const agentTranscriptLiveRowsSchema = EffectSchema.Struct({
   ),
   window: EffectSchema.Array(transcriptWindowRowSchema),
   windowParts: EffectSchema.Array(transcriptWindowPartRowSchema),
+  /** The agent's queue as its revision, a row at most, none before its first change and from a service older than the queue. */
+  queueRevision: EffectSchema.optionalKey(
+    EffectSchema.Array(EffectSchema.Struct({ revision: countedNumber })),
+  ),
 });
 
 /** The query a transcript read is asked at once by rather than held, and the one word it takes. */
@@ -540,7 +546,7 @@ export const scopeInboxLiveAnswerSchema = EffectSchema.Struct({
 
 export type ScopeInboxLiveAnswer = typeof scopeInboxLiveAnswerSchema.Type;
 
-/** One message of an item's thread as its row carries it: its item, and the member by id and name, either null where none stands. */
+/** One message of an item's thread as its row carries it: its item, the member by id and name, either null where none stands, and the key the reader's own was sent under. */
 const inboxLiveMessageSchema = EffectSchema.Struct({
   id: inboxMessageSchema.fields.id,
   itemId: EffectSchema.String,
@@ -550,6 +556,8 @@ const inboxLiveMessageSchema = EffectSchema.Struct({
   text: EffectSchema.String,
   ask: EffectSchema.NullOr(inboxReadAskSchema),
   answers: EffectSchema.NullOr(inboxAnswersSchema),
+  /** The key the reader's own message was sent under; null on every other, and absent from a service before it. */
+  clientKey: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   createdAt: countedNumber,
 });
 
@@ -628,6 +636,9 @@ function inboxMessageOfLiveRow(
     ...(files.length === 0 ? undefined : { files }),
     ...(row.ask === null ? undefined : { ask: standingAsk(row.ask, row.id, item) }),
     ...(row.answers === null ? undefined : { answers: row.answers }),
+    ...(row.clientKey === undefined || row.clientKey === null
+      ? undefined
+      : { clientKey: row.clientKey }),
     createdAt: row.createdAt,
   };
 }

@@ -1,11 +1,6 @@
-import type { AgentChangesPeople, AgentPullRequest } from "@luke/features/agent-wire";
-import type { CatalogModel } from "@luke/features/models-wire";
+import type { AgentPullRequest } from "@luke/features/agent-wire";
 import type { TaskRunsOn } from "@luke/features/task-wire";
 import {
-  CHIP_LOOK,
-  CHIP_SIZE,
-  Chip,
-  ChipName,
   GROUP_HEADING,
   GroupHeader,
   LIST_DENSITY,
@@ -13,13 +8,12 @@ import {
   ListRow,
   RowHint,
   RowHintOptions,
-  Tooltip,
 } from "@luke/ui";
 import { isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
-import { agentStillWriting, pullRequestNumberLabel } from "../tasks/agent-model.js";
-import { type AgentSubject, agentSubject } from "../tasks/agent-ref.js";
+import { agentStillWriting } from "../tasks/agent-model.js";
+import { agentSubject } from "../tasks/agent-ref.js";
 import { PullRequestCard, peopleOf } from "../tasks/pull-request-card.js";
-import { PullRequestMark, pullRequestMarkState } from "../tasks/pull-request-mark.js";
+import { PullRequestChip } from "../tasks/pull-request-chip.js";
 import { RunsOnPlace } from "../tasks/runs-on.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
 import { openerOf } from "../tasks/use-link-standing.js";
@@ -40,7 +34,7 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * the task's and so every row's alike, the failed mark at its end once its
  * turn failed, and the card its tab hangs. Its pull request, where it opened
  * one, stands after it as a chip of GitHub's mark in GitHub's colour for
- * where it stands and its number (`pull-request-mark.tsx`), hanging the
+ * where it stands and its number (`pull-request-chip.tsx`), hanging the
  * pull request's one card as its Pull request tab does, the agent whose it
  * is and who it names among what the card says (`pull-request-card.tsx`).
  * A row's press is the page's to answer (`onOpenAgent`): the side panel's
@@ -67,50 +61,6 @@ function listedOrder(entries: readonly AddEntry[]): readonly AddEntry[] {
   );
 }
 
-/** An agent's pull request as a chip: its mark in GitHub's colour for where it stands and its number, hanging its card, opening its Pull request tab. */
-function PullRequestChip({
-  pullRequest,
-  agent,
-  people,
-  onOpen,
-}: {
-  pullRequest: AgentPullRequest;
-  /** The agent whose pull request it is, as the list names it, and how its tab opens. */
-  agent: { subject: AgentSubject; models: readonly CatalogModel[] | undefined; onOpen: () => void };
-  /** Who the pull request names, as its Pull request tab last read them; none before it has. */
-  people: AgentChangesPeople | undefined;
-  onOpen: () => void;
-}): React.JSX.Element {
-  const card = (
-    <PullRequestCard
-      pullRequest={pullRequest}
-      lines={pullRequest}
-      files={pullRequest.changedFiles}
-      opener={people?.author ?? openerOf(pullRequest)}
-      agent={agent}
-      reviewers={people?.reviewers}
-    />
-  );
-  return (
-    <Tooltip label={pullRequest.title} card={card}>
-      <Chip
-        look={CHIP_LOOK.PILL}
-        size={CHIP_SIZE.COMPACT}
-        data-pull-request-state={pullRequestMarkState(pullRequest)}
-        href={pullRequest.url}
-        onClick={(event) => {
-          // Note that the page opens in the window's Pull request tab, so the browser does not follow the address.
-          event.preventDefault();
-          onOpen();
-        }}
-      >
-        <PullRequestMark pullRequest={pullRequest} />
-        <ChipName>{pullRequestNumberLabel(pullRequest)}</ChipName>
-      </Chip>
-    </Tooltip>
-  );
-}
-
 /** One agent's row: its tab's look, where it runs, its failed mark, and its pull request's chip where it opened one. */
 function PlanAgentRow({
   entry,
@@ -132,6 +82,10 @@ function PlanAgentRow({
   const { row, endMark, card } = entry;
   const agentId = row.id;
   const chosen = tab !== undefined && sameTab({ agent: agentId }, tab);
+  const people =
+    pullRequest === undefined
+      ? undefined
+      : peopleOf(agents.changesPeople.get(agentId), pullRequest);
   return (
     <RowHintOptions card={card}>
       <ListRow
@@ -149,12 +103,20 @@ function PlanAgentRow({
           pullRequest === undefined ? undefined : (
             <PullRequestChip
               pullRequest={pullRequest}
-              agent={{
-                subject: agentSubject(agents, agentId, held, chosen),
-                models: agents.models,
-                onOpen: entry.onPick,
-              }}
-              people={peopleOf(agents.changesPeople.get(agentId), pullRequest)}
+              card={
+                <PullRequestCard
+                  pullRequest={pullRequest}
+                  lines={pullRequest}
+                  files={pullRequest.changedFiles}
+                  opener={people?.author ?? openerOf(pullRequest)}
+                  agent={{
+                    subject: agentSubject(agents, agentId, held, chosen),
+                    models: agents.models,
+                    onOpen: entry.onPick,
+                  }}
+                  reviewers={people?.reviewers}
+                />
+              }
               onOpen={onOpenPullRequest}
             />
           )

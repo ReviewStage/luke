@@ -1,7 +1,7 @@
 import type { AgentMachineKind, ContextWindow } from "@luke/features/agent-wire";
 import type { ChaptersModelId } from "@luke/features/chapters-model-choice";
 import type { LinkOpen } from "@luke/features/link-open";
-import type { ExperimentChoices } from "@luke/settings";
+import type { AgentEnter, ExperimentChoices } from "@luke/settings";
 import { jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
@@ -24,6 +24,13 @@ export const accountPreference = pgTable("account_preference", {
    * moves no `updated_at`.
    */
   linkOpen: text("link_open").$type<LinkOpen>(),
+  /**
+   * What Enter does in an agent's message box while it works
+   * (`@luke/settings`'s `AGENT_ENTER`): steer the turn or queue the
+   * message; null until the account chooses, which reads as steer. A part of
+   * the snapshot of its own, as the link choice is, for the same reason.
+   */
+  agentEnter: text("agent_enter").$type<AgentEnter>(),
   /**
    * The model and effort a coding agent starts on when Start is clicked, as
    * AI Gateway's catalog names them (`packages/service/src/providers/model-catalog.ts`); null on both

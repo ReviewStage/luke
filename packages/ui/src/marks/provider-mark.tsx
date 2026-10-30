@@ -781,6 +781,42 @@ function SlackMark({ className }: MarkProps): React.JSX.Element {
 }
 
 /**
+ * Stripe's icon, verbatim from stripe.com's own favicon
+ * (https://images.stripeassets.com/fzn2n1nzq965/1hgcBNd12BfT9VLgbId7By/01d91920114b124fb4cf6d448f9f06eb/favicon.svg),
+ * its white mark on its own blurple tile on either ground. Stripe's logo kit
+ * (https://stripe.com/newsroom/brand-assets) holds the wordmark alone. Its
+ * clip's id is this mark's own, so two marks on one page never clip with
+ * each other's.
+ */
+function StripeMark({ className }: MarkProps): React.JSX.Element {
+  const id = useId();
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 512 512"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <g clipPath={`url(#${id}-clip)`}>
+        <rect width="512" height="512" fill="#533AFD" />
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M120 392L392 334.317V120L120 178.357V392Z"
+          fill="white"
+        />
+      </g>
+      <defs>
+        <clipPath id={`${id}-clip`}>
+          <rect width="512" height="512" rx="64" fill="white" />
+        </clipPath>
+      </defs>
+    </svg>
+  );
+}
+
+/**
  * Supabase's logomark, verbatim from `supabase-logo-icon.svg` in Supabase's
  * brand assets (https://supabase.com/brand-assets, `brand-assets.zip`), in
  * its own greens on either ground. Its gradients' ids are this mark's own,
@@ -932,6 +968,8 @@ export function ProviderMark({
       return <SentryMark className={className} />;
     case MARK_PROVIDER.SLACK:
       return <SlackMark className={className} />;
+    case MARK_PROVIDER.STRIPE:
+      return <StripeMark className={className} />;
     case MARK_PROVIDER.SUPABASE:
       return <SupabaseMark className={className} />;
     case MARK_PROVIDER.VERCEL:

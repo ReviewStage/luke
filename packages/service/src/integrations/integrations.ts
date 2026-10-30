@@ -156,6 +156,19 @@ export const INTEGRATION = {
     DESCRIPTION:
       "Slack, the developer's team chat, as their own account sees it: search messages, files, channels, and people, read channels, threads, canvases, and profiles, and send and schedule messages, react, and write canvases as the developer.",
   },
+  /*
+   * Stripe's server reaches most of its API through `stripe_api_read` and
+   * `stripe_api_write`, and holds a refund or a movement of money for the
+   * developer to approve in Stripe's Dashboard, answering the agent with the
+   * link to approve it at (https://docs.stripe.com/mcp, "Confirm actions").
+   */
+  [INTEGRATION_PROVIDER.STRIPE]: {
+    CONNECTOR_VARIABLE: "STRIPE_CONNECTOR_UID",
+    ALLOWED_ACCOUNTS_VARIABLE: "STRIPE_ALLOWED_ACCOUNTS",
+    MCP_URL: "https://mcp.stripe.com",
+    DESCRIPTION:
+      "Stripe, the developer's payments, as their own account sees it in the accounts and sandboxes they granted: search the API and read or write customers, payments, refunds, subscriptions, invoices, products, prices, payment links, disputes, payouts, and balances, query analytics, and search Stripe's documentation. A refund or a movement of money answers with a link for the developer to approve it in Stripe: give them the link, and retry only once they say they approved it.",
+  },
   [INTEGRATION_PROVIDER.SUPABASE]: {
     CONNECTOR_VARIABLE: "SUPABASE_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "SUPABASE_ALLOWED_ACCOUNTS",

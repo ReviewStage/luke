@@ -208,6 +208,8 @@ export async function functionBundlePlan(web: string): Promise<FunctionBundlePla
       metafile: true,
       logLevel: "warning",
       plugins: [dispatcherPlugin(web, functions), zodEntryPlugin()],
+      // A shell script a route imports `?raw` is inlined as its text, as Vite answers it to a test: the host's install script (`server/routes/hosts/install-script.ts`).
+      loader: { ".sh": "text" },
       external: exceptions,
       banner: { js: REQUIRE_BANNER },
     },

@@ -627,7 +627,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
   );
 
   it.effect(
-    "tools/list leaves out what eve offers no agent on no task and in no repository, its plan's pictures, the comments', and the checkout's, and the memory where its starter has Memory off",
+    "tools/list leaves out what eve offers no agent in no repository, the checkout's, and the memory where its starter has Memory off, and lists the plan's tools to one on no task",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -637,17 +637,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         const listed = yield* Effect.promise(() => client.listTools());
         yield* Effect.promise(() => client.close());
 
-        const withheld = [
-          "look_at_picture",
-          "read_comments",
-          "reply_to_comment",
-          "resolve_thread",
-          "reopen_thread",
-          "open_pull_request",
-          "list_open_asks",
-          "remember",
-          "recall",
-        ];
+        const withheld = ["open_pull_request", "list_open_asks", "remember", "recall"];
         assert.deepEqual(
           listed.tools.map((tool) => tool.name).sort(),
           SERVED_TOOLS.filter((name) => !withheld.includes(name)).sort(),

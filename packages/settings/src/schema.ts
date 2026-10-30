@@ -2,6 +2,13 @@ import { isLinkOpen, LINK_OPEN, LINK_OPEN_LABEL, LINK_OPEN_LIST } from "@luke/fe
 import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
 import { Schema } from "effect";
+import {
+  AGENT_ENTER,
+  AGENT_ENTER_DETAIL,
+  AGENT_ENTER_LABEL,
+  AGENT_ENTER_LIST,
+  isAgentEnter,
+} from "./agent-enter.js";
 import { HOST_CAPABILITY } from "./capabilities.js";
 import {
   DIFF_FONT,
@@ -251,6 +258,32 @@ export const APP_SETTING_SCHEMA = {
     order: 110,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: microphoneRouteDrawn,
+  }),
+  /*
+   * What Enter does in an agent's message box while its turn runs: steer it,
+   * as every message did before queueing, or queue the message behind it.
+   * An account preference, as the link choice is: the account carries it to
+   * every Mac and the web, riding a part of the snapshot of its own.
+   */
+  agentEnter: choiceSetting({
+    field: "agentEnter",
+    id: APP_SETTING_ID.AGENT_ENTER,
+    label: "Follow-up behavior",
+    detail: (settings) =>
+      AGENT_ENTER_DETAIL[
+        settings("agentEnter") === AGENT_ENTER.QUEUE ? AGENT_ENTER.QUEUE : AGENT_ENTER.STEER
+      ],
+    values: AGENT_ENTER_LIST,
+    token: (choice) => choice,
+    optionLabel: (choice) => AGENT_ENTER_LABEL[choice],
+    guard: (value: UnparsedWireValue) => optional(value, isAgentEnter),
+    default: AGENT_ENTER.STEER,
+    page: SETTINGS_PAGE.ACCOUNT,
+    section: SETTING_SECTION.COMPOSER,
+    order: 400,
+    // Nothing to run per write: the message box reads the choice as a key is pressed.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+    visible: accountDrawn,
   }),
   lineNumbers: toggleSetting({
     field: "lineNumbers",

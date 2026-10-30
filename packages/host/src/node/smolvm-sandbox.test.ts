@@ -42,6 +42,7 @@ import { composeLocalAgents } from "../compose-local-agents.js";
 import { LINUX_HOST } from "../daemon/host-os.js";
 import { hostPlatform } from "../daemon/host-platform.js";
 import { Environment, LocalAgentPlatform, Reporter } from "../effect/seams.js";
+import { fakeClis } from "../testing/fake-sandbox.js";
 import { type ScriptedSpawner, scriptedSpawner } from "../testing/scripted-spawner.js";
 import { smolvmSandbox } from "./smolvm-sandbox.js";
 
@@ -229,6 +230,7 @@ const following = (input: {
       Layer.succeed(LocalAgentPlatform, {
         launch: vm.launch,
         sandbox: vm.sandbox,
+        clis: fakeClis(),
         runnerBundle: RUNNER_BUNDLE,
         runnerEnv: { LUKE_RUNNER_PLACE: "host" },
         formerlyDirect: false,

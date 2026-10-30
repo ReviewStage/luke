@@ -139,7 +139,6 @@ import {
   agentRow,
   orderTaskRows,
   repositoryLabel,
-  TASK_ORDER,
   TASK_ROW,
   type TaskRow,
   taskRow,
@@ -920,16 +919,13 @@ function taskRows(
   // activity, as the sidebar, Home's Recent, and the row's time read it.
   const pinnedFirst = (rows: readonly TaskRow[]) => [
     ...rows.filter((row) => taskRowPinnedAt(row) !== undefined),
-    ...orderTaskRows(
-      rows.filter((row) => taskRowPinnedAt(row) === undefined),
-      TASK_ORDER.UPDATED,
-    ),
+    ...orderTaskRows(rows.filter((row) => taskRowPinnedAt(row) === undefined)),
   ];
   const { standing: agents, archived: archivedAgents } = tasks.listedAgents;
   const here = [...tasks.tasks.filter(listed).map(taskRow), ...agents.map(agentRow)];
   const elsewhere = tasks.tasks.filter((task) => !listed(task)).map(taskRow);
   // The listed workspace's archived agents, by their last activity.
-  const archived = orderTaskRows(archivedAgents.map(agentRow), TASK_ORDER.UPDATED);
+  const archived = orderTaskRows(archivedAgents.map(agentRow));
   return [
     ...pinnedFirst(here).map((row) => rowOf(row, false)),
     ...pinnedFirst(elsewhere).map((row) => rowOf(row, false)),

@@ -1583,3 +1583,17 @@ test("an agent dragged from a section onto Tasks leaves every section", async ()
     { kind: TASK_SECTION_WRITE.PLACE_AGENT, agentId: SWEEP.id, sectionId: null },
   ]);
 });
+
+test("in a shared workspace, your one task standing in a section leaves Tasks saying nothing of a view that matches none", async () => {
+  const shared = { ...WORKSPACE, memberCount: 2 };
+  const ada = { userId: "user-ada", name: "Ada Lovelace" };
+  const sidebar = await mountSidebar([], SECTIONS, {
+    tasks: [{ ...INVITES, assignee: ada }, RETRIES],
+    workspace: shared,
+    workspaces: [shared],
+    me: ada.userId,
+  });
+
+  assert.match(sidebar.textContent ?? "", /Invite expiry/u);
+  assert.doesNotMatch(sidebar.textContent ?? "", /No tasks match this view\./u);
+});

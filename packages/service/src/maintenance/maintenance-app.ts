@@ -1,11 +1,13 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { purgeWithdrawnLines, sweepAbandonedTurns } from "@luke/database/models/abandoned-turns";
+import { sweepHostPairings } from "@luke/database/models/host-pairing-store";
 import { hostedStore } from "@luke/database/models/hosted-store";
 import { purgeUnsavedAttachments } from "@luke/database/models/plan-attachments";
 import { storeWriter } from "@luke/database/models/writer";
 import { Effect, Layer } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
 import type { AgentStateBlobs } from "../agents/agent-state-blobs.js";
+import { sweepAgentQueues } from "../agents/coder-host/agent-queue.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
 import { deploymentEveOrigin } from "../agents/eve-host/eve-origin.js";
@@ -111,6 +113,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       ),
     sweepNativeWakeups: (now) =>
       sweepNativeWakeups(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
+    sweepAgentQueues: () => sweepAgentQueues(eveFor).pipe(Effect.provideContext(startContext)),
     sweepOperatorWakes: (now) =>
       sweepOperatorWakes(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepStarterNotices: (now) =>
@@ -131,6 +134,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepNativeRepositorySnapshots().pipe(Effect.provideContext(startContext)),
     sweepAgentStates: (now) =>
       sweepAgentStates(new Date(now)).pipe(Effect.provideContext(startContext)),
+    sweepHostPairings: (now) => sweepHostPairings(new Date(now)),
   });
 });
 

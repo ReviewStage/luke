@@ -1,0 +1,31 @@
+/* task-row.css -- a task's row (`task-row.tsx`): what its state restyles
+   beyond its utilities.
+
+   The row holding the keyboard, or whose menu is open, stands over its
+   neighbours, so its ring is drawn whole. A quick add's draft fills the
+   name's room with its title, so the caret's line reaches the row's end as a
+   plan's line reaches its page's; an add still out stands muted until its
+   row draws. */
+
+@layer components {
+  .luke-task-row:has(:focus-visible),
+  .luke-task-row[data-menu-open="true"],
+  .luke-task-row:has([aria-expanded="true"]) {
+    z-index: 2;
+  }
+
+  .luke-task-row-draft .luke-task-row-press {
+    display: flex;
+    overflow: visible;
+    gap: var(--luke-item-gap);
+  }
+
+  .luke-task-row-draft .luke-task-row-press > [data-slot="input"] {
+    min-inline-size: 0;
+    flex: 1 1 auto;
+  }
+
+  .luke-task-row-draft[data-pending="true"] .luke-task-row-press {
+    color: var(--luke-color-text-muted);
+  }
+}

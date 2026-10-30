@@ -27,7 +27,8 @@ import { installScrollIntoView } from "./testing/scroll-into-view.js";
  * The agent's box takes files: a picture dropped on the card or pasted into
  * the field is held as its chip, and pictures past the bytes a message
  * carries together are left out, the box saying why in its note while the
- * ones that fit still come.
+ * ones that fit still come; the note goes once the box's message goes,
+ * whichever way it goes, queued behind a running turn as sent.
  */
 
 const ignore = () => undefined;
@@ -41,6 +42,34 @@ function AgentBox(): ReactNode {
     send: () => new Promise<AgentAgentAnswer>(ignore),
   });
   return createElement(AgentComposer, { ...QUIET_COMPOSER, composer, skills: undefined });
+}
+
+/** The agent's box while a turn runs, its Enter queueing, the queue taking its message as the queue does: out of the box. */
+function QueueingBox(): ReactNode {
+  const composer = useAgentComposer({
+    agentId: "agent-1",
+    taskId: "plan-1",
+    messages: [],
+    send: () => new Promise<AgentAgentAnswer>(ignore),
+  });
+  const queued = () => {
+    composer.setDraft("");
+    composer.setAttachments(() => []);
+  };
+  return createElement(AgentComposer, {
+    ...QUIET_COMPOSER,
+    composer,
+    skills: undefined,
+    queueing: {
+      working: true,
+      enterQueues: true,
+      onQueue: queued,
+      editing: false,
+      onSave: ignore,
+      onSteer: ignore,
+      onCancel: ignore,
+    },
+  });
 }
 
 /** The boxes that take files, each drawn alone. */
@@ -180,4 +209,23 @@ test("pictures past the bytes a message carries together leave the last out of t
       box,
     );
   }
+});
+
+test("a note of files left out goes once the box's message is queued, as it goes once one is sent", async () => {
+  const size = Math.floor(AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES / 2.5);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(QueueingBox))));
+  await settle();
+  await drop(container, [png("one.png", size), png("two.png", size), png("three.png", size)]);
+  assert.equal(held(container).note, "These files are too large to send together.");
+
+  const queue = container.querySelector('button[aria-label="Queue"]');
+  assert.ok(queue instanceof HTMLButtonElement, "Send reads Queue while the turn runs");
+  act(() => queue.click());
+  await settle();
+
+  assert.deepEqual(held(container), { chips: [], note: null });
 });
