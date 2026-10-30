@@ -1,5 +1,5 @@
 /**
- * messages.tsx -- a turn of a conversation, the line over a received one naming who sent it and what they did, and the line under every one: when, then its actions, the actions hidden until the pointer rests on the turn or the keyboard is on one of them, and on a touch screen shown by a tap on the turn.
+ * messages.tsx -- a turn of a conversation, the line over a received one naming who sent it and what they did, and the line under every one: when, then its actions, flush with an agent's words where they stand on no bubble, the actions hidden until the pointer rests on the turn or the keyboard is on one of them, and on a touch screen shown by a tap on the turn.
  */
 
 import {
@@ -9,6 +9,7 @@ import {
   INLINE_REF_LOOK,
   InlineRef,
   MESSAGE_LINE_ALIGN,
+  MESSAGE_LINE_INSET,
   MessageActions,
   MessageFrame,
   MessageHead,
@@ -82,6 +83,22 @@ function Messages(): React.JSX.Element {
             </MessageHead>
             <Text>Yes, a week.</Text>
             <MessageLine align={MESSAGE_LINE_ALIGN.START} at={SENT_AT} actions={COPY} />
+          </MessageFrame>
+        </div>
+      </CatalogSection>
+      <CatalogSection
+        id="message-flush"
+        title="An agent's turn, its words on no bubble, leads its line flush with them"
+      >
+        <div className="catalog-frame">
+          <MessageFrame revealActionsOnTap>
+            <Text>The spec passes on WebKit now.</Text>
+            <MessageLine
+              align={MESSAGE_LINE_ALIGN.START}
+              inset={MESSAGE_LINE_INSET.FLUSH}
+              sender="Worked for 2m 29s · Today, 3:42 PM"
+              actions={COPY}
+            />
           </MessageFrame>
         </div>
       </CatalogSection>

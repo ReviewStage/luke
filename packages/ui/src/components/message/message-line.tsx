@@ -29,14 +29,32 @@ export const MESSAGE_LINE_ALIGN = {
 
 export type MessageLineAlign = (typeof MESSAGE_LINE_ALIGN)[keyof typeof MESSAGE_LINE_ALIGN];
 
+/** Where the line's start stands: at a bubble's or a card's inset, or flush with words set on no ground, as an agent's own words are. */
+export const MESSAGE_LINE_INSET = {
+  BUBBLE: "bubble",
+  FLUSH: "flush",
+} as const;
+
+export type MessageLineInset = (typeof MESSAGE_LINE_INSET)[keyof typeof MESSAGE_LINE_INSET];
+
 /** Whether a node draws anything: none, null, and a boolean, as a condition leaves it, draw nothing. */
 function drawsSomething(node: ReactNode): boolean {
   return node !== undefined && node !== null && typeof node !== "boolean";
 }
 
+/** Whether the line opens at a bubble's inset: at its start where it keeps to the left, unless its message's words stand on no ground. */
+function opensInset(align: MessageLineAlign, inset: MessageLineInset): boolean {
+  return align === MESSAGE_LINE_ALIGN.START && inset === MESSAGE_LINE_INSET.BUBBLE;
+}
+
+/** The sender's inset: at its end, and at its start too unless the line opens flush with words on no ground. */
+function senderInset(inset: MessageLineInset): string {
+  return inset === MESSAGE_LINE_INSET.BUBBLE ? "px-luke-4" : "pe-luke-4";
+}
+
 /** The time's inset: at its end, and at its start too where it opens a received message's line, so it stands at the bubble's inset as the head over it does (`MessageHead`). */
-function timeInset(named: boolean, align: MessageLineAlign): string {
-  return !named && align === MESSAGE_LINE_ALIGN.START ? "px-luke-4" : "pe-luke-4";
+function timeInset(named: boolean, align: MessageLineAlign, inset: MessageLineInset): string {
+  return !named && opensInset(align, inset) ? "px-luke-4" : "pe-luke-4";
 }
 
 /** The line under a message: `sender`, `at`, and `actions`, each left out where the message has none, the actions on the side away from `align`'s edge. */
@@ -45,6 +63,7 @@ export function MessageLine({
   at,
   actions,
   align = MESSAGE_LINE_ALIGN.END,
+  inset = MESSAGE_LINE_INSET.BUBBLE,
   wrap = false,
 }: {
   /** Who sent it, as the caller's own mark and name, or what else leads the line, such as how long a turn worked; none for the reader's own. */
@@ -54,6 +73,8 @@ export function MessageLine({
   /** Its actions, a `MessageActions` bar. */
   actions?: ReactNode;
   align?: MessageLineAlign;
+  /** Where its start stands: at the bubble's inset, unless the message's words stand on no ground, as an agent's turn's do. */
+  inset?: MessageLineInset;
   /** Whether the time may break onto a line under a sender too long to share one. */
   wrap?: boolean;
 }): React.JSX.Element | null {
@@ -68,13 +89,15 @@ export function MessageLine({
     >
       {actionsFirst ? actions : null}
       {named ? (
-        <span className="luke-message-line-sender flex min-w-0 items-center px-luke-4">
+        <span
+          className={`luke-message-line-sender flex min-w-0 items-center ${senderInset(inset)}`}
+        >
           {sender}
         </span>
       ) : null}
       {at === undefined ? null : (
         <span
-          className={`luke-message-line-time flex flex-none items-center gap-luke-6 whitespace-nowrap tabular-nums ${timeInset(named, align)}`}
+          className={`luke-message-line-time flex flex-none items-center gap-luke-6 whitespace-nowrap tabular-nums ${timeInset(named, align, inset)}`}
         >
           {named ? <span aria-hidden="true">·</span> : null}
           <Time at={at} look={TIME_LOOK.DAY} />
