@@ -44,7 +44,7 @@ export const EXPERIMENTS = [
     name: "Pilot",
     detail:
       "Start a new task with one pilot agent that plans the work, splits it into child tasks, " +
-      "and runs a coding agent on each.",
+      "and runs an agent on each.",
     owner: "Charles",
     since: "2026-10-29",
   },

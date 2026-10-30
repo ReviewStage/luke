@@ -185,11 +185,7 @@ const MODE_CHOICES: readonly ChoiceItem<TaskMode>[] = [
     label: "Pilot",
     hint: `One pilot plans the ${TERM.TASK.one}, splits it into child ${TERM.TASK.many}, and runs ${TERM.AGENT.many} on them`,
   },
-  {
-    value: TASK_MODE.AGENT,
-    label: "Agent",
-    hint: `One ${TERM.AGENT.one} works on the ${TERM.TASK.one}`,
-  },
+  { value: TASK_MODE.AGENT, label: "Agent" },
 ];
 
 /** Why an automation's agent did not start where the brief and the words pass an agent's first message's bound. */
