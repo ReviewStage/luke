@@ -1346,7 +1346,7 @@ export function InboxPaneEmpty({
   );
 }
 
-/** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, the scope's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
+/** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, the scope's empty state where it leaves out every item, or the Inbox's empty state where the list stands alone; nothing for an empty Inbox beside the pane, which says it. */
 export function InboxListNote({
   failed,
   reading,
@@ -1392,15 +1392,14 @@ export function InboxListNote({
   if (searched !== undefined) return <SearchEmpty searched={searched} />;
   if (filteredOut !== undefined)
     return <ShowEmpty show={filteredOut} counts={counts} whose={filteredOut} onList={onList} />;
+  // Note that beside the pane the list stands bare, since the pane's empty state says it once.
+  if (!alone) return null;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
-  if (alone) {
-    return (
-      <EmptyState icon={<InboxIcon />} action={newTaskAction(onNewTask)}>
-        {NEEDS_YOU.NONE}
-      </EmptyState>
-    );
-  }
-  return <NoteLine look={NOTE_LINE_LOOK.ROWS}>{NEEDS_YOU.NONE}</NoteLine>;
+  return (
+    <EmptyState icon={<InboxIcon />} action={newTaskAction(onNewTask)}>
+      {NEEDS_YOU.NONE}
+    </EmptyState>
+  );
 }
 
 /** What the list's head offers: its scopes on every Inbox, and on the window's how it groups its items and which plans are folded. */

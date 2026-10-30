@@ -715,6 +715,11 @@ test("an Inbox with nothing in it stands its empty state in the pane beside the 
     [emptyStateIn(page, ".inbox-tasks"), emptyStateIn(page, ".inbox-view-items")],
     [null, "Nothing needs you"],
   );
+  assert.doesNotMatch(
+    page.querySelector(".inbox-tasks")?.textContent ?? "",
+    /Nothing needs you/u,
+    "the list beside the pane says nothing, the pane saying it once",
+  );
   const offered = emptyStateAction(page, ".inbox-view-items");
   assert.equal(offered?.textContent, "New task", "the empty Inbox offers New task");
   act(() => offered?.click());
