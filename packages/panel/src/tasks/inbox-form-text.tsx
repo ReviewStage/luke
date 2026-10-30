@@ -7,6 +7,7 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef } from "react";
 import { useSideBundles } from "../bundle-loader.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
+import { PANEL_SPAN } from "../panel-spans.js";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
 import { ComposerField } from "./composer-field.js";
 import { useComposerPickers } from "./composer-pickers.js";
@@ -102,6 +103,7 @@ export function InboxFormText({
       data-disabled={disabled ? "" : undefined}
     >
       <ComposerField
+        keystrokeSpan={PANEL_SPAN.KEYSTROKE_INBOX_ANSWER}
         module={module}
         editor={editor}
         room={room}
