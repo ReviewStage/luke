@@ -36,7 +36,7 @@ import { RUNNER_TOKEN_PATH } from "../native-events/runner-token-app.js";
 import { deploymentOidcToken } from "../vercel-sandbox-api.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import { agentCiReadable, agentCoAuthor } from "./checkout.js";
-import { claudeCodeDeniedTools, claudeCodeSessions } from "./claude-code-sessions.js";
+import { claudeCodeSessions } from "./claude-code-sessions.js";
 import { codexSessions } from "./codex-sessions.js";
 import { agentCoderInstructions, CODER_HARNESS, type CoderHarness } from "./instructions.js";
 import type { RunnerServices, RunnerSessionsOptions } from "./runner-sessions.js";
@@ -142,10 +142,9 @@ export function nativeAgentSessionsLayer(
             );
           }
           return Option.some(
-            claudeCodeSessions({
-              ...optionsFor(account, origin, CODER_HARNESS.CLAUDE_CODE),
-              deniedTools: claudeCodeDeniedTools,
-            }).pipe(Effect.provideContext(context)),
+            claudeCodeSessions(optionsFor(account, origin, CODER_HARNESS.CLAUDE_CODE)).pipe(
+              Effect.provideContext(context),
+            ),
           );
         },
       };

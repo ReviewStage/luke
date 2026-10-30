@@ -14,6 +14,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
+import type { LinkPlace, ReadLink } from "@luke/features/link-grammar";
 import type { Task } from "@luke/features/task-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -21,6 +22,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -35,11 +37,10 @@ import {
 import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
- * inbox-call-item.test.ts -- in a task's column, the row of an agent's
- * post to the inbox opens the task's Inbox on the item it posted, the
- * thread under its key of that agent's, rather than on whatever the Inbox
- * had chosen, though another agent posted under the same key. Synthetic
- * throughout.
+ * inbox-call-item.test.ts -- in a task's column, the chip on the row of an
+ * agent's post to the inbox opens the item it posted, the thread its answer
+ * names under its key of that agent's, though another agent posted under
+ * the same key. Synthetic throughout.
  */
 
 const TASK: Task = {
@@ -64,21 +65,6 @@ const AGENT: AgentSummary = {
 };
 
 const OTHER_AGENT = "4d2f1c7e-9a3b-4e8d-b1c6-2f7a8e9d0b13";
-
-/** The agent's turn: one post to the inbox under the key `invite-ttl`, answered. */
-const POSTED: AgentTranscriptMessage = {
-  id: "turn",
-  role: MESSAGE_ROLE.ASSISTANT,
-  parts: [
-    {
-      type: "tool-post_to_inbox",
-      toolCallId: "call-post",
-      state: "output-available",
-      input: { key: "invite-ttl", title: "Invite links expire after 7 days or 14?", body: "?" },
-      output: { status: "accepted", inbox: [] },
-    },
-  ],
-};
 
 /** An open item asking a decision, posted by `agentId` under `key` at `at`. */
 function item(id: string, agentId: string, key: string, title: string, at: number): InboxItem {
@@ -116,6 +102,26 @@ const ITEMS: readonly InboxItem[] = [
   item("a1b2c3d4-0000-4000-8000-000000000003", AGENT.id, "invite-ttl", "Invite TTL", 10),
 ];
 
+/** The agent's turn: one post to the inbox under the key `invite-ttl`, answered with the agent's threads, the one it posted on among them. */
+const POSTED: AgentTranscriptMessage = {
+  id: "turn",
+  role: MESSAGE_ROLE.ASSISTANT,
+  parts: [
+    {
+      type: "tool-post_to_inbox",
+      toolCallId: "call-post",
+      state: "output-available",
+      input: { key: "invite-ttl", title: "Invite links expire after 7 days or 14?", body: "?" },
+      output: {
+        status: "accepted",
+        inbox: [ITEMS[0], ITEMS[2]].flatMap((posted) =>
+          posted === undefined ? [] : [{ id: posted.id, key: posted.key }],
+        ),
+      },
+    },
+  ],
+};
+
 const roots: Root[] = [];
 
 beforeEach(installScrollIntoView);
@@ -127,7 +133,7 @@ afterEach(() => {
 });
 
 /** The task's page, the agent's tab in its column and the Inbox in its side panel, wide enough for the list and the item side by side. */
-async function mount(): Promise<HTMLElement> {
+async function mount(onOpen: (link: ReadLink) => void): Promise<HTMLElement> {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -173,7 +179,14 @@ async function mount(): Promise<HTMLElement> {
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: control }),
+        createElement(OpenLinkProvider, {
+          value: onOpen,
+          children: createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            tasks: control,
+          }),
+        }),
       ),
     ),
   );
@@ -183,20 +196,20 @@ async function mount(): Promise<HTMLElement> {
   return container;
 }
 
-/** The title of the item the task's Inbox shows. */
-function shownTitle(container: HTMLElement): string | null | undefined {
-  return container.querySelector("section.inbox-view [data-inbox-title]")?.textContent;
-}
+test("a post's chip opens the item the agent posted under its key, not another agent's under the same key", async () => {
+  const opened: LinkPlace[] = [];
+  const container = await mount((link) => opened.push(link.place));
 
-test("a post's row opens the task's Inbox on the item the agent posted under its key, not another agent's under the same key", async () => {
-  const container = await mount();
-  assert.equal(shownTitle(container), undefined, "the Inbox stands on nothing chosen");
+  const chip =
+    container.querySelector<HTMLElement>('[data-call-id="call-post"] summary [data-mention-ref]') ??
+    assert.fail("the post's row names the thread by its chip");
+  act(() => chip.click());
 
-  const row =
-    container.querySelector<HTMLButtonElement>('button[data-call-id="call-post"]') ??
-    assert.fail("the post's row is a press");
-  act(() => row.click());
-  await act(async () => undefined);
-
-  assert.equal(shownTitle(container), "Invite TTL");
+  assert.deepEqual(opened, [
+    {
+      kind: "inbox-item",
+      agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+      itemId: "a1b2c3d4-0000-4000-8000-000000000003",
+    },
+  ]);
 });

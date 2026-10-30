@@ -275,8 +275,6 @@ export const CODER_MODEL_FIXTURE = {
 export const CODER_REFUSAL = {
   NO_AGENT: "Not run: this conversation is no agent's.",
   NO_REPOSITORY: "Not run: the agent works in no repository.",
-  PILOT:
-    "Not run: as the task's pilot you plan its work and start the coding agents that do it, and never open a pull request or patch code yourself. Start a coding agent to make the change.",
   UNKNOWN_PROVIDER: "Not run: the agent's model is outside the providers Luke runs agents on.",
   NO_PROVIDER_KEY: "Not run: the account saved no API key for the agent's model provider.",
   NO_FAST_VERSION:

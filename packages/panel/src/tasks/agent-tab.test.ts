@@ -9,6 +9,7 @@ import {
   agentMessageReplyLine,
 } from "@luke/features/agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import type { PlanMention } from "@luke/features/mention-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { AppStateSnapshot } from "@luke/host/app-state";
@@ -37,9 +38,10 @@ import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 
 /**
- * agent-tab.test.ts -- a call about something the window draws in a tab of
- * its own is a row that opens that tab, and every other call a row that
- * folds open in place; a run of calls and a finished turn's lead fold under
+ * agent-tab.test.ts -- a call about an agent is a row that opens the
+ * agent's tab, a call that made a page, a thread, a task, or a pull request
+ * a row that folds open in place naming it by its chip, and every other
+ * call a row that folds open in place; a run of calls and a finished turn's lead fold under
  * a line saying whether it is open. A row that opens an agent's or a
  * worker's tab hangs that tab's card. A call of an integration's own tool is one row
  * wearing the integration's mark, with the `connection_execute` that ran it
@@ -70,26 +72,36 @@ function assistant(parts: readonly WireRecord[]): AgentTranscriptMessage {
   return { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts };
 }
 
-/** The message drawn as an agent's turn is, every target its rows open recorded, its workers standing as their own sessions say. */
+/** The message drawn as an agent's turn is, every target its rows open recorded, its workers standing as their own sessions say, in the transcript of `page`'s agent on its task's page where one is given. */
 function drawn(
   message: AgentTranscriptMessage,
   moving = false,
   standings?: ReadonlyMap<string, AgentSubagentStanding>,
+  page?: TaskMentionsValue,
 ) {
   const opened: ToolTarget[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const turn = createElement(AgentMessage, {
+    message,
+    plan: false,
+    lead: AGENT_LEAD,
+    moving,
+    delegation: { models: [], standings, onOpenTarget: (target) => opened.push(target) },
+  });
   act(() =>
     root.render(
-      createElement(AgentMessage, {
-        message,
-        plan: false,
-        lead: AGENT_LEAD,
-        moving,
-        delegation: { models: [], standings, onOpenTarget: (target) => opened.push(target) },
-      }),
+      page === undefined
+        ? turn
+        : onRegistry(
+            AtomRegistry.make(),
+            createElement(TaskMentions, {
+              value: page,
+              children: createElement(TranscriptAgent, { value: TASK_AGENT, children: turn }),
+            }),
+          ),
     ),
   );
   return { container, opened };
@@ -97,19 +109,26 @@ function drawn(
 
 const ACCEPTED = { status: "accepted" };
 
+/** A call that opens something: an agent's, whose row is one button that opens its tab, or what the call made, whose row folds as any call's and names it, after `verb`, by the chip `made` labels, whose press `opens` the link it leaves by, or the task it opens in place. */
 const OPENING_CALLS: readonly {
   readonly name: string;
   readonly tool: string;
   readonly input: WireRecord;
   readonly output?: WireRecord;
   readonly target: ToolTarget;
+  readonly verb?: string;
+  readonly made?: string;
+  readonly opens?: string;
 }[] = [
   {
-    name: "a page shown opens its tab",
+    name: "a page shown, named by its title until the window holds its name",
     tool: "show_page",
     input: { title: "Pricing explorer", path: "pricing.html" },
     output: { status: "accepted", page: { id: "page-1", version: 2 } },
     target: { kind: TOOL_TARGET.PAGE, page: "page-1" },
+    verb: "Showed",
+    made: "Pricing explorer",
+    opens: "https://tryluke.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/page/page-1",
   },
   {
     name: "a read of an agent opens its tab",
@@ -126,47 +145,119 @@ const OPENING_CALLS: readonly {
     target: { kind: TOOL_TARGET.AGENT, agent: "agent-9" },
   },
   {
-    name: "a plan edit opens the plan",
+    name: "a plan edit, named by the plan's chip, called Plan until the window holds its name, and no count",
     tool: "edit_plan",
     input: { notes: [{ kind: "add", section: "Goal", text: "Export invoices" }] },
     output: ACCEPTED,
     target: { kind: TOOL_TARGET.PLAN },
+    verb: "Updated",
+    made: "Plan",
+    opens: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
   },
   {
-    name: "a post to the inbox opens the Inbox",
-    tool: "post_to_inbox",
-    input: { title: "Which currency?", response: { type: "text" } },
-    output: { items: [] },
-    target: { kind: TOOL_TARGET.INBOX },
+    name: "a post on a thread, named by the thread's title",
+    tool: "post_thread",
+    input: { key: "currency", title: "Which currency?", body: "Euros or dollars?" },
+    output: { inbox: [{ id: "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d", key: "currency" }] },
+    target: { kind: TOOL_TARGET.INBOX, key: "currency" },
+    verb: "Posted",
+    made: "Which currency?",
+    opens:
+      "https://tryluke.dev/acme/agent/8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21/inbox/9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
   },
   {
-    name: "a close in the inbox opens the Inbox",
-    tool: "close_inbox_item",
-    input: { key: "currency", reason: "Settled in the plan" },
-    output: { items: [] },
-    target: { kind: TOOL_TARGET.INBOX },
-  },
-  {
-    name: "a read of the inbox opens the Inbox",
-    tool: "read_inbox",
-    input: {},
-    output: { items: [] },
-    target: { kind: TOOL_TARGET.INBOX },
+    name: "a pull request opened, named by its number",
+    tool: "open_pull_request",
+    input: { head: "feat/invoices", title: "Export invoices", body: "" },
+    output: { url: "https://github.com/acme/relay/pull/214", number: 214 },
+    target: { kind: TOOL_TARGET.PULL_REQUEST, url: "https://github.com/acme/relay/pull/214" },
+    verb: "Opened",
+    made: "#214",
+    opens: "https://github.com/acme/relay/pull/214",
   },
 ];
 
 for (const call of OPENING_CALLS) {
-  test(`${call.name}: its row is one button that opens it`, () => {
-    const { container, opened } = drawn(assistant([toolPart(call.tool, call.input, call.output)]));
-    const row = container.querySelector<HTMLButtonElement>(
-      `button[data-call-id="call-${call.tool}"]`,
+  if (call.made === undefined) {
+    test(`${call.name}: its row is one button that opens it`, () => {
+      const { container, opened } = drawn(
+        assistant([toolPart(call.tool, call.input, call.output)]),
+      );
+      const row = container.querySelector<HTMLButtonElement>(
+        `button[data-call-id="call-${call.tool}"]`,
+      );
+      assert.ok(row, "the row is a button");
+      assert.equal(container.querySelector("details"), null, "the row folds nothing open in place");
+      act(() => row.click());
+      assert.deepEqual(opened, [call.target]);
+    });
+    continue;
+  }
+  test(`${call.name}: its row folds as any call's, its verb alone before the chip, whose press folds nothing`, () => {
+    fakeAppBridge({});
+    const left: string[] = [];
+    fakeAppPlatform({
+      ...QUIET_PANEL,
+      openWeb: (url) => left.push(url),
+      openGitHub: (url) => left.push(url),
+    });
+    const page = {
+      ...TASK_PAGE,
+      doors: { ...TASK_PAGE.doors, onOpenTask: (plan: PlanMention) => left.push(plan.taskId) },
+    };
+    const { container } = drawn(
+      assistant([toolPart(call.tool, call.input, call.output)]),
+      false,
+      undefined,
+      page,
     );
-    assert.ok(row, "the row is a button");
-    assert.equal(container.querySelector("details"), null, "the row folds nothing open in place");
+    const row = container.querySelector<HTMLElement>(`[data-call-id="call-${call.tool}"] summary`);
+    assert.ok(row, "the row is a fold's line");
+    const chip = row.querySelector<HTMLElement>("[data-mention-ref]");
+    assert.equal(chip?.querySelector(".luke-inline-ref-label")?.textContent, call.made);
+    assert.equal(row.querySelector(".tool-label")?.textContent?.trim(), call.verb);
+    act(() => chip?.click());
+    assert.deepEqual(left, [call.opens], "the chip's press opens what it names");
+    assert.equal(row.getAttribute("aria-expanded"), "false", "the chip's press folds nothing");
     act(() => row.click());
-    assert.deepEqual(opened, [call.target]);
+    assert.equal(row.getAttribute("aria-expanded"), "true", "the row's press folds it open");
   });
 }
+
+test("a call's row opened while it runs stays open as its answer lands and names what it made", () => {
+  fakeAppBridge({});
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const input = { title: "Pricing explorer", path: "pricing.html" };
+  const draw = (part: WireRecord) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(TaskMentions, {
+            value: TASK_PAGE,
+            children: createElement(AgentMessage, {
+              message: assistant([part]),
+              plan: false,
+              lead: AGENT_LEAD,
+              moving: true,
+              delegation: { models: [], onOpenTarget: () => undefined },
+            }),
+          }),
+        ),
+      ),
+    );
+  draw(toolPart("show_page", input));
+  const row = () =>
+    container.querySelector<HTMLElement>('[data-call-id="call-show_page"] summary') ??
+    assert.fail("the row is a fold's line");
+  act(() => row().click());
+  draw(toolPart("show_page", input, { status: "accepted", page: { id: "page-1", version: 1 } }));
+  assert.ok(row().querySelector("[data-mention-ref]"), "the row names the page by its chip");
+  assert.equal(row().getAttribute("aria-expanded"), "true", "the row stands open");
+});
 
 const SENT_CALLS: readonly {
   readonly name: string;
@@ -212,6 +303,10 @@ const FOLDING_CALLS: readonly {
   readonly name: string;
   readonly part: WireRecord;
 }[] = [
+  {
+    name: "a read of the inbox, which made nothing to name",
+    part: toolPart("read_inbox", {}, { items: [] }),
+  },
   {
     name: "a command on the Mac",
     part: toolPart(
@@ -759,6 +854,24 @@ test("a call about an agent the place lists not, whose answer names no model, we
   fakeAppBridge({});
 });
 
+/** The page of the task `taskId` in the workspace `acme`, whose transcript links what its calls made. */
+function onTask(taskId: string): TaskMentionsValue {
+  return {
+    ...TASK_PAGE,
+    holder: { taskId },
+    doors: { ...TASK_PAGE.doors, holder: { taskId } },
+  };
+}
+
+/** The chip a call's row names what the call made by. */
+function madeChip(container: HTMLElement, callId: string): HTMLElement {
+  return (
+    container.querySelector<HTMLElement>(
+      `[data-call-id="call-${callId}"] summary [data-mention-ref]`,
+    ) ?? assert.fail("the call's row names what it made by its chip")
+  );
+}
+
 test("a call that showed or read a page hangs the page's card as its tab does, previewing it, and one the window holds not yet its name as the row says it", async () => {
   const taskId = "task-pricing";
   const snapshot = signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" });
@@ -802,12 +915,15 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(AgentMessage, {
-          message,
-          plan: false,
-          lead: AGENT_LEAD,
-          moving: true,
-          delegation: { models: [], onOpenTarget: () => undefined, cards: cards.call },
+        createElement(TaskMentions, {
+          value: onTask(taskId),
+          children: createElement(AgentMessage, {
+            message,
+            plan: false,
+            lead: AGENT_LEAD,
+            moving: true,
+            delegation: { models: [], onOpenTarget: () => undefined, cards: cards.call },
+          }),
         }),
       ),
     ),
@@ -816,10 +932,9 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
   const cardOf = (callId: string) => {
-    const row = container.querySelector<HTMLElement>(`button[data-call-id="call-${callId}"]`);
-    assert.ok(row, "the call's row opens the page's tab");
+    const chip = madeChip(container, callId);
     document.documentElement.dataset.keyboard = "true";
-    focusRestOn(row);
+    focusRestOn(chip);
     const card = [...document.querySelectorAll(".luke-tooltip-card [data-page-card]")].at(-1);
     return {
       name: card?.querySelector(".luke-hover-card-name")?.textContent,
@@ -879,25 +994,30 @@ test("a call about the plan or another task hangs that task's card as its Plan t
   ]);
   act(() =>
     root.render(
-      createElement(ChipCards, {
-        value: { taskCard },
-        children: createElement(AgentMessage, {
-          message,
-          plan: false,
-          lead: AGENT_LEAD,
-          moving: false,
-          delegation: { models: [], onOpenTarget: () => undefined, cards: cards.call },
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(TaskMentions, {
+          value: onTask("task-invoices"),
+          children: createElement(ChipCards, {
+            value: { taskCard },
+            children: createElement(AgentMessage, {
+              message,
+              plan: false,
+              lead: AGENT_LEAD,
+              moving: false,
+              delegation: { models: [], onOpenTarget: () => undefined, cards: cards.call },
+            }),
+          }),
         }),
-      }),
+      ),
     ),
   );
   const fold = container.querySelector<HTMLElement>("[data-turn-fold] > summary");
   act(() => fold?.click());
   const cardOf = (callId: string) => {
-    const row = container.querySelector<HTMLElement>(`button[data-call-id="call-${callId}"]`);
-    assert.ok(row, "the call's row opens the task");
+    const chip = madeChip(container, callId);
     document.documentElement.dataset.keyboard = "true";
-    focusRestOn(row);
+    focusRestOn(chip);
     const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
     return {
       task: card?.getAttribute("data-task-card") ?? undefined,
@@ -1067,6 +1187,9 @@ test("a message from an agent the line keeps no chip of is named by the name its
   );
 });
 
+/** The agent whose transcript a task's page draws. */
+const TASK_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+
 /** A task's page in the workspace `acme`, whose agent's transcript draws a thread's chip. */
 const TASK_PAGE: TaskMentionsValue = {
   holder: { taskId: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b" },
@@ -1102,7 +1225,7 @@ test("a teammate's message on a thread is headed by who sent it, what they did a
       },
     },
     TASK_PAGE,
-    "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    TASK_AGENT,
     { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED, name: "Ada Lovelace" },
   );
   const head = container.querySelector<HTMLElement>("[data-thread-line]");

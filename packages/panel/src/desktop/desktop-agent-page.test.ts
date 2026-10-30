@@ -802,45 +802,7 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
   );
 });
 
-test("the row of a page the agent showed opens it in the panel beside the agent's page", async () => {
-  transcript = {
-    messages: [
-      {
-        id: "answer",
-        role: MESSAGE_ROLE.ASSISTANT,
-        parts: [
-          {
-            type: "tool-show_page",
-            toolCallId: "call-1",
-            state: "output-available",
-            input: { title: FUNNEL.title, path: "funnel.html" },
-            output: { status: "accepted", page: { id: FUNNEL.id, version: 2 } },
-          },
-        ],
-      },
-    ],
-    cursor: "1:0",
-    status: AGENT_STATUS.COMPLETED,
-    title: null,
-  };
-  const chosen: unknown[] = [];
-  const tasks = tasksControl({});
-  const page = mount({
-    ...tasks,
-    sidePanel: { ...tasks.sidePanel, onChoose: (tab) => chosen.push(tab) },
-  });
-  await settle();
-
-  const row =
-    [...page.querySelectorAll<HTMLButtonElement>(".desktop-agent button")].find((each) =>
-      (each.textContent ?? "").includes(FUNNEL.title),
-    ) ?? assert.fail("the call's row names the page it showed");
-  act(() => row.click());
-
-  assert.deepEqual(chosen, [{ page: FUNNEL.id }]);
-});
-
-test("the row of a page an agent on a task showed hangs the page's card, read from the task the page stands on", async () => {
+test("the chip of a page an agent on a task showed hangs the page's card, read from the task the page stands on", async () => {
   pages = [{ agent: { ...PAGE, planId: PAGE_TASK } }];
   transcript = {
     messages: [
@@ -865,12 +827,11 @@ test("the row of a page an agent on a task showed hangs the page's card, read fr
   const page = mount();
   await settle();
 
-  const row =
-    [...page.querySelectorAll<HTMLButtonElement>(".desktop-agent button")].find((each) =>
-      (each.textContent ?? "").includes(FUNNEL.title),
-    ) ?? assert.fail("the call's row names the page it showed");
+  const chip =
+    page.querySelector<HTMLElement>('.desktop-agent [data-call-id="call-1"] [data-mention-ref]') ??
+    assert.fail("the call's row names the page it showed by its chip");
   document.documentElement.dataset.keyboard = "true";
-  focusRestOn(row);
+  focusRestOn(chip);
   await settle();
 
   const card = document.querySelector(".luke-tooltip-card [data-page-card]");

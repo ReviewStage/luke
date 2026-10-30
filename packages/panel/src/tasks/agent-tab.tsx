@@ -20,7 +20,13 @@ import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/mo
 import type { KnownNames } from "@luke/features/place-chip-model";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskStatus } from "@luke/features/task-wire";
-import { CALL_KIND, CALL_WORDS, sameFieldsBy, sameShape } from "@luke/features/turn-rows";
+import {
+  CALL_KIND,
+  CALL_WORDS,
+  isMadeCallKind,
+  sameFieldsBy,
+  sameShape,
+} from "@luke/features/turn-rows";
 import { replyFromWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -172,7 +178,8 @@ import { EditComposer } from "./edit-composer.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
 import { GitHubLineCard, ThreadLineHead, TranscriptAgent } from "./line-cards.js";
-import { CHIP_OR_LINK_FRAME, ChipOrLink } from "./mention-chip.js";
+import { CHIP_OR_LINK_FRAME, ChipOrLink, linkChip } from "./mention-chip.js";
+import type { MentionHolder } from "./mention-holder.js";
 import {
   agentMessagePlace,
   MESSAGE_GONE,
@@ -201,6 +208,7 @@ import {
   TARGET_HINT,
   TOOL_TARGET,
   type ToolTarget,
+  targetLink,
   todoFocus,
   todosSummary,
   toolCallView,
@@ -217,6 +225,7 @@ import {
   TranscriptTodos,
   TranscriptTodosDock,
   TranscriptTool,
+  type TranscriptToolProps,
   TranscriptWords,
 } from "./transcript-blocks.js";
 import { drawnMessageWords, drawnRowsWords } from "./transcript-copy.js";
@@ -236,7 +245,6 @@ import { useAgentServers } from "./use-agent-servers.js";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript.js";
 import type { AgentsControl } from "./use-agents.js";
 import { useKnownNames, useTaskStatus } from "./use-known-names.js";
-import { useOpenLink } from "./use-open-link.js";
 import { type CutBody, useWholePart, useWholePartDoor, WholePartsProvider } from "./whole-parts.js";
 import { WorkedFor, WorkingLine } from "./working-time.js";
 
@@ -400,6 +408,8 @@ export interface TranscriptCards {
   readonly agent?: ((agentId: string) => Actor | undefined) | undefined;
   /** The task whose plan an agent was handed, which its card's sender line names; none where the place knows no task. */
   readonly task?: BriefTask | undefined;
+  /** What the transcript stands on, its task or its agent on no task, under which the plan and a page a call made are linked where the place's mentions hold neither, as an agent's own page does not hold its task; none where the place does not say. */
+  readonly standsOn?: MentionHolder | undefined;
 }
 
 /** What a delegation's row draws from beyond its part: the catalog its pair is named from, the agent's own pair for a half the agent left to its own, when each running worker began, and the press that opens the worker's tab. */
@@ -429,12 +439,14 @@ export interface DelegationDoors {
 const LiveDoors = createContext<Pick<DelegationDoors, "cards"> | undefined>(undefined);
 
 /**
- * The parts of a transcript the reader opened on, as its follow's first page
- * drew them (`standing`), which a text part reads as it is first drawn: words
- * written before the reader looked stand, and only the words written after
- * fade in. Note that the parts are the reads the rows draw (`agentParts`),
- * so a part is looked up as itself, and the set moves only when a follow
- * opens, never with a page. Where a transcript hands none, every part stands.
+ * The parts of a transcript the reader opened on, as its follow drew them
+ * until it caught up (`standing`), which a text part reads as it is drawn:
+ * words written before the reader looked stand, a reply the follow is still
+ * catching up on among them, and only the words written after fade in. Note
+ * that the parts are the reads the rows draw (`agentParts`), so a part is
+ * looked up as itself, a part that grew since being a read of its own, and
+ * the set moves only while a follow catches up, never with a page after.
+ * Where a transcript hands none, every part stands.
  */
 const StandingParts = createContext<ReadonlySet<AgentPart> | undefined>(undefined);
 
@@ -556,11 +568,14 @@ function ToolCallView({
   part,
   jobs,
   cards,
+  made,
   cut,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
   jobs?: WorkerJobs | undefined;
   cards?: TranscriptCards | undefined;
+  /** The chip of what the call made, which its row names it by (`MadeCallView`). */
+  made?: TranscriptToolProps["made"];
   cut?: CutBody | undefined;
 }): ReactNode {
   const view = toolCallView({ ...part, jobs });
@@ -586,6 +601,7 @@ function ToolCallView({
         page={view.page}
         agent={calledAgentActor(part, cards, known)}
         agentCard={agentCard}
+        made={made}
         input={view.input}
         output={view.output}
         errorText={part.errorText}
@@ -841,7 +857,10 @@ function OpeningCallView({
   );
 }
 
-/** A call about something a tab of its own draws, hanging that tab's card as the window draws it now (`LiveDoors`). */
+/** A call's target where it is an agent. */
+type AgentTarget = Extract<ToolTarget, { readonly kind: typeof TOOL_TARGET.AGENT }>;
+
+/** A call about an agent, whose tab of its own the row opens, hanging that tab's card as the window draws it now (`LiveDoors`). */
 function TargetCallView({
   part,
   target,
@@ -849,20 +868,72 @@ function TargetCallView({
   onOpen,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
-  target: ToolTarget;
+  target: AgentTarget;
   doors: DelegationDoors | undefined;
   onOpen: () => void;
 }): ReactNode {
   const cards = useLiveDoors(doors)?.cards;
-  const openLink = useOpenLink();
   return (
     <OpeningCallView
       part={part}
       hint={TARGET_HINT[target.kind]}
       card={cards?.target(target, toolCallView(part).subject)}
       cards={cards}
-      // Note that a pull request opens as a link to it does, in its Pull request tab where the place has one, so the row asks no window's `onOpenTarget`.
-      onOpen={target.kind === TOOL_TARGET.PULL_REQUEST ? () => openLink(target.url) : onOpen}
+      onOpen={onOpen}
+    />
+  );
+}
+
+/**
+ * What the chip of what a call made is labelled with until the window
+ * holds its name: the call's own title, a page's or a thread's or a task's;
+ * and the link bare for the plan and a pull request, which the chip then
+ * calls by the plan's name and the pull request's number.
+ */
+function madeLabel(target: ToolTarget, subject: string | undefined, href: string): string {
+  const bare = target.kind === TOOL_TARGET.PLAN || target.kind === TOOL_TARGET.PULL_REQUEST;
+  return bare || subject === undefined || subject === "" ? href : subject;
+}
+
+/**
+ * A call's row, naming what the call made or is about, a page, the plan, a
+ * thread, a task, or a pull request, after its verb by the chip and hover
+ * card the window draws for its link anywhere, whose press alone opens it.
+ * Note that a call still running, one that made nothing, and one whose
+ * place cannot link what it made draw any call's row through this same
+ * view, so a row opened while it runs stays open as its answer lands.
+ */
+function MadeCallView({
+  part,
+  target,
+  doors,
+}: {
+  part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+  /** What the call made or is about; none where it made nothing. */
+  target: ToolTarget | undefined;
+  doors: DelegationDoors | undefined;
+}): ReactNode {
+  const mentions = useMentionDoors();
+  const standsOn = useLiveDoors(doors)?.cards?.standsOn;
+  const agentId = useContext(TranscriptAgent);
+  const { kind, subject } = toolCallView(part);
+  const href =
+    target === undefined
+      ? undefined
+      : targetLink(target, {
+          workspace: mentions.place.workspace,
+          holder: mentions.holder ?? standsOn,
+          agentId,
+        });
+  const chip =
+    target === undefined || href === undefined
+      ? undefined
+      : linkChip(href, madeLabel(target, subject, href), mentions);
+  return (
+    <ToolCallView
+      part={part}
+      jobs={doors?.jobs}
+      made={chip === undefined || !isMadeCallKind(kind) ? undefined : { kind, chip }}
     />
   );
 }
@@ -952,6 +1023,9 @@ function AgentPartView({
       if (delegates(part)) return <DelegationRow part={part} doors={delegation} />;
       // A call that failed keeps its row, because the row is where its error is read.
       const target = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
+      if (target !== undefined && target.kind !== TOOL_TARGET.AGENT) {
+        return <MadeCallView part={part} target={target} doors={delegation} />;
+      }
       const openTarget = delegation?.onOpenTarget;
       if (target !== undefined && openTarget !== undefined) {
         return (
@@ -977,7 +1051,7 @@ function AgentPartView({
         <LoadedSkillView part={part} />
       ) : // A call about an agent names it by the cards the window hands now (`LiveDoors`).
       calledAgent(part) === undefined ? (
-        <ToolCallView part={part} jobs={delegation?.jobs} />
+        <MadeCallView part={part} target={undefined} doors={delegation} />
       ) : (
         <AgentCallView part={part} jobs={delegation?.jobs} doors={delegation} />
       );
@@ -2107,7 +2181,7 @@ function AgentTranscriptView({
   standing,
 }: {
   messages: readonly AgentTranscriptMessage[];
-  /** The messages as the transcript's follow first drew them (`standing`), whose words stand while what is written after fades in; none where nothing streams, when every word stands. */
+  /** The messages as the transcript's follow drew them until it caught up (`standing`), whose words stand while what is written after fades in; none where nothing streams, when every word stands. */
   standing?: readonly AgentTranscriptMessage[] | undefined;
   /** Whether the log waits to draw for what stands around it, saying it is loading meanwhile. */
   holding?: boolean;

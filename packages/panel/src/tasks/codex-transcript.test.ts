@@ -250,13 +250,13 @@ test("Codex's reasoning summary is drawn as the agent's reasoning", () => {
   );
 });
 
-test("Luke's read_inbox, called over its MCP server and stored under its own name, opens the inbox", () => {
+test("Luke's read_agent, called over its MCP server and stored under its own name, opens the agent", () => {
   const { container, opened: targets } = drawn(
-    storedPart("read_inbox", {}, { status: "accepted", inbox: [] }),
+    storedPart("read_agent", { agentId: "agent-7" }, { status: "running" }),
   );
   const row =
-    container.querySelector<HTMLButtonElement>('button[data-call-id="item_read_inbox"]') ??
+    container.querySelector<HTMLButtonElement>('button[data-call-id="item_read_agent"]') ??
     assert.fail("the row is a button");
   act(() => row.click());
-  assert.deepEqual(targets, [{ kind: TOOL_TARGET.INBOX }]);
+  assert.deepEqual(targets, [{ kind: TOOL_TARGET.AGENT, agent: "agent-7" }]);
 });
