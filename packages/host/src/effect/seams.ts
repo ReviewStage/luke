@@ -20,14 +20,12 @@ import {
   type Effect,
   Layer,
   Logger,
-  type Option,
   type Path,
   type Result,
   type Stream,
 } from "effect";
 import type { FileSystem } from "effect/FileSystem";
 import type { HttpClient } from "effect/http/HttpClient";
-import type { PlatformError } from "effect/PlatformError";
 import type { ChildProcessSpawner } from "effect/process";
 import type { AccountSourceSeam } from "../account-source.js";
 import type { OpenTerminalSocket } from "../compose-terminals.js";
@@ -154,103 +152,6 @@ export interface LocalAgentCommand {
   readonly env: Readonly<Record<string, string>>;
 }
 
-/** A command run inside an agent's VM: the agent it is for and its folder, the folder it runs in there, its program and arguments, and the variables it is handed. */
-export interface LocalAgentSandboxCommand {
-  readonly agentId: string;
-  readonly folder: string;
-  readonly cwd: string;
-  readonly command: string;
-  readonly args: readonly string[];
-  readonly env: Readonly<Record<string, string>>;
-}
-
-/**
- * The VM each of a sandboxed device's agents runs a turn in
- * (`@luke/host/node`'s `smolvmSandbox`), beside the launch that starts the
- * runner in it. A device whose agents run straight on it
- * (`DEVICE_ISOLATION.DIRECT`), as every host's do now, starts none, and
- * asks only for the machines its agents' runs from before left standing
- * (`machines`) and deletes them (`deleted`). A VM lives for one turn: it is made fresh and started
- * before a runner starts, each of the agent's processes in it is signalled
- * before the runner's process is killed, since killing a command run in a
- * VM ends what it runs at once with no signal, and it is deleted once its
- * runner has ended; a check of the agent's folder between turns makes one
- * of its own and deletes it after. The agent's GitHub token is kept on the
- * device for the turn alone, outside every folder the VM mounts, where the
- * VM's credential bindings read it on every request, so the VM only ever
- * holds a placeholder. Only the local agents concern asks for it.
- */
-export interface LocalAgentSandbox {
-  /** Where the VM's own image keeps what a runner runs on, which the device registers in place of any copy of its own. */
-  readonly tools: { readonly node: string; readonly claude: string; readonly codex: string };
-  /**
-   * The device's VMs given what they run on, had now where it can be: a
-   * host's `smolvm` is its service's own, so it always has; a Mac fetches and
-   * checks its pinned `smolvm` the first time, and pulls the image once. It
-   * runs `preparing` once, just before a fetch or pull begins, and never
-   * where it has everything already, so the device says it is getting ready
-   * only while it is. It fails, in words naming no secret, with what could
-   * not be had. The device registers as ready to take an agent only once it
-   * succeeds.
-   */
-  readonly ready: (
-    preparing: Effect.Effect<void>,
-  ) => Effect.Effect<
-    void,
-    LocalAgentSandboxUnavailable,
-    ChildProcessSpawner.ChildProcessSpawner | FileSystem | Path.Path | HttpClient
-  >;
-  /**
-   * The agent's VM made fresh from the pinned image, its folder mounted at
-   * the same path, and started, once any VM of the agent's a run that died
-   * left standing is deleted; it fails where it could not be, leaving no VM
-   * it made standing.
-   */
-  readonly started: (agent: {
-    readonly agentId: string;
-    readonly folder: string;
-    /** Whether the VM sends the agent's GitHub token to GitHub, from the files `githubToken` writes. */
-    readonly github: boolean;
-  }) => Effect.Effect<
-    void,
-    LocalAgentSandboxUnavailable,
-    ChildProcessSpawner.ChildProcessSpawner | FileSystem
-  >;
-  /** The process a command run inside the agent's VM is, its variables handed by name and never as arguments. */
-  readonly exec: (command: LocalAgentSandboxCommand) => LocalAgentCommand;
-  /** Every process of the agent's in its VM asked to end (SIGTERM), so the runner ends as it would on a signal of its own. */
-  readonly signalled: (
-    agentId: string,
-  ) => Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner>;
-  /**
-   * The agent's VM deleted, stopped first where it still runs, and the
-   * token kept for it beside it: every turn's end, and a discard's. Its
-   * folder is the follower's. Whether the VM is gone, since one left
-   * standing is deleted again before its launch is settled, and stays in
-   * the record an uninstall deletes by.
-   */
-  readonly deleted: (
-    agentId: string,
-  ) => Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner | FileSystem>;
-  /**
-   * The agents smolvm keeps a machine for, by id, whoever made it; none
-   * where it could not list its machines, so no agent is taken as holding
-   * none where it may. A device with no `smolvm` at all holds none.
-   */
-  readonly machines: Effect.Effect<
-    Option.Option<ReadonlySet<string>>,
-    never,
-    ChildProcessSpawner.ChildProcessSpawner | FileSystem
-  >;
-  /** The agent's GitHub token written where its VM's bindings read it, replacing the last, so a renewal needs no restart. */
-  readonly githubToken: (
-    agentId: string,
-    token: string,
-  ) => Effect.Effect<void, PlatformError, FileSystem>;
-  /** What a git run on the device itself, as the worktree's script runs, adds to its environment to read the same token, never naming it. */
-  readonly deviceGit: (agentId: string) => Readonly<Record<string, string>>;
-}
-
 /**
  * The agent CLIs a device keeps of its own (`local-agent-setup.ts`'s
  * `localAgentClis`): Claude Code, Codex, and GitHub's CLI, each the pinned
@@ -283,18 +184,12 @@ export class LocalAgentClisUnavailable extends Data.TaggedError("LocalAgentClisU
   readonly detail: string;
 }> {}
 
-/** Why an agent's VM could not be made or started. */
-export class LocalAgentSandboxUnavailable extends Data.TaggedError("LocalAgentSandboxUnavailable")<{
-  readonly detail: string;
-}> {}
-
 /**
  * What a local agent's runner is started with on this device
  * (`compose-local-agents.ts`): how every runner is started (`launch`),
  * straight on the box as a host's are, on what (`tools`), the runner's
- * bundle, and what the start adds to its environment; the VMs its agents'
- * runs from before left (`sandbox`); the name, platform, and architecture
- * the device is offered under at Start; and the scripts that make an
+ * bundle, and what the start adds to its environment; the name, platform,
+ * and architecture the device is offered under at Start; and the scripts that make an
  * agent's own repository and check it for unsaved work
  * (`node/open-on-mac.ts`'s `agentWorktreeScript` and `agentUnsavedWorkScript`).
  * It arrives rather than being built here, because each is the shell's own,
@@ -303,9 +198,9 @@ export class LocalAgentSandboxUnavailable extends Data.TaggedError("LocalAgentSa
  * `luke-host` runs it (`@luke/host/daemon`'s `hostPlatform`).
  */
 export interface LocalAgentPlatformSeam {
-  /** The process a runner is started as, given what it runs and the environment made for it: straight on the box in the agent's folder (`local-agent-box.ts`'s `agentOnBox`), or, on a sandboxed device, `smolvm machine exec` into the agent's VM. */
+  /** The process a runner is started as, given what it runs and the environment made for it: straight on the box in the agent's folder (`local-agent-box.ts`'s `agentOnBox`). */
   readonly launch: (runner: LocalAgentRunner) => LocalAgentCommand;
-  /** What every runner runs on, which the device registers: the host's own Node and the CLIs it keeps (`clis.paths`), or, on a sandboxed device, the VM image's. */
+  /** What every runner runs on, which the device registers: the host's own Node and the CLIs it keeps (`clis.paths`). */
   readonly tools: { readonly node: string; readonly claude: string; readonly codex: string };
   readonly runnerBundle: string;
   readonly runnerEnv: Readonly<Record<string, string>>;
@@ -313,7 +208,7 @@ export interface LocalAgentPlatformSeam {
   /** The platform and architecture the device registers as. */
   readonly devicePlatform: DevicePlatform;
   readonly deviceArch: DeviceArch;
-  /** How the launcher runs each agent, which the device registers as: straight on the box (`DEVICE_ISOLATION.DIRECT`), as every host's does, or in a VM of its own. */
+  /** How the launcher runs each agent, which the device registers as: straight on the box (`DEVICE_ISOLATION.DIRECT`), as every host's does. */
   readonly deviceIsolation: DeviceIsolation;
   /**
    * The lines beyond the first the device registers it takes
@@ -336,15 +231,6 @@ export interface LocalAgentPlatformSeam {
    * none removes the folder unconditionally.
    */
   readonly unsavedWorkScript?: ((input: { readonly worktree: string }) => string) | undefined;
-  /**
-   * The VM each agent runs a turn in on a sandboxed device: `launch` starts
-   * the runner inside it, and the follower makes it fresh for each turn and
-   * deletes it as the turn ends, keeps the agent's GitHub token out of its
-   * folder, and checks the folder for unsaved work in a VM made for the
-   * check rather than on the device. On a device whose agents run straight
-   * on it, only the machines its agents' runs from before left standing.
-   */
-  readonly sandbox: LocalAgentSandbox;
   /** The agent CLIs the device keeps of its own, had before it registers ready (`LocalAgentClis`). */
   readonly clis: LocalAgentClis;
   /**
@@ -357,12 +243,11 @@ export interface LocalAgentPlatformSeam {
    */
   readonly formerlyDirect: boolean;
   /**
-   * Whether the agents' folders under the device's home and its smolvm
-   * store are this install's alone: a Linux host's are, its `luke-host`
-   * user's own, and a Mac's never, since This Mac and a standalone
-   * `luke-host` share the member's. On such a device the follower takes
-   * every agent with a folder or a machine there as one it made as its gate
-   * opens, beside those its own state names.
+   * Whether the agents' folders under the device's home are this install's
+   * alone: a Linux host's are, its `luke-host` user's own, and a Mac's
+   * never, since This Mac and a standalone `luke-host` share the member's.
+   * On such a device the follower takes every agent with a folder there as
+   * one it made as its gate opens, beside those its own state names.
    */
   readonly storesOwned: boolean;
 }

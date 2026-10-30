@@ -21,7 +21,7 @@ export const THIS_MAC_HOST_STANDING = {
   NOT_TURNED_ON: "not-turned-on",
   /** Being turned on: the Mac enrolled and its login item registered. */
   TURNING_ON: "turning-on",
-  /** `luke-host` is fetching what its VMs run on, which takes no agent until it is done. */
+  /** `luke-host` is fetching what its agents run on, which takes no agent until it is done. */
   GETTING_READY: "getting-ready",
   /** `luke-host` holds the machine's lease and follows its agents. */
   RUNNING: "running",
@@ -33,7 +33,7 @@ export const THIS_MAC_HOST_STANDING = {
   REMOVED: "removed",
   /** The last turn-on failed, for the reason it carries. */
   FAILED: "failed",
-  /** `luke-host` could not fetch what its VMs run on, for the reason it registered. */
+  /** `luke-host` could not fetch what its agents run on, for the reason it registered. */
   SETUP_FAILED: "setup-failed",
   /** This Mac runs agents for another Luke account signed in on it before. */
   OTHER_ACCOUNT: "other-account",

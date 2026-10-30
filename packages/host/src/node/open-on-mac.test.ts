@@ -933,7 +933,7 @@ test(
     push("first\n");
     const head = push("second\n");
     const clone = cloneFolder(state, "acme/app");
-    const own = path.join(scratch, "agents", "vm", "repository");
+    const own = path.join(scratch, "agents", "agent", "repository");
 
     run(
       scratch,
@@ -946,7 +946,7 @@ test(
         remotes: { https: origin, ssh: origin },
       }),
     );
-    // Note that the VM mounts the agent's folder alone, so the shared clone is moved out of reach.
+    // Note that the agent's repository stands on its own, so the shared clone is moved out of reach.
     rmSync(clone, { recursive: true, force: true });
 
     assert.equal(git(own, ["rev-parse", "HEAD"]), head);

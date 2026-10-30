@@ -378,12 +378,12 @@ export function openOnMacScript(input: {
  * (`@luke/host`'s `compose-local-agents.ts`), at the head of the branch the
  * agent starts from, or of GitHub's default branch where it names none,
  * read in Luke's own clone of the repository, the clone Open on this Mac
- * shares, under the same lock. The agent's VM mounts its folder alone, and
- * a worktree's Git folder would stand in the shared clone, so the agent
+ * shares, under the same lock. The agent's work stays in its own folder,
+ * and a worktree's Git folder would stand in the shared clone, so the agent
  * gets a repository of its own: fetched from the shared clone at that head,
  * its commits and trees only, then pointed at GitHub, which every blob it
- * lacks is had from as it is needed, through the VM's own credential inside
- * it. Nothing of the shared clone, nor of another agent's work in it, is
+ * lacks is had from as it is needed, through the agent's own GitHub
+ * credential. Nothing of the shared clone, nor of another agent's work in it, is
  * copied in beyond that head's history. A repository already made is left
  * as it stands, since it holds the agent's work, and one left half made is
  * taken away, so the next launch makes it again. It ends with its failure

@@ -1,6 +1,5 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { SMOLVM_MAC_PIN } from "@luke/agent-runner/pins";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { DEVICE_AGENT_LINE_KIND, DEVICE_ARCH } from "@luke/features/device-agent-wire";
 import {
@@ -20,7 +19,7 @@ import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
 import { Environment, reporterLayer } from "../effect/seams.js";
 import { readHostDevice } from "../host-device-record.js";
-import { fakeClis } from "../testing/fake-sandbox.js";
+import { fakeClis } from "../testing/fake-clis.js";
 import { scriptedSpawner } from "../testing/scripted-spawner.js";
 import { hostDaemon } from "./host-daemon.js";
 import { enrollHostDevice } from "./host-device.js";
@@ -47,7 +46,6 @@ const PAIRING_CODE: Omit<HostPairingStartAnswer, "pollSecret"> = {
 type HostPairingPollStatus =
   (typeof HOST_PAIRING_POLL_STATUS)[keyof typeof HOST_PAIRING_POLL_STATUS];
 const RUNNER_TOKEN = "sk-ant-oat01-fixture-not-a-real-token";
-const SMOLVM = "/usr/local/bin/smolvm";
 /** The Node the daemon runs on, which its runners run on too. */
 const NODE = "/opt/luke-host/node/bin/node";
 /** The runner's bundle each OS runs: a Linux release's own, and on a Mac the app's. */
@@ -64,8 +62,8 @@ const HTTP = {
   SERVER_ERROR: 500,
 } as const;
 
-/** A Linux box named fra-01, with no `/dev/kvm`. */
-const FRA_01: HostOs = { ...LINUX_HOST, deviceName: () => "fra-01", nested: () => false };
+/** A Linux box named fra-01. */
+const FRA_01: HostOs = { ...LINUX_HOST, deviceName: () => "fra-01" };
 
 /** A box's platform on the OS given, as its daemon builds it, running as the user given. */
 const platformOn = (os: HostOs, stateRoot: string, uid = 990) =>
@@ -74,7 +72,6 @@ const platformOn = (os: HostOs, stateRoot: string, uid = 990) =>
     installFolder: "/opt/luke-host",
     arch: DEVICE_ARCH.X64,
     stateRoot,
-    smolvm: SMOLVM,
     node: NODE,
     user: { uid, gid: uid },
     clis: fakeClis(),
@@ -101,7 +98,7 @@ const box = Effect.gen(function* () {
 const isRunner = (each: { readonly program: string; readonly args: readonly string[] }) =>
   each.program === NODE && each.args.some((arg) => RUNNER_BUNDLES.has(arg));
 
-/** The daemon's world: its home and shell, a spawner whose login shell answers a PATH and whose runners run, with no smolvm on the box, and the reports it makes. */
+/** The daemon's world: its home and shell, a spawner whose login shell answers a PATH and whose runners run, and the reports it makes. */
 const world = (home: string, reports: string[]) => {
   const spawner = scriptedSpawner((program, args) => {
     if (program === "/bin/bash" && args[0] === "-l")
@@ -258,7 +255,6 @@ describe("a host's daemon", () => {
         expect(
           new Set(http.requests.map((request) => request.headers.get(HOST_WIRE.VERSION_HEADER))),
         ).toEqual(new Set([VERSION]));
-        expect(spawner.spawned.some((each) => each.program === SMOLVM)).toBe(false);
         const launched = spawner.spawned.filter(isRunner);
         expect(launched).toHaveLength(1);
         const [runner] = launched;
@@ -448,22 +444,19 @@ describe("hostRuntime", () => {
       home: "/Users/ada",
       os: DARWIN_HOST,
       stateRoot: "/Users/ada/Library/Application Support/Luke",
-      smolvm: { kind: "pin", pin: SMOLVM_MAC_PIN },
     },
     {
       platform: "linux",
       home: "/var/lib/luke-host",
       os: LINUX_HOST,
       stateRoot: "/var/lib/luke-host/state",
-      smolvm: { kind: "path", variable: "LUKE_HOST_SMOLVM" },
     },
   ])(
-    "runs $platform as its own OS, with its state where its app or service keeps it and its smolvm from where that OS takes it",
-    ({ platform, home, os, stateRoot, smolvm }) => {
+    "runs $platform as its own OS, with its state where its app or service keeps it",
+    ({ platform, home, os, stateRoot }) => {
       const runtime = hostRuntime({ platform, home, app: { developerIdSigned: true } });
       expect(runtime?.os).toBe(os);
       expect(runtime?.stateRoot).toBe(stateRoot);
-      expect(runtime?.os.smolvm).toEqual(smolvm);
     },
   );
 });

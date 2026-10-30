@@ -17,5 +17,4 @@ export {
   HOST_CONNECT_OUTCOME,
   type HostPairingCode,
 } from "./host-pairing.js";
-export { type HostPlatformOptions, hostPlatform } from "./host-platform.js";
-export { hostSmolvmLeft } from "./host-smolvm.js";
+export { hostPlatform } from "./host-platform.js";

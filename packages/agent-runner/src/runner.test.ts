@@ -1004,7 +1004,7 @@ function launchedAs(options: Options | undefined) {
 }
 
 it.effect(
-  "starts the CLI in a local agent's VM exactly as in a sandbox, with the same permission mode and tools, and only the command sandbox off",
+  "starts the CLI on a host exactly as in the cloud's sandbox, with the same permission mode and tools, and only the command sandbox off",
   () =>
     Effect.gen(function* () {
       const optionsIn = (env: Record<string, string>) =>
