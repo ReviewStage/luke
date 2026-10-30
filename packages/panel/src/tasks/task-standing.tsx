@@ -1,4 +1,3 @@
-import type { MacOffer } from "@luke/features/models-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   MERGE_POLICY,
@@ -64,9 +63,8 @@ import { TaskBlockAdd, TaskBlockLines, type TaskBlocksDoor } from "./task-blocks
  * repository's chip (`repository-chip.tsx`), the owner's picture and
  * `owner/name`, or Choose a repository while the task has none, which drops
  * the search over every repository the workspace reaches, and which ⌘K's
- * Change repository opens the same way; and, while local agents are on, a
- * fifth for where its agents run (`runs-on.tsx`); on a pilot tree's top
- * task, an Auto-merge switch for its merge policy, merge on green while on and
+ * Change repository opens the same way; and a fifth for where its agents
+ * run (`runs-on.tsx`); on a pilot tree's top task, an Auto-merge switch for its merge policy, merge on green while on and
  * hold every PR while off, and Start, which lets the tree's agents work, or
  * Stop while they do, which stops them (`pilot-switches.ts`); and last, where the page hands their door,
  * Add relation, with the task's blocks on a line of their own under the chips
@@ -243,13 +241,12 @@ export interface TaskRepositoryDoor {
   readonly note?: string | undefined;
 }
 
-/** What the page hands the task's head: its workspace's name, which the key is drawn from, the door a pick is sent through, none where the task takes no change, the repository chip's doors, none where the task's repository is not changed from here, and the member's devices, as the models answer last listed them, which say whether a cloud task shows its Runs on. */
+/** What the page hands the task's head: its workspace's name, which the key is drawn from, the door a pick is sent through, none where the task takes no change, and the repository chip's doors, none where the task's repository is not changed from here. */
 export interface TaskStandingDoor {
   readonly workspaceName: string;
   /** Settles once the service has answered, where the page waits on it. */
   readonly onSet?: ((standing: TaskStanding) => void | Promise<void>) | undefined;
   readonly repository?: TaskRepositoryDoor | undefined;
-  readonly devices?: readonly MacOffer[] | undefined;
   /** The task's blocks' door: the tasks they name, where a press opens one, and where a change is sent; none where they are not drawn. */
   readonly blocks?: TaskBlocksDoor | undefined;
   /** Whether the plan is in sight, which S's ask waits on, so it never opens a menu behind another tab; in sight where unsaid. */
@@ -416,9 +413,9 @@ function TreeRunButton({
 /**
  * The task's status, priority, and assignee chips, under its title, its
  * repository's where the page hands the chip's doors, with the service's
- * refusal of the last pick beside it, and where its agents run while the
- * member has a device or the task runs on one, and the Auto-merge switch and Start or Stop on a pilot tree's top task. A
- * task from a service before statuses draws none of the
+ * refusal of the last pick beside it, where its agents run, and the
+ * Auto-merge switch and Start or Stop on a pilot tree's top task. A task
+ * from a service before statuses draws none of the
  * standing chips, and still its repository's, which does not wait on them,
  * since the plan's menu leaves Change repository to the chip.
  */
@@ -426,7 +423,6 @@ export function TaskStandingChips({
   task,
   onSet,
   repository,
-  devices,
   blocks,
   inSight = true,
 }: {
@@ -434,7 +430,6 @@ export function TaskStandingChips({
   /** Where a pick is sent, settling once the service has answered where the page waits on it; without one the chips only say. */
   onSet: ((standing: TaskStanding) => void | Promise<void>) | undefined;
   repository?: TaskRepositoryDoor | undefined;
-  devices?: readonly MacOffer[] | undefined;
   /** The task's blocks' door; without it no block is drawn. */
   blocks?: TaskBlocksDoor | undefined;
   /** Whether the plan is in sight, which S waits on, so it never opens a menu behind another tab. */
@@ -453,8 +448,6 @@ export function TaskStandingChips({
   if (!standing && repository === undefined) return null;
   const mergePolicy = standing ? mergePolicySwitchOf(task) : undefined;
   const running = standing ? runningSwitchOf(task) : undefined;
-  const runsOnDrawn =
-    standing && ((devices !== undefined && devices.length > 0) || task.runsOn !== undefined);
   return (
     <div className="plan-task-standing">
       <Inline gap={GAP.CONTROL}>
@@ -511,7 +504,7 @@ export function TaskStandingChips({
             {repository.note}
           </FailureNote>
         )}
-        {runsOnDrawn ? <TaskRunsOnChip runsOn={task.runsOn} /> : null}
+        {standing ? <TaskRunsOnChip runsOn={task.runsOn} /> : null}
         {mergePolicy === undefined ? null : (
           <LabeledSwitch
             label="Auto-merge"

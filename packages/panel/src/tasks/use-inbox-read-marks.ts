@@ -20,9 +20,10 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * A mark goes to the service as an act, which the host draws into every
  * read the window draws the moment it is asked, and holds there until each
  * carries it (`@luke/host`'s `inbox-collections.ts`), so the dot flips at
- * once and never flickers back; the host sends the marks one at a time, in
- * the order they were asked, so a quick read, unread, read reaches the
- * service as the last, Mark all as read in its turn among them. A mark the
+ * once and never flickers back, and answers once the service takes it; the
+ * host sends one item's marks in the order they were asked, so a quick read,
+ * unread, read reaches the service as the last, Mark all as read in its turn
+ * among them, and marks on other items at once. A mark the
  * service did not take is taken back by the host, the dot standing as the
  * reads hold it, and a toast says so, unless the caller asks for quiet
  * because it says the refusal itself, as the selection bar does for the

@@ -21,9 +21,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
  * this one moves it, and each section a save by anyone but the developer
  * changed after it is a section changed since they last looked, held for the
  * visit until they dismiss it or leave. A section is known by its heading.
- * A save that lands while the task is open is typed in before
- * their eyes, the notetaker's on a call above all, so it never joins the
- * visit's changes. A task never looked at on this Mac
+ * A save that lands while the task is open is drawn before their eyes, so
+ * it never joins the visit's changes. A task never looked at on this Mac
  * has no mark and nothing changed: every section would be new.
  *
  * The mark is a save's instant as the service stamped it, never this Mac's

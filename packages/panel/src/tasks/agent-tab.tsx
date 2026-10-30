@@ -48,6 +48,7 @@ import {
   InlineRef,
   LineSummary,
   MESSAGE_LINE_ALIGN,
+  MESSAGE_LINE_INSET,
   MessageHead,
   MessageLine,
   NOTE_LINE_LOOK,
@@ -1353,7 +1354,8 @@ const NO_ARRIVED: readonly ArrivedLine[] = [];
  * The line a finished turn ends on, the line under every message
  * (`MessageLine`): how long it worked and when it ended as its lead, then
  * its Copy and Copy link beside it, set as any message's are under its
- * bubble rather than floated over the turn's corner. A turn still running
+ * bubble rather than floated over the turn's corner, though flush with the
+ * turn's words, which stand on no bubble. A turn still running
  * offers no Copy, because its words are not yet whole.
  */
 function TurnFoot({ workedFor, copy }: { workedFor: ReactNode; copy: ReactNode }): ReactNode {
@@ -1361,7 +1363,12 @@ function TurnFoot({ workedFor, copy }: { workedFor: ReactNode; copy: ReactNode }
   return (
     // Note that the room above is the row's rather than the worked line's, because the buttons are taller than the words and centring them would push the words down.
     <div className="agent-turn-foot mt-tight-gap" data-turn-foot="">
-      <MessageLine align={MESSAGE_LINE_ALIGN.START} sender={workedFor} actions={copy} />
+      <MessageLine
+        align={MESSAGE_LINE_ALIGN.START}
+        inset={MESSAGE_LINE_INSET.FLUSH}
+        sender={workedFor}
+        actions={copy}
+      />
     </div>
   );
 }

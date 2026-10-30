@@ -218,7 +218,7 @@ test("a plain link pressed in a version opens in the browser", () => {
   assert.deepEqual(sent, [{ kind: ACT_KIND.WEB_OPEN, payload: { url: DOCS } }]);
 });
 
-test("a bare address an edit or a change marks inside is drawn whole, its caret and its marks where they stand", () => {
+test("a bare address a change marks inside is drawn whole, its marks where they stand", () => {
   const words = `See ${BARE} now.`;
   const inside = words.indexOf("current");
   const changed = drawn(
@@ -229,16 +229,12 @@ test("a bare address an edit or a change marks inside is drawn whole, its caret 
       },
     }),
   );
-  const typed = drawn(createElement(MarkdownMessage, { words, edit: { caret: inside } }));
 
-  for (const surface of [changed, typed]) {
-    assert.deepEqual(plainLinks(surface), [[BARE, false]]);
-  }
+  assert.deepEqual(plainLinks(changed), [[BARE, false]]);
   assert.equal(
     changed.querySelector(".luke-text-link ins.markdown-inserted")?.textContent,
     "current",
   );
-  assert.notEqual(typed.querySelector(".luke-text-link .markdown-caret"), null);
 });
 
 test("a plain link to an address the window refuses to open is drawn going nowhere", () => {

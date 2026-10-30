@@ -7,6 +7,8 @@ import { type MacOffer, MODEL_PROVIDER } from "@luke/features/models-wire";
 import type { TaskRunsOnRequest } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
+import { experimentsOn } from "@luke/settings/testing";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -14,6 +16,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { useSteadyDoors } from "../steady-door.js";
 import { fakeActPort } from "../testing/app-bridge.js";
+import { handState } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout, pressInComposer } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -24,15 +27,17 @@ import { MODELS_READ, type ModelsRead } from "./use-agents.js";
 import type { NewTaskParent, NewTaskStart } from "./use-tasks-tab.js";
 
 /**
- * new-task-composer-runs-on.test.ts -- New task's Runs on, with two of the
- * member's devices offered, one offline: the task starts on the device picked,
+ * new-task-composer-runs-on.test.ts -- New task's Runs on, with Bring your own
+ * host on and two of the member's devices offered, one offline: the task starts on the device picked,
  * by its id, and the offline one cannot be picked, nor one online but getting
  * ready or not set up, which says so; a last pick that is offline or getting
  * ready as the card opens stays picked and says so, never Cloud; a card takes
  * a device picked in another card; and nothing starts on a last pick of a
  * device before the card's own read of the devices lands, a read that failed
  * saying so with a Retry that reads them again, while a member whose last pick
- * is the cloud is not held. A child's card starts under its parent alone,
+ * is the cloud is not held, the chip standing on Cloud alone. With the
+ * experiment off the card reads no devices, offers Cloud alone, and starts in
+ * the cloud at once, a last pick of a device unheld. A child's card starts under its parent alone,
  * naming neither a repository nor a device, which the service would refuse,
  * since a child takes its parent's. Synthetic throughout.
  */
@@ -67,6 +72,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
+  handState(experimentsOn(EXPERIMENT.BRING_YOUR_OWN_HOST));
   // The service answers the shared presence read with no beat later than the lists carry.
   fakeActPort({
     [ACT_KIND.HOSTS_PRESENCE]: () =>
@@ -150,7 +156,9 @@ async function mount(offered: Offered = { devices: devicesWith() }, parent?: New
   const root = createRoot(container);
   roots.push(root);
   const registry = AtomRegistry.make();
+  let asked = 0;
   const readModels = () => {
+    asked += 1;
     const generation = modelsRead.generation + 1;
     if (reads === READS.LAND) {
       devices = [...(offered.reread ?? offered.devices ?? [])];
@@ -198,7 +206,15 @@ async function mount(offered: Offered = { devices: devicesWith() }, parent?: New
   const letReadsLand = () => {
     reads = READS.LAND;
   };
-  return { container, starts, named, letReadsLand };
+  return { container, starts, named, letReadsLand, reads: () => asked };
+}
+
+/** The card's Runs on chip. */
+function runsOnChip(container: HTMLElement): HTMLButtonElement {
+  return (
+    container.querySelector<HTMLButtonElement>('button[aria-label^="Runs on"]') ??
+    assert.fail("the card draws Runs on")
+  );
 }
 
 /** The menu's row naming `name`. */
@@ -328,10 +344,36 @@ test("nothing starts before the card's own read of the devices lands, and one th
 
 test("a member whose last pick is the cloud, as every member's with no device is, starts while the card's read of the devices is still out", async () => {
   const { container, starts } = await mount({ devices: undefined, reads: READS.HOLD });
+  assert.equal(runsOnChip(container).getAttribute("aria-label"), "Runs on: Cloud");
   pressInComposer(container, "Enter", { metaKey: true });
   await settle();
 
-  assert.deepEqual(starts, [undefined]);
+  assert.deepEqual(starts, [{ machine: AGENT_MACHINE.VERCEL }]);
+});
+
+test("while Bring your own host is off the card reads no devices, offers Cloud alone, and starts in the cloud at once, though the last pick is a device", async () => {
+  handState(experimentsOn());
+  let beats = 0;
+  fakeActPort({
+    [ACT_KIND.HOSTS_PRESENCE]: () => {
+      beats += 1;
+      return Promise.resolve({ devices: [] });
+    },
+  });
+  window.localStorage.setItem("luke.newTaskRunsOn", STUDIO);
+  const { container, starts, reads } = await mount({ devices: devicesWith(), reads: READS.HOLD });
+  pressInComposer(container, "Enter", { metaKey: true });
+  await settle();
+  act(() => runsOnChip(container).click());
+  await settle();
+
+  assert.deepEqual(starts, [{ machine: AGENT_MACHINE.VERCEL }]);
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent),
+    ["Cloud"],
+  );
+  assert.equal(reads(), 0);
+  assert.equal(beats, 0);
 });
 
 test("a child's card starts under its parent alone, naming no repository and no device", async () => {

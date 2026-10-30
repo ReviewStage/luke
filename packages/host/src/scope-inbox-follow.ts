@@ -99,7 +99,7 @@ export function scopeInboxes(
           return { kind: LIVE_STATE.REFUSED, failure } as const;
         }
         const inbox = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
-        const read = yield* itemsRead();
+        const read = yield* itemsRead(dependencies.reads);
         let wait: TxWait | undefined;
         let answered = false;
         // Note that nothing is told before the read first answers, since a write drawn on no items shows nothing of the scope.
@@ -112,7 +112,7 @@ export function scopeInboxes(
             : Effect.void,
         );
         yield* dependencies.reads.stand({
-          draw: read.draw,
+          shown: read.shown,
           take: read.take,
           txWait: () => wait,
           drawn,
