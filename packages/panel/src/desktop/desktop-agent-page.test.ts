@@ -1552,6 +1552,25 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
   assert.equal(newestToastSays(), "Link copied");
 });
 
+/** Opens the side panel's ⋯, over the tab it shows, and answers what it offers. */
+async function sidePanelMenu(): Promise<HTMLButtonElement[]> {
+  const more =
+    document.querySelector<HTMLButtonElement>(".side-panel-bar .toolbar-tab-actions button") ??
+    assert.fail("the side panel's bar has a ⋯");
+  act(() => more.click());
+  await settle();
+  return [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+}
+
+/** Opens the side panel's ⋯ and answers the item under `label`, or fails saying it is not offered. */
+async function sidePanelMenuItem(label: string): Promise<HTMLButtonElement> {
+  return (
+    (await sidePanelMenu()).find(
+      (each) => each.querySelector(".luke-menu-item-label")?.textContent === label,
+    ) ?? assert.fail(`the side panel's ⋯ offers ${label}`)
+  );
+}
+
 /** Opens the page's ⋯ and answers the item under `label`, or fails saying it is not offered. */
 function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
   const more =
@@ -1751,7 +1770,7 @@ function standTerminalDocument(): () => void {
   };
 }
 
-test("Run in the header of the agent's Pull request tab runs its branch on this Mac in the side panel, from its own repository", async () => {
+test("Run on the ⋯ of the agent's Pull request tab runs its branch on this Mac in the side panel, from its own repository", async () => {
   takeDownTerminal = standTerminalDocument();
   pages = [{ agent: { ...PAGE, status: AGENT_STATUS.RUNNING } }];
   published = {
@@ -1777,11 +1796,7 @@ test("Run in the header of the agent's Pull request tab runs its branch on this 
   act(() => row.click());
   await settle();
 
-  const run =
-    container.querySelector<HTMLButtonElement>(
-      'aside.side-panel .pull-request-title-actions button[aria-label="Run on this Mac"]',
-    ) ?? assert.fail("the Pull request tab's header offers Run");
-  assert.equal(run.textContent, "Run");
+  const run = await sidePanelMenuItem("Run on this Mac");
   act(() => run.click());
   await settle();
 
@@ -1791,7 +1806,7 @@ test("Run in the header of the agent's Pull request tab runs its branch on this 
   assert.equal(tab.repository, PAGE.repository);
 });
 
-test("Run in the header of a Pull request tab opened by its number runs that pull request's branch, not the agent's own", async () => {
+test("Run on the ⋯ of a Pull request tab opened by its number runs that pull request's branch, not the agent's own", async () => {
   takeDownTerminal = standTerminalDocument();
   pages = [{ agent: { ...PAGE, status: AGENT_STATUS.RUNNING } }];
   published = {
@@ -1813,10 +1828,7 @@ test("Run in the header of a Pull request tab opened by its number runs that pul
   act(() => drawnPanel?.onChoose({ changes: AGENT_ID, number: 2905 }));
   await settle();
 
-  const run =
-    document.querySelector<HTMLButtonElement>(
-      'aside.side-panel .pull-request-title-actions button[aria-label="Run on this Mac"]',
-    ) ?? assert.fail("the numbered Pull request tab's header offers Run");
+  const run = await sidePanelMenuItem("Run on this Mac");
   act(() => run.click());
   await settle();
 
@@ -1826,7 +1838,7 @@ test("Run in the header of a Pull request tab opened by its number runs that pul
   assert.equal(tab.number, 2905);
 });
 
-/** Runs the agent's pushed branch on this Mac from the Pull request tab's header, which shows the run's Mac terminal tab. */
+/** Runs the agent's pushed branch on this Mac from the Pull request tab's ⋯, which shows the run's Mac terminal tab. */
 /** The agent has pushed a branch, which its pull request tab reads. */
 function pushBranch(): void {
   published = {
@@ -1857,10 +1869,7 @@ async function runOnThisMac(): Promise<void> {
     ) ?? assert.fail("the pull request's row stands over the box");
   act(() => row.click());
   await settle();
-  const run =
-    container.querySelector<HTMLButtonElement>(
-      'aside.side-panel .pull-request-title-actions button[aria-label="Run on this Mac"]',
-    ) ?? assert.fail("the Pull request tab's header offers Run");
+  const run = await sidePanelMenuItem("Run on this Mac");
   act(() => run.click());
   await settle();
 }
@@ -1997,11 +2006,11 @@ test("a fork's Pull request tab offers no Run, since its head's branch name woul
     document.querySelector("aside.side-panel .pull-request-title-actions"),
     "the fork's Pull request tab draws its header",
   );
-  assert.equal(
-    document.querySelector('aside.side-panel button[aria-label="Run on this Mac"]'),
-    null,
-    "no Run on a fork's pull request",
+  const offered = (await sidePanelMenu()).map(
+    (each) => each.querySelector(".luke-menu-item-label")?.textContent,
   );
+  assert.ok(offered.includes("Open on GitHub"), "the fork's Pull request tab's ⋯ opens");
+  assert.ok(!offered.includes("Run on this Mac"), "no Run on a fork's pull request");
 });
 
 test("Archive on the page's ⋯ reads an agent at rest again and archives it unasked", async () => {
