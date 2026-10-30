@@ -329,7 +329,7 @@ test("a plain click still opens its item, leaving what is chosen as it stands", 
 test("a plan main says changed is read again, so an item answered on another Mac lists as settled, gray where it stood while the pointer is over the list and sorted anew once it leaves; To do then lists only what still needs you, and the choice outlives a relaunch", async () => {
   let { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
-  const list = page.querySelector('nav[aria-label="Inbox items"]');
+  const list = page.querySelector('nav[aria-label^="Inbox items"]');
   assert.ok(list !== null);
   pointerCross(document.body, list);
   world.inboxes.set(INVITES.id, [
@@ -1203,6 +1203,11 @@ test("a row says Needs you to a reader only outside Needs you, whose name says i
   );
   showScope(page, "Needs you");
   assert.equal(heardRow(page, CODED.title)[0], `Invites Unread Expire after 7 days? ${time}`);
+  assert.equal(
+    page.querySelector("nav.inbox-tasks")?.getAttribute("aria-label"),
+    "Inbox items · Needs you",
+    "the list says it once, since the head names no scope",
+  );
 });
 
 test("an unread item wears the blue dot in its row's gutter, its title in the unread weight, and says Unread to a reader; opening it marks it read at once, and the Inbox opening, choosing nothing, marks none", async () => {

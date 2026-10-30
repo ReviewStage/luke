@@ -264,6 +264,9 @@ const ARCHIVED_WORDS = {
   UNARCHIVING: "Unarchiving",
 } as const;
 
+/** What the list's region is named, before its scope, which a reader hears there once rather than on every row (`needsYouShown`), since the head names no scope on Needs you. */
+const INBOX_ITEMS = "Inbox items";
+
 /** What an unread row says to a reader, its dot being drawn for the eye alone. */
 const UNREAD = "Unread";
 
@@ -1797,7 +1800,7 @@ export function InboxList({
     <nav
       ref={rowFocus.ref}
       className="inbox-tasks relative flex min-h-0 min-w-0 flex-col border-r border-border"
-      aria-label="Inbox items"
+      aria-label={`${INBOX_ITEMS} · ${SCOPE_WORDS[head.show.show].label}`}
       hidden={columns === INBOX_COLUMNS.ITEM}
       onFocus={rowFocus.onFocus}
       onBlur={rowFocus.onBlur}
