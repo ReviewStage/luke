@@ -1283,7 +1283,7 @@ test("a row leads its repository with its owner's picture, one address for every
     ...page.querySelectorAll<HTMLImageElement>("[data-cell='repository'] img.luke-avatar-picture"),
   ].map((picture) => picture.getAttribute("src"));
 
-  assert.equal(pictures.length, page.querySelectorAll(".tasks-list-row").length);
+  assert.equal(pictures.length, page.querySelectorAll(".luke-task-row").length);
   assert.deepEqual(new Set(pictures), new Set(["https://github.com/acme.png?size=32"]));
 });
 

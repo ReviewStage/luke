@@ -24,6 +24,10 @@
  * an older build still sends, lists no plan more, and an archive asked for
  * settles the plan instead (`archive-settle.ts`).
  *
+ * `POST /api/plans/{id}/parent` sets the plan's parent, or clears it with
+ * null, under the rules a child is made under (`setTaskParent`), and
+ * `POST /api/plans/{id}/relation` moves one relation of the plan to another
+ * kind in one transaction (`task-relation.ts`).
  * `POST /api/plans/{id}/blocks` adds or takes away one block of the plan,
  * as Linear's blocked-by and blocks are: the other task, of the plan's own
  * workspace and one the caller reaches, waits on it or is waited on, and a
@@ -46,7 +50,7 @@
  * none; either way the plan belongs to that workspace from then on.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
 import { accountExperimentOn } from "@luke/database/models/account-store";
 import { listAgents, readAgentByKey } from "@luke/database/models/agent-store";
 import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
@@ -69,6 +73,7 @@ import {
   readTaskHeader,
   readTaskPlan,
   type StoredTask,
+  setTaskParent,
   type TaskHeader,
   type TaskRunsOnWrite,
   updateTaskCommitted,
@@ -131,6 +136,7 @@ import {
   saveDeveloperEdit,
 } from "./plan-notes.js";
 import { type TaskParent, taskParentOf } from "./task-parent.js";
+import { moveTaskRelation, type TaskRelationRefused } from "./task-relation.js";
 
 export interface TasksProcedureSeams extends EveReach, SandboxStopReach {
   resolveUserId: UserIdResolver;
@@ -456,11 +462,37 @@ const runsOnChange = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
+ * A relation's refusal answered by name: a task blocking itself and a task
+ * of another workspace are invalid, a block closing a cycle is refused as
+ * one, a parent under which the task would descend from itself as one, a
+ * parent in another repository as a child's repository locked, a parent out
+ * of reach is not found, and the store out of reach is unavailable.
+ */
+function relationRefused(
+  failure: TaskRelationRefused | StoreFailure,
+): Effect.Effect<never, HostedRefusal> {
+  switch (failure._tag) {
+    case "TaskBlockCycle":
+      return Effect.fail(HOSTED_REFUSAL.TASK_BLOCK_CYCLE);
+    case "TaskBlockSelf":
+    case "TaskBlockAcrossWorkspaces":
+      return Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    case "TaskParentCycle":
+      return Effect.fail(HOSTED_REFUSAL.TASK_PARENT_CYCLE);
+    case "TaskParentRepositoryDiffers":
+      return Effect.fail(HOSTED_REFUSAL.CHILD_REPOSITORY_LOCKED);
+    case "TaskParentUnreached":
+      return Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    default:
+      return hostedStoreOrUnavailable(Effect.fail(failure));
+  }
+}
+
+/**
  * The block a change names, written for the account: added or taken away,
- * the plan the path names on the side the change says. Its refusals are
- * answered by name: a task blocking itself and a task of another workspace
- * are invalid, a block closing a cycle is refused as one, and the store out
- * of reach is unavailable. Nothing where the account reaches either task not.
+ * the plan the path names on the side the change says, its refusals
+ * answered by name (`relationRefused`). Nothing where the account reaches
+ * either task not.
  */
 const blockWritten = (
   userId: string,
@@ -477,15 +509,7 @@ const blockWritten = (
   > = change.change === TASK_BLOCK_CHANGE.ADD
     ? addTaskBlock(userId, pair)
     : removeTaskBlock(userId, pair);
-  return written.pipe(
-    Effect.catch((failure) =>
-      failure._tag === "TaskBlockCycle"
-        ? Effect.fail(HOSTED_REFUSAL.TASK_BLOCK_CYCLE)
-        : failure._tag === "TaskBlockSelf" || failure._tag === "TaskBlockAcrossWorkspaces"
-          ? Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)
-          : hostedStoreOrUnavailable(Effect.fail(failure)),
-    ),
-  );
+  return Effect.catch(written, relationRefused);
 };
 
 /** The plans resource, every procedure to a signed-in caller. */
@@ -757,6 +781,44 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const { userId } = context;
       const taskId = yield* pathUuid(input.params.id);
       const written = yield* blockWritten(userId, taskId, input.body);
+      if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const opened = yield* hostedStoreOrUnavailable(readTaskPlan(userId, taskId));
+      if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const { txid } = written.value;
+      return txid === undefined ? { plan: opened.value } : { plan: opened.value, txid };
+    }),
+
+    /**
+     * The plan's parent set, or cleared with null (`setTaskParent`), its
+     * refusals answered by name (`relationRefused`), and answered with the
+     * plan as it then stands and the transaction the parent was written in,
+     * none where it stood as asked already.
+     */
+    parent: plans.parent.effect(function* ({ input, context }) {
+      const { userId } = context;
+      const taskId = yield* pathUuid(input.params.id);
+      const written = yield* Effect.catch(
+        setTaskParent(userId, taskId, input.body.parentTaskId),
+        relationRefused,
+      );
+      if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const { task: plan, txid } = written.value;
+      return txid === undefined ? { plan } : { plan, txid };
+    }),
+
+    /**
+     * One relation of the plan moved to another kind in one transaction
+     * (`moveTaskRelation`), its refusals answered by name
+     * (`relationRefused`), and answered as a block's change is: the plan as
+     * it then stands, and the transaction the move was written in.
+     */
+    relation: plans.relation.effect(function* ({ input, context }) {
+      const { userId } = context;
+      const taskId = yield* pathUuid(input.params.id);
+      const written = yield* Effect.catch(
+        moveTaskRelation(userId, taskId, input.body),
+        relationRefused,
+      );
       if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const opened = yield* hostedStoreOrUnavailable(readTaskPlan(userId, taskId));
       if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);

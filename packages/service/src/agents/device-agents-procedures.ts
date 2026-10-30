@@ -1,5 +1,5 @@
 /**
- * device-agents-procedures.ts -- a local agent's Mac registers and beats, takes its agents' lines and its tools' requests, and says what came of each.
+ * device-agents-procedures.ts -- a local agent's Mac registers and beats, takes its agents' lines and its tools' requests, and says what came of each; a box pairs with a code.
  *
  * Every procedure but the enrolls reads the device's bearer alone, never a
  * browser's session cookie (`deviceMiddleware`), since a line carries a
@@ -38,6 +38,19 @@
  * token it first carried answers that line again, and a settle or an answer keeps what the
  * Mac said of a row it claimed.
  *
+ * A box may pair with a code instead of a token. Its start
+ * (`POST /api/device-agents/pairing`) reads no credential, only its
+ * daemon's version against the floor (`pairingHostMiddleware`), and is
+ * braked per address in this instance, since a start costs little and
+ * lapses; it opens a pairing under a fresh code and answers the poll
+ * secret, answered this once and kept as a hash, the code, and the link
+ * on the origin the request reached that opens it. Its poll
+ * (`POST /api/device-agents/pairing/poll`) reads the poll secret as its
+ * bearer alone (`pollSecretMiddleware`), and answers where the pairing
+ * stands (`@luke/database/models/host-pairing-store`): once a member
+ * approved it, the host's id and a device secret minted for it, this once,
+ * counted as an install as an enroll is.
+ *
  * A save of an agent's state (`POST /api/device-agents/state/save`) is
  * granted one upload to a fresh path of the store (`./agent-state-blobs.ts`),
  * the grant kept, and the agent's state key, minted where it has none, and
@@ -55,6 +68,7 @@
  * and its size.
  */
 
+import { isIP } from "node:net";
 import {
   type AgentStateGeneration,
   commitAgentState,
@@ -71,6 +85,12 @@ import {
 } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import {
+  HOST_PAIRING,
+  type HostPairingOpening,
+  openHostPairing,
+  pollHostPairing,
+} from "@luke/database/models/host-pairing-store";
+import {
   enrollHost,
   enrollOwnDevice,
   HOST_ENROLL_REFUSAL,
@@ -81,12 +101,19 @@ import {
   DEVICE_CAPABILITY,
   type deviceAgentStateCommitRequestSchema,
 } from "@luke/features/device-agent-wire";
-import { HOST_WIRE, type OwnDeviceEnrollRequest } from "@luke/features/host-wire";
-import { Clock, Effect, Option, Redacted, Result } from "effect";
+import {
+  HOST_PAIRING_POLL_STATUS,
+  HOST_WIRE,
+  hostConnectPath,
+  type OwnDeviceEnrollRequest,
+  shownHostUserCode,
+} from "@luke/features/host-wire";
+import { Clock, Duration, Effect, Option, Redacted, Result } from "effect";
 import {
   admittedHostVersion,
   hostSecretHash,
   mintHostSecret,
+  mintHostUserCode,
   presentedHostVersion,
 } from "../auth/device-secret.js";
 import { HostedEnvironment } from "../environment.js";
@@ -97,6 +124,7 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
+import { makeRateBrake } from "../http/rate-brake.js";
 import {
   actsForDevice,
   bearerOnlyMiddleware,
@@ -104,6 +132,8 @@ import {
   deviceMiddleware,
   hosted,
   installTokenMiddleware,
+  pairingHostMiddleware,
+  pollSecretMiddleware,
 } from "../orpc/base.js";
 import { AgentStateBlobs, freshAgentStatePath } from "./agent-state-blobs.js";
 import {
@@ -120,6 +150,51 @@ export interface DeviceAgentsProcedureSeams {
 }
 
 const DONE = { done: true } as const;
+
+/** The headers the platform names a request's address in: Vercel sets both and overwrites any a caller sent, so no caller names its own. */
+const ADDRESS_HEADER = {
+  REAL_IP: "x-real-ip",
+  FORWARDED_FOR: "x-forwarded-for",
+} as const;
+
+/** The brake's key for every start whose address the platform did not name, as on a machine of a developer's own. */
+const UNNAMED_ADDRESS = "unnamed";
+
+/** How many pairings one address may start: ten in ten minutes, a box started again several times over with room to spare. */
+const PAIRING_START_BRAKE = {
+  windowMs: 10 * 60 * 1_000,
+  maxRequestsPerWindow: 10,
+  maxTrackedUsers: 10_000,
+};
+
+/** How many fresh codes a start tries, each one a standing pairing already showed, before it is answered unavailable. */
+const USER_CODE_TRIES = 3;
+
+/** The address a request came from as the platform named it, or nothing where it named none that reads as one. */
+function requestAddressOf(request: Request): string | undefined {
+  const named =
+    request.headers.get(ADDRESS_HEADER.REAL_IP) ??
+    request.headers.get(ADDRESS_HEADER.FORWARDED_FOR)?.split(",")[0];
+  const address = named?.trim() ?? "";
+  return isIP(address) === 0 ? undefined : address;
+}
+
+/** The link that opens the code given on the origin the request reached, so a Preview's box links its own. */
+function connectUrlOf(request: Request, userCode: string): string {
+  return new URL(hostConnectPath(userCode), new URL(request.url).origin).href;
+}
+
+/** A pairing opened under a fresh code, answering the code; another is minted where a standing pairing shows the one tried. */
+const openedPairing = (opening: Omit<HostPairingOpening, "userCode">) =>
+  Effect.gen(function* () {
+    for (let tried = 0; tried < USER_CODE_TRIES; tried += 1) {
+      const userCode = mintHostUserCode();
+      const opened = yield* hostedStoreOrUnavailable(openHostPairing({ ...opening, userCode }));
+      if (Option.isSome(opened)) return userCode;
+    }
+    yield* Effect.logError("no fresh pairing code was free after every try");
+    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  });
 
 /** The device named, where the caller may act for it (`actsForDevice`); not found otherwise. */
 const ownDevice = (caller: DeviceCaller, deviceId: string) =>
@@ -202,13 +277,48 @@ const committed = (userId: string, commit: typeof deviceAgentStateCommitRequestS
 const keptOrNotFound = (kept: boolean) =>
   kept ? Effect.succeed(DONE) : Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
 
-/** The device-agents resource: the enroll on an install token, and every other procedure on the device's bearer. */
+/** The device-agents resource: the enroll on an install token, a pairing's start on no credential and its poll on its poll secret, and every other procedure on the device's bearer. */
 export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
   const deviceAgents = hosted.deviceAgents.use(deviceMiddleware(seams.resolveUserId));
   // Note that each caller middleware is used on the resource rather than its procedure, so it refuses before the input is read, as every procedure's does.
   const enrolling = hosted.deviceAgents.use(installTokenMiddleware);
   const signedIn = hosted.deviceAgents.use(bearerOnlyMiddleware(seams.resolveUserId));
+  const pairing = hosted.deviceAgents.use(pairingHostMiddleware);
+  const polling = hosted.deviceAgents.use(pollSecretMiddleware);
+  const startBrake = makeRateBrake(PAIRING_START_BRAKE);
   return {
+    startPairing: pairing.startPairing.effect(function* ({ context, input }) {
+      const ip = requestAddressOf(context.request);
+      if (!(yield* startBrake.check(ip ?? UNNAMED_ADDRESS))) {
+        return yield* Effect.fail(HOSTED_REFUSAL.QUOTA_EXHAUSTED);
+      }
+      const poll = mintHostSecret(HOST_WIRE.POLL_SECRET_PREFIX);
+      const userCode = yield* openedPairing({
+        pollSecretHash: poll.hash,
+        ...input,
+        version: context.hostVersion,
+        ip: ip ?? null,
+      });
+      return {
+        pollSecret: poll.secret,
+        userCode: shownHostUserCode(userCode),
+        url: connectUrlOf(context.request, userCode),
+        expiresInMs: Duration.toMillis(HOST_PAIRING.LIFETIME),
+        intervalMs: Duration.toMillis(HOST_PAIRING.POLL_INTERVAL),
+      };
+    }),
+    pollPairing: polling.pollPairing.effect(function* ({ context }) {
+      // Note that a secret is minted for every poll, and the store keeps its hash only where it hands the pairing over.
+      const minted = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
+      const polled = yield* hostedStoreOrUnavailable(
+        pollHostPairing(hostSecretHash(context.pollSecret), minted.hash),
+      );
+      if (polled.status !== HOST_PAIRING_POLL_STATUS.APPROVED) return { status: polled.status };
+      yield* recordServerEvent(SERVER_EVENT.HOST_INSTALL, polled.userId, {
+        kind: SERVER_HOST_KIND.LUKE_HOST,
+      });
+      return { status: polled.status, deviceId: polled.deviceId, deviceSecret: minted.secret };
+    }),
     enroll: enrolling.enroll.effect(function* ({ context, input }) {
       const { deviceId, ...box } = input;
       const minted = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);

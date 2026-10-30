@@ -37,11 +37,17 @@ const THREAD: PlanCommentThread = {
   ],
 };
 
-test("a thread is handed over as its quoted words, its section's name, and its comments, and never the plan's text", () => {
-  const message = commentAskMessage({ taskName: "Invites", thread: THREAD, sender: "Dean" });
+test("a thread is handed over as its quoted words, its section's name, its comments, and the task a reply names, and never the plan's text", () => {
+  const message = commentAskMessage({
+    taskId: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
+    taskName: "Invites",
+    thread: THREAD,
+    sender: "Dean",
+  });
 
   assert.ok(message.startsWith('Dean sent you a comment thread on the plan "Invites"'));
   assert.ok(message.includes('On: "a retry" (section "Testing")'));
   assert.ok(message.includes("Dean: Is this covered already?"));
   assert.ok(message.includes("Read the thread, then answer"));
+  assert.ok(message.includes('of task "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b"'));
 });

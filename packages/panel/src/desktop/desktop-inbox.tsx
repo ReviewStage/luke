@@ -47,7 +47,7 @@ import {
   type InboxListed,
   itemWorkspaceId,
 } from "../tasks/inbox-model.js";
-import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
+import { useInboxPager } from "../tasks/inbox-pager.js";
 import { type InboxNewThread, InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
 import { useMoveThreadDialog } from "../tasks/move-thread-dialog.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
@@ -346,7 +346,7 @@ export const DesktopInbox = memo(function DesktopInbox({
   );
   const timeOpen = useInboxItemOpenSpan(chosen?.item.id, live.read);
   useInboxOpenSpan(listedRows.length);
-  // A row's press and Next's open their item alike, the keyboard following it.
+  // A row's press opens its item, the keyboard following it.
   const open = (listed: InboxListed) => {
     timeOpen(listed.item.id);
     choose(listed);
@@ -359,16 +359,7 @@ export const DesktopInbox = memo(function DesktopInbox({
     choose(listed);
     columns.onStep();
   };
-  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
-    shown: tasks.shown,
-  });
-  const next = inboxNext(
-    steps,
-    chosen,
-    { models: named.models, readerId: tasks.me },
-    open,
-    direction,
-  );
+  const pager = useInboxPager(steps, list, chosen?.item.id, step, { shown: tasks.shown });
   // Where the chosen item's words are read: its plan's workspace and repository, or, with no plan, its agent's own.
   const place = chosen === undefined ? undefined : answerPlace(chosen, agents, tasks);
   // Where the chosen item's links are written: under its own workspace, by slug once the workspaces are read.
@@ -390,6 +381,7 @@ export const DesktopInbox = memo(function DesktopInbox({
     ? {
         channelOf: landsIn,
         workspaceId: tasks.workspace?.id,
+        onOpenChannel: view.onOpenChannel,
         onStart: (item, start) =>
           startInboxThread({
             agentId: item.agentId,
@@ -571,7 +563,6 @@ export const DesktopInbox = memo(function DesktopInbox({
               hidden={columns.shown === INBOX_COLUMNS.LIST}
               onBack={columns.onBack}
               pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
-              next={next}
               mentions={mentions}
               channelName={channel?.name}
               newThread={newThread}

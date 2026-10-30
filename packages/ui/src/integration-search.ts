@@ -34,6 +34,8 @@ const INTEGRATION_KEYWORDS = {
   [INTEGRATION_PROVIDER.POSTHOG]: "analytics events feature flags experiments insights",
   [INTEGRATION_PROVIDER.SENTRY]: "errors crashes exceptions monitoring traces issues",
   [INTEGRATION_PROVIDER.SLACK]: "chat messages channels threads team",
+  [INTEGRATION_PROVIDER.STRIPE]:
+    "payments billing subscriptions invoices customers refunds checkout revenue",
   [INTEGRATION_PROVIDER.SUPABASE]: "postgres database sql auth storage edge functions",
   [INTEGRATION_PROVIDER.VERCEL]: "deployments hosting logs domains projects",
   [INTEGRATION_PROVIDER.YCOMBINATOR]: "yc bookface startups founders investors hiring",

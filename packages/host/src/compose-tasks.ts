@@ -37,6 +37,7 @@ import {
   type TasksBlockAnswer,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabsAnswer,
+  type TasksChangeRelationAnswer,
   type TasksCommentAnswer,
   type TasksCommentsAnswer,
   type TasksDocument,
@@ -54,6 +55,7 @@ import {
   type TasksRepositoriesAnswer,
   type TasksRevisionAnswer,
   type TasksRevisionsAnswer,
+  type TasksSetParentAnswer,
   type TasksSetRepositoryAnswer,
   type TasksSkillsAnswer,
   type TasksStartAnswer,
@@ -74,6 +76,7 @@ import {
   tasksBlockParamsSchema,
   tasksBrowserTabOpenParamsSchema,
   tasksBrowserTabsParamsSchema,
+  tasksChangeRelationParamsSchema,
   tasksCommentActParamsSchema,
   tasksCommentStartParamsSchema,
   tasksCommentsParamsSchema,
@@ -92,6 +95,7 @@ import {
   tasksRepositoriesParamsSchema,
   tasksRevisionParamsSchema,
   tasksRevisionsParamsSchema,
+  tasksSetParentParamsSchema,
   tasksSetRepositoryParamsSchema,
   tasksSetStandingParamsSchema,
   tasksSkillsParamsSchema,
@@ -316,6 +320,8 @@ export type TasksClient = Pick<
   | "rename"
   | "mark"
   | "block"
+  | "setParent"
+  | "changeRelation"
   | "pinRepository"
   | "sidebarLive"
   | "writeTaskSection"
@@ -1484,6 +1490,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ...(task.number === undefined ? undefined : { number: task.number }),
       assigneeId: task.assignee?.userId ?? null,
       assigneeName: task.assignee?.name ?? null,
+      parentTaskId: task.parentTaskId ?? null,
       pinnedAt: task.pinnedAt ?? null,
       pinPosition: task.pinPosition ?? null,
       completedAt: task.completedAt ?? null,
@@ -2431,6 +2438,74 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               carried<TasksBlockAnswer>({
                 blockedBy: task.blockedBy ?? [],
                 blocks: task.blocks ?? [],
+              }),
+              changed.answer.txid,
+              takeAnswered(task),
+            ] as const;
+          }),
+        );
+      }),
+    // The service answers the task with its parent as it then stands, so the
+    // list's row re-nests it and the open document takes it in place, and
+    // nothing is read again.
+    [GATEWAY_METHOD.TASKS_SET_PARENT]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksSetParentParamsSchema,
+          params,
+          "a parent change names the task and its parent, or null for none",
+        );
+        if (!gate()) {
+          return carried<TasksSetParentAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        }
+        return yield* writtenThenListed(
+          Effect.gen(function* () {
+            const changed = yield* served(
+              client.setParent(read.taskId, { parentTaskId: read.parentTaskId }),
+            );
+            if (!changed.ok) {
+              return [
+                carried<TasksSetParentAnswer>({ failure: changed.failure }),
+                undefined,
+              ] as const;
+            }
+            const { task } = changed.answer;
+            return [
+              carried<TasksSetParentAnswer>({ parentTaskId: task.parentTaskId ?? null }),
+              changed.answer.txid,
+              takeAnswered(task),
+            ] as const;
+          }),
+        );
+      }),
+    // The service answers the task with its relations as they then stand, so
+    // the list's row and the open document take them in place and nothing is
+    // read again.
+    [GATEWAY_METHOD.TASKS_CHANGE_RELATION]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksChangeRelationParamsSchema,
+          params,
+          "a relation change names the task, the other task, and the kinds it moves between",
+        );
+        if (!gate()) {
+          return carried<TasksChangeRelationAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        }
+        return yield* writtenThenListed(
+          Effect.gen(function* () {
+            const changed = yield* served(client.changeRelation(read.taskId, read.relation));
+            if (!changed.ok) {
+              return [
+                carried<TasksChangeRelationAnswer>({ failure: changed.failure }),
+                undefined,
+              ] as const;
+            }
+            const { task } = changed.answer;
+            return [
+              carried<TasksChangeRelationAnswer>({
+                blockedBy: task.blockedBy ?? [],
+                blocks: task.blocks ?? [],
+                parentTaskId: task.parentTaskId ?? null,
               }),
               changed.answer.txid,
               takeAnswered(task),

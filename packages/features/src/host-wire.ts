@@ -23,6 +23,16 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * floor is refused as needing an upgrade (`hostUpgradeNeededDataSchema`).
  * A host has no developer's git login, so it asks the same way for a GitHub
  * token for each agent it runs (`hostGithubTokenRequestSchema`).
+ *
+ * A box may pair with a code instead of an install token. It starts a
+ * pairing with no credential (`hostPairingStartRequestSchema`) and is
+ * answered a poll secret, a code to show, and the link that opens it on the
+ * service's own origin (`hostConnectPath`); it polls on that secret
+ * (`hostPairingPollAnswerSchema`) while a signed-in member opens the link
+ * and approves or denies the code (`hostPairingCodeRequestSchema`). The
+ * first poll after an approve is answered the box's device id and secret,
+ * this once, and the box calls on that secret from then on as an enrolled
+ * one does.
  */
 
 export const HOST_WIRE = {
@@ -36,7 +46,46 @@ export const HOST_WIRE = {
   INSTALL_SCRIPT_PATH: "/install.sh",
   /** The route that answers the install script, with the release and the origin it was asked on written in (`@luke/service/agents/host-install-script-app`). */
   INSTALL_SCRIPT_ROUTE: "/api/hosts/install-script",
+  /** What every poll secret begins with: the bearer a pairing box polls on, which names its pairing and nothing else. */
+  POLL_SECRET_PREFIX: "lkp_",
+  /** The path of the page a pairing's link opens on the service's own origin, its code the segment after it (`hostConnectPath`), where a member approves or denies it. */
+  CONNECT_PATH: "/connect",
 } as const;
+
+/**
+ * A pairing's user code: eight letters of RFC 8628's twenty consonants, so
+ * no code spells a word or holds a letter read as another, shown as two
+ * groups of four (`shownHostUserCode`).
+ */
+export const HOST_USER_CODE = {
+  ALPHABET: "BCDFGHJKLMNPQRSTVWXZ",
+  LENGTH: 8,
+  /** What stands between a shown code's two groups. */
+  SEPARATOR: "-",
+} as const;
+
+/** A user code as its letters alone. */
+const USER_CODE_LETTERS = new RegExp(
+  `^[${HOST_USER_CODE.ALPHABET}]{${HOST_USER_CODE.LENGTH}}$`,
+  "u",
+);
+
+/** A code as typed or as its link names it, read whatever its case, dashes, and spaces: its eight letters, upper case; nothing where it is no code. */
+export function hostUserCodeOf(typed: string): string | undefined {
+  const letters = typed.replace(/[\s-]/gu, "").toUpperCase();
+  return USER_CODE_LETTERS.test(letters) ? letters : undefined;
+}
+
+/** A code's eight letters as a box shows them and its link names them: `XXXX-XXXX`. */
+export function shownHostUserCode(code: string): string {
+  const half = HOST_USER_CODE.LENGTH / 2;
+  return `${code.slice(0, half)}${HOST_USER_CODE.SEPARATOR}${code.slice(half)}`;
+}
+
+/** The path of the page that approves the code given, on the service's own origin. */
+export function hostConnectPath(code: string): string {
+  return `${HOST_WIRE.CONNECT_PATH}/${shownHostUserCode(code)}`;
+}
 
 /** A daemon's version, as `MAJOR.MINOR.PATCH` with no leading zeros. */
 const HOST_VERSION = /^(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})$/u;
@@ -154,6 +203,113 @@ export const ownDeviceEnrollRequestSchema = EffectSchema.Struct({
 });
 
 export type OwnDeviceEnrollRequest = typeof ownDeviceEnrollRequestSchema.Type;
+
+/**
+ * A pairing started (POST), with no credential: the box's name (its
+ * hostname), platform, and architecture, its daemon's version riding in
+ * `HOST_WIRE.VERSION_HEADER` as on every call of a host's. The service
+ * mints the device's id once a member approves; the box never names one.
+ */
+export const hostPairingStartRequestSchema = EffectSchema.Struct(enrollingMachineFields);
+
+export type HostPairingStartRequest = typeof hostPairingStartRequestSchema.Type;
+
+/**
+ * What a start answers: the poll secret the box polls on as its bearer,
+ * answered this once and kept by the service only as a hash; the code to
+ * show, as `XXXX-XXXX`; the link that opens it; how long the code may be
+ * approved, and how often to poll, both in milliseconds from the answer.
+ */
+export const hostPairingStartAnswerSchema = EffectSchema.Struct({
+  pollSecret: secretOf(HOST_WIRE.POLL_SECRET_PREFIX),
+  userCode: EffectSchema.String,
+  url: EffectSchema.String,
+  expiresInMs: countedNumber,
+  intervalMs: countedNumber,
+});
+
+export type HostPairingStartAnswer = typeof hostPairingStartAnswerSchema.Type;
+
+/** Where a pairing stands as its poll answers it. */
+export const HOST_PAIRING_POLL_STATUS = {
+  /** No member has approved or denied the code yet; poll again after the interval. */
+  PENDING: "pending",
+  /** The poll came sooner than the interval after the last; wait longer between polls. */
+  SLOW_DOWN: "slow-down",
+  /** A member approved the code: the device's id and secret, answered this once. */
+  APPROVED: "approved",
+  /** A member denied the code, or removed the host before the box collected it. */
+  DENIED: "denied",
+  /** The code lapsed unapproved, or the poll secret names no pairing that stands, one handed over included. */
+  EXPIRED: "expired",
+} as const;
+
+/**
+ * What a poll answers (POST, on the poll secret as its bearer and no body):
+ * where the pairing stands, and once approved, the device's id and its
+ * secret, which the box calls on from then on.
+ */
+export const hostPairingPollAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    status: EffectSchema.Literals([
+      HOST_PAIRING_POLL_STATUS.PENDING,
+      HOST_PAIRING_POLL_STATUS.SLOW_DOWN,
+      HOST_PAIRING_POLL_STATUS.DENIED,
+      HOST_PAIRING_POLL_STATUS.EXPIRED,
+    ]),
+  }),
+  EffectSchema.Struct({
+    status: EffectSchema.Literal(HOST_PAIRING_POLL_STATUS.APPROVED),
+    deviceId: wireUuidSchema,
+    deviceSecret: secretOf(HOST_WIRE.DEVICE_SECRET_PREFIX),
+  }),
+]);
+
+export type HostPairingPollAnswer = typeof hostPairingPollAnswerSchema.Type;
+
+/**
+ * A pairing read, approved, or denied by its code (POST), on the member's
+ * own sign-in or browser session: the code as typed or as its link names
+ * it, read whatever its case and dash (`hostUserCodeOf`). It rides in the
+ * body rather than the address, so no log of addresses keeps it.
+ */
+export const hostPairingCodeRequestSchema = EffectSchema.Struct({
+  code: EffectSchema.String.check(
+    EffectSchema.isMaxLength(32),
+    EffectSchema.makeFilter(
+      (value: string) => hostUserCodeOf(value) !== undefined || "a code of eight letters",
+    ),
+  ),
+});
+
+export type HostPairingCodeRequest = typeof hostPairingCodeRequestSchema.Type;
+
+/**
+ * A pending pairing as the approve screen shows it, so a member sees what
+ * they would let run their agents: the box's name, platform, and
+ * architecture as it named them, the address its start came from, none
+ * where the service read none, and when its code lapses, in epoch
+ * milliseconds.
+ */
+export const hostPairingAnswerSchema = EffectSchema.Struct({
+  name: EffectSchema.String,
+  platform: EffectSchema.Literals(Object.values(DEVICE_PLATFORM)),
+  arch: EffectSchema.Literals(Object.values(DEVICE_ARCH)),
+  ip: EffectSchema.NullOr(EffectSchema.String),
+  expiresAt: countedNumber,
+});
+
+export type HostPairingAnswer = typeof hostPairingAnswerSchema.Type;
+
+/** What an approve answers: the id of the host it made, listed among the member's hosts from now on. */
+export const hostPairingApproveAnswerSchema = EffectSchema.Struct({ deviceId: wireUuidSchema });
+
+export type HostPairingApproveAnswer = typeof hostPairingApproveAnswerSchema.Type;
+
+/** What a held refusal of a read, an approve, or a deny carries beside its slug: when the account's guesses are taken again, in epoch milliseconds. */
+export const hostPairingHeldDataSchema = EffectSchema.Struct({
+  heldUntil: EffectSchema.optionalKey(EffectSchema.Number),
+});
 
 /** What an upgrade-needed refusal carries beside its slug: the lowest daemon version the service takes. */
 export const hostUpgradeNeededDataSchema = EffectSchema.Struct({

@@ -43,8 +43,9 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * plan a day ago that no save ever named is deleted, and the pull requests of
  * agents on a member's own GitHub token, which no webhook reaches, are polled
  * for what their agents are told of, and the native agents' image template
- * is moved on and the templates of older images deleted, and the device agents' saved
- * state no launch will restore again is deleted from its store. Each is bounded on its own, and the
+ * is moved on and the templates of older images deleted, the device agents' saved
+ * state no launch will restore again is deleted from its store, and the hosts' pairings
+ * whose code lapsed are deleted with the address each kept. Each is bounded on its own, and the
  * sweep runs them in turn, each kept from the others, so one that fails is
  * logged and the rest still run.
  */
@@ -52,7 +53,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
-/** The nineteen sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The twenty sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -92,10 +93,12 @@ interface MaintenanceSweeps {
   sweepAgentQueues: (now: number) => SweepRead<number>;
   /** Deletes the device agents' saved state superseded, of an agent gone, or past its retention, and the uploads no commit named, blob then row, a sweep's worth. */
   sweepAgentStates: (now: number) => SweepRead<AgentStateSweepOutcome>;
+  /** Deletes the hosts' pairings whose code lapsed, a sweep's worth, and the hosts approved whose boxes never collected their secret, answering how many pairings went. */
+  sweepHostPairings: (now: number) => SweepRead<number>;
 }
 
 /**
- * How a run is told to the sweep's cron monitor: around the nineteen sweeps once
+ * How a run is told to the sweep's cron monitor: around the twenty sweeps once
  * the call is the cron's own. A call that is not the cron's, or one a
  * deployment without its secret cannot authenticate, is not a run and tells
  * it nothing, so a stranger cannot report a run that failed.
@@ -150,6 +153,8 @@ interface MaintenanceSweepAnswer {
   agentQueues: Swept<number>;
   /** What the sweep over the device agents' saved state did. */
   agentStates: Swept<AgentStateSweepOutcome>;
+  /** Hosts' pairings whose code lapsed, deleted. */
+  hostPairings: Swept<number>;
 }
 
 /** What a sweep that failed answers in its place: the failure is logged, and the other sweeps run on. */
@@ -178,7 +183,7 @@ const isolated = <A>(name: string, sweep: SweepRead<A>): SweepRead<Swept<A>> =>
     ),
   );
 
-/** The nineteen sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
+/** The twenty sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
 const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
   sweeps: MaintenanceSweeps,
 ): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
@@ -209,6 +214,7 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     ),
     agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
     agentStates: yield* isolated("sweepAgentStates", sweeps.sweepAgentStates(now)),
+    hostPairings: yield* isolated("sweepHostPairings", sweeps.sweepHostPairings(now)),
   };
 });
 

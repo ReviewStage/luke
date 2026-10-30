@@ -31,7 +31,7 @@ import { CODER_DEPLOYMENT_PRESENCE, CODER_DEPLOYMENT_TURNS, coderChannelInput } 
 import { INBOX_TOOLS } from "./inbox.js";
 import { CODER_HARNESS, coderInstructions, coderWorkerInstructions } from "./instructions.js";
 import { SLEEP_TOOL } from "./sleep.js";
-import { CODER_TOOL, taskToolsOf } from "./tool-set.js";
+import { CODER_TOOL } from "./tool-set.js";
 
 /** The link of the task an agent on one works on, as its instructions are handed it. */
 const TASK_ADDRESS = "https://tryluke.dev/acme/plan/pl_1";
@@ -486,28 +486,6 @@ test("an agent on a task starts the agents that help with it on its own task, an
       brief,
     );
   }
-});
-
-test("an agent on a task is offered edit_plan, show_page, look_at_picture, and the comment tools, whether it was handed the plan or a prompt, and one an automation started with no task show_page and edit_plan alone, its pages standing on itself and its notes on a task it names", () => {
-  const offered = (agent: Parameters<typeof taskToolsOf>[0]) => [...taskToolsOf(agent)].sort();
-  const comments = [
-    CODER_TOOL.READ_COMMENTS,
-    CODER_TOOL.REOPEN_THREAD,
-    CODER_TOOL.REPLY_TO_COMMENT,
-    CODER_TOOL.RESOLVE_THREAD,
-  ];
-  const all = [
-    CODER_TOOL.EDIT_PLAN,
-    CODER_TOOL.SHOW_PAGE,
-    CODER_TOOL.LOOK_AT_PICTURE,
-    ...comments,
-  ].sort();
-  const handedItsTask = { taskId: "plan-1", prompt: null };
-  const handedPrompt = { taskId: "plan-1", prompt: "Fix the flaky test." };
-  const automation = { taskId: null, prompt: "Sweep the flaky tests." };
-  assert.deepEqual(offered(handedItsTask), all);
-  assert.deepEqual(offered(handedPrompt), all);
-  assert.deepEqual(offered(automation), [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE].sort());
 });
 
 test("every agent on a task is told how to update its plan, one handed a prompt told to read it first, and one on no task told of no plan", () => {

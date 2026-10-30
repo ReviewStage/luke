@@ -1359,6 +1359,28 @@ test("ticking the box's checkbox under an open question sets its options aside a
   assert.equal(box().getAttribute("aria-checked"), "false", "its box is a reply again");
 });
 
+test("a press on the channel's chip beside the box's checkbox opens the channel and leaves the box unticked", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  world.listedWorkspace = ACME;
+  answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
+  world.inboxes = new Map([[BILLING.id, [{ ...noticeOf(THRESHOLD), channelId: APP_CHANNEL.id }]]]);
+  const { page } = mount([], { chosen: ON_THRESHOLD });
+  await settle();
+
+  const box =
+    itemPane(page).querySelector<HTMLElement>('[role="checkbox"]') ??
+    assert.fail("the box offers a new thread");
+  const chip =
+    [...(box.closest("label")?.querySelectorAll("button") ?? [])].find(
+      (each) => each.textContent === APP_CHANNEL.name,
+    ) ?? assert.fail("the channel's chip is a button");
+  act(() => chip.click());
+  await settle();
+
+  assert.equal(box.getAttribute("aria-checked"), "false");
+  assert.equal(headTitle(page), `#${APP_CHANNEL.name}`);
+});
+
 test("words written in the box while its new thread starts stay in it once the thread has started", async () => {
   world.listedWorkspace = ACME;
   world.inboxes = new Map([[BILLING.id, [noticeOf(THRESHOLD)]]]);

@@ -1519,18 +1519,6 @@ export function needsYou(listed: InboxListed, readerId: string | undefined): boo
 }
 
 /**
- * Whether a listed item is one the reader is not done with, as the next
- * item that needs you steps to it: one that needs them (`needsYou`), or one
- * of theirs (`readersItem`) still unread, such as a settled thread a
- * teammate wrote on.
- */
-function toDo(listed: InboxListed, readerId: string | undefined): boolean {
-  return (
-    needsYou(listed, readerId) || (readersItem(listed.item, readerId) && isUnread(listed.item))
-  );
-}
-
-/**
  * Every holder's items that live in one channel, as an Inbox narrowed to it
  * lists and counts them, a holder left with none left out; and the item
  * `kept`, wherever it lives, so one opened from another channel stands
@@ -1731,37 +1719,6 @@ export function inboxEnds(
   const first = view.items[0];
   const last = view.items.at(-1);
   return first === undefined || last === undefined ? undefined : { first, last };
-}
-
-/** Which way the reader last stepped through the list, K up and J down, which Next follows. */
-export const INBOX_DIRECTION = {
-  UP: "up",
-  DOWN: "down",
-} as const;
-
-export type InboxDirection = (typeof INBOX_DIRECTION)[keyof typeof INBOX_DIRECTION];
-
-/**
- * The nearest row past the chosen one, the way the reader is moving, whose
- * item the reader is not done with (`toDo`);
- * none where nothing else is. Down it reads the rows below and wraps round
- * to the list's top; up, the rows above, nearest first, and wraps round
- * from the list's foot.
- */
-export function nextNeedingYou(
-  view: InboxListView,
-  chosen: string | undefined,
-  direction: InboxDirection = INBOX_DIRECTION.DOWN,
-): InboxListed | undefined {
-  const listed = view.items;
-  const at = listed.findIndex(({ item }) => item.id === chosen);
-  const below = listed.slice(at + 1);
-  const above = listed.slice(0, Math.max(at, 0));
-  const ahead =
-    direction === INBOX_DIRECTION.UP
-      ? [...above.reverse(), ...below.reverse()]
-      : [...below, ...above];
-  return ahead.find((listed) => toDo(listed, view.readerId) && listed.item.id !== chosen);
 }
 
 /** How many lines of the file a code block's card draws above and below the lines it points at. */

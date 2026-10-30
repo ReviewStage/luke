@@ -66,6 +66,8 @@ const DECLARED_TABLES = [
   "github_rate_hold",
   "github_repository_read",
   "host_install_token",
+  "host_pairing",
+  "host_pairing_guess",
   "hosted_usage",
   "inbox_item",
   "inbox_item_read",

@@ -178,6 +178,8 @@ export const FAILURE_SURFACE = {
   TASKS_READ: "tasks.read",
   TASKS_REFRESH: "tasks.refresh",
   TASK_BLOCK: "task.block",
+  TASK_PARENT: "task.parent",
+  TASK_RELATION: "task.relation",
   TASK_DELETE: "task.delete",
   TASK_DOCUMENT_READ: "task_document.read",
   TASK_MARK: "task.mark",

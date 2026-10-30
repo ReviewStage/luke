@@ -31,7 +31,7 @@ import {
   type InboxListed,
   listedItems,
 } from "../tasks/inbox-model.js";
-import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
+import { useInboxPager } from "../tasks/inbox-pager.js";
 import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
 import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
@@ -141,7 +141,7 @@ export function SideInboxTab({
         });
   const choose = ({ item }: InboxListed) => setAsked(item.id);
   const timeOpen = useInboxItemOpenSpan(chosen?.item.id, inbox.read);
-  // A row's press and Next's open their item alike, the keyboard following it.
+  // A row's press opens its item, the keyboard following it.
   const open = (listed: InboxListed) => {
     timeOpen(listed.item.id);
     choose(listed);
@@ -173,10 +173,7 @@ export function SideInboxTab({
     choose(listed);
     columns.onStep();
   };
-  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
-    shown,
-  });
-  const next = inboxNext(steps, chosen, { models: agents.models, readerId }, open, direction);
+  const pager = useInboxPager(steps, list, chosen?.item.id, step, { shown });
   return (
     <section
       ref={columns.ref}
@@ -242,7 +239,6 @@ export function SideInboxTab({
           hidden={columns.shown === INBOX_COLUMNS.LIST}
           onBack={columns.onBack}
           pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
-          next={next}
           doors={{ ...doors, onMark: marks.onMark, onClose: closeItem }}
         />
       )}
