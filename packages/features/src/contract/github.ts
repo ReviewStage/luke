@@ -76,7 +76,8 @@ const numberQuerySchema = EffectSchema.String.pipe(
   ),
 );
 
-const numberedQuerySchema = EffectSchema.Struct({
+/** One pull request or issue of a repository, as a read with no plan names it: the repository's place and the number. */
+export const numberedQuerySchema = EffectSchema.Struct({
   ...repositoryPlaceQuery,
   [GITHUB_REPOSITORIES_QUERY.NUMBER]: numberQuerySchema,
 });
