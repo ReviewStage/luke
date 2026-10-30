@@ -91,7 +91,7 @@ test("the Tasks head carries its ⋯ and View options, and its ⋯, a right-clic
     [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(
       (each) => each.textContent,
     );
-  const escape = () =>
+  const closeMenu = () =>
     act(() => {
       document.activeElement?.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
@@ -102,7 +102,7 @@ test("the Tasks head carries its ⋯ and View options, and its ⋯, a right-clic
     head.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
   });
   assert.deepEqual(offered(), ["New section…"]);
-  escape();
+  closeMenu();
 
   const more =
     head.querySelector<HTMLButtonElement>('button[aria-label="Tasks actions"]') ??
