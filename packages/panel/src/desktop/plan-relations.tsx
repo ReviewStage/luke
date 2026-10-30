@@ -83,6 +83,9 @@ const RELATIONS_NOUN = { one: "relation", many: "relations" } as const;
 const CHANGE_RELATION = "Change relation";
 const REMOVE_RELATION = "Remove relation";
 
+/** What a related task the list does not hold yet is called on its row. */
+const UNLISTED_TASK_NAME = "Task";
+
 /** The words a sub-task's fold is named by, before its name. */
 const SUB_TASKS_OF = "Sub-tasks of";
 
@@ -336,15 +339,29 @@ function subTaskRows(
   return rows;
 }
 
-/** The tasks a side of the task's blocks names, as the list holds them; one it does not hold yet is left out until it does. */
+/**
+ * The tasks a side of the task's blocks names, as the list holds them. Note
+ * that one the list does not hold yet, while it is still read or after a
+ * read failed, still stands, named "Task" in the task's own workspace until
+ * the list names it, because the open document is read apart from the list
+ * and a relation it holds must not vanish meanwhile.
+ */
 function blockTasks(
+  task: Task,
   byId: ReadonlyMap<string, TaskSummary>,
   ids: readonly string[] | undefined,
 ): readonly TaskSummary[] {
-  return (ids ?? []).flatMap((id) => {
-    const listed = byId.get(id);
-    return listed === undefined ? [] : [listed];
-  });
+  return (ids ?? []).map(
+    (id) =>
+      byId.get(id) ?? {
+        id,
+        workspaceId: task.workspaceId,
+        name: UNLISTED_TASK_NAME,
+        repository: null,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+  );
 }
 
 /**
@@ -377,8 +394,8 @@ export function PlanRelations({
   const count = subTaskCount(subTasksOf(tasks.tasks, task.id));
   const byId = new Map(tasks.tasks.map((each) => [each.id, each]));
   const sides = [
-    { kind: TASK_RELATION_KIND.BLOCKED_BY, related: blockTasks(byId, task.blockedBy) },
-    { kind: TASK_RELATION_KIND.BLOCKS, related: blockTasks(byId, task.blocks) },
+    { kind: TASK_RELATION_KIND.BLOCKED_BY, related: blockTasks(task, byId, task.blockedBy) },
+    { kind: TASK_RELATION_KIND.BLOCKS, related: blockTasks(task, byId, task.blocks) },
   ] as const;
   const relations: RelatedTaskRow[] = sides.flatMap(({ kind, related }) =>
     related.map((other) => {

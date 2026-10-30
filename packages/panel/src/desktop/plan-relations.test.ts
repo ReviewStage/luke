@@ -131,14 +131,15 @@ test("a sub-task's own stand under it once its fold opens, and a task with no re
   assert.deepEqual(rowIds(container, "Sub-tasks"), ["t-2", "t-3"]);
 });
 
-test("picking another kind on a relation's pill moves it in one call, and Remove relation takes the block away", () => {
+test("a relation stands while the list does not hold its task, and picking another kind on its pill moves it in one call, and Remove relation takes the block away", () => {
   const sent: { changes: TaskRelationChangeRequest[]; removed: [TaskBlockRelation, string][] } = {
     changes: [],
     removed: [],
   };
-  const container = draw([summary("t-5", 5)], { blockedBy: ["t-5"] }, sent);
+  const container = draw([summary("t-5", 5)], { blockedBy: ["t-5"], blocks: ["t-9"] }, sent);
   assert.equal(container.querySelector("ul[aria-label='Sub-tasks']"), null);
-  assert.deepEqual(rowIds(container, "Relations"), ["t-5"]);
+  // Note that a task the list does not hold yet still stands, so a list still read hides no relation.
+  assert.deepEqual(rowIds(container, "Relations"), ["t-5", "t-9"]);
   const pill = () =>
     container.querySelector<HTMLButtonElement>("button[aria-label='Relation: Blocked by']");
 
