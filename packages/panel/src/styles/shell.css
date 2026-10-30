@@ -361,6 +361,56 @@
   padding-top: var(--luke-row-inset);
 }
 
+/* Under the window's title bar the Inbox stands no row on the frame: the bar
+   names it, the list's acts end its search row (`inbox-list.tsx`), and its
+   sheet starts under the bar. What the item's row held, its path and its ⋯,
+   stands as its pane's first line in the sheet, as tall as the search row
+   beside it, so the two columns' first lines read as one line. The line
+   parting them runs from the sheet's top, and the find bar stands under
+   that first line as it stood under the row. */
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell[data-title-bar="true"]
+  > .desktop-main
+  .desktop-task[data-page="inbox"] {
+  --inbox-head-height: calc(var(--luke-control-height) + 2 * var(--luke-row-inset));
+}
+
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell[data-title-bar="true"]
+  > .desktop-main
+  .desktop-task[data-page="inbox"]
+  > .page-find::before {
+  top: 0;
+}
+
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell[data-title-bar="true"]
+  > .desktop-main
+  .desktop-task[data-page="inbox"]
+  .inbox-view[data-columns="both"]
+  .inbox-tasks::after {
+  top: 0;
+}
+
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell[data-title-bar="true"]
+  > .desktop-main
+  .desktop-task[data-page="inbox"]
+  .inbox-view-items
+  > .luke-toolbar {
+  --luke-toolbar-height: var(--inbox-head-height);
+  --luke-toolbar-block-inset: var(--luke-row-inset);
+}
+
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell[data-title-bar="true"]
+  > .desktop-main
+  .desktop-task[data-page="inbox"]
+  > .page-find
+  > .find-bar {
+  top: calc(var(--inbox-head-height) + var(--luke-space-8));
+}
+
 /* The sheet's top -----------------------------------------------------------
 
    The sheet clips nothing (above), so a bar's fill standing in its top

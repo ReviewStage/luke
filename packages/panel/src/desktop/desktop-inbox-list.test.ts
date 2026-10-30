@@ -1578,10 +1578,11 @@ test("the list's search stands under the Inbox's head, its name and buttons neve
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const title = headTitle(page);
+  // The list's acts end its search row, after the field, whose own clear is the field's.
   const buttons = () =>
-    [...(page.querySelector(".inbox-tasks > .luke-toolbar")?.querySelectorAll("button") ?? [])].map(
-      (each) => each.getAttribute("aria-label"),
-    );
+    [...(page.querySelector(".inbox-tasks .inbox-search")?.querySelectorAll("button") ?? [])]
+      .filter((each) => each.closest(".luke-search-field") === null)
+      .map((each) => each.getAttribute("aria-label"));
   assert.deepEqual(buttons(), ["View options"]);
   const input = page.querySelector<HTMLInputElement>(
     '.inbox-tasks input[aria-label="Search inbox"]',
