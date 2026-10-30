@@ -750,8 +750,15 @@ discard as well, so the guarantee does not rest on one property in one file.
 The service counts its own half under the same key: the core loop the desktop
 cannot see (a task, workspace, issue, or automation made, an agent
 started, an agent's pull request opened, an Inbox answer,
-an integration connected or disconnected), recorded where each is committed
+an integration connected or disconnected, and how a team comes together: a
+sign-up, an invitation sent and accepted, a member's thread post, plan edit, or
+plan comment, an automation run started, the GitHub App connected, a host
+enrolled), recorded where each is committed
 through `recordServerEvent` in `packages/service/src/events/server-events.ts`.
+A sign-up and an accepted invitation commit inside Better Auth, so its hooks
+note them (`packages/service/src/auth/auth-counts.ts`) and the auth route
+records them once Better Auth has answered. Only a member's own thread post,
+plan edit, and plan comment are counted, never an agent's through its tools.
 Its vocabulary is typed per event and holds only fixed words, booleans, and
 catalog ids, and each event carries the account's id as `distinct_id`, so it
 joins the desktop's person and is erased with it. The `ProductAnalytics`

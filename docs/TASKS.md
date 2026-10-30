@@ -298,7 +298,7 @@ Dictate, and Start.
   Dismiss") until Dismiss or leaving the task (`tasks/use-task-looks.ts`),
   each section known by its heading.
   A look is the task held open three seconds: from then on every save while
-  it stays open counts as seen, so an agent's save typing in while the task
+  it stays open counts as seen, so an agent's save landing while the task
   is open never lights anything. What is kept is the newest save's instant,
   on the
   service's clock, by task id in the renderer's own storage; a task never
@@ -325,9 +325,8 @@ Dictate, and Start.
   body, always empty now, is not drawn.
 - It is selectable, so a selection can be copied, and it is edited whole in
   place, with its title ("Editing" below).
-- When a save lands, the document redraws in place and keeps its scroll
-  position, the caret typing in what an agent changed; the developer's own
-  edit lands at once.
+- When a save lands, whoever made it, the document redraws in place at once
+  and keeps its scroll position.
 - If the saved document cannot be read, the region shows the failure and a
   `Try again` button. The tab never draws a document it did not read.
 
@@ -573,8 +572,8 @@ The service lays each save over what others wrote meanwhile
   base; the editor takes that part block by block, in place of only the
   blocks it changed where the developer has not changed them since, so the
   caret's block stays, the selection maps through, and it is no step of the
-  developer's undo. While the editor is closed, the document types in each
-  save that lands.
+  developer's undo. While the editor is closed, the document redraws in
+  place on each save that lands.
 - **What agents are told.** A turn's standing context names the sections
   the developer last wrote, by heading, under `[sections the developer
   wrote]`, as their decisions, and the agent is told never to reword or
@@ -669,12 +668,10 @@ replaces at once, and the window's toast says
 before it. The newest revision is the plan as it stands, so it offers no
 restore.
 
-A save that lands types in where the plan changed. The Tasks tab's caret
-types the difference in where it stands (`tasks/task-reveal.ts`): a point
-typed at the end of its section, a correction selected and retyped, a struck
-line selected and erased. A unit of the document is a section as the
-service cuts one ("Document" above), known by its heading, so a section
-joining or leaving moves no other words.
+A save that lands redraws the Tasks tab's document in place
+(`tasks/plan-body.tsx`). A unit of the document is a section as the service
+cuts one ("Document" above), known by its heading, so a section joining or
+leaving redraws no other section.
 
 ### The plan's text
 

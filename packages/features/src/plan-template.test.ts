@@ -8,7 +8,6 @@ import {
   NOTE_KIND,
   type PlanNote,
   readNotes,
-  textNotesInProgress,
   withAgentEdit,
 } from "./plan-template.js";
 
@@ -276,24 +275,6 @@ test("a batch with one note naming what the text does not hold exactly once take
     assert.equal(taken.text, text, note.kind);
     assert.deepEqual(taken.missed, note, note.kind);
   }
-});
-
-test("a draft takes the notes so far up to the first that cannot be taken", () => {
-  const draft = textNotesInProgress(
-    DOCUMENT,
-    unparsedWire({
-      notes: [
-        add("Goal", "- Admins can withdraw an invite."),
-        { kind: NOTE_KIND.REPLACE, find: "## Rollout", text: "" },
-        add("Context", "It came up in support."),
-        { kind: NOTE_KIND.ADD, section: "Hard parts", text: "- A link" },
-      ],
-    }),
-  );
-
-  assert.equal(draft.includes("Admins can withdraw an invite."), true);
-  assert.equal(draft.includes("It came up in support."), false);
-  assert.equal(draft.includes("A link"), false);
 });
 
 test("a deletion across lines ending on a line break takes out those lines and not the one after", () => {

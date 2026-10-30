@@ -84,6 +84,7 @@ describe("server events", () => {
                   has_task: true,
                   agent_kind: "coder",
                   $geoip_disable: true,
+                  platform: "server",
                   $lib: "luke-service",
                 },
               },

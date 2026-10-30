@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { accountBearer } from "../account-call.js";
 import type { AccountToken } from "../account-token.js";
-import { PRODUCT_EVENT } from "./product-events.js";
+import { PRODUCT_EVENT, PRODUCT_PLATFORM } from "./product-events.js";
 import {
   ProductEventSender,
   type ProductEventSenderOptions,
@@ -37,6 +37,7 @@ function senderWith(
         serviceBaseUrl: BASE_URL,
         appVersion: APP_VERSION,
         packaged: true,
+        platform: PRODUCT_PLATFORM.DESKTOP,
         sends: true,
         credential: accountBearer({ readAccessToken, refreshAccount, readAccountKey }),
         httpClient: layer,
@@ -247,18 +248,21 @@ it.effect("a clock that was wrong hides no real day, and costs one count at most
   }),
 );
 
-it.effect("every batch says which version it came from and whether that build is packaged", () =>
-  Effect.gen(function* () {
-    const { sender, requests } = yield* sharingSender({ packaged: false });
-    sender.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
-    yield* sender.flush;
+it.effect(
+  "every batch says which version it came from, whether that build is packaged, and which app it is",
+  () =>
+    Effect.gen(function* () {
+      const { sender, requests } = yield* sharingSender({ packaged: false });
+      sender.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
+      yield* sender.flush;
 
-    assert.equal(requests.length, 1);
-    assert.deepEqual(JSON.parse(requests[0]?.body ?? "{}").build, {
-      app_version: APP_VERSION,
-      packaged: false,
-    });
-  }),
+      assert.equal(requests.length, 1);
+      assert.deepEqual(JSON.parse(requests[0]?.body ?? "{}").build, {
+        app_version: APP_VERSION,
+        packaged: false,
+        platform: PRODUCT_PLATFORM.DESKTOP,
+      });
+    }),
 );
 
 it.effect(

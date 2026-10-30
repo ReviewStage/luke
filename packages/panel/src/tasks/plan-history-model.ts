@@ -34,7 +34,7 @@ import { providerOf } from "./agent-model.js";
  * stood before its history began. Its line says
  * what it did: how many changes its saves made, or which version a restore
  * brought back. A version is drawn whole, a unit to each section of its
- * body (`planSections`, as the open plan cuts it in `task-reveal.ts`), each
+ * body (`planSections`, as the open plan cuts it in `plan-body.tsx`), each
  * unit beside the unit under the same heading in the plan it is compared
  * with: a unit only one of them holds is drawn added or struck whole, and a
  * unit both hold that differs is drawn with its words written in and struck

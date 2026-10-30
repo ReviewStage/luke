@@ -6,8 +6,9 @@
  * in words of its own (its title's weight, or a hidden word), since a dot
  * alone says nothing to a reader who cannot see it. The gutter sets its
  * line in a title's type, so its baseline is the title's, and the dot
- * stands centred on the title's capitals rather than on its line's box.
- * The dot is the accent's ink rather than its fill, because the web's cyan
+ * stands centred on the title's capitals rather than on its line's box,
+ * or on the capitals a row names as its own (`--luke-mark-cap`), a lead
+ * line's. The dot is the accent's ink rather than its fill, because the web's cyan
  * fill reads at 1.7:1 on its light page, under a mark's 3:1.
  */
 
@@ -19,7 +20,7 @@ export function UnreadMark({ unread }: { unread: boolean }): React.JSX.Element {
       aria-hidden="true"
     >
       {unread ? (
-        <span className="luke-unread-dot inline-block size-status-dot rounded-disc bg-accent-ink align-[calc(0.5cap-var(--spacing-status-dot)/2)]" />
+        <span className="luke-unread-dot inline-block size-status-dot rounded-disc bg-accent-ink align-[calc(var(--luke-mark-cap,1cap)/2-var(--spacing-status-dot)/2)]" />
       ) : null}
     </span>
   );

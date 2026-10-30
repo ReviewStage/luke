@@ -185,7 +185,7 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["Experimental", "beta", "labs"]) {
     assert.deepEqual(
       experimentalFound(query, true),
-      ["Skills", "Pilot", "Channels", "Memory", "Luke, your operator"],
+      ["Bring your own host", "Skills", "Pilot", "Channels", "Memory", "Luke, your operator"],
       query,
     );
   }
@@ -245,9 +245,11 @@ test("Escape and the keys that answer in place are found on the Keyboard shortcu
   assert.ok(shortcutsFound("link").includes("Link selected words"));
 });
 
-/** Every page's rows as a signed-in desktop reader of a workspace they administer sees them, Skills' among them. */
+/** Every page's rows as a signed-in desktop reader of a workspace they administer sees them, Skills' and Hosts' among them. */
 const FULL_INPUT: SettingsSearchInput = {
-  settings: settingsView({ experiments: experimentsOn(EXPERIMENT.SKILLS) }),
+  settings: settingsView({
+    experiments: experimentsOn(EXPERIMENT.SKILLS, EXPERIMENT.BRING_YOUR_OWN_HOST),
+  }),
   accountDrawn: true,
   capabilities: DESKTOP_CAPABILITIES,
   workspace: { ...TEAM, role: WORKSPACE_ROLE.ADMIN },

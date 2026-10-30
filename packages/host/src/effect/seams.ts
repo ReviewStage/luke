@@ -6,6 +6,7 @@
  * taking a kernel that holds all of them.
  */
 import type { OpenConsent } from "@luke/credentials";
+import type { ProductClientPlatform } from "@luke/features/analytics";
 import type {
   DeviceArch,
   DeviceCapability,
@@ -43,6 +44,7 @@ export class RunMode extends Context.Service<RunMode, RunModeFacts>()("@luke/hos
 export interface AppIdentityFacts {
   readonly appVersion: string;
   readonly packaged: boolean;
+  readonly platform: ProductClientPlatform;
 }
 
 export class AppIdentity extends Context.Service<AppIdentity, AppIdentityFacts>()(

@@ -78,8 +78,9 @@ const ACCOUNT: AccountSnapshot = {
 /** An admin of Luke, read, so Admin stands rather than waiting on the read. */
 const ADMIN_ACCESS = { admin: true } as const;
 
-/** The experiments the staged pages stand behind: Skills' page and Memory's. */
+/** The experiments the staged pages stand behind: Hosts' page, Skills', and Memory's. */
 const STAGED_EXPERIMENTS = {
+  [EXPERIMENT.BRING_YOUR_OWN_HOST]: true,
   [EXPERIMENT.SKILLS]: true,
   [EXPERIMENT.MEMORY]: true,
 } as const;

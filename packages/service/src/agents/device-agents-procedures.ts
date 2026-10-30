@@ -70,7 +70,12 @@ import {
   openDeviceAgentLaunches,
 } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
-import { enrollHost, enrollOwnDevice, HOST_ENROLL_REFUSAL } from "@luke/database/models/host-store";
+import {
+  enrollHost,
+  enrollOwnDevice,
+  HOST_ENROLL_REFUSAL,
+  hostsOf,
+} from "@luke/database/models/host-store";
 import { openAgentStateKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import {
   DEVICE_CAPABILITY,
@@ -85,6 +90,7 @@ import {
   presentedHostVersion,
 } from "../auth/device-secret.js";
 import { HostedEnvironment } from "../environment.js";
+import { recordServerEvent, SERVER_EVENT, SERVER_HOST_KIND } from "../events/server-events.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -221,6 +227,10 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
             : HOSTED_REFUSAL.INVALID_TOKEN,
         );
       }
+      // Note that a box already enrolled is refused above, so every enroll that gets here is a first connect.
+      yield* recordServerEvent(SERVER_EVENT.HOST_INSTALL, enrolled.userId, {
+        kind: SERVER_HOST_KIND.LUKE_HOST,
+      });
       return { deviceId, deviceSecret: minted.secret };
     }),
     enrollOwn: signedIn.enrollOwn.effect(function* ({ context, input }) {
@@ -228,6 +238,8 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       const version = yield* admittedHostVersion(presentedHostVersion(context.request));
       const minted = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
       const machine = yield* enrollingMachine(input);
+      // Note that a Mac enrolled before is keyed again here, which is no new install, so it is read first.
+      const before = yield* hostedStoreOrUnavailable(hostsOf(userId));
       const enrolled = yield* hostedStoreOrUnavailable(
         enrollOwnDevice(userId, {
           id: input.deviceId,
@@ -237,6 +249,11 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
         }),
       );
       if (!enrolled) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      if (!before.some((host) => host.id === input.deviceId)) {
+        yield* recordServerEvent(SERVER_EVENT.HOST_INSTALL, userId, {
+          kind: SERVER_HOST_KIND.THIS_MAC,
+        });
+      }
       return { deviceId: input.deviceId, deviceSecret: minted.secret };
     }),
     register: deviceAgents.register.effect(function* ({ context, input }) {

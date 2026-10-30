@@ -26,6 +26,7 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HOST_VERSION, hostSecretHash, mintHostSecret } from "../auth/device-secret.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { sweepAgentStates } from "../maintenance/agent-state-sweep.js";
 import { hostedFetch } from "../orpc/handler.js";
@@ -74,6 +75,15 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   providerKeyEncryptionKeys: Redacted.make(`1:${Buffer.alloc(32, 9).toString("base64")}`),
 };
 
+/** What the routes counted, across the file; a case reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+/** The properties of each event of one name the account was counted for, in order. */
+const countedProperties = (userId: string, name: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === name)
+    .map((event) => event.properties);
+
 /** The store of agents' saved state every case's routes and sweeps reach, and the paths it was asked to delete. */
 const stateStore = agentStateBlobsFake();
 
@@ -105,6 +115,7 @@ const answerOf = (incoming: Request) =>
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, yield* HostedEnvironment),
       Layer.succeed(AgentStateBlobs, yield* AgentStateBlobs),
+      ANALYTICS.layer,
     );
     const context = yield* Effect.context<SqlClient.SqlClient>().pipe(Effect.provide(services));
     const seams = {
@@ -119,7 +130,7 @@ const answerOf = (incoming: Request) =>
       deviceAgents: deviceAgentsProcedures(seams),
       hosts: hostsProcedures(seams),
     });
-    // SAFETY: the procedures yield the database, the clock, the environment, and the store of saved state alone, which is all a test provides of the web runtime's services.
+    // SAFETY: the procedures yield the database, the clock, the environment, the store of saved state, and the analytics alone, which is all a test provides of the web runtime's services.
     const response = yield* Effect.promise(() =>
       handle(incoming, context as Context.Context<WebServices>),
     );
@@ -346,6 +357,12 @@ it.layer(
           "a bearer naming no one is unauthenticated",
         );
         assert.equal(yield* statusOf(macRegister(secret, deviceId)), HOSTED_HTTP_STATUS.OK);
+
+        // A Mac keyed again on a new sign-in is the same install.
+        assert.equal((yield* answerOf(enrollOwn(owner, deviceId))).status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_INSTALL), [
+          { kind: "this_mac" },
+        ]);
       }),
   );
 
@@ -456,6 +473,11 @@ it.layer(
         assert.equal(beat, HOSTED_HTTP_STATUS.UNAUTHORIZED);
         assert.deepEqual(listed.body.hosts, []);
         assert.equal(back, HOSTED_HTTP_STATUS.OK, "a removed host enrolls again");
+        assert.deepEqual(
+          countedProperties(owner, SERVER_EVENT.HOST_INSTALL),
+          [{ kind: "luke_host" }, { kind: "luke_host" }],
+          "the first enroll and the one after the removal count, the refused rerun does not",
+        );
       }),
   );
 

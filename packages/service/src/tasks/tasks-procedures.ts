@@ -815,6 +815,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const saved = yield* saveDeveloperEdit({ userId: context.userId, taskId }, input.body);
       switch (saved.status) {
         case PLAN_SAVE_STATUS.SAVED:
+          yield* recordServerEvent(SERVER_EVENT.PLAN_EDIT, context.userId, {});
           return { plan: saved.task };
         case PLAN_SAVE_STATUS.CONFLICT:
           return {
