@@ -580,6 +580,8 @@
   --spacing-breadcrumb-gap: var(--luke-space-4);
   --spacing-breadcrumb-pill-block: var(--luke-space-2);
   --spacing-breadcrumb-pill-inline: var(--luke-space-4);
+  /* A title bar's crumb's inset, a tab's start (`tabs.css`'s `--luke-tab-start`), so its glyph and words stand over the first tab's below. */
+  --spacing-breadcrumb-control-inline: var(--luke-space-8);
   --spacing-breadcrumb-chevron: var(--luke-space-12);
   --spacing-breadcrumb-title-chevron: 13px; /* off-scale: the toolbar heading's chevron, a size under a control's glyph */
   --spacing-data-table-cell-block: var(--luke-space-12);

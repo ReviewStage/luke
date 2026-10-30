@@ -9,7 +9,9 @@ import { BREADCRUMB_SHOWN, type Crumb } from "./breadcrumbs.js";
  * whole width, so a path that does not fit whole folds the crumbs at its
  * start into a single "…" crumb, one more at a time, until what is left
  * fits whole, rather than cut any of them; the last crumb, the page the
- * reader stands on, always stands. Only once nothing is left to fold does a
+ * reader stands on, always stands. A path led by crumbs that may not be
+ * folded, as a task's is by its repository's, which drops a menu, keeps
+ * them and folds the run of crumbs after them instead. Only once nothing is left to fold does a
  * crumb give way, by its share, down to a floor the stylesheet keeps
  * legible, the last crumb last of all. Only a crumb of words or a plain press may be folded: one that
  * opens something, a glyph that is the toolbar's way back, and one a bar's
@@ -51,11 +53,18 @@ function foldable(crumb: Crumb): boolean {
   );
 }
 
-/** How many crumbs at the path's start may be folded: its leading foldable crumbs, never the last one drawn. */
-function foldableCount(crumbs: readonly Crumb[]): number {
+/** Where the crumbs a path may fold start: past the crumbs leading it that may not be folded. */
+function foldStart(crumbs: readonly Crumb[]): number {
+  let start = 0;
+  while (start < crumbs.length && !foldable(crumbs[start] as Crumb)) start += 1;
+  return start;
+}
+
+/** How many crumbs from `start` may be folded: the run of foldable crumbs there, never the last one drawn. */
+function foldableCount(crumbs: readonly Crumb[], start: number): number {
   const last = crumbs.findLastIndex((crumb) => crumb.shown !== false);
   let count = 0;
-  while (count < last && foldable(crumbs[count] as Crumb)) count += 1;
+  while (start + count < last && foldable(crumbs[start + count] as Crumb)) count += 1;
   return count;
 }
 
@@ -64,26 +73,36 @@ function legible(crumb: Crumb): boolean {
   return crumb.icon === undefined && crumb.popup === undefined;
 }
 
-/** The path as drawn with its first `count` of the `most` crumbs it may fold folded into one "…" that names them. */
-function folded(crumbs: readonly Crumb[], count: number, most: number): readonly DrawnCrumb[] {
-  const kept = crumbs
-    .map((crumb, at) => {
-      const words = legible(crumb);
-      return {
-        key: String(at),
-        crumb,
-        legible: words,
-        whole: words && count < most,
-        folded: false,
-      };
-    })
-    .slice(count);
-  if (count === 0) return kept;
-  const names = crumbs.slice(0, count).map((crumb) => crumb.label);
+/** The path as drawn with the first `count` of the `most` crumbs it may fold from `start` folded into one "…" that names them. */
+function folded(
+  crumbs: readonly Crumb[],
+  start: number,
+  count: number,
+  most: number,
+): readonly DrawnCrumb[] {
+  const drawn = crumbs.map((crumb, at) => {
+    const words = legible(crumb);
+    return {
+      key: String(at),
+      crumb,
+      legible: words,
+      whole: words && count < most,
+      folded: false,
+    };
+  });
+  if (count === 0) return drawn;
+  // Note that a crumb's detail joins its name, because two tasks may share a name and only their keys tell them apart.
+  const names = crumbs
+    .slice(start, start + count)
+    .map((crumb) => (crumb.detail === undefined ? crumb.label : `${crumb.label} ${crumb.detail}`));
   const hint = names.join(FOLDED_SEPARATOR);
   // Note that the "…" is no legible crumb, because its floor is its own width.
   const crumb: Crumb = { label: FOLDED_WORDS, hint, name: hint };
-  return [{ key: "folded", crumb, legible: false, whole: false, folded: true }, ...kept];
+  return [
+    ...drawn.slice(0, start),
+    { key: "folded", crumb, legible: false, whole: false, folded: true },
+    ...drawn.slice(start + count),
+  ];
 }
 
 /** What identifies a path for the fold: its words and which are drawn, so a renamed or arriving crumb is measured afresh. */
@@ -141,7 +160,8 @@ export function useCrumbFold(
   const key = signature(crumbs);
   const [state, setState] = useState({ key, count: 0 });
   const count = state.key === key ? state.count : 0;
-  const most = foldableCount(crumbs);
+  const start = foldStart(crumbs);
+  const most = foldableCount(crumbs, start);
   const bar = useRef<HTMLElement | null>(null);
   const observer = useRef<ResizeObserver | null>(null);
   const watched = useRef(new Set<Element>());
@@ -187,5 +207,5 @@ export function useCrumbFold(
     }
     settled.current = widthsOf(nav);
   });
-  return [attach, folded(crumbs, count, most), crumbs.slice(0, count)];
+  return [attach, folded(crumbs, start, count, most), crumbs.slice(start, start + count)];
 }

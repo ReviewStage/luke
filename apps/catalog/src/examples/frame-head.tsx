@@ -1,13 +1,21 @@
-import { FrameHead, FrameHeadSkeleton, FramePlace } from "@luke/ui";
+import { TASK_STATUS } from "@luke/features/task-wire";
+import {
+  BREADCRUMB_POPUP,
+  type Crumb,
+  FolderIcon,
+  FrameHead,
+  FrameHeadSkeleton,
+  FramePlace,
+} from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * frame-head.tsx -- a task's head over its column: the task as a chip, its
- * key and name, and what waits on the reader there; the same head with
- * nothing waiting; a task from before keys, named alone; a long name in a
- * narrow column, cut short before the count; and the head while its task is
- * read. Then a place that is no task, named by its words: the Inbox, a
+ * frame-head.tsx -- a task's head over its column: the task by its path,
+ * its repository then the task by status mark, name, and key; a child task,
+ * its parent before it; a task from before keys, named alone; a deep path
+ * in a narrow column, folding its eldest tasks; and the head while its task
+ * is read. Then a place that is no task, named by its words: the Inbox, a
  * channel with its purpose after it, and an automation's run under the
  * places above it.
  */
@@ -15,34 +23,51 @@ import { CatalogSection } from "../section";
 /** A press the catalog has nowhere to take. */
 function stay(): void {}
 
-const WAITING = { count: 2, noun: { one: "needs you", many: "need you" }, onOpen: stay } as const;
+const TASK = {
+  name: "Opening reference materials to the right",
+  taskKey: "STAGE-214",
+  status: TASK_STATUS.IN_PROGRESS,
+  onOpen: stay,
+} as const;
 
-const NAME = "Opening reference materials to the right";
+const PARENT = {
+  name: "Places and things",
+  taskKey: "STAGE-200",
+  status: TASK_STATUS.IN_PROGRESS,
+  onOpen: stay,
+} as const;
+
+const REPOSITORY: Crumb = {
+  label: "stage/luke",
+  glyph: <FolderIcon />,
+  popup: BREADCRUMB_POPUP.DIALOG,
+  onPress: stay,
+};
 
 function FrameHeads(): React.JSX.Element {
   return (
     <>
-      <CatalogSection id="frame-head-task" title="The task as a chip, and what needs you">
-        <FrameHead taskKey="STAGE-214" name={NAME} onOpen={stay} waiting={WAITING} />
+      <CatalogSection id="frame-head-task" title="A task by its path: repository, then the task">
+        <FrameHead repository={REPOSITORY} task={TASK} />
       </CatalogSection>
-      <CatalogSection id="frame-head-none-waiting" title="Nothing waits, so no count">
-        <FrameHead
-          taskKey="STAGE-214"
-          name={NAME}
-          onOpen={stay}
-          waiting={{ ...WAITING, count: 0 }}
-        />
+      <CatalogSection id="frame-head-child" title="A child task, its parent before it">
+        <FrameHead repository={REPOSITORY} ancestors={[PARENT]} task={TASK} />
       </CatalogSection>
-      <CatalogSection id="frame-head-no-key" title="A task from before keys, named alone">
-        <FrameHead name={NAME} onOpen={stay} waiting={{ ...WAITING, count: 1 }} />
+      <CatalogSection
+        id="frame-head-no-key"
+        title="A task from before keys and statuses, named alone"
+      >
+        <FrameHead task={{ name: TASK.name, onOpen: stay }} />
       </CatalogSection>
-      <CatalogSection id="frame-head-narrow" title="A long name is cut short before the count">
+      <CatalogSection
+        id="frame-head-narrow"
+        title="A deep path in a narrow column folds its eldest tasks, then cuts the name short"
+      >
         <div className="catalog-narrow">
           <FrameHead
-            taskKey="STAGE-214"
-            name="Quarterly review of the onboarding funnel and its drop-off"
-            onOpen={stay}
-            waiting={WAITING}
+            repository={REPOSITORY}
+            ancestors={[{ ...PARENT, name: "Roadmap", taskKey: "STAGE-100" }, PARENT]}
+            task={{ ...TASK, name: "Quarterly review of the onboarding funnel and its drop-off" }}
           />
         </div>
       </CatalogSection>

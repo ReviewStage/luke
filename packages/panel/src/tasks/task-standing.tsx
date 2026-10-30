@@ -22,6 +22,8 @@ import {
   type Crumb,
   ErrorState,
   FailureNote,
+  FrameHead,
+  type FrameHeadTask,
   GAP,
   Inline,
   type MenuRow,
@@ -44,7 +46,11 @@ import { memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
 import { Picker } from "../settings/picker-row.js";
 import { useTaskCard } from "./chip-cards.js";
-import { type RepositoryChooser, useRepositoryMenu } from "./repository-chip.js";
+import {
+  type RepositoryChooser,
+  type RepositoryMenu,
+  useRepositoryMenu,
+} from "./repository-chip.js";
 import { TaskBlockAdd, TaskBlockLines, type TaskBlocksDoor } from "./task-blocks.js";
 
 /**
@@ -311,6 +317,23 @@ function parentOf(task: Task, tasks: readonly TaskSummary[]): TaskSummary | unde
   return parentId === undefined ? undefined : tasks.find((each) => each.id === parentId);
 }
 
+/**
+ * The tasks the open one is a child of, as the workspace's tasks list them,
+ * eldest first; none for a task at the top. Note that a task met twice ends
+ * the walk, so a parent the list holds in a loop names each task once.
+ */
+function ancestorsOf(task: Task, tasks: readonly TaskSummary[]): readonly TaskSummary[] {
+  const found: TaskSummary[] = [];
+  const met = new Set([task.id]);
+  for (let at = parentOf(task, tasks); at !== undefined && !met.has(at.id); ) {
+    met.add(at.id);
+    found.unshift(at);
+    const parentId = at.parentTaskId;
+    at = parentId === undefined ? undefined : tasks.find((each) => each.id === parentId);
+  }
+  return found;
+}
+
 /** The parent's crumb: its status mark, then its key and name, which opens it and hangs its card. */
 function useParentCrumb(
   parent: TaskSummary | undefined,
@@ -372,6 +395,19 @@ function PathLine({
   );
 }
 
+/** The repository's crumb, which drops its menu, named by the repository or the pick it waits on. */
+function repositoryCrumb(menu: RepositoryMenu, repository: Task["repository"]): Crumb {
+  return {
+    label: menu.label,
+    glyph: menu.glyph,
+    hint: menu.open ? undefined : (repository ?? undefined),
+    card: menu.card,
+    popup: BREADCRUMB_POPUP.DIALOG,
+    expanded: menu.open,
+    onPress: menu.press,
+  };
+}
+
 /** The path led by the task's repository, whose crumb drops the repository's menu (`useRepositoryMenu`). */
 function RepositoryPath({
   task,
@@ -390,15 +426,7 @@ function RepositoryPath({
     onAsked: door.onAsked,
     align: POPOVER_ALIGN.START,
   });
-  const repository: Crumb = {
-    label: menu.label,
-    glyph: menu.glyph,
-    hint: menu.open ? undefined : (task.repository ?? undefined),
-    card: menu.card,
-    popup: BREADCRUMB_POPUP.DIALOG,
-    expanded: menu.open,
-    onPress: menu.press,
-  };
+  const repository = repositoryCrumb(menu, task.repository);
   return (
     <PathLine crumbs={[repository, ...rest]} room={menu.room} menu={menu.menu} note={door.note} />
   );
@@ -427,6 +455,98 @@ export function TaskPath({
   ) : (
     // Keyed by the task, so another task starts the crumb's menu afresh and the same task keeps it.
     <RepositoryPath key={task.id} task={task} door={door.repository} rest={rest} />
+  );
+}
+
+/** A task as the window's title bar names it: its mark, name, and key, its press, and its card. */
+function frameTask(
+  task: {
+    readonly name: string;
+    readonly status?: TaskStatus | undefined;
+    readonly number?: number | undefined;
+  },
+  workspaceName: string,
+  onOpen: () => void,
+  card?: ReactNode,
+): FrameHeadTask {
+  return {
+    name: task.name,
+    taskKey: task.number === undefined ? undefined : taskKey(workspaceName, task.number),
+    status: task.status,
+    onOpen,
+    card,
+  };
+}
+
+/**
+ * The task's head in the window's title bar (`FrameHead`): its repository's
+ * crumb where the page hands the repository's doors, dropping the menu the
+ * plan's path drops; the tasks it is a child of, eldest first, each opening
+ * its own task, the parent hanging its card; then the task, whose press is
+ * `onOpen`, its Overview. Note that ⌘K's Change repository stays the plan's path's to
+ * answer, so one ask never opens two menus.
+ */
+export function TaskFrameHead({
+  task,
+  shown,
+  door,
+  onOpen,
+}: {
+  task: Task;
+  /** The task as the list draws it now, its name and status. */
+  shown: Pick<TaskSummary, "name" | "status">;
+  door: TaskStandingDoor;
+  onOpen: () => void;
+}): React.JSX.Element {
+  const ancestors = ancestorsOf(task, door.tasks ?? []);
+  const parentCard = useTaskCard(ancestors.at(-1)?.id);
+  const { workspaceName, onOpenTask } = door;
+  const drawn = {
+    ancestors: ancestors.map((each, at) =>
+      frameTask(
+        each,
+        workspaceName,
+        () => onOpenTask?.(each.id),
+        at === ancestors.length - 1 ? parentCard : undefined,
+      ),
+    ),
+    head: frameTask({ ...shown, number: task.number }, workspaceName, onOpen),
+  };
+  return door.repository === undefined ? (
+    <FrameHead ancestors={drawn.ancestors} task={drawn.head} />
+  ) : (
+    // Keyed by the task, so another task starts the crumb's menu afresh and the same task keeps it.
+    <RepositoryFrameHead key={task.id} task={task} door={door.repository} {...drawn} />
+  );
+}
+
+/** The title bar's head led by the task's repository, whose crumb drops the repository's menu (`useRepositoryMenu`). */
+function RepositoryFrameHead({
+  task,
+  door,
+  ancestors,
+  head,
+}: {
+  task: Task;
+  door: TaskRepositoryDoor;
+  ancestors: readonly FrameHeadTask[];
+  head: FrameHeadTask;
+}): React.JSX.Element {
+  const menu = useRepositoryMenu({
+    value: task.repository,
+    chooser: door.chooser,
+    onChoose: door.onChoose,
+    align: POPOVER_ALIGN.START,
+  });
+  const repository = repositoryCrumb(menu, task.repository);
+  return (
+    <FrameHead
+      repository={repository}
+      ancestors={ancestors}
+      task={head}
+      room={menu.room}
+      menu={menu.menu}
+    />
   );
 }
 

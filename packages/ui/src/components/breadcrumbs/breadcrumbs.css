@@ -77,7 +77,7 @@
      and stand a gap before the next chevron; this way a crumb's least width
      is the lesser of its floor and its words, and a path with room packs
      each crumb one chevron after the one before. */
-  .luke-breadcrumbs[data-variant="caption"] li {
+  .luke-breadcrumbs:is([data-variant="caption"], [data-variant="control"]) li {
     --luke-breadcrumb-floor: 2.5em;
     --luke-breadcrumb-chevron-room: 0px;
     flex: 1 0 calc(var(--luke-breadcrumb-floor) + var(--luke-breadcrumb-chevron-room));
@@ -89,24 +89,25 @@
      at, because a path that squeezes every crumb to two letters says
      nothing. It gives way to that floor only once the path has nothing left
      to fold (`crumb-fold.ts`); until then it keeps its whole width below. */
-  .luke-breadcrumbs[data-variant="caption"] li[data-legible="true"] {
+  .luke-breadcrumbs:is([data-variant="caption"], [data-variant="control"]) li[data-legible="true"] {
     --luke-breadcrumb-floor: 11em;
   }
 
-  .luke-breadcrumbs[data-variant="caption"] li:has(> .luke-breadcrumb-separator) {
+  .luke-breadcrumbs:is([data-variant="caption"], [data-variant="control"])
+    li:has(> .luke-breadcrumb-separator) {
     --luke-breadcrumb-chevron-room: 12px;
   }
 
   /* Note that a crumb whose chevron a width hides takes no chevron's room
      in its floor there, as below for the narrower widths. */
-  .luke-breadcrumbs[data-variant="caption"]
+  .luke-breadcrumbs:is([data-variant="caption"], [data-variant="control"])
   li:has(> .luke-breadcrumb-separator[data-wide="false"]) {
     --luke-breadcrumb-chevron-room: 0px;
   }
 
   /* The last crumb, the page the reader stands on, takes the larger share of
      the room past the floors, so it gives way last. */
-  .luke-breadcrumbs[data-variant="caption"] li:last-child {
+  .luke-breadcrumbs:is([data-variant="caption"], [data-variant="control"]) li:last-child {
     flex-grow: 9;
   }
 
@@ -114,7 +115,7 @@
      leaves out, and a crumb of words while the path may still fold one
      (`crumb-fold.ts`) keep their width, so a path folds its first crumbs
      before it cuts any. */
-  .luke-breadcrumbs[data-variant="caption"]
+  .luke-breadcrumbs:is([data-variant="caption"], [data-variant="control"])
   li:is([data-fixed="true"], [data-whole="true"], [data-shown="narrow"], [data-shown="narrowest"]) {
     flex: none;
   }
@@ -150,12 +151,12 @@
       display: none;
     }
 
-    .luke-breadcrumbs[data-variant="caption"]
+    .luke-breadcrumbs:is([data-variant="caption"], [data-variant="control"])
       li:has(> .luke-breadcrumb-separator[data-wide="false"]) {
       --luke-breadcrumb-chevron-room: 12px;
     }
 
-    .luke-breadcrumbs[data-variant="caption"]
+    .luke-breadcrumbs:is([data-variant="caption"], [data-variant="control"])
       li:has(> .luke-breadcrumb-separator[data-narrow="false"]) {
       --luke-breadcrumb-chevron-room: 0px;
     }
@@ -179,12 +180,12 @@
       display: none;
     }
 
-    .luke-breadcrumbs[data-variant="caption"]
+    .luke-breadcrumbs:is([data-variant="caption"], [data-variant="control"])
       li:has(> .luke-breadcrumb-separator[data-narrow="false"]) {
       --luke-breadcrumb-chevron-room: 12px;
     }
 
-    .luke-breadcrumbs[data-variant="caption"]
+    .luke-breadcrumbs:is([data-variant="caption"], [data-variant="control"])
       li:has(> .luke-breadcrumb-separator[data-narrowest="false"]) {
       --luke-breadcrumb-chevron-room: 0px;
     }
