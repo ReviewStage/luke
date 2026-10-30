@@ -178,6 +178,7 @@ import {
   SidebarSections,
   TASKS_DROP_ZONE,
   useSectionDialogs,
+  useSectionEdits,
 } from "./sidebar-sections.js";
 import {
   HiddenStatusesLine,
@@ -1909,6 +1910,7 @@ function SidebarColumn({
     sectionInView(drawn, openParents, assignedTo, tasks.me),
   );
   const sectionDialogs = useSectionDialogs(tasks, tasks.shown && overlay.inSight);
+  const sectionEdits = useSectionEdits();
   // A slot a row is let go at in an open section, counted among its rows as drawn, child tasks nested, read back in the section's own order; a folded one takes it on top, as it always has.
   const sectionSlot = (target: DrawnSection, at: number) =>
     folds.sectionFolded(target.section.id)
@@ -1959,10 +1961,11 @@ function SidebarColumn({
   // The reader's own tasks, which the list holds until the reader chooses otherwise, and the chip's × lists again.
   const mine: AssignedTo = { kind: ASSIGNED_TO.ME };
   // New section stands on the Tasks head while the account keeps sections.
-  const askNewSection = chosen(() => {
+  // Note that a new section is named in place at the foot of the sections, so the sidebar stays standing rather than being put away as a choice puts it.
+  const askNewSection = () => {
     const { workspace } = tasks;
-    if (workspace !== undefined) sectionDialogs.askNew(workspace.id);
-  });
+    if (workspace !== undefined) sectionEdits.beginCreate(workspace.id, newSectionButton.current);
+  };
   const tasksHeadGroups: MenuAction[][] =
     sectionsShown && tasks.workspace !== undefined ? [[newSectionAction(askNewSection)]] : [];
   // Note that the count reads every listed task, not the rows the view draws, which hides the finished ones by default.
@@ -2284,9 +2287,11 @@ function SidebarColumn({
                   />
                   <SidebarSections
                     sections={homedSections}
+                    workspaceId={sectionsShown ? tasks.workspace?.id : undefined}
                     context={{
                       tasks,
                       dialogs: sectionDialogs,
+                      edits: sectionEdits,
                       current: currentRow,
                       unread,
                       inSight: overlay.inSight,

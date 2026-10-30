@@ -1,6 +1,7 @@
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   TASK_SECTION_BOUNDS,
+  TASK_SECTION_ICON_KIND,
   TASK_SECTION_WRITE,
   type TaskSection,
   type TaskSectionIcon,
@@ -16,6 +17,7 @@ import {
 import type { TaskSummary } from "@luke/features/task-wire";
 import {
   BUTTON_SIZE,
+  BUTTON_VARIANT,
   DIALOG_TONE,
   Dialog,
   DialogActions,
@@ -24,6 +26,10 @@ import {
   GAP,
   GROUP_HEADING,
   GroupHeader,
+  type GroupHeaderEditEnd,
+  GroupHeaderEditor,
+  type GroupHeaderEditorHandle,
+  Inline,
   LAYOUT_ELEMENT,
   MoreButton,
   motionKey,
@@ -31,13 +37,22 @@ import {
   NoteLine,
   nextRowOrHead,
   Stack,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
   TextField,
   TrashIcon,
   useConfirmDialog,
   useLeaving,
   useMenu,
 } from "@luke/ui";
-import { FolderOutputIcon, FolderPlusIcon, GLYPH, MailOpenIcon } from "@luke/ui/icons";
+import {
+  FolderOutputIcon,
+  FolderPlusIcon,
+  GLYPH,
+  MailOpenIcon,
+  SmilePlusIcon,
+} from "@luke/ui/icons";
 import { type DrawnTaskRow, TASK_ROW, type TaskRow, taskRowKey } from "@luke/ui/task-list-model";
 import {
   memberSection,
@@ -49,7 +64,7 @@ import {
   workspaceSections,
 } from "@luke/ui/task-sections-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { confirmFailure } from "../failure-report.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
@@ -58,21 +73,24 @@ import { undoToast, useToast } from "../toast.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { movedBeside, siblingsAt, useNestedRows } from "./nested-rows.js";
 import { type RowPlace, RowPlaced, useRowMoveKeys, withRowMoves } from "./row-moves.js";
-import { SectionIconPicker, sectionGlyph } from "./section-icon-picker.js";
+import { SectionIconWell, sectionGlyph } from "./section-icon-picker.js";
 import { foldedCount, SIDEBAR_SECTION_SLOT, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { sharedStatus, statusSubmenu } from "./standing-submenus.js";
 import { useFormDialog } from "./use-form-dialog.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
- * sidebar-sections.tsx -- the account's own sections in the sidebar, between Pinned and Tasks: each a title, and an icon where one was chosen, over the tasks and agents kept in it, the dialog that makes and edits one, and the Move to section of a task's menu and an agent's.
+ * sidebar-sections.tsx -- the account's own sections in the sidebar, between Pinned and Tasks: each a title, and an icon where one was chosen, over the tasks and agents kept in it, named and renamed in place, the dialog that makes one where no head is in sight, and the Move to section of a task's menu and an agent's.
  *
  * A section is the reader's own (`task-section-wire.ts`), so nothing here
  * is a teammate's. Each stands under a header like a repository's, its icon
  * where a repository's picture stands, or its title alone where it has none,
  * folded and kept as a repository's
- * fold is, with Rename, which edits its title and icon, and Delete section on
- * its ⋯ and a right-click, and between them, while it holds rows, what acts
+ * fold is, with Rename and Change icon, which turn its head into its editor
+ * in place (`GroupHeaderEditor`), the icon well in the glyph's cell and the
+ * name where the title stood, and Delete section on its ⋯ and a right-click;
+ * New section on the Tasks head names a new one the same way, at the foot of
+ * the sections; and between them, while it holds rows, what acts
  * on all of them at once: Mark all as read while any task is unread, Status,
  * which sets its tasks all at one and asks nothing, as a repository's does,
  * and Move all to section, to another section or a new one, and Remove all
@@ -104,42 +122,58 @@ const TITLE_ASKED = "Name the section.";
 /** What the toast says once a section is deleted. */
 const SECTION_DELETED = "Section deleted";
 
+/** What opens a section's head with its icon's picker open, on its menu. */
+const CHANGE_ICON = "Change icon";
+
 /** What makes a section, as the Tasks head's button and every Move to section name it. */
 export const NEW_SECTION = "New section";
 
-/** What the dialog was opened to do: make a section in a workspace, then perhaps more with it, or edit one. */
-type SectionAsk =
-  | {
-      readonly kind: typeof TASK_SECTION_WRITE.CREATE;
-      readonly workspaceId: string;
-      readonly after: ((sectionId: string) => readonly TaskSectionWrite[]) | undefined;
-    }
-  | { readonly kind: typeof TASK_SECTION_WRITE.EDIT; readonly section: TaskSection };
+/** What the dialog was opened to do: make a section in a workspace, perhaps with more written with it, and the words saying what moves into it. */
+interface SectionAsk {
+  readonly workspaceId: string;
+  readonly after: ((sectionId: string) => readonly TaskSectionWrite[]) | undefined;
+  readonly moving: string | undefined;
+}
 
-/** The section dialogs' doors, and the cards they open. */
+/** The section dialog's doors, and the card it opens. */
 export interface SectionDialogs {
-  /** Opens New section in a workspace; `after` is what to write with the section once made, a task moved into it. */
-  askNew: (workspaceId: string, after?: (sectionId: string) => readonly TaskSectionWrite[]) => void;
-  askEdit: (section: TaskSection) => void;
+  /**
+   * Opens New section in a workspace; `after` is what to write with the
+   * section once made, a task moved into it, and `moving` says what that
+   * moves, as `movesInto` words it.
+   */
+  askNew: (
+    workspaceId: string,
+    after?: (sectionId: string) => readonly TaskSectionWrite[],
+    moving?: string,
+  ) => void;
   /** Deletes a section, focus going on from `from`, the control its menu was opened from, to the section after it, or the first. */
   askDelete: (section: TaskSection, from: HTMLElement | null) => void;
   dialog: React.JSX.Element;
 }
 
-/** The writes a section dialog's answer makes. */
-function answerWrites(ask: SectionAsk, title: string, icon: TaskSectionIcon | undefined) {
-  if (ask.kind === TASK_SECTION_WRITE.EDIT) {
-    return [{ kind: TASK_SECTION_WRITE.EDIT, id: ask.section.id, title, icon: icon ?? null }];
-  }
-  const id = crypto.randomUUID();
-  const made: TaskSectionWrite = {
+/** The write that makes a section titled `title` in a workspace under a new id, wearing `icon` where one was chosen. */
+function createWrite(workspaceId: string, title: string, icon: TaskSectionIcon | undefined) {
+  return {
     kind: TASK_SECTION_WRITE.CREATE,
-    id,
-    workspaceId: ask.workspaceId,
+    id: crypto.randomUUID(),
+    workspaceId,
     title,
     ...(icon === undefined ? undefined : { icon }),
-  };
-  return [made, ...(ask.after?.(id) ?? [])];
+  } satisfies TaskSectionWrite;
+}
+
+/** The writes the dialog's answer makes: the section, then what was asked to be written with it. */
+function answerWrites(ask: SectionAsk, title: string, icon: TaskSectionIcon | undefined) {
+  const made = createWrite(ask.workspaceId, title, icon);
+  return [made, ...(ask.after?.(made.id) ?? [])];
+}
+
+/** What New section says moves into the section it makes: a task by its name, one agent, or how many. */
+export function movesInto(count: number, name?: string): string {
+  if (count === 1)
+    return name === undefined ? "The agent moves into it" : `“${name}” moves into it`;
+  return `${count} tasks move into it`;
 }
 
 /**
@@ -178,28 +212,27 @@ function undeleteWrites(
 }
 
 /**
- * New section and Edit section's dialog, standing only while `surfaceOpen`
- * and an account is signed in, and Delete section, which asks nothing and
- * offers Undo. New and Edit ask a title, held to the wire's bound, and an
- * icon; Enter in the title answers. Every answer is drawn at once, so the
- * card never waits on the service. Note that the Undo reads the sections as
- * they stand when it is pressed (`latest`), since it lands renders after
- * the delete.
+ * New section's dialog, standing only while `surfaceOpen` and an account is
+ * signed in, for where no sidebar head is in sight to name one in place:
+ * Move to section's New section, from a task's menu, an agent's, a
+ * selection's, or a section's Move all. It asks a name, held to the wire's
+ * bound, beside the icon well, and says what moves into the section; Enter
+ * in the name answers. And Delete section, which asks nothing and offers
+ * Undo. Every answer is drawn at once, so the card never waits on the
+ * service. Note that the Undo reads the sections as they stand when it is
+ * pressed (`latest`), since it lands renders after the delete.
  */
 export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): SectionDialogs {
   const [ask, setAsk] = useState<SectionAsk | undefined>(undefined);
   const [title, setTitle] = useState("");
   const [icon, setIcon] = useState<TaskSectionIcon | undefined>(undefined);
+  const [picking, setPicking] = useState(false);
   const field = useRef<HTMLInputElement | null>(null);
   const toast = useToast();
   const latest = useRef(tasks);
   latest.current = tasks;
-  // Note that a question about a section goes with the section, deleted on another Mac or by a refresh.
-  const standing = (section: TaskSection | undefined) =>
-    section !== undefined && tasks.taskSections.sections.some((each) => each.id === section.id);
-  const asked = ask?.kind === TASK_SECTION_WRITE.EDIT ? standing(ask.section) : true;
   const confirm: DialogConfirm = useConfirmDialog(
-    { subject: tasks.signedIn && asked, surfaceOpen },
+    { subject: tasks.signedIn, surfaceOpen },
     (): Promise<ActionResult> => {
       const trimmed = title.trim();
       if (trimmed === "" || ask === undefined) {
@@ -210,74 +243,80 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
     },
     confirmFailure(FAILURE_SURFACE.SECTION_WRITE),
   );
-  const open = (next: SectionAsk, words: string, chosen: TaskSectionIcon | undefined) => {
-    setAsk(next);
-    setTitle(words);
-    setIcon(chosen);
-    confirm.ask();
-  };
-  const editing = ask?.kind === TASK_SECTION_WRITE.EDIT;
   const blank = title.trim() === "";
   const form = useFormDialog(confirm, !blank);
   const dialog = (
-    <>
-      <Dialog
-        open={form.open}
-        title={editing ? "Edit section" : "New section"}
-        busy={form.settling}
-        refused={form.refusal !== undefined}
-        initialFocus={field}
-        onDismiss={form.dismiss}
-        restoreTo={nextRowOrHead}
-        actions={
-          <DialogActions
-            onCancel={form.dismiss}
-            act={{
-              verb: editing ? "Save" : "Create section",
-              tone: DIALOG_TONE.PRIMARY,
-              running: editing ? "Saving" : "Creating section",
-              ...form.act,
-            }}
-          />
-        }
-      >
-        <FormField label="Section title" error={form.refusal}>
+    <Dialog
+      open={form.open}
+      title={NEW_SECTION}
+      busy={form.settling}
+      refused={form.refusal !== undefined}
+      initialFocus={field}
+      onDismiss={form.dismiss}
+      restoreTo={nextRowOrHead}
+      actions={
+        <DialogActions
+          onCancel={form.dismiss}
+          act={{
+            verb: "Create section",
+            tone: DIALOG_TONE.PRIMARY,
+            running: "Creating section",
+            ...form.act,
+          }}
+        />
+      }
+    >
+      <Stack gap={GAP.TIGHT}>
+        <FormField label="Name" error={form.refusal}>
           {(control) => (
-            <TextField
-              ref={field}
-              field={control}
-              spellCheck={false}
-              placeholder="Launch week"
-              maxLength={TASK_SECTION_BOUNDS.MAX_TITLE_CHARS}
-              value={title}
-              disabled={form.settling}
-              // Note that Enter on a blank title is asked anyway, so the field says why it was not kept.
-              onEnter={blank ? confirm.run : form.submit}
-              onChange={(next) => {
-                setTitle(next);
-                // Note that a refused answer has settled, so the refusal alone holds
-                // the card up: the question is asked again rather than cleared, or
-                // the first key typed after it would close the card.
-                if (confirm.rejection !== undefined) confirm.ask();
-              }}
-            />
+            <Inline gap={GAP.CONTROL}>
+              <SectionIconWell
+                icon={icon}
+                open={picking}
+                onOpenChange={setPicking}
+                onIcon={setIcon}
+                variant={BUTTON_VARIANT.OUTLINE}
+                disabled={form.settling}
+              />
+              <div className="section-dialog-name min-w-0 flex-auto">
+                <TextField
+                  ref={field}
+                  field={control}
+                  spellCheck={false}
+                  placeholder="Launch week"
+                  maxLength={TASK_SECTION_BOUNDS.MAX_TITLE_CHARS}
+                  value={title}
+                  disabled={form.settling}
+                  // Note that Enter on a blank name is asked anyway, so the field says why it was not kept.
+                  onEnter={blank ? confirm.run : form.submit}
+                  onChange={(next) => {
+                    setTitle(next);
+                    // Note that a refused answer has settled, so the refusal alone holds
+                    // the card up: the question is asked again rather than cleared, or
+                    // the first key typed after it would close the card.
+                    if (confirm.rejection !== undefined) confirm.ask();
+                  }}
+                />
+              </div>
+            </Inline>
           )}
         </FormField>
-        {/* Keyed by what was asked, so each opening starts its tab, color, and search afresh from the icon it opened with. */}
-        <SectionIconPicker
-          key={ask?.kind === TASK_SECTION_WRITE.EDIT ? ask.section.id : TASK_SECTION_WRITE.CREATE}
-          icon={icon}
-          disabled={form.settling}
-          onIcon={setIcon}
-        />
-      </Dialog>
-    </>
+        {ask?.moving === undefined ? null : (
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            {ask.moving}
+          </Text>
+        )}
+      </Stack>
+    </Dialog>
   );
   return {
-    askNew: (workspaceId, after) =>
-      open({ kind: TASK_SECTION_WRITE.CREATE, workspaceId, after }, "", undefined),
-    askEdit: (section) =>
-      open({ kind: TASK_SECTION_WRITE.EDIT, section }, section.title, section.icon),
+    askNew: (workspaceId, after, moving) => {
+      setAsk({ workspaceId, after, moving });
+      setTitle("");
+      setIcon(undefined);
+      setPicking(false);
+      confirm.ask();
+    },
     askDelete: (section, from) => {
       const before = tasks.taskSections;
       // Note that focus goes on to the section beside it now, while this one
@@ -295,6 +334,107 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
   };
 }
 
+/** What the sidebar names in place: a section being made in a workspace, from the control that asked, or one being renamed, its picker open where Change icon asked. */
+type InPlace =
+  | {
+      readonly kind: typeof TASK_SECTION_WRITE.CREATE;
+      readonly workspaceId: string;
+      readonly from: HTMLElement | null;
+    }
+  | {
+      readonly kind: typeof TASK_SECTION_WRITE.EDIT;
+      readonly sectionId: string;
+      readonly picking: boolean;
+    };
+
+/** The sidebar's naming in place: what is being named, if anything, and the section whose head takes the focus once its edit ends by a key. */
+export interface SectionEdits {
+  readonly inPlace: InPlace | undefined;
+  readonly focusing: string | undefined;
+  /** Stands a new section's editor at the foot of the workspace's sections; Escape hands the focus back to `from`. */
+  beginCreate: (workspaceId: string, from: HTMLElement | null) => void;
+  /** Turns a section's head into its editor, its picker open where `picking`. */
+  beginEdit: (sectionId: string, picking: boolean) => void;
+  /** Ends the naming, the focus going to the head of `focus` where it names a section. */
+  end: (focus?: string) => void;
+  /** Says the head asked for has the focus. */
+  focused: () => void;
+}
+
+/** The sidebar's naming in place, one thing at a time. */
+export function useSectionEdits(): SectionEdits {
+  const [inPlace, setInPlace] = useState<InPlace | undefined>(undefined);
+  const [focusing, setFocusing] = useState<string | undefined>(undefined);
+  return {
+    inPlace,
+    focusing,
+    beginCreate: (workspaceId, from) =>
+      setInPlace({ kind: TASK_SECTION_WRITE.CREATE, workspaceId, from }),
+    beginEdit: (sectionId, picking) =>
+      setInPlace({ kind: TASK_SECTION_WRITE.EDIT, sectionId, picking }),
+    end: (focus) => {
+      setInPlace(undefined);
+      if (focus !== undefined) setFocusing(focus);
+    },
+    focused: () => setFocusing(undefined),
+  };
+}
+
+/** Whether two icons, either perhaps none, are the same: one emoji, or one glyph in one color. */
+function sameIcon(a: TaskSectionIcon | undefined, b: TaskSectionIcon | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  if (a.kind === TASK_SECTION_ICON_KIND.EMOJI) {
+    return b.kind === TASK_SECTION_ICON_KIND.EMOJI && a.emoji === b.emoji;
+  }
+  return b.kind === TASK_SECTION_ICON_KIND.GLYPH && a.glyph === b.glyph && a.color === b.color;
+}
+
+/**
+ * A section's head being named in place: the icon well in the glyph's cell,
+ * its picker open from the start where `picking`, and the name field in the
+ * label's place, opened over `title`. How it ended is heard with the icon
+ * chosen meanwhile.
+ */
+function SectionEditor({
+  title,
+  icon,
+  picking,
+  onEnd,
+}: {
+  title: string;
+  icon: TaskSectionIcon | undefined;
+  picking: boolean;
+  onEnd: (end: GroupHeaderEditEnd, icon: TaskSectionIcon | undefined) => void;
+}): React.JSX.Element {
+  const [chosen, setChosen] = useState(icon);
+  const [open, setOpen] = useState(picking);
+  const editor = useRef<GroupHeaderEditorHandle | null>(null);
+  return (
+    <GroupHeaderEditor
+      ref={editor}
+      value={title}
+      label="Section name"
+      placeholder="Section name"
+      maxLength={TASK_SECTION_BOUNDS.MAX_TITLE_CHARS}
+      holding={open}
+      glyph={
+        <SectionIconWell
+          icon={chosen}
+          open={open}
+          onOpenChange={(next, away) => {
+            setOpen(next);
+            // Note that a press away from the picker took the focus before it put the picker away, so it ends the edit here.
+            if (away) editor.current?.leave();
+          }}
+          onIcon={setChosen}
+          size={BUTTON_SIZE.COMPACT}
+        />
+      }
+      onEnd={(end) => onEnd(end, chosen)}
+    />
+  );
+}
+
 /** The row a sidebar row is in a section: its task, or its agent with no task. */
 export function rowMember(row: TaskRow): SectionMember {
   return row.kind === TASK_ROW.TASK
@@ -305,6 +445,11 @@ export function rowMember(row: TaskRow): SectionMember {
 /** The New section row of a menu, which asks for a section and runs `onSelect`'s ask. */
 export function newSectionAction(onSelect: () => void): MenuAction {
   return { label: NEW_SECTION, icon: <FolderPlusIcon />, onSelect };
+}
+
+/** A task's name, or none for an agent, which New section's card names as one agent. */
+function memberName(tasks: TasksControl, member: SectionMember): string | undefined {
+  return member.agent ? undefined : tasks.tasks.find((task) => task.id === member.id)?.name;
 }
 
 /**
@@ -346,7 +491,11 @@ export function moveToSectionEntry(
         ];
   return {
     ...commandHead(PANEL_COMMAND.MOVE_TO_SECTION),
-    items: [...sections, newSectionAction(() => askNew(workspaceId, put)), ...remove],
+    items: [
+      ...sections,
+      newSectionAction(() => askNew(workspaceId, put, movesInto(1, memberName(tasks, member)))),
+      ...remove,
+    ],
   };
 }
 
@@ -366,6 +515,8 @@ function drawnSectionTasks(drawn: DrawnSection): TaskSummary[] {
 interface SectionContext {
   readonly tasks: TasksControl;
   readonly dialogs: SectionDialogs;
+  /** What the sidebar names in place. */
+  readonly edits: SectionEdits;
   /** Whether a row is the open one, the open task's or the agent's whose page stands, which a fold leaves standing. */
   readonly current: (row: TaskRow) => boolean;
   /** Whether a task is unread, as its row's weight says. */
@@ -415,13 +566,23 @@ function moveTasksEntry(drawn: DrawnSection, context: SectionContext): MenuEntry
   return {
     label: "Move all to section",
     icon: <GLYPH.MOVE />,
-    items: [...others, newSectionAction(() => dialogs.askNew(section.workspaceId, put))],
+    items: [
+      ...others,
+      newSectionAction(() =>
+        dialogs.askNew(
+          section.workspaceId,
+          put,
+          movesInto(members.length, drawnSectionTasks(drawn)[0]?.name),
+        ),
+      ),
+    ],
   };
 }
 
 /**
- * A section's menu: Rename, which edits its title and icon, and Mark all as
- * read; then Status for its tasks; then Move all to section and Remove all
+ * A section's menu: Rename and Change icon, which name it in place, its
+ * head turning into its editor, the icon's picker open for Change icon, and
+ * Mark all as read; then Status for its tasks; then Move all to section and Remove all
  * from section; then Delete section. Only the rows drawn are acted on, so
  * one kept in it but pinned or archived, which it draws not, is left where
  * it stands; what only a task takes, a read mark or a status, acts on its
@@ -433,9 +594,14 @@ function sectionActionGroups(
   doors: SectionDoors,
 ): MenuEntry[][] {
   const { section } = drawn;
-  const { tasks, dialogs } = context;
+  const { tasks, dialogs, edits } = context;
   const edit: MenuEntry[] = [
-    commandAction(PANEL_COMMAND.RENAME, () => dialogs.askEdit(section), false),
+    commandAction(PANEL_COMMAND.RENAME, () => edits.beginEdit(section.id, false), false),
+    {
+      label: CHANGE_ICON,
+      icon: <SmilePlusIcon />,
+      onSelect: () => edits.beginEdit(section.id, true),
+    },
   ];
   const remove: MenuEntry[] = [
     {
@@ -572,9 +738,41 @@ function SidebarSection({
     },
   });
   const glyph = sectionGlyph(section.icon);
+  const { edits } = context;
+  const root = useRef<HTMLDivElement | null>(null);
+  // Note that a head named in place by a key takes the focus back once it is drawn again.
+  useLayoutEffect(() => {
+    if (edits.focusing !== section.id || edits.inPlace !== undefined) return;
+    root.current?.querySelector<HTMLElement>(".luke-group-header-lead")?.focus();
+    edits.focused();
+  });
+  const renaming =
+    edits.inPlace?.kind === TASK_SECTION_WRITE.EDIT && edits.inPlace.sectionId === section.id
+      ? edits.inPlace
+      : undefined;
+  const renamed = (end: GroupHeaderEditEnd, icon: TaskSectionIcon | undefined) => {
+    edits.end(end.byKey ? section.id : undefined);
+    if (!end.kept) return;
+    // Note that a name left blank keeps the one it had, as a rename never leaves a section nameless.
+    const title = end.value === "" ? section.title : end.value;
+    if (title === section.title && sameIcon(icon, section.icon)) return;
+    tasks.onWriteSections([
+      { kind: TASK_SECTION_WRITE.EDIT, id: section.id, title, icon: icon ?? null },
+    ]);
+  };
   return (
-    <div className="sidebar-repository sidebar-own-section" data-row-drop={section.id}>
+    <div ref={root} className="sidebar-repository sidebar-own-section" data-row-drop={section.id}>
       <GroupHeader
+        editing={
+          renaming === undefined ? undefined : (
+            <SectionEditor
+              title={section.title}
+              icon={section.icon}
+              picking={renaming.picking}
+              onEnd={renamed}
+            />
+          )
+        }
         heading={GROUP_HEADING.NONE}
         glyph={glyph}
         label={section.title}
@@ -631,13 +829,19 @@ function sectionKeyOf(drawn: DrawnSection): string {
 /**
  * The account's sections in the listed workspace, between Pinned and Tasks,
  * in the order dragged: a section's header is its handle, so a press on one
- * of its rows drags the row and not the section.
+ * of its rows drags the row and not the section. A section being made
+ * stands at their foot, where it will land, named in place: Return makes
+ * it, the focus going to its head, and Escape, or the focus leaving with no
+ * name typed, makes nothing.
  */
 export function SidebarSections({
   sections,
+  workspaceId,
   context,
 }: {
   sections: readonly DrawnSection[];
+  /** The listed workspace, in whose sections a new one is named in place. */
+  workspaceId: string | undefined;
   context: SectionContext;
 }): React.JSX.Element | null {
   const order = sections.map((drawn) => drawn.section);
@@ -648,7 +852,23 @@ export function SidebarSections({
   // Note that a section on its way out, deleted or moved away, is drawn on where it stood until its exit has played.
   const shown = useLeaving(sections, sectionKeyOf);
   const listedAt = new Map(sections.map((drawn, at) => [sectionKeyOf(drawn), at]));
-  if (shown.length === 0) return null;
+  const { tasks, edits } = context;
+  const creating =
+    edits.inPlace?.kind === TASK_SECTION_WRITE.CREATE && edits.inPlace.workspaceId === workspaceId
+      ? edits.inPlace
+      : undefined;
+  if (shown.length === 0 && creating === undefined) return null;
+  const created = (end: GroupHeaderEditEnd, icon: TaskSectionIcon | undefined) => {
+    if (creating === undefined) return;
+    if (!end.kept || end.value === "") {
+      edits.end();
+      if (end.byKey) creating.from?.focus();
+      return;
+    }
+    const made = createWrite(creating.workspaceId, end.value, icon);
+    edits.end(end.byKey ? made.id : undefined);
+    tasks.onWriteSections([made]);
+  };
   return (
     <nav className="sidebar-group" aria-label="Sections">
       <Stack
@@ -668,6 +888,13 @@ export function SidebarSections({
             />
           </li>
         ))}
+        {creating === undefined ? null : (
+          <li className="sidebar-sections-item sidebar-sections-new">
+            <div className="sidebar-repository sidebar-own-section">
+              <SectionEditor title="" icon={undefined} picking={false} onEnd={created} />
+            </div>
+          </li>
+        )}
       </Stack>
     </nav>
   );

@@ -1,19 +1,28 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { act, createElement, type ReactElement, useState } from "react";
+import { act, createElement, type ReactElement, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { NAV_COUNT_SHOWN } from "../nav-item/nav-item.js";
-import { type GroupFold, GroupHeader } from "./group-header.js";
+import { PopoverIconButton } from "../popover-icon-button/popover-icon-button.js";
+import {
+  type GroupFold,
+  GroupHeader,
+  type GroupHeaderEditEnd,
+  GroupHeaderEditor,
+  type GroupHeaderEditorHandle,
+} from "./group-header.js";
 
 /**
  * group-header.test.ts -- pressing a group's head folds and unfolds its
  * rows and says so in `aria-expanded`, open or folded from the start or as
  * its holder keeps it; an action beside the fold presses without folding;
  * a head that folds nothing draws its rows always and no fold control; the count is
- * drawn as its caller gives it; and a folded group draws what it leaves
- * standing.
+ * drawn as its caller gives it; a folded group draws what it leaves
+ * standing; and a head named in place keeps its rows and ends its edit on
+ * Return, Escape, or the focus leaving it, though not for a layer its glyph's
+ * control hung.
  */
 
 declare global {
@@ -164,4 +173,135 @@ test("what a folded group leaves standing is drawn once the rows fade, and not w
     !unfolding.textContent?.includes("Retry the audit"),
     "a head that folds nothing keeps none",
   );
+});
+
+/** A group being named in place over its rows, with a button in the glyph's cell, each end heard by `ends`. */
+function editing(ends: GroupHeaderEditEnd[], holding = false): HTMLElement {
+  const editor = createElement(GroupHeaderEditor, {
+    value: "Launch",
+    label: "Section name",
+    glyph: createElement("button", { type: "button" }, "Icon"),
+    holding,
+    onEnd: (end: GroupHeaderEditEnd) => ends.push(end),
+  });
+  return render(createElement(GroupHeader, { label: "Launch", editing: editor, children: ROWS }));
+}
+
+function fieldOf(container: HTMLElement): HTMLInputElement {
+  return container.querySelector('input[aria-label="Section name"]') ?? assert.fail("a name field");
+}
+
+function typeInto(field: HTMLInputElement, words: string): void {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+test("a head named in place stands over its rows, its field focused, and Return keeps the words typed", () => {
+  const ends: GroupHeaderEditEnd[] = [];
+  const container = editing(ends);
+  const field = fieldOf(container);
+  assert.equal(document.activeElement, field);
+  assert.ok(container.textContent?.includes(ROWS));
+
+  typeInto(field, "  Launch week ");
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+
+  assert.deepEqual(ends, [{ kept: true, value: "Launch week", byKey: true }]);
+});
+
+test("Escape lets the edit go", () => {
+  const ends: GroupHeaderEditEnd[] = [];
+  const container = editing(ends);
+
+  act(() => {
+    fieldOf(container).dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+  });
+
+  assert.deepEqual(ends, [{ kept: false, value: "Launch", byKey: true }]);
+});
+
+test("the focus moving to the glyph's control goes on editing, and leaving the head keeps the words", () => {
+  const ends: GroupHeaderEditEnd[] = [];
+  const container = editing(ends);
+  const outside = document.body.appendChild(document.createElement("button"));
+
+  act(() => container.querySelector<HTMLButtonElement>("button")?.focus());
+  assert.deepEqual(ends, []);
+  act(() => outside.focus());
+
+  assert.deepEqual(ends, [{ kept: true, value: "Launch", byKey: false }]);
+});
+
+test("while a layer the glyph's control hung stands, the focus leaving the head ends nothing", () => {
+  const ends: GroupHeaderEditEnd[] = [];
+  editing(ends, true);
+  const outside = document.body.appendChild(document.createElement("button"));
+
+  act(() => outside.focus());
+
+  assert.deepEqual(ends, []);
+});
+
+/** A head named in place whose glyph's button hangs a panel, the panel's standing held as an owner holds it. */
+function EditingWithPanel({ ends }: { ends: GroupHeaderEditEnd[] }): ReactElement {
+  const [open, setOpen] = useState(false);
+  const handle = useRef<GroupHeaderEditorHandle | null>(null);
+  const editor = createElement(GroupHeaderEditor, {
+    ref: handle,
+    value: "Launch",
+    label: "Section name",
+    holding: open,
+    glyph: createElement(PopoverIconButton, {
+      icon: "☺",
+      label: "Change icon",
+      title: "Icon",
+      open,
+      onOpenChange: (next: boolean, away: boolean) => {
+        setOpen(next);
+        if (away) handle.current?.leave();
+      },
+      children: createElement("button", { type: "button" }, "Rocket"),
+    }),
+    onEnd: (end: GroupHeaderEditEnd) => ends.push(end),
+  });
+  return createElement(GroupHeader, { label: "Launch", editing: editor, children: ROWS });
+}
+
+test("a press away while the glyph's panel stands puts the panel away and keeps the words", async () => {
+  const ends: GroupHeaderEditEnd[] = [];
+  const container = render(createElement(EditingWithPanel, { ends }));
+  const outside = document.body.appendChild(document.createElement("button"));
+  const settle = () =>
+    act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+  typeInto(fieldOf(container), "Launch week");
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="Change icon"]')?.click(),
+  );
+  await settle();
+  assert.ok(document.querySelector('[role="dialog"][aria-label="Icon"]'), "the panel stands");
+
+  await act(async () => {
+    outside.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }),
+    );
+    outside.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+    outside.focus();
+    outside.dispatchEvent(
+      new PointerEvent("pointerup", { bubbles: true, button: 0, pointerType: "mouse" }),
+    );
+    outside.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+    outside.click();
+  });
+  await settle();
+
+  assert.deepEqual(ends, [{ kept: true, value: "Launch week", byKey: false }]);
 });

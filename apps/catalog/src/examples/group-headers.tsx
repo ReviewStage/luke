@@ -6,16 +6,19 @@ import {
   GROUP_SURFACE,
   GroupAction,
   GroupHeader,
+  GroupHeaderEditor,
+  type GroupHeaderEditorHandle,
   IconButton,
   MoreButton,
   NAV_COUNT_SHOWN,
   PinIcon,
   PlusIcon,
+  PopoverIconButton,
   STATUS_TONE,
   Text,
 } from "@luke/ui";
 import { ListFilterIcon, SlidersHorizontalIcon } from "@luke/ui/icons";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -25,8 +28,9 @@ import { CatalogSection } from "../section";
  * its actions beside the fold; a group its holder keeps; a head with no
  * glyph, whose chevron stands at rest; heads that fold nothing; a list's head
  * with its buttons standing; a list's head whose buttons wait,
- * a filter that is on standing with its dot; and the count on a wide page and
- * in a narrow column.
+ * a filter that is on standing with its dot; the count on a wide page and
+ * in a narrow column; and a group named in place, its glyph's button hanging
+ * a panel and its field in the head's type over its rows.
  */
 
 const ignore = (): void => undefined;
@@ -199,7 +203,61 @@ function GroupHeaders(): React.JSX.Element {
       >
         <Surfaces />
       </CatalogSection>
+      <CatalogSection id="group-header-editing" title="A group named in place">
+        <Renamed />
+      </CatalogSection>
     </>
+  );
+}
+
+/** A group named in place: Return keeps the name, Escape lets it go, and the glyph's button hangs a panel without ending the edit. */
+function Renamed(): React.JSX.Element {
+  const [name, setName] = useState("Launch week");
+  const [editing, setEditing] = useState(true);
+  const [picking, setPicking] = useState(false);
+  const editor = useRef<GroupHeaderEditorHandle | null>(null);
+  return (
+    <div className="catalog-narrow">
+      <GroupHeader
+        label={name}
+        glyph={<FolderIcon />}
+        fold={{ defaultOpen: true }}
+        actions={<MoreButton thing={name} onClick={() => setEditing(true)} />}
+        editing={
+          editing ? (
+            <GroupHeaderEditor
+              ref={editor}
+              value={name}
+              label="Section name"
+              placeholder="Section name"
+              holding={picking}
+              glyph={
+                <PopoverIconButton
+                  icon={<FolderIcon />}
+                  label="Change icon"
+                  title="Icon"
+                  open={picking}
+                  onOpenChange={(open, away) => {
+                    setPicking(open);
+                    if (away) editor.current?.leave();
+                  }}
+                >
+                  <div className="p-card-inset-snug">
+                    <Text>Any panel hangs here.</Text>
+                  </div>
+                </PopoverIconButton>
+              }
+              onEnd={({ kept, value }) => {
+                setEditing(false);
+                if (kept && value !== "") setName(value);
+              }}
+            />
+          ) : undefined
+        }
+      >
+        <Rows names={TASKS} />
+      </GroupHeader>
+    </div>
   );
 }
 

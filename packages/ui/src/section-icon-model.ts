@@ -16,7 +16,11 @@
  * picker loads that data when it opens rather than with the window.
  */
 
-import { TASK_SECTION_GLYPH } from "@luke/features/task-section-wire";
+import {
+  TASK_SECTION_GLYPH,
+  TASK_SECTION_ICON_KIND,
+  type TaskSectionIcon,
+} from "@luke/features/task-section-wire";
 import { matchesTokens, searchTokens } from "./search-tokens.js";
 
 /** The newest emoji version offered: one newer is not yet drawn by every macOS a Mac may run. */
@@ -84,6 +88,28 @@ export function glyphKey(glyph: string): string {
 export function glyphLabel(glyph: string): string {
   const words = glyph.split("-").join(" ");
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** Whether a glyph is one the picker suggests. */
+export function isSuggestedGlyph(glyph: string): boolean {
+  return SUGGESTED_GLYPHS.includes(glyph);
+}
+
+/** Whether two icons are the same choice: one emoji, or one glyph whatever its color. */
+function sameIcon(a: TaskSectionIcon, b: TaskSectionIcon): boolean {
+  if (a.kind === TASK_SECTION_ICON_KIND.EMOJI) {
+    return b.kind === TASK_SECTION_ICON_KIND.EMOJI && a.emoji === b.emoji;
+  }
+  return b.kind === TASK_SECTION_ICON_KIND.GLYPH && glyphKey(a.glyph) === glyphKey(b.glyph);
+}
+
+/** The icons chosen last once `chosen` is: it first, in the color it was chosen in, then the rest as they stood, at most `most`. */
+export function recentIcons(
+  recent: readonly TaskSectionIcon[],
+  chosen: TaskSectionIcon,
+  most: number,
+): TaskSectionIcon[] {
+  return [chosen, ...recent.filter((one) => !sameIcon(one, chosen))].slice(0, most);
 }
 
 /** Every glyph by its key in Lucide's `icons`, found by its name, the suggested ones first and the rest alphabetical. */

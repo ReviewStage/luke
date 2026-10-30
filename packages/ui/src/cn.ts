@@ -188,6 +188,7 @@ const PANEL_WINDOW = {
     "workspace-shared-glyph",
   ],
   shadow: ["actor-for-ring", "actor-outline", "actor-outline-ring", "actor-ring"],
+  container: ["section-icon-picker"],
   animate: ["offline-arrive"],
 } as const;
 
@@ -613,6 +614,7 @@ const merge = extendTailwindMerge({
         "tooltip-card",
         ...FEEDBACK_DISPLAY.container,
         ...CONTENT_TEXT.container,
+        ...PANEL_WINDOW.container,
         ...PAGE_PATTERNS.container,
       ],
       animate: [

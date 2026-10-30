@@ -24,7 +24,12 @@ import { confirmFailure } from "../failure-report.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { undoToast, useToast } from "../toast.js";
 import { sectionGlyph } from "./section-icon-picker.js";
-import { newSectionAction, type SectionDialogs, useSectionDialogs } from "./sidebar-sections.js";
+import {
+  movesInto,
+  newSectionAction,
+  type SectionDialogs,
+  useSectionDialogs,
+} from "./sidebar-sections.js";
 import { sharedStatus, statusSubmenu } from "./standing-submenus.js";
 
 /**
@@ -146,7 +151,9 @@ function selectionActs(
         icon: sectionGlyph(section.icon) ?? <GLYPH.SECTION />,
         onSelect: move(section.id),
       })),
-      newSectionAction(acted(() => doors.askNew(workspace, put))),
+      newSectionAction(
+        acted(() => doors.askNew(workspace, put, movesInto(taskIds.length, chosen[0]?.name))),
+      ),
     ],
     ...(sections.length === 0 ? [] : [[{ label: SELECTION_ACT.NO_SECTION, onSelect: move(null) }]]),
   ];
