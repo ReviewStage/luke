@@ -16,7 +16,9 @@ import { ActionMenu, type MenuAction } from "./action-menu.js";
  * account's feed as the window's Inbox reads them (`useListedInboxGroups`),
  * and only while it stands open, so no read is held for a menu nobody
  * opened. Mark all as read stands disabled while nothing it would mark is
- * unread, and until the feed first answers. On the Inbox's row it marks
+ * unread, and until the feed answers for every holder the listed workspace
+ * holds, which the menu's own groups are told (`ready`), so a channel's
+ * look is never stamped over threads not read yet. On the Inbox's row it marks
  * every unread thread of the listed workspace, as the service marks the
  * workspace's whole (`onMarkAll`); on a channel's, that channel's threads
  * alone, each on its own (`onMarkEach`), since the service marks no
@@ -57,19 +59,20 @@ export function ReadAllMenu({
   channelId?: string | undefined;
   label: string;
   menu: DrawnMenu;
-  /** The menu's groups, Mark all as read among them where the row keeps it. */
-  groups: (markAll: MenuAction) => readonly (readonly MenuAction[])[];
+  /** The menu's groups, Mark all as read among them where the row keeps it, and whether the feed has answered for every thread it would mark. */
+  groups: (markAll: MenuAction, ready: boolean) => readonly (readonly MenuAction[])[];
   onClose: (returnFocus: boolean) => void;
 }): React.JSX.Element {
-  const { groups: listed } = useListedInboxGroups(readAll.tasks);
+  const { groups: listed, read } = useListedInboxGroups(readAll.tasks);
+  const ready = !read.pending && !read.failed;
   const held = channelId === undefined ? listed : channelGroups(listed, channelId, undefined);
   const unread = held.flatMap(({ items }) => items).filter(isUnread);
   const { onMarkAll, onMarkEach } = readAll.marks;
   const markAll: MenuAction = {
     label: MARK_ALL_READ,
     icon: <CheckCheckIcon />,
-    disabled: unread.length === 0,
+    disabled: !ready || unread.length === 0,
     onSelect: () => (channelId === undefined ? onMarkAll : onMarkEach)(unread),
   };
-  return <ActionMenu label={label} menu={menu} groups={groups(markAll)} onClose={onClose} />;
+  return <ActionMenu label={label} menu={menu} groups={groups(markAll, ready)} onClose={onClose} />;
 }

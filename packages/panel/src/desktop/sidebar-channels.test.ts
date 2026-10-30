@@ -119,8 +119,8 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The sidebar's channels over `channels`, each channel opened recorded in `opened`. */
-function mount(channels: readonly Channel[], opened: string[]): HTMLElement {
+/** The sidebar's channels over `channels`, each channel opened recorded in `opened`; the Billing task changed at `changedAt`, past the feed's items where it is later than 3. */
+function mount(channels: readonly Channel[], opened: string[], changedAt = 3): HTMLElement {
   const unasked = () => Promise.resolve(undefined);
   const control: ChannelsControl = {
     channels,
@@ -143,7 +143,7 @@ function mount(channels: readonly Channel[], opened: string[]): HTMLElement {
   };
   const tasks = tasksControl({
     tasks: [BILLING],
-    inboxTasks: [{ taskId: BILLING.id, items: 3, updatedAt: 3 }],
+    inboxTasks: [{ taskId: BILLING.id, items: 3, updatedAt: changedAt }],
   });
   function Channels() {
     return createElement(SidebarChannels, {
@@ -223,6 +223,17 @@ test("a channel's ⋯ offers Copy link and Mark all as read, which stamps the re
   await settle();
   assert.deepEqual(marked, [APP_UNREAD.id]);
   assert.deepEqual(looked, ["c-app"]);
+});
+
+test("a channel's Mark all as read stands disabled while the feed has not answered for its threads, though the channel is unread", async () => {
+  mount([channel("c-app", "app", { lookedAt: 1, latestPostedAt: 5 })], [], 99);
+  act(() => button("Channel actions").click());
+  await settle();
+  const markAll =
+    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (each) => each.textContent === "Mark all as read",
+    ) ?? assert.fail("the menu offers Mark all as read");
+  assert.equal(markAll.matches(":disabled, [aria-disabled='true'], [data-disabled]"), true);
 });
 
 test("Browse archived channels lists the archived standing channels, Unarchive opens one again, and a press opens one", async () => {

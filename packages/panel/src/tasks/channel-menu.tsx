@@ -37,8 +37,8 @@ const CHANNEL_MENU_WORDS = {
 
 /** A channel's menu as a surface holds it: each channel's groups, and the question to draw beside them. */
 interface ChannelMenu {
-  /** A channel's groups, `markAll` in Mark as read's place, stamping the reader's look too, where one is handed. */
-  readonly groups: (channel: Channel, markAll?: MenuAction) => MenuAction[][];
+  /** A channel's groups, `markAll` in Mark as read's place, stamping the reader's look too, where one is handed; pressable for the look alone only once its threads are `ready`. */
+  readonly groups: (channel: Channel, markAll?: MenuAction, ready?: boolean) => MenuAction[][];
   readonly dialog: React.JSX.Element;
 }
 
@@ -72,7 +72,7 @@ export function useChannelMenu({
         : channels.onArchive(doomed.channel.id).then(answered),
     confirmFailure(FAILURE_SURFACE.CHANNEL_ARCHIVE),
   );
-  const groups = (channel: Channel, markAll?: MenuAction): MenuAction[][] => {
+  const groups = (channel: Channel, markAll?: MenuAction, ready = false): MenuAction[][] => {
     const copyLink = copyLinkItem(channelPlace(channel.id));
     const look = () => channels.onLook(channel.id);
     // Note that Mark all as read stands for Mark as read where it is handed, so the menu offers one way to read a channel, whose look is stamped with its threads.
@@ -81,7 +81,8 @@ export function useChannelMenu({
         ? [
             {
               ...markAll,
-              disabled: markAll.disabled === true && !channelUnread(channel),
+              // Note that the look alone keeps it pressable only once the threads are read, so it never clears the channel's mark over threads it could not mark.
+              disabled: markAll.disabled === true && !(ready && channelUnread(channel)),
               onSelect: () => {
                 look();
                 markAll.onSelect();

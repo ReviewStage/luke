@@ -88,8 +88,8 @@ function ChannelRow({
   workspaceId: string | undefined;
   current: boolean;
   shown: boolean;
-  /** Its menu's groups, Mark all as read among them where it is handed. */
-  groups: (markAll?: MenuAction) => MenuAction[][];
+  /** Its menu's groups, Mark all as read among them where it is handed, and whether its threads are read. */
+  groups: (markAll?: MenuAction, ready?: boolean) => MenuAction[][];
   readAll: SidebarReadAll;
   onOpen: () => void;
 }): React.JSX.Element {
@@ -239,7 +239,7 @@ export function SidebarChannels({
             workspaceId={workspaceId}
             current={channel.id === currentId}
             shown={shown}
-            groups={(markAll) => menu.groups(channel, markAll)}
+            groups={(markAll, ready) => menu.groups(channel, markAll, ready)}
             readAll={readAll}
             onOpen={() => onOpen(channel.id)}
           />
