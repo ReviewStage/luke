@@ -37,7 +37,6 @@ import {
   MailOpenIcon,
   ScrollTextIcon,
   UserCheckIcon,
-  UsersIcon,
 } from "@luke/ui/icons";
 import type { MenuAction } from "./desktop/action-menu.js";
 
@@ -135,7 +134,6 @@ export const PANEL_COMMAND = {
   GROUP_BY: unkeyed("Group by", <ListIcon />),
   ORDER_BY: unkeyed("Order by", <ClockIcon />),
   ASSIGNED_TO: unkeyed("Assigned to", <UserCheckIcon />),
-  CREATED_BY: unkeyed("Created by", <UsersIcon />),
   CANCEL_TASK: unkeyed("Cancel task", <TaskStatusMark status={TASK_STATUS.CANCELED} />),
   CHANGE_REPOSITORY: unkeyed("Change repository", <GLYPH.REPOSITORY />),
   MOVE_TO_WORKSPACE: unkeyed("Move to workspace", <GLYPH.MOVE />),
