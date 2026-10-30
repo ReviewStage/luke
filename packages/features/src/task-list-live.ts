@@ -16,6 +16,7 @@ import {
   type AgentStatus,
   type AgentSummary,
   agentKindSchema,
+  agentOwnerOf,
   agentPullRequestSchema,
   agentSummarySchema,
   CONTEXT_WINDOW,
@@ -151,6 +152,11 @@ const agentLiveRowSchema = EffectSchema.Struct({
   starterPilotModel: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   automationId: EffectSchema.NullOr(EffectSchema.String),
   automationName: EffectSchema.NullOr(EffectSchema.String),
+  /** The run the agent belongs to, and the automation that run belongs to; null where it belongs to none, and absent from a statement before they were carried. */
+  runId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  runAutomationId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  /** The operator that started the agent, by its id; null where none did, and absent from a statement before it was carried. */
+  starterOperatorId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   archivedAt: EffectSchema.NullOr(countedNumber),
   archivedBy: EffectSchema.NullOr(archiveLiveSchema),
   archiverName: EffectSchema.NullOr(EffectSchema.String),
@@ -469,6 +475,13 @@ function agentSummaryOf(row: AgentLiveRow, now: number, continued: Continuations
   const mac = macOf(row);
   const continuedBy = continued.get(row.id);
   const startedByPilot = startedByPilotOf(row);
+  const owner = agentOwnerOf({
+    taskId: row.planId,
+    runId: row.runId ?? null,
+    runAutomationId: row.runAutomationId ?? null,
+    kind: row.kind ?? AGENT_KIND.CODER,
+    startedByOperator: row.starterOperatorId != null,
+  });
   return {
     id: row.id,
     planId: row.planId,
@@ -497,6 +510,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number, continued: Continuations
     ...(startedByPilot === undefined ? undefined : { startedByPilot }),
     ...(row.automationId === null ? undefined : { automationId: row.automationId }),
     ...(row.automationName === null ? undefined : { automationName: row.automationName }),
+    ...(owner === undefined ? undefined : { owner }),
     ...(row.startedFrom === null ? undefined : { from: row.startedFrom }),
     ...(continuedBy === undefined ? undefined : { continuedBy }),
     ...(started === undefined ? undefined : { runStartedAt: started }),

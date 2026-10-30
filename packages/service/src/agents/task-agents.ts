@@ -1,3 +1,4 @@
+import { agentOwnerFactsOf } from "@luke/database/models/agent-owners";
 import {
   type AgentLatestTurn,
   type AgentStoreEffect,
@@ -256,6 +257,7 @@ export function listTasklessAgents(
       agents.map((agent) => agent.id),
     );
     const macs = yield* devicesNamed(summaryDevices(agents));
+    const owners = yield* agentOwnerFactsOf(agents);
     const now = yield* Clock.currentTimeMillis;
     return agents.map((agent) => {
       const turn = turns.get(agent.conversationId);
@@ -267,6 +269,7 @@ export function listTasklessAgents(
           { turn, awaitingLineAt, runtime },
           now,
           names,
+          owners,
           continued.get(agent.id),
           macs,
         ),

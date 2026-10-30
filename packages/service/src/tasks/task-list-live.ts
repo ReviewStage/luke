@@ -13,6 +13,7 @@ import {
 import { agentPin, conversations, device, taskPin } from "@luke/database/schemas";
 import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
+import { automationRun } from "@luke/database/schemas/automation";
 import { task } from "@luke/database/schemas/task";
 import { AGENT_BRIEF, AGENT_KIND, type AgentKind } from "@luke/features/agent-wire";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
@@ -50,6 +51,7 @@ const starter = alias(user, "starter");
 const archiver = alias(user, "archiver");
 const assignee = alias(user, "assignee");
 const starterPilot = alias(agentTable, "starter_pilot");
+const starterOperator = alias(agentTable, "starter_operator");
 
 /** The statements the plan list is subscribed to live. */
 export interface TaskListLiveStatements {
@@ -158,6 +160,9 @@ function agentsStatement(userId: string) {
           starterPilotModel: starterPilot.model,
           automationId: agentTable.automationId,
           automationName: sql<string | null>`${agentTable.automationOrigin} ->> 'name'`,
+          runId: agentTable.automationRunId,
+          runAutomationId: automationRun.automationId,
+          starterOperatorId: starterOperator.id,
           archivedBy: agentTable.archivedBy,
           archiverName: archiver.name,
           disabledServers: agentTable.disabledServers,
@@ -196,6 +201,14 @@ function agentsStatement(userId: string) {
       and(
         eq(starterPilot.id, agentTable.startedByAgentId),
         eq(starterPilot.kind, AGENT_KIND.PILOT),
+      ),
+    )
+    .leftJoin(automationRun, eq(automationRun.id, agentTable.automationRunId))
+    .leftJoin(
+      starterOperator,
+      and(
+        eq(starterOperator.id, agentTable.startedByAgentId),
+        eq(starterOperator.kind, AGENT_KIND.OPERATOR),
       ),
     )
     .leftJoin(archiver, eq(archiver.id, sql`${agentTable.archivedBy} ->> 'userId'`))

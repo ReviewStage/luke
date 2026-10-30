@@ -1,3 +1,4 @@
+import type { AgentOwnerFacts } from "@luke/database/models/agent-owners";
 import {
   type Agent,
   type AgentLatestTurn,
@@ -27,6 +28,7 @@ import {
   type AgentPage,
   type AgentStatus,
   type AgentSummary,
+  agentOwnerOf,
   CONTEXT_WINDOW,
   type NativeAgentRuntime,
 } from "@luke/features/agent-wire";
@@ -302,17 +304,29 @@ export function summaryDevices(
   );
 }
 
-/** What every read of one agent says of it but its task, its status read at `now`, the agents started from it where any was, and the Mac it runs on where `macs` holds it. */
+/** What every read of one agent says of it but its task, its status read at `now`, its owner as `owners` reads it, the agents started from it where any was, and the Mac it runs on where `macs` holds it. */
 function summaryFields(
   agent: AgentLine,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
+  owners: AgentOwnerFacts,
   continuedBy: readonly AgentStartedFromIt[],
   macs: ReadonlyMap<string, Device>,
 ): Omit<AgentSummary, "id" | "planId"> {
   const starter = names.get(agent.userId);
   const mac = macOf(agent, macs);
+  const owner = agentOwnerOf({
+    taskId: agent.taskId,
+    runId: agent.automationRunId,
+    runAutomationId:
+      agent.automationRunId === null
+        ? null
+        : (owners.runAutomations.get(agent.automationRunId) ?? null),
+    kind: agent.kind,
+    startedByOperator:
+      agent.startedByAgentId !== null && owners.operatorStarters.has(agent.startedByAgentId),
+  });
   const summary: Omit<AgentSummary, "id" | "planId"> = {
     model: agent.model,
     effort: agent.effort,
@@ -346,6 +360,7 @@ function summaryFields(
     ...(starter === undefined ? undefined : { startedBy: { userId: agent.userId, name: starter } }),
     ...(agent.automationId === null ? undefined : { automationId: agent.automationId }),
     ...(agent.automationName === null ? undefined : { automationName: agent.automationName }),
+    ...(owner === undefined ? undefined : { owner }),
     ...(agent.startedFrom === null ? undefined : { from: agent.startedFrom }),
     ...(continuedBy.length === 0
       ? undefined
@@ -377,13 +392,15 @@ function summaryFields(
  * list's line, its status read at `now`, the member who started it named by
  * `names`, the accounts' names by id, where theirs stands, the agents
  * started from it, none where the read names none, and the Mac a local
- * agent runs on, where `macs` holds it.
+ * agent runs on, where `macs` holds it. Its owner is read from `owners`,
+ * which `agentOwnerFactsOf` answers for the agents of the read.
  */
 export function agentSummary(
   agent: Agent | AgentLine,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
+  owners: AgentOwnerFacts,
   continuedBy: readonly AgentStartedFromIt[] = [],
   macs: ReadonlyMap<string, Device> = NO_MACS,
 ): AgentSummary {
@@ -391,7 +408,7 @@ export function agentSummary(
   return {
     id: line.id,
     planId: line.taskId,
-    ...summaryFields(line, standing, now, names, continuedBy, macs),
+    ...summaryFields(line, standing, now, names, owners, continuedBy, macs),
   };
 }
 
@@ -447,13 +464,14 @@ export function agentPage(
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
+  owners: AgentOwnerFacts,
   continuedBy: readonly AgentStartedFromIt[] = [],
   macs: ReadonlyMap<string, Device> = NO_MACS,
 ): AgentPage {
   return {
     id: agent.id,
     planId: agent.taskId,
-    ...summaryFields(agentLineOf(agent), standing, now, names, continuedBy, macs),
+    ...summaryFields(agentLineOf(agent), standing, now, names, owners, continuedBy, macs),
     automationId: agent.automationId,
     ...(agent.automationOrigin === null
       ? undefined
