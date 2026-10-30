@@ -1624,15 +1624,13 @@ body,
 
 /* The draft's title fills the name's room, so the caret's line reaches the
    column's edge as a plan's line reaches its page's. */
-.tasks-board-draft .tasks-board-name,
-.tasks-list-draft .tasks-list-press {
+.tasks-board-draft .tasks-board-name {
   display: flex;
   overflow: visible;
   gap: var(--luke-item-gap);
 }
 
-.tasks-board-draft .tasks-board-name > [data-slot="input"],
-.tasks-list-draft .tasks-list-press > [data-slot="input"] {
+.tasks-board-draft .tasks-board-name > [data-slot="input"] {
   min-inline-size: 0;
   flex: 1 1 auto;
 }
@@ -1650,14 +1648,6 @@ body,
   box-shadow: inset 0 -1px var(--luke-color-focus-ring);
 }
 
-/* The row holding the keyboard, or whose menu is open, stands over its
-   neighbours, so its ring is drawn whole. */
-.tasks-list-row:has(:focus-visible),
-.tasks-list-row[data-menu-open="true"],
-.tasks-list-row:has([aria-expanded="true"]) {
-  z-index: 2;
-}
-
 /* A row being dragged stays in its group as its own placeholder, faded,
    while its copy follows the pointer; the copy, out of the grid, lays its
    cells out on a line of its own. */
@@ -1665,14 +1655,14 @@ body,
   opacity: 0.4;
 }
 
-.tasks-list-row[data-lifted="true"] {
+.luke-task-row[data-lifted="true"] {
   display: flex;
   gap: var(--luke-block-gap);
   background: var(--luke-color-surface);
   box-shadow: 0 4px 12px var(--luke-color-shadow-soft);
 }
 
-.tasks-list-row[data-lifted="true"] > [data-cell="name"] {
+.luke-task-row[data-lifted="true"] > [data-cell="name"] {
   flex: 1;
 }
 
@@ -1685,22 +1675,10 @@ body,
   box-shadow: inset 0 -2px 0 var(--luke-color-focus-ring);
 }
 
-/* A group's quick add line (`quick-add.tsx`): a row of the list's cells
-   raised as a card, its title bare where a row's name stands; an add still
-   out stands muted until its row draws. */
-.tasks-list-draft {
-  /* Note that the card's hairline is taken out of its inset, so its cells stand on the rows' lines. */
-  padding-inline: calc(var(--row-inset) - 1px);
-}
-
-.tasks-list-draft[data-pending="true"] .tasks-list-press {
-  color: var(--luke-color-text-muted);
-}
-
 /* A row's creator's face (`task-row-parts.tsx`) is a press of its own,
    hanging its card, standing over the row's press in a cell that lets the
    pointer through, so a press beside it still opens the task. */
-.tasks-list-cell [data-task-creator] {
+.luke-task-row-cell [data-task-creator] {
   position: relative;
   z-index: 1;
   pointer-events: auto;

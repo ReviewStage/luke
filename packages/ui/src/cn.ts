@@ -229,6 +229,7 @@ const PANEL_HOME_TASKS = {
     "card-line",
     "new-task-title",
     "row-context",
+    "task-row-draft",
     "tasks-board-column",
     "tasks-list-maker",
     "tasks-list-row",
