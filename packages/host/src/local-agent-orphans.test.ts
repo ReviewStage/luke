@@ -1,5 +1,5 @@
 /**
- * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, its agents run straight on the box and their folders kept between turns: a VM a run from before left deleted; an agent two answered reads in a row leave out removed whole, but kept, for a week, where the box's check finds work in its folder, whatever a save record from before says; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a folder with unsaved work kept once and never checked again, a listed folder never let go of past a warm window, a box with no smolvm never held up by it, and a pass that died never the last; the folders past the 15 used most recently, a folder from before the stamp ranked by its last change, cleared where their work is all on GitHub, the agent kept as this machine's, but never a running agent's, nor one with unpushed work, which is checked once while its agent stays idle; and the agents an install ran before it kept its record of them taken as its own as the gate opens, a Mac's by its own state alone and never by the store it shares, a Linux host's by its folders and machines.
+ * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, its agents run straight on the box and their folders kept between turns: a VM a run from before left deleted; an agent two answered reads in a row leave out removed whole, but kept, for a week, where the box's check finds work in its folder, whatever a save record from before says; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a folder with unsaved work kept once and never checked again, a listed folder never let go of past a warm window, a box with no smolvm never held up by it, and a pass that died never the last; an idle agent's folder cleared a week after its last use where its work is all on GitHub, the agent kept as this machine's, one from before the stamp not until a week after the start that stamps it, and never a busy agent's, nor one with unpushed work, which is checked once while its agent stays idle; and the agents an install ran before it kept its record of them taken as its own as the gate opens, a Mac's by its own state alone and never by the store it shares, a Linux host's by its folders and machines.
  *
  * The follower runs the real smolvm sandbox over a fake `smolvm` that keeps
  * its machines in a set, on a real temporary folder, against a fake service
@@ -57,9 +57,11 @@ const NOT_FOUND = {
 
 /** When a saved agent's last turn ended, as a host that saved its agents' state recorded it: past its 15 minutes' warm window as the clock starts. */
 const ENDED_PAST_WINDOW = -Duration.toMillis(Duration.minutes(16));
-/** When a folder was first kept: half a pass short of a week as the second pass runs, five minutes in, and so half a pass past it as the third does. */
-const KEPT_A_WEEK_BY_THE_THIRD_PASS =
+/** Half a pass short of a week before the second pass runs, five minutes in, and so half a pass past a week before the third: when a folder was first kept, or an agent last used. */
+const A_WEEK_BY_THE_THIRD_PASS =
   Duration.toMillis(Duration.minutes(7.5)) - Duration.toMillis(Duration.days(7));
+/** When an agent unused for over a week as the clock starts was last used. */
+const USED_OVER_A_WEEK_AGO = -Duration.toMillis(Duration.days(8));
 
 const AGENT = {
   ORPHAN: "6f1c2a4e-0b7d-4c55-9a3e-2d8f61b0c9a1",
@@ -70,9 +72,6 @@ const AGENT = {
   OTHER_INSTALL: "4e5f6071-8293-4a41-8d5e-6f7a8b9c0d1e",
   FROM_BEFORE: "607182a3-a4b5-4c63-8f70-8b9c0d1e2f30",
 } as const;
-
-/** A day, which the tests' stamps of each agent's last use stand apart by. */
-const DAY = Duration.toMillis(Duration.days(1));
 
 /** How many turns in a row must find nothing asked of the disk unanswered before the follower is taken to wait on the clock alone. */
 const QUIET_TURNS = 3;
@@ -97,23 +96,6 @@ const settled = Effect.gen(function* () {
 /** An id for the `index`th of many agents. */
 const agentNumbered = (index: number) =>
   `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
-
-/** A launch line, under the line id given, for an agent with no repository, whose runner runs until the test ends. */
-const launchOf = (home: string, agentId: string, lineId: string): DeviceAgentClaimedLine => ({
-  line: {
-    id: lineId,
-    agentId,
-    seq: 1,
-    kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
-    payload: {
-      checkoutPath: deviceAgentLayout(home, agentId).checkoutPath,
-      repository: null,
-      startBranch: null,
-      firstSequence: 0,
-    },
-  },
-  secrets: { env: {}, stdin: "{}\n" },
-});
 
 /** The agents a device holds things for, as a test lays them out before the follower starts. */
 interface Held {
@@ -445,7 +427,23 @@ it.effect("an agent whose runner runs, or whose launch is still kept, is left be
         held: { whole: [AGENT.LAUNCH_KEPT], folderOnly: [AGENT.ORPHAN] },
         reads: [[], []],
         keptLaunches: [{ id: "4d5e6f70-8192-4a3b-8c4d-5e6f7a8b9c0d", agentId: AGENT.LAUNCH_KEPT }],
-        launches: (home) => [launchOf(home, AGENT.RUNNING, "5e6f7081-92a3-4b4c-9d5e-6f7a8b9c0d1e")],
+        launches: (home) => [
+          {
+            line: {
+              id: "5e6f7081-92a3-4b4c-9d5e-6f7a8b9c0d1e",
+              agentId: AGENT.RUNNING,
+              seq: 1,
+              kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
+              payload: {
+                checkoutPath: deviceAgentLayout(home, AGENT.RUNNING).checkoutPath,
+                repository: null,
+                startBranch: null,
+                firstSequence: 0,
+              },
+            },
+            secrets: { env: {}, stdin: "{}\n" },
+          },
+        ],
       });
       yield* device.passed(2);
 
@@ -584,7 +582,7 @@ it.effect(
       Effect.gen(function* () {
         const device = yield* following({
           held: { folderOnly: [AGENT.ORPHAN] },
-          kept: { [AGENT.ORPHAN]: KEPT_A_WEEK_BY_THE_THIRD_PASS },
+          kept: { [AGENT.ORPHAN]: A_WEEK_BY_THE_THIRD_PASS },
           reads: [[], [], []],
         });
         yield* device.passed(2);
@@ -682,61 +680,52 @@ it.effect.each([
 );
 
 it.effect(
-  "a pass keeps the 15 folders used most recently, a folder from before the stamp ranked by its last change, and of the rest clears those whose work is all on GitHub, its agent still this machine's",
+  "a pass clears an idle agent's folder a week after its last use, its work all on GitHub and its agent still this machine's, but one from before the stamp not until a week after the start that stamps it",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const recent = Array.from({ length: 15 }, (_, index) => agentNumbered(index + 1));
-        const [oldest, fromBefore] = [agentNumbered(16), agentNumbered(17)];
-        const everyone = [...recent, oldest, fromBefore];
+        const [used, fromBefore] = [agentNumbered(1), agentNumbered(2)];
+        const listed = [used, fromBefore];
         const device = yield* following({
-          held: { folderOnly: everyone },
-          used: {
-            ...Object.fromEntries(recent.map((agentId, index) => [agentId, DAY * (100 + index)])),
-            [oldest]: DAY * 10,
-          },
-          changedAt: { [fromBefore]: DAY * 20 },
-          reads: [everyone],
+          held: { folderOnly: listed },
+          used: { [used]: A_WEEK_BY_THE_THIRD_PASS },
+          // Note that its folder last changed long before the clock starts, which dates nothing.
+          changedAt: { [fromBefore]: USED_OVER_A_WEEK_AGO },
+          reads: [listed, listed, listed],
         });
-        yield* device.passed(1);
+        yield* device.passed(2);
 
-        assert.deepEqual(
-          recent.filter((agentId) => !device.holdsOf(agentId).folder),
-          [],
-          "every folder of the 15 used most recently stays",
-        );
-        assert.deepEqual(device.holdsOf(oldest), NOTHING);
-        assert.deepEqual(device.holdsOf(fromBefore), NOTHING);
-        assert.deepEqual(device.ownedRecorded(), [...everyone].sort());
+        assert.equal(device.holdsOf(used).folder, true);
+        yield* device.passed(3);
+
+        assert.deepEqual(device.holdsOf(used), NOTHING);
+        assert.equal(device.holdsOf(fromBefore).folder, true);
+        assert.deepEqual(device.ownedRecorded(), listed);
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
 
 it.effect(
-  "a pass never clears a running agent's folder past the 15 used most recently, nor one with unpushed work, which it checks once while that agent stays idle",
+  "a pass never clears the folder of an agent unused for a week whose launch is still kept, nor one with unpushed work, which it checks once while that agent stays idle",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const recent = Array.from({ length: 15 }, (_, index) => agentNumbered(index + 1));
+        const listed = [AGENT.LAUNCH_KEPT, AGENT.UNSAVED];
         const device = yield* following({
-          held: { folderOnly: [...recent, AGENT.UNSAVED] },
+          held: { folderOnly: listed },
           used: {
-            ...Object.fromEntries(recent.map((agentId, index) => [agentId, DAY * (100 + index)])),
-            [AGENT.UNSAVED]: DAY * 10,
+            [AGENT.LAUNCH_KEPT]: USED_OVER_A_WEEK_AGO,
+            [AGENT.UNSAVED]: USED_OVER_A_WEEK_AGO,
           },
+          keptLaunches: [
+            { id: "4d5e6f70-8192-4a3b-8c4d-5e6f7a8b9c0d", agentId: AGENT.LAUNCH_KEPT },
+          ],
           unsavedWork: { [AGENT.UNSAVED]: "it has commits on no remote branch\n" },
-          // Note that the running agent is stamped as it launches, by the test's clock, long before any other's use.
-          launches: (home) => [
-            launchOf(home, AGENT.RUNNING, "5e6f7081-92a3-4b4c-9d5e-6f7a8b9c0d1e"),
-          ],
-          reads: [
-            [...recent, AGENT.UNSAVED, AGENT.RUNNING],
-            [...recent, AGENT.UNSAVED, AGENT.RUNNING],
-          ],
+          reads: [listed, listed],
         });
         yield* device.passed(2);
 
-        assert.equal(device.holdsOf(AGENT.RUNNING).folder, true);
+        assert.equal(device.holdsOf(AGENT.LAUNCH_KEPT).folder, true);
         assert.equal(device.holdsOf(AGENT.UNSAVED).folder, true);
         assert.equal(device.checksRun(), 1);
       }),

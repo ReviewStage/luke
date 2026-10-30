@@ -115,9 +115,9 @@ export function savedSince(save: AgentSave | undefined): Option.Option<number> {
  * never checks again while they stand and lets go of whole a week after,
  * and when each agent whose folder stands was last used here (epoch
  * milliseconds): its last launch, turn's end, or files written, or, for a
- * folder from before the record, when its folder says, which ranks the
- * folders a pass keeps; each of the last four absent from a state file from
- * before it.
+ * folder from before the record, the first start that kept it, which a pass
+ * reads to clear the folders of agents long unused; each of the last four
+ * absent from a state file from before it.
  */
 const LocalAgentStateSchema = Schema.Struct({
   devices: Schema.Record(Schema.String, Schema.String),
