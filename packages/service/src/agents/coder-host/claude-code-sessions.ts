@@ -33,7 +33,7 @@ import { deviceLayout } from "@luke/database/models/device-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { AGENT_KIND, AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
+import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -76,22 +76,8 @@ function effortOf(effort: string): Effort | undefined {
   return Object.values(EFFORT).find((level) => level === effort);
 }
 
-/** Claude Code's built-in tools that change a file, by the CLI's names. */
-const CLAUDE_CODE_EDITING_TOOLS = ["Edit", "Write", "NotebookEdit"] as const;
-
-/** The built-in tools an agent of its kind goes without: a pilot never changes code, so it has none that edits a file. */
-export function claudeCodeDeniedTools(agent: Agent): readonly string[] {
-  return agent.kind === AGENT_KIND.PILOT ? CLAUDE_CODE_EDITING_TOOLS : [];
-}
-
-/** What Claude Code's sessions are handed beside what every harness's are. */
-export interface ClaudeCodeSessionsOptions extends RunnerSessionsOptions {
-  /** Claude Code's built-in tools the agent goes without, by the CLI's names, which its launch's config carries; none leaves the CLI's set as Luke's launch shapes it. */
-  readonly deniedTools: (agent: Agent) => readonly string[];
-}
-
 /** Claude Code as the shared launch drives it, for one account. */
-function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonly _tag: string }> {
+function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _tag: string }> {
   const { userId } = options;
 
   /**
@@ -249,7 +235,6 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
       const model = providerModelOf(agent.model);
       if (model === undefined) return yield* Effect.fail(new LaunchRefused({ reason: "model" }));
       const effort = effortOf(agent.effort);
-      const denied = options.deniedTools(agent);
       const written: ClaudeCodeConfig = {
         harness: RUNNER_HARNESS.CLAUDE_CODE,
         cwd: layout.checkoutPath,
@@ -265,7 +250,6 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
         mcpUrl: options.mcpUrl,
         integrations: yield* options.integrations(agent),
         allowedDomains: [...ALLOWED_DOMAINS],
-        ...(denied.length === 0 ? undefined : { deniedTools: [...denied] }),
         installedSkills: layout.installedSkills,
         // The runner stays warm past the agent's turn, for the sweep to retire (`retireWarmRunner`).
         warm: true,
@@ -315,6 +299,6 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
 
 /** The sessions for one account, over the calling fiber's services. */
 export const claudeCodeSessions = <Turn extends EveHostTurn = EveHostTurn>(
-  options: ClaudeCodeSessionsOptions,
+  options: RunnerSessionsOptions,
 ): Effect.Effect<NativeSessions<Turn>, never, RunnerServices> =>
   runnerSessions<{ readonly _tag: string }, Turn>(claudeCode(options), options);
