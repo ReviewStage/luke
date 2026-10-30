@@ -41,25 +41,27 @@ import {
   ErrorState,
   FAILURE_NOTE_TIME,
   FailureNote,
+  GlyphSlot,
   INLINE_REF_LOOK,
   InlineRef,
   LineSummary,
   MESSAGE_LINE_ALIGN,
   MessageHead,
   MessageLine,
+  NOTE_LINE_LOOK,
+  NoteLine,
   OneLine,
   STATUS_TONE,
   SUBJECT_FIT,
   TaskStatusMark,
   TEXT_ELEMENT,
-  TEXT_LINK_LOOK,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  TextLink,
   useAnnounce,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
+import { ICON_SIZE } from "@luke/ui/icons";
 import { skillWord } from "@luke/ui/skill-mention";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
@@ -176,7 +178,7 @@ import { EditComposer } from "./edit-composer.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
 import { GitHubLineCard, ThreadLineHead, TranscriptAgent } from "./line-cards.js";
-import { linkChip } from "./mention-chip.js";
+import { CHIP_OR_LINK_FRAME, ChipOrLink, linkChip } from "./mention-chip.js";
 import type { MentionHolder } from "./mention-holder.js";
 import {
   agentMessagePlace,
@@ -186,7 +188,7 @@ import {
 } from "./message-links.js";
 import { PilotComposerNote } from "./pilot-note.js";
 import { PlanPictures } from "./plan-pictures.js";
-import { ORIGIN_CHIP, ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
+import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection.js";
 import { REWIND_ACTION, RewindProvider, rewindPoints, useMessageEdit } from "./rewind-action.js";
@@ -1074,7 +1076,9 @@ function OriginBody({ body }: { body: string }): React.JSX.Element {
     <Fold className="agent-origin-body text-caption-inline">
       <LineSummary brightens>
         <DisclosureChevron />
-        <WebhookIcon className="agent-origin-body-icon size-luke-16 shrink-0" aria-hidden="true" />
+        <GlyphSlot size={ICON_SIZE.MEDIUM}>
+          <WebhookIcon />
+        </GlyphSlot>
         {WEBHOOK_BODY_LABEL}
       </LineSummary>
       <FoldBody>
@@ -1164,9 +1168,9 @@ function TaskRef({ task, onOpen }: { task: BriefTask; onOpen?: (() => void) | un
     <InlineRef
       look={INLINE_REF_LOOK.WASH}
       glyph={
-        <span className="agent-origin-glyph inline-grid size-luke-16 flex-none place-items-center text-muted-foreground [&>svg]:size-origin-glyph">
+        <GlyphSlot size={ICON_SIZE.MEDIUM} inset>
           <PlanGlyph status={task.status} />
-        </span>
+        </GlyphSlot>
       }
       label={task.name}
       onPress={onOpen === undefined ? undefined : () => onOpen()}
@@ -1229,21 +1233,14 @@ function OriginSubject({
         {words}
       </OneLine>
     );
-  const chip = linkChip(url, words, doors);
-  if (chip !== undefined) return <span className={ORIGIN_CHIP}>{chip}</span>;
   return (
-    <OneLine className="agent-origin-subject" words={words}>
-      <TextLink
-        href={url}
-        look={TEXT_LINK_LOOK.UNDERLINED}
-        onClick={(event) => {
-          event.preventDefault();
-          openGitHub(url);
-        }}
-      >
-        {words}
-      </TextLink>
-    </OneLine>
+    <ChipOrLink
+      href={url}
+      words={words}
+      doors={doors}
+      onOpen={openGitHub}
+      frame={CHIP_OR_LINK_FRAME.SUBJECT}
+    />
   );
 }
 
@@ -1630,7 +1627,7 @@ export function AgentMessage({
 
 /**
  * The line a transcript ends on once its turn was stopped or failed: a
- * failure is a `FailureNote`; a stop's words are quiet. A turn failed on
+ * failure is a `FailureNote`; a stop's words are a quiet `NoteLine`. A turn failed on
  * the reader's own refused key offers its API keys after the words, inside
  * the note.
  */
@@ -1675,18 +1672,19 @@ function AgentEndLine({
     );
   }
   return (
-    <p className={END_LINE_CLASS} data-ended="">
+    <NoteLine look={NOTE_LINE_LOOK.INSET} data-ended="">
       <span className="agent-end-words">{ended.words}</span>
       {remedyButton}
-    </p>
+    </NoteLine>
   );
 }
 
 /**
- * The end line: a failure's mark, its words, then what the turn cost after
- * a dot, flowing as one sentence in the caption role, so a long failure
- * wraps under its own words. Only a failure is drawn in the danger ink
- * (`FailureNote`): a stop is the developer's own doing.
+ * A failed end line's frame: a failure's mark, its words, then what the
+ * turn cost after a dot, flowing as one sentence in the caption role, so a
+ * long failure wraps under its own words. Only a failure is drawn in the
+ * danger ink (`FailureNote`): a stop is the developer's own doing, said in
+ * a quiet note line.
  */
 const END_LINE_CLASS = "agent-end-line m-0 text-caption text-muted-foreground";
 

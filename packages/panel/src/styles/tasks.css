@@ -1745,12 +1745,15 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* The line a finished turn ends on (`agent-tab.tsx`'s TurnFoot), the line
    under every message: how long it worked as its lead, then its Copy and
-   Copy link to the right of it. Note that the room above is the row's
-   rather than the worked line's, because the buttons are taller than the
-   words and centring them would push the words down. */
+   Copy link to the right of it, the lead giving up its width before them. */
 .agent-turn-foot [data-worked] {
   min-width: 0;
-  margin-top: 0;
+}
+
+/* A message's Forked to trail (fork-action.tsx) stands a list's gap under
+   its foot. */
+[data-forked-to] {
+  margin-top: var(--luke-list-gap);
 }
 
 /* A forked draft's chip over its box: what it forks, the message's opening
@@ -2300,14 +2303,9 @@ svg.lucide {
 }
 
 /* A narrow side panel gives a subagent's job two lines before it
-   cuts it, so the time and marks beside it leave more than a word of it. */
+   cuts it, so the time and marks beside it leave more than a word of it;
+   its row, pressed or not, grows around them. */
 @container side-panel (width < 360px) {
-  .subagent-line {
-    height: auto;
-    min-height: 28px; /* off-scale: a call's line */
-    padding-block: var(--luke-space-2);
-  }
-
   .subagent-job {
     display: -webkit-box;
     -webkit-box-orient: vertical;

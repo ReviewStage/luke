@@ -1,7 +1,18 @@
 import type { TurnRecord } from "@luke/features/agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { callHeading, WORKED_SEPARATOR, workingTime } from "@luke/features/time-format";
-import { ANNOUNCE, cn, Shimmer, TIME_LOOK, Time, Tooltip, useAnnounce, useMinute } from "@luke/ui";
+import {
+  ANNOUNCE,
+  cn,
+  NOTE_LINE_LOOK,
+  NoteLine,
+  Shimmer,
+  TIME_LOOK,
+  Time,
+  Tooltip,
+  useAnnounce,
+  useMinute,
+} from "@luke/ui";
 import type { ReactNode } from "react";
 import { TurnCard } from "./turn-card.js";
 
@@ -17,8 +28,9 @@ import { TurnCard } from "./turn-card.js";
  * turn: "Worked for 1m 18s · Today, 3:42 PM", the day worded as a call's
  * header words it, and the turn's card on hover (`turn-card.tsx`). The two
  * read as one line in two states, so they share a type, a colour, and the
- * room above them, the finished line only without the shimmer. Both lines
- * are selectable, as the transcript around them is.
+ * room above them, the finished line only without the shimmer: both are
+ * the transcript's quiet note line (`NoteLine`), selectable, as the
+ * transcript around them is.
  */
 
 /** What a transcript's last line says while its agent works. */
@@ -26,9 +38,6 @@ const WORKING_LINE = "Working…";
 
 /** What a finished turn's last line says before how long it worked. */
 const WORKED_WORDS = "Worked for ";
-
-/** How a working line and the line a finished turn ends on are both set: the transcript's quiet status type, in the muted colour, its words selectable. */
-const STATUS_LINE_CLASS = "status-line select-text text-caption text-muted-foreground";
 
 /** What a finished turn's last line says: how long it worked, and the day and time it ended, as a call's header says it from `now`. */
 function workedForText(startedAt: number, endedAt: number, now: number): string {
@@ -96,14 +105,14 @@ export function WorkedFor({
         />
       }
     >
-      <p className={`${STATUS_LINE_CLASS} mt-control-gap mb-0 w-fit tabular-nums`} data-worked="">
-        <span data-worked-length="">
+      <NoteLine look={NOTE_LINE_LOOK.INSET} selectable data-worked="">
+        <span className="tabular-nums" data-worked-length="">
           {WORKED_WORDS}
           {workingTime(endedAt - startedAt)}
         </span>
         {WORKED_SEPARATOR}
         <Time at={endedAt} look={TIME_LOOK.DAY} now={now} />
-      </p>
+      </NoteLine>
     </Tooltip>
   );
 }
@@ -118,11 +127,10 @@ export function WorkingLine({
   words?: string;
 }): ReactNode {
   useAnnounce(ANNOUNCE.POLITE, words);
-  // Note that only its top margin is cleared, because the conversation's gap below it is a bottom margin a cleared one would override, leaving what is said next touching it.
   return (
-    <p className={`${STATUS_LINE_CLASS} mt-0 last:mb-0`} data-working="">
+    <NoteLine look={NOTE_LINE_LOOK.INSET} selectable data-working="">
       <Shimmer>{words}</Shimmer>
       {startedAt === undefined ? null : <WorkingTime startedAt={startedAt} />}
-    </p>
+    </NoteLine>
   );
 }

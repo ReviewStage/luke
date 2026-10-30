@@ -10,19 +10,19 @@ import {
   Disclosure,
   DisclosureBody,
   DisclosureSummary,
+  GlyphSlot,
   Inline,
   MESSAGE_LINE_ALIGN,
   MessageHead,
   MessageLine,
   OneLine,
   TEXT_ELEMENT,
-  TEXT_LINK_LOOK,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  TextLink,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
+import { ICON_SIZE } from "@luke/ui/icons";
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
@@ -35,7 +35,7 @@ import { useMemberDirectory } from "../member-directory.js";
 import { lineSender, providerOf } from "./agent-model.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
 import { CopyMessageAction } from "./copy-message.js";
-import { linkChip } from "./mention-chip.js";
+import { CHIP_OR_LINK_FRAME, ChipOrLink, ORIGIN_CHIP } from "./mention-chip.js";
 import {
   earlierStepsLine,
   leftOutLine,
@@ -76,13 +76,6 @@ import { useOpenPlace } from "./use-open-link.js";
  * where known. The source's whole transcript is a press of its chip away.
  * The model is `replay-card-model.ts`.
  */
-
-/**
- * A chip naming what a transcript's opening came from, as the transcript
- * draws one, which cuts its own name to the line: held to the line's width
- * so a narrow line cuts the title, never the state after it.
- */
-export const ORIGIN_CHIP = "agent-origin-chip inline-flex min-w-0 max-w-full";
 
 /**
  * Where an agent's replay card stands: the agents of its task, archived ones
@@ -363,7 +356,9 @@ function SummaryRow({ line, text }: { line: string; text: string }): React.JSX.E
   return (
     <Disclosure data-replay-summary="">
       <DisclosureSummary>
-        <TextQuoteIcon aria-hidden="true" />
+        <GlyphSlot size={ICON_SIZE.MEDIUM}>
+          <TextQuoteIcon />
+        </GlyphSlot>
         {line}
       </DisclosureSummary>
       <DisclosureBody inset={DISCLOSURE_BODY.FLUSH}>
@@ -458,20 +453,13 @@ function ReplayFoot({
         </span>
       )}
       {pullRequest === undefined || pullRequest === null || words === undefined ? null : (
-        <span className={ORIGIN_CHIP}>
-          {linkChip(pullRequest.url, words, doors) ?? (
-            <TextLink
-              href={pullRequest.url}
-              look={TEXT_LINK_LOOK.UNDERLINED}
-              onClick={(event) => {
-                event.preventDefault();
-                place.openGitHub(pullRequest.url);
-              }}
-            >
-              {words}
-            </TextLink>
-          )}
-        </span>
+        <ChipOrLink
+          href={pullRequest.url}
+          words={words}
+          doors={doors}
+          onOpen={place.openGitHub}
+          frame={CHIP_OR_LINK_FRAME.ORIGIN}
+        />
       )}
     </div>
   );

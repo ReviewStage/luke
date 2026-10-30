@@ -50,6 +50,9 @@ import {
   InlineRef,
   LAYOUT_ELEMENT,
   LineButton,
+  LineRow,
+  NOTE_LINE_LOOK,
+  NoteLine,
   OneLine,
   ProviderMark,
   RollingNumber,
@@ -1740,13 +1743,9 @@ export function TranscriptSubagent({
       </Tool>
     ) : onOpen === undefined ? (
       // The same line as the one that opens a subagent's tab, pressed by nothing.
-      <div
-        className="subagent-line flex h-7 w-full min-w-0 items-center gap-icon-gap rounded-luke-6 px-tight-gap text-caption text-muted-foreground"
-        data-subagent-row=""
-        data-call-id={callId}
-      >
+      <LineRow data-subagent-row="" data-call-id={callId}>
         {line}
-      </div>
+      </LineRow>
     ) : (
       <Tooltip label={SUBAGENT_HINT} card={card ?? undefined}>
         <LineButton data-subagent-row="" data-call-id={callId} onClick={onOpen}>
@@ -1877,9 +1876,5 @@ export function TranscriptRows<B>({
 
 /** A quiet note between a transcript's rows: what was left out, or what stands in a row's place. */
 export function TranscriptNote({ children }: { children: ReactNode }): ReactNode {
-  return (
-    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-      {children}
-    </Text>
-  );
+  return <NoteLine look={NOTE_LINE_LOOK.INSET}>{children}</NoteLine>;
 }
