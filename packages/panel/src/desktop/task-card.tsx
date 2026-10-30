@@ -145,7 +145,7 @@ function CreatorDetail({
 }: {
   task: TaskSummary;
   readerId: string | undefined;
-  now: number;
+  now: number | undefined;
 }): React.JSX.Element {
   const creator = useCreator(task, readerId);
   const maker = useTaskMaker(task);
@@ -271,8 +271,8 @@ export function TaskCard({
   readerId?: string | undefined;
   /** The catalog as last read, which names each agent's model; empty before the first read. */
   models: readonly CatalogModel[];
-  /** The time the card's times are counted back from. */
-  now: number;
+  /** The time the card's times are counted back from; the window's minute where none is handed. */
+  now: number | undefined;
   /** Opens the task on one of its agents' tabs. */
   onShowAgent: (agentId: string) => void;
   /** The workspace the task's repository belongs to, where the reader may move it there, which the card names at its foot. */
@@ -397,7 +397,7 @@ function TaskSub({
 }: {
   task: TaskSummary;
   workspaceName: string | undefined;
-  now: number;
+  now: number | undefined;
 }): React.JSX.Element {
   const keyed = task.number !== undefined && workspaceName !== undefined;
   return (
@@ -461,7 +461,7 @@ export function taskCardOf(
     readonly agents: Pick<TasksControl["agents"], "models">;
   },
   task: TaskSummary,
-  now: number,
+  now: number | undefined,
   focus?: React.ComponentProps<typeof TaskCard>["focus"],
 ): React.JSX.Element {
   return (

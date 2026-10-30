@@ -30,7 +30,9 @@ import {
   EMPTY_DRAFT,
   holdsPicks,
   type InboxPlace,
+  picksStandOn,
   useDraftWriter,
+  useInboxDraftStandings,
   useInboxDrafts,
   withoutPicks,
 } from "../composer-drafts.js";
@@ -392,7 +394,7 @@ function withItem(items: readonly InboxItem[], item: InboxItem): readonly InboxI
  * reader of a plan does while another has heard the agent's newer post
  * first, leaves them be, since its read is what is out of date.
  */
-function caughtUp(item: InboxItem, draft: Draft): boolean {
+function caughtUp(item: InboxItem, draft: Pick<Draft, "revision">): boolean {
   return draft.revision === undefined || item.revision >= draft.revision;
 }
 
@@ -435,7 +437,55 @@ function holdsNothing(draft: Draft): boolean {
   );
 }
 
-export function useTaskInbox(input: {
+/**
+ * Where a held read's cards keep their drafts, kept apart from the hook so
+ * another tab's or page's reading of the inbox shares them: under the plan,
+ * or under none where the inbox is an agent's with no plan; and what of
+ * them the read covers, a plan's or, for an agent with no plan, that
+ * agent's alone.
+ */
+function draftScope(
+  taskId: string | undefined,
+  kind: AgentInboxScope["kind"],
+  draftTask: string | null | undefined,
+) {
+  const ownTask = kind === INBOX_SCOPE_KIND.PLAN ? taskId : undefined;
+  return {
+    ownTask,
+    // Note that one agent's inbox keeps them under its plan where it has one, as its task's Inbox does.
+    draftsOn: ownTask ?? draftTask ?? null,
+    // Note that an agent with no plan is the planId its inbox is read by.
+    readAgent: kind === INBOX_SCOPE_KIND.AGENT ? taskId : undefined,
+  };
+}
+
+/** The doors of a held read's cards' drafts (`useInboxCardDrafts`). */
+type InboxCardDrafts = Pick<TaskInboxControl, "draftOf" | "drafted" | "onDraft" | "onAttachments">;
+
+/**
+ * A held read without its cards' drafts, which the window's Inbox reads in
+ * its pane alone (`useHeldTaskInbox`); and its holder's own read whole, none
+ * until it answers, which alone says an item is gone (`useInboxDraftsLetGo`).
+ */
+export type HeldTaskInboxControl = Omit<TaskInboxControl, keyof InboxCardDrafts> & {
+  readonly whole: readonly InboxItem[] | undefined;
+};
+
+/** The open task's inbox as one control, its cards' drafts among it: its held read (`useHeldTaskInbox`), the drafts it lets go (`useInboxDraftsLetGo`), and those drafts (`useInboxCardDrafts`). */
+export function useTaskInbox(input: Parameters<typeof useHeldTaskInbox>[0]): TaskInboxControl {
+  const held = useHeldTaskInbox(input);
+  useInboxDraftsLetGo(held, input);
+  return { ...held, ...useInboxCardDrafts(held, input) };
+}
+
+/**
+ * The open task's inbox as one control, but for its cards' drafts, which
+ * it reads none of, so a word typed in a box draws nothing that holds it:
+ * the window's Inbox holds it at its page, beside the drafts it lets go
+ * (`useInboxDraftsLetGo`), and reads the drafts in its pane, which draws the
+ * box (`useInboxCardDrafts`).
+ */
+export function useHeldTaskInbox(input: {
   /** The task whose inbox is held, or, with `kind` an agent's, the agent with no task whose inbox is. */
   taskId: string | undefined;
   /** Whose inbox `taskId` names: a task's, unless it is one agent's with no task. */
@@ -459,7 +509,7 @@ export function useTaskInbox(input: {
     /** Reads the task's agents again, for where an agent an answer reached stands now. */
     readonly onRetryList: () => void;
   };
-}): TaskInboxControl {
+}): HeldTaskInboxControl {
   const { taskId, shown, waiting, readerId, agents } = input;
   const kind = input.kind ?? INBOX_SCOPE_KIND.PLAN;
 
@@ -511,14 +561,7 @@ export function useTaskInbox(input: {
     new Map(),
   );
   const [notes, setNotes] = useState<ReadonlyMap<string, InboxNote>>(new Map());
-  // The cards' drafts, kept apart from the hook so another tab's or page's reading of the inbox
-  // shares them, under the plan, or under none where the inbox is an agent's with no plan.
-  const ownTask = kind === INBOX_SCOPE_KIND.PLAN ? taskId : undefined;
-  // Note that one agent's inbox keeps them under its plan where it has one, as its task's Inbox does.
-  const draftsOn = ownTask ?? input.draftTask ?? null;
-  // Note that an agent with no plan is the planId its inbox is read by.
-  const readAgent = kind === INBOX_SCOPE_KIND.AGENT ? taskId : undefined;
-  const drafts = useInboxDrafts(draftsOn);
+  const draftsOn = draftScope(taskId, kind, input.draftTask).draftsOn;
   const writer = useDraftWriter();
   const attempts = useRef(new Map<string, Attempt>());
   // The items whose send is out, as `sending` holds them but at once, so a second press before
@@ -695,31 +738,102 @@ export function useTaskInbox(input: {
     latest.current.onRetryList();
   }, [held.items, ids]);
 
-  // A read lets go of the drafts of the items it covers that it no longer holds: a plan's, or, for
-  // an agent with no plan, that agent's alone. Note that only the holder's own read says an item is
-  // gone, since the feed leaves out a settled item past its bound whose draft still stands.
+  const board = useMemo(() => inboxBoard(held.items, readerId), [held.items, readerId]);
+
+  return {
+    board,
+    reading: active && !held.drawn && !failed,
+    read,
+    drawn: held.drawn,
+    failed,
+    onRetry: holder.retry,
+    whole: holder.rows,
+    sending,
+    pendingReplies,
+    notes,
+    onDropNote,
+    onAcknowledge,
+    onMessage,
+    images,
+    onImage,
+    onRetryImage,
+  };
+}
+
+/** Whose read a held read's cards' drafts are kept under. */
+interface DraftScopeOf {
+  readonly taskId: string | undefined;
+  readonly kind?: AgentInboxScope["kind"] | undefined;
+  readonly draftTask?: string | null | undefined;
+}
+
+/**
+ * Lets go of the cards' drafts a held read covers (`useHeldTaskInbox`) once
+ * it draws its holder's items: those of the items it no longer holds, and
+ * the picks of those whose items changed since they were made. Note that
+ * only the holder's own read says an item is gone (`whole`), since the feed
+ * leaves out a settled item past its bound whose draft still stands. Note
+ * too that it reads where each draft stands and never its words
+ * (`useInboxDraftStandings`), so what holds the read draws nothing for a
+ * word typed; and that it stands for as long as the read does, rather than
+ * with the box, so an item gone from under its open box takes its draft
+ * with it.
+ */
+export function useInboxDraftsLetGo(
+  control: Pick<HeldTaskInboxControl, "board" | "drawn" | "whole">,
+  scope: DraftScopeOf,
+): void {
+  const { ownTask, draftsOn, readAgent } = draftScope(
+    scope.taskId,
+    scope.kind ?? INBOX_SCOPE_KIND.PLAN,
+    scope.draftTask,
+  );
+  const standings = useInboxDraftStandings();
+  const { drop, update } = useDraftWriter();
+  const { board, drawn, whole } = control;
+  const items = useMemo(() => [...board.open, ...board.settled], [board]);
   // Note that the agent posting on the item again, or a teammate settling it, lets only the picks go,
   // which stand on the ask as it was, while the words and files being written stay as they are.
-  const { drop, update } = writer;
-  const whole = holder.rows;
   useEffect(() => {
-    if (!held.drawn || (ownTask === undefined && readAgent === undefined)) return;
-    const covered = drafts.filter(
-      (kept) => ownTask !== undefined || kept.place.agentId === readAgent,
+    if (!drawn || (ownTask === undefined && readAgent === undefined)) return;
+    const covered = standings.filter(
+      ({ place }) =>
+        place.planId === draftsOn && (ownTask !== undefined || place.agentId === readAgent),
     );
     const gone =
       whole === undefined
         ? []
         : covered.filter((kept) => !whole.some((item) => item.id === kept.place.itemId));
     const lapsed = covered.filter((kept) => {
-      const item = held.items.find((each) => each.id === kept.place.itemId);
-      return item !== undefined && caughtUp(item, kept) && draftOfItem(kept, item) !== kept;
+      const item = items.find((each) => each.id === kept.place.itemId);
+      return (
+        item !== undefined && caughtUp(item, kept) && !picksStandOn(kept.revision, kept.picks, item)
+      );
     });
     for (const kept of lapsed) update(kept.place, withoutPicks);
     if (gone.length > 0) drop((place) => gone.some((kept) => Equal.equals(kept.place, place)));
-  }, [held.drawn, held.items, whole, ownTask, readAgent, drafts, drop, update]);
+  }, [drawn, items, whole, ownTask, readAgent, draftsOn, standings, drop, update]);
+}
 
-  const board = useMemo(() => inboxBoard(held.items, readerId), [held.items, readerId]);
+/**
+ * The cards' drafts of a held read (`useHeldTaskInbox`), as the box that
+ * writes them reads them (`../composer-drafts.ts`), read here alone, so a
+ * word typed in a box draws only what reads this.
+ */
+export function useInboxCardDrafts(
+  control: Pick<HeldTaskInboxControl, "board">,
+  scope: DraftScopeOf,
+): InboxCardDrafts {
+  const { draftsOn } = draftScope(
+    scope.taskId,
+    scope.kind ?? INBOX_SCOPE_KIND.PLAN,
+    scope.draftTask,
+  );
+  const drafts = useInboxDrafts(draftsOn);
+  const writer = useDraftWriter();
+  const { board } = control;
+  const items = useMemo(() => [...board.open, ...board.settled], [board]);
+
   const draftOf = useCallback(
     (item: InboxItem): InboxDraft => {
       const found = drafts.find((each) => each.place.itemId === item.id);
@@ -738,9 +852,7 @@ export function useTaskInbox(input: {
     [drafts],
   );
   const drafted = drafts.some((kept) =>
-    held.items.some(
-      (item) => item.id === kept.place.itemId && !holdsNothing(draftOfItem(kept, item)),
-    ),
+    items.some((item) => item.id === kept.place.itemId && !holdsNothing(draftOfItem(kept, item))),
   );
   const onDraft = useCallback(
     (item: InboxItem, draft: InboxDraft) =>
@@ -766,25 +878,5 @@ export function useTaskInbox(input: {
     [writer, draftsOn],
   );
 
-  return {
-    board,
-    draftOf,
-    drafted,
-    onDraft,
-    onAttachments,
-    reading: active && !held.drawn && !failed,
-    read,
-    drawn: held.drawn,
-    failed,
-    onRetry: holder.retry,
-    sending,
-    pendingReplies,
-    notes,
-    onDropNote,
-    onAcknowledge,
-    onMessage,
-    images,
-    onImage,
-    onRetryImage,
-  };
+  return { draftOf, drafted, onDraft, onAttachments };
 }

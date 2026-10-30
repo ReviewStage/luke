@@ -1,6 +1,5 @@
 import type { Channel } from "@luke/features/channel-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { agoText } from "@luke/features/time-format";
 import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -41,7 +40,6 @@ export interface ArchivedHead {
 export function useChannelHead(
   channel: HeadedChannel,
   archived: ArchivedHead | undefined,
-  now: number,
 ): InboxChannelHead {
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<{ readonly id: string; readonly words: string }>();
@@ -51,6 +49,7 @@ export function useChannelHead(
     return {
       name: channel.name,
       detail: channel.purpose === "" ? undefined : channel.purpose,
+      archivedAt: undefined,
       unarchive: undefined,
       refusal,
     };
@@ -65,7 +64,8 @@ export function useChannelHead(
   };
   return {
     name: channel.name,
-    detail: `Archived ${agoText(archived.archivedAt, now)}`,
+    detail: undefined,
+    archivedAt: archived.archivedAt,
     unarchive: { busy, onUnarchive: unarchive },
     refusal,
   };

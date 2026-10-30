@@ -66,6 +66,7 @@ import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { useInboxRowDrafts } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import {
   copyLinkItem,
@@ -80,7 +81,7 @@ import { stateEndMark } from "../state-glyph.js";
 import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { HOME_ROW_CONTEXT, HOME_ROW_META, HOME_ROW_PICTURE } from "../tasks/home-row.js";
-import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
+import { InboxItemRow, InboxListSkeleton, inboxRowDraft } from "../tasks/inbox-list.js";
 import { INBOX_HOLDER, type InboxListed, NEEDS_YOU } from "../tasks/inbox-model.js";
 import { agentEndMark } from "../tasks/tab-look.js";
 import { readAgentById } from "../tasks/use-agents.js";
@@ -668,6 +669,7 @@ function PersonColumn({
   const theirAutomations = usePersonAutomations(tasks.workspace?.id, userId);
   const { automations } = theirAutomations;
   const read = useWaitingItems(tasks);
+  const drafts = useInboxRowDrafts();
   // With Channels on what waits is threads, so its wait and its failure say so.
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   // An item is theirs where it waits on them (`inboxWaitsOn`), on a task its assignee or else its agent's starter, by the task's row from a service that names neither.
@@ -789,7 +791,7 @@ function PersonColumn({
                 key={listed.item.id}
                 listed={listed}
                 chosen={false}
-                now={now}
+                {...inboxRowDraft(drafts.get(listed.item.id), listed.item, false)}
                 models={tasks.agents.models}
                 readerId={tasks.me}
                 onChoose={openItem}
