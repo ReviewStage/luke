@@ -9,11 +9,9 @@ import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
 } from "@luke/features/pull-request-write-wire";
-import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "../act.js";
 import type { ViewedMarks } from "./changes-list.js";
-import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js";
+import type { PullRequestSource } from "./pull-request-source.js";
 import { noteOf, type WriteNote } from "./pull-request-writes.js";
 
 /**
@@ -74,12 +72,11 @@ interface Pressing {
  */
 export function useViewedFiles(
   agentId: string,
-  read: (agentId: string) => Promise<AgentPullRequestViewedAnswerView>,
+  source: Pick<PullRequestSource, "readViewed" | "write">,
   /** How many answers the changes read has landed with, a pull request named in the latest; none while none is. */
   reading: number | undefined,
 ): ViewedFiles {
-  const { act } = useAct();
-  const number = usePullRequestNumber();
+  const { readViewed: read, write } = source;
   const [states, setStates] = useState<ReadonlyMap<string, FileViewedState> | undefined>();
   const [pressed, setPressed] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [note, setNote] = useState<WriteNote | undefined>(undefined);
@@ -96,7 +93,7 @@ export function useViewedFiles(
     let standing = true;
     const asked = settled.current.count;
     latest.current
-      .read(agentId)
+      .read()
       .catch(
         (): AgentPullRequestViewedAnswerView => ({
           failure: AGENT_CALL_FAILURE.UNANSWERED,
@@ -134,10 +131,7 @@ export function useViewedFiles(
         ? PULL_REQUEST_ACTION.MARK_FILE_VIEWED
         : PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED;
       sentAt.set(path, pressing.current.get(path)?.presses ?? 0);
-      void act(ACT_KIND.AGENTS_PULL_REQUEST_ACTION, {
-        ...pullRequestAsked(agentId, number),
-        request: { action, path },
-      })
+      void write({ action, path })
         .catch(
           (): AgentPullRequestWriteAnswerView => ({
             failure: AGENT_CALL_FAILURE.UNANSWERED,
@@ -170,7 +164,7 @@ export function useViewedFiles(
           for (const tell of now.told) tell(stood);
         });
     },
-    [act, agentId, number],
+    [write],
   );
 
   const toggle = useCallback(
