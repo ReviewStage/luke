@@ -71,7 +71,7 @@ import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { loadTasksFixture } from "./tasks-fixture-loader.js";
-import { type ChannelPlaceControl, useChannelPlace } from "./use-channels.js";
+import { type ChannelPlaceControl, useChannelPlace, useInboxTask } from "./use-channels.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -1208,11 +1208,11 @@ test("a Luke link to an Inbox item opens it in its task's own Inbox tab in the t
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
 });
 
-/** The window's channel place as a surface drawing it reads it now. */
-function channelPlaceNow(): () => ChannelPlaceControl {
-  let seen: ChannelPlaceControl | undefined;
+/** The window's channel place, and the task the Inbox is narrowed to, as a surface drawing them reads them now. */
+function channelPlaceNow(): () => ChannelPlaceControl & { readonly taskId: string | undefined } {
+  let seen: (ChannelPlaceControl & { readonly taskId: string | undefined }) | undefined;
   const Reader = () => {
-    seen = useChannelPlace();
+    seen = { ...useChannelPlace(), taskId: useInboxTask() };
     return null;
   };
   const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -1255,6 +1255,52 @@ test("with Channels on, a channel's link opens the Inbox narrowed to it, which a
   assert.equal(thread, app);
   assert.deepEqual(tab.control().inboxView.chosen, { taskId: "alerts", itemId: opened });
   assert.equal(place().channelId, design);
+  handState({});
+});
+
+test("a task's Inbox door and its link narrow the Inbox to the task in place of a channel, a channel chosen after takes the task's place, and the Inbox's own row lists everything", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
+  await settle();
+  const place = channelPlaceNow();
+  const app = "a1000001-6d9f-4ab7-92df-000000000002";
+  const narrowedTo = () => ({
+    open: tab.control().inboxView.open,
+    chosen: tab.control().inboxView.chosen,
+    channelId: place().channelId,
+    taskId: place().taskId,
+  });
+  const channelLink = { workspace: "acme", place: { kind: LINK_PLACE.CHANNEL, channelId: app } };
+
+  act(() => tab.control().onOpenLink(channelLink));
+  act(() => tab.control().onShowInbox({ taskId: "notes" }));
+  const door = narrowedTo();
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.INBOX, planId: "alerts" },
+    }),
+  );
+  const linked = narrowedTo();
+  act(() => tab.control().onOpenLink(channelLink));
+  const channel = narrowedTo();
+  act(() => tab.control().onShowInbox({ taskId: "notes" }));
+  act(() => tab.control().inboxView.onOpen());
+
+  assert.deepEqual(door, { open: true, chosen: undefined, channelId: undefined, taskId: "notes" });
+  assert.deepEqual(linked, {
+    open: true,
+    chosen: undefined,
+    channelId: undefined,
+    taskId: "alerts",
+  });
+  assert.deepEqual(channel, { open: true, chosen: undefined, channelId: app, taskId: undefined });
+  assert.deepEqual(narrowedTo(), {
+    open: true,
+    chosen: undefined,
+    channelId: undefined,
+    taskId: undefined,
+  });
   handState({});
 });
 

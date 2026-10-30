@@ -71,11 +71,14 @@ import {
 } from "../tasks/tool-call-model.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
 import {
+  leaveInboxTask,
   openChannelThread,
+  openTaskThread,
   useArchivedChannels,
   useChannelPlace,
   useChannels,
   useInboxNarrowed,
+  useInboxTask,
   useThreadChannel,
 } from "../tasks/use-channels.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
@@ -207,6 +210,9 @@ export const DesktopInbox = memo(function DesktopInbox({
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const narrowed = useInboxNarrowed();
   const channelPlace = useChannelPlace();
+  // A task chosen narrows the Inbox to its own items, Channels on or off, which a chip over the list names and clears.
+  const narrowedTask = useInboxTask();
+  const narrowedTaskName = tasks.tasks.find((task) => task.id === narrowedTask)?.name;
   const channels = useChannels(channelsOn ? tasks.workspace?.id : undefined, tasks.shown);
   // A channel chosen that is open no more is looked for among the archived ones, read only then, and shown to read where it is one.
   const chosenGone =
@@ -266,7 +272,10 @@ export const DesktopInbox = memo(function DesktopInbox({
     choose,
     closeItem,
     onRetry,
-  } = useInboxListing(tasks, narrowed ? channelPlace.channelId : undefined);
+  } = useInboxListing(tasks, {
+    channelId: narrowed ? channelPlace.channelId : undefined,
+    taskId: narrowedTask,
+  });
   // An item opened into a channel from a link, which names its item and not its channel, narrows the Inbox to its own channel once read.
   useThreadChannel(narrowed ? chosen?.item : undefined);
   // Leaving a channel is having looked at it, so its row no longer reads unread for what was posted before.
@@ -503,6 +512,7 @@ export const DesktopInbox = memo(function DesktopInbox({
               : { agentId, itemId, opened: true };
         if (choice === undefined) return false;
         if (channelsOn) openChannelThread(itemId);
+        openTaskThread(holder);
         view.onChoose(choice);
         return true;
       }
@@ -668,6 +678,10 @@ export const DesktopInbox = memo(function DesktopInbox({
                           ? { start: <NewTaskButton tasks={tasks} /> }
                           : undefined,
                       channel: channel === undefined ? undefined : channelHead,
+                      task:
+                        narrowedTask === undefined
+                          ? undefined
+                          : { id: narrowedTask, name: narrowedTaskName, onClear: leaveInboxTask },
                     }}
                     models={named.models}
                     readerId={tasks.me}

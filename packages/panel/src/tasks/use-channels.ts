@@ -17,7 +17,7 @@ import { useExperiment } from "../use-app-state.js";
 import { CHANNEL_SHOWN, channelShown, generalChannel } from "./channels-model.js";
 
 /**
- * use-channels.ts -- a workspace's channels as the window holds them, the channel the Inbox is narrowed to, and its archived channels, each read through the act port (STAG-547).
+ * use-channels.ts -- a workspace's channels as the window holds them, the channel or the task the Inbox is narrowed to, and its archived channels, each read through the act port (STAG-547).
  *
  * The channels are held once per workspace for the whole window, so the
  * sidebar that lists them under the Inbox and the Inbox that heads one with
@@ -35,6 +35,11 @@ import { CHANNEL_SHOWN, channelShown, generalChannel } from "./channels-model.js
  * so whoever made it opens it; archiving the channel the window shows moves
  * the window to #general and says so, where an archive by someone else
  * leaves the Inbox to say the channel is gone.
+ *
+ * The Inbox may be narrowed to one task's items instead, Channels on or
+ * off, as a task's "needs you" count opens it (`chooseInboxTask`). It is
+ * narrowed to one or the other, never both: choosing a task leaves the
+ * channel, and choosing a channel leaves the task.
  */
 
 /** A workspace's channels as last read: none until a read answers, and whether the last read failed. */
@@ -65,16 +70,20 @@ const moveListeners = new Set<(moved: readonly string[]) => void>();
 
 /**
  * The channel the Inbox is narrowed to, none where it lists every channel;
- * and the item opened into it whose channel the place follows once its
- * item is read (`useThreadChannel`), as a link names its item and not its
- * channel.
+ * the task it is narrowed to instead, none where it lists every task's; and
+ * the item opened into it whose channel the place follows once its item is
+ * read (`useThreadChannel`), as a link names its item and not its channel.
  */
 interface ChannelPlace {
   readonly channelId: string | undefined;
+  readonly taskId: string | undefined;
   readonly following: string | undefined;
 }
 
-let place: ChannelPlace = { channelId: undefined, following: undefined };
+/** The Inbox narrowed to nothing, listing every channel's and every task's items. */
+const EVERY_ITEM: ChannelPlace = { channelId: undefined, taskId: undefined, following: undefined };
+
+let place: ChannelPlace = EVERY_ITEM;
 
 /** The workspace the window lists, whose channels the place names; none until the window lists one. */
 let placeWorkspace: string | undefined;
@@ -147,7 +156,7 @@ export function listChannelWorkspace(workspaceId: string): void {
   if (placeWorkspace === workspaceId) return;
   const was = placeWorkspace;
   placeWorkspace = workspaceId;
-  if (was !== undefined) moveTo({ channelId: undefined, following: undefined });
+  if (was !== undefined) moveTo(EVERY_ITEM);
 }
 
 /** Reads a workspace's channels again and holds the answer. */
@@ -194,14 +203,39 @@ function holdFollow(workspaceId: string): () => void {
 
 /** Moves the window's place, telling every surface drawing it. */
 function moveTo(next: ChannelPlace): void {
-  if (next.channelId === place.channelId && next.following === place.following) return;
+  if (
+    next.channelId === place.channelId &&
+    next.taskId === place.taskId &&
+    next.following === place.following
+  ) {
+    return;
+  }
   place = next;
   told();
 }
 
 /** Narrows the Inbox to a channel; a door any surface or link opens a channel by. */
 export function chooseChannel(channelId: string): void {
-  moveTo({ channelId, following: undefined });
+  moveTo({ ...EVERY_ITEM, channelId });
+}
+
+/** Narrows the Inbox to one task's items, leaving any channel chosen; the door a task's "needs you" count opens it by. */
+export function chooseInboxTask(taskId: string): void {
+  moveTo({ ...EVERY_ITEM, taskId });
+}
+
+/** Leaves the task the Inbox is narrowed to, so it lists every task's items again; the door the task's chip over the list clears it by. */
+export function leaveInboxTask(): void {
+  if (place.taskId !== undefined) moveTo({ ...place, taskId: undefined });
+}
+
+/**
+ * Opens an item while the Inbox is narrowed to a task: an item of another
+ * task, or of an agent on no task, leaves the task, so the list it opens in
+ * holds it.
+ */
+export function openTaskThread(itemTaskId: string | undefined): void {
+  if (place.taskId !== undefined && place.taskId !== itemTaskId) leaveInboxTask();
 }
 
 /**
@@ -215,19 +249,22 @@ export function openChannelThread(itemId: string, channelId?: string): void {
   if (place.channelId === undefined) return;
   moveTo(
     channelId === undefined
-      ? { channelId: place.channelId, following: itemId }
-      : { channelId, following: undefined },
+      ? { ...EVERY_ITEM, channelId: place.channelId, following: itemId }
+      : { ...EVERY_ITEM, channelId },
   );
 }
 
-/** Leaves any channel shown, so the Inbox lists every channel; the door its row and its command open it by. */
+/** Leaves any channel shown, and any task, so the Inbox lists every channel; the door its row and its command open it by. */
 export function leaveChannel(): void {
-  moveTo({ channelId: undefined, following: undefined });
+  moveTo(EVERY_ITEM);
 }
 
-/** Stands the channel as a step of the window's history held it, none for the Inbox narrowed to none. */
-export function standChannelPlace(channelId: string | undefined): void {
-  moveTo({ channelId, following: undefined });
+/** Stands the channel or the task as a step of the window's history or a link held it, neither for the Inbox narrowed to none. */
+export function standInboxPlace(narrowed: {
+  readonly channelId?: string | undefined;
+  readonly taskId?: string | undefined;
+}): void {
+  moveTo({ ...EVERY_ITEM, channelId: narrowed.channelId, taskId: narrowed.taskId });
 }
 
 /**
@@ -244,7 +281,7 @@ function leaveArchived(
   if (place.channelId !== channelId) return;
   const general = generalChannel(channels);
   const name = was?.find((channel) => channel.id === channelId)?.name;
-  moveTo({ channelId: general?.id, following: undefined });
+  moveTo({ ...EVERY_ITEM, channelId: general?.id });
   toast({
     words: `${name === undefined ? "The channel" : `#${name}`} is archived. You're in #general now.`,
     tone: STATUS_TONE.COMPLETE,
@@ -380,6 +417,11 @@ export function useChannelPlace(): ChannelPlaceControl {
   return useMemo(() => ({ channelId, onChoose: chooseChannel }), [channelId]);
 }
 
+/** The task the Inbox is narrowed to, Channels on or off; none where it lists every task's items. */
+export function useInboxTask(): string | undefined {
+  return useSyncExternalStore(subscribe, placeNow, placeNow).taskId;
+}
+
 /** Whether the Inbox is narrowed to a channel: Channels on, and a channel chosen. */
 export function useInboxNarrowed(): boolean {
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
@@ -405,7 +447,7 @@ export function useThreadChannel(
     standing.following === id &&
     standing.channelId !== channelId;
   useEffect(() => {
-    if (misplaced) moveTo({ channelId, following: undefined });
+    if (misplaced) moveTo({ ...EVERY_ITEM, channelId });
   }, [misplaced, channelId]);
 }
 

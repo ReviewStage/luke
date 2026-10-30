@@ -234,7 +234,9 @@ import { cardTitle } from "./tool-call-model.js";
  * chip over the list then says, its × listing everyone's again; each
  * choice checked; and under them Mark all as read,
  * which clears the dots alone. Every
- * choice is kept across launches. Grouped by person, each person's items
+ * choice is kept across launches. An Inbox narrowed to one task names it in a
+ * chip over the list too, before Whose's, its × listing every task's items
+ * again. Grouped by person, each person's items
  * stand under their face, the reader's own first as You. Every row, in
  * any grouping and in a task's own Inbox alike, names its task on its
  * first line, over its title. Where the scope leaves out every
@@ -860,14 +862,22 @@ function windowEntries(
   return [view, whose];
 }
 
-/** The key the chip over the list is followed by, as it arrives and leaves. */
-const WHOSE_CHIP_KEY = "whose";
+/** The keys the chips over the list are followed by, as each arrives and leaves. */
+const FILTER_CHIP_KEY = { TASK: "task", WHOSE: "whose" } as const;
 
-/** The chip over the list as last drawn, so it leaves looking as it did: its mark, if the person is known, and its words. */
-interface WhoseChipEntry {
-  readonly key: typeof WHOSE_CHIP_KEY;
-  readonly actor: Actor | undefined;
+/** What the task's chip's × says it does. */
+const CLEAR_TASK = "Show every task's items";
+
+/** What the task's chip names while the task is not listed yet. */
+const UNNAMED_TASK = "Task";
+
+/** A chip over the list as last drawn, so it leaves looking as it did: its mark, its words, and its ×. */
+interface FilterChipEntry {
+  readonly key: (typeof FILTER_CHIP_KEY)[keyof typeof FILTER_CHIP_KEY];
+  readonly mark: React.ReactNode;
   readonly words: string;
+  readonly removeLabel: string;
+  readonly onRemove: () => void;
 }
 
 /** What a press on the chip leaving does, out of reach as it is: nothing. */
@@ -875,10 +885,10 @@ function stays(): void {}
 
 /** The chip Whose calls for, Me by the reader's face, or the teammate's face and name; none while the list holds everyone's. */
 function whoseChipEntries(
-  chosen: InboxWhoseChoice["whose"],
+  { whose: chosen, onWhose }: InboxWhoseChoice,
   directory: ReturnType<typeof useMemberDirectory>,
   readerId: string | undefined,
-): WhoseChipEntry[] {
+): FilterChipEntry[] {
   if (chosen.kind === INBOX_WHOSE.EVERYONE) return [];
   const { members, former, readerId: known } = directory;
   const reader = known ?? readerId;
@@ -895,29 +905,63 @@ function whoseChipEntries(
       : actor === undefined
         ? chosen.name
         : actorName(actor);
-  return [{ key: WHOSE_CHIP_KEY, actor, words }];
+  const mark =
+    actor === undefined ? <UserIcon /> : <ActorMark actor={actor} size={ACTOR_SIZE.MARK} />;
+  return [
+    {
+      key: FILTER_CHIP_KEY.WHOSE,
+      mark,
+      words,
+      removeLabel: CLEAR_WHOSE,
+      onRemove: () => onWhose(EVERYONES),
+    },
+  ];
+}
+
+/** The chip the task the Inbox is narrowed to calls for, by its name; none while it lists every task's. */
+function taskChipEntries(
+  name: string | undefined,
+  onClear: (() => void) | undefined,
+): FilterChipEntry[] {
+  if (onClear === undefined) return [];
+  return [
+    {
+      key: FILTER_CHIP_KEY.TASK,
+      mark: <GLYPH.TASK />,
+      words: name ?? UNNAMED_TASK,
+      removeLabel: CLEAR_TASK,
+      onRemove: onClear,
+    },
+  ];
 }
 
 /**
- * The chip itself. Note that this is its own component under the line's
+ * The chips themselves. Note that this is its own component under the line's
  * `ListMotion`, because `useLeaving` finds the motion through the context
  * the motion provides.
  */
-function WhoseChipLine({
+function FilterChipLine({
   line,
   whose,
+  task,
   readerId,
 }: {
   line: RefObject<HTMLDivElement | null>;
   whose: InboxWhoseChoice;
+  task: InboxTaskHead | undefined;
   readerId: string | undefined;
 }): React.JSX.Element {
   const directory = useMemberDirectory();
-  const chosen = whose.whose;
+  const { whose: chosen, onWhose } = whose;
+  const taskName = task?.name;
+  const onClearTask = task?.onClear;
   // Note that the entries are made once for what they are made from, because `useLeaving` reads a new list as a change.
   const listed = useMemo(
-    () => whoseChipEntries(chosen, directory, readerId),
-    [chosen, directory, readerId],
+    () => [
+      ...taskChipEntries(taskName, onClearTask),
+      ...whoseChipEntries({ whose: chosen, onWhose }, directory, readerId),
+    ],
+    [taskName, onClearTask, chosen, onWhose, directory, readerId],
   );
   const drawn = useLeaving(listed, (entry) => entry.key);
   // Note that the box around the row stands hidden while the list holds everyone's, so the row's padding takes no room, and the chip arriving arrives into a row that stands.
@@ -932,14 +976,10 @@ function WhoseChipLine({
             key={key}
             motionKey={key}
             look={CHIP_LOOK.FILTER}
-            removeLabel={CLEAR_WHOSE}
-            onRemove={leaving ? stays : () => whose.onWhose(EVERYONES)}
+            removeLabel={value.removeLabel}
+            onRemove={leaving ? stays : value.onRemove}
           >
-            {value.actor === undefined ? (
-              <UserIcon />
-            ) : (
-              <ActorMark actor={value.actor} size={ACTOR_SIZE.MARK} />
-            )}
+            {value.mark}
             <ChipName>{value.words}</ChipName>
           </Chip>
         ))}
@@ -949,23 +989,26 @@ function WhoseChipLine({
 }
 
 /**
- * The chip over the list while Whose leaves out anyone's items: Me by the
- * reader's face, or the teammate's face and name, and a × that lists
- * everyone's again (`@luke/ui`'s removable filter chip, as the sidebar's
- * Created by stands over its tasks). It scales in as Whose chooses someone
- * and out as the × lifts it, as the Tasks page's filter chips do.
+ * The chips over the list: the task the Inbox is narrowed to, by its name,
+ * and a × that lists every task's items again; and, while Whose leaves out
+ * anyone's items, Me by the reader's face, or the teammate's face and name,
+ * and a × that lists everyone's again (`@luke/ui`'s removable filter chip,
+ * as the sidebar's Created by stands over its tasks). Each scales in as it
+ * is chosen and out as its × lifts it, as the Tasks page's filter chips do.
  */
-function WhoseChip({
+function FilterChips({
   whose,
+  task,
   readerId,
 }: {
   whose: InboxWhoseChoice;
+  task: InboxTaskHead | undefined;
   readerId: string | undefined;
 }): React.JSX.Element {
   const line = useRef<HTMLDivElement | null>(null);
   return (
     <ListMotion root={line} way={LIST_MOTION_WAY.SCALE}>
-      <WhoseChipLine line={line} whose={whose} readerId={readerId} />
+      <FilterChipLine line={line} whose={whose} task={task} readerId={readerId} />
     </ListMotion>
   );
 }
@@ -1209,7 +1252,9 @@ function ListHead({
           level={ANNOUNCE.ALERT}
           error={refusedShown(channel?.refusal, FAILURE_SURFACE.CHANNEL_POST)}
         />
-        {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
+        {view === undefined ? null : (
+          <FilterChips whose={view.choices} task={head.task} readerId={readerId} />
+        )}
       </>
     );
   }
@@ -1256,7 +1301,9 @@ function ListHead({
         level={ANNOUNCE.ALERT}
         error={refusedShown(channel?.refusal, FAILURE_SURFACE.CHANNEL_POST)}
       />
-      {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
+      {view === undefined ? null : (
+        <FilterChips whose={view.choices} task={head.task} readerId={readerId} />
+      )}
     </>
   );
 }
@@ -1436,6 +1483,15 @@ export interface InboxListHead {
   readonly link?: MenuAction | undefined;
   /** The channel the window's Inbox is narrowed to, which names its head; none where it lists every channel. */
   readonly channel?: InboxChannelHead | undefined;
+  /** The task the window's Inbox is narrowed to, which a chip over the list names and clears; none where it lists every task's items. */
+  readonly task?: InboxTaskHead | undefined;
+}
+
+/** The task the window's Inbox is narrowed to, as the chip over its list names it: its name, none while it is not listed yet, and the × that clears it. */
+export interface InboxTaskHead {
+  readonly id: string;
+  readonly name: string | undefined;
+  readonly onClear: () => void;
 }
 
 /** A channel heading the Inbox narrowed to it: its name, the words after it, and what its head offers of its own. */

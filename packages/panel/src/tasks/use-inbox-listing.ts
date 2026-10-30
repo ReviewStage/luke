@@ -21,6 +21,7 @@ import {
   inboxAgentOf,
   inboxCounts,
   listedItems,
+  taskGroups,
 } from "./inbox-model.js";
 import { useAgents } from "./use-agents.js";
 import { useHeldInboxList } from "./use-held-inbox-list.js";
@@ -63,6 +64,9 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * they turned it to, in every channel and across a launch
  * (`useChannelScope`). Its grouping, its order, and the rest of its view
  * are the Inbox's own.
+ *
+ * Narrowed to a task instead, it lists and counts that task's items alone
+ * (`taskGroups`), under the Inbox's own view.
  */
 
 /**
@@ -93,12 +97,19 @@ export function choiceOf({ holder, item }: InboxListed): InboxChoice {
     : { agentId: item.agentId, itemId: item.id };
 }
 
+/** What the window's Inbox is narrowed to: a channel, or a task, or neither; never both. */
+export interface InboxNarrowing {
+  readonly channelId?: string | undefined;
+  readonly taskId?: string | undefined;
+}
+
 /**
- * The window's Inbox as it is read and listed, narrowed to `channelId`
- * where one is given, and its chosen item; see the module's head, its list
- * held still while it is shown (`use-held-inbox-list.ts`).
+ * The window's Inbox as it is read and listed, narrowed to a channel or a
+ * task where one is given, and its chosen item; see the module's head, its
+ * list held still while it is shown (`use-held-inbox-list.ts`).
  */
-export function useInboxListing(tasks: TasksControl, channelId?: string) {
+export function useInboxListing(tasks: TasksControl, narrowing: InboxNarrowing = {}) {
+  const { channelId, taskId: narrowedTask } = narrowing;
   const view = tasks.inboxView;
   const { act } = useAct();
   const choices = useScopedChoices(channelId);
@@ -224,13 +235,12 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     [held, holdings, everyTask, holdingAgents, listedWorkspace],
   );
   const keptInChannel = asked?.opened === true ? asked.itemId : undefined;
-  const standing = useMemo(
-    () =>
-      channelId === undefined
-        ? everyChannel
-        : channelGroups(everyChannel, channelId, keptInChannel),
-    [everyChannel, channelId, keptInChannel],
-  );
+  const standing = useMemo(() => {
+    if (narrowedTask !== undefined) return taskGroups(everyChannel, narrowedTask);
+    return channelId === undefined
+      ? everyChannel
+      : channelGroups(everyChannel, channelId, keptInChannel);
+  }, [everyChannel, channelId, narrowedTask, keptInChannel]);
   // Note that every item marked read is pushed with each followed inbox, its marker among its rows, so nothing is read again.
   const marks = useInboxReadMarks({ act, workspaceId: tasks.workspace?.id });
   // The list's search, which narrows what it lists, never what it counts.

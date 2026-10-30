@@ -10,7 +10,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test } from "vitest";
 import type { AdminView } from "./admin/routing.js";
 import { runAppCommand } from "./app-commands.js";
 import { useCopyLink } from "./links-at-hand.js";
@@ -22,6 +22,7 @@ import {
 } from "./navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
+import { chooseInboxTask, leaveChannel } from "./tasks/use-channels.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -206,6 +207,8 @@ function tasksTab(
       onOpen: (agent) => patch((held) => ({ ...held, agent })),
       onClose: () => patch((held) => ({ ...held, agent: undefined })),
     },
+    // As the real door does, it opens the Inbox on no item; the task it narrows to is the window's own store's.
+    onShowInbox: () => inbox({ open: true, chosen: undefined }),
     inboxView: {
       ...base.inboxView,
       open: at.inbox.open,
@@ -502,6 +505,22 @@ test("on a narrow stage an Inbox item opened from its list is a step, and the In
   assert.equal(shownItem(window.at()), undefined, "the way back stands the list");
   assert.equal(window.history().canGoForward, true, "as a step back, the item ahead");
   assert.equal(window.standingAddress(), "/acme/inbox");
+});
+
+test("an Inbox narrowed to a task, showing one column, steps its item's way back to the task's list rather than adding a step after the item", () => {
+  chooseInboxTask(DOCUMENT_TASK.id);
+  onTestFinished(leaveChannel);
+  const window = mount(SHELL_ROOM.WIDE, {
+    ...ON_TASK,
+    inbox: { open: true, chosen: undefined, single: true },
+  });
+  window.press(() => {
+    window.shown().inboxView.onChoose(ITEM);
+  });
+  window.press(() => window.shown().inboxView.onClear());
+
+  assert.equal(window.history().canGoForward, true, "a step back, the item ahead");
+  assert.equal(window.standingAddress(), `/acme/inbox/plan/${DOCUMENT_TASK.id}`);
 });
 
 test("in a room still wide, as a 700px stage is, an Inbox showing one column by its own width holds its item as a step after its list, and its way back steps back to the list", () => {
