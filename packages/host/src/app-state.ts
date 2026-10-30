@@ -484,7 +484,10 @@ type InboxHoldersMoved<Value extends object> = ByInboxHolder<Value | null>;
  * Each holder that moved from `before` to `after`, whole, and each gone as
  * null; none where none moved. Note that a change crosses as the holders
  * it moved, since the largest workspace's feed is megabytes, a held inbox
- * is a task's whole, and a change moves one holder's.
+ * is a task's whole, and a change moves one holder's. A holder is compared
+ * by reference alone, because the document keeps the identity of every
+ * holder a patch did not move, so one that is not the very value sent is
+ * one that moved.
  */
 function inboxHoldersMoved<Value extends object>(
   before: ByInboxHolder<Value>,
@@ -492,9 +495,7 @@ function inboxHoldersMoved<Value extends object>(
 ): InboxHoldersMoved<Value> | undefined {
   const ofKind = (kind: InboxHolderKind) =>
     Object.fromEntries([
-      ...Object.entries(after[kind]).filter(
-        ([id, value]) => !Equal.equals(before[kind][id], value),
-      ),
+      ...Object.entries(after[kind]).filter(([id, value]) => before[kind][id] !== value),
       ...Object.keys(before[kind])
         .filter((id) => !Object.hasOwn(after[kind], id))
         .map((id) => [id, null]),
