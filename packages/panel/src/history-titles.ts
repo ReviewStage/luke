@@ -215,9 +215,11 @@ function liveTaskTitle(
   const label = taskName(tasks, step.taskId) ?? kept?.label;
   if (label === undefined) return undefined;
   const { taskId, column, side } = step;
-  // Note that `null` is a pane that showed no tab, and `undefined` a tab named neither now nor as kept, which leaves the words kept whole.
+  // Note that `null` is a pane that showed no tab, or the column's Overview, which is the task itself, and `undefined` a tab named neither now nor as kept, which leaves the words kept whole.
   const columnName =
-    column === undefined ? null : (columnTabLabel(column, taskId, tasks) ?? kept?.panes?.column);
+    column === undefined || isOverviewTab(column)
+      ? null
+      : (columnTabLabel(column, taskId, tasks) ?? kept?.panes?.column);
   const sideName =
     side === undefined ? null : (sideTabLabel(side, taskId, tasks) ?? kept?.panes?.side);
   if (columnName === undefined || sideName === undefined) return { label, detail: kept?.detail };
