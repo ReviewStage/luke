@@ -14,7 +14,9 @@ import { TIME_LOOK, Time } from "../time/time.js";
  * or where there is none, at a row's size on the head's line, and an
  * agent's or an app's glyph on a quiet tile; the name is
  * the label role's, as the caller's name helper says it (`actorName`,
- * `agentName`), on one line cut where the head runs out of room; the time
+ * `agentName`), on one line cut where the head runs out of room, and
+ * after it, in the muted ink, what the writer did where the comment is a
+ * line of what happened to its thread (`said`, "resolved this"); the time
  * is `Time`'s age in the caption role, a step quieter, its moment in full
  * on hover; and the trailing slot holds the line's end, its actions or a
  * status, against the head's far edge. What they wrote stands under the
@@ -62,6 +64,7 @@ const FACE = "luke-comment-face col-start-1 row-start-1 inline-flex self-center"
 const HEAD =
   "luke-comment-head col-start-2 row-start-1 flex min-w-0 items-baseline gap-icon-gap text-label";
 const NAME = "luke-comment-name min-w-0";
+const SAID = "luke-comment-said flex-none whitespace-pre font-luke-regular text-muted-foreground";
 const TIME = "luke-comment-time flex-none";
 // Note that the trailing slot is the head's line tall, its controls centred on it and standing over its edges, because a control's height would push every comment's words down by a different amount.
 const TRAILING =
@@ -110,6 +113,7 @@ function BodyCell({ children }: { children: ReactNode }): React.JSX.Element {
 export function Comment({
   author,
   nameRef,
+  said,
   at,
   now,
   trailing,
@@ -121,6 +125,8 @@ export function Comment({
   author: CommentAuthor;
   /** The name drawn as the caller's own ref, a chip that hangs the writer's card, in place of `author.name`'s words. */
   nameRef?: ReactNode;
+  /** What the writer did, said after their name, for a line of what happened to a thread: "resolved this". */
+  said?: string | undefined;
   /** When it was written; none for a draft not yet sent. */
   at?: number | undefined;
   /** What its age counts from; none counts from the window's minute. */
@@ -152,6 +158,7 @@ export function Comment({
       <HeadLine>
         <Text className={NAME} variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.SPAN} truncate>
           {nameRef ?? author.name}
+          {said === undefined ? null : <span className={SAID}>{` ${said}`}</span>}
         </Text>
         {at === undefined ? null : (
           <Text

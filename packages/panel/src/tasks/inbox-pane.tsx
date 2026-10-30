@@ -132,9 +132,11 @@ import {
   holderName,
   INBOX_HOLDER,
   INBOX_NOT_READ,
+  INBOX_SETTLED_STANDING,
   type InboxDraft,
   type InboxHolder,
   type InboxKnownAsk,
+  inboxSettledStanding,
   itemWorkspaceId,
   knownAsk,
   operatorHolder,
@@ -560,7 +562,7 @@ function AnsweredMarker(): React.JSX.Element {
  * controls as it offered them (`HeldControls`), stepped back to the muted
  * ink (`SteppedBack`), nothing picked and taking nothing, so what it used to
  * ask still reads in the thread and never as an answer, then `marker`, the
- * small pill saying what became of it. An `answer` of words
+ * small pill saying what became of it, where one says it. An `answer` of words
  * alone, which has no controls, ends with the pill alone, as does a to-do
  * naming no steps, whose one step was the item's title as it stood then,
  * which a later post may have renamed.
@@ -573,8 +575,9 @@ function HeldAsk({
   ask: InboxKnownAsk;
   /** The item's title, which stands as the one step of a to-do that names none. */
   title: string;
-  marker: React.JSX.Element;
-}): React.JSX.Element {
+  /** What became of it; none where the thread says so in a line of its own (`ResolvedEvent`). */
+  marker: React.JSX.Element | null;
+}): React.JSX.Element | null {
   // A to-do naming no steps draws the item's title as its one step, and a later post may have renamed the item since, so the title it drew then is not known.
   if (!hasControls(ask) || (ask.type === INBOX_ASK.DO && ask.steps.length === 0)) return marker;
   return (
@@ -619,10 +622,21 @@ function ReplacedMarker({
 }
 
 /**
- * What ends a withdrawn ask's message: the pill saying it was withdrawn, or
- * who closed the item without answering while the close stands, and why its
- * agent took it back as a muted sentence under the pill, so a long why
- * reads as words rather than wrapping inside it.
+ * Whether a member resolved the item without an answer while that close
+ * stands, as its row's card says it (`inboxSettledStanding`), which the
+ * thread says in a line of its own among its messages (`ResolvedEvent`).
+ */
+function resolvedByMember(item: InboxItem): boolean {
+  return inboxSettledStanding(item) === INBOX_SETTLED_STANDING.RESOLVED;
+}
+
+/**
+ * What ends a withdrawn ask's message: the pill saying it was withdrawn,
+ * and why its agent took it back as a muted sentence under the pill, so a
+ * long why reads as words rather than wrapping inside it. Where no reason
+ * was said a member closed the item without answering, which the thread's
+ * own line says while the close stands (`ResolvedEvent`), so the pill says
+ * so only where that line is not drawn.
  */
 function WithdrawnMarker({
   item,
@@ -630,18 +644,54 @@ function WithdrawnMarker({
 }: {
   item: InboxItem;
   reason: string | undefined;
-}): React.JSX.Element {
-  const closer = usePerson(item.closedBy);
+}): React.JSX.Element | null {
+  if (reason === undefined && resolvedByMember(item)) return null;
   return (
     <div
       className="inbox-ask-withdrawn flex min-w-0 flex-col items-start gap-tight-gap"
       data-inbox-settled="withdrawn"
     >
       <Badge>
-        <WithdrawnWords reason={reason} closer={item.closedBy === undefined ? undefined : closer} />
+        <WithdrawnWords reason={reason} />
       </Badge>
       <WithdrawnWhy reason={reason} />
     </div>
+  );
+}
+
+/**
+ * Where the line saying a member resolved the item stands among its
+ * messages: after the last one written by the time of the close, since a
+ * settled item still takes messages, or at the thread's end where that time
+ * is not known; -1 before every message read, and none where no member's
+ * close stands.
+ */
+function resolvedAfter(item: InboxItem, thread: readonly InboxMessage[]): number | undefined {
+  if (!resolvedByMember(item)) return undefined;
+  const settled = item.settledAt;
+  if (settled === undefined) return thread.length - 1;
+  return thread.findLastIndex((message) => message.createdAt <= settled);
+}
+
+/** What a member resolving the item says after their name. */
+const RESOLVED_IT = "resolved this without an answer";
+
+/**
+ * A member resolving the item without an answer, as a line of the thread
+ * where they did (`resolvedAfter`), drawn as a plan comment's "resolved this" is: their
+ * face on the gutter's line, their name, what they did, and when.
+ */
+function ResolvedEvent({ item, now }: { item: InboxItem; now: number }): React.JSX.Element {
+  const closer = usePerson(item.closedBy);
+  return (
+    <InboxComment
+      kind={COMMENT.CLOSED}
+      author={commentAuthor(closer)}
+      nameRef={<ActorRef actor={closer} nameOnly />}
+      said={RESOLVED_IT}
+      at={item.settledAt}
+      now={now}
+    />
   );
 }
 
@@ -668,8 +718,9 @@ function AskMarker({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element | 
  * a replaced ask, no card, its controls as it offered them, stepped back,
  * over a small marker saying a newer question, or message, replaced it
  * (`HeldAsk`); for a withdrawn one the same, over a marker saying so and
- * why, or who closed the item; and an ask this build does not know a card naming a
- * newer Luke.
+ * why, or with none where a member's close stands, which the thread's own
+ * line says (`ResolvedEvent`); and an ask this build does not know a card
+ * naming a newer Luke.
  */
 function AskBox({
   item,
@@ -1342,6 +1393,7 @@ export function InboxPane({
   const draft = control.draftOf(item);
   const thread = item.thread ?? NO_MESSAGES;
   const pending = pendingReplyOn(control.pendingReplies, item);
+  const resolved = resolvedAfter(item, thread);
   useOptionNumbers(pane, item, draft, control, open ? numberedPickOf(thread) : undefined);
   const formText: FormTextDoors = {
     self: item.agentId,
@@ -1484,6 +1536,7 @@ export function InboxPane({
                 className={INBOX_THREAD}
                 aria-label="Messages"
               >
+                {resolved === -1 ? <ResolvedEvent item={item} now={now} /> : null}
                 {thread.map((message, at) => (
                   <Fragment key={message.id}>
                     <ThreadMessage
@@ -1499,6 +1552,7 @@ export function InboxPane({
                     {at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ ? (
                       <EarlierMessages by={by} />
                     ) : null}
+                    {at === resolved ? <ResolvedEvent item={item} now={now} /> : null}
                   </Fragment>
                 ))}
                 {pending === undefined ? null : (
