@@ -2,9 +2,11 @@ DROP TRIGGER IF EXISTS "luke_sync_update" ON "agent";
 --> statement-breakpoint
 DROP TRIGGER IF EXISTS "luke_sync_write" ON "agent";
 --> statement-breakpoint
-ALTER TABLE "agent" ADD COLUMN "automation_run_id" uuid;--> statement-breakpoint
-CREATE INDEX "agent_automation_run" ON "agent" ("automation_run_id") WHERE "automation_run_id" is not null;--> statement-breakpoint
-ALTER TABLE "agent" ADD CONSTRAINT "agent_automation_run_id_automation_run_id_fkey" FOREIGN KEY ("automation_run_id") REFERENCES "automation_run"("id") ON DELETE SET NULL;--> statement-breakpoint
+-- Note that the column, its index, and its key are each guarded, because the shared Preview database
+-- ran this migration under an earlier folder name, and the migrator applies by name.
+ALTER TABLE "agent" ADD COLUMN IF NOT EXISTS "automation_run_id" uuid;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "agent_automation_run" ON "agent" ("automation_run_id") WHERE "automation_run_id" is not null;--> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = '"agent"'::regclass AND conname = 'agent_automation_run_id_automation_run_id_fkey') THEN ALTER TABLE "agent" ADD CONSTRAINT "agent_automation_run_id_automation_run_id_fkey" FOREIGN KEY ("automation_run_id") REFERENCES "automation_run"("id") ON DELETE SET NULL; END IF; END $$;--> statement-breakpoint
 -- Each agent belongs to the run that started it: the run whose id it was started under, never the
 -- run of an automation that hands every run to the same agent, which names an agent it did not start.
 UPDATE "agent" SET "automation_run_id" = "automation_run"."id" FROM "automation_run" WHERE "automation_run"."agent_id" = "agent"."id" AND "agent"."idempotency_key" = "automation_run"."id"::text;
