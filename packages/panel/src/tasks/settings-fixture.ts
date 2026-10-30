@@ -34,7 +34,7 @@ import {
   adminMetricsWindow,
 } from "@luke/features/admin-wire";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { DEVICE_PLATFORM, DEVICE_SETUP } from "@luke/features/device-agent-wire";
+import { DEVICE_ARCH, DEVICE_PLATFORM, DEVICE_SETUP } from "@luke/features/device-agent-wire";
 import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
 import { INSTALLED_SKILL_CALL_FAILURE } from "@luke/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
@@ -637,6 +637,14 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
       },
     ],
     installScriptUrl: STAGED_INSTALL_SCRIPT,
+  }),
+  // A box waiting on its code, as a pairing's link opened over Settings › Hosts reads it.
+  [ACT_KIND.HOSTS_PAIRING_READ]: () => ({
+    name: "fra-02",
+    platform: DEVICE_PLATFORM.LINUX,
+    arch: DEVICE_ARCH.X64,
+    ip: "203.0.113.24",
+    expiresAt: NOW + 15 * MINUTE,
   }),
   [ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN]: () => ({
     id: FIXTURE_HOST.TOKEN,

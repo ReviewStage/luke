@@ -1,4 +1,9 @@
-import { appLinkOf, type LinkPlaceKind, readLink } from "./link-grammar.js";
+import {
+  type AccountPlaceKind,
+  appLinkOf,
+  type LinkPlaceKind,
+  readShownLink,
+} from "./link-grammar.js";
 import { LINK_ORIGIN } from "./link-home.js";
 
 /**
@@ -12,20 +17,21 @@ import { LINK_ORIGIN } from "./link-home.js";
  * whatever host served it, a slash after it let go as the route lets it,
  * and written again in the desktop's scheme by the one module that knows a
  * link's form (`@luke/features/link-grammar`). A picture's address,
- * `/<workspace>/plan/<id>/files/<picture>`, opens the plan it is of. A path
+ * `/<workspace>/plan/<id>/files/<picture>`, opens the plan it is of, and a
+ * pairing's, `/connect/<code>`, under no workspace, opens its approve. A path
  * that names no place opens nothing.
  */
 
 /** What the page hands the app: the link in the app's own scheme, and the kind of place it opens. */
 export interface OpenTarget {
   readonly appLink: string;
-  readonly kind: LinkPlaceKind;
+  readonly kind: LinkPlaceKind | AccountPlaceKind;
 }
 
 /** The place the page's address names, and the link that opens it in the desktop app; nothing where the address names no place. */
 export function openTargetOf(pathname: string, hash: string, search = ""): OpenTarget | undefined {
   const address = `${LINK_ORIGIN}${pathname.replace(/\/$/u, "")}${search}${hash}`;
-  const read = readLink(address);
+  const read = readShownLink(address);
   const appLink = appLinkOf(address);
   return read === undefined || appLink === undefined
     ? undefined

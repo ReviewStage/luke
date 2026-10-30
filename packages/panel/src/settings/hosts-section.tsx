@@ -59,6 +59,7 @@ import {
   useDevicePresence,
 } from "../device-presence.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
+import { HostConnectDialog, useHostConnect } from "./host-connect-dialog.js";
 import { MenuRow } from "./menu-row.js";
 import {
   type HostLine,
@@ -104,7 +105,9 @@ import {
  * shows it: it stands in this section's state while the dialog is open,
  * inside the install command the member runs on each host, and is gone once
  * the dialog closes. Revoke this command stops new servers enrolling with it, and none it
- * already enrolled. The page stands only while the Bring your own host
+ * already enrolled. A pairing's link opened in this window stands its dialog
+ * over the page (`host-connect-dialog.tsx`), and the list is read again once
+ * Connect makes the host. The page stands only while the Bring your own host
  * experiment is on (`settings-rows.ts`'s `PAGE_EXPERIMENT`), so while it is
  * off nothing here is drawn, read, or turned on.
  */
@@ -422,6 +425,9 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const [addFailed, setAddFailed] = useState(false);
   const [shown, setShown] = useState<ShownToken | undefined>(undefined);
   const thisMac = useThisMacHost(signedIn);
+  const [connecting, closeConnect] = useHostConnect();
+  // A pairing's question does not outlive the page it was asked over.
+  useEffect(() => closeConnect, [closeConnect]);
 
   // The page opening reads the hosts the service holds now, which a server may just have joined.
   useEffect(() => {
@@ -595,6 +601,15 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
             // The list is read again, so a server that joined while the dialog stood is drawn.
             setAttempt((count) => count + 1);
           }}
+        />
+      )}
+      {/* Note that a pairing's dialog comes after Add hosts, so it stands over it where both are open. */}
+      {connecting === undefined || !signedIn ? null : (
+        <HostConnectDialog
+          key={connecting}
+          code={connecting}
+          onClose={closeConnect}
+          onConnected={() => setAttempt((count) => count + 1)}
         />
       )}
     </>

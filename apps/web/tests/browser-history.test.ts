@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { ReadLink } from "@luke/features/link-grammar";
+import type { ShownLink } from "@luke/features/link-grammar";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
 import { Effect } from "effect";
@@ -33,8 +33,8 @@ afterEach(() => {
 });
 
 /** The links the tab's address is said as, to one subscriber of the bridge. */
-function linksSaid(): ReadLink[] {
-  const said: ReadLink[] = [];
+function linksSaid(): ShownLink[] {
+  const said: ShownLink[] = [];
   withLoadLink(fixtureBridge(RUN_PROFILE.IDLE)).onShowLink((link) => said.push(link));
   return said;
 }
@@ -298,7 +298,7 @@ test("the panel's own paths, and an entry holding a saved step, say no link as t
 
   openAt("/acme/settings/appearance");
   const bridge = withLoadLink(fixtureBridge(RUN_PROFILE.IDLE));
-  const said: ReadLink[] = [];
+  const said: ShownLink[] = [];
   bridge.onShowLink((link) => said.push(link));
   bridge.onShowLink((link) => said.push(link));
   assert.deepEqual(said, [{ workspace: "acme", place: { kind: "settings", page: "appearance" } }]);

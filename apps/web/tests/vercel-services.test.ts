@@ -213,7 +213,7 @@ function directivesOf(policy: string): ReadonlyMap<string, readonly string[]> {
   );
 }
 
-test("a link to any place in Luke, a plan's, a section's and a picture's among them, and the app's own path are served the web app, and no page of Luke's own is", () => {
+test("a link to any place in Luke, a plan's, a section's, a picture's, and a box's pairing among them, and the app's own path are served the web app, and no page of Luke's own is", () => {
   for (const path of [
     "/app",
     "/app/",
@@ -233,6 +233,7 @@ test("a link to any place in Luke, a plan's, a section's and a picture's among t
     "/acme/admin/cost",
     "/acme/admin/user/user_9Fq2-x",
     "/acme/admin/day/2026-10-12",
+    "/connect/BCDF-GHJK",
   ]) {
     assert.equal(servedFile(path), "/app.html", path);
   }

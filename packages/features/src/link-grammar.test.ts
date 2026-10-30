@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
+  ACCOUNT_PLACE,
   ADMIN_LINK_SECTION,
   appLinkOf,
   GITHUB_PAGE,
@@ -15,6 +16,7 @@ import {
   readGitHubPage,
   readLinearIssue,
   readLink,
+  readShownLink,
 } from "./link-grammar.js";
 import { linkLabels, linksIn, mentionLinksIn, mentionsIn } from "./mention-link.js";
 
@@ -313,6 +315,34 @@ test("a link is handed to the desktop in its own scheme, written again from the 
   ]) {
     assert.equal(appLinkOf(target), undefined, target);
   }
+});
+
+test("a box's pairing link names its code under no workspace, read whatever its case and dash, and is handed to the desktop as the box shows it", () => {
+  const place = { kind: ACCOUNT_PLACE.CONNECT, code: "BCDFGHJK" } as const;
+  for (const target of [
+    "https://tryluke.dev/connect/BCDF-GHJK",
+    "https://tryluke.dev/connect/bcdfghjk/?from=box#top",
+    "tryluke://tryluke.dev/connect/BCDF-GHJK",
+  ]) {
+    assert.deepEqual(readShownLink(target), { place }, target);
+  }
+  assert.equal(
+    appLinkOf("https://tryluke.dev/connect/bcdf-ghjk?from=box"),
+    "tryluke://tryluke.dev/connect/BCDF-GHJK",
+  );
+  // A code holds no vowel, so a step of any workspace's place is never read as one.
+  for (const target of [
+    "https://tryluke.dev/connect",
+    "https://tryluke.dev/connect/BCDF-GHJA",
+    "https://tryluke.dev/connect/BCDF-GHJK/more",
+    "https://example.com/connect/BCDF-GHJK",
+  ]) {
+    assert.equal(readShownLink(target), undefined, target);
+  }
+  assert.deepEqual(readShownLink(`https://tryluke.dev/connect/plan/${TASK}`), {
+    workspace: "connect",
+    place: { kind: LINK_PLACE.TASK, planId: TASK },
+  });
 });
 
 const COMMIT = "0123456789abcdef0123456789abcdef01234567";
