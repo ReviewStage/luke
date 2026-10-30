@@ -1,10 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "fcac553a-3742-4145-97b2-9debd50da763",
+  "id": "a191faf0-879c-4d13-afcd-95a5fd740b34",
   "prevIds": [
-    "2c154521-bebd-47d4-921b-b278f943966f",
-    "bd691f14-bf62-4a9a-9d05-a3148c1c4a4f"
+    "6648be58-c5ef-444f-89af-02ca01022b1e"
   ],
   "ddl": [
     {
@@ -58,24 +57,6 @@
     {
       "isRlsEnabled": false,
       "name": "agent_runner_lease",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "agent_state_generation",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "agent_state_key",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "agent_state_upload",
       "entityType": "tables",
       "schema": "public"
     },
@@ -1764,240 +1745,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "agent_runner_lease"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "gen_random_uuid()",
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_generation"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "agent_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_generation"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "conversation_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_generation"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "generation",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_generation"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "path",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_generation"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "bytes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_generation"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "sha256",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_generation"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "base_commit",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_generation"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "device_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_generation"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "saved_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_generation"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "agent_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_key"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "key_version",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_key"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "sealed_data_key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_key"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "sealed_key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_key"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_key"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "path",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_upload"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "agent_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_upload"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "granted_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_state_upload"
     },
     {
       "type": "uuid",
@@ -11238,55 +10985,6 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "agent_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "generation",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "agent_state_generation_agent_generation",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "agent_state_generation"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "granted_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "agent_state_upload_granted",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "agent_state_upload"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
           "value": "due_at",
           "isExpression": false,
           "asc": true,
@@ -14608,40 +14306,6 @@
     {
       "nameExplicit": false,
       "columns": [
-        "device_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "device",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "SET NULL",
-      "name": "agent_state_generation_device_id_device_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "agent_state_generation"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "agent_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "agent",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "agent_state_key_agent_id_agent_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "agent_state_key"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
         "agent_id"
       ],
       "schemaTo": "public",
@@ -17284,36 +16948,6 @@
         "id"
       ],
       "nameExplicit": false,
-      "name": "agent_state_generation_pkey",
-      "schema": "public",
-      "table": "agent_state_generation",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "agent_id"
-      ],
-      "nameExplicit": false,
-      "name": "agent_state_key_pkey",
-      "schema": "public",
-      "table": "agent_state_key",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "path"
-      ],
-      "nameExplicit": false,
-      "name": "agent_state_upload_pkey",
-      "schema": "public",
-      "table": "agent_state_upload",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
       "name": "agent_wakeup_pkey",
       "schema": "public",
       "table": "agent_wakeup",
@@ -18053,13 +17687,6 @@
       "schema": "public",
       "table": "personal_workspace",
       "entityType": "uniques"
-    },
-    {
-      "value": "\"sha256\" ~ '^[0-9a-f]{64}$'",
-      "name": "agent_state_generation_sha256_hex",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "agent_state_generation"
     },
     {
       "value": "(num_nonnulls(\"inbox_item_id\", \"conversation_id\", \"plan_comment_id\") = 1 or (\"task_id\" is not null and num_nonnulls(\"inbox_item_id\", \"conversation_id\", \"plan_comment_id\") = 0)) and (\"inbox_message_id\" is null or \"inbox_item_id\" is not null)",
