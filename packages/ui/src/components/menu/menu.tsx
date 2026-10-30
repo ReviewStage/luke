@@ -1,3 +1,4 @@
+import type { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import type { BaseUIEvent } from "@base-ui/react/types";
 import {
   Fragment,
@@ -132,6 +133,12 @@ const MENU_ITEM =
   ':is([role="menuitem"], [role="menuitemcheckbox"]):not(:disabled, [aria-disabled="true"])';
 /** How a submenu finds room: the menu's other side where its own has none, and rising to end level with its item where the window's foot leaves no room below. */
 const BESIDE_OR_ACROSS = { side: "flip", align: "flip", fallbackAxisSide: "none" } as const;
+/**
+ * Why Base UI opens or closes a submenu that is this menu's to follow: the
+ * pointer resting on its item, or leaving the path to it. Note that every
+ * other reason (a press, a key, a press elsewhere) is the menu's own.
+ */
+const SUBMENU_HOVER: MenuPrimitive.SubmenuRoot.ChangeEventReason = "trigger-hover";
 /** How a menu is held inside what can be seen: never turned to its other side, only moved along either axis until it fits, as it was clamped. */
 const HELD_INSIDE = { side: "shift", align: "shift", fallbackAxisSide: "none" } as const;
 
@@ -926,9 +933,15 @@ function besideMenu(item: HTMLElement | null, side: string): number {
  * it, or its last where the window's foot leaves no room below. Whether it
  * stands is the menu's (`open`), so resting on another item, Left, or
  * Escape closes it alone, fading out as its menu does (`DROPDOWN_MENU_SURFACE`
- * on Base UI's ending state), and a finger's arrival opens nothing: iOS plays a
- * tap's arrival as a hover and spends the tap on what comes in with it, so
- * the tap itself opens it, the keyboard taken into it.
+ * on Base UI's ending state).
+ *
+ * The pointer is Base UI's to follow, as a system menu's submenu follows it:
+ * resting on the item opens the submenu after a moment, so passing over it
+ * on the way elsewhere opens nothing, and while the pointer heads for the
+ * submenu, across the menu's other items, it stays open (Base UI's safe
+ * polygon). A finger's arrival opens nothing, since Base UI follows a mouse
+ * alone: iOS plays a tap's arrival as a hover and spends the tap on what
+ * comes in with it, so the tap itself opens it, the keyboard taken into it.
  */
 function Submenu({
   entry,
@@ -954,7 +967,7 @@ function Submenu({
   /** The submenu's element, which the menu counts as its own when it hears a press. */
   surface: React.RefObject<HTMLDivElement | null>;
   onOpen: (focus: boolean) => void;
-  /** Closes the submenu alone, focus back on the item that opened it. */
+  /** Closes the submenu alone, where it is still the one standing. */
   onBack: () => void;
   onChoose: (action: MenuAction) => void;
 }): React.JSX.Element {
@@ -1006,20 +1019,23 @@ function Submenu({
     event.preventBaseUIHandler();
   };
   return (
-    <DropdownMenuSub open={open} onOpenChange={() => undefined}>
+    <DropdownMenuSub
+      open={open}
+      onOpenChange={(next, details) => {
+        if (details.reason !== SUBMENU_HOVER) return;
+        if (next) onOpen(false);
+        else onBack();
+      }}
+    >
       <DropdownMenuSubTrigger
         ref={trigger}
         nativeButton
         render={<button type="button" />}
-        openOnHover={false}
         label={entry.label}
         className="luke-menu-item"
         {...rovingItem()}
         data-open={open ? "true" : undefined}
         endClassName={endSlot(entry.hint !== undefined, false)}
-        onPointerEnter={(event) => {
-          if (event.pointerType !== "touch") onOpen(false);
-        }}
         onClick={pulseOnPress((event: BaseUIEvent<React.MouseEvent<HTMLElement>>) => {
           // Note that Base UI's own press would take focus back to the item after it went into the submenu.
           event.preventBaseUIHandler();
@@ -1274,7 +1290,10 @@ function FloatingMenu({
                     leaving={leaving}
                     surface={submenuElement}
                     onOpen={() => setSubmenu(entry.label)}
-                    onBack={() => setSubmenu(undefined)}
+                    // Note that a late close of a submenu another has replaced leaves the other standing.
+                    onBack={() =>
+                      setSubmenu((standing) => (standing === entry.label ? undefined : standing))
+                    }
                     onChoose={choose}
                   />
                 ) : (

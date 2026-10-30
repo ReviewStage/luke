@@ -476,6 +476,49 @@ test("a submenu with room on neither side takes the side it runs past less, push
   assert.deepEqual(submenuIn(390, 30, 370), { side: "left", shift: 179 });
 });
 
+/** The pinned row whose words are `label`. */
+function pinned(label: string): HTMLElement {
+  return (
+    [...document.querySelectorAll<HTMLElement>('[data-steered="true"]')].find(
+      (row) => row.textContent === label,
+    ) ?? assert.fail(`no pinned row ${label}`)
+  );
+}
+
+/** The mouse moving over `row` to the point `clientX`, `clientY`, as a browser reports it. */
+function mouseOver(row: HTMLElement, clientX: number, clientY: number): void {
+  act(() => {
+    row.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX, clientY }));
+  });
+}
+
+test("the pointer crossing a pinned row on its way into the submenu beside another leaves that submenu standing, until it rests on the row it crossed", () => {
+  // Note that the Effort submenu stands right of its row, from x=330 and y=100 down to y=200.
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains("luke-searchable-menu-submenu")
+      ? new DOMRect(330, 100, 200, 100)
+      : new DOMRect(0, 0, 0, 0);
+  });
+  mount({ placeholder: "Search models", foot: true });
+  const effortOpen = () => document.querySelector('[aria-label="Effort"][role="listbox"]') !== null;
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    mouseOver(pinned("Effort"), 300, 116);
+    const opened = effortOpen();
+    // Straight from the move that opened it, the pointer heads down and right for the submenu's lower rows, over the next row's end.
+    mouseOver(pinned("Open on GitHub"), 310, 140);
+    const crossed = effortOpen();
+    act(() => {
+      vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE);
+    });
+    assert.deepEqual([opened, crossed, effortOpen()], [true, true, false]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("a row's own end marks stand at its end, after why it cannot be picked now, and a row with none ends in nothing", () => {
   mount({
     placeholder: "Search agents",
