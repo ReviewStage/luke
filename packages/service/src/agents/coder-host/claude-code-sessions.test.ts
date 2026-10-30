@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { it } from "@effect/vitest";
 import {
   type ClaudeCodeConfig,
@@ -52,7 +55,7 @@ import {
 } from "@luke/features/provider-key-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { MESSAGE_ROLE } from "@luke/wire";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { fakeHttpClientLayer, temporaryDirectory } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
 import {
   Clock,
@@ -599,6 +602,45 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           [...(api.uploads[0]?.values() ?? [])],
         ]);
         for (const secret of [PLAN_TOKEN, bearer]) assert.equal(visible.includes(secret), false);
+      }),
+  );
+
+  it.effect(
+    "a launch on a checkout already shared with agent's group leaves its git config unwritten, so a config.lock an agent's git left behind never fails a relaunch",
+    (t) =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        yield* sessions.open(message(agent, "Fix the invitations."));
+        // The launch's step that shares the checkout with the group, run by a real bash on a real checkout.
+        const step = (api.commands[0]?.args[1] ?? "")
+          .split("\n")
+          .find((each) => each.includes("core.sharedRepository"));
+        assert.ok(step !== undefined);
+        const checkout = yield* Effect.promise(() => temporaryDirectory(t, "launch-checkout-"));
+        const launched = () =>
+          spawnSync(
+            "bash",
+            ["-euo", "pipefail", "-c", step.replaceAll(CODER.CHECKOUT_PATH, checkout)],
+            { encoding: "utf8" },
+          );
+        assert.equal(spawnSync("git", ["init", "--quiet", checkout]).status, 0);
+
+        assert.equal(launched().status, 0);
+        writeFileSync(join(checkout, ".git", "config.lock"), "");
+        const relaunched = launched();
+
+        assert.equal(relaunched.status, 0, relaunched.stderr);
+        assert.equal(
+          spawnSync("git", ["-C", checkout, "config", "--get", "core.sharedRepository"], {
+            encoding: "utf8",
+          }).stdout.trim(),
+          "group",
+        );
       }),
   );
 
