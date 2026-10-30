@@ -418,12 +418,15 @@ function ChoosingCards({
   runs = false,
   off = [],
   undrawn = [],
+  broughtIn = [],
 }: {
   runs?: boolean;
   /** The places whose cards are unavailable. */
   off?: readonly string[];
   /** The places the region lists but draws no card for, as a run drawing only the rows near the view leaves them; the region is handed every place's order where any is. */
   undrawn?: readonly string[];
+  /** Hears each place the region asks to be brought into view, which draws nothing here. */
+  broughtIn?: string[];
 }): React.JSX.Element {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [opened, setOpened] = useState<string[]>([]);
@@ -460,6 +463,10 @@ function ChoosingCards({
       id: "places",
       selection: { selected, onChange: setSelected },
       order: undrawn.length === 0 ? undefined : PLACES,
+      bringIn: (key: string) => {
+        broughtIn.push(key);
+        return true;
+      },
       children: [
         createElement(Fragment, { key: "first" }, list(PLACES.slice(0, 2))),
         createElement(Fragment, { key: "rest" }, list(PLACES.slice(2))),
@@ -501,8 +508,9 @@ test("a region chooses its card presses across its lists: ⌘-click one, ⇧-cli
   expect(page.querySelector("[data-opened]")?.textContent).toBe("Inbox");
 });
 
-test("a region handed its order reaches the rows it draws no card for: ⇧-click runs across them, ⌘A chooses them", () => {
-  const page = draw(createElement(ChoosingCards, { undrawn: ["Board"] }));
+test("a region handed its order reaches the rows it draws no card for: ⇧-click runs across them, ⇧↓ brings one in, ⌘A chooses them", () => {
+  const broughtIn: string[] = [];
+  const page = draw(createElement(ChoosingCards, { undrawn: ["Board"], broughtIn }));
   const card = (name: string) => {
     const press = [...page.querySelectorAll<HTMLButtonElement>("[data-card-press]")].find(
       (each) => each.textContent === name,
@@ -519,6 +527,24 @@ test("a region handed its order reaches the rows it draws no card for: ⇧-click
     card("Automations").dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
   });
   expect(chosen()).toBe("Tasks,Board,Automations");
+
+  act(() => {
+    card("Tasks").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  act(() => {
+    card("Tasks").dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "ArrowDown",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+  expect(chosen()).toBe("Tasks,Board");
+  expect(broughtIn).toEqual(["Board"]);
 
   act(() => {
     card("Tasks").dispatchEvent(

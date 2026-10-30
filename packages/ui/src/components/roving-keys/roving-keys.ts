@@ -46,11 +46,12 @@ import {
  * (`moveTo`). A list that steps a highlight while the focus stays in a
  * field moves no focus at all, and takes the walk alone (`rovingStep`). A
  * set that draws only some of its items, a list drawing the rows near the
- * view (`VirtualRows`), hands its owner each key that reaches past the items
- * drawn (`reach`): Home and End, and a step past either drawn end, which
- * the walk over the items drawn would land on that end or wrap from; the
- * owner takes the focus to the set's own first or last item, or the one
- * after or before the item in hand, wherever it stands.
+ * view (`VirtualRows`), hands its owner every key that walks it (`reach`),
+ * since the item after the one in hand may be drawn nowhere near it, or not
+ * at all, as a group's rows left undrawn below the view are: the owner
+ * takes the focus to the set's own first or last item, or the one after or
+ * before the item in hand, wherever it stands, and a key it leaves walks the
+ * items drawn.
  *
  * The box keeps the tab order in the DOM rather than in a render, because
  * its items are drawn by whoever fills it: it settles the order whenever
@@ -201,23 +202,21 @@ export function rovingStep(
 }
 
 /**
- * Where a key reaches past the `count` items drawn from `at` (below zero
- * for none): Home and End to the set's ends, and a step on from the last
- * drawn or back from the first, which the walk over the items drawn would
- * wrap; none for a key that stays among them.
+ * Where a key walking the set reaches from the item in hand, `at` (below
+ * zero for none): Home and End to the set's ends, and a step to the item
+ * after or before it, or from none, forward to the first and back to the
+ * last, as the walk goes; none for a key that walks nothing.
  */
-function reachOf(
-  key: string,
-  orientation: RovingOrientation,
-  at: number,
-  count: number,
-): RovingReach | undefined {
+function reachOf(key: string, orientation: RovingOrientation, at: number): RovingReach | undefined {
   if (key === "Home") return ROVING_REACH.FIRST;
   if (key === "End") return ROVING_REACH.LAST;
-  if (at < 0) return undefined;
   const step = STEP_KEYS[orientation];
-  if (at === count - 1 && step.next.some((each) => each === key)) return ROVING_REACH.NEXT;
-  if (at === 0 && step.previous.some((each) => each === key)) return ROVING_REACH.PREVIOUS;
+  if (step.next.some((each) => each === key)) {
+    return at < 0 ? ROVING_REACH.FIRST : ROVING_REACH.NEXT;
+  }
+  if (step.previous.some((each) => each === key)) {
+    return at < 0 ? ROVING_REACH.LAST : ROVING_REACH.PREVIOUS;
+  }
   return undefined;
 }
 
@@ -257,7 +256,7 @@ function focusItem(item: HTMLElement): void {
  * Home, and End walking them. `stop` says which item is the Tab stop,
  * `moveTo` takes the focus to the item a key lands on, and does whatever
  * else the set does as it lands, and `reach`, in a set drawing only some of
- * its items, takes a key reaching past them, answering whether it did.
+ * its items, takes each key walking it, answering whether it moved the focus.
  */
 export function useRovingKeys<T extends HTMLElement>({
   orientation = ROVING_ORIENTATION.VERTICAL,
@@ -353,7 +352,7 @@ export function useRovingKeys<T extends HTMLElement>({
       const at = item === undefined ? -1 : open.indexOf(item);
       const to = rovingStep(event.key, orientation, at, open.length);
       if (to === undefined) return false;
-      const reached = reachOf(event.key, orientation, at, open.length);
+      const reached = reachOf(event.key, orientation, at);
       if (reached !== undefined && reaching.current?.(item, reached) === true) {
         event.preventDefault();
         return true;
