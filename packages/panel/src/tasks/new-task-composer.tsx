@@ -134,7 +134,7 @@ import type { NewTaskAgent, NewTaskParent, NewTaskStart, TasksControl } from "./
  * owner's.
  *
  * New child task, from a task's menu or ⌘K, opens this same card for a
- * child of that task (`parent`): its head row says "New child task" and
+ * child of that task (`parent`): its head row says "New sub-task" and
  * names the parent where the repository chip stands, and it draws no Runs
  * on, because a child works in its parent's workspace and repository and
  * runs where its parent runs, which the service holds it to. Its start names
@@ -201,7 +201,7 @@ const COMPOSER_WORDS = {
 } as const;
 
 /** A child's head row title, drawn before the parent it is made under. */
-const CHILD_HEADING = "New child task";
+const CHILD_HEADING = "New sub-task";
 
 /** What the card says where the member's devices could not be read, with Retry, rather than starting the task in the cloud. */
 const DEVICES_UNREAD: Failure = {
