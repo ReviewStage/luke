@@ -19,7 +19,6 @@ import {
   type PullRequestRefusal,
 } from "@luke/features/pull-request-write-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
   Badge,
@@ -61,6 +60,7 @@ import {
   useCallback,
   useContext,
   useId,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -72,7 +72,8 @@ import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { useToast, useWithdrawToast } from "../toast.js";
 import { PULL_REQUEST_STATE_LABEL, queuedLabel, REPOSITORY_UNREACHED_NOTE } from "./agent-model.js";
 import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark.js";
-import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js";
+import { usePullRequestNumber } from "./pull-request-number.js";
+import { agentPullRequestWrite, usePullRequestSource } from "./pull-request-source.js";
 import { useOpenWorkspaceGitHub } from "./repository-remedy.js";
 
 /**
@@ -274,11 +275,15 @@ export function noteOf(
  * The agent's pull request's changes, one at a time, a press while one is
  * out doing nothing; once GitHub
  * answers, whether it took the change or refused it, `onWritten` asks the
- * tab's reads again.
+ * tab's reads again. A change goes through the source of the tab around it
+ * (`pull-request-source.ts`), or, drawn outside one, to the agent named.
  */
 export function usePullRequestWrites(agentId: string, onWritten: () => void): PullRequestWrites {
   const { act } = useAct();
   const number = usePullRequestNumber();
+  const source = usePullRequestSource();
+  const own = useMemo(() => agentPullRequestWrite(act, agentId, number), [act, agentId, number]);
+  const send = source?.write ?? own;
   const [pending, setPending] = useState<PullRequestAction | undefined>(undefined);
   const [note, setNote] = useState<WriteNote | undefined>(undefined);
   // Note that the one out is held in a ref as well, because two presses in one frame both read the state from before either.
@@ -289,10 +294,7 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
       out.current = true;
       setPending(request.action);
       setNote(undefined);
-      return act(ACT_KIND.AGENTS_PULL_REQUEST_ACTION, {
-        ...pullRequestAsked(agentId, number),
-        request,
-      })
+      return send(request)
         .catch(
           (): AgentPullRequestWriteAnswerView => ({
             failure: AGENT_CALL_FAILURE.UNANSWERED,
@@ -311,7 +313,7 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
           return outcomeOf(note);
         });
     },
-    [act, agentId, number, onWritten],
+    [send, onWritten],
   );
   const dismiss = useCallback(() => setNote(undefined), []);
   return { pending, note, write, dismiss };

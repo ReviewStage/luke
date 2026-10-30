@@ -1,4 +1,3 @@
-import { AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
@@ -6,9 +5,7 @@ import {
 import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
 import { useCallback, useRef, useState } from "react";
 import { useAgentRead } from "./agent-changes-tab.js";
-import { agentStillWriting } from "./agent-model.js";
-import { usePullRequestNumber } from "./pull-request-number.js";
-import type { AgentsControl } from "./use-agents.js";
+import type { PullRequestSource } from "./pull-request-source.js";
 
 /**
  * chapters-read.ts -- a pull request's chapters as its Pull request tab holds them: the read, this window's own Generate, and the count the Chapters tab wears.
@@ -56,38 +53,33 @@ export interface ChaptersRead {
  */
 export function useChaptersRead(
   agentId: string,
-  control: AgentsControl,
+  source: PullRequestSource,
   shown: boolean,
   held: ChaptersHeld | undefined,
   /** Reads the tab again, the chapters and their files among them, which a Generate does once it lands, since it tells them for the head GitHub holds then. */
   refresh: () => void,
 ): ChaptersRead {
-  const status = control.agents?.find((each) => each.id === agentId)?.status;
-  const ended = !agentStillWriting(status ?? AGENT_STATUS.RUNNING);
-  const number = usePullRequestNumber();
   const read = useAgentRead(
     agentId,
     shown,
-    ended,
-    (id: string) =>
-      held === undefined ? Promise.resolve(UNANSWERED) : control.readChapters(id, held.number),
+    source.ended,
+    () => (held === undefined ? Promise.resolve(UNANSWERED) : source.readChapters(held.number)),
     UNANSWERED,
   );
   const [generated, setGenerated] = useState<
     { readonly of: unknown; readonly answer: PullRequestChaptersAnswerView } | undefined
   >(undefined);
   const [generating, setGenerating] = useState<number | undefined>(undefined);
-  const latest = useRef({ control, number, read, refresh });
-  latest.current = { control, number, read, refresh };
+  const latest = useRef({ source, read, refresh });
+  latest.current = { source, read, refresh };
   // Note that whether a Generate is out is a ref too, because two presses in one frame would both read the state as none.
   const out = useRef(false);
   const generate = useCallback(() => {
     if (out.current) return;
     out.current = true;
     setGenerating(Date.now());
-    const { control, number } = latest.current;
-    control
-      .generateChapters(agentId, number)
+    latest.current.source
+      .generateChapters()
       .catch(() => UNANSWERED)
       .then((answer) => {
         out.current = false;
@@ -95,7 +87,7 @@ export function useChaptersRead(
         setGenerated({ of: latest.current.read.answer, answer });
         latest.current.refresh();
       });
-  }, [agentId]);
+  }, []);
   const answer =
     generated !== undefined && generated.of === read.answer ? generated.answer : read.answer;
   return { answer, head: held?.head, out: read.out, ask: read.ask, generate, generating };

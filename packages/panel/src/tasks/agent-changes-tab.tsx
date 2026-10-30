@@ -1,10 +1,5 @@
 import { AGENT_CALL_FAILURE, type AgentChangesAnswerView } from "@luke/features/agent-view";
-import {
-  AGENT_STATUS,
-  type AgentChangedFile,
-  DIFF_SIDE,
-  type ReviewThread,
-} from "@luke/features/agent-wire";
+import { type AgentChangedFile, DIFF_SIDE, type ReviewThread } from "@luke/features/agent-wire";
 import { imageTypeOfPath } from "@luke/features/github-image";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wire";
@@ -73,7 +68,6 @@ import {
 } from "../diff-view/contract.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { usePhoneRoom } from "../stage-room.js";
-import { agentStillWriting } from "./agent-model.js";
 import {
   type ChangesList,
   FileHead,
@@ -142,9 +136,9 @@ import { LineComment, type PendingReview } from "./line-comment.js";
 import { MinimizedThreads } from "./minimized-threads.js";
 import { useOpenFileTab } from "./open-file-tab.js";
 import { usePullRequestNumber } from "./pull-request-number.js";
+import type { PullRequestSource } from "./pull-request-source.js";
 import { PullRequestWriteNote } from "./pull-request-writes.js";
 import { landable, type ThreadLanding, ThreadLandingProvider } from "./thread-reveal.js";
-import type { AgentsControl } from "./use-agents.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
 
@@ -1717,24 +1711,14 @@ export interface ChangesReads {
  */
 export function useChangesReads(
   agentId: string,
-  control: AgentsControl,
+  source: PullRequestSource,
   shown: boolean,
 ): ChangesReads {
-  const status = control.agents?.find((each) => each.id === agentId)?.status;
-  const ended = !agentStillWriting(status ?? AGENT_STATUS.RUNNING);
-  // The pull request the tab names by its number, where it names one other than the agent's own (`pull-request-number.ts`).
-  const number = usePullRequestNumber();
   const {
     answer: latest,
     out,
     ask,
-  } = useAgentRead(
-    agentId,
-    shown,
-    ended,
-    (id: string) => control.readChanges(id, number),
-    UNANSWERED,
-  );
+  } = useAgentRead(agentId, shown, source.ended, source.readChanges, UNANSWERED);
   // Note that a good answer stands over a failure after it, because a read that fails
   // again must not take the files drawn away; the count follows what is drawn.
   const good = useRef<
@@ -1750,13 +1734,9 @@ export function useChangesReads(
   });
   if (reads.current.of !== answer) reads.current = { of: answer, count: reads.current.count + 1 };
   const pullRequest = answer !== undefined && "pullRequest" in answer ? answer.pullRequest : null;
-  const readViewed = useCallback(
-    (id: string) => control.readPullRequestViewed(id, number),
-    [control.readPullRequestViewed, number],
-  );
   const viewedFiles = useViewedFiles(
     agentId,
-    readViewed,
+    source,
     pullRequest === null ? undefined : reads.current.count,
   );
   return { answer, refreshFailed, out, ask, count: reads.current.count, pullRequest, viewedFiles };
@@ -1772,7 +1752,7 @@ export interface FileReveal {
 
 export function AgentChangesTab({
   agentId,
-  control,
+  source,
   shown,
   repository,
   tree,
@@ -1785,7 +1765,8 @@ export function AgentChangesTab({
   overscroll,
 }: {
   agentId: string;
-  control: AgentsControl;
+  /** Where the tab reads the pull request, whose task its files' texts are read through. */
+  source: PullRequestSource;
   /** Whether the panel is on screen, which is when the tab reads. */
   shown: boolean;
   /** The task's repository, which the agent works in, and whose files a gap between hunks is read from; none opens no gap. */
@@ -1897,8 +1878,7 @@ export function AgentChangesTab({
         ]
       : undefined,
   );
-  const taskId = control.agents?.find((each) => each.id === agentId)?.planId ?? null;
-  const texts = useFileTexts(taskId, repository, pullRequest, changed.files);
+  const texts = useFileTexts(source.place.taskId, repository, pullRequest, changed.files);
   const commenting = useListCommenting(
     agentId,
     changed.files,
