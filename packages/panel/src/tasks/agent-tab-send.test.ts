@@ -190,7 +190,7 @@ function rowOf(line: HTMLElement | undefined): Element {
   return line?.closest("[data-row-key]") ?? assert.fail("the line is drawn in a row of the list");
 }
 
-test("a message sent stands in the transcript at once, the box empty and taking words, and its row lands in its place, drawn once, before the send answers", async () => {
+test("a message sent stands in the transcript at once with its time, the box empty and taking words, and its row lands in its place, drawn once, before the send answers", async () => {
   vi.spyOn(crypto, "randomUUID").mockReturnValue(KEY);
   const row: AgentTranscriptMessage = {
     id: "row-1",
@@ -208,6 +208,7 @@ test("a message sent stands in the transcript at once, the box empty and taking 
   assert.equal(document.activeElement, editor, "and keeps the caret");
   const [pending] = tab.lines("Now the dark variant.");
   const drawnAt = rowOf(pending);
+  assert.ok(drawnAt.querySelector("time"), "its time stands under it before its row lands");
 
   await tab.landRow();
   const landed = tab.lines("Now the dark variant.");
@@ -238,13 +239,16 @@ test("a line whose row landed before its send answered offers Edit only once the
   assert.ok(edit(), "Edit once the service took it");
 });
 
-test("a message sent to an agent at rest draws the working line at once, before the service takes it", async () => {
-  const tab = await drawnTab([]);
+test("a message sent to an agent at rest draws the working line at once, before the service takes it, counting from the press rather than the turn before it", async () => {
+  // The summary still holds the ended turn's start, as the task list does until the line wakes it.
+  const tab = await drawnTab([], { ...AGENT_SUMMARY, runStartedAt: 2_000 });
   assert.equal(tab.container.querySelector("[data-working]"), null, "an agent at rest");
 
   await tab.send("Now the dark variant.");
 
-  assert.ok(tab.container.querySelector("[data-working]"), "working from the press");
+  const working = tab.container.querySelector("[data-working]");
+  assert.ok(working, "working from the press");
+  assert.equal(working.querySelector("time")?.textContent, "0s", "counted from the press");
   assert.equal(tab.sent.length, 1, "with the send still unanswered");
 });
 

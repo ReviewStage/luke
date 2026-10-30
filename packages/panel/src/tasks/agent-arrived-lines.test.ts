@@ -219,3 +219,25 @@ test("a line from a service that kept no place for it stands where the order put
 
   assert.deepEqual(drawnOrder(container), ["line: task", "line: github", "fold: 3 tool calls"]);
 });
+
+test("a line sent to steer a turn still running stands inside the turn, which stays under way, before the service says where it arrived", async () => {
+  const steer: AgentTranscriptMessage = {
+    id: "steer",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text: "Keep the 16:9 ratio." }],
+    sentAt: 5_000,
+  };
+  // The service keeps a line awaiting its place after the open journal.
+  const container = await drawnTab([TASK, journal(false), steer], AGENT_STATUS.RUNNING);
+
+  assert.equal(drawnOrder(container).at(-1), "line: steer", "at the turn's end");
+  assert.ok(
+    container.querySelector(`[data-row-key="${JOURNAL}"] [data-message-id="steer"]`),
+    "in the turn's own row, so it does not move as the service places it",
+  );
+  assert.equal(
+    container.querySelector('button[aria-label="Revert to here"]'),
+    null,
+    "the turn under way offers no end's actions",
+  );
+});

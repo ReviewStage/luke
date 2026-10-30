@@ -120,6 +120,7 @@ import {
   agentRows,
   agentStillWriting,
   agentWorkingPhase,
+  agentWorkingSince,
   archivedByReading,
   CONTINUE_AGAIN_LABEL,
   CONTINUE_LABEL,
@@ -2504,6 +2505,7 @@ function AgentTabView({
   published,
   doors,
   startedAt,
+  counts,
   delegationStarts,
   onStop,
   onUnarchive,
@@ -2546,8 +2548,10 @@ function AgentTabView({
   /** What the agent published, once the service has said; nothing before. */
   published: AgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
-  /** When the agent's run began, as the working line counts from it; none while the tab is off screen, so nothing counts unseen. */
+  /** When the agent's run began, as its summary says, which the working line counts from where its lines say nothing. */
   startedAt: number | undefined;
+  /** Whether the working line counts: false while the tab is off screen, so nothing counts unseen. */
+  counts: boolean;
   /** When each of its running workers began, as their rows count from it; none while the tab is off screen. */
   delegationStarts: ReadonlyMap<string, number> | undefined;
   onStop: () => Promise<boolean>;
@@ -2763,9 +2767,13 @@ function AgentTabView({
                     pageRuns={pageRuns}
                     rewindOut={composer.rewindOut}
                     sessionStarting={agent.status === AGENT_STATUS.STARTING}
-                    // Note that while a rewind goes the line counts from its press, never from the run before it, which is the agent's start until a new turn begins.
+                    // Note that the line counts from the lines themselves, from the press of the line that opened the turn, and while a rewind goes from its press, never from the task list's run, which a line sent does not wake.
                     startedAt={
-                      composer.rewinding && startedAt !== undefined ? composer.rewoundAt : startedAt
+                      !counts
+                        ? undefined
+                        : composer.rewinding
+                          ? composer.rewoundAt
+                          : (agentWorkingSince(lines) ?? startedAt)
                     }
                     ended={
                       // Note that the end line waits for a page that has itself ended, so a stopped agent's tab never draws it over nothing, nor a failure's words before the page that carries its reason, and gives way to a line on its way, which the working line stands for.
@@ -3164,7 +3172,8 @@ function AgentTabBody({
           copy: copyWithToast,
           openPullRequest: onOpenPullRequest,
         }}
-        startedAt={shown ? agent.runStartedAt : undefined}
+        startedAt={agent.runStartedAt}
+        counts={shown}
         delegationStarts={shown ? transcript.delegations : undefined}
         onStop={() => control.onStop(agent.id)}
         onUnarchive={control.onUnarchive}

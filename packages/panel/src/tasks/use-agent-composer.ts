@@ -391,6 +391,7 @@ export function useAgentComposer(input: {
       text,
       attachments,
       steers: input.running === true,
+      sentAt: Date.now(),
       state: SENT_LINE_STATE.PENDING,
     };
     update(() => EMPTY_DRAFT);
@@ -403,6 +404,7 @@ export function useAgentComposer(input: {
     const text = words.trim();
     if (!hasWordsOrFiles(text, attachments) || held.closed !== undefined) return;
     const clientKey = crypto.randomUUID();
+    const rewoundAt = Date.now();
     const line: SentLine = {
       id: sentLineId(clientKey),
       clientKey,
@@ -410,10 +412,10 @@ export function useAgentComposer(input: {
       attachments,
       // Note that a line in place of another stops the turn under way rather than steering it.
       steers: false,
+      sentAt: rewoundAt,
       state: SENT_LINE_STATE.PENDING,
       rewinds: messageId,
     };
-    const rewoundAt = Date.now();
     setHeld((was) => ({
       ...was,
       revertFailed: undefined,

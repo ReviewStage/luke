@@ -2191,6 +2191,29 @@ function isQuietReply(message: AgentTranscriptMessage): boolean {
 }
 
 /**
+ * The rows with each line that follows the newest turn while it is still
+ * open placed in that turn after the steps it has begun, as a line it takes
+ * in is placed once the service says where it arrived. Note that such a
+ * line steers the turn, and drawn below it, it would stand the turn as
+ * done, offering a finished turn's actions, then move into it as the
+ * service takes it.
+ */
+function steeringPlaced(
+  messages: readonly AgentTranscriptMessage[],
+): readonly AgentTranscriptMessage[] {
+  const at = messages.findLastIndex((message) => message.role === MESSAGE_ROLE.ASSISTANT);
+  const journal = messages[at];
+  if (journal === undefined || journal.finishedAt !== undefined) return messages;
+  const begun = agentParts(journal).filter((part) => part.kind === AGENT_PART.STEP_START).length;
+  const arrivedIn = { journalId: journal.id, afterStep: begun };
+  return messages.map((message, index) =>
+    index > at && message.role === MESSAGE_ROLE.USER && message.arrivedIn === undefined
+      ? { ...message, arrivedIn }
+      : message,
+  );
+}
+
+/**
  * A transcript's rows with each line that reached a turn under way moved
  * into that turn's journal, which draws it where it arrived, out of the
  * order the service keeps, where the journal closed behind it. A line whose
@@ -2205,7 +2228,9 @@ export function placedMessages(
   messages: readonly AgentTranscriptMessage[],
   quiet = false,
 ): readonly PlacedMessage[] {
-  const shown = quiet ? messages.filter((message) => !isQuietReply(message)) : messages;
+  const shown = steeringPlaced(
+    quiet ? messages.filter((message) => !isQuietReply(message)) : messages,
+  );
   const journals = new Set(
     shown.filter((message) => message.role === MESSAGE_ROLE.ASSISTANT).map((each) => each.id),
   );
@@ -2298,6 +2323,29 @@ export function agentWorkingPhase(
     return at === lines.length - 1 ? WORKING_PHASE.WORKING : WORKING_PHASE.STARTING;
   }
   return drawnParts(journal).length === 0 ? WORKING_PHASE.THINKING : WORKING_PHASE.WORKING;
+}
+
+/**
+ * When the working line counts from, read off the lines themselves: the
+ * press of the developer's line that opened the turn under way, or opens
+ * the one on its way, and the turn's own start where no such line stands.
+ * Note that the task list's run is not read, because a line sent does not
+ * wake the list, which until then still holds the turn before it, ended
+ * however long ago, and holds no start at all while the line awaits its
+ * turn; none where the lines say nothing, as before a first turn.
+ */
+export function agentWorkingSince(lines: readonly AgentTranscriptMessage[]): number | undefined {
+  const at = lines.findLastIndex((line) => line.role === MESSAGE_ROLE.ASSISTANT);
+  const journal = lines[at];
+  const opens = (line: AgentTranscriptMessage) =>
+    line.role === MESSAGE_ROLE.USER && line.arrivedIn === undefined && line.sentAt !== undefined;
+  // A closed journal, or none, is followed by the line that opens the next turn, where one was sent.
+  if (journal === undefined || journal.finishedAt !== undefined) {
+    return lines.slice(at + 1).find(opens)?.sentAt;
+  }
+  // An open journal was opened by the first line after the journal before it.
+  const before = lines.slice(0, at).findLastIndex((line) => line.role === MESSAGE_ROLE.ASSISTANT);
+  return lines.slice(before + 1, at).find(opens)?.sentAt ?? journal.startedAt;
 }
 
 /**
@@ -2423,6 +2471,8 @@ export interface SentLine {
   readonly attachments: readonly AgentAttachment[];
   /** Whether a turn ran as the line went, so it steers that turn rather than opening one. */
   readonly steers: boolean;
+  /** Epoch milliseconds the line was sent, drawn under it at once, as its row's own time will be. */
+  readonly sentAt: number;
   readonly state: SentLineState;
   /** The developer's line it was written in place of, by its message id, which the agent is taken back to just before as it goes; none for a line sent after the rest. */
   readonly rewinds?: string | undefined;
@@ -2494,6 +2544,7 @@ function sentLineMessage(line: SentLine): AgentTranscriptMessage {
     id: line.id,
     role: MESSAGE_ROLE.USER,
     parts: [{ type: AGENT_PART.TEXT, text: line.text }, ...files],
+    sentAt: line.sentAt,
   };
 }
 
@@ -2513,6 +2564,7 @@ export function openingLineOf(words: {
     text: words.prompt.trim(),
     attachments: words.attachments,
     steers: false,
+    sentAt: Date.now(),
     state: SENT_LINE_STATE.PENDING,
   };
 }
