@@ -3,11 +3,12 @@
 import assert from "node:assert/strict";
 import type { TaskSummary } from "@luke/features/task-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { DesktopSidebar } from "./desktop/desktop-sidebar.js";
 import {
+  beginPanelSpan,
   endWindowSpanOnFirstDraw,
   installPanelSpanRecorder,
   leaveWindowSpan,
@@ -17,6 +18,7 @@ import {
   useKeystrokeSpans,
 } from "./panel-spans.js";
 import { SHELL_ROOM } from "./shell-room.js";
+import { useInboxItemOpenSpan, useInboxOpenSpan } from "./tasks/use-inbox-spans.js";
 import type { TasksControl } from "./tasks/use-tasks-tab.js";
 import { fakeActPortAnswering } from "./testing/app-bridge.js";
 import { onRegistry } from "./testing/copy-feedback.js";
@@ -234,6 +236,88 @@ test("a box gone, or one in a window that records nothing, times no key", () => 
     processingEnd: 3_020,
     duration: 40,
   });
+
+  assert.deepEqual(recorded(), []);
+});
+
+/** The Inbox's two press spans, drawn over the rows the page holds and the thread it shows. */
+function InboxTimed({
+  rows,
+  shown,
+  held,
+  pressed,
+}: {
+  rows: number;
+  shown: string | undefined;
+  held: boolean;
+  pressed: string | undefined;
+}): null {
+  useInboxOpenSpan(rows);
+  const timeOpen = useInboxItemOpenSpan(shown, held);
+  // A press is made once, as the render that carries it commits.
+  useEffect(() => {
+    if (pressed !== undefined) timeOpen(pressed);
+  }, [pressed, timeOpen]);
+  return null;
+}
+
+test("the Inbox is timed from its opening to its first rows drawn, and a row chosen to its thread drawn, the one already shown never", () => {
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const draw = (props: Parameters<typeof InboxTimed>[0]) =>
+    act(() => root.render(createElement(InboxTimed, props)));
+
+  beginPanelSpan(PANEL_SPAN.INBOX_OPEN);
+  draw({ rows: 0, shown: undefined, held: false, pressed: undefined });
+  vi.setSystemTime(5_000_250);
+  draw({ rows: 7, shown: undefined, held: false, pressed: undefined });
+  draw({ rows: 8, shown: undefined, held: false, pressed: undefined });
+
+  vi.setSystemTime(5_001_000);
+  draw({ rows: 8, shown: undefined, held: false, pressed: "a" });
+  vi.setSystemTime(5_001_040);
+  draw({ rows: 8, shown: "a", held: true, pressed: "a" });
+  draw({ rows: 8, shown: "a", held: true, pressed: undefined });
+  draw({ rows: 8, shown: "a", held: true, pressed: "a" });
+  draw({ rows: 8, shown: "a", held: true, pressed: undefined });
+
+  assert.deepEqual(recorded(), [
+    {
+      name: PANEL_SPAN.INBOX_OPEN,
+      startedAt: 5_000_000,
+      waited: 250,
+      measured: { "inbox.item_count": 7 },
+    },
+    {
+      name: PANEL_SPAN.INBOX_ITEM_OPEN,
+      startedAt: 5_001_000,
+      waited: 40,
+      measured: { "inbox.held": 1 },
+    },
+  ]);
+});
+
+test("an Inbox left before it drew a row, or in a window that records nothing, times nothing", () => {
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  beginPanelSpan(PANEL_SPAN.INBOX_OPEN);
+  act(() =>
+    root.render(
+      createElement(InboxTimed, { rows: 0, shown: undefined, held: false, pressed: undefined }),
+    ),
+  );
+  act(() => root.unmount());
+  roots.splice(0);
+  uninstall();
+  beginPanelSpan(PANEL_SPAN.INBOX_OPEN);
+  uninstall = installPanelSpanRecorder((span) => spans.push(span));
+  const next = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(next);
+  act(() =>
+    next.render(
+      createElement(InboxTimed, { rows: 3, shown: undefined, held: false, pressed: undefined }),
+    ),
+  );
 
   assert.deepEqual(recorded(), []);
 });

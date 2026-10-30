@@ -21,6 +21,7 @@ import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
+import { PANEL_SPAN } from "../panel-spans.js";
 import {
   COMPOSER_INPUT,
   type ComposerEditorHandle,
@@ -336,6 +337,7 @@ function AnswerForm({
       {/* The note line stands on its own over the foot, as the agent's box's field does, its files over it. */}
       <ComposerBody files={chips}>
         <ComposerField
+          keystrokeSpan={PANEL_SPAN.KEYSTROKE_INBOX_ANSWER}
           module={module}
           editor={editor}
           room={room}

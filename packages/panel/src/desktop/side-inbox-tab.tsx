@@ -38,6 +38,7 @@ import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
 import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
 import { useInboxReadMarks, useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
+import { useInboxItemOpenSpan } from "../tasks/use-inbox-spans.js";
 import type { TaskInboxControl } from "../tasks/use-task-inbox.js";
 import { useTaskInboxShow } from "./folded-groups.js";
 
@@ -157,8 +158,10 @@ export function SideInboxTab({
           itemId: chosen.item.id,
         });
   const choose = ({ item }: InboxListed) => setAsked(item.id);
+  const timeOpen = useInboxItemOpenSpan(chosen?.item.id, inbox.read);
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
+    timeOpen(listed.item.id);
     choose(listed);
     columns.onOpen(listed.item.id);
   };

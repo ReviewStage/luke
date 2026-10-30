@@ -71,6 +71,7 @@ import {
 } from "../tasks/use-channels.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
+import { useInboxItemOpenSpan, useInboxOpenSpan } from "../tasks/use-inbox-spans.js";
 import { type OpenHere, OpenHereProvider } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -304,8 +305,11 @@ export function DesktopInbox({
     chosen?.item.id ?? (missing || chosenFailed ? asked?.itemId : undefined),
     { onClear, onSingle },
   );
+  const timeOpen = useInboxItemOpenSpan(chosen?.item.id, live.read);
+  useInboxOpenSpan(listedItems(list).length);
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
+    timeOpen(listed.item.id);
     choose(listed);
     columns.onOpen(listed.item.id);
   };
