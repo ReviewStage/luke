@@ -40,7 +40,7 @@ import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
 import { LAUNCH_NOTE, unrestoredNote, unsavedNote } from "./local-agent-first-lines.js";
 import { type AgentSave, readLocalAgentState } from "./local-agent-state.js";
 import { openAgentState, sealAgentState } from "./node/agent-state-seal.js";
-import { fakeSandbox, VM_EXEC } from "./testing/fake-sandbox.js";
+import { fakeClis, fakeSandbox, VM_EXEC } from "./testing/fake-sandbox.js";
 import { type Script, type ScriptedSpawner, scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const SERVICE = "https://luke.test";
@@ -138,6 +138,7 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script, vmLe
         sandbox: vmLeft
           ? { ...fakeSandbox().sandbox, deleted: () => Effect.succeed(false) }
           : fakeSandbox().sandbox,
+        clis: fakeClis(),
         formerlyDirect: !vmLeft,
         storesOwned: false,
         runnerBundle: "/opt/luke/agent-runner.mjs",
@@ -535,6 +536,7 @@ const saving = (
               vm.sandbox.deleted(agentId),
             ),
         },
+        clis: fakeClis(),
         formerlyDirect: false,
         storesOwned: false,
         runnerBundle: "/opt/luke/agent-runner.mjs",

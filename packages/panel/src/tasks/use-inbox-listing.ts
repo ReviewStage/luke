@@ -5,14 +5,11 @@ import { searchTokens } from "@luke/ui/search-tokens";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { afterPaint } from "../after-paint.js";
-import {
-  type InboxViewChoices,
-  useChannelScope,
-  useInboxViewChoices,
-} from "../desktop/folded-groups.js";
+import { useInboxViewChoices } from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
 import {
   channelGroups,
+  EVERYONES,
   INBOX_HOLDER,
   INBOX_SHOW,
   INBOX_WHOSE,
@@ -63,12 +60,13 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * window's choice, draw it a frame later rather than holding up the thread.
  *
  * Narrowed to a channel, it lists and counts that channel's items alone
- * (`channelGroups`), under the channels' scope, one for every channel and
- * apart from the Inbox's: All of everyone's until the reader turns it,
- * since a channel is everyone's threads on one topic, and then whatever
- * they turned it to, in every channel and across a launch
- * (`useChannelScope`). Its order, the latest first, is the Inbox's own.
+ * (`channelGroups`), every one of them whoever it is addressed to, since a
+ * channel is everyone's threads on one topic, and offers no view choices.
+ * Its order, the latest first, is the Inbox's own.
  */
+
+/** What a channel lists: every item in it, open or settled, whoever it is addressed to. */
+const CHANNEL_LISTS = { show: INBOX_SHOW.ALL, whose: EVERYONES } as const;
 
 /**
  * The tasks the list holds items of, in main's order: each holding one that
@@ -82,13 +80,6 @@ function listedHoldings(
 ): readonly AppInboxTaskHolding[] {
   const ids = new Set(listed.map((task) => task.id));
   return holdings.filter((holding) => ids.has(holding.taskId));
-}
-
-/** The Inbox's view choices, under the channels' scope where a channel is given; the Inbox's kept choices where none is. */
-function useScopedChoices(channelId: string | undefined): InboxViewChoices {
-  const kept = useInboxViewChoices();
-  const channels = useChannelScope();
-  return channelId === undefined ? kept : { ...kept, ...channels };
 }
 
 /** The choice that opens a listed item: by its task, and its agent, which its link names, or by its agent where it has none. */
@@ -173,7 +164,9 @@ function useChoiceFirst(
 export function useInboxListing(tasks: TasksControl, channelId?: string) {
   const view = tasks.inboxView;
   const { act } = useAct();
-  const choices = useScopedChoices(channelId);
+  // Note that a channel lists everything, so the Inbox's kept choices stand only while it lists every channel.
+  const kept = useInboxViewChoices();
+  const choices = channelId === undefined ? kept : undefined;
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   // Note that the Inbox reads the automations whenever it stands, because the items of agents with no task it lists are every one an automation's.
   const openAutomation = useCallback(
@@ -326,7 +319,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
   const [query, setQuery] = useState("");
   const search = useMemo(() => searchTokens(query), [query]);
   const me = tasks.me;
-  const { show, whose } = choices;
+  const { show, whose } = choices ?? CHANNEL_LISTS;
   const counts = useMemo(() => inboxCounts(standing, me, whose), [standing, me, whose]);
   const filter = useMemo(() => ({ show, whose, search, readerId: me }), [show, whose, search, me]);
   // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its place,
@@ -348,7 +341,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
   const filteredOut =
     searched === undefined &&
     listedRows.length === 0 &&
-    (choices.show !== INBOX_SHOW.ALL || choices.whose.kind !== INBOX_WHOSE.EVERYONE) &&
+    (show !== INBOX_SHOW.ALL || whose.kind !== INBOX_WHOSE.EVERYONE) &&
     standing.some(({ items }) => items.length > 0);
   // Note that a chosen item whose task or agent is listed but not read yet keeps its place, because
   // it may be listed once the read lands; one whose task left the list, deleted elsewhere, gives way.

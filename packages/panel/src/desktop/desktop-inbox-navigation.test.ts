@@ -36,7 +36,7 @@ import { beforeAll, test } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
-import { chooseChannel, leaveChannel } from "../tasks/use-channels.js";
+import { chooseChannel } from "../tasks/use-channels.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import {
   type AnyAct,
@@ -981,7 +981,7 @@ test("a teammate's open item of an agent with no plan is listed, wearing the tea
   );
 });
 
-test("on a phone the Inbox's list is headed by New task and one ⋯, its title centred between them, the ⋯ opening View options' own menu, and the search standing under the head", async () => {
+test("on a phone the Inbox's list is headed by New task and one ⋯, its title centred between them, the ⋯ opening View options' own menu and offering Mark all as read, and the search standing under the head", async () => {
   const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
   await settle();
   const head = page.querySelector<HTMLElement>(".inbox-head");
@@ -1013,8 +1013,8 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
     [...document.querySelectorAll('[role="menu"] .luke-menu-item-label')].map(
       (each) => each.textContent,
     ),
-    ["View options"],
-    "the ⋯ holds what the wide head draws as buttons",
+    ["View options", "Mark all as read"],
+    "the ⋯ holds what the wide head draws as buttons, and what a right-click offers",
   );
   act(() => more().click());
   pick("View options");
@@ -1259,7 +1259,7 @@ function buttonSaying(words: string): HTMLButtonElement {
   );
 }
 
-test("a channel narrows the Inbox to its own threads, everyone's, under its name and purpose", async () => {
+test("a channel narrows the Inbox to its own threads, everyone's, under its name and purpose, with no view's menu", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
   answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
@@ -1283,51 +1283,31 @@ test("a channel narrows the Inbox to its own threads, everyone's, under its name
     [EXPIRY.title, THRESHOLD.title],
     "#general's threads alone, a teammate's among them, the latest first",
   );
+  assert.equal(page.querySelector('button[aria-label="View options"]'), null);
 });
 
-test("a scope turned in one channel stands in every channel, and when the reader comes back", async () => {
+test("a channel chosen while the workspace's channels could not be read says so with Retry, and ⌘K's Mark all as read marks the chosen channel's threads alone", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = ACME;
-  answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
+  world.listedWorkspace = { ...ACME, id: "workspace-channels-unread" };
+  world.channels = { [world.listedWorkspace.id]: { failed: true } };
   world.inboxes = new Map([
     [
       BILLING.id,
       [
-        { ...THRESHOLD, channelId: GENERAL.id, startedBy: TEAMMATE },
-        { ...RETRY, channelId: APP_CHANNEL.id, startedBy: TEAMMATE },
+        { ...THRESHOLD, channelId: GENERAL.id, unread: true },
+        { ...RETRY, channelId: APP_CHANNEL.id, unread: true },
       ],
     ],
   ]);
-  const { page } = mount([], { channels: true });
-  await settle();
-  showScope(page, "Open");
-  chooseView(page, "Addressed to", "Me");
-  await settle();
-  assert.deepEqual(rowTitles(page), [], "Open addressed to Me leaves out the teammate's thread");
-
-  act(() => chooseChannel(APP_CHANNEL.id));
-  await settle();
-  assert.equal(headTitle(page), `#${APP_CHANNEL.name} · Open`);
-  assert.deepEqual(rowTitles(page), [], "another channel opens on it too");
-
-  act(() => leaveChannel());
-  await settle();
-  act(() => chooseChannel(GENERAL.id));
-  await settle();
-  assert.equal(headTitle(page), "#general · Open");
-  assert.deepEqual(rowTitles(page), [], "#general is still on it");
-});
-
-test("a channel chosen while the workspace's channels could not be read says so with Retry", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = { ...ACME, id: "workspace-channels-unread" };
-  world.channels = { [world.listedWorkspace.id]: { failed: true } };
   const { page } = mount([], { channels: true });
   await settle();
   const notRead =
     page.querySelector<HTMLElement>('section[aria-label="Channels not read"]') ??
     assert.fail("the failed read is said");
   assert.match(notRead.textContent ?? "", /Could not read this workspace's channels\./u);
+  assert.equal(runAppCommand(APP_COMMAND.MARK_INBOX_READ), true);
+  await settle();
+  assert.deepEqual(world.readMarks, [`read:${THRESHOLD.id}`], "never the workspace's whole");
 });
 
 test("ticking the box's checkbox under an open question sets its options aside and sends its words as a new thread to the item's agent in the item's channel, which the Inbox then opens, the box a reply again", async () => {

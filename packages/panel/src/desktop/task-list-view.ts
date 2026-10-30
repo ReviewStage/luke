@@ -1,44 +1,74 @@
 import { useAtom } from "@effect/atom-react";
-import { type TaskStatus, taskStatusSchema } from "@luke/features/task-wire";
 import {
+  ASSIGNED_TO,
+  type AssignedTo,
   DEFAULT_TASK_LIST_VIEW,
   TASK_GROUPING,
-  TASK_ORDER,
   type TaskGrouping,
   type TaskListView,
-  type TaskOrder,
 } from "@luke/ui/task-list-model";
-import { Schema } from "effect";
+import { Schema, SchemaTransformation } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { keptKey, useKept } from "../use-kept.js";
 
 /**
- * task-list-view.ts -- how each workspace's task list is grouped, ordered, and filtered in the sidebar, kept per workspace on this Mac.
+ * task-list-view.ts -- how each workspace's task list is grouped, and whose tasks it holds, in the sidebar, kept per workspace on this Mac.
  *
  * The view is the developer's reading of a workspace's list, kept in the
- * renderer's own storage as the folds are, so a list grouped by creator on
+ * renderer's own storage as the folds are, so a list grouped in one run on
  * one Mac stays grouped by repository on another, and one workspace's view
- * never changes another's. A workspace with no view kept draws today's,
- * by repository and last update, everyone's tasks to do and under way,
- * assigned to anyone. A fixture run draws that view and keeps
- * nothing, so its frames never wear a developer's choices.
+ * never changes another's. A workspace with no view kept draws today's, by
+ * repository, the reader's own tasks. A fixture run draws that view and
+ * keeps nothing, so its frames never wear a developer's choices.
+ *
+ * Note that Assigned to is kept under `assignee`, which no earlier build
+ * wrote, and Me where it is absent, so every reader opens on their own
+ * tasks once, whatever an earlier build kept under `assignedTo`, and a
+ * later choice of Anyone is kept as one. An earlier build's order, creator,
+ * and statuses read as nothing, and its grouping by person as by
+ * repository.
  */
+
+/** The groupings by person an earlier build kept, which read as by repository. */
+const EARLIER_GROUPING = {
+  ASSIGNEE: "assignee",
+  CREATOR: "creator",
+} as const;
+
+/** A kept grouping, an earlier build's by person read as by repository. */
+const storedGrouping = Schema.Literals([
+  ...Object.values(TASK_GROUPING),
+  ...Object.values(EARLIER_GROUPING),
+]).pipe(
+  Schema.decodeTo(
+    Schema.Literals(Object.values(TASK_GROUPING)),
+    SchemaTransformation.transform({
+      decode: (kept): TaskGrouping =>
+        kept === TASK_GROUPING.NONE ? TASK_GROUPING.NONE : TASK_GROUPING.REPOSITORY,
+      encode: (grouping) => grouping,
+    }),
+  ),
+);
+
+/** A kept Assigned to. */
+const storedAssignedTo = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal(ASSIGNED_TO.ME) }),
+  Schema.Struct({ kind: Schema.Literal(ASSIGNED_TO.ANYONE) }),
+  Schema.Struct({ kind: Schema.Literal(ASSIGNED_TO.MEMBER), userId: Schema.String }),
+]);
 
 /** Each workspace's view, by its id. */
 const storedViews = Schema.fromJsonString(
   Schema.Record(
     Schema.String,
     Schema.Struct({
-      grouping: Schema.Literals(Object.values(TASK_GROUPING)),
-      order: Schema.Literals(Object.values(TASK_ORDER)),
-      createdBy: Schema.optionalKey(Schema.String),
-      assignedTo: Schema.optionalKey(Schema.String),
-      statuses: Schema.optionalKey(Schema.Array(taskStatusSchema)),
+      grouping: storedGrouping,
+      assignee: Schema.optionalKey(storedAssignedTo),
     }),
   ),
 );
 
-type Views = Readonly<Record<string, TaskListView>>;
+type StoredViews = typeof storedViews.Type;
 
 /** Where the views are kept in the renderer's storage. */
 const KEPT = { VIEWS: keptKey("luke.sidebarTaskViews", storedViews) } as const;
@@ -47,23 +77,21 @@ const KEPT = { VIEWS: keptKey("luke.sidebarTaskViews", storedViews) } as const;
 export interface TaskListViewControl {
   readonly view: TaskListView;
   readonly onGrouping: (grouping: TaskGrouping) => void;
-  readonly onOrder: (order: TaskOrder) => void;
-  /** Lists one member's tasks, by account id, or everyone's for undefined. */
-  readonly onCreatedBy: (createdBy: string | undefined) => void;
-  /** Lists the tasks assigned to one member, by account id, or to anyone for undefined. */
-  readonly onAssignedTo: (assignedTo: string | undefined) => void;
-  /** Lists everyone's tasks assigned to anyone, letting go of both filters by person in one choice. */
-  readonly onEveryone: () => void;
-  /** Lists every task one member created, whoever it is assigned to, in one choice, as their page's Show all asks. */
-  readonly onCreatedByAlone: (createdBy: string) => void;
-  /** Lists every task assigned to one member, whoever created it, in one choice, as ⌘K's Show my tasks asks. */
-  readonly onAssignedToAlone: (assignedTo: string) => void;
-  /** Lists the tasks of these statuses, in `TASK_STATUS_ORDER`. */
-  readonly onStatuses: (statuses: readonly TaskStatus[]) => void;
+  /** Lists the reader's tasks, anyone's, or one teammate's. */
+  readonly onAssignedTo: (assignedTo: AssignedTo) => void;
 }
 
 /** A fixture run's views, which keep nothing. One for the window, so the sidebar and a person's page, which lists their tasks there, read and change the same view. */
-const stagedViewsAtom = Atom.keepAlive(Atom.make<Views>({}));
+const stagedViewsAtom = Atom.keepAlive(Atom.make<StoredViews>({}));
+
+/** A view as kept, Me where no Assigned to is. */
+function viewOf(kept: StoredViews[string] | undefined): TaskListView {
+  if (kept === undefined) return DEFAULT_TASK_LIST_VIEW;
+  return {
+    grouping: kept.grouping,
+    assignedTo: kept.assignee ?? DEFAULT_TASK_LIST_VIEW.assignedTo,
+  };
+}
 
 /** The view of the workspace listed, kept as each choice is made, unless the run is `staged`. */
 export function useTaskListView(
@@ -71,14 +99,16 @@ export function useTaskListView(
   staged: boolean,
 ): TaskListViewControl {
   // Note that every surface holding the key draws a choice at once, so the sidebar and a person's page read and change the same view.
-  const [kept, keep] = useKept<Views>(KEPT.VIEWS, {});
+  const [kept, keep] = useKept<StoredViews>(KEPT.VIEWS, {});
   const [stagedViews, setStagedViews] = useAtom(stagedViewsAtom);
   const views = staged ? stagedViews : kept;
-  const view =
-    (workspaceId === undefined ? undefined : views[workspaceId]) ?? DEFAULT_TASK_LIST_VIEW;
+  const view = viewOf(workspaceId === undefined ? undefined : views[workspaceId]);
   const choose = (next: TaskListView) => {
     if (workspaceId === undefined) return;
-    const all = { ...views, [workspaceId]: next };
+    const all = {
+      ...views,
+      [workspaceId]: { grouping: next.grouping, assignee: next.assignedTo },
+    };
     if (staged) {
       setStagedViews(all);
       return;
@@ -88,29 +118,6 @@ export function useTaskListView(
   return {
     view,
     onGrouping: (grouping) => choose({ ...view, grouping }),
-    onOrder: (order) => choose({ ...view, order }),
-    // Note that everyone's tasks is the view with no creator named at all, the rest of it kept.
-    onCreatedBy: (createdBy) => {
-      const { createdBy: _standing, ...rest } = view;
-      choose(createdBy === undefined ? rest : { ...rest, createdBy });
-    },
-    // And anyone's is the view with no assignee named at all, the rest of it kept.
-    onAssignedTo: (assignedTo) => {
-      const { assignedTo: _standing, ...rest } = view;
-      choose(assignedTo === undefined ? rest : { ...rest, assignedTo });
-    },
-    onCreatedByAlone: (createdBy) => {
-      const { assignedTo: _assigned, ...rest } = view;
-      choose({ ...rest, createdBy });
-    },
-    onAssignedToAlone: (assignedTo) => {
-      const { createdBy: _created, ...rest } = view;
-      choose({ ...rest, assignedTo });
-    },
-    onEveryone: () => {
-      const { createdBy: _created, assignedTo: _assigned, ...rest } = view;
-      choose(rest);
-    },
-    onStatuses: (statuses) => choose({ ...view, statuses }),
+    onAssignedTo: (assignedTo) => choose({ ...view, assignedTo }),
   };
 }

@@ -248,6 +248,38 @@ export interface LocalAgentSandbox {
   readonly deviceGit: (agentId: string) => Readonly<Record<string, string>>;
 }
 
+/**
+ * The agent CLIs a device keeps of its own (`local-agent-setup.ts`'s
+ * `localAgentClis`): Claude Code, Codex, and GitHub's CLI, each the pinned
+ * build for the box, fetched under its state and checked before it is kept.
+ * The device has them before it registers ready, as its readiness step
+ * asks, while its agents still run in VMs on the image's own; once they run
+ * on the box itself, `paths` is what it registers and launches from.
+ */
+export interface LocalAgentClis {
+  /** Where each is kept under the device's state, named before it is fetched. */
+  readonly paths: { readonly claude: string; readonly codex: string; readonly gh: string };
+  /**
+   * Each had now where it can be: the build kept where it still stands as
+   * checked, and otherwise the pinned build fetched and checked. It runs
+   * `preparing` once, just before the first fetch begins, and never where
+   * every one is kept, so the device says it is getting ready only while it
+   * is. It fails, in words naming no secret, with the one it could not have.
+   */
+  readonly ready: (
+    preparing: Effect.Effect<void>,
+  ) => Effect.Effect<
+    void,
+    LocalAgentClisUnavailable,
+    ChildProcessSpawner.ChildProcessSpawner | FileSystem | Path.Path | HttpClient
+  >;
+}
+
+/** Which of a device's agent CLIs could not be had. */
+export class LocalAgentClisUnavailable extends Data.TaggedError("LocalAgentClisUnavailable")<{
+  readonly detail: string;
+}> {}
+
 /** Why an agent's VM could not be made or started. */
 export class LocalAgentSandboxUnavailable extends Data.TaggedError("LocalAgentSandboxUnavailable")<{
   readonly detail: string;
@@ -319,6 +351,8 @@ export interface LocalAgentPlatformSeam {
    * the device.
    */
   readonly sandbox: LocalAgentSandbox;
+  /** The agent CLIs the device keeps of its own, had before it registers ready (`LocalAgentClis`). */
+  readonly clis: LocalAgentClis;
   /**
    * The agent's packed state at `from`, which must be a plain file standing
    * in the folder `within` by its real path, sealed under the agent's state

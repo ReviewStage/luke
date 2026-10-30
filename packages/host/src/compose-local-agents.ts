@@ -94,9 +94,11 @@ import type { RunMode } from "./run-mode.js";
  * for its runner and requests from its tools. A Mac's id is minted once per
  * account and kept in the host's state; a host is handed the one it enrolled
  * under (`LocalAgentsDependencies.deviceId`). Every time the gate opens, an
- * app start among them, the device first has what its VMs run on
- * (`LocalAgentSandbox.ready`: a Mac's pinned smolvm, fetched and checked,
- * and the image pulled once). A first fetch or pull takes minutes, so while
+ * app start among them, the device first has its agents' CLIs
+ * (`LocalAgentClis.ready`: Claude Code, Codex, and GitHub's CLI, each
+ * fetched and checked) and what its VMs run on (`LocalAgentSandbox.ready`:
+ * a Mac's pinned smolvm, fetched and checked, and the image pulled once).
+ * A first fetch or pull takes minutes, so while
  * it runs the device registers as preparing (`DEVICE_SETUP`) and beats, and
  * the menus list it as getting ready, which takes no agent; one that failed
  * registers why and beats, so it is listed as not set up rather than not at
@@ -673,12 +675,13 @@ export function composeLocalAgents(
       );
 
     /**
-     * Whether the device has what its VMs run on (`LocalAgentSandbox.ready`),
+     * Whether the device has its agents' CLIs (`LocalAgentClis.ready`) and
+     * what its VMs run on (`LocalAgentSandbox.ready`), in that order,
      * asked each time the gate opens, and after a try that failed asked
      * again once `setupRetryAfter` has passed, one try at a time, for as
      * long as the gate stands and the account is the one `userId` names; it
-     * answers false only once either changes. As a fetch or pull begins (the
-     * sandbox's `preparing`) the device registers as preparing and beats, so
+     * answers false only once either changes. As the first fetch or pull
+     * begins (`preparing`) the device registers as preparing and beats, so
      * the menus list it as getting ready rather than not at all; a try that
      * failed registers why and beats while it waits for the next, so it is
      * listed as not set up rather than away. `registered` registers the
@@ -705,11 +708,15 @@ export function composeLocalAgents(
                   yield* Effect.forkIn(presence(userId, deviceId), scope);
                 }
               });
-              return yield* Effect.result(platform.sandbox.ready(preparing));
+              // Note that the device says it is getting ready once, whichever fetch begins first, its CLIs' or its VMs'.
+              const once = yield* Effect.cached(preparing);
+              return yield* Effect.result(
+                Effect.andThen(platform.clis.ready(once), platform.sandbox.ready(once)),
+              );
             }),
           );
           if (Result.isSuccess(ready)) return true;
-          report("the local agents' smolvm or sandbox image could not be had");
+          report(`the local agents' setup failed: ${ready.failure.detail}`);
           const listed = yield* asked(
             registered({ setup: DEVICE_SETUP.FAILED, setupFailure: ready.failure.detail }),
           );

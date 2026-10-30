@@ -1,7 +1,16 @@
 import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { type AgentToolPin, SMOLVM_MAC_PIN } from "@luke/agent-runner/pins";
+import {
+  type AgentToolPin,
+  CLAUDE_CODE_LINUX_PINS,
+  CLAUDE_CODE_MAC_PIN,
+  CODEX_LINUX_PINS,
+  CODEX_MAC_PIN,
+  GH_LINUX_PINS,
+  GH_MAC_PIN,
+  SMOLVM_MAC_PIN,
+} from "@luke/agent-runner/pins";
 import {
   DEVICE_ARCH,
   DEVICE_PLATFORM,
@@ -10,11 +19,12 @@ import {
 } from "@luke/features/device-agent-wire";
 import { resolveAppName } from "../app-identity.js";
 import type { LocalAgentPlatformSeam } from "../effect/seams.js";
+import type { AgentCliPins } from "../local-agent-setup.js";
 import { macDeviceName } from "../node/mac-device-name.js";
 import { agentUnsavedWorkScript } from "../node/open-on-mac.js";
 
 /**
- * host-os.ts -- what a host's daemon does differently on each OS it runs on (`HostOs`): the platform it enrolls and registers as, the architectures it is built for, its default name, whether its agents' VMs may nest, where its `smolvm` comes from, whether agents ran directly on it before, and whether its agents' folders and VMs are its own alone.
+ * host-os.ts -- what a host's daemon does differently on each OS it runs on (`HostOs`): the platform it enrolls and registers as, the architectures it is built for, its default name, whether its agents' VMs may nest, where its `smolvm` comes from, which builds of the agent CLIs it keeps, whether agents ran directly on it before, and whether its agents' folders and VMs are its own alone.
  *
  * Everything else, the enroll, the follower, and the VM per agent, is the
  * same program on every OS (`hostPlatform`, `hostDaemon`). A description
@@ -48,6 +58,8 @@ export interface HostOs {
   /** Whether each agent's VM may run VMs of its own. */
   readonly nested: () => boolean;
   readonly smolvm: HostSmolvmSource;
+  /** The builds of the agent CLIs it fetches and keeps, for the architecture it runs on (`LocalAgentPlatformSeam.clis`). */
+  readonly agentClis: (arch: DeviceArch) => AgentCliPins;
   /** Whether agents may have run directly on the machine before every agent ran in a VM (`LocalAgentPlatformSeam.formerlyDirect`). */
   readonly formerlyDirect: boolean;
   /** Whether the agents' folders and the smolvm store the daemon runs with are its own alone (`LocalAgentPlatformSeam.storesOwned`). */
@@ -65,7 +77,7 @@ export interface HostApp {
   readonly developerIdSigned: boolean;
 }
 
-/** A Linux box: its state, its agents' folders and its smolvm store under the `luke-host` user's home, that user's alone, its host name, `/dev/kvm` passed through where it has it, and the `smolvm` the install script put at the path its service names. */
+/** A Linux box: its state, its agents' folders and its smolvm store under the `luke-host` user's home, that user's alone, its host name, `/dev/kvm` passed through where it has it, the `smolvm` the install script put at the path its service names, and the glibc builds of the agent CLIs for its architecture. */
 export const LINUX_HOST: HostOs = {
   name: "Linux",
   platform: DEVICE_PLATFORM.LINUX,
@@ -73,6 +85,11 @@ export const LINUX_HOST: HostOs = {
   deviceName: () => os.hostname(),
   nested: () => existsSync(KVM),
   smolvm: { kind: HOST_SMOLVM.PATH, variable: "LUKE_HOST_SMOLVM" },
+  agentClis: (arch) => ({
+    claude: CLAUDE_CODE_LINUX_PINS[arch],
+    codex: CODEX_LINUX_PINS[arch],
+    gh: GH_LINUX_PINS[arch],
+  }),
   formerlyDirect: false,
   storesOwned: true,
   stateRoot: (home) => path.join(home, "state"),
@@ -81,8 +98,9 @@ export const LINUX_HOST: HostOs = {
 
 /**
  * A Mac: Apple silicon alone, its Computer Name, no nested VMs, which
- * Hypervisor.framework never gives its guests, and the pinned `smolvm`
- * fetched and checked in-process. Note that agents ran directly on This Mac
+ * Hypervisor.framework never gives its guests, the pinned `smolvm`
+ * fetched and checked in-process, and the macOS arm64 builds of the agent
+ * CLIs, each install keeping its own copy. Note that agents ran directly on This Mac
  * before, so a discard checks a folder for work that is nowhere else. Its
  * `luke-host` runs as the member and ships inside the desktop app, so its
  * state is the app's own folder, which Electron puts under Application
@@ -101,6 +119,8 @@ export const DARWIN_HOST: HostOs = {
   deviceName: macDeviceName,
   nested: () => false,
   smolvm: { kind: HOST_SMOLVM.PIN, pin: SMOLVM_MAC_PIN },
+  // Note that the arch is not read, since a Mac host is built for Apple silicon alone (`arches`).
+  agentClis: () => ({ claude: CLAUDE_CODE_MAC_PIN, codex: CODEX_MAC_PIN, gh: GH_MAC_PIN }),
   formerlyDirect: true,
   storesOwned: false,
   unsavedWorkScript: agentUnsavedWorkScript,

@@ -92,7 +92,6 @@ import {
 import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "../desktop/action-menu.js";
 import {
   INBOX_LIST_WIDTH,
-  type InboxShowChoice,
   type InboxViewChoices,
   type InboxWhoseChoice,
   useInboxListWidth,
@@ -174,8 +173,9 @@ import { cardTitle } from "./tool-call-model.js";
  * neither. Apart from whether it waits, an item is unread where it changed
  * since the developer last read it, or they marked it so: the blue dot in
  * a gutter before its tile, its title in the unread weight; opening it
- * reads it, and its row, its menu, U, and Mark all as read in the view's
- * menu mark it read or unread (`use-inbox-read-marks.ts`). An item settled
+ * reads it, and its row, its menu, U, and Mark all as read, which the
+ * sidebar's Inbox row and each channel's row offer on a right-click, ⌘K, and a
+ * phone's ⋯, mark it read or unread (`use-inbox-read-marks.ts`). An item settled
  * and read is done with (`isDone`), and its row stands back, gray, with no
  * word saying so: the chosen row Open keeps once it is answered or read,
  * until another is chosen (`use-held-inbox-list.ts`), and every such row All lists.
@@ -186,16 +186,14 @@ import { cardTitle } from "./tool-call-model.js";
  * which a chip over the list then says, its × listing the developer's own
  * again. Open addressed to the developer is Needs you, the threads the
  * sidebar's Inbox row counts, where the Inbox opens. Each choice stands
- * checked, and under them Mark all as read clears the dots alone. Every
- * choice is kept across launches. Every row, in the window's Inbox and a
+ * checked, and every choice is kept across launches. Every row, in the window's Inbox and a
  * task's own alike, names its task on its first line, over its title.
  * Where the scope leaves out every
  * item listed, the list says so in the Inbox's empty state, offering the
  * view that holds something, as a mail app's empty unread view does; the
- * item the pane shows keeps its place there, though no row. A task's own
- * Inbox lists one task's items, its Open the developer's own, so its
- * view's menu offers Needs you and All alone, kept apart
- * from the window's. Either list
+ * item the pane shows keeps its place there, though no row. A channel
+ * and a task's own Inbox list every item they hold, with no view's menu,
+ * and say "Nothing here" where they hold none. Either list
  * is resized from its right edge as the sidebar is, and keeps one width
  * between them across launches; an Inbox showing one column at a time
  * draws its list the whole Inbox wide, with no edge, and hides it while an
@@ -222,7 +220,7 @@ const INBOX_ITEMS = "Inbox items";
 /** What an unread row says to a reader, its dot being drawn for the eye alone. */
 const UNREAD = "Unread";
 
-/** What the view's menu offers to clear every dot with. */
+/** What a phone's ⋯ offers to clear every dot with, as the sidebar's rows offer it on a right-click. */
 const MARK_ALL_READ = "Mark all as read";
 
 /** What the list's placeholder rows say to a reader while its items are first read. */
@@ -240,35 +238,25 @@ const SKELETON_ROWS = [
 /** How wide a placeholder row's time stands, as wide as a short "2h". */
 const SKELETON_TIME = "20px";
 
-/** What each scope is called, in the view's menu and after a channel's name at its head, and its glyph in the menu. */
+/** What each scope is called, in the view's menu and the list's region's name, and its glyph in the menu. */
 const SCOPE_WORDS = {
   [INBOX_SHOW.OPEN]: { label: "Open", icon: <GLYPH.TODOS /> },
   [INBOX_SHOW.ALL]: { label: "All", icon: <InboxIcon /> },
 } as const satisfies Record<InboxShow, { label: string; icon: React.JSX.Element }>;
 
-/** What a task's own Inbox calls its scopes, whose Open is the reader's own, Needs you (`side-inbox-tab.tsx`). */
-const TASK_SCOPE_WORDS = {
-  ...SCOPE_WORDS,
-  [INBOX_SHOW.OPEN]: { ...SCOPE_WORDS[INBOX_SHOW.OPEN], label: NEEDS_YOU.LABEL },
-} as const satisfies Record<InboxShow, { label: string; icon: React.JSX.Element }>;
-
-/** The scopes every Inbox's view's menu offers, in its order. */
+/** The scopes the window's Inbox's view's menu offers, in its order. */
 const INBOX_SCOPES = [INBOX_SHOW.OPEN, INBOX_SHOW.ALL] as const satisfies readonly InboxShow[];
 
 /** The Inbox's name at its head, whatever it lists, the view's menu saying the rest. */
 const INBOX_TITLE = "Inbox";
 
 /**
- * Whether the list holds only what needs the reader, Open addressed to
- * them, as a task's own Inbox lists its Open (`side-inbox-tab.tsx`): its
- * rows then leave Needs you unsaid (`needsYouShown`), and its region says
- * it once.
+ * Whether the list holds only what needs the reader, the window's Inbox's
+ * Open addressed to them: its rows then leave Needs you unsaid
+ * (`needsYouShown`), and its region says it once.
  */
 function needsYouListed(head: InboxListHead): boolean {
-  return (
-    head.show.show === INBOX_SHOW.OPEN &&
-    (head.view === undefined || head.view.choices.whose.kind === INBOX_WHOSE.MINE)
-  );
+  return head.view?.show === INBOX_SHOW.OPEN && head.view.whose.kind === INBOX_WHOSE.MINE;
 }
 
 /** Whom Addressed to names, in the words a reader hears after the list's region's name. */
@@ -287,20 +275,18 @@ function whoseWords(whose: InboxWhose): string {
  * The list's region's name, saying what it lists, since the head names the
  * Inbox alone: Needs you where it holds only what needs the reader, whose
  * rows leave it unsaid (`needsYouShown`), so a reader hears it once; else
- * the scope and, on the window's Inbox, whom Addressed to names. A
- * channel's head names its scope itself.
+ * the window's Inbox's scope and whom Addressed to names. A channel and a
+ * task's own Inbox list everything, so their region is named alone.
  */
 function regionLabel(head: InboxListHead): string {
-  if (head.channel !== undefined) return INBOX_ITEMS;
+  const { view } = head;
+  if (view === undefined) return INBOX_ITEMS;
   if (needsYouListed(head)) return `${INBOX_ITEMS} · ${NEEDS_YOU.LABEL}`;
-  const scope = `${INBOX_ITEMS} · ${SCOPE_WORDS[head.show.show].label}`;
-  return head.view === undefined ? scope : `${scope} · ${whoseWords(head.view.choices.whose)}`;
+  return `${INBOX_ITEMS} · ${SCOPE_WORDS[view.show].label} · ${whoseWords(view.whose)}`;
 }
 
-/** A channel's name at the head of the Inbox narrowed to it: the scope after it, but for All, where a channel opens. */
-function channelTitle(name: string, show: InboxShow): string {
-  return show === INBOX_SHOW.ALL ? `#${name}` : `#${name} · ${SCOPE_WORDS[show].label}`;
-}
+/** What a channel or a task's own Inbox says holding nothing, since it lists everything it holds. */
+export const NOTHING_HERE = "Nothing here";
 
 /**
  * What the list says where its scope and Addressed to leave out every item
@@ -312,7 +298,7 @@ const SHOW_EMPTY = {
     [INBOX_SHOW.OPEN]: NEEDS_YOU.NONE,
     [INBOX_SHOW.ALL]: "Nothing addressed to you",
   },
-  [INBOX_WHOSE.EVERYONE]: { [INBOX_SHOW.OPEN]: "Nothing open", [INBOX_SHOW.ALL]: "Nothing here" },
+  [INBOX_WHOSE.EVERYONE]: { [INBOX_SHOW.OPEN]: "Nothing open", [INBOX_SHOW.ALL]: NOTHING_HERE },
   [INBOX_WHOSE.PERSON]: {
     [INBOX_SHOW.OPEN]: "Nothing addressed to them",
     [INBOX_SHOW.ALL]: "Nothing addressed to them",
@@ -322,15 +308,15 @@ const SHOW_EMPTY = {
 /** What the empty state's presses say: All of whom Addressed to names, the reader's own again, or anyone's. */
 const SHOW_INSTEAD = {
   ALL: "Show all",
-  MINE: "Show what's addressed to me",
+  MINE: "Show mine",
   EVERYONE: "Show anyone's",
 } as const;
 
 /** What the view's submenu of whom the items are addressed to is called. */
 const WHOSE = "Addressed to";
 
-/** What the chip over the list says its × does. */
-const CLEAR_WHOSE = SHOW_INSTEAD.MINE;
+/** What the chip over the list says its × does, in full, since a reader hears it apart from the empty state's short press. */
+const CLEAR_WHOSE = "Show what's addressed to me";
 
 /**
  * What the list leaves the item beside it, in CSS pixels: the list is
@@ -580,37 +566,29 @@ function whoseEntries(
 }
 
 /**
- * The head's button that drops the view's menu: first what it shows, the
- * scopes the Inbox offers, Open and All, a task's own calling its Open
- * Needs you, the one shown checked; then, on the window's Inbox, Addressed to, a submenu of Anyone,
- * Me, or a teammate by face and name, its choice checked; and Mark all as
- * read at its foot.
+ * The window's Inbox's head's button that drops the view's menu: first what
+ * it shows, Open or All, the one shown checked; then Addressed to, a
+ * submenu of Anyone, Me, or a teammate by face and name, its choice checked.
  */
 function ViewOptions({
   shown,
-  show,
   choices,
   readerId,
-  readAll,
   asked,
 }: {
   shown: boolean;
-  show: InboxShowChoice;
-  /** The window's Inbox's Addressed to; none on a task's own, whose menu offers its scopes alone. */
-  choices: InboxViewChoices | undefined;
+  choices: InboxViewChoices;
   readerId: string | undefined;
-  readAll: InboxReadAll | undefined;
   /** Where a phone's ⋯ stands for the button, the menu drawn under the ⋯ each time it asks (`phone-head.tsx`), and no button of its own; none elsewhere. */
   asked?: { readonly ask: MenuAsk | undefined } | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
   useAskedMenu(menu.show, asked?.ask);
   const reader = useMemberDirectory();
-  const words = choices === undefined ? TASK_SCOPE_WORDS : SCOPE_WORDS;
   const scope: MenuEntry[] = INBOX_SCOPES.map((value) => ({
-    ...words[value],
-    checked: show.show === value,
-    onSelect: () => show.onShow(value),
+    ...SCOPE_WORDS[value],
+    checked: choices.show === value,
+    onSelect: () => choices.onShow(value),
   }));
   return (
     <>
@@ -623,11 +601,7 @@ function ViewOptions({
         <ActionMenu
           label={VIEW_OPTIONS}
           menu={menu.drawn}
-          groups={[
-            scope,
-            ...(choices === undefined ? [] : windowEntries(choices, reader, readerId)),
-            readAll === undefined ? [] : markAllEntries(readAll),
-          ].filter((group) => group.length > 0)}
+          groups={[scope, ...windowEntries(choices, reader, readerId)]}
           onClose={menu.close}
         />
       )}
@@ -635,16 +609,14 @@ function ViewOptions({
   );
 }
 
-/** Mark all as read, as the view's menu offers it at its foot, pressable while anything is unread. */
-function markAllEntries(readAll: InboxReadAll): MenuEntry[] {
-  return [
-    {
-      label: MARK_ALL_READ,
-      icon: <CheckCheckIcon />,
-      disabled: !readAll.unread,
-      onSelect: readAll.onMarkAll,
-    },
-  ];
+/** Mark all as read, as a phone's ⋯ offers it, a phone having no right-click, pressable while anything is unread. */
+function markAllAction(readAll: InboxReadAll): MenuAction {
+  return {
+    label: MARK_ALL_READ,
+    icon: <CheckCheckIcon />,
+    disabled: !readAll.unread,
+    onSelect: readAll.onMarkAll,
+  };
 }
 
 /** The window's Inbox's own group of its view's menu, after its scopes: Addressed to. */
@@ -760,13 +732,12 @@ function WhoseChip({
 /**
  * The way on from an empty scope: All of whom Addressed to names where it
  * holds anything; else back to the reader's own from a teammate's, or to
- * anyone's from the reader's own; none from anyone's, or on a task's own
- * Inbox, where nothing else holds anything.
+ * anyone's from the reader's own; none from anyone's, where nothing else
+ * holds anything.
  */
 function emptyWayOn(
-  show: InboxShowChoice,
+  view: InboxViewChoices,
   counts: InboxCounts,
-  whose: InboxWhoseChoice | undefined,
   onList: () => void,
 ): EmptyStateAction | undefined {
   const turn = (label: string, change: () => void): EmptyStateAction => ({
@@ -776,37 +747,32 @@ function emptyWayOn(
       change();
     },
   });
-  if (show.show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0) {
-    return turn(SHOW_INSTEAD.ALL, () => show.onShow(INBOX_SHOW.ALL));
+  if (view.show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0) {
+    return turn(SHOW_INSTEAD.ALL, () => view.onShow(INBOX_SHOW.ALL));
   }
-  if (whose?.whose.kind === INBOX_WHOSE.PERSON) {
-    return turn(SHOW_INSTEAD.MINE, () => whose.onWhose(MINE));
+  if (view.whose.kind === INBOX_WHOSE.PERSON) {
+    return turn(SHOW_INSTEAD.MINE, () => view.onWhose(MINE));
   }
-  if (whose?.whose.kind === INBOX_WHOSE.MINE) {
-    return turn(SHOW_INSTEAD.EVERYONE, () => whose.onWhose(EVERYONES));
+  if (view.whose.kind === INBOX_WHOSE.MINE) {
+    return turn(SHOW_INSTEAD.EVERYONE, () => view.onWhose(EVERYONES));
   }
   return undefined;
 }
 
 /** What the list stands where its scope and Addressed to leave out every item it holds: that nothing is there, in the words of whom it names (`SHOW_EMPTY`), and the press that shows what holds something (`emptyWayOn`), which keeps the list standing where the Inbox shows one column. */
-export function ShowEmpty({
-  show,
+function ShowEmpty({
+  view,
   counts,
-  whose,
   onList,
 }: {
-  show: InboxShowChoice;
+  view: InboxViewChoices;
   counts: InboxCounts;
-  /** Whom the items the window's Inbox lists are addressed to; none on a task's own, whose Open is the reader's own and whose All is anyone's. */
-  whose?: InboxWhoseChoice | undefined;
   /** Asks the Inbox for its list, so the item chosen once the rows return does not stand in their place. */
   onList: () => void;
 }): React.JSX.Element {
-  const kind =
-    whose?.whose.kind ?? (show.show === INBOX_SHOW.OPEN ? INBOX_WHOSE.MINE : INBOX_WHOSE.EVERYONE);
   return (
-    <EmptyState icon={<InboxIcon />} action={emptyWayOn(show, counts, whose, onList)}>
-      {SHOW_EMPTY[kind][show.show]}
+    <EmptyState icon={<InboxIcon />} action={emptyWayOn(view, counts, onList)}>
+      {SHOW_EMPTY[view.whose.kind][view.show]}
     </EmptyState>
   );
 }
@@ -887,10 +853,9 @@ function ListSearch({ search }: { search: InboxSearchHead }): React.JSX.Element 
 
 /**
  * The list's head: the Inbox's name, whatever it lists, or a channel's, and
- * the view's menu at the list's top right, which chooses the scope and, on
- * the window's Inbox, whom the items are addressed to; a task's own
- * Inbox lists one task's items in one run, so its menu offers its scopes
- * alone. On the window's Inbox its heading and its button glide as the
+ * on the window's Inbox the view's menu at the list's top right, which
+ * chooses the scope and whom the items are addressed to; a channel and a
+ * task's own Inbox list everything they hold, and offer no menu. On the window's Inbox its heading and its button glide as the
  * sidebar folds, the name moving to the list's middle, clear of the
  * sidebar's toggle, and the button keeping to the list's edge. Where the
  * list offers a search, its field stands under the head (`ListSearch`).
@@ -902,46 +867,19 @@ function ListHead({
   head: InboxListHead;
   readerId: string | undefined;
 }): React.JSX.Element {
-  const { shown, show, view, channel } = head;
-  const title = channel === undefined ? INBOX_TITLE : channelTitle(channel.name, show.show);
+  const { shown, view, channel } = head;
+  const title = channel === undefined ? INBOX_TITLE : `#${channel.name}`;
   const asked = useMenuAsk();
   const search = head.search === undefined ? null : <ListSearch search={head.search} />;
-  // A task's own Inbox tab on a phone hands its View options to the task's header, whose title
-  // already names it; its search field stands over the list as on every page.
+  // A task's own Inbox tab hands the open item's link to the tab's ⋯.
+  const linkGroups: TabActionGroups =
+    head.tab === true && head.link !== undefined ? [[head.link]] : [];
+  useTabActions(linkGroups.length === 0 ? undefined : linkGroups);
+  // On a phone the task's header, whose title already names the tab, stands for its head; its search field stands over the list as on every page.
   const phone = usePhoneRoom();
-  const handed = head.tab === true && phone;
-  const linkGroups = head.tab === true && head.link !== undefined ? [[head.link]] : [];
-  const viewGroups: TabActionGroups = handed
-    ? [
-        [
-          {
-            label: VIEW_OPTIONS,
-            icon: <SlidersHorizontalIcon />,
-            opens: true,
-            detail: title,
-            onAsk: asked.onAsk,
-          },
-        ],
-      ]
-    : [];
-  const tabGroups = [...linkGroups, ...viewGroups];
-  useTabActions(tabGroups.length === 0 ? undefined : tabGroups);
-  if (handed) {
-    return (
-      <>
-        <ViewOptions
-          shown={shown}
-          show={show}
-          choices={view?.choices}
-          readerId={readerId}
-          readAll={head.readAll}
-          asked={{ ask: asked.ask }}
-        />
-        {search}
-      </>
-    );
-  }
+  if (head.tab === true && phone) return <>{search}</>;
   if (head.phone !== undefined) {
+    const { readAll } = head.phone;
     return (
       <>
         <PhoneHead
@@ -971,33 +909,36 @@ function ListHead({
                           onSelect: channel.unarchive.onUnarchive,
                         },
                       ],
-                  [
-                    {
-                      label: VIEW_OPTIONS,
-                      icon: <SlidersHorizontalIcon />,
-                      opens: true,
-                      onSelect: () => asked.onAsk(opener),
-                    },
-                  ],
+                  view === undefined
+                    ? []
+                    : [
+                        {
+                          label: VIEW_OPTIONS,
+                          icon: <SlidersHorizontalIcon />,
+                          opens: true,
+                          onSelect: () => asked.onAsk(opener),
+                        },
+                      ],
+                  readAll === undefined ? [] : [markAllAction(readAll)],
                 ].filter((group) => group.length > 0)
               }
             />
           }
         />
-        <ViewOptions
-          shown={shown}
-          show={show}
-          choices={view?.choices}
-          readerId={readerId}
-          readAll={head.readAll}
-          asked={{ ask: asked.ask }}
-        />
+        {view === undefined ? null : (
+          <ViewOptions
+            shown={shown}
+            choices={view}
+            readerId={readerId}
+            asked={{ ask: asked.ask }}
+          />
+        )}
         {search}
         <ErrorLine
           level={ANNOUNCE.ALERT}
           error={refusedShown(channel?.refusal, FAILURE_SURFACE.CHANNEL_POST)}
         />
-        {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
+        {view === undefined ? null : <WhoseChip whose={view} readerId={readerId} />}
       </>
     );
   }
@@ -1015,19 +956,13 @@ function ListHead({
           {ARCHIVED_WORDS.UNARCHIVE}
         </Button>
       )}
-      <ViewOptions
-        shown={shown}
-        show={show}
-        choices={view?.choices}
-        readerId={readerId}
-        readAll={head.readAll}
-      />
+      {view === undefined ? null : <ViewOptions shown={shown} choices={view} readerId={readerId} />}
     </>
   );
   return (
     <>
       {/* Note that a task's own Inbox is a tab, whose bar is every tab's; the window's Inbox is a page, whose head glides with the sidebar. */}
-      {view === undefined ? (
+      {head.tab === true ? (
         <PaneBar title={title} actions={options} />
       ) : channel?.archivedAt === undefined ? (
         <Toolbar
@@ -1044,7 +979,7 @@ function ListHead({
         level={ANNOUNCE.ALERT}
         error={refusedShown(channel?.refusal, FAILURE_SURFACE.CHANNEL_POST)}
       />
-      {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
+      {view === undefined ? null : <WhoseChip whose={view} readerId={readerId} />}
     </>
   );
 }
@@ -1105,22 +1040,26 @@ const CHOOSE_AN_ITEM = "Choose an item";
  * The pane beside the list while nothing is chosen, as a mail app's stands
  * empty: how to choose an item, by a press or by stepping with the keys that
  * step through the list (J and K), or, holding none, that nothing needs the
- * reader, over New task where one can start. Under a finger there is no
+ * reader, over New task where one can start, or "Nothing here" on a list of
+ * everything a channel or a task holds. Under a finger there is no
  * keyboard to step with, so it names the press alone.
  */
 export function InboxPaneEmpty({
   listed,
   newTask,
+  none = NEEDS_YOU.NONE,
 }: {
   /** How many items the list holds. */
   listed: number;
   newTask?: (() => void) | undefined;
+  /** What it says holding none: that nothing needs the reader, or `NOTHING_HERE` on a list of everything its place holds. */
+  none?: string | undefined;
 }): React.JSX.Element {
   const coarse = useCoarsePointer();
   if (listed === 0) {
     return (
       <EmptyState icon={<InboxIcon />} action={newTaskAction(newTask)}>
-        {NEEDS_YOU.NONE}
+        {none}
       </EmptyState>
     );
   }
@@ -1151,6 +1090,7 @@ export function InboxListNote({
   onRetry,
   searched,
   onNewTask,
+  none = NEEDS_YOU.NONE,
 }: {
   failed: boolean;
   reading: boolean;
@@ -1168,6 +1108,8 @@ export function InboxListNote({
   onRetry: () => void;
   /** The words the list's search narrows it by, where it narrows it, which an empty list says found nothing. */
   searched?: string | undefined;
+  /** What the list standing alone says holding none: that nothing needs the reader, or `NOTHING_HERE` on a channel's. */
+  none?: string | undefined;
 }): React.JSX.Element | null {
   if (failed) {
     return (
@@ -1184,40 +1126,38 @@ export function InboxListNote({
   if (reading) return <InboxListSkeleton />;
   if (searched !== undefined) return <SearchEmpty searched={searched} />;
   if (filteredOut !== undefined)
-    return <ShowEmpty show={filteredOut} counts={counts} whose={filteredOut} onList={onList} />;
+    return <ShowEmpty view={filteredOut} counts={counts} onList={onList} />;
   // Note that beside the pane the list stands bare, since the pane's empty state says it once.
   if (!alone) return null;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
   return (
     <EmptyState icon={<InboxIcon />} action={newTaskAction(onNewTask)}>
-      {NEEDS_YOU.NONE}
+      {none}
     </EmptyState>
   );
 }
 
-/** What the list's head offers: its scopes on every Inbox, and on the window's whom the items are addressed to. */
+/** What the list's head offers: on the window's Inbox, its scope and whom the items are addressed to. */
 export interface InboxListHead {
   /** Whether the list is on screen, for its menu not to outlive it. */
   readonly shown: boolean;
-  /** The scope the list shows, and the choice that shows another. */
-  readonly show: InboxShowChoice;
-  /** The window's Inbox's choices; none on a task's own, whose menu offers its scopes alone. */
-  readonly view: { readonly choices: InboxViewChoices } | undefined;
-  /** Mark all as read, in the view's menu, where the list marks its items. */
-  readonly readAll?: InboxReadAll | undefined;
+  /** The window's Inbox's view choices, and the presses that change them; none on a channel or a task's own, which list every item they hold. */
+  readonly view: InboxViewChoices | undefined;
   /** The list's search, under its head, on the window's Inbox and a task's own alike; none where the list offers none. */
   readonly search?: InboxSearchHead | undefined;
   /**
    * A phone's head (`phone-head.tsx`), where the window's Inbox stands on a
    * phone's places: its one start control, New task, the title centred, and
-   * the ⋯ holding View options, the search standing under it; none elsewhere.
+   * the ⋯ holding View options and Mark all as read, which a phone has no
+   * right-click to reach, the search standing under it; none elsewhere.
    */
-  readonly phone?: { readonly start: React.ReactNode } | undefined;
+  readonly phone?:
+    | { readonly start: React.ReactNode; readonly readAll?: InboxReadAll | undefined }
+    | undefined;
   /**
    * Whether the list stands in a task's own Inbox tab, which a phone heads
-   * with the task's header, whose ⋯ takes the head's View options
-   * (`useTabActions`), so the list draws no head of its own there, only its
-   * search under where the head stood.
+   * with the task's header, so the list draws no head of its own there, only
+   * its search under where the head stood.
    */
   readonly tab?: boolean | undefined;
   /** Copy link, the open item's, which a task's own Inbox tab hands its ⋯ first (`useTabActions`); none while no item is open, since a link names no task's Inbox whole. */
@@ -1245,7 +1185,7 @@ interface InboxSearchHead {
   readonly onQuery: (query: string) => void;
 }
 
-/** Mark all as read as the view's menu offers it: whether any item is unread, filtered out or not, and the mark. */
+/** Mark all as read as a phone's ⋯ offers it: whether any item is unread, filtered out or not, and the mark. */
 interface InboxReadAll {
   readonly unread: boolean;
   readonly onMarkAll: () => void;
