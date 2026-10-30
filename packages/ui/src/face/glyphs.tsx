@@ -462,16 +462,6 @@ export function TerminalIcon(): React.JSX.Element {
   );
 }
 
-/**
- * The box an agent's mark stands in, held empty: an agent whose harness is
- * not known yet. Note that it draws nothing rather than a stand-in glyph,
- * because the harness's mark lands in the same box and a glyph there first
- * would read as the agent's own; the name beside it says whose it is.
- */
-export function AgentPlaceholderIcon(): React.JSX.Element {
-  return <Glyph>{null}</Glyph>;
-}
-
 /** A lit bulb: what Luke's agents remember for the workspace. */
 export function MemoryIcon(): React.JSX.Element {
   return (
