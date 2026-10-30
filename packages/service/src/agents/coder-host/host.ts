@@ -34,7 +34,7 @@ import {
 } from "../../providers/model-catalog.js";
 import type { CommentToolName } from "../../tasks/comment-tools.js";
 import type { PictureLookResult } from "../../tasks/picture-look.js";
-import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
+import { reopenTaskForWork, settleTaskAfterTurn } from "../../tasks/task-finish.js";
 import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { endsTurn } from "../agent-runtime/sandbox.js";
@@ -966,12 +966,13 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         if (agent === undefined) return;
         yield* recordContext(event, admitted.target.userId, agent, prompt);
         // A turn starting takes up the task, reopening one settled; a turn's end, its row settled by
-        // the relay above, may have finished the task's work. Neither is the relay's failure.
+        // the relay above, may have finished the task's work, or archives the agent with a task moved
+        // to Done while it worked. Neither is the relay's failure.
         if (agent.taskId !== null && event.type === "turn.started") {
           yield* reopenTaskForWork(admitted.target.userId, agent.taskId);
         }
         if (agent.taskId !== null && endsTurn(event)) {
-          yield* settleTaskIfFinished(admitted.target.userId, agent.taskId);
+          yield* settleTaskAfterTurn(admitted.target.userId, agent.taskId, agent.id);
         }
         // An operator goes by Luke and is never titled, so no title model is asked for one.
         if (agent.title !== null || agent.kind === AGENT_KIND.OPERATOR || !asksTitle(event)) {

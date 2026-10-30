@@ -81,7 +81,7 @@ import {
 import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace, isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
-import { AGENT_MACHINE, LOCAL_AGENT_REFUSAL } from "@luke/features/agent-wire";
+import { AGENT_ARCHIVER, AGENT_MACHINE, LOCAL_AGENT_REFUSAL } from "@luke/features/agent-wire";
 import { TASK_START_STATUS } from "@luke/features/contract";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
@@ -106,12 +106,13 @@ import {
   eveFor,
   everyStoppedForGood,
   everyStopsForGood,
+  idleStandingAgents,
   summaryOf,
 } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { retiredBeforeDelete, retiringReach } from "../agents/retire-sessions.js";
-import type { SandboxStopReach } from "../agents/session-sandboxes.js";
+import { type SandboxStopReach, stoppedInBackground } from "../agents/session-sandboxes.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TASK_LIST_ARCHIVED } from "../core.js";
 import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
@@ -670,6 +671,12 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * with a message awaiting its turn, which no Stop can name yet, leaves
      * the plan and every agent standing and the archive refused as not
      * ready, so it is asked again a moment later.
+     *
+     * A move to Done archives with the plan every agent of it standing idle,
+     * as the member, and lets each go as an archive by hand does, its sandbox
+     * stopped and its device's folder removed; one still at work is archived
+     * as its turn ends. A move off Done brings back the agents that Done
+     * archived (`task-store.ts`'s `updateTaskCommitted`).
      */
     update: plans.update.effect(function* ({ input, context }) {
       const { userId, request } = context;
@@ -755,6 +762,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
         },
         organizationId === undefined ? undefined : movedRepositoryReached(organizationId, userId),
+        { archivedBy: { by: AGENT_ARCHIVER.MEMBER, userId }, idle: idleStandingAgents },
       ).pipe(
         Effect.catch((failure) =>
           failure._tag === "MoveRefused"
@@ -767,7 +775,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ),
       );
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const { task: plan, txid } = task.value;
+      const { task: plan, txid, archived } = task.value;
+      if (archived.length > 0) yield* stoppedInBackground(seams, archived);
       return txid === undefined ? { plan } : { plan, txid };
     }),
 

@@ -68,7 +68,7 @@ import {
 } from "../../http/http-effect.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
-import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
+import { reopenTaskForWork, settleTaskAfterTurn } from "../../tasks/task-finish.js";
 import { CODER } from "../coder-host/bounds.js";
 import { isNativeRuntime } from "../coder-host/native-runtime.js";
 import { RUNNER_ENDED, runnerEnded, runnerIdled } from "../coder-host/runner-sessions.js";
@@ -731,12 +731,13 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
     });
   }
   // The task follows the turns the batch moved, once their rows are written: a turn starting takes
-  // it up, and a turn's end may have finished its work (`tasks/task-finish.ts`).
+  // it up, and a turn's end may have finished its work, or archives the agent with a task moved to
+  // Done while it worked (`tasks/task-finish.ts`).
   if (taskId !== null && applied.value.turns.started) {
     yield* reopenTaskForWork(target.userId, taskId);
   }
   if (taskId !== null && applied.value.turns.ended) {
-    yield* settleTaskIfFinished(target.userId, taskId);
+    yield* settleTaskAfterTurn(target.userId, taskId, agent.value.id);
   }
   // Note that the title runs after the answer, kept awake past it, because the runner need not wait on a model.
   if (title !== undefined && (applied.value.turns.started || applied.value.turns.ended)) {
