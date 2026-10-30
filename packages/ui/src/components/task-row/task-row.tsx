@@ -30,8 +30,10 @@ import { SelectionRegion } from "../selection/selection-region.js";
  * The row's press reaches every edge of it (`CardPress`), opening the task,
  * its name on one line in the label's weight, what the eye reads in the
  * cells said after the name to a reader (`said`). The cells that hold a
- * control stand over the press, and the rest let the pointer through to it,
- * so a press anywhere but a chip or the ⋯ opens the task. Its box comes in
+ * control stand over the press, and the rest let the pointer through to it;
+ * a cell of its owner's, the pull requests and the end, lifts only the
+ * links and buttons in it, so a press anywhere but a chip or the ⋯, a
+ * related task's kind among it, opens the task. Its box comes in
  * under the pointer in the gutter at its start (`SELECT_BOX_PLACE.GUTTER`),
  * where its list chooses rows, and stays while any is chosen. Its menu
  * (`menu`) is opened alike by its ⋯, shown while the row is in hand, a
@@ -112,6 +114,14 @@ const OVER_WHERE_FILLED =
   "pointer-events-none not-empty:pointer-events-auto not-empty:relative not-empty:z-1";
 
 /**
+ * A cell whose own controls stand over the row's press and nothing else:
+ * a press on a link or a button in it is that control's, and one on its
+ * words, a pill, or the room around its chips is the row's.
+ */
+const OVER_ITS_CONTROLS =
+  "pointer-events-none relative z-1 [&_a]:pointer-events-auto [&_button]:pointer-events-auto";
+
+/**
  * Each cell's place in a row's reading order, priority, key, and status
  * before the name and the rest after it, and whether it stands over the
  * row's press: the chips take their own presses, and a cell left empty
@@ -127,9 +137,9 @@ const CELL_PLACE = {
   [TASK_ROW_CELL.ASSIGNEE]: `${OVER_WHERE_FILLED} order-7`,
   [TASK_ROW_CELL.CREATOR]: "pointer-events-none order-8",
   [TASK_ROW_CELL.AGENTS]: "pointer-events-none order-9",
-  [TASK_ROW_CELL.PULL_REQUESTS]: `${OVER_WHERE_FILLED} order-10`,
+  [TASK_ROW_CELL.PULL_REQUESTS]: `${OVER_ITS_CONTROLS} order-10`,
   [TASK_ROW_CELL.UPDATED]: "pointer-events-none order-11 justify-end",
-  [TASK_ROW_CELL.END]: `${OVER_WHERE_FILLED} order-12`,
+  [TASK_ROW_CELL.END]: `${OVER_ITS_CONTROLS} order-12`,
 } as const satisfies Record<TaskRowCell, string>;
 
 /** The ⋯'s cell, at a row's end, standing over its press. */
