@@ -10,14 +10,13 @@ CREATE TABLE "agent_queue" (
 );
 --> statement-breakpoint
 CREATE TABLE "queued_message" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	"id" uuid PRIMARY KEY,
 	"agent_id" uuid NOT NULL,
 	"user_id" text NOT NULL,
 	"position" integer NOT NULL,
-	"client_key" text NOT NULL,
 	"text" text NOT NULL,
 	"attachments" jsonb,
-	"held_until" timestamp with time zone,
+	"editing" boolean DEFAULT false NOT NULL,
 	"claimed_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -25,7 +24,6 @@ CREATE TABLE "queued_message" (
 --> statement-breakpoint
 ALTER TABLE "account_preference" ADD COLUMN "agent_enter" text;--> statement-breakpoint
 CREATE INDEX "queued_message_agent_position" ON "queued_message" ("agent_id","position");--> statement-breakpoint
-CREATE UNIQUE INDEX "queued_message_agent_key" ON "queued_message" ("agent_id","client_key");--> statement-breakpoint
 ALTER TABLE "agent_queue" ADD CONSTRAINT "agent_queue_agent_id_agent_id_fkey" FOREIGN KEY ("agent_id") REFERENCES "agent"("id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "queued_message" ADD CONSTRAINT "queued_message_agent_id_agent_id_fkey" FOREIGN KEY ("agent_id") REFERENCES "agent"("id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "queued_message" ADD CONSTRAINT "queued_message_user_id_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE;
