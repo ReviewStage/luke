@@ -7,6 +7,7 @@ import {
 import {
   PULL_REQUEST_GLYPH,
   PULL_REQUEST_MARK_QUEUED,
+  pullRequestMarkState,
   STATUS_TONE,
   type StatusTone,
 } from "@luke/ui";
@@ -38,15 +39,6 @@ export const PULL_REQUEST_TONE = {
   [PULL_REQUEST_STATE.MERGED]: STATUS_TONE.MERGED,
   [PULL_REQUEST_STATE.CLOSED]: STATUS_TONE.DANGER,
 } as const satisfies Record<PullRequestState, StatusTone>;
-
-/** Where a pull request's mark says it stands: queued where it is open and the merge queue holds it, else where it stands. */
-export function pullRequestMarkState(
-  pullRequest: Pick<AgentPullRequest, "state" | "queued">,
-): PullRequestState | typeof PULL_REQUEST_MARK_QUEUED {
-  return pullRequest.queued === true && pullRequest.state === PULL_REQUEST_STATE.OPEN
-    ? PULL_REQUEST_MARK_QUEUED
-    : pullRequest.state;
-}
 
 /** What a failed check run adds to the mark's words for a reader who cannot see it. */
 const CHECKS_FAILING_WORDS = ", checks failing";

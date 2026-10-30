@@ -405,7 +405,7 @@ async function narrowTaskInbox(
     ],
     rows: () =>
       [...tab.querySelectorAll(".inbox-tasks .luke-list-row-title")].map((row) => row.textContent),
-    pager: () => tab.querySelector(".inbox-pager-count")?.textContent ?? null,
+    pager: () => tab.querySelector(".luke-pager-count")?.textContent ?? null,
     /** What the list's foot says of a refresh that did not land, and whether it offers Retry. */
     refreshFailure: () => {
       const alert = tab.querySelector('.inbox-tasks [role="alert"]');
