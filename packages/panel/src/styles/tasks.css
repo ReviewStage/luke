@@ -799,16 +799,6 @@
   overflow: clip;
 }
 
-/* A key change's card, `@luke/ui`'s outlined Card: the words take its
-   width; the press to its lines hugs its own. */
-.chapter-key-change {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--luke-list-gap);
-  padding: var(--luke-item-gap) var(--luke-row-inset);
-}
-
 /* While chapters are being made, the placeholder's region takes the room under the line, as the
    chapters' body does under theirs, so the rail runs the full height. */
 .chapters-generating > .luke-skeleton-region {

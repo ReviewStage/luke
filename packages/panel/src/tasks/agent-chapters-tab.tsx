@@ -14,11 +14,6 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { CHAPTERS_KEY, CHAPTERS_SHORTCUTS, chaptersKeyFor } from "@luke/settings/shortcuts";
 import {
   Button,
-  CARD_CORNER,
-  CARD_ELEMENT,
-  CARD_LOOK,
-  CARD_PADDING,
-  Card,
   CHIP_LOOK,
   CHIP_SIZE,
   Checkbox,
@@ -83,6 +78,7 @@ import {
   type FileReveal,
   type LineComments,
 } from "./agent-changes-tab.js";
+import { Section } from "./agent-pull-request-tab.js";
 import { typingInto } from "./changes-list.js";
 import { CHANGES_WORDS } from "./changes-model.js";
 import {
@@ -183,6 +179,7 @@ const CHAPTERS_WORDS = {
   /** Which model told the chapters, as quiet meta text above them. */
   madeBy: (model: string) => `Made by ${model}`,
   STALE: "New commits since these chapters",
+  BRIEF: "Summary",
   WHAT_TO_REVIEW: "What to review",
   VIEWED: "Viewed",
   MARK_VIEWED: "Mark chapter viewed",
@@ -628,22 +625,14 @@ function KeyChangeItem({
 }): React.JSX.Element {
   const first = firstLineRef(change.lineRefs, paths);
   return (
-    <Card
-      as={CARD_ELEMENT.LI}
-      look={CARD_LOOK.OUTLINE}
-      corner={CARD_CORNER.CONTROL}
-      padding={CARD_PADDING.NONE}
-      className="chapter-key-change"
-    >
-      <div className="self-stretch">
-        <TranscriptWords text={change.content} />
-      </div>
+    <li>
+      <TranscriptWords text={change.content} />
       {first === undefined ? null : onReveal === undefined ? (
         <span className="text-muted-foreground">{lineRefLabel(first)}</span>
       ) : (
         <TextButton onClick={() => onReveal(first)}>{lineRefLabel(first)}</TextButton>
       )}
-    </Card>
+    </li>
   );
 }
 
@@ -691,6 +680,7 @@ function ChaptersReading({
   const slide = usePaneSlide(beside, PANE_EDGE.LEFT);
   // The chapter's own tree starts hidden, the rail standing in its room; its width is the panel's for every tree.
   const [filesOpen, setFilesOpen] = useState(false);
+  const [briefOpen, setBriefOpen] = useState(true);
   const filesTree: TreeShown = {
     open: filesOpen,
     onToggle: () => setFilesOpen((was) => !was),
@@ -896,44 +886,46 @@ function ChaptersReading({
               fade={SCROLL_FADE.BOTH}
               overscroll={SCROLL_OVERSCROLL.CHAIN}
             >
-              <div className="flex flex-col gap-control-gap px-column-inset pt-row-inset pb-list-inset">
-                <div className="px-row-inset">
-                  <TranscriptWords text={chapter.summary} />
-                </div>
-                {chapter.keyChanges.length === 0 ? null : (
-                  <section
-                    className="px-row-inset [&>ul]:mt-tight-gap"
-                    aria-label={CHAPTERS_WORDS.WHAT_TO_REVIEW}
-                  >
-                    <Text as={TEXT_ELEMENT.H4} variant={TEXT_VARIANT.CAPTION}>
-                      {CHAPTERS_WORDS.WHAT_TO_REVIEW}
-                    </Text>
-                    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.CONTROL}>
-                      {chapter.keyChanges.map((change, index) => (
-                        <KeyChangeItem
-                          key={index}
-                          change={change}
-                          paths={row?.paths ?? []}
-                          onReveal={
-                            stale
-                              ? undefined
-                              : (ref) => {
-                                  asks.current += 1;
-                                  setReveal({
-                                    path: ref.path,
-                                    ask: asks.current,
-                                    lines: drawnLines(
-                                      chapterFiles.find((file) => file.path === ref.path),
-                                      ref,
-                                    ),
-                                  });
-                                }
-                          }
-                        />
-                      ))}
-                    </Stack>
-                  </section>
-                )}
+              <div className="max-w-page-measure px-column-inset pb-list-inset">
+                <Section
+                  title={CHAPTERS_WORDS.BRIEF}
+                  fold={{ open: briefOpen, onOpenChange: setBriefOpen }}
+                >
+                  <div className="flex flex-col gap-control-gap px-row-inset">
+                    <TranscriptWords text={chapter.summary} />
+                    {chapter.keyChanges.length === 0 ? null : (
+                      <section aria-label={CHAPTERS_WORDS.WHAT_TO_REVIEW}>
+                        <Text as={TEXT_ELEMENT.H4} variant={TEXT_VARIANT.CAPTION}>
+                          {CHAPTERS_WORDS.WHAT_TO_REVIEW}
+                        </Text>
+                        <ul className="mt-tight-gap flex list-disc flex-col gap-control-gap pl-column-inset">
+                          {chapter.keyChanges.map((change, index) => (
+                            <KeyChangeItem
+                              key={index}
+                              change={change}
+                              paths={row?.paths ?? []}
+                              onReveal={
+                                stale
+                                  ? undefined
+                                  : (ref) => {
+                                      asks.current += 1;
+                                      setReveal({
+                                        path: ref.path,
+                                        ask: asks.current,
+                                        lines: drawnLines(
+                                          chapterFiles.find((file) => file.path === ref.path),
+                                          ref,
+                                        ),
+                                      });
+                                    }
+                              }
+                            />
+                          ))}
+                        </ul>
+                      </section>
+                    )}
+                  </div>
+                </Section>
               </div>
             </ScrollArea>
           </div>

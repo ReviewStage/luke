@@ -329,6 +329,7 @@
   --spacing-welcome-tile: 56px; /* off-scale: the welcome's tile, a masthead's size */
   --spacing-welcome-face: 34px; /* off-scale: Luke's face on the welcome's tile */
   --spacing-welcome-composer: min(var(--luke-page-measure), 100%);
+  --spacing-page-measure: var(--luke-page-measure);
   --spacing-row-context: 20ch; /* off-scale: a row's context, bounded in letters */
   --spacing-new-task-title: calc(100% - 2 * var(--luke-control-height) - var(--luke-item-gap));
   --spacing-card-line: calc(100% + 2 * var(--luke-row-inset));
