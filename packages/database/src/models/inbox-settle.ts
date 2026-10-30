@@ -1,12 +1,15 @@
 /**
  * inbox-settle.ts -- the inbox items whose reason is gone settled on their own: their task's work done or canceled, or their agent archived.
  *
- * An item waits on the developer for as long as its task's work does. A
+ * An ask waits on the developer for as long as its task's work does. A
  * task moved to Done or Canceled, by a member or by Luke's own finish, and
  * an agent archived, by whoever archives it, close every open item of
- * theirs, a question and a post alike, in the same transaction as the write
- * that moved them, so no caller has to remember it: each store write that
- * moves a task to a settled status or stamps an agent archived settles here.
+ * theirs that holds an ask or whose agent waits on a reply, in the same
+ * transaction as the write that moved them, so no caller has to remember
+ * it: each store write that moves a task to a settled status or stamps an
+ * agent archived settles here. A notice, which asks nothing, stays open
+ * until a member opens it, so the last word of a finished task, such as its
+ * pull request merged, still waits in Needs you rather than settling unseen.
  * The close reads as the agent's own, with why (`INBOX_SETTLED_REASON`), and
  * withdraws the ask the item held open with the same why. Nothing is
  * deleted, nothing is sent to the agent, and nothing moves the item's last
@@ -36,6 +39,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  or,
   sql,
 } from "drizzle-orm";
 import type { AnyPgTable } from "drizzle-orm/pg-core";
@@ -75,7 +79,7 @@ const SettleRequestSchema = Schema.Struct({
   now: Schema.Date,
 });
 
-/** The open items of the task or the agents closed with why and no ask held open; their ids. */
+/** The open items of the task or the agents that hold an ask or wait on a reply closed with why and no ask held open, every notice left open; their ids. */
 const closeOpenItems = SqlSchema.findAll({
   Request: SettleRequestSchema,
   Result: Schema.Struct({ id: Schema.String }),
@@ -96,6 +100,7 @@ const closeOpenItems = SqlSchema.findAll({
               ? inArray(inboxItem.taskId, ids)
               : inArray(inboxItem.agentId, ids),
             eq(inboxItem.status, INBOX_STATUS.OPEN),
+            or(isNotNull(inboxItem.openAskMessageId), eq(inboxItem.needsReply, true)),
           ),
         )
         .returning({ id: inboxItem.id }),
@@ -126,7 +131,7 @@ const withdrawOpenAsks = SqlSchema.void({
     ),
 });
 
-/** The open items named settled, and their open asks withdrawn, with why; how many settled. */
+/** The open items named that ask settled, and their open asks withdrawn, with why; how many settled. */
 function settle(
   by: (typeof SETTLE_BY)[keyof typeof SETTLE_BY],
   ids: readonly string[],
@@ -142,7 +147,7 @@ function settle(
   });
 }
 
-/** The task's open items settled, where it moved to Done or Canceled at `now`, its finish's stamp; nothing for a move to any other status. Run inside the transaction that moved it. */
+/** The task's open asks settled, where it moved to Done or Canceled at `now`, its finish's stamp; nothing for a move to any other status. Run inside the transaction that moved it. */
 export function settleTaskInboxItems(
   taskId: string,
   status: TaskStatus,
@@ -152,7 +157,7 @@ export function settleTaskInboxItems(
   return reason === undefined ? Effect.succeed(0) : settle(SETTLE_BY.TASK, [taskId], reason, now);
 }
 
-/** The agents' open items settled, as their archive settles them; run inside the transaction that archived them. */
+/** The agents' open asks settled, as their archive settles them; run inside the transaction that archived them. */
 export function settleAgentInboxItems(
   agentIds: readonly string[],
   now: Date,
