@@ -20,7 +20,9 @@ const STATE_FILE = "local-agents.json";
 /**
  * The folder in the machine's state holding an empty file for each agent
  * whose folder and VM this machine made, named for the agent, from its
- * first launch or files until a discard removes its folder. The folder and
+ * first launch or files, or, for one it last ran before it kept this
+ * record, the first time its follower's gate opens after, until a discard
+ * removes its folder. The folder and
  * the VM stand in the user's own `~/.luke/agents` and smolvm store, which
  * every Luke install for that user shares, so `luke-host uninstall` reads
  * this to remove its own and no other's (`apps/host/scripts/luke-host.sh`),

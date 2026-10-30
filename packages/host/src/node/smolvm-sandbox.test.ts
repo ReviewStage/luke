@@ -232,6 +232,7 @@ const following = (input: {
         runnerBundle: RUNNER_BUNDLE,
         runnerEnv: { LUKE_RUNNER_PLACE: "host" },
         formerlyDirect: false,
+        storesOwned: false,
         deviceName: "rack-1",
         devicePlatform: DEVICE_PLATFORM.LINUX,
         deviceArch: DEVICE_ARCH.X64,

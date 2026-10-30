@@ -360,6 +360,15 @@ export interface LocalAgentPlatformSeam {
    * VM, and checks its folder on the device before a discard.
    */
   readonly formerlyDirect: boolean;
+  /**
+   * Whether the agents' folders under the device's home and its smolvm
+   * store are this install's alone: a Linux host's are, its `luke-host`
+   * user's own, and a Mac's never, since This Mac and a standalone
+   * `luke-host` share the member's. On such a device the follower takes
+   * every agent with a folder or a machine there as one it made as its gate
+   * opens, beside those its own state names.
+   */
+  readonly storesOwned: boolean;
 }
 
 export class LocalAgentPlatform extends Context.Service<

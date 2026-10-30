@@ -139,6 +139,7 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script, vmLe
           ? { ...fakeSandbox().sandbox, deleted: () => Effect.succeed(false) }
           : fakeSandbox().sandbox,
         formerlyDirect: !vmLeft,
+        storesOwned: false,
         runnerBundle: "/opt/luke/agent-runner.mjs",
         runnerEnv: {},
         deviceName: "Studio",
@@ -535,6 +536,7 @@ const saving = (
             ),
         },
         formerlyDirect: false,
+        storesOwned: false,
         runnerBundle: "/opt/luke/agent-runner.mjs",
         runnerEnv: {},
         deviceName: "rack-1",
