@@ -747,7 +747,11 @@ test("chapters made for an older head stand under a line saying new commits came
     null,
     "a key change's lines are named, not pressed",
   );
-  assert.match(tab.textContent ?? "", /src\/store\.tsL1–2/u, "a key change's lines are named");
+  assert.match(
+    tab.textContent ?? "",
+    /src\/store\.ts · L1–2/u,
+    "a key change's lines are named, its file and its lines apart",
+  );
   act(() => button(tab, "Regenerate").click());
   await settle();
   assert.equal(generates, 1);

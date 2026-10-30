@@ -199,6 +199,8 @@ const CHAPTERS_WORDS = {
   WHAT_TO_REVIEW: "What to review",
   /** What a key change's lines name, as a reader hears its pill's kind. */
   FILE: "file",
+  /** What parts a key change's file from its lines, as a reader hears its pill. */
+  LINES_APART: " · ",
   /** What a press on a key change's lines does, as a reader hears it. */
   reveal: (ref: LineRef) => `Show ${lineRefLabel(ref)} in the diff`,
   /** How many of a chapter's files are viewed, as its Viewed box says it. */
@@ -638,7 +640,13 @@ function KeyChangeItem({
           kind={CHAPTERS_WORDS.FILE}
           label={first.path}
           name={INLINE_REF_NAME.PATH}
-          state={lineRefLines(first)}
+          state={
+            // Note that the pill's rule parts its path from its lines to the eye alone, so a reader hears them parted in words.
+            <>
+              <VisuallyHidden>{CHAPTERS_WORDS.LINES_APART}</VisuallyHidden>
+              {lineRefLines(first)}
+            </>
+          }
           hint={false}
           onPress={onReveal === undefined ? undefined : () => onReveal(first)}
           pressLabel={onReveal === undefined ? undefined : CHAPTERS_WORDS.reveal(first)}
