@@ -42,12 +42,11 @@ import { useWorkspaceMembers } from "./use-workspace-members.js";
  *
  * Drawn along the composer card's foot for a task about to start, the way a
  * branch or model chip is: the owner's picture and `owner/name`, or the
- * GitHub mark and the pick it is waiting on. In the open plan it stands in
- * the chip row under the title, beside the status, priority, and assignee
- * chips (`task-standing.tsx`), as a Settings picker's chip is drawn,
- * reading `Choose a repository` while the task has none and the repository
- * once the task names one; ⌘K's Change repository opens its menu from
- * there. Its menu is the shared searchable one: a search over every
+ * GitHub mark and the pick it is waiting on. In the open plan the same
+ * menu drops from the first crumb of the task's path over its title
+ * (`task-standing.tsx`, through `useRepositoryMenu`), reading `Choose a
+ * repository` while the task has none and the repository once the task
+ * names one; ⌘K's Change repository opens its menu from there. Its menu is the shared searchable one: a search over every
  * repository the GitHub connected to the workspace reaches, the
  * repositories the account's tasks were about lately first and the rest as
  * GitHub last saw them change, each under its owner's picture, one the
@@ -229,29 +228,47 @@ type ListedRepositories = Extract<
   { repositories: unknown }
 >["repositories"];
 
-export function RepositoryChip(props: {
+/** What the repository's menu is handed, whatever opens it: the chip, or the plan's repository crumb. */
+interface RepositoryMenuProps {
   /** The repository named now, `owner/name`, or null while none is. */
   value: string | null;
   chooser: RepositoryChooser;
   onChoose: (repository: string) => void;
-  /** Lets go of a pick the read finds the workspace's GitHub does not reach, where the pick is the chip's own to drop. */
+  /** Lets go of a pick the read finds the workspace's GitHub does not reach, where the pick is the opener's own to drop. */
   onUnreached?: (() => void) | undefined;
   /** Hears the repositories each successful read lists, `owner/name`. */
   onListed?: ((repositories: readonly string[]) => void) | undefined;
   /** Counts the asks from elsewhere to open the menu, each opening it. */
   openRequest?: number | undefined;
-  /** Hears each ask the chip opened its menu for, so the asker can let it go. */
+  /** Hears each ask the menu opened for, so the asker can let it go. */
   onAsked?: ((request: number) => void) | undefined;
-  place: ChipPlace;
-  /** A form row's chip: the edge its menu hangs from, the trailing one where none is named, as a Settings picker's does. */
+  /** The edge of its room the menu hangs from, the trailing one where none is named. */
   align?: PopoverAlign | undefined;
-  /** A form row's chip: how wide it stands, its words' own width where none is named. */
-  width?: ChipWidth | undefined;
-  /** A form row's chip: the ids of the row's words that describe it, its error among them while it has one. */
-  describedBy?: string | undefined;
-  /** A form row's chip: whether the row says its value is refused. */
-  invalid?: true | undefined;
-}): React.JSX.Element {
+}
+
+/**
+ * The repository's menu as its opener draws it: whether it stands open, the
+ * opener's words and mark, the card it hangs while shut, the press that
+ * opens and shuts it from the element pressed, the room the menu hangs in,
+ * which the opener's box holds as the menu's anchor, and the menu itself,
+ * drawn in that room.
+ */
+export interface RepositoryMenu {
+  readonly open: boolean;
+  readonly menuId: string;
+  /** The opener's words: the repository, or the pick it waits on. */
+  readonly label: string;
+  /** The owner's picture, or the repository's glyph while none is named. */
+  readonly glyph: React.JSX.Element;
+  /** The repository's card, none while none is named or the menu stands open. */
+  readonly card: React.ReactNode;
+  readonly press: (opener: HTMLElement) => void;
+  readonly room: React.RefObject<HTMLDivElement | null>;
+  readonly menu: React.ReactNode;
+}
+
+/** The repository's menu, read and placed as the chip's always was, for whatever opener draws it (`RepositoryMenu`). */
+export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
   const { chooser, openRequest, onAsked, onUnreached, onListed, value } = props;
   const openSettings = useOpenSettings();
   const [open, setOpen] = useState(false);
@@ -260,8 +277,7 @@ export function RepositoryChip(props: {
   // The last read that listed, kept while a later one fails, so the rows stand and a line says the refresh did not land.
   const [lastListed, setLastListed] = useState<ListedRepositories | undefined>(undefined);
   const menuId = useId();
-  const chip = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
+  const room = useRef<HTMLDivElement>(null);
   /** What held focus as the menu opened, which closing hands it back to. */
   const opener = useRef<HTMLElement | null>(null);
   // Note that the chooser is read through a ref, because the tab hands a
@@ -298,7 +314,7 @@ export function RepositoryChip(props: {
     onAsked?.(openRequest);
   }, [openRequest, onAsked]);
 
-  // Note that we hand focus back to where it came from, the chip or the task
+  // Note that we hand focus back to where it came from, the opener or the task
   // menu's button, as a native menu returns it to its trigger, because
   // closing takes the focused field away with it.
   const close = () => {
@@ -326,13 +342,12 @@ export function RepositoryChip(props: {
     section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
     ...(chooser.scope === undefined ? undefined : { workspaceId: chooser.scope }),
   };
-  const press = () => {
-    opener.current = trigger.current;
+  const press = (from: HTMLElement) => {
+    opener.current = from;
     setOpen(!open);
   };
   const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);
-  const label =
-    props.value ?? (rows.length === 0 && listed !== undefined ? NONE_LABEL : CHOOSE_LABEL);
+  const label = value ?? (rows.length === 0 && listed !== undefined ? NONE_LABEL : CHOOSE_LABEL);
   // A list with nothing to pick says why, then offers an owner Settings and a member the owners to ask.
   const deadEnd = (lines: readonly string[], ask: OwnerAsk, askedOf: string | undefined) => (
     <>
@@ -376,59 +391,79 @@ export function RepositoryChip(props: {
       deadEnd([MENU_NOTE.NONE_REACHED], OWNER_ASK.ADD_REPOSITORY, undefined)
     ) : undefined;
 
+  return {
+    open,
+    menuId,
+    label,
+    glyph:
+      value === null ? (
+        <GLYPH.REPOSITORY />
+      ) : (
+        <RepositoryPicture
+          repository={value}
+          pictures={chooser.pictures}
+          size={AVATAR_SIZE.GLYPH}
+        />
+      ),
+    card:
+      value === null || open ? undefined : (
+        <RepositoryCard repository={value} pictures={chooser.pictures} />
+      ),
+    press,
+    room,
+    menu: drawn.mounted ? (
+      <SearchableMenu
+        leaving={drawn.leaving}
+        ref={drawn.ref}
+        id={menuId}
+        label="Repository"
+        placeholder="Search repositories"
+        rows={rows}
+        value={value ?? undefined}
+        note={note}
+        noMatch={MENU_NOTE.NO_MATCH}
+        align={props.align ?? POPOVER_ALIGN.END}
+        onPick={(repository) => choose(() => props.onChoose(repository))}
+        onClose={close}
+        onLeave={(left) => {
+          if (!(left instanceof Node && room.current?.contains(left))) setOpen(false);
+        }}
+      />
+    ) : null,
+  };
+}
+
+export function RepositoryChip(
+  props: RepositoryMenuProps & {
+    place: ChipPlace;
+    /** A form row's chip: how wide it stands, its words' own width where none is named. */
+    width?: ChipWidth | undefined;
+    /** A form row's chip: the ids of the row's words that describe it, its error among them while it has one. */
+    describedBy?: string | undefined;
+    /** A form row's chip: whether the row says its value is refused. */
+    invalid?: true | undefined;
+  },
+): React.JSX.Element {
+  const menu = useRepositoryMenu(props);
   return (
-    <div className="repository-chip relative min-w-0" data-place={props.place} ref={chip}>
-      <Tooltip
-        label={open ? undefined : (props.value ?? undefined)}
-        card={
-          props.value === null || open ? undefined : (
-            <RepositoryCard repository={props.value} pictures={chooser.pictures} />
-          )
-        }
-      >
+    <div className="repository-chip relative min-w-0" data-place={props.place} ref={menu.room}>
+      <Tooltip label={menu.open ? undefined : (props.value ?? undefined)} card={menu.card}>
         <Chip
-          ref={trigger}
           look={PLACE_LOOK[props.place]}
           width={props.width}
           chevron={props.place === CHIP_PLACE.FIELD}
           aria-describedby={props.describedBy}
           aria-invalid={props.invalid}
           aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-controls={open ? menuId : undefined}
-          onClick={press}
+          aria-expanded={menu.open}
+          aria-controls={menu.open ? menu.menuId : undefined}
+          onClick={(event) => menu.press(event.currentTarget)}
         >
-          {props.value === null ? (
-            <GLYPH.REPOSITORY />
-          ) : (
-            <RepositoryPicture
-              repository={props.value}
-              pictures={chooser.pictures}
-              size={AVATAR_SIZE.GLYPH}
-            />
-          )}
-          <ChipName>{label}</ChipName>
+          {menu.glyph}
+          <ChipName>{menu.label}</ChipName>
         </Chip>
       </Tooltip>
-      {drawn.mounted ? (
-        <SearchableMenu
-          leaving={drawn.leaving}
-          ref={drawn.ref}
-          id={menuId}
-          label="Repository"
-          placeholder="Search repositories"
-          rows={rows}
-          value={props.value ?? undefined}
-          note={note}
-          noMatch={MENU_NOTE.NO_MATCH}
-          align={props.align ?? POPOVER_ALIGN.END}
-          onPick={(repository) => choose(() => props.onChoose(repository))}
-          onClose={close}
-          onLeave={(left) => {
-            if (!(left instanceof Node && chip.current?.contains(left))) setOpen(false);
-          }}
-        />
-      ) : null}
+      {menu.menu}
     </div>
   );
 }

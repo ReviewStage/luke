@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { TASK_PRIORITY, TASK_STATUS, type Task, type TaskStanding } from "@luke/features/task-wire";
+import {
+  TASK_PRIORITY,
+  TASK_STATUS,
+  type Task,
+  type TaskStanding,
+  type TaskSummary,
+} from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -15,14 +21,20 @@ import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import type { RepositoryChooser } from "./repository-chip.js";
-import { TaskKeyLine, type TaskRepositoryDoor, TaskStandingChips } from "./task-standing.js";
+import {
+  TaskPath,
+  type TaskRepositoryDoor,
+  TaskStandingChips,
+  type TaskStandingDoor,
+} from "./task-standing.js";
 
 /**
- * task-standing.test.ts -- a task's head names it by its key and says where
+ * task-standing.test.ts -- a task's head names it by its path and says where
  * it stands and how much it matters: a pick from the status chip's menu is
  * handed to the page to send, the chips take no pick without a door to send
- * it through, the repository's chip stands among them where the page hands
- * its doors, and a task from a service before keys draws neither.
+ * it through, the repository's crumb leads the path where the page hands
+ * its doors, the parent's stands after it for a child task, and a task from
+ * a service before keys draws neither path nor chips.
  */
 
 const TASK: Task = {
@@ -51,11 +63,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Draws the task's key and its chips into the document, with the door a pick is sent through, and the repository chip's doors where handed. */
+/** Draws the task's path and its chips into the document, with the door a pick is sent through, and the rest of the head's doors where handed. */
 function drawn(
   task: Task,
   onSet: ((standing: TaskStanding) => void) | undefined,
-  repository?: TaskRepositoryDoor,
+  door?: Partial<TaskStandingDoor>,
 ): HTMLElement {
   const host = document.createElement("div");
   document.body.append(host);
@@ -63,8 +75,8 @@ function drawn(
   roots.push(root);
   act(() =>
     root.render([
-      createElement(TaskKeyLine, { key: "key", task, workspaceName: "Acme" }),
-      createElement(TaskStandingChips, { key: "chips", task, onSet, repository }),
+      createElement(TaskPath, { key: "path", task, door: { workspaceName: "Acme", ...door } }),
+      createElement(TaskStandingChips, { key: "chips", task, onSet }),
     ]),
   );
   return host;
@@ -95,33 +107,55 @@ test("names the task by its workspace's prefix and its number, with its status a
   assert.ok(chip(host, "Priority").textContent?.includes("High"));
 });
 
-test("the repository chip stands among the chips where the page hands its doors, reading the repository, or Choose a repository on a task with none, and an ask from elsewhere opens its menu", async () => {
-  const picks: string[] = [];
-  const door: TaskRepositoryDoor = {
-    chooser: UNREAD_CHOOSER,
-    onChoose: (pick) => picks.push(pick),
-  };
-  const named = drawn(TASK, () => undefined, door);
+test("the repository's crumb leads the path where the page hands its doors, reading the repository, or Choose a repository on a task with none, and an ask from elsewhere opens its menu", async () => {
+  const door: TaskRepositoryDoor = { chooser: UNREAD_CHOOSER, onChoose: () => undefined };
+  const named = drawn(TASK, () => undefined, { repository: door });
   await act(async () => undefined);
-  const row = named.querySelector(".plan-task-standing");
-  assert.ok(row?.textContent?.includes("acme/web"), "the chip reads the repository");
-  assert.ok(row?.textContent?.includes("High"), "beside the standing chips");
+  const path = named.querySelector('nav[aria-label="Task path"]');
+  assert.match(path?.textContent ?? "", /acme\/web.*ACME-42/u, "the repository, then the key");
   assert.equal(chip(named, "acme/web").getAttribute("aria-expanded"), "false");
 
-  const bare = drawn({ ...TASK, repository: null }, () => undefined, { ...door, openRequest: 1 });
+  const bare = drawn({ ...TASK, repository: null }, () => undefined, {
+    repository: { ...door, openRequest: 1 },
+  });
   await act(async () => undefined);
   const choose = chip(bare, "Choose a repository");
   assert.equal(choose.getAttribute("aria-expanded"), "true", "⌘K's ask opens its menu");
 
   const without = drawn(TASK, () => undefined);
-  assert.equal(without.textContent?.includes("acme/web"), false, "no doors, no chip");
+  assert.equal(without.textContent?.includes("acme/web"), false, "no doors, no crumb");
+});
 
-  // A task from a service before statuses draws no standing chip, and still its repository's.
-  const { status: _status, priority: _priority, ...before } = TASK;
-  const legacy = drawn(before, () => undefined, door);
-  await act(async () => undefined);
-  assert.ok(legacy.textContent?.includes("acme/web"), "the chip does not wait on the standing");
-  assert.equal(legacy.querySelector('[aria-label^="Status"]'), null);
+test("a child task's path names its parent by key and name between the repository and its own key, and a press opens the parent", () => {
+  const parent: TaskSummary = {
+    id: "parent-task",
+    workspaceId: TASK.workspaceId,
+    name: "Ship the login rework",
+    createdAt: 1,
+    updatedAt: 1,
+    repository: "acme/web",
+    status: TASK_STATUS.IN_PROGRESS,
+    priority: TASK_PRIORITY.NONE,
+    number: 7,
+  };
+  const child: TaskSummary = { ...parent, id: TASK.id, name: TASK.name, parentTaskId: parent.id };
+  const opened: string[] = [];
+  const host = drawn(TASK, () => undefined, {
+    tasks: [parent, child],
+    onOpenTask: (taskId) => opened.push(taskId),
+  });
+
+  const path = host.querySelector('nav[aria-label="Task path"]');
+  assert.match(path?.textContent ?? "", /ACME-7 Ship the login rework.*ACME-42/u);
+  act(() => chip(host, "Ship the login rework").click());
+  assert.deepEqual(opened, ["parent-task"]);
+
+  const top = drawn(TASK, () => undefined, { tasks: [parent] });
+  assert.equal(
+    top.textContent?.includes("Ship the login rework"),
+    false,
+    "a task at the top names none",
+  );
 });
 
 test("a status picked from the menu, opened by its chip or by S, is handed to the page, and the one standing is not picked again", () => {

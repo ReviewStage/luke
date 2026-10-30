@@ -73,7 +73,7 @@ import {
 } from "./plan-document-editor.js";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";
 import { UNIT_ATTRIBUTED_CLASS, UNIT_BYLINE_CLASS, UNIT_MORE_CLASS } from "./plan-unit-look.js";
-import { TaskKeyLine, TaskStandingChips, type TaskStandingDoor } from "./task-standing.js";
+import { TaskPath, TaskStandingChips, type TaskStandingDoor } from "./task-standing.js";
 import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing.js";
@@ -282,13 +282,13 @@ function Ago({ at }: { at: number }): React.JSX.Element {
 }
 
 /**
- * Who started the task and when, and who last edited its plan and when,
- * under its title, in the line every document draws there
- * (`DocumentByline`): "Created by [Charles] Charles Pan · 3d
- * ago" and "Last edited by [Luke] Luke · 2h ago", each phrase wrapping
- * whole. The people hang their cards, and the edit's time opens the plan's
- * version history where the window offers it. A plan nobody has edited
- * says only who created it.
+ * Who started the task and when, and when its plan was last edited, under
+ * its title, in the line every document draws there (`DocumentByline`):
+ * "Created by [Charles] Charles Pan · 3d ago" and "Edited 2h ago", each
+ * phrase wrapping whole. The creator hangs their card, and the edit's time
+ * opens the plan's version history where the window offers it. Who last
+ * edited it is the task's ⋯ menu's to say, in its footer. A plan nobody has
+ * edited says only who created it.
  */
 function PlanByline({
   task,
@@ -317,9 +317,7 @@ function PlanByline({
       edited={
         edit === undefined ? undefined : (
           <>
-            {edit.actor === PLAN_ACTOR.EARLIER ? "Last edited" : "Last edited by "}
-            <EditedBy edit={edit} place={place} sentence />
-            {" · "}
+            {"Edited "}
             <EditTime
               at={edit.at}
               label={editedLabel}
@@ -1293,9 +1291,7 @@ export const PlanBody = memo(function PlanBody({
       <DocumentScroll ref={scroller}>
         <PlanBodyColumn ref={bodyHost}>
           <WordsDatePickerRoom>
-            {taskStanding === undefined ? null : (
-              <TaskKeyLine task={task} workspaceName={taskStanding.workspaceName} />
-            )}
+            {taskStanding === undefined ? null : <TaskPath task={task} door={taskStanding} />}
             {titled ? (
               // Keyed by the plan, so words typed for one are saved to it as another opens.
               <EditableTitle
@@ -1316,7 +1312,6 @@ export const PlanBody = memo(function PlanBody({
               <TaskStandingChips
                 task={task}
                 onSet={taskStanding.onSet}
-                repository={taskStanding.repository}
                 blocks={taskStanding.blocks}
                 inSight={taskStanding.inSight}
               />
