@@ -8,9 +8,9 @@ import {
   SettingsSection,
   SKELETON_SHAPE,
   Skeleton,
-  Toolbar,
 } from "@luke/ui";
 import { type ReactNode, useCallback, useRef } from "react";
+import { PlaceToolbar } from "./title-bar.js";
 
 /**
  * automation-list-frame.tsx -- the Automations list's boxes, which the list and its placeholders both draw.
@@ -54,7 +54,7 @@ export function AutomationsToolbar({ children }: { children: ReactNode }): React
   // The toolbar's own width, which a container query reads, folds Create with an agent to its glyph before it crowds the title.
   return (
     <div className="automations-toolbar flex-none @container/automations-toolbar">
-      <Toolbar
+      <PlaceToolbar
         title="Automations"
         actions={<div className="automations-acts contents">{children}</div>}
       />

@@ -21,6 +21,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorLine,
   ErrorState,
+  FramePlace,
   GAP,
   GROUP_SURFACE,
   GroupHeader,
@@ -60,6 +61,7 @@ import {
   Text,
   TOOLBAR_INSET,
   Toolbar,
+  type ToolbarPlace,
   Tooltip,
   UnreadMark,
   useLeaving,
@@ -131,6 +133,7 @@ import {
 } from "../desktop/phone-head.js";
 import { groupCount, sidebarFold } from "../desktop/sidebar-fold.js";
 import { type TabActionGroups, useTabActions } from "../desktop/strip-tabs.js";
+import { TitleBarPlace, useTitleBar } from "../desktop/title-bar.js";
 import { refusedShown, unreadShown } from "../failure-report.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
@@ -1287,12 +1290,7 @@ function ListHead({
       {view === undefined ? (
         <PaneBar title={title} actions={options} />
       ) : channel?.archivedAt === undefined ? (
-        <Toolbar
-          title={title}
-          detail={channel?.detail}
-          actions={options}
-          end={TOOLBAR_INSET.COLUMN}
-        />
+        <InboxBar title={title} detail={channel?.detail} task={head.task} actions={options} />
       ) : (
         <ArchivedChannelBar title={title} archivedAt={channel.archivedAt} actions={options} />
       )}
@@ -1304,6 +1302,45 @@ function ListHead({
       {view === undefined ? null : (
         <FilterChips whose={view.choices} task={head.task} readerId={readerId} />
       )}
+    </>
+  );
+}
+
+/**
+ * The window's Inbox's bar, its actions at its end, and the Inbox's name:
+ * at the bar's head, or in the window's title bar where one stands, the
+ * task the Inbox is narrowed to after it, the Inbox's own name a press
+ * back to every task's items, as the task's chip under the bar clears it.
+ */
+function InboxBar({
+  title,
+  detail,
+  task,
+  actions,
+}: {
+  title: string;
+  detail: string | undefined;
+  task?: InboxTaskHead | undefined;
+  actions: React.ReactNode;
+}): React.JSX.Element {
+  const up = useTitleBar() !== null;
+  const trail: ToolbarPlace[] | undefined =
+    task === undefined ? undefined : [{ label: title, onPress: task.onClear }];
+  return (
+    <>
+      <TitleBarPlace>
+        <FramePlace
+          title={task === undefined ? title : (task.name ?? UNNAMED_TASK)}
+          trail={trail}
+          detail={detail}
+        />
+      </TitleBarPlace>
+      <Toolbar
+        title={up ? undefined : title}
+        detail={up ? undefined : detail}
+        actions={actions}
+        end={TOOLBAR_INSET.COLUMN}
+      />
     </>
   );
 }
@@ -1323,11 +1360,10 @@ function ArchivedChannelBar({
   actions: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <Toolbar
+    <InboxBar
       title={title}
       detail={`Archived ${agoText(archivedAt, useMinute())}`}
       actions={actions}
-      end={TOOLBAR_INSET.COLUMN}
     />
   );
 }

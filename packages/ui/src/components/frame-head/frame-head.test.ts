@@ -3,13 +3,15 @@
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { FrameHead } from "./frame-head.js";
+import { FrameHead, FramePlace } from "./frame-head.js";
 
 /**
  * frame-head.test.ts -- a task's head names the task by its key and name in
  * a chip that opens it, says how many things wait on the reader in words
  * that agree with the count, takes a press on that count to go to them, and
- * says nothing of a count of none. Synthetic tasks.
+ * says nothing of a count of none; and a place that is no task is named as
+ * the page's heading, the places above it before it, each a press back.
+ * Synthetic tasks.
  */
 
 const roots: Root[] = [];
@@ -68,4 +70,22 @@ test("says one waiting thing in the singular, and nothing at all of none", () =>
     }),
   );
   expect(none.textContent).toBe("Launch checklist");
+});
+
+test("names a place that is no task as the page's heading, the places above it before it, each a press back", () => {
+  const back: string[] = [];
+  const head = draw(
+    createElement(FramePlace, {
+      title: "Check the 2.14.0 deploy",
+      trail: [
+        { label: "Automations", onPress: () => back.push("automations") },
+        { label: "Check each deploy", onPress: () => back.push("automation") },
+      ],
+    }),
+  );
+  act(() => press(head, "Check each deploy")?.click());
+  expect(back).toEqual(["automation"]);
+  expect(draw(createElement(FramePlace, { title: "Inbox" })).querySelector("h1")?.textContent).toBe(
+    "Inbox",
+  );
 });

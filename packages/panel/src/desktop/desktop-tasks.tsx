@@ -113,6 +113,7 @@ import {
   TaskSummary,
   useSummaryLayout,
 } from "./task-summary.js";
+import { TitleBarPlace } from "./title-bar.js";
 
 /**
  * The work column while Tasks is chosen: the open task's column, its
@@ -129,10 +130,12 @@ import {
  * the repository chip only while the task has none, and otherwise only the
  * chip's menu, which Change repository opens.
  *
- * Under the toolbar the task's head stands over every tab of the column
- * (`FrameHead`): the task as a chip, its key and name, which shows its plan,
- * and how many of its Inbox items wait on the reader, a press that opens
- * the window's Inbox narrowed to the task. A phone heads the task with its
+ * The task's head names the task whichever tab is chosen (`FrameHead`): the
+ * task as a chip, its key and name, which shows its plan, and how many of
+ * its Inbox items wait on the reader, a press that opens the window's Inbox
+ * narrowed to the task. It stands in the window's title bar, over the
+ * toolbar, where one stands (`title-bar.tsx`), and under the toolbar over
+ * every tab of the column where none does. A phone heads the task with its
  * own row instead (`TaskHead`).
  *
  * The column's summary stands at its right, under the toolbar, listing what
@@ -272,7 +275,11 @@ function TaskPageSkeleton({
               title={<MainTabStripSkeleton />}
               actions={<TaskActionsSkeleton summary={summary.holds} />}
             />
-            {framed ? <FrameHeadSkeleton /> : null}
+            {framed ? (
+              <TitleBarPlace inline>
+                <FrameHeadSkeleton />
+              </TitleBarPlace>
+            ) : null}
             <TaskBody>
               <Fill className="desktop-task-column">
                 <AgentColumn>
@@ -1187,23 +1194,25 @@ function PlanDocument({
                             </>
                           }
                         />
-                        {/* The task's head stands over every tab of the column, naming the
-            task whichever is chosen; a phone heads the task with its own row (`TaskHead`). */}
+                        {/* The task's head names the task whichever tab is chosen: in the window's title bar,
+            or over every tab of the column where none stands; a phone heads the task with its own row (`TaskHead`). */}
                         {switched ? null : (
-                          <FrameHead
-                            taskKey={
-                              task.number === undefined
-                                ? undefined
-                                : taskKey(workspaceName, task.number)
-                            }
-                            name={listed.name}
-                            onOpen={() => openPanelTab(SIDE_PANEL_TAB.PLAN)}
-                            waiting={{
-                              count: inbox.board.waiting.length,
-                              noun: NEEDS_YOU.COUNT,
-                              onOpen: () => tasks.onShowInbox({ taskId: task.id }),
-                            }}
-                          />
+                          <TitleBarPlace inline>
+                            <FrameHead
+                              taskKey={
+                                task.number === undefined
+                                  ? undefined
+                                  : taskKey(workspaceName, task.number)
+                              }
+                              name={listed.name}
+                              onOpen={() => openPanelTab(SIDE_PANEL_TAB.PLAN)}
+                              waiting={{
+                                count: inbox.board.waiting.length,
+                                noun: NEEDS_YOU.COUNT,
+                                onOpen: () => tasks.onShowInbox({ taskId: task.id }),
+                              }}
+                            />
+                          </TitleBarPlace>
                         )}
                         {/* The plan's banner is the whole plan's, so it stands over every
             tab of the column, and over the panel's while that fills the window. */}

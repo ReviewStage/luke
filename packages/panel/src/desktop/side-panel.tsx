@@ -201,6 +201,7 @@ import {
 import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { type CardSubject, tabCard } from "./tab-card.js";
 import { TabStrip } from "./tab-strip.js";
+import { TitleBarRoom } from "./title-bar.js";
 
 /** A phone's Activity, as the panel's strip is handed it: where it lists the tabs, how a row's press leaves the list, and where the tab shown is handed on. */
 interface StripActivity {
@@ -2930,8 +2931,8 @@ function PanelFrame({
         data-popover-room=""
         style={panel.fullScreen ? undefined : { width: panel.width }}
       >
-        {/* The row is a drag region and each control in it is not; Chromium
-            takes regions in document order, so the controls follow it. */}
+        {/* The row is a drag region, unless the window's title bar stands over it, and each
+            control in it is not; Chromium takes regions in document order, so the controls follow it. */}
         <div className="side-panel-bar">
           {tabs}
           {actions}
@@ -2945,7 +2946,8 @@ function PanelFrame({
         </div>
         {head}
         {panel.fullScreen ? banner : null}
-        {children}
+        {/* The panel holds things, not the place, so nothing in it names itself in the window's title bar. */}
+        <TitleBarRoom bar={null}>{children}</TitleBarRoom>
         {/* Last, so the drag region of the row above does not take the
             edge's top from it. Full screen has no edge to drag. */}
         {panel.fullScreen ? null : <ResizeEdge edge={edge} />}

@@ -1373,6 +1373,130 @@ body,
   padding-left: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
+/* The window's title bar -------------------------------------------------
+
+   The installed app's wide window stands one title bar over its panes
+   (`title-bar.tsx`): the sidebar's own top row, where the traffic lights,
+   its toggle, and back and forward stand, and beside it a row over the work
+   column, as tall as the lights' row and level with it, so the two read as
+   one bar across the window and the window is dragged by either. The page
+   the work column shows names its place in that row: from where the column
+   starts, or past the title bar's buttons while the sidebar is folded, to
+   short of the side panel's toggle where that stands, a head standing its
+   controls at a column's inset. Nothing slides beneath the row, so its
+   buttons stand still over the frame. The web's tab and a narrow room stand
+   no title bar (`data-title-bar`), and keep every rule above. */
+:root {
+  --title-bar-height: calc(2 * var(--title-bar-middle));
+}
+
+.desktop-shell[data-title-bar="true"] {
+  grid-template-rows: var(--title-bar-height) minmax(0, 1fr);
+}
+
+.desktop-shell[data-title-bar="true"] > .desktop-sidebar {
+  grid-row: 1 / -1;
+  grid-column: 1;
+}
+
+.desktop-shell[data-title-bar="true"] > .desktop-main {
+  grid-row: 2;
+  grid-column: 2;
+}
+
+.window-title-bar {
+  display: flex;
+  min-width: 0;
+  grid-row: 1;
+  grid-column: 2;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 var(--sheet-gap) 0 0;
+}
+
+.desktop-shell[data-sidebar-collapsed="true"] > .window-title-bar {
+  padding-left: calc(var(--sidebar-toggle-clearance) - var(--column-inset));
+}
+
+.desktop-shell[data-panel-toggle="true"] > .window-title-bar {
+  padding-right: calc(
+    var(--panel-toggle-right) +
+    var(--luke-control-height) +
+    var(--luke-control-gap) -
+    var(--column-inset)
+  );
+}
+
+[data-luke-profile="desktop"] .window-title-bar {
+  -webkit-app-region: drag;
+}
+
+/* Its chips, buttons, and crumbs claim their presses back as they do on any
+   bar (above, and `@luke/ui`'s breadcrumb), coming after the bar in document
+   order; so does a field a page names itself with, as Rename's on an
+   agent's page, so a press in it moves the caret rather than the window. */
+[data-luke-profile="desktop"] .window-title-bar input {
+  -webkit-app-region: no-drag;
+}
+
+/* Under the title bar every pane's top row is an ordinary bar, the window's
+   handle no longer, and the title bar's buttons stand over none of them: the
+   plan's first tab starts on one line with its sheet's edge, folded or not,
+   the side panel's row ends at its own, and nothing below keeps room for
+   the buttons above. */
+[data-luke-profile="desktop"] .desktop-shell[data-title-bar="true"] > .desktop-main {
+  --luke-toolbar-app-region: no-drag;
+}
+
+[data-luke-profile="desktop"]
+  .desktop-shell[data-title-bar="true"]
+  > .desktop-main
+  :is(.side-panel-bar, .desktop-drag-strip) {
+  -webkit-app-region: no-drag;
+}
+
+.desktop-shell[data-title-bar="true"] > .desktop-main {
+  --luke-toolbar-end-at: initial;
+}
+
+.desktop-shell[data-title-bar="true"][data-sidebar-collapsed="true"] > .desktop-main {
+  --luke-toolbar-start-at: initial;
+}
+
+.desktop-shell[data-title-bar="true"][data-sidebar-collapsed="true"]
+  > .desktop-main
+  .desktop-task-main {
+  --luke-toolbar-start-at: 0px;
+}
+
+.desktop-shell[data-title-bar="true"][data-sidebar-collapsed="true"]
+  .desktop-main
+  > .desktop-task
+  > .page-find
+  > .inbox-view[data-columns="item"]
+  .inbox-view-items {
+  --luke-toolbar-start-at: initial;
+}
+
+.desktop-shell[data-title-bar="true"][data-sidebar-collapsed="true"] .desktop-task {
+  --document-reserve: initial;
+}
+
+.desktop-shell[data-title-bar="true"] > .desktop-main .side-panel-bar {
+  padding-right: 0;
+}
+
+.desktop-shell[data-title-bar="true"][data-sidebar-collapsed="true"]
+  .side-panel[data-full-screen="true"]
+  .side-panel-bar {
+  padding-left: 0;
+}
+
+.desktop-shell[data-title-bar="true"][data-sidebar-collapsed="true"]
+  .automation-runs-screen::before {
+  content: none;
+}
+
 [data-luke-profile="desktop"] .tab-add-anchor .luke-anchored-popover {
   -webkit-app-region: no-drag;
 }
