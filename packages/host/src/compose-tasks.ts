@@ -27,7 +27,7 @@ import {
   taskPagesLiveRowsSchema,
 } from "@luke/features/live-wire";
 import { PAGE_OWNER, type PageOwner, type PagePlace } from "@luke/features/page-wire";
-import { TASK_STATUS, type Task } from "@luke/features/task-wire";
+import { TASK_STATUS, type Task, type TaskSkillsAnswer } from "@luke/features/task-wire";
 import {
   HOST_LIVE,
   IDLE_TASKS_VIEW,
@@ -264,6 +264,28 @@ function linkReadKept(exit: Exit.Exit<unknown>): Duration.Duration {
 /** A call on a task's Browser tabs behind a closed gate, or of a service that did not answer. */
 const BROWSER_TABS_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
+/** How many holders' skills a session keeps, the least asked lately let go first past it. */
+const SKILLS_KEPT = 256;
+
+/** A plan's skills, by its id and the repository the list names it on, so a plan moved to another repository is another key. */
+class PlanSkillsKey extends Data.Class<{
+  readonly planId: string;
+  readonly repository: string | undefined;
+}> {}
+
+/** A workspace's repository's skills, where no plan names it, or the workspace's alone for an agent with no repository. */
+class RepositorySkillsKey extends Data.Class<{
+  readonly workspaceId: string;
+  readonly repository: string | undefined;
+}> {}
+
+/** How long a holder's skills are kept: the session, where the service read them; no time where it refused or did not answer, so the next ask reads again. */
+function skillsKept(exit: Exit.Exit<TaskSkillsAnswer | undefined>): Duration.Duration {
+  return Exit.isSuccess(exit) && exit.value !== undefined && "skills" in exit.value
+    ? Duration.infinity
+    : Duration.zero;
+}
+
 /** Whose pages: one task's, or one agent's on no task, by what they stand on and then its id. */
 class PageOwnerKey extends Data.Class<{
   readonly kind: PageOwner["kind"];
@@ -465,6 +487,28 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         ),
       ),
     { capacity: LINK_READ_KEPT.CAPACITY, timeToLive: linkReadKept },
+  );
+  /**
+   * Each plan's skills, and each repository's no plan names, read once for
+   * the session: a `/` in a box, a chip naming a skill, and a choice of the
+   * plan again in the Inbox ask these, never the service; a read already out
+   * is joined, never asked twice. A skill added on GitHub is offered once the
+   * session starts again.
+   */
+  const planSkills = yield* Cache.makeWith(
+    (key: PlanSkillsKey) => served(client.readSkills(key.planId)),
+    { capacity: SKILLS_KEPT, timeToLive: skillsKept },
+  );
+  const repositorySkills = yield* Cache.makeWith(
+    (key: RepositorySkillsKey) =>
+      served(
+        client.readRepositorySkills(
+          key.repository === undefined
+            ? { workspaceId: key.workspaceId }
+            : { workspaceId: key.workspaceId, repository: key.repository },
+        ),
+      ),
+    { capacity: SKILLS_KEPT, timeToLive: skillsKept },
   );
   const issueReads = yield* Cache.makeWith(
     (key: LinkReadKey) =>
@@ -1704,11 +1748,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksTreeAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
-    // The repository's skills are answered to the window that asked and held
-    // nowhere: a skill added on GitHub is chosen on the next read.
+    // The repository's skills are kept for every window for the session
+    // (`planSkills`, `repositorySkills`), a plan's under the repository the
+    // list names it on, so a plan moved to another repository reads that one's.
     [GATEWAY_METHOD.TASKS_SKILLS]: (params) =>
       Effect.gen(function* () {
-        const read = yield* readParams(
+        const asked = yield* readParams(
           tasksSkillsParamsSchema,
           params,
           "reading a repository's skills names the task, or a workspace and its repository",
@@ -1716,10 +1761,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) {
           return carried<TasksSkillsAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const asked = read;
-        const answer = yield* served(
-          "planId" in asked ? client.readSkills(asked.planId) : client.readRepositorySkills(asked),
-        );
+        const answer = yield* "planId" in asked
+          ? Cache.get(
+              planSkills,
+              new PlanSkillsKey({
+                planId: asked.planId,
+                repository:
+                  view.tasks.find((each) => each.id === asked.planId)?.repository ?? undefined,
+              }),
+            )
+          : Cache.get(
+              repositorySkills,
+              new RepositorySkillsKey({
+                workspaceId: asked.workspaceId,
+                repository: asked.repository,
+              }),
+            );
         return carried<TasksSkillsAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     // A pull request is answered to the link that asked, and kept for every
@@ -2828,6 +2885,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     reset: Effect.gen(function* () {
       yield* Cache.invalidateAll(pullRequestReads);
       yield* Cache.invalidateAll(issueReads);
+      yield* Cache.invalidateAll(planSkills);
+      yield* Cache.invalidateAll(repositorySkills);
       yield* FiberHandle.clear(openedRead);
       // Note that the windows' holds on pages stand through a sign-out, so a session signing in follows them anew (`open`).
       yield* heldPageReads.end;

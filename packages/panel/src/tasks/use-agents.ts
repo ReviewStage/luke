@@ -19,6 +19,7 @@ import {
   type AgentPullRequest,
   type AgentSummary,
   CONTEXT_WINDOW,
+  type TasklessAgent,
 } from "@luke/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type {
@@ -662,6 +663,12 @@ export function useAgents(input: {
    */
   listedAgents?: readonly AgentSummary[] | undefined;
   /**
+   * The page's agent as the task list carries it, with its workspace and
+   * its repository, where the caller draws nothing of the run that started
+   * it, which the agent's own read alone carries: the page is then not read.
+   */
+  listedPage?: Pick<TasklessAgent, "id" | "workspaceId" | "repository"> | undefined;
+  /**
    * The pull request of every agent the task list followed live carries,
    * on a task or with none, the archived ones among them; none where it is
    * not followed.
@@ -697,7 +704,10 @@ export function useAgents(input: {
     repository?: string | undefined;
     origin?: AgentOrigin | undefined;
   }>({ agentId: undefined, agents: undefined, failed: false });
-  const listOf = taskId === undefined ? agentId : undefined;
+  // Note that an agent the list carries with its workspace and repository is not read as a page, so choosing it reads nothing.
+  const listedPage =
+    taskId === undefined && input.listedPage?.id === agentId ? input.listedPage : undefined;
+  const listOf = taskId === undefined && listedPage === undefined ? agentId : undefined;
   const ours = (was: { agentId: string | undefined }) =>
     listOf !== undefined && was.agentId === listOf;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
@@ -1539,11 +1549,13 @@ export function useAgents(input: {
   );
 
   // Note that the skills are kept for the plan and its repository as they
-  // stand, so another plan, or the plan moved to another repository, reads
-  // afresh; an agent no plan holds reads its repository's through the
-  // workspace it belongs to, once the read of it has named that workspace.
-  const workspaceId = ours(list) ? list.workspaceId : undefined;
-  const agentRepository = ours(list) ? list.repository : undefined;
+  // stand, and the host keeps each one's for the session (`compose-tasks.ts`),
+  // so choosing the plan again reads none; another plan, or the plan moved to
+  // another repository, is another one. An agent no plan holds reads its
+  // repository's through the workspace it belongs to, once the list or the
+  // read of it has named that workspace.
+  const workspaceId = ours(list) ? list.workspaceId : listedPage?.workspaceId;
+  const agentRepository = ours(list) ? list.repository : (listedPage?.repository ?? undefined);
   // Note that a plan or an agent with no repository still reads its member's installed skills, and
   // that the plan's repository stays a dependency, so a plan moved to another repository reads afresh.
   // While the Skills experiment is off, no box offers a skill and no sent message draws one.

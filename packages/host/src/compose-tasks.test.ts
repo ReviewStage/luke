@@ -837,7 +837,11 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     readFile: (_taskId, window) => Effect.sync(() => service.files[window.path]),
     readTree: (_taskId, folder) => Effect.sync(() => service.folders[folder.path]),
-    readSkills: (taskId) => Effect.sync(() => service.skills[taskId]),
+    readSkills: (taskId) =>
+      Effect.sync(() => {
+        service.reads.push(`skills:${taskId}`);
+        return service.skills[taskId];
+      }),
     readRepositoryFile: (place, window) =>
       Effect.sync(() => service.places[place.workspaceId]?.[place.repository]?.files[window.path]),
     readRepositoryTree: (place, folder) =>
@@ -3015,6 +3019,41 @@ it.effect(
         yield* call(GATEWAY_METHOD.TASKS_SKILLS, { planId: INVITES }),
         skills("review"),
       );
+    }),
+);
+
+it.effect(
+  "a plan's skills are read once for the session, asked again from what was read, read again where the service did not answer, and read anew after a sign-out",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const review: TaskSkillsAnswer = {
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [
+            {
+              name: "review",
+              description: "",
+              source: TASK_SKILL_SOURCE.REPOSITORY,
+              path: ".agents/skills/review/SKILL.md",
+            },
+          ],
+        },
+      };
+      const { tasks, call } = yield* subject(service);
+      const asked = () => call(GATEWAY_METHOD.TASKS_SKILLS, { planId: INVITES });
+      const reads = () => service.reads.filter((read) => read.startsWith("skills:")).length;
+
+      assert.deepEqual(yield* asked(), { failure: TASK_CALL_FAILURE.UNANSWERED });
+      service.skills[INVITES] = review;
+      assert.deepEqual(yield* asked(), review);
+      assert.deepEqual(yield* asked(), review);
+      assert.equal(reads(), 2, "the skills read once are answered again from what was read");
+
+      yield* tasks.reset;
+      assert.deepEqual(yield* asked(), review);
+      assert.equal(reads(), 3, "a sign-out lets what was read go");
     }),
 );
 
