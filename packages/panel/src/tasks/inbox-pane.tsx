@@ -65,7 +65,7 @@ import {
 import { GLYPH } from "@luke/ui/icons";
 import { isWireString } from "@luke/wire";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ACTOR_SIZE,
   ActorLine,
@@ -84,6 +84,7 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { PhoneHead } from "../desktop/phone-head.js";
 import { unreadShown } from "../failure-report.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
+import { useSteadyDoor } from "../steady-door.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
@@ -153,7 +154,12 @@ import { cardTitle } from "./tool-call-model.js";
 import { INERT_LINK_CLASS, TranscriptWords } from "./transcript-blocks.js";
 import type { AgentsControl } from "./use-agents.js";
 import { opensAsLink } from "./use-open-link.js";
-import { type PendingInboxReply, pendingReplyOn, type TaskInboxControl } from "./use-task-inbox.js";
+import {
+  type InboxImageReads,
+  type PendingInboxReply,
+  pendingReplyOn,
+  type TaskInboxControl,
+} from "./use-task-inbox.js";
 
 /**
  * inbox-pane.tsx -- one inbox item at reading size: a comment thread under the item's title, the agent's messages and what they ask, and the answers given in place or as they were given.
@@ -639,13 +645,14 @@ function resolvedByMember(item: InboxItem): boolean {
  * so only where that line is not drawn.
  */
 function WithdrawnMarker({
-  item,
+  resolved,
   reason,
 }: {
-  item: InboxItem;
+  /** Whether a member resolved the item without an answer while that close stands (`resolvedByMember`). */
+  resolved: boolean;
   reason: string | undefined;
 }): React.JSX.Element | null {
-  if (reason === undefined && resolvedByMember(item)) return null;
+  if (reason === undefined && resolved) return null;
   return (
     <div
       className="inbox-ask-withdrawn flex min-w-0 flex-col items-start gap-tight-gap"
@@ -723,13 +730,17 @@ function AskMarker({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element | 
  * naming a newer Luke.
  */
 function AskBox({
-  item,
+  title,
+  resolved,
   message,
   ask,
   thread,
   waitingOn,
 }: {
-  item: InboxItem;
+  /** The item's title, as `cardTitle` reads it. */
+  title: string;
+  /** Whether a member resolved the item without an answer while that close stands (`resolvedByMember`). */
+  resolved: boolean;
   message: InboxMessage;
   ask: InboxReadAsk;
   thread: readonly InboxMessage[];
@@ -752,7 +763,7 @@ function AskBox({
     return (
       <HeldAsk
         ask={ask}
-        title={cardTitle(item.title)}
+        title={title}
         marker={<ReplacedMarker message={message} thread={thread} />}
       />
     );
@@ -761,8 +772,8 @@ function AskBox({
     return (
       <HeldAsk
         ask={ask}
-        title={cardTitle(item.title)}
-        marker={<WithdrawnMarker item={item} reason={ask.withdrawnReason} />}
+        title={title}
+        marker={<WithdrawnMarker resolved={resolved} reason={ask.withdrawnReason} />}
       />
     );
   }
@@ -811,23 +822,35 @@ const NO_TEXT_LABELS: ReadonlySet<string> = new Set();
  * question's are and a member's as a sent message's, and the files it
  * carried after them, a picture its words draw standing there alone;
  * an agent's message that asks ends with its ask's box, a marker alone
- * while it waits, until it is answered.
+ * while it waits, until it is answered. It is drawn again only where it is
+ * handed another prop (`memo`), each the part of the item it draws, so a
+ * change to the item that leaves the message as it was, as marking it read
+ * does, draws none of the thread's messages again.
  */
-function ThreadMessage({
-  item,
+const ThreadMessage = memo(function ThreadMessage({
+  itemId,
+  title,
+  threadAddressedTo,
+  resolved,
   message,
   thread,
   by,
   now,
-  control,
+  images,
   waitingOn,
 }: {
-  item: InboxItem;
+  itemId: string;
+  /** The item's title, as `cardTitle` reads it. */
+  title: string;
+  /** The member the item's agent addressed its thread to (`inboxAddressedTo`), which an open ask from before messages kept their own addressee is addressed to. */
+  threadAddressedTo: InboxItem["waitsOn"];
+  /** Whether a member resolved the item without an answer while that close stands (`resolvedByMember`). */
+  resolved: boolean;
   message: InboxMessage;
   thread: readonly InboxMessage[];
   by: ItemAgent;
   now: number;
-  control: TaskInboxControl;
+  images: InboxImageReads;
   waitingOn: InboxItem["startedBy"];
 }): React.JSX.Element {
   const writer = useMessageWriter(message, by);
@@ -835,7 +858,7 @@ function ThreadMessage({
   // Note that an open ask from before messages kept their own addressee is addressed as its thread is.
   const addressedTo =
     message.addressedTo ??
-    (message.ask?.status === INBOX_ASK_STATUS.OPEN ? inboxAddressedTo(item) : undefined);
+    (message.ask?.status === INBOX_ASK_STATUS.OPEN ? threadAddressedTo : undefined);
   const answered = answers === undefined ? undefined : answeredAsk(thread, answers);
   return (
     <InboxComment
@@ -848,7 +871,7 @@ function ThreadMessage({
       trailing={addressedTo === undefined ? undefined : <AddressedTo to={addressedTo} />}
     >
       {answers === undefined ? null : answered !== undefined && knownAsk(answered) ? (
-        <AnsweredCard ask={answered} title={cardTitle(item.title)} answers={answers} />
+        <AnsweredCard ask={answered} title={title} answers={answers} />
       ) : (
         <>
           {/* Where the thread read no longer carries the ask, or this build does not know it, the answer is its stamp and its values listed. */}
@@ -856,10 +879,11 @@ function ThreadMessage({
           <AnswerValues values={answers.values ?? []} texts={NO_TEXT_LABELS} />
         </>
       )}
-      <MessageWords itemId={item.id} message={message} images={control} />
+      <MessageWords itemId={itemId} message={message} images={images} />
       {message.ask === undefined ? null : (
         <AskBox
-          item={item}
+          title={title}
+          resolved={resolved}
           message={message}
           ask={message.ask}
           thread={thread}
@@ -868,7 +892,7 @@ function ThreadMessage({
       )}
     </InboxComment>
   );
-}
+});
 
 /** No groups over the item's own. */
 const NO_LEAD: readonly MenuAction[][] = [];
@@ -1384,11 +1408,27 @@ export function InboxPane({
   const phoneHead = phone !== undefined && onBack !== undefined;
   // An open ask waits on its task's assignee, else whoever started its agent, as the list says, though any member may answer it.
   const waitingOn = readersItem(item, readerId) ? undefined : inboxWaitsOn(item);
-  const by: ItemAgent = {
-    subject: agentSubject(agents, item.agentId, NOTHING_HELD, false),
-    models: agents.models,
-    onOpen: () => doors.onOpenAgent(item.agentId),
-  };
+  // Note that the agent and the pictures are handed to the thread's messages as the same objects while they say the same, so a message is drawn again only where it moved (`ThreadMessage`).
+  const onOpenAgent = useSteadyDoor(() => doors.onOpenAgent(item.agentId));
+  const { agents: listedAgents, archived, models, me, pullRequests } = agents;
+  const by: ItemAgent = useMemo(
+    () => ({
+      subject: agentSubject(
+        { agents: listedAgents, archived, models, me, pullRequests },
+        item.agentId,
+        NOTHING_HELD,
+        false,
+      ),
+      models,
+      onOpen: onOpenAgent,
+    }),
+    [listedAgents, archived, models, me, pullRequests, item.agentId, onOpenAgent],
+  );
+  const { images: pictures, onImage, onRetryImage } = control;
+  const images: InboxImageReads = useMemo(
+    () => ({ images: pictures, onImage, onRetryImage }),
+    [pictures, onImage, onRetryImage],
+  );
   const open = item.status === INBOX_STATUS.OPEN;
   const draft = control.draftOf(item);
   const thread = item.thread ?? NO_MESSAGES;
@@ -1523,12 +1563,7 @@ export function InboxPane({
             className={`inbox-board ${LOG_OVER_COMPOSER_CLASS} ph-no-capture flex flex-col pt-section-gap`}
           >
             {/* The item's words are drawn as documents: its own pictures read through the Inbox, and a link alone on its line as its card. */}
-            <ItemWords
-              itemId={item.id}
-              workspaceId={workspaceId}
-              images={control}
-              code={doors.code}
-            >
+            <ItemWords itemId={item.id} workspaceId={workspaceId} images={images} code={doors.code}>
               <Subject item={item} heading={setHeading} first={phoneHead} />
               <Stack
                 as={LAYOUT_ELEMENT.OL}
@@ -1540,12 +1575,15 @@ export function InboxPane({
                 {thread.map((message, at) => (
                   <Fragment key={message.id}>
                     <ThreadMessage
-                      item={item}
+                      itemId={item.id}
+                      title={cardTitle(item.title)}
+                      threadAddressedTo={inboxAddressedTo(item)}
+                      resolved={resolved !== undefined}
                       message={message}
                       thread={thread}
                       by={by}
                       now={now}
-                      control={control}
+                      images={images}
                       waitingOn={waitingOn}
                     />
                     {/* The first message always stands, so the line saying earlier ones are cut follows it. */}

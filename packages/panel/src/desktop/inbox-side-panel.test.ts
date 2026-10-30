@@ -25,7 +25,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { useAppKeymap } from "../app-commands.js";
 import { installPressIntent } from "../press-intent.js";
 import { useInboxTaskAgents } from "../tasks/use-inbox-task-agents.js";
@@ -43,6 +43,7 @@ import {
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handInboxItems, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { holdFrames, settleFrames } from "../testing/frames.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
@@ -146,12 +147,14 @@ let root: Root | undefined;
 beforeEach(() => {
   window.localStorage.clear();
   readMarks = [];
+  holdFrames();
 });
 
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  vi.restoreAllMocks();
 });
 
 /** Answers each act as the service would for the plan, its agent, and the pull request it opened. */
@@ -273,11 +276,9 @@ async function inbox(
   return { container, left, panel };
 }
 
-/** Lets every promise settled so far run its continuations. */
+/** Lets every promise settled so far run its continuations, and the frames a paint takes pass. */
 async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 16; tick += 1) await Promise.resolve();
-  });
+  await settleFrames();
 }
 
 /** Presses the chip of the item's words that says the name given. */

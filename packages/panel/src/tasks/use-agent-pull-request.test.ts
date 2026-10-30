@@ -12,7 +12,8 @@ import {
 import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
+import { holdFrames, settleFrames } from "../testing/frames.js";
 import {
   type TaskPullRequests,
   useAgentPullRequest,
@@ -55,10 +56,13 @@ function page(id: string): readonly AgentTranscriptMessage[] {
 
 let root: Root | undefined;
 
+beforeEach(() => holdFrames());
+
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  vi.restoreAllMocks();
 });
 
 test("a transcript page landing while the read is out leaves its answer standing", async () => {
@@ -146,9 +150,7 @@ function taskKept(): TaskPullRequests[] {
 }
 
 async function settled(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
+  await settleFrames();
 }
 
 const newest = (held: readonly TaskPullRequests[]) => held.at(-1) ?? assert.fail("drawn");

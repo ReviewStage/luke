@@ -83,6 +83,7 @@ import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-plat
 import { deliveryOf, handSettings, stateWith } from "../testing/app-state.js";
 import { installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { holdFrames, settleFrames } from "../testing/frames.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
@@ -2298,6 +2299,8 @@ test("a part whose read failed says so with a Retry that reads it alone, the oth
 });
 
 test("a pull request renamed on GitHub renames its tab once Refresh is pressed, as it does its header", async () => {
+  // Note that the task's sweep of its agents' pull requests, which names the tab, starts once a frame has painted.
+  holdFrames();
   const renamed = { ...PULL_REQUEST, title: "Expire invitations weekly" };
   const answer = (title: string) => ({
     repository: "acme/relay",
@@ -2315,11 +2318,12 @@ test("a pull request renamed on GitHub renames its tab once Refresh is pressed, 
       reader: inTurn<AgentPullRequestAnswerView>(answer(PULL_REQUEST.title), answer(renamed.title)),
     }),
   );
+  await settleFrames();
   const name = () => tab.querySelector("[data-tab-name]")?.textContent;
   assert.equal(name(), "#42 Expire invitations");
 
   await pressToolbar(tab, "Refresh");
-  await settle();
+  await settleFrames();
   assert.equal(
     tab.querySelector(".pull-request-title")?.textContent,
     "Expire invitations weekly #42",
