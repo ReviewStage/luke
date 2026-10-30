@@ -1248,13 +1248,13 @@ export function pressKey(key: string, target: EventTarget = document.body): void
 /** The pager at the end of the item's bar, as it reads: "2 of 3", or none where it is not drawn. */
 export function pagerOf(page: HTMLElement): string | null {
   return (
-    page.querySelector(".inbox-view-items:not([hidden]) .inbox-pager-count")?.textContent ?? null
+    page.querySelector(".inbox-view-items:not([hidden]) .luke-pager-count")?.textContent ?? null
   );
 }
 
 /** One of the pager's arrows, by its name. */
 export function arrowNamed(page: HTMLElement, name: string): HTMLButtonElement {
-  const arrow = page.querySelector<HTMLButtonElement>(`.inbox-pager button[aria-label="${name}"]`);
+  const arrow = page.querySelector<HTMLButtonElement>(`.luke-pager button[aria-label="${name}"]`);
   assert.ok(arrow, `the pager offers ${name}`);
   return arrow;
 }
