@@ -15,8 +15,8 @@ import { DesktopSidebar } from "./desktop-sidebar.js";
 
 /**
  * sidebar-tasks-head.test.ts -- the Tasks head carries New section and View
- * options, and offers New section on a right-click too, each asking for the
- * section's title. Synthetic throughout.
+ * options, and offers New section on a right-click too, each naming the new
+ * section in place in the sidebar. Synthetic throughout.
  */
 
 const WORKSPACE: Workspace = {
@@ -79,7 +79,7 @@ function mountTasks(): HTMLElement {
   );
 }
 
-test("the Tasks head carries New section and View options, and its button and a right-click both ask for a section's title", () => {
+test("the Tasks head carries New section and View options, and its button and a right-click both name a section in place", () => {
   const tasks = mountTasks();
   const head =
     tasks.querySelector<HTMLElement>(".luke-group-header-head") ?? assert.fail("no head");
@@ -91,14 +91,16 @@ test("the Tasks head carries New section and View options, and its button and a 
     [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(
       (each) => each.textContent,
     );
-  const asked = () => document.querySelector('[role="dialog"] input');
+  const asked = () =>
+    document.querySelector('nav[aria-label="Sections"] input[aria-label="Section name"]');
 
   act(() => {
     head.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
   });
   assert.deepEqual(offered(), ["New section"]);
   act(() => document.querySelector<HTMLElement>('[role="menuitem"]')?.click());
-  assert.ok(asked(), "the right-click's New section asks for a title");
+  assert.ok(asked(), "the right-click's New section names a section in place");
+  assert.equal(document.querySelector('[role="dialog"]'), null, "no dialog is asked");
   act(() => {
     document.activeElement?.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
@@ -110,5 +112,5 @@ test("the Tasks head carries New section and View options, and its button and a 
     head.querySelector<HTMLButtonElement>('button[aria-label="New section"]') ??
     assert.fail("no New section");
   act(() => button.click());
-  assert.ok(asked(), "the button asks for a title at once");
+  assert.ok(asked(), "the button names a section in place at once");
 });

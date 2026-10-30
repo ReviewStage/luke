@@ -540,6 +540,7 @@ test("a section holding tasks offers what acts on all of them between Rename and
   assert.deepEqual(menuLabels(), [
     "Move up",
     "Rename",
+    "Change icon",
     "Status",
     "Move all to section",
     "Remove all from section",
@@ -556,7 +557,7 @@ test("a section holding no task offers only Rename and Delete, after its move", 
 
   openSectionMenu(sidebar, "Someday");
 
-  assert.deepEqual(menuLabels(), ["Move down", "Rename", "Delete section"]);
+  assert.deepEqual(menuLabels(), ["Move down", "Rename", "Change icon", "Delete section"]);
 });
 
 test("a section's Move all to section puts every task in it on top of the section chosen, in its order", async () => {
@@ -689,19 +690,59 @@ test("Move to section names a section without an icon with no glyph beside it", 
   assert.equal(item("Launch").querySelector(".luke-menu-item-glyph")?.textContent, "🚀");
 });
 
-test("a new section starts with no icon and is made without one", async () => {
+/** Presses the Tasks head's New section, which names a section in place. */
+function newSectionInPlace(sidebar: HTMLElement): HTMLInputElement {
+  const button =
+    sidebar.querySelector<HTMLButtonElement>(
+      'nav[aria-label="Tasks"] button[aria-label="New section"]',
+    ) ?? assert.fail("no New section on the Tasks head");
+  act(() => button.click());
+  return sectionNameField();
+}
+
+/** The name field of the section being named in place, failing where none stands. */
+function sectionNameField(): HTMLInputElement {
+  return (
+    document.querySelector<HTMLInputElement>(
+      'nav[aria-label="Sections"] input[aria-label="Section name"]',
+    ) ?? assert.fail("no section is named in place")
+  );
+}
+
+/** Presses `key` in `field`. */
+async function press(field: HTMLElement, key: string, shiftKey = false): Promise<void> {
+  await act(async () => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true }));
+  });
+}
+
+/** Opens the menu of the section titled `title`, then chooses `label` on it. */
+function sectionMenuChoose(sidebar: HTMLElement, title: string, label: string): void {
+  const actions =
+    sidebar.querySelector<HTMLButtonElement>(`[aria-label="${title} actions"]`) ??
+    assert.fail(`no ${title} actions`);
+  act(() => actions.click());
+  act(() => item(label).click());
+}
+
+/** Opens New section from Retry audit's Move to section, then its icon well's picker. */
+async function dialogPicker(sidebar: HTMLElement): Promise<void> {
+  openMoveToSection(sidebar, "Retry audit");
+  act(() => item("New section").click());
+  act(() => dialogButton("Add icon").click());
+  await settleLoaded();
+}
+
+test("Move to section's New section asks in a card that says the task moves into it, and makes the section with no icon unless one is chosen", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
 
   openMoveToSection(sidebar, "Retry audit");
   act(() => item("New section").click());
-  assert.equal(dialogButton("No icon").getAttribute("aria-pressed"), "true");
-  const title = dialogField("Section title");
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(title, "Someday");
-    title.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  const card = document.querySelector('[role="dialog"]') ?? assert.fail("no card");
+  assert.ok(card.textContent?.includes("“Retry audit” moves into it"));
+  assert.ok(dialogButton("Add icon"), "the icon well says no icon is chosen");
+  typeInto(dialogField("Name"), "Someday");
   await act(async () => dialogButton("Create section").click());
 
   const made = writes[0];
@@ -710,67 +751,113 @@ test("a new section starts with no icon and is made without one", async () => {
   assert.equal("icon" in made, false);
 });
 
-test("New section waits on a title, and Enter in it makes the section", async () => {
+test("New section waits on a name, and Enter in it makes the section", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
 
   openMoveToSection(sidebar, "Retry audit");
   act(() => item("New section").click());
-  assert.equal(dialogButton("Create section").disabled, true, "a blank title is not offered");
-  const title = dialogField("Section title");
-  assert.ok(title.closest('[role="dialog"]'), "a form is a dialog, not an alert");
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(title, "S");
-    title.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  assert.equal(dialogButton("Create section").disabled, true, "a blank name is not offered");
+  const name = dialogField("Name");
+  assert.ok(name.closest('[role="dialog"]'), "a form is a dialog, not an alert");
+  typeInto(name, "S");
   assert.equal(dialogButton("Create section").disabled, false);
-  await act(async () => {
-    title.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-  });
+  await press(name, "Enter");
 
   assert.equal(writes[0]?.kind, TASK_SECTION_WRITE.CREATE);
   assert.equal(writes[0]?.kind === TASK_SECTION_WRITE.CREATE && writes[0].title, "S");
 });
 
-test("New section's field is labelled, and Enter on a blank title marks it invalid with the reason on it", async () => {
+test("New section's field is labelled, and Enter on a blank name marks it invalid with the reason on it", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
 
   openMoveToSection(sidebar, "Retry audit");
   act(() => item("New section").click());
-  const title = dialogField("Section title");
-  assert.equal(title.getAttribute("aria-label"), null, "the visible label names the field");
-  assert.notEqual(title.placeholder, "Section title", "the placeholder is not the label again");
-  assert.equal(title.getAttribute("aria-invalid"), null);
+  const name = dialogField("Name");
+  assert.equal(name.getAttribute("aria-label"), null, "the visible label names the field");
+  assert.notEqual(name.placeholder, "Name", "the placeholder is not the label again");
+  assert.equal(name.getAttribute("aria-invalid"), null);
 
-  await act(async () => {
-    title.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-  });
+  await press(name, "Enter");
   const error = document.querySelector('[role="dialog"] [data-slot="field-error"]');
-  assert.equal(title.getAttribute("aria-invalid"), "true");
+  assert.equal(name.getAttribute("aria-invalid"), "true");
   assert.equal(error?.textContent, "Name the section.");
   assert.ok(
-    title
+    name
       .getAttribute("aria-describedby")
       ?.split(" ")
       .includes(error?.id ?? "missing"),
   );
-  assert.deepEqual(writes, [], "no section is made from a blank title");
+  assert.deepEqual(writes, [], "no section is made from a blank name");
 });
 
-test("choosing No icon and saving clears a section's icon", async () => {
+test("New section on the Tasks head names a section in place, with no dialog, and Return makes it", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
-  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Launch actions"]');
-  assert.ok(actions);
 
-  act(() => actions.click());
-  act(() => item("Rename").click());
+  const name = newSectionInPlace(sidebar);
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(document.activeElement, name);
+  typeInto(name, "Someday");
+  await press(name, "Enter");
+
+  assert.equal(writes.length, 1);
+  const made = writes[0];
+  assert.equal(made?.kind, TASK_SECTION_WRITE.CREATE);
+  assert.equal(made.title, "Someday");
+  assert.equal(made.workspaceId, WORKSPACE.id);
+  assert.equal("icon" in made, false);
+  assert.equal(document.querySelector('input[aria-label="Section name"]'), null);
+});
+
+test("Escape on a section named in place makes nothing and hands the focus back to New section", async () => {
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes);
+
+  const name = newSectionInPlace(sidebar);
+  typeInto(name, "Someday");
+  await press(name, "Escape");
+
+  assert.deepEqual(writes, []);
+  assert.equal(document.querySelector('input[aria-label="Section name"]'), null);
+  assert.equal(document.activeElement?.getAttribute("aria-label"), "New section");
+});
+
+test("Rename names a section in place, and Return keeps the new name with the icon it wears", async () => {
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes);
+
+  sectionMenuChoose(sidebar, "Launch", "Rename");
+  const name = sectionNameField();
+  assert.equal(name.value, "Launch");
+  typeInto(name, "Launch week");
+  await press(name, "Enter");
+
+  assert.deepEqual(writes, [
+    {
+      kind: TASK_SECTION_WRITE.EDIT,
+      id: LAUNCH,
+      title: "Launch week",
+      icon: { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: "🚀" },
+    },
+  ]);
+});
+
+test("Remove icon in the picker clears a section's icon", async () => {
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes);
+
+  sectionMenuChoose(sidebar, "Launch", "Rename");
+  act(() => dialogButton("Change icon").click());
   await settleLoaded();
-  assert.equal(dialogButton("🚀").getAttribute("aria-pressed"), "true");
-  act(() => dialogButton("No icon").click());
-  await act(async () => dialogButton("Save").click());
+  assert.equal(
+    document.querySelector('button[aria-label="rocket"]')?.getAttribute("aria-pressed"),
+    "true",
+  );
+  act(() => dialogButton("Remove icon").click());
+  await settleLoaded();
+  await press(sectionNameField(), "Enter");
 
   assert.deepEqual(writes, [
     { kind: TASK_SECTION_WRITE.EDIT, id: LAUNCH, title: "Launch", icon: null },
@@ -1050,13 +1137,18 @@ test("an icon found by searching, in a color chosen, is the new section's", asyn
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
 
-  openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section").click());
-  typeInto(dialogField("Section title"), "Stars");
-  await settleLoaded();
+  await dialogPicker(sidebar);
   act(() => dialogButton("Teal").click());
-  typeInto(dialogField("Search icons"), "telescope");
+  typeInto(dialogField("Search icons and emoji"), "telescope");
+  await settleLoaded();
   act(() => dialogButton("Telescope").click());
+  await settleLoaded();
+  assert.equal(
+    document.querySelector('input[aria-label="Search icons and emoji"]'),
+    null,
+    "a choice puts the picker away",
+  );
+  typeInto(dialogField("Name"), "Stars");
   await act(async () => dialogButton("Create section").click());
 
   const made = writes[0];
@@ -1068,18 +1160,16 @@ test("an icon found by searching, in a color chosen, is the new section's", asyn
   });
 });
 
-test("a color chosen recolors the glyph a section wears", async () => {
+test("Change icon opens a section's head with its picker, where a color chosen recolors the glyph it wears", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes, GLYPHS);
-  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Stars actions"]');
-  assert.ok(actions);
 
-  act(() => actions.click());
-  act(() => item("Rename").click());
+  sectionMenuChoose(sidebar, "Stars", "Change icon");
   await settleLoaded();
   assert.equal(dialogButton("Telescope").getAttribute("aria-pressed"), "true");
   act(() => dialogButton("No color").click());
-  await act(async () => dialogButton("Save").click());
+  assert.ok(dialogButton("Telescope"), "a color leaves the picker standing");
+  await press(sectionNameField(), "Enter");
 
   assert.deepEqual(writes, [
     {
@@ -1091,20 +1181,16 @@ test("a color chosen recolors the glyph a section wears", async () => {
   ]);
 });
 
-test("Enter in the Emoji tab's search chooses the first emoji it found", async () => {
+test("Enter in the search chooses the first thing it found, an emoji where no glyph matches", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
 
-  openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section").click());
-  typeInto(dialogField("Section title"), "Errands");
-  act(() => dialogButton("Emoji").click());
-  await settleLoaded();
-  const search = dialogField("Search emoji");
+  await dialogPicker(sidebar);
+  const search = dialogField("Search icons and emoji");
   typeInto(search, "pickup truck");
-  act(() => {
-    search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-  });
+  await settleLoaded();
+  await press(search, "Enter");
+  typeInto(dialogField("Name"), "Errands");
   await act(async () => dialogButton("Create section").click());
 
   const made = writes[0];
@@ -1112,12 +1198,10 @@ test("Enter in the Emoji tab's search chooses the first emoji it found", async (
   assert.deepEqual(made.icon, { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: "🛻" });
 });
 
-test("Icons and Emoji are tabs over the picker's panel, which the tab shown names, its search following the kind", async () => {
+test("Icons and Emoji are tabs over the picker's panel, which the tab shown names, and Remove icon stands only while there is an icon", async () => {
   const sidebar = await mountSidebar([]);
 
-  openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section").click());
-  await settleLoaded();
+  await dialogPicker(sidebar);
   const kinds =
     document.querySelector<HTMLElement>('[role="tablist"][aria-label="Icon kind"]') ??
     assert.fail("the icon kinds are tabs");
@@ -1134,37 +1218,29 @@ test("Icons and Emoji are tabs over the picker's panel, which the tab shown name
     return panel;
   };
   assert.equal(tab("Icons").getAttribute("aria-selected"), "true");
-  assert.ok(shown("Icons").querySelector('input[aria-label="Search icons"]'));
+  assert.ok(shown("Icons").querySelector('button[aria-label="Folder"]'));
+  assert.equal(
+    [...document.querySelectorAll("button")].some((each) => each.textContent === "Remove icon"),
+    false,
+  );
 
   act(() => tab("Emoji").click());
   await settleLoaded();
 
   assert.equal(tab("Emoji").getAttribute("aria-selected"), "true");
-  const emoji = shown("Emoji");
-  assert.ok(emoji.querySelector('input[aria-label="Search emoji"]'));
-  assert.ok(emoji.querySelector('input[aria-label="Any emoji"]'));
-  assert.equal(
-    emoji.contains(dialogButton("No icon")),
-    false,
-    "No icon stands beside the tabs, whichever is shown",
-  );
+  assert.ok(shown("Emoji").querySelector('button[aria-label="grinning face"]'));
 });
 
-test("Shift-Enter in the icon search chooses the first glyph it found, as Enter does", async () => {
+test("Shift-Enter in the search chooses the first glyph it found, as Enter does", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
 
-  openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section").click());
-  typeInto(dialogField("Section title"), "Stars");
-  await settleLoaded();
-  const search = dialogField("Search icons");
+  await dialogPicker(sidebar);
+  const search = dialogField("Search icons and emoji");
   typeInto(search, "telescope");
-  act(() => {
-    search.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true }),
-    );
-  });
+  await settleLoaded();
+  await press(search, "Enter", true);
+  typeInto(dialogField("Name"), "Stars");
   await act(async () => dialogButton("Create section").click());
 
   assert.deepEqual(writes[0]?.kind === TASK_SECTION_WRITE.CREATE ? writes[0].icon : undefined, {
@@ -1173,14 +1249,13 @@ test("Shift-Enter in the icon search chooses the first glyph it found, as Enter 
   });
 });
 
-test("Clear search empties the icon search, every glyph is offered again, and the caret stays in the search", async () => {
+test("Clear search empties the search, every glyph is offered again, and the caret stays in the search", async () => {
   const sidebar = await mountSidebar([]);
 
-  openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section").click());
-  await settleLoaded();
-  const search = dialogField("Search icons");
+  await dialogPicker(sidebar);
+  const search = dialogField("Search icons and emoji");
   typeInto(search, "telescope");
+  await settleLoaded();
   assert.equal(document.querySelector('button[aria-label="Folder"]'), null);
   act(() => dialogButton("Clear search").click());
 
@@ -1189,17 +1264,14 @@ test("Clear search empties the icon search, every glyph is offered again, and th
   assert.equal(document.activeElement, search);
 });
 
-test("ArrowDown in the icon search hands the focus to the grid's tab stop", async () => {
+test("ArrowDown in the search hands the focus to the grid's tab stop", async () => {
   const sidebar = await mountSidebar([]);
 
-  openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section").click());
-  await settleLoaded();
-  const search = dialogField("Search icons");
+  await dialogPicker(sidebar);
+  const search = dialogField("Search icons and emoji");
   typeInto(search, "telescope");
-  act(() => {
-    search.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-  });
+  await settleLoaded();
+  await press(search, "ArrowDown");
 
   assert.equal(document.activeElement?.getAttribute("aria-label"), "Telescope");
 });
@@ -1207,9 +1279,7 @@ test("ArrowDown in the icon search hands the focus to the grid's tab stop", asyn
 test("the arrows move the grid's one tab stop with the focus", async () => {
   const sidebar = await mountSidebar([]);
 
-  openMoveToSection(sidebar, "Retry audit");
-  act(() => item("New section").click());
-  await settleLoaded();
+  await dialogPicker(sidebar);
   const folder = dialogButton("Folder");
   act(() => folder.focus());
   act(() => {
@@ -1221,29 +1291,36 @@ test("the arrows move the grid's one tab stop with the focus", async () => {
   assert.equal(folder.getAttribute("tabindex"), "-1");
 });
 
-test("editing a section in an emoji the grid leaves out names it in the emoji field", async () => {
-  const newest: TaskSections = {
-    sections: [
-      {
-        id: LAUNCH,
-        workspaceId: WORKSPACE.id,
-        title: "Launch",
-        icon: { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: "🫩" },
-        createdAt: 1,
-      },
-    ],
-    entries: SECTIONS.entries,
-    agentEntries: [],
-  };
-  const sidebar = await mountSidebar([], newest);
-  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Launch actions"]');
-  assert.ok(actions);
+test("an emoji typed into the search is offered first, one the grid leaves out included", async () => {
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes);
 
-  act(() => actions.click());
-  act(() => item("Rename").click());
+  await dialogPicker(sidebar);
+  const search = dialogField("Search icons and emoji");
+  typeInto(search, "🫩");
+  await settleLoaded();
+  await press(search, "Enter");
+  typeInto(dialogField("Name"), "Tired");
+  await act(async () => dialogButton("Create section").click());
+
+  const made = writes[0];
+  assert.equal(made?.kind, TASK_SECTION_WRITE.CREATE);
+  assert.deepEqual(made.icon, { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: "🫩" });
+});
+
+test("an icon chosen is offered first under Recent the next time the picker opens", async () => {
+  const sidebar = await mountSidebar([]);
+
+  await dialogPicker(sidebar);
+  typeInto(dialogField("Search icons and emoji"), "telescope");
+  await settleLoaded();
+  act(() => dialogButton("Telescope").click());
+  await settleLoaded();
+  act(() => dialogButton("Change icon").click());
   await settleLoaded();
 
-  assert.equal(dialogField("Any emoji").value, "🫩");
+  const recent = document.querySelector('section[aria-label="Recent"]') ?? assert.fail("no Recent");
+  assert.equal(recent.querySelector("button")?.getAttribute("aria-label"), "Telescope");
 });
 
 /** Answers the window's media queries as a phone does, its pointer a finger. */

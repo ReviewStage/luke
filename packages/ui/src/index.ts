@@ -98,6 +98,7 @@ export * from "./components/pane-bar/pane-bar.js";
 export * from "./components/pane-pin/pane-pin.js";
 export * from "./components/picture-set/picture-set.js";
 export * from "./components/picture-tile/picture-tile.js";
+export * from "./components/popover-icon-button/popover-icon-button.js";
 export * from "./components/popover-panel/popover-panel.js";
 export * from "./components/portal-fence/portal-fence.js";
 export * from "./components/progress/progress.js";
