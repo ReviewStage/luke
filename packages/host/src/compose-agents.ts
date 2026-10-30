@@ -68,10 +68,8 @@ import {
   type GitHubTokenAnswerView,
   githubTokenSaveParamsSchema,
   type HostDoneAnswerView,
-  type HostInstallTokenAnswerView,
   type HostsAnswerView,
   hostIdParamsSchema,
-  hostInstallTokenParamsSchema,
   INBOX_SCOPE_KIND,
   type MemoriesAnswerView,
   memoriesReadParamsSchema,
@@ -195,8 +193,6 @@ export type AgentClient = Pick<
   | "hosts"
   | "devicePresence"
   | "removeHost"
-  | "keepHostInstallToken"
-  | "revokeHostInstallToken"
   | "readHostPairing"
   | "approveHostPairing"
   | "denyHostPairing"
@@ -528,27 +524,6 @@ function composed(
       Effect.gen(function* () {
         const { id } = yield* readParams(hostIdParamsSchema, params, "a remove names a host");
         return carried<HostDoneAnswerView>(yield* asked(client.removeHost(id)));
-      }),
-    [GATEWAY_METHOD.HOSTS_KEEP_INSTALL_TOKEN]: (params) =>
-      Effect.gen(function* () {
-        // Note that only the token's hash crosses here: the window that minted the token keeps it.
-        const { tokenHash } = yield* readParams(
-          hostInstallTokenParamsSchema,
-          params,
-          "keeping an install token names its hash",
-        );
-        return carried<HostInstallTokenAnswerView>(
-          yield* asked(client.keepHostInstallToken(tokenHash)),
-        );
-      }),
-    [GATEWAY_METHOD.HOSTS_REVOKE_INSTALL_TOKEN]: (params) =>
-      Effect.gen(function* () {
-        const { id } = yield* readParams(
-          hostIdParamsSchema,
-          params,
-          "a revoke names an install token",
-        );
-        return carried<HostDoneAnswerView>(yield* asked(client.revokeHostInstallToken(id)));
       }),
     [GATEWAY_METHOD.HOSTS_PAIRING_READ]: (params) =>
       Effect.gen(function* () {

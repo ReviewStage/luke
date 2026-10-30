@@ -12,32 +12,25 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  *
  * A host is a device of kind host (`DEVICE_KIND`): a Linux box or a Mac the
  * install command set up, which runs its member's local agents as the
- * desktop runs them on This Mac. The member mints an install token in
- * Settings, good for any number of boxes until it expires or is revoked;
- * each box trades it once, with the id it minted for itself, for a device
- * secret of its own (`hostEnrollRequestSchema`, `hostEnrollAnswerSchema`),
- * which the service keeps only as a hash. From then on the box calls the
- * device-agents procedures (`device-agent-wire.ts`) with that secret as its
- * bearer, and every call of a host, its enroll included, carries its
- * daemon's version (`HOST_WIRE.VERSION_HEADER`); one below the service's
- * floor is refused as needing an upgrade (`hostUpgradeNeededDataSchema`).
- * A host has no developer's git login, so it asks the same way for a GitHub
- * token for each agent it runs (`hostGithubTokenRequestSchema`).
- *
- * A box may pair with a code instead of an install token. It starts a
+ * desktop runs them on This Mac. A box pairs with a code: it starts a
  * pairing with no credential (`hostPairingStartRequestSchema`) and is
  * answered a poll secret, a code to show, and the link that opens it on the
  * service's own origin (`hostConnectPath`); it polls on that secret
  * (`hostPairingPollAnswerSchema`) while a signed-in member opens the link
  * and approves or denies the code (`hostPairingCodeRequestSchema`). The
- * first poll after an approve is answered the box's device id and secret,
- * this once, and the box calls on that secret from then on as an enrolled
- * one does.
+ * first poll after an approve is answered the box's device id and a device
+ * secret of its own, this once, which the service keeps only as a hash. A
+ * member's own Mac enrolls on its desktop's sign-in instead
+ * (`ownDeviceEnrollRequestSchema`, `hostEnrollAnswerSchema`). From then on
+ * the host calls the device-agents procedures (`device-agent-wire.ts`) with
+ * that secret as its bearer, and every call of a host carries its daemon's
+ * version (`HOST_WIRE.VERSION_HEADER`); one below the service's floor is
+ * refused as needing an upgrade (`hostUpgradeNeededDataSchema`). A host has
+ * no developer's git login, so it asks the same way for a GitHub token for
+ * each agent it runs (`hostGithubTokenRequestSchema`).
  */
 
 export const HOST_WIRE = {
-  /** What every install token begins with, so a box, a log scrubber, and a reader can tell one from any other secret. */
-  INSTALL_TOKEN_PREFIX: "lkh_",
   /** What every device secret begins with, which is how the service tells a host's bearer from a desktop's sign-in. */
   DEVICE_SECRET_PREFIX: "lkd_",
   /** The header every call of a host carries its daemon's version in, as `MAJOR.MINOR.PATCH`. */
@@ -150,32 +143,14 @@ function secretOf(prefix: string) {
   );
 }
 
-/**
- * An enroll: the id the box minted for itself once and keeps, its name (its
- * hostname), and its platform and architecture. The install token is its
- * credential, so it rides as the call's bearer (`Authorization: Bearer
- * lkh_…`) as a device secret does on every later call, and its daemon's
- * version in `HOST_WIRE.VERSION_HEADER`.
- */
+/** What a joining machine names itself as: its name (its hostname), and its platform and architecture. */
 const enrollingMachineFields = {
   name: EffectSchema.String.check(EffectSchema.isMinLength(1), EffectSchema.isMaxLength(200)),
   platform: EffectSchema.Literals(Object.values(DEVICE_PLATFORM)),
   arch: EffectSchema.Literals(Object.values(DEVICE_ARCH)),
 };
 
-export const hostEnrollRequestSchema = EffectSchema.Struct({
-  deviceId: wireUuidSchema,
-  ...enrollingMachineFields,
-});
-
-export type HostEnrollRequest = typeof hostEnrollRequestSchema.Type;
-
-/**
- * What an enroll answers: the device's id, and its secret, answered this
- * once and kept by the service only as a hash. The id of a host the member
- * removed may be enrolled again, which brings it back with a new secret; a
- * standing host's id is refused, so a token alone never takes over a box.
- */
+/** What an own device's enroll answers: the device's id, and its secret, answered this once and kept by the service only as a hash. */
 export const hostEnrollAnswerSchema = EffectSchema.Struct({
   deviceId: wireUuidSchema,
   deviceSecret: secretOf(HOST_WIRE.DEVICE_SECRET_PREFIX),
@@ -190,10 +165,10 @@ export type HostEnrollAnswer = typeof hostEnrollAnswerSchema.Type;
  * three or none, since a device the account already has needs none. The
  * desktop's own sign-in is its credential, as its bearer and never a
  * browser's session, and the version of the host program it enrolls for
- * rides in `HOST_WIRE.VERSION_HEADER`, as on a token's enroll. It answers
- * as a token's enroll does (`hostEnrollAnswerSchema`), a device the account
- * has converted in place under the same id so its agents keep it; a device
- * already enrolled is keyed again, its old secret refused from then on.
+ * rides in `HOST_WIRE.VERSION_HEADER`. It answers the device's id and its
+ * new secret (`hostEnrollAnswerSchema`), a device the account has converted
+ * in place under the same id so its agents keep it; a device already
+ * enrolled is keyed again, its old secret refused from then on.
  */
 export const ownDeviceEnrollRequestSchema = EffectSchema.Struct({
   deviceId: wireUuidSchema,
@@ -374,31 +349,10 @@ export const devicePresenceAnswerSchema = EffectSchema.Struct({
 
 export type DevicePresenceAnswer = typeof devicePresenceAnswerSchema.Type;
 
-/** A SHA-256 in lowercase hex. */
-const sha256Hex = EffectSchema.String.check(
-  EffectSchema.makeFilter((value: string) => /^[0-9a-f]{64}$/u.test(value) || "a SHA-256 in hex"),
-);
-
-/**
- * An install token to keep (POST), by its SHA-256 alone: the member's own
- * Luke mints the token where the member is (`@luke/host`'s hosts composer)
- * and shows it there once, so the token itself never reaches the service.
- */
-export const hostInstallTokenRequestSchema = EffectSchema.Struct({ tokenHash: sha256Hex });
-
-/** What keeping an install token answers: its id, which revokes it, when it expires in epoch milliseconds, and the install script's address, which the command names. */
-export const hostInstallTokenAnswerSchema = EffectSchema.Struct({
-  id: wireUuidSchema,
-  expiresAt: countedNumber,
-  installScriptUrl: EffectSchema.String,
-});
-
-export type HostInstallTokenAnswer = typeof hostInstallTokenAnswerSchema.Type;
-
-/** An install token revoked, or a host removed, by its id. */
+/** A host removed, by its id. */
 export const hostIdRequestSchema = EffectSchema.Struct({ id: wireUuidSchema });
 
-/** What a revoke or a remove answers. */
+/** What a remove or a deny answers. */
 export const hostDoneAnswerSchema = EffectSchema.Struct({ done: EffectSchema.Literal(true) });
 
 /** The command that installs the host program on a box and pairs it, which prints the link and the code a member approves: public, with no secret in it. */

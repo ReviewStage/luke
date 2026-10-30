@@ -294,8 +294,6 @@ function fakeService() {
     hosts: () => Effect.succeed({ failure: "unanswered" }),
     devicePresence: () => Effect.succeed({ failure: "unanswered" }),
     removeHost: () => Effect.succeed({ failure: "unanswered" }),
-    keepHostInstallToken: () => Effect.succeed({ failure: "unanswered" }),
-    revokeHostInstallToken: () => Effect.succeed({ failure: "unanswered" }),
     readHostPairing: () => Effect.succeed({ failure: "unanswered" }),
     approveHostPairing: () => Effect.succeed({ failure: "unanswered" }),
     denyHostPairing: () => Effect.succeed({ failure: "unanswered" }),

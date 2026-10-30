@@ -36,7 +36,6 @@ import {
   admittedHostVersion,
   hostCallerOf,
   presentedHostVersion,
-  presentedInstallToken,
   presentedPollSecret,
 } from "../auth/device-secret.js";
 import { sessionCredential } from "../auth/session-credential.js";
@@ -200,28 +199,6 @@ export function deviceMiddleware(resolveUserId: UserIdResolver) {
   });
 }
 
-/** An enroll's caller: the install token its bearer carries, and its daemon's version, at or past the floor. */
-export interface EnrollingHost {
-  readonly installToken: string;
-  readonly hostVersion: string;
-}
-
-/**
- * The caller as a box enrolling: an install token as its bearer, or refused
- * as unauthenticated, as every other procedure refuses a caller that names
- * no credential; then its daemon's version, refused as needing an upgrade
- * below the floor. Whether the token stands is the enroll's to read.
- */
-export const installTokenMiddleware = middlewareGen<HostedContext, EnrollingHost>(function* ({
-  context,
-  next,
-}) {
-  const installToken = presentedInstallToken(context.request);
-  if (installToken === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  const hostVersion = yield* admittedHostVersion(presentedHostVersion(context.request));
-  return yield* next({ context: { installToken, hostVersion } });
-});
-
 /** A pairing box's caller: no credential, and its daemon's version, at or past the floor. */
 export interface PairingHost {
   readonly hostVersion: string;
@@ -230,7 +207,7 @@ export interface PairingHost {
 /**
  * The caller as a box starting a pairing: no credential is read, and its
  * daemon's version is refused as needing an upgrade below the floor, as
- * an enroll's is (`installTokenMiddleware`).
+ * every call of a host's is.
  */
 export const pairingHostMiddleware = middlewareGen<HostedContext, PairingHost>(function* ({
   context,

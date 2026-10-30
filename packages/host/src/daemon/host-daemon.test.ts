@@ -22,7 +22,6 @@ import { readHostDevice } from "../host-device-record.js";
 import { fakeClis } from "../testing/fake-clis.js";
 import { scriptedSpawner } from "../testing/scripted-spawner.js";
 import { hostDaemon } from "./host-daemon.js";
-import { enrollHostDevice } from "./host-device.js";
 import { DARWIN_HOST, type HostOs, hostRuntime, LINUX_HOST } from "./host-os.js";
 import { connectHostDevice, HOST_CONNECT_OUTCOME, type HostPairingCode } from "./host-pairing.js";
 import { hostPlatform } from "./host-platform.js";
@@ -32,7 +31,6 @@ const VERSION = "0.1.0";
 const DEVICE_ID = "6bbcb1b9-6706-4c97-9197-374756ceee07";
 const AGENT_ID = "0b6f9a4e-1c1d-4d2e-9f3a-5b7c8d9e0f12";
 const LINE_ID = "d1c2b3a4-0000-4000-8000-000000000001";
-const INSTALL_TOKEN = `lkh_${"b".repeat(40)}`;
 const DEVICE_SECRET = `lkd_${"a".repeat(43)}`;
 const POLL_SECRET = `lkp_${"c".repeat(43)}`;
 /** What a pairing's start answers beside its poll secret: the service's own numbers, ten minutes and five seconds. */
@@ -57,7 +55,6 @@ const RUNNER_BUNDLES: ReadonlySet<string> = new Set(Object.values(RUNNER_BUNDLE)
 const HTTP = {
   OK: 200,
   UNAUTHORIZED: 401,
-  CONFLICT: 409,
   UPGRADE_REQUIRED: 426,
   SERVER_ERROR: 500,
 } as const;
@@ -117,50 +114,6 @@ const world = (home: string, reports: string[]) => {
 };
 
 describe("a host's daemon", () => {
-  it.effect(
-    "enrolls on its install token as its OS, under an id it keeps, readable by its user alone, and keeps that enrollment where the box is still enrolled",
-    () =>
-      Effect.gen(function* () {
-        const { stateRoot } = yield* box;
-        const fileSystem = yield* FileSystem.FileSystem;
-        let enrolled = false;
-        const http = recordingHttpClient(() => {
-          if (enrolled) return jsonResponse({ error: "host-still-enrolled" }, HTTP.CONFLICT);
-          enrolled = true;
-          return jsonResponse({ deviceId: DEVICE_ID, deviceSecret: DEVICE_SECRET });
-        });
-        const enroll = enrollHostDevice({
-          stateRoot,
-          serviceOrigin: SERVICE,
-          installToken: INSTALL_TOKEN,
-          name: "fra-01",
-          platform: DARWIN_HOST.platform,
-          arch: DEVICE_ARCH.ARM64,
-          version: VERSION,
-        }).pipe(Effect.provide(http.layer));
-
-        expect((yield* enroll).outcome).toBe("enrolled");
-        expect((yield* enroll).outcome).toBe("still-enrolled");
-
-        const [first, second] = http.requests;
-        expect(first?.pathname).toBe(HOSTED_SERVICE_PATH.DEVICE_AGENT_ENROLL);
-        expect(first?.authorization).toBe(`Bearer ${INSTALL_TOKEN}`);
-        expect(first?.headers.get(HOST_WIRE.VERSION_HEADER)).toBe(VERSION);
-        const firstBody = JSON.parse(first?.body ?? "{}");
-        expect(firstBody).toMatchObject({ name: "fra-01", platform: "darwin", arch: "arm64" });
-        expect(JSON.parse(second?.body ?? "{}").deviceId).toBe(firstBody.deviceId);
-        expect(Option.getOrUndefined(yield* readHostDevice(stateRoot))).toEqual({
-          deviceId: firstBody.deviceId,
-          deviceSecret: DEVICE_SECRET,
-          serviceOrigin: SERVICE,
-        });
-        expect(
-          ((yield* fileSystem.stat(`${stateRoot}/device.json`)).mode & 0o777).toString(8),
-        ).toBe("600");
-        expect(((yield* fileSystem.stat(stateRoot)).mode & 0o777).toString(8)).toBe("700");
-      }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
-  );
-
   it.effect.each([
     {
       os: { ...LINUX_HOST, deviceName: () => "fra-01" },
@@ -408,6 +361,7 @@ describe("a host's connect with a code", () => {
         expect(
           ((yield* fileSystem.stat(`${stateRoot}/device.json`)).mode & 0o777).toString(8),
         ).toBe("600");
+        expect(((yield* fileSystem.stat(stateRoot)).mode & 0o777).toString(8)).toBe("700");
 
         const again = yield* connectOn(stateRoot, http, shown);
         expect(again).toEqual({

@@ -61,7 +61,6 @@ import {
   type AgentWorkspaceListParams,
   type DevicePresenceAnswerView,
   type HostDoneAnswerView,
-  type HostInstallTokenAnswerView,
   type HostsAnswerView,
   TRANSCRIPT_KIND,
 } from "@luke/features/agent-view";
@@ -86,8 +85,6 @@ export interface AgentProceduresDependencies {
     hostsList(): Effect.Effect<HostsAnswerView>;
     hostsPresence(): Effect.Effect<DevicePresenceAnswerView>;
     hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
-    hostsKeepInstallToken(tokenHash: string): Effect.Effect<HostInstallTokenAnswerView>;
-    hostsRevokeInstallToken(id: string): Effect.Effect<HostDoneAnswerView>;
     hostsPairingRead(code: string): Effect.Effect<HostPairingView>;
     hostsPairingApprove(code: string): Effect.Effect<HostPairingApproveView>;
     hostsPairingDeny(code: string): Effect.Effect<HostPairingDenyView>;
@@ -278,18 +275,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.hostsRemove(input.id);
-    }),
-    [AGENT_ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN]: actPort[
-      AGENT_ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.hostsKeepInstallToken(input.tokenHash);
-    }),
-    [AGENT_ACT_KIND.HOSTS_REVOKE_INSTALL_TOKEN]: actPort[
-      AGENT_ACT_KIND.HOSTS_REVOKE_INSTALL_TOKEN
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.hostsRevokeInstallToken(input.id);
     }),
     [AGENT_ACT_KIND.HOSTS_PAIRING_READ]: actPort[AGENT_ACT_KIND.HOSTS_PAIRING_READ].effect(
       function* ({ input, context, errors }) {

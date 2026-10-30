@@ -1,5 +1,5 @@
 /**
- * main.ts -- the host daemon's process: `luke-host run` follows the machine's local agents for as long as its service runs, `luke-host connect` pairs the machine with a code a member approves in Luke, `luke-host enroll` trades an install token for the machine's device secret, and `luke-host version` prints the daemon's version.
+ * main.ts -- the host daemon's process: `luke-host run` follows the machine's local agents for as long as its service runs, `luke-host connect` pairs the machine with a code a member approves in Luke, and `luke-host version` prints the daemon's version.
  *
  * Bundled into one file (`pnpm --filter @luke/host-daemon build`) that the
  * host's release carries at `lib/luke-host.mjs`, beside the runner's bundle
@@ -13,7 +13,7 @@
  * item runs `run` (`apps/desktop/native/macos/HostLoginItem.swift`).
  *
  * `run` is the command the box's system service runs. A box
- * that never enrolled says so and reads its record again every
+ * that never connected says so and reads its record again every
  * `UNENROLLED_REST`, rather than exiting for systemd to start it over; one
  * that did runs the daemon (`@luke/host/daemon`) until the service is
  * stopped, which stops every runner it started with it, or until Luke
@@ -22,20 +22,14 @@
  * straight on the box (`hostPlatform`), as a child of this process, on its
  * Node, and as its user.
  *
- * `enroll` is run once as the box is set up: it reads the install token on stdin,
- * where `--token` gives none, prints the one line the script shows, and
- * exits by how the enroll ended (`ENROLL_EXIT`), never printing the token or
- * the secret.
- *
- * `connect` is the enroll's successor, run as the box is set up or by hand:
- * it prints the link and the code a member approves in Luke, waits for
- * them to, and exits by how the connect ended (`CONNECT_EXIT`), never
- * printing the poll secret or the device secret. A box already connected
+ * `connect` is run as the box is set up or by hand: it prints the link and
+ * the code a member approves in Luke, waits for them to, and exits by how
+ * the connect ended (`CONNECT_EXIT`), never printing the poll secret or the
+ * device secret. A box already connected
  * says so and pairs nothing. Ctrl-C ends the wait with a line saying the
  * box was not connected.
  */
 
-import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -45,11 +39,10 @@ import {
   NodePath,
   NodeRuntime,
 } from "@effect/platform-node";
-import { HOST_ENROLL_OUTCOME } from "@luke/features";
+import { HOST_WIRE, hostInstallCommand } from "@luke/features/host-wire";
 import { buildCarriesDeveloperIdSigning } from "@luke/host/app-identity";
 import {
   connectHostDevice,
-  enrollHostDevice,
   HOST_CONNECT_OUTCOME,
   type HostPairingCode,
   type HostRuntime,
@@ -67,20 +60,16 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 /** The daemon's version, which the release's build writes in; a development run is below every floor. */
 const VERSION = process.env.LUKE_HOST_VERSION ?? "0.0.0";
 
-/** The service a box enrolls with where its install script names none. */
+/** The service a box connects to where its install script names none. */
 const DEFAULT_SERVICE_ORIGIN = "https://tryluke.dev";
 
-/** How long a box that never enrolled rests before it reads its record again. */
-const UNENROLLED_REST = Duration.minutes(1);
+/** The public command that installs the host program and connects the box to that service. */
+const DEFAULT_INSTALL_COMMAND = hostInstallCommand(
+  new URL(HOST_WIRE.INSTALL_SCRIPT_PATH, DEFAULT_SERVICE_ORIGIN).href,
+);
 
-/** The exit codes of `enroll`, which the install script reads. */
-const ENROLL_EXIT = {
-  ENROLLED: 0,
-  UNANSWERED: 1,
-  REFUSED: 2,
-  UPGRADE_NEEDED: 3,
-  USAGE: 64,
-} as const;
+/** How long a box that never connected rests before it reads its record again. */
+const UNENROLLED_REST = Duration.minutes(1);
 
 /** The exit codes of `connect`, which the install script reads: a box already connected exits as connected. */
 const CONNECT_EXIT = {
@@ -95,7 +84,7 @@ const CONNECT_EXIT = {
   USAGE: 64,
 } as const;
 
-const COMMAND = { RUN: "run", CONNECT: "connect", ENROLL: "enroll", VERSION: "version" } as const;
+const COMMAND = { RUN: "run", CONNECT: "connect", VERSION: "version" } as const;
 
 /** The release's own folder: this bundle stands in its `lib/`. */
 const installFolder = path.resolve(path.dirname(process.argv[1] ?? "."), "..");
@@ -149,15 +138,15 @@ const follow = (runtime: HostRuntime) =>
     const device = yield* readHostDevice(stateRoot);
     if (Option.isNone(device)) {
       reportToStderr(
-        "Luke host: this box is not enrolled. Run the install command from Settings › Hosts, with its --token.",
+        `Luke host: this box is not connected. Run luke-host connect, or the install command from Settings › Hosts › Add hosts (${DEFAULT_INSTALL_COMMAND}), and approve the code it shows in Luke.`,
       );
       yield* Effect.sleep(UNENROLLED_REST);
       return false;
     }
-    // Note that a box Luke refused before is not asked again on the dead secret: it rests removed until it is enrolled again.
+    // Note that a box Luke refused before is not asked again on the dead secret: it rests removed until it is connected again.
     if (device.value.refused === true) {
       reportToStderr(
-        "Luke host: Luke refused this box's secret before, so it was removed. Enroll it again to follow its agents.",
+        "Luke host: Luke refused this box's secret before, so it was removed. Connect it again to follow its agents.",
       );
       return true;
     }
@@ -177,7 +166,7 @@ const follow = (runtime: HostRuntime) =>
     );
     yield* hostDaemon({ stateRoot, device: device.value, version: VERSION, platform });
     reportToStderr(
-      "Luke host: every agent it ran is stopped. It exits until this box is enrolled again.",
+      "Luke host: every agent it ran is stopped. It exits until this box is connected again.",
     );
     return true;
   }).pipe(Effect.repeat({ until: (removed) => removed }));
@@ -185,42 +174,12 @@ const follow = (runtime: HostRuntime) =>
 /** `luke-host run`: the daemon, until Luke refuses the box's secret. */
 const run = (runtime: HostRuntime) => Effect.as(follow(runtime), 0);
 
-/** `luke-host enroll`: the install token traded for the box's secret, and the one line the install script shows. */
-const enroll = (runtime: HostRuntime, token: string, name: string, origin: string) =>
-  Effect.gen(function* () {
-    const outcome = yield* enrollHostDevice({
-      stateRoot: runtime.stateRoot,
-      serviceOrigin: origin.replace(/\/+$/u, ""),
-      installToken: token,
-      name,
-      platform: runtime.os.platform,
-      arch: yield* arch(runtime),
-      version: VERSION,
-    });
-    switch (outcome.outcome) {
-      case HOST_ENROLL_OUTCOME.ENROLLED:
-        process.stdout.write(
-          `Enrolled as ${name} (secret kept readable by ${os.userInfo().username} only)\n`,
-        );
-        return ENROLL_EXIT.ENROLLED;
-      case HOST_ENROLL_OUTCOME.STILL_ENROLLED:
-        process.stdout.write(`Kept this box's enrollment as ${name}\n`);
-        return ENROLL_EXIT.ENROLLED;
-      case HOST_ENROLL_OUTCOME.REFUSED:
-        process.stderr.write(
-          "Luke refused the install token: it is unknown, revoked, or past its 24 hours. Copy a fresh command from Settings › Hosts › Add hosts.\n",
-        );
-        return ENROLL_EXIT.REFUSED;
-      case HOST_ENROLL_OUTCOME.UPGRADE_NEEDED:
-        process.stderr.write(
-          `Luke needs a newer host than ${VERSION}${outcome.minimumVersion === undefined ? "" : ` (${outcome.minimumVersion} or later)`}. Run the install command again to fetch it.\n`,
-        );
-        return ENROLL_EXIT.UPGRADE_NEEDED;
-      case HOST_ENROLL_OUTCOME.UNANSWERED:
-        process.stderr.write(`Could not reach Luke at ${origin}.\n`);
-        return ENROLL_EXIT.UNANSWERED;
-    }
-  });
+/** The command that connects this box to the service given: its origin named where it is not the one `connect` takes by default. */
+function connectCommand(origin: string): string {
+  return origin === DEFAULT_SERVICE_ORIGIN
+    ? "luke-host connect"
+    : `luke-host connect --origin ${origin}`;
+}
 
 /** How the code is shown: its link to open and the code to check against the one Luke shows, then that the box waits. */
 const showCode = ({ url, userCode, expiresInMs }: HostPairingCode) =>
@@ -264,17 +223,17 @@ const connect = (runtime: HostRuntime, name: string, origin: string) =>
         return CONNECT_EXIT.CONNECTED;
       case HOST_CONNECT_OUTCOME.DENIED:
         process.stderr.write(
-          "The code was denied in Luke, so this box was not connected. Run luke-host connect again for a new code.\n",
+          `The code was denied in Luke, so this box was not connected. Run ${connectCommand(origin)} again for a new code.\n`,
         );
         return CONNECT_EXIT.DENIED;
       case HOST_CONNECT_OUTCOME.EXPIRED:
         process.stderr.write(
-          "The code expired before it was approved, so this box was not connected. Run luke-host connect again for a new code.\n",
+          `The code expired before it was approved, so this box was not connected. Run ${connectCommand(origin)} again for a new code.\n`,
         );
         return CONNECT_EXIT.EXPIRED;
       case HOST_CONNECT_OUTCOME.BRAKED:
         process.stderr.write(
-          "Luke is taking no more connections from this address for now. Wait a few minutes, then run luke-host connect again.\n",
+          `Luke is taking no more connections from this address for now. Wait a few minutes, then run ${connectCommand(origin)} again.\n`,
         );
         return CONNECT_EXIT.BRAKED;
       case HOST_CONNECT_OUTCOME.UPGRADE_NEEDED:
@@ -323,34 +282,11 @@ function main(argv: readonly string[]): Effect.Effect<number, unknown, HostServi
     }
     return connect(runtime, name, (values.origin ?? DEFAULT_SERVICE_ORIGIN).replace(/\/+$/u, ""));
   }
-  if (command === COMMAND.ENROLL) {
-    const { values } = parseArgs({
-      args: [...rest],
-      options: {
-        token: { type: "string" },
-        name: { type: "string" },
-        origin: { type: "string" },
-      },
-    });
-    // Note that the install script hands the token on stdin, where no other user of the box can read it.
-    const token = values.token ?? readFileSync(0, "utf8").trim();
-    if (token.length === 0) {
-      return Effect.sync(() =>
-        process.stderr.write("luke-host enroll needs an install token, as --token or on stdin\n"),
-      ).pipe(Effect.as(ENROLL_EXIT.USAGE));
-    }
-    return enroll(
-      runtime,
-      token,
-      values.name ?? runtime.os.deviceName(),
-      values.origin ?? DEFAULT_SERVICE_ORIGIN,
-    );
-  }
   return Effect.sync(() =>
     process.stderr.write(
-      "usage: luke-host run | connect [--origin <url>] [--name <name>] | enroll [--token <token>] | version | uninstall\n",
+      "usage: luke-host run | connect [--origin <url>] [--name <name>] | version | uninstall\n",
     ),
-  ).pipe(Effect.as(ENROLL_EXIT.USAGE));
+  ).pipe(Effect.as(CONNECT_EXIT.USAGE));
 }
 
 NodeRuntime.runMain(

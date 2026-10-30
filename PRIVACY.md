@@ -532,8 +532,8 @@ The host deletes an archived or deleted agent's folder once the archive reaches
 it or our service no longer lists the agent; one where the host's check finds
 work that no remote has, or cannot tell, is kept for seven days, then deleted.
 
-**Connecting a host with a code.** A host can also join your account with a
-code rather than an install token. The box asks our service for a code with no
+**Connecting a host with a code.** A host joins your account with a code.
+The box asks our service for a code with no
 credential, and our service keeps, beside the code, the name, operating
 system, and processor the box gives, its version of Luke's host program, and
 the IP address it asked from, for the code's ten minutes. Anyone signed in to

@@ -48,7 +48,6 @@ import {
   type GitHubTokenSaveParams,
   githubImageTypeSchema,
   type HostDoneAnswerView,
-  type HostInstallTokenAnswerView,
   type HostsAnswerView,
   type MemoriesAnswerView,
   type MemoriesReadParams,
@@ -530,23 +529,6 @@ export class HostedAgentClient {
   /** One of the account's hosts removed, its secret refused at once. */
   removeHost(id: string): Effect.Effect<HostDoneAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.hosts.remove, { id }), ROW_REFUSALS);
-  }
-
-  /** An install token kept by its SHA-256 alone; the token itself stays with the window that minted it. */
-  keepHostInstallToken(
-    tokenHash: string,
-  ): Effect.Effect<HostInstallTokenAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.hosts.keepInstallToken, { tokenHash }),
-      ROW_REFUSALS,
-    );
-  }
-
-  /** One of the account's install tokens revoked, so it enrolls no box again. */
-  revokeHostInstallToken(
-    id: string,
-  ): Effect.Effect<HostDoneAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.hosts.revokeInstallToken, { id }), ROW_REFUSALS);
   }
 
   /** A box's pending pairing by the code its link named, as the approve screen shows it: the box and the address its start came from. */

@@ -65,7 +65,6 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.CHANNEL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: HOSTED_HTTP_STATUS.UPGRADE_REQUIRED,
-  [HOSTED_API_ERROR.HOST_STILL_ENROLLED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.DEVICE_REMOVED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.RUNS_ON_LOCKED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -174,8 +173,6 @@ export const HOSTED_REFUSAL = {
   LOCAL_AGENT_REFUSED: { error: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED },
   /** A host's daemon is below the service's floor (`hostUpgradeNeeded`, which names the floor); nothing was read or written. */
   HOST_UPGRADE_NEEDED: { error: HOSTED_API_ERROR.HOST_UPGRADE_NEEDED },
-  /** An enroll named a host of the token's member that is still enrolled; nothing was written. */
-  HOST_STILL_ENROLLED: { error: HOSTED_API_ERROR.HOST_STILL_ENROLLED },
   /** The agent ran on a host its starter removed; nothing was sent. */
   DEVICE_REMOVED: { error: HOSTED_API_ERROR.DEVICE_REMOVED },
   /** Where a task runs is set when it is created (`taskRunsOnRequestSchema`); a change that names another is refused, nothing written. */

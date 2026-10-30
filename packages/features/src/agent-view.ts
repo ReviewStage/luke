@@ -42,8 +42,6 @@ import {
   devicePresenceAnswerSchema,
   hostDoneAnswerSchema,
   hostIdRequestSchema,
-  hostInstallTokenAnswerSchema,
-  hostInstallTokenRequestSchema,
   hostsAnswerSchema,
 } from "./host-wire.js";
 import {
@@ -192,23 +190,12 @@ export const devicePresenceAnswerViewSchema = EffectSchema.Union([
 
 export type DevicePresenceAnswerView = typeof devicePresenceAnswerViewSchema.Type;
 
-/** An install token kept by its hash, as the window hears it: its id, expiry, and the install script's address, or why it was not kept. */
-export const hostInstallTokenAnswerViewSchema = EffectSchema.Union([
-  hostInstallTokenAnswerSchema,
-  failed,
-]);
-
-export type HostInstallTokenAnswerView = typeof hostInstallTokenAnswerViewSchema.Type;
-
-/** A host removed or an install token revoked, as the window hears it: done, or why not. */
+/** A host removed, as the window hears it: done, or why not. */
 export const hostDoneAnswerViewSchema = EffectSchema.Union([hostDoneAnswerSchema, failed]);
 
 export type HostDoneAnswerView = typeof hostDoneAnswerViewSchema.Type;
 
-/** What keeping an install token names: the token's SHA-256 alone, since the window that minted it keeps the token. */
-export const hostInstallTokenParamsSchema = hostInstallTokenRequestSchema;
-
-/** What removing a host or revoking an install token names: its id. */
+/** What removing a host names: its id. */
 export const hostIdParamsSchema = hostIdRequestSchema;
 
 /** The account's own provider keys, as the window hears them read, saved, or removed: the keys as they stand, or why there are none. */

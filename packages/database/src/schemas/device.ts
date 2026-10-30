@@ -32,16 +32,16 @@ import { user } from "./auth.js";
  * same Mac (`./device-agent.ts`). The row belongs to the account and leaves
  * with it.
  *
- * Every device joins by trading for a device secret of its own, a Linux
- * box an install token (`./host-install-token.ts`) and a Mac its desktop's
- * signed-in session, which the row keeps only as its SHA-256 in
- * `secret_hash` and which every later call of the device carries as its
- * bearer. Until the host first registers, it has no
+ * Every device joins with a device secret of its own, a box the one its
+ * approved pairing hands it (`./host-pairing.ts`) and a Mac the one its
+ * desktop's signed-in session trades for, which the row keeps only as its
+ * SHA-256 in `secret_hash` and which every later call of the device carries
+ * as its bearer. Until the host first registers, it has no
  * `home` or `claude_executable`, and no agent is offered or launched on it.
  * Removing a host stamps `removed_at` and clears its secret, so the box is
- * refused at once while its agents keep the name they ran under; enrolling
- * that id again under the same account brings it back with a new secret,
- * and a standing host's id is never enrolled again.
+ * refused at once while its agents keep the name they ran under; the
+ * account's signed-in session enrolling that id again brings it back with a
+ * new secret.
  */
 export const device = pgTable(
   "device",

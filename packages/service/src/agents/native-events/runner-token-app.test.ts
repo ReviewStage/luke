@@ -5,11 +5,7 @@ import { Database } from "@luke/database/core/query";
 import { createAgent, recordAgentRunnerToken } from "@luke/database/models/agent-store";
 import { queueDeviceAgentLine } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
-import {
-  enrollHost,
-  enrollOwnDevice,
-  mintHostInstallToken,
-} from "@luke/database/models/host-store";
+import { enrollOwnDevice } from "@luke/database/models/host-store";
 import { type KeyRing, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
@@ -464,19 +460,15 @@ const openMember = Effect.gen(function* () {
 /** A host enrolled under the member, and registered running its agents in VMs, as a host does once it starts: its device id and its secret. */
 const enrolledHost = (userId: string) =>
   Effect.gen(function* () {
-    const install = mintHostSecret(HOST_WIRE.INSTALL_TOKEN_PREFIX);
-    yield* mintHostInstallToken(userId, install.hash);
     const secret = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
     const deviceId = randomUUID();
-    const enrolled = yield* enrollHost(install.hash, {
+    const enrolled = yield* enrollOwnDevice(userId, {
       id: deviceId,
-      name: "rack-1",
-      platform: DEVICE_PLATFORM.LINUX,
-      arch: DEVICE_ARCH.X64,
       version: HOST_VERSION.FLOOR,
       secretHash: secret.hash,
+      machine: { name: "rack-1", platform: DEVICE_PLATFORM.LINUX, arch: DEVICE_ARCH.X64 },
     });
-    assert.ok("userId" in enrolled, "the host was not enrolled");
+    assert.ok(enrolled, "the host was not enrolled");
     yield* registerDevice(userId, {
       id: deviceId,
       name: "rack-1",

@@ -1,24 +1,20 @@
 /**
- * hosts-procedures.ts -- the account's enrolled machines as Settings › Hosts reads and changes them: listed, removed, the install tokens that add Linux servers kept and revoked, and a box's pairing read, approved, or denied by its code.
+ * hosts-procedures.ts -- the account's enrolled machines as Settings › Hosts reads and changes them: listed, removed, and a box's pairing read, approved, or denied by its code.
  *
  * A machine is any device of the account's that holds a device secret, a
- * Linux box that traded an install token and a Mac its desktop enrolled
- * alike (`@luke/database/models/host-store`), so each is listed, judged
- * against the floor, and removed the same way; a desktop that never
- * enrolled is not listed.
+ * box its approved pairing keyed and a Mac its desktop enrolled alike
+ * (`@luke/database/models/host-store`), so each is listed, judged against
+ * the floor, and removed the same way; a desktop that never enrolled is not
+ * listed.
  *
  * Every procedure is the account's own, on its bearer or its browser's
  * session (`accountMiddleware`), so the Hosts list works in a browser and on
- * a phone as in the desktop. An install token
- * reaches here as its SHA-256 alone: the member's own Luke mints the token
- * and shows it where the member is, so the service never holds it. A host
- * removed is refused at once on its secret (`auth/device-secret.ts`), and its
- * agents' running turns are settled lost with it; a token
- * revoked enrolls no box again and touches none it already enrolled. Each
- * host is listed with whether its daemon is below the floor, where its
- * setup stands, whether its program has called in since it joined, and,
- * for a Mac, the user it runs as, and every
- * answer names the install script on the service's own origin, which the
+ * a phone as in the desktop. A host removed is refused at once on its
+ * secret (`auth/device-secret.ts`), and its agents' running turns are
+ * settled lost with it. Each host is listed with whether its daemon is
+ * below the floor, where its setup stands, whether its program has called
+ * in since it joined, and, for a Mac, the user it runs as, and every answer
+ * names the install script on the service's own origin, which the
  * install and upgrade commands name (`@luke/features/host-wire`).
  *
  * A box's pairing is read, approved, or denied by its user code, whatever
@@ -44,13 +40,7 @@ import {
   type HostPairingGuessed,
   readHostPairing,
 } from "@luke/database/models/host-pairing-store";
-import {
-  hostAgentConversations,
-  hostsOf,
-  mintHostInstallToken,
-  removeHost,
-  revokeHostInstallToken,
-} from "@luke/database/models/host-store";
+import { hostAgentConversations, hostsOf, removeHost } from "@luke/database/models/host-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
 import { HOST_WIRE, hostUserCodeOf, hostVersionMeets } from "@luke/features/host-wire";
@@ -187,21 +177,6 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
       const removed = yield* hostedStoreOrUnavailable(removeHost(context.userId, input.id));
       if (removed) yield* endedHostAgents(context.userId, input.id);
       return yield* keptOrNotFound(removed);
-    }),
-    keepInstallToken: hosts.keepInstallToken.effect(function* ({ context, input }) {
-      const minted = yield* hostedStoreOrUnavailable(
-        mintHostInstallToken(context.userId, input.tokenHash),
-      );
-      return {
-        id: minted.id,
-        expiresAt: minted.expiresAt.getTime(),
-        installScriptUrl: installScriptUrlOf(context.request),
-      };
-    }),
-    revokeInstallToken: hosts.revokeInstallToken.effect(function* ({ context, input }) {
-      return yield* keptOrNotFound(
-        yield* hostedStoreOrUnavailable(revokeHostInstallToken(context.userId, input.id)),
-      );
     }),
     readPairing: hosts.readPairing.effect(function* ({ context, input }) {
       const code = yield* codeOf(input.code);

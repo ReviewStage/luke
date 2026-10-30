@@ -1,7 +1,7 @@
 /**
- * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: a desktop's own sign-in is refused as needing an upgrade, a Mac enrolls on that sign-in, created where Luke never saw it and never under another account, and a host enrolls on its member's install token and calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed; a box pairs with a code a member approves, its secret handed over once, or is denied, or lapses, polled no faster than the interval, while an account that guesses too many codes is held.
+ * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: a desktop's own sign-in is refused as needing an upgrade, a Mac enrolls on that sign-in, created where Luke never saw it and never under another account, and a host calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed; a box pairs with a code a member approves, its secret handed over once, or is denied, or lapses, polled no faster than the interval, while an account that guesses too many codes is held.
  *
- * Synthetic accounts, bearers, tokens, Macs, hosts, and keys throughout.
+ * Synthetic accounts, bearers, codes, Macs, hosts, and keys throughout.
  */
 
 import assert from "node:assert/strict";
@@ -9,7 +9,6 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { createAgent, latestTurnsOfReached } from "@luke/database/models/agent-store";
-import { mintHostInstallToken, revokeHostInstallToken } from "@luke/database/models/host-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
@@ -27,7 +26,7 @@ import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { Clock, type Context, Effect, Layer, Option, Redacted } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { HOST_VERSION, hostSecretHash, mintHostSecret } from "../auth/device-secret.js";
+import { HOST_VERSION } from "../auth/device-secret.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -44,7 +43,6 @@ const PATH = {
   LINES: "/api/device-agents/lines",
   LINE_CLAIM: "/api/device-agents/lines/claim",
   LIVE_AGENTS: "/api/device-agents/live-agents",
-  ENROLL: "/api/device-agents/enroll",
   ENROLL_OWN: "/api/device-agents/devices/enroll",
   HOSTS: "/api/hosts",
   HOST_REMOVE: "/api/hosts/remove",
@@ -174,52 +172,6 @@ function macRegister(
   });
 }
 
-/** An install token of the account's, kept by its hash as Settings keeps one, and its id. */
-const installToken = (userId: string) =>
-  Effect.gen(function* () {
-    const minted = mintHostSecret(HOST_WIRE.INSTALL_TOKEN_PREFIX);
-    const kept = yield* mintHostInstallToken(userId, hostSecretHash(minted.secret));
-    return { token: minted.secret, id: kept.id };
-  });
-
-/** A box's enroll on the token given, under a fresh id unless one is given, at the floor's version unless another is given. */
-function enroll(
-  token: string,
-  init: { readonly deviceId?: string; readonly version?: string } = {},
-) {
-  return request(token, PATH.ENROLL, {
-    version: init.version ?? HOST_VERSION.FLOOR,
-    body: {
-      deviceId: init.deviceId ?? randomUUID(),
-      name: "fra-01",
-      platform: DEVICE_PLATFORM.LINUX,
-      arch: DEVICE_ARCH.X64,
-    },
-  });
-}
-
-/** A host enrolled under the account on a fresh token, registered on its own secret: its id, its secret, and its token. */
-const enrolledHost = (userId: string) =>
-  Effect.gen(function* () {
-    const token = yield* installToken(userId);
-    const deviceId = randomUUID();
-    const answer = yield* answerOf(enroll(token.token, { deviceId }));
-    assert.equal(answer.status, HOSTED_HTTP_STATUS.OK);
-    const secret: string = answer.body.deviceSecret;
-    const register = yield* statusOf(
-      request(secret, PATH.DEVICES, {
-        version: HOST_VERSION.FLOOR,
-        body: {
-          ...registered(deviceId),
-          platform: DEVICE_PLATFORM.LINUX,
-          home: "/var/lib/luke-host",
-        },
-      }),
-    );
-    assert.equal(register, HOSTED_HTTP_STATUS.OK);
-    return { deviceId, secret, token };
-  });
-
 /** An agent of the account's pinned to the device given, or to none, whose turn is running; its conversation's id. */
 const agentRunningOn = (userId: string, deviceId: string | null) =>
   Effect.gen(function* () {
@@ -285,6 +237,29 @@ const startedPairing = Effect.gen(function* () {
   return { pollSecret, userCode };
 });
 
+/** A host paired under the account with a code it approved, registered on its own secret: its id and its secret. */
+const pairedHost = (userId: string) =>
+  Effect.gen(function* () {
+    const { pollSecret, userCode } = yield* startedPairing;
+    const approved = yield* byCode(userId, PATH.PAIRING_APPROVE, userCode);
+    assert.equal(approved.status, HOSTED_HTTP_STATUS.OK);
+    const handed = yield* pollPairing(pollSecret);
+    const deviceId: string = handed.body.deviceId;
+    const secret: string = handed.body.deviceSecret;
+    const register = yield* statusOf(
+      request(secret, PATH.DEVICES, {
+        version: HOST_VERSION.FLOOR,
+        body: {
+          ...registered(deviceId),
+          platform: DEVICE_PLATFORM.LINUX,
+          home: "/var/lib/luke-host",
+        },
+      }),
+    );
+    assert.equal(register, HOSTED_HTTP_STATUS.OK);
+    return { deviceId, secret };
+  });
+
 /** A code no pending pairing has: seven Bs and the letter given. */
 function unusedCode(last: string) {
   return `BBBB-BBB${last}`;
@@ -338,8 +313,8 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
     Effect.gen(function* () {
       const owner = yield* account();
       const other = yield* account();
-      const host = yield* enrolledHost(owner);
-      const otherHost = yield* enrolledHost(other);
+      const host = yield* pairedHost(owner);
+      const otherHost = yield* pairedHost(other);
       const task = yield* startTask(owner, { name: "Invitations" });
       const started = yield* createAgent(owner, {
         taskId: task.id,
@@ -367,13 +342,13 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
   );
 
   it.effect(
-    "a host calls on its own secret for itself alone, and one member's install token enrolls nothing under another",
+    "a host calls on its own secret for itself alone, and is listed under its own member alone",
     () =>
       Effect.gen(function* () {
         const owner = yield* account();
         const other = yield* account();
-        const host = yield* enrolledHost(owner);
-        const otherHost = yield* enrolledHost(other);
+        const host = yield* pairedHost(owner);
+        const otherHost = yield* pairedHost(other);
 
         const ownBeat = yield* answerOf(hostBeat(host.secret, host.deviceId));
         const otherDeviceBeat = yield* statusOf(hostBeat(host.secret, otherHost.deviceId));
@@ -383,9 +358,6 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
             version: HOST_VERSION.FLOOR,
           }),
         );
-        // Note that the other member's token naming the owner's host's id takes nothing over.
-        const otherToken = yield* installToken(other);
-        const takenOver = yield* statusOf(enroll(otherToken.token, { deviceId: host.deviceId }));
         const ownerList = yield* answerOf(request(owner, PATH.HOSTS));
         const otherList = yield* answerOf(request(other, PATH.HOSTS));
 
@@ -398,7 +370,6 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
           [otherDeviceBeat, followedByOther],
           [HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_HTTP_STATUS.NOT_FOUND],
         );
-        assert.equal(takenOver, HOSTED_HTTP_STATUS.UNAUTHORIZED);
         assert.deepEqual(
           ownerList.body.hosts.map((each: { readonly id: string }) => each.id),
           [host.deviceId],
@@ -411,48 +382,32 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
       }),
   );
 
-  it.effect(
-    "a standing host's id enrolls again only once removed, and a removed host's secret is refused at once",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* account();
-        const host = yield* enrolledHost(owner);
-        const other = yield* account();
+  it.effect("a removed host's secret is refused at once, and no other account removes it", () =>
+    Effect.gen(function* () {
+      const owner = yield* account();
+      const host = yield* pairedHost(owner);
+      const other = yield* account();
 
-        const rerun = yield* answerOf(enroll(host.token.token, { deviceId: host.deviceId }));
-        const beatAfterRerun = yield* statusOf(hostBeat(host.secret, host.deviceId));
-        const removedByOther = yield* statusOf(
-          request(other, PATH.HOST_REMOVE, { body: { id: host.deviceId } }),
-        );
-        const removed = yield* statusOf(
-          request(owner, PATH.HOST_REMOVE, { body: { id: host.deviceId } }),
-        );
-        const beat = yield* statusOf(hostBeat(host.secret, host.deviceId));
-        const listed = yield* answerOf(request(owner, PATH.HOSTS));
-        const back = yield* statusOf(enroll(host.token.token, { deviceId: host.deviceId }));
+      const removedByOther = yield* statusOf(
+        request(other, PATH.HOST_REMOVE, { body: { id: host.deviceId } }),
+      );
+      const removed = yield* statusOf(
+        request(owner, PATH.HOST_REMOVE, { body: { id: host.deviceId } }),
+      );
+      const beat = yield* statusOf(hostBeat(host.secret, host.deviceId));
+      const listed = yield* answerOf(request(owner, PATH.HOSTS));
 
-        assert.deepEqual(rerun, {
-          status: HOSTED_HTTP_STATUS.CONFLICT,
-          body: { error: "host-still-enrolled" },
-        });
-        assert.equal(beatAfterRerun, HOSTED_HTTP_STATUS.OK, "the standing host keeps its secret");
-        assert.equal(removedByOther, HOSTED_HTTP_STATUS.NOT_FOUND);
-        assert.equal(removed, HOSTED_HTTP_STATUS.OK);
-        assert.equal(beat, HOSTED_HTTP_STATUS.UNAUTHORIZED);
-        assert.deepEqual(listed.body.hosts, []);
-        assert.equal(back, HOSTED_HTTP_STATUS.OK, "a removed host enrolls again");
-        assert.deepEqual(
-          countedProperties(owner, SERVER_EVENT.HOST_INSTALL),
-          [{ kind: "luke_host" }, { kind: "luke_host" }],
-          "the first enroll and the one after the removal count, the refused rerun does not",
-        );
-      }),
+      assert.equal(removedByOther, HOSTED_HTTP_STATUS.NOT_FOUND);
+      assert.equal(removed, HOSTED_HTTP_STATUS.OK);
+      assert.equal(beat, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+      assert.deepEqual(listed.body.hosts, []);
+    }),
   );
 
   it.effect("removing a host settles its agents' running turns as failed, and no one else's", () =>
     Effect.gen(function* () {
       const owner = yield* account();
-      const host = yield* enrolledHost(owner);
+      const host = yield* pairedHost(owner);
       const onHost = yield* agentRunningOn(owner, host.deviceId);
       const elsewhere = yield* agentRunningOn(owner, null);
 
@@ -476,45 +431,16 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
   );
 
   it.effect(
-    "a revoked or expired install token refuses new boxes, and the hosts it enrolled keep calling",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* account();
-        const revoked = yield* enrolledHost(owner);
-        const expiring = yield* enrolledHost(owner);
-
-        yield* revokeHostInstallToken(owner, revoked.token.id);
-        const afterRevoke = yield* statusOf(enroll(revoked.token.token));
-        yield* TestClock.adjust("25 hours");
-        const afterExpiry = yield* statusOf(enroll(expiring.token.token));
-
-        assert.deepEqual(
-          [afterRevoke, afterExpiry],
-          [HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_HTTP_STATUS.UNAUTHORIZED],
-        );
-        assert.deepEqual(
-          [
-            yield* statusOf(hostBeat(revoked.secret, revoked.deviceId)),
-            yield* statusOf(hostBeat(expiring.secret, expiring.deviceId)),
-          ],
-          [HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK],
-        );
-      }),
-  );
-
-  it.effect(
     "a daemon below the version floor, or naming none, is refused as needing an upgrade, and its Hosts row says so",
     () =>
       Effect.gen(function* () {
         const owner = yield* account();
-        const host = yield* enrolledHost(owner);
-        const token = yield* installToken(owner);
+        const host = yield* pairedHost(owner);
 
         const oldBeat = yield* answerOf(hostBeat(host.secret, host.deviceId, OLD_VERSION));
         const unnamed = yield* statusOf(
           request(host.secret, PATH.PRESENCE, { body: { deviceId: host.deviceId } }),
         );
-        const oldEnroll = yield* statusOf(enroll(token.token, { version: OLD_VERSION }));
         const listed = yield* answerOf(request(owner, PATH.HOSTS));
 
         assert.equal(oldBeat.status, HOSTED_HTTP_STATUS.UPGRADE_REQUIRED);
@@ -523,7 +449,6 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
           minimumVersion: HOST_VERSION.FLOOR,
         });
         assert.equal(unnamed, HOSTED_HTTP_STATUS.UPGRADE_REQUIRED);
-        assert.equal(oldEnroll, HOSTED_HTTP_STATUS.UPGRADE_REQUIRED);
         assert.deepEqual(
           listed.body.hosts.map(
             (each: { readonly version: string; readonly upgradeNeeded: boolean }) => [

@@ -17,16 +17,15 @@ import {
 import { CREDENTIAL_HEADER } from "./session-credential.js";
 
 /**
- * device-secret.ts -- a host's own credentials: minting an install token, a device secret, a pairing's poll secret, or its user code, and reading the host a request's bearer names.
+ * device-secret.ts -- a host's own credentials: minting a device secret, a pairing's poll secret, or its user code, and reading the host a request's bearer names.
  *
  * A host calls the service on a device secret (`@luke/features/host-wire`),
  * as `Authorization: Bearer lkd_…`, never the desktop's sign-in, and with
- * its daemon's version in `HOST_WIRE.VERSION_HEADER` on every call. Both
- * the install token a box enrolls with and the secret it is answered are
- * minted here, answered once, and kept by the store only as their SHA-256
- * (`@luke/database/models/host-store`), so a secret is looked up by its
- * hash and a database read never yields one. A pairing box's poll secret
- * is minted, answered, and kept the same way; its user code is the one
+ * its daemon's version in `HOST_WIRE.VERSION_HEADER` on every call. That
+ * secret is minted here, answered once, and kept by the store only as its
+ * SHA-256 (`@luke/database/models/host-store`), so a secret is looked up by
+ * its hash and a database read never yields one. A pairing box's poll
+ * secret is minted, answered, and kept the same way; its user code is the one
  * thing a member types or follows a link to, eight letters drawn evenly
  * from `HOST_USER_CODE.ALPHABET`, about 34 bits.
  *
@@ -46,7 +45,7 @@ export const HOST_VERSION = {
   FLOOR: "0.1.0",
 } as const;
 
-/** The bytes of randomness behind an install token and a device secret. */
+/** The bytes of randomness behind a device secret and a poll secret. */
 const SECRET_BYTES = 32;
 
 /** What every bearer begins with. */
@@ -69,7 +68,7 @@ export function hostSecretHash(secret: string): string {
   return createHash("sha256").update(secret).digest("hex");
 }
 
-/** A fresh secret of the prefix given (`HOST_WIRE.INSTALL_TOKEN_PREFIX`, `HOST_WIRE.DEVICE_SECRET_PREFIX`), and its hash. */
+/** A fresh secret of the prefix given (`HOST_WIRE.DEVICE_SECRET_PREFIX`, `HOST_WIRE.POLL_SECRET_PREFIX`), and its hash. */
 export function mintHostSecret(prefix: string): MintedSecret {
   const secret = `${prefix}${randomBytes(SECRET_BYTES).toString("base64url")}`;
   return { secret, hash: hostSecretHash(secret) };
@@ -92,11 +91,6 @@ function presentedBearer(request: Request, prefix: string): string | undefined {
 /** The device secret a request's bearer carries, or nothing where it carries another bearer or none. */
 function presentedDeviceSecret(request: Request): string | undefined {
   return presentedBearer(request, HOST_WIRE.DEVICE_SECRET_PREFIX);
-}
-
-/** The install token an enroll's bearer carries, or nothing where it carries another bearer or none. */
-export function presentedInstallToken(request: Request): string | undefined {
-  return presentedBearer(request, HOST_WIRE.INSTALL_TOKEN_PREFIX);
 }
 
 /** The poll secret a pairing box's poll carries as its bearer, or nothing where it carries another bearer or none. */

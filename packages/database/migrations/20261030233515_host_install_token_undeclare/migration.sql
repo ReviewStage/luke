@@ -1,0 +1,5 @@
+-- Expand step of dropping the install tokens hosts once enrolled with, "host_install_token": the modules no longer
+-- declare it, and nothing this deployment runs reads or writes it, since a box now pairs with a code. Note that the
+-- table itself stays one deployment longer, because a build migrates while the deployment before it still serves and
+-- still writes it; a later release's migration drops it
+-- (apps/web/server/README.md, "Dropping a column ... takes two deployments").

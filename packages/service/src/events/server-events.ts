@@ -154,7 +154,7 @@ export const SERVER_SIGN_IN_METHOD = {
   UNKNOWN: "unknown",
 } as const;
 
-/** What kind of machine first connected: a Linux box on an install token, or the Mac's own desktop. */
+/** What kind of machine first connected: a box on its approved pairing, or the Mac's own desktop. */
 export const SERVER_HOST_KIND = {
   LUKE_HOST: "luke_host",
   THIS_MAC: "this_mac",
