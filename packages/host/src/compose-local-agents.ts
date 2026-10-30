@@ -11,6 +11,7 @@ import {
   checkoutIdentityEnv,
 } from "@luke/features/checkout-identity";
 import {
+  DEVICE_AGENT_FOLDER,
   DEVICE_AGENT_LINE_KIND,
   DEVICE_CAPABILITY,
   DEVICE_ISOLATION,
@@ -135,7 +136,13 @@ import type { RunMode } from "./run-mode.js";
  * launch or files line keeps the agent as one whose folder and VM this
  * machine made (`keepOwnedAgent`), and a discard that removes the folder
  * forgets it, so an uninstall removes this machine's agents and no other
- * Luke install's beside it.
+ * Luke install's beside it. Every time the gate opens, every agent the
+ * host's own state names, in how each ran or a launch it kept, is kept so
+ * too, and, on a device whose agents' folders and smolvm store are its own
+ * alone (`LocalAgentPlatformSeam.storesOwned`, a Linux host's), every agent
+ * with a folder or a machine there (`adopted`), so one it last ran before
+ * it kept that record is cleaned up as the rest are; never one from a
+ * Mac's folders or store, which are shared.
  *
  * A VM (`LocalAgentPlatformSeam.sandbox`) lives for one turn. It is made
  * fresh and started before the runner starts in it; the runner is
@@ -525,6 +532,42 @@ export function composeLocalAgents(
           ...current,
           launches: current.launches.filter((launch) => launch.id !== id),
         }));
+      });
+
+    /**
+     * Every agent this install's own state names kept as one whose folder
+     * and VM it made (`keepOwnedAgent`), under the home folder given, so an
+     * agent it last ran before it kept that record is deleted, saved and
+     * let go of as the rest are: each its `modes` names, which This Mac and
+     * a Mac's own `luke-host` each keep in their own state, and each of a
+     * launch it kept; and, on a device whose agents' folders and smolvm
+     * store are its own alone (`storesOwned`), each with a folder or a
+     * machine there. Note that a Mac's are shared with another Luke
+     * install, so nothing there is taken as this one's. Keeping one kept
+     * already changes nothing.
+     */
+    const adopted = (folder: string) =>
+      Effect.gen(function* () {
+        const { modes, launches } = yield* Ref.get(state);
+        const named = [
+          ...Object.keys(modes ?? {}),
+          ...launches.flatMap((launch) => launch.agentId ?? []),
+        ];
+        const stored = platform.storesOwned ? yield* storedAgents(folder) : [];
+        for (const agentId of new Set([...named, ...stored])) {
+          if (AGENT_UUID.test(agentId)) yield* keepOwnedAgent(kernel.stateRoot, agentId);
+        }
+      });
+
+    /** The agents with a folder under the home folder given or a machine in smolvm's store, by id; none of either that could not be listed. */
+    const storedAgents = (folder: string) =>
+      Effect.gen(function* () {
+        const folders = yield* Effect.orElseSucceed(
+          fileSystem.readDirectory(path.join(folder, DEVICE_AGENT_FOLDER.ROOT)),
+          (): readonly string[] => [],
+        );
+        const machines = yield* platform.sandbox.machines;
+        return [...folders, ...Option.getOrElse(machines, (): ReadonlySet<string> => new Set())];
       });
 
     // -- a turn's end ------------------------------------------------------------
@@ -2047,7 +2090,8 @@ export function composeLocalAgents(
 
     /**
      * One turn of the loop: with the gate shut, a rest; with it open, the
-     * machine's lease taken, the device registered, every launch it kept
+     * machine's lease taken, the device registered, every agent its own
+     * state names kept as its own (`adopted`), every launch it kept
      * from a runner that ended with the app or the gate settled as gone, its
      * VM deleted first, every VM this machine's agents left standing
      * deleted, and
@@ -2097,6 +2141,8 @@ export function composeLocalAgents(
         const shellVariables = yield* shellEnvironment;
         if (!(yield* asked(registered({})))) return yield* Effect.sleep(IDLE);
         if (savesState) yield* saves.straysLetGo(userId);
+        // Note that the agents this install ran are kept as its own before its kept launches are settled and forgotten, and before any of its VMs is deleted or its first pass runs.
+        yield* adopted(folder);
         const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
         for (const launch of left) {
           // Note that a runner that ended with the app saved nothing of its turn, so its folder holds state no save committed.

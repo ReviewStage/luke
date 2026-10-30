@@ -1,5 +1,5 @@
 /**
- * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, keeping nothing past an agent's warm window: a saved folder let go of once its window ends and an unsaved one kept; a VM a run left deleted; an agent two answered reads in a row leave out removed whole where its state is saved, and kept where it is not, for a week; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a Mac's folder with unsaved work kept once and never checked again, and a pass that died never the last; and a listed agent's folder no save holds saved, then let go of after its window, one whose save fails kept without holding back the next, and one that ran directly on the Mac left as it is.
+ * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, keeping nothing past an agent's warm window: a saved folder let go of once its window ends and an unsaved one kept; a VM a run left deleted; an agent two answered reads in a row leave out removed whole where its state is saved, and kept where it is not, for a week; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a Mac's folder with unsaved work kept once and never checked again, and a pass that died never the last; and a listed agent's folder no save holds saved, then let go of after its window, one whose save fails kept without holding back the next, and one that ran directly on the Mac left as it is; and the agents an install ran before it kept its record of them taken as its own as the gate opens, a Mac's by its own state alone and never by the store it shares, a Linux host's by its folders and machines.
  *
  * The follower runs the real smolvm sandbox over a fake `smolvm` that keeps
  * its machines in a set, on a real temporary folder, against a fake service
@@ -12,7 +12,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
@@ -110,7 +110,11 @@ interface Held {
 /**
  * The follower on a host, or a Mac where `unsavedWork` names what its check
  * prints, with what `held` lays out, every agent of it recorded as this
- * machine's but those `unowned` names, another install's, and each saved,
+ * machine's but those `unowned` names, another install's, and those
+ * `madeBeforeRecord` names, which this machine made before it kept that
+ * record, in a folder and smolvm store shared with another install, as a
+ * Mac's are, or its own alone where `storesOwned` says, as a Linux host's
+ * are; and each saved,
  * its last turn ended at `endedAt` says or within its window, but those
  * `unsaved` names, and those `fromBefore` and `ranDirectly` name, which
  * have no record of a save, and kept since when `kept` says; its live-agents read answering `reads` one after another,
@@ -128,6 +132,8 @@ interface Held {
 const following = (input: {
   readonly held: Held;
   readonly unowned?: readonly string[];
+  readonly madeBeforeRecord?: readonly string[];
+  readonly storesOwned?: boolean;
   readonly unsaved?: readonly string[];
   readonly endedAt?: Readonly<Record<string, number>>;
   readonly kept?: Readonly<Record<string, number>>;
@@ -165,7 +171,9 @@ const following = (input: {
       ...(input.held.folderOnly ?? []),
     ].filter((agentId) => !(input.unowned ?? []).includes(agentId));
     mkdirSync(`${stateRoot}/owned-agents`, { recursive: true });
-    for (const agentId of owned) writeFileSync(`${stateRoot}/owned-agents/${agentId}`, "");
+    for (const agentId of owned.filter((each) => !(input.madeBeforeRecord ?? []).includes(each))) {
+      writeFileSync(`${stateRoot}/owned-agents/${agentId}`, "");
+    }
     const unrecorded = [...(input.fromBefore ?? []), ...(input.ranDirectly ?? [])];
     const inVms = owned.filter((agentId) => !(input.ranDirectly ?? []).includes(agentId));
     const saves = Object.fromEntries(
@@ -332,6 +340,7 @@ const following = (input: {
         runnerBundle: `${RUNNER_FOLDER}/agent-runner.mjs`,
         runnerEnv: {},
         formerlyDirect: input.ranDirectly !== undefined,
+        storesOwned: input.storesOwned === true,
         deviceName: "rack-1",
         devicePlatform: DEVICE_PLATFORM.LINUX,
         deviceArch: DEVICE_ARCH.X64,
@@ -385,6 +394,7 @@ const following = (input: {
       spawner.spawned.filter((each) => each.args.includes(`luke-${agentId}`)).length;
     const keptRecorded = () =>
       Object.keys(JSON.parse(readFileSync(`${stateRoot}/local-agents.json`, "utf8")).kept ?? {});
+    const ownedRecorded = () => readdirSync(`${stateRoot}/owned-agents`).sort();
     const saveOf = (agentId: string) =>
       JSON.parse(readFileSync(`${stateRoot}/local-agents.json`, "utf8")).saves?.[agentId];
     const packsOf = (agentId: string) =>
@@ -402,6 +412,7 @@ const following = (input: {
       checksRun,
       machineCommands,
       keptRecorded,
+      ownedRecorded,
       saveOf,
       packsOf,
     };
@@ -711,6 +722,51 @@ it.effect(
         assert.equal(device.saveOf(AGENT.RAN_DIRECTLY), undefined);
         assert.equal(device.packsOf(AGENT.RAN_DIRECTLY), 0);
         assert.equal(device.holdsOf(AGENT.RAN_DIRECTLY).folder, true);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a Mac takes as its own, as its gate opens, an agent its state says it ran but never recorded, deleting its VM, and never one only the store it shares holds",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const device = yield* following({
+          held: { whole: [AGENT.FROM_BEFORE, AGENT.OTHER_INSTALL] },
+          madeBeforeRecord: [AGENT.FROM_BEFORE],
+          unowned: [AGENT.OTHER_INSTALL],
+          // Note that the device is a Mac, whose state records how each of its agents ran, none of them directly.
+          ranDirectly: [],
+          reads: [[AGENT.FROM_BEFORE, AGENT.OTHER_INSTALL]],
+        });
+        yield* device.passed(1);
+
+        assert.deepEqual(device.ownedRecorded(), [AGENT.FROM_BEFORE]);
+        assert.deepEqual(device.holdsOf(AGENT.FROM_BEFORE), { ...NOTHING, folder: true });
+        assert.deepEqual(device.holdsOf(AGENT.OTHER_INSTALL), EVERYTHING);
+        assert.equal(device.machineCommands(AGENT.OTHER_INSTALL), 0);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a Linux host takes as its own, as its gate opens, every agent with a folder or a machine in its own store, deleting their VMs",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const [whole, vmOnly, folderOnly] = [agentNumbered(1), agentNumbered(2), agentNumbered(3)];
+        const device = yield* following({
+          held: { whole: [whole], vmOnly: [vmOnly], folderOnly: [folderOnly] },
+          madeBeforeRecord: [whole, vmOnly, folderOnly],
+          storesOwned: true,
+          reads: [[whole, vmOnly, folderOnly]],
+        });
+        yield* device.passed(1);
+
+        assert.deepEqual(device.ownedRecorded(), [whole, vmOnly, folderOnly]);
+        assert.deepEqual(device.holdsOf(whole), { ...NOTHING, folder: true });
+        assert.deepEqual(device.holdsOf(vmOnly), NOTHING);
+        assert.deepEqual(device.holdsOf(folderOnly), { ...NOTHING, folder: true });
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );

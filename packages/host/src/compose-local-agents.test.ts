@@ -293,6 +293,7 @@ const followingDevice = (
         launch: ({ env }) => ({ command: VM_RUNNER, args: [], env }),
         sandbox,
         formerlyDirect: options.formerlyDirect ?? true,
+        storesOwned: false,
         runnerBundle: "/opt/luke/agent-runner.mjs",
         runnerEnv: {},
         deviceName: "Studio",
