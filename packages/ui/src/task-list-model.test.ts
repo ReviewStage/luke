@@ -535,7 +535,7 @@ test("a parent counts its direct child tasks that are done or canceled, of all i
   expect(counts.has("shipped")).toBe(false);
 });
 
-test("a settled parent stays in the list, uncounted as hidden, while any child task under it, at any depth, is not done or canceled", () => {
+test("a parent stays in the list, uncounted as hidden, while the view shows any child task under it, at any depth, whatever its own status", () => {
   const withStatus = (name: string, parent: string | undefined, status: TaskStatus) => ({
     ...childTask(name, 1, parent),
     status,
@@ -543,22 +543,21 @@ test("a settled parent stays in the list, uncounted as hidden, while any child t
   const tasks = [
     withStatus("shipped parent", undefined, TASK_STATUS.DONE),
     withStatus("shipped child", "shipped parent", TASK_STATUS.DONE),
-    withStatus("filed grandchild", "shipped child", TASK_STATUS.BACKLOG),
+    withStatus("waiting grandchild", "shipped child", TASK_STATUS.TODO),
     withStatus("cut parent", undefined, TASK_STATUS.CANCELED),
-    withStatus("cut child", "cut parent", TASK_STATUS.CANCELED),
-    withStatus("shipped alone", undefined, TASK_STATUS.DONE),
+    withStatus("filed child", "cut parent", TASK_STATUS.BACKLOG),
   ];
   const rows = tasks.map(taskRow);
   const statuses = shownStatuses({ grouping: TASK_GROUPING.NONE, order: TASK_ORDER.UPDATED });
-  const open = openParentIds(tasks);
+  const open = openParentIds(tasks, statuses);
 
   expect(taskRowsInStatuses(rows, statuses, open).map(taskRowName)).toEqual([
     "shipped parent",
     "shipped child",
+    "waiting grandchild",
   ]);
   expect(hiddenStatuses(rows, statuses, open)).toEqual([
     { status: TASK_STATUS.BACKLOG, count: 1 },
-    { status: TASK_STATUS.DONE, count: 1 },
-    { status: TASK_STATUS.CANCELED, count: 2 },
+    { status: TASK_STATUS.CANCELED, count: 1 },
   ]);
 });

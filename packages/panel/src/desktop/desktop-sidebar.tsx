@@ -2168,8 +2168,11 @@ function SidebarColumn({
   );
   // The view's filters thin the sections' tasks as they thin the list's, a row dropped among them landing among those drawn.
   const statuses = shownStatuses(taskView.view);
-  // A parent stays while any child task under it is still open, whatever its own status.
-  const openParents = useMemo(() => openParentIds(tasks.listed.tasks), [tasks.listed.tasks]);
+  // A parent stays while the view shows any child task under it, whatever its own status.
+  const openParents = useMemo(
+    () => openParentIds(tasks.listed.tasks, statuses),
+    [tasks.listed.tasks, statuses],
+  );
   const shownSections = sectioned.sections.map((drawn) =>
     sectionInView(drawn, statuses, openParents, createdBy, assignedTo),
   );
