@@ -1856,6 +1856,15 @@ export function finishTaskWork<R = never>(
 }
 
 /**
+ * Whether an inbox item of the task holds a question open for the developer,
+ * as a finish reads it before it moves the task to done (`finishTaskWork`).
+ * The caller has read the task on the account's standing already.
+ */
+export function taskHoldsOpenQuestion(taskId: string): TaskStoreEffect<boolean> {
+  return Effect.map(findOpenQuestion({ taskId }), Option.isSome);
+}
+
+/**
  * Deletes the task and its document, and stamps its coding agents'
  * conversations cleared; false where the account reached no such task. The agents'
  * conversations are read before the delete, because the delete cascades

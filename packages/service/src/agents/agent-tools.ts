@@ -35,6 +35,7 @@ import {
   type StoredTask,
   setTaskParent,
   type TaskChanges,
+  taskHoldsOpenQuestion,
   updateTask,
 } from "@luke/database/models/task-store";
 import type { StoreWriter } from "@luke/database/models/writer";
@@ -319,6 +320,11 @@ export const UPDATE_TASK_REFUSAL = {
   NO_TASK:
     "Not run: no task of your workspace has that id, so it is none you can change; " +
     `${AGENT_TOOL.LIST_TASKS} names them.`,
+  OPEN_ASK:
+    "Not run: a thread of that task still holds an ask open for the developer, which marking " +
+    `it done would withdraw. Withdraw each ask of yours it no longer needs with ${AGENT_TOOL.WITHDRAW_ASK} ` +
+    `(${AGENT_TOOL.READ_THREADS} lists them), then mark it done; or leave it as it stands, and ` +
+    "Luke marks it done by itself once they are answered and its work is finished.",
   NOT_MEMBER:
     "Not run: that assignee is no member of the task's workspace, or names no person; name a " +
     `member by the mention link ${AGENT_TOOL.LIST_TASKS} hands you, or null for no one.`,
@@ -2194,6 +2200,14 @@ export function runUpdateTask(
               read.value.task.status ?? TASK_STATUS.TODO,
               archived,
             );
+      // Note that an agent's Done waits on the task's open asks, as Luke's own finish does, because a Done withdraws them (`inbox-settle.ts`).
+      if (
+        status === TASK_STATUS.DONE &&
+        read.value.task.status !== TASK_STATUS.DONE &&
+        (yield* taskHoldsOpenQuestion(taskId))
+      ) {
+        return agentToolRejected(UPDATE_TASK_REFUSAL.OPEN_ASK);
+      }
       // A repository is compared as GitHub spells it, which is how the task holds it.
       const asWritten = {
         ...changes,
