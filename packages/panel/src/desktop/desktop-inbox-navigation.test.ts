@@ -1286,16 +1286,28 @@ test("a channel narrows the Inbox to its own threads, everyone's, under its name
   assert.equal(page.querySelector('button[aria-label="View options"]'), null);
 });
 
-test("a channel chosen while the workspace's channels could not be read says so with Retry", async () => {
+test("a channel chosen while the workspace's channels could not be read says so with Retry, and ⌘K's Mark all as read marks the chosen channel's threads alone", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = { ...ACME, id: "workspace-channels-unread" };
   world.channels = { [world.listedWorkspace.id]: { failed: true } };
+  world.inboxes = new Map([
+    [
+      BILLING.id,
+      [
+        { ...THRESHOLD, channelId: GENERAL.id, unread: true },
+        { ...RETRY, channelId: APP_CHANNEL.id, unread: true },
+      ],
+    ],
+  ]);
   const { page } = mount([], { channels: true });
   await settle();
   const notRead =
     page.querySelector<HTMLElement>('section[aria-label="Channels not read"]') ??
     assert.fail("the failed read is said");
   assert.match(notRead.textContent ?? "", /Could not read this workspace's channels\./u);
+  assert.equal(runAppCommand(APP_COMMAND.MARK_INBOX_READ), true);
+  await settle();
+  assert.deepEqual(world.readMarks, [`read:${THRESHOLD.id}`], "never the workspace's whole");
 });
 
 test("ticking the box's checkbox under an open question sets its options aside and sends its words as a new thread to the item's agent in the item's channel, which the Inbox then opens, the box a reply again", async () => {

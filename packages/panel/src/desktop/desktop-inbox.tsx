@@ -216,6 +216,8 @@ export const DesktopInbox = memo(function DesktopInbox({
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const narrowed = useInboxNarrowed();
   const channelPlace = useChannelPlace();
+  // The channel the list is narrowed to, chosen whether or not its channel is read yet.
+  const narrowedTo = narrowed ? channelPlace.channelId : undefined;
   const channels = useChannels(channelsOn ? tasks.workspace?.id : undefined);
   // A channel chosen that is open no more is looked for among the archived ones, and shown to read where it is one.
   const chosenGone =
@@ -276,7 +278,7 @@ export const DesktopInbox = memo(function DesktopInbox({
     clear,
     closeItem,
     onRetry,
-  } = useInboxListing(tasks, narrowed ? channelPlace.channelId : undefined);
+  } = useInboxListing(tasks, narrowedTo);
   // An item opened into a channel from a link, which names its item and not its channel, narrows the Inbox to its own channel once read.
   useThreadChannel(narrowed ? chosen?.item : undefined);
   // Leaving a channel is having looked at it, so its row no longer reads unread for what was posted before.
@@ -292,7 +294,8 @@ export const DesktopInbox = memo(function DesktopInbox({
   const unread = useMemo(() => anyUnread(standing), [standing]);
   // Mark all as read marks the listed workspace's items, or a channel's alone, each on its own, since the service marks a workspace's whole.
   const { onMarkAll, onMarkEach } = marks;
-  const markAll = () => (channel === undefined ? onMarkAll : onMarkEach)(standingItems);
+  // Note that it asks of the channel chosen rather than the channel read, as the list does, so a channel whose read is still out never marks the workspace's whole.
+  const markAll = () => (narrowedTo === undefined ? onMarkAll : onMarkEach)(standingItems);
   useAppCommand(APP_COMMAND.MARK_INBOX_READ, tasks.shown && unread ? markAll : undefined);
   // An item's ⋯, its row's and its thread bar's, moves its thread to another open channel, which the channels' counts are read again for.
   const move = useMoveThreadDialog({
@@ -651,7 +654,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                 ) : (
                   <InboxList
                     view={list}
-                    scene={narrowed ? channelPlace.channelId : undefined}
+                    scene={narrowedTo}
                     chosen={chosen?.item.id}
                     columns={columns.shown}
                     rows={columns.rows}
@@ -682,8 +685,8 @@ export const DesktopInbox = memo(function DesktopInbox({
                         onList={columns.onList}
                         onRetry={onRetry}
                         searched={searched}
-                        onNewTask={channel === undefined ? newTask : undefined}
-                        none={channel === undefined ? undefined : NOTHING_HERE}
+                        onNewTask={narrowedTo === undefined ? newTask : undefined}
+                        none={narrowedTo === undefined ? undefined : NOTHING_HERE}
                       />
                     }
                     onChoose={open}
@@ -724,8 +727,8 @@ export const DesktopInbox = memo(function DesktopInbox({
                       // Note that the list says the read failed, or what the filter or its search left out, so the pane beside it stands bare.
                       <InboxPaneEmpty
                         listed={listedRows.length}
-                        newTask={channel === undefined ? newTask : undefined}
-                        none={channel === undefined ? undefined : NOTHING_HERE}
+                        newTask={narrowedTo === undefined ? newTask : undefined}
+                        none={narrowedTo === undefined ? undefined : NOTHING_HERE}
                       />
                     )}
                   </section>
