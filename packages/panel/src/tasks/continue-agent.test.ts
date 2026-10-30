@@ -326,7 +326,7 @@ test("the end line's words and whether it tells of a failure come apart, and nam
     }),
     {
       words:
-        "This agent ran directly on your Mac, which Luke no longer does. Its unpushed work is still in /Users/ada/.luke/agents/agent-1/repository. Continue in a new agent to carry on in a sandbox.",
+        "This agent ran on your Mac before Luke gave each agent a folder of its own, so it can't start there again. Its unpushed work is still in /Users/ada/.luke/agents/agent-1/repository. Continue in a new agent to carry on.",
       failed: true,
     },
   );
@@ -335,7 +335,7 @@ test("the end line's words and whether it tells of a failure come apart, and nam
     endLineParts(AGENT_STATUS.FAILED, AGENT_FAILURE.SESSION_ENDED, "Ada Lovelace", true, {
       folder: "/Users/ada/.luke/agents/agent-1/repository",
     })?.words,
-    "This agent ran directly on Ada Lovelace's Mac, which Luke no longer does. Its unpushed work is still in /Users/ada/.luke/agents/agent-1/repository there. Continue in a new agent to carry on in a sandbox.",
+    "This agent ran on Ada Lovelace's Mac before Luke gave each agent a folder of its own, so it can't start there again. Its unpushed work is still in /Users/ada/.luke/agents/agent-1/repository there. Continue in a new agent to carry on.",
   );
   for (const status of [AGENT_STATUS.STARTING, AGENT_STATUS.RUNNING, AGENT_STATUS.COMPLETED]) {
     assert.equal(endLineParts(status, undefined), undefined, status);

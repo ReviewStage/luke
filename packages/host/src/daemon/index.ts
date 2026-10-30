@@ -18,4 +18,4 @@ export {
   type HostPairingCode,
 } from "./host-pairing.js";
 export { type HostPlatformOptions, hostPlatform } from "./host-platform.js";
-export { hostSmolvm } from "./host-smolvm.js";
+export { hostSmolvmLeft } from "./host-smolvm.js";

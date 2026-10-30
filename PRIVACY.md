@@ -11,10 +11,10 @@ what we collect, who we send it to, and how to turn it off.
   you have not sent yet. On our service: your account, your tasks and their
   plans, your agents' transcripts, and your conversation. Agents work
   in sandboxes on our service, not on your Mac. An agent you run on This Mac
-  or on a host works in a folder there instead, and as each of its turns ends
-  saves its unpushed work, its session files, and its attachments, encrypted,
-  to a private store of ours, kept seven days after its last save. See [What we
-  collect](#what-we-collect) and [Storage](#storage).
+  or on a host instead runs straight on that machine, as you or the user Luke's
+  host runs as there, with full access to whatever that account can reach,
+  in a folder of its own it keeps for its life; no copy of its work comes to
+  us. See [What we collect](#what-we-collect) and [Storage](#storage).
 - **Models run on your keys.** Dictation goes to OpenAI, and
   agents go to Anthropic or OpenAI, on the API key or subscription you
   saved, never ours.
@@ -478,100 +478,61 @@ lost him, is deleted the same way, shortly after his conversation is removed.
 
 **A local agent on your Mac.** Once you turn on Bring your own host in
 Settings › Experimental and then This Mac in Settings › Hosts, an agent you
-start on This Mac runs Claude Code, or Codex for a GPT model, on your Mac,
-each in a virtual machine of its own (smolvm) that sees
-only that agent's folder, and its transcript, its events, and the files its
-tools read still reach our service as any agent's do. It runs on the
-plan or key you saved in Luke, never on the sign-in of Claude Code or Codex on
-your Mac, which the machine cannot reach; a Codex agent asks our service for
-your ChatGPT plan's access token over HTTPS as it needs one, so no token waits
-in our database for your Mac. A Claude Code agent's plan token or key is
-handed into its machine with Claude Code, where a command the agent runs can
-read it, unlike in a Vercel Sandbox. It reaches GitHub with a short-lived token our
-service hands your Mac, as for a host below: the token stays on your Mac,
-outside the machine and every folder it can see, and the agent sees only a
-placeholder. Each machine lasts only for one turn of its agent's: it is made
-fresh as the turn starts and deleted as the turn ends, whatever ended it, and
-the token kept for it is deleted with it. As a turn ends, Luke saves what of
-the agent nothing else holds: the work in its repository that no remote has
-(commits not pushed, changes not committed, stashes), the session files Claude
-Code or Codex resumes from, and the files attached to its messages, but never
-a credential file of Claude Code's, Codex's, or `gh`'s. Inside the agent's
-machine, before it is deleted, they are packed into one file in the agent's
-folder; once the machine is gone, your Mac encrypts that file with AES-256-GCM
-under a key drawn for that agent alone, which our service keeps encrypted
-under a server-only secret and hands your Mac only to save or restore the
-agent, and which your Mac holds in memory alone, and uploads it straight to a
-private Vercel Blob store of Luke's. Our service holds both the file and its
-key, so the encryption keeps it from anyone who reaches the store alone, not
-from our service. Each save goes once a newer one lands, and the newest seven
-days after it was made, or later while the agent runs; all of them go sooner
-with the agent's transcript, seven days after you delete the agent or its
-task, and at once with your account. A save that fails leaves the agent's
-folder as it is, and a file already encrypted waits in Luke's own folder on
-your Mac, outside every folder the machine sees, until it uploads or a later
-turn's save replaces it; a state over 500 MB is not saved, and the reason is
-said in plain words. A turn that finds none of the agent's work on your Mac
-brings its newest save back: your Mac downloads it into Luke's own folder,
-outside every folder the machine sees, checks its size and digest, decrypts it
-into the agent's folder, where the agent's machine unpacks it, and deletes
-both files once it has; a restore that fails deletes nothing, is said in plain
-words, and is tried again with the agent's next message. Luke's log on your
-Mac names each save's and each restore's size, digest, generation, and how
-long it took, never what it holds.
-Once a turn's save has landed, your Mac keeps the agent's folder for 15
-minutes, so a message soon after goes on from it, or for less while your disk
-has under a tenth free, then deletes it, and the agent's next turn brings its
-save back. A folder whose save did not land, or that no save ever held, as an
-agent's from before saves did, is saved without a turn, one agent at a time,
-minutes apart, and less often after each save that fails; it stays until one
-lands, then goes after the same 15 minutes. An agent you archive or delete
-loses its folder, its machine, and its token from
-your Mac as soon as the archive reaches it, or within minutes of your Mac's
-next being online once our service no longer lists the agent; a folder whose
-save has not landed is saved first where it can be, and one that still is not
-is kept wherever the Mac's check finds work in it that no remote has, or
-cannot tell, for seven days, and then deleted. Only the agents this copy of
-Luke started are ever touched, never another copy's sharing your Mac. Nothing
-of this happens until you turn This Mac on. Turning it on registers a login
-item that runs Luke's host program, `luke-host`, on your Mac at each login,
-whether the app is open or not, and the app keeps it registered from then on;
-removing This Mac in Settings › Hosts stops its agents, and it runs none until
-you turn it on again. To run them, `luke-host` downloads smolvm from its
-GitHub release once, keeps it in Luke's own folder on your Mac only once it
-matches the checksum Luke pins, checks the files it runs against those
-checksums again before each use, and pulls the public sandbox image our hosts
-run. An agent that ran directly on your Mac before this is not started again;
+start on This Mac runs Claude Code, or Codex for a GPT model, straight on your
+Mac, as you, in a folder of its own under `~/.luke/agents` that holds its
+repository, its home, and its caches. It has full access to whatever your
+account on the Mac can reach, as a program you run yourself does: your files,
+the folders of your other agents, your running programs, and the network;
+neither Claude Code nor Codex runs a sandbox of its own there or asks before a
+command. Its transcript, its events, and the files its tools read still reach
+our service as any agent's do. It runs on the plan or key you saved in Luke,
+never on the sign-in of Claude Code or Codex on your Mac; a Codex agent asks
+our service for your ChatGPT plan's access token over HTTPS as it needs one, so
+no token waits in our database for your Mac. A Claude Code agent's plan token
+or key is in the agent's environment, where any command it runs can read it,
+unlike in a Vercel Sandbox. It reaches GitHub with a short-lived token our
+service hands your Mac, as for a host below, which your Mac writes into `gh`'s
+sign-in in the agent's own folder, where the agent's `git` and `gh` read it
+and any command it runs can too, rewrites as it renews, and deletes as each
+turn ends. No copy of an agent's work goes to Luke: its folder stays on your
+Mac for the agent's life, and each turn goes on from it. A save an earlier
+Luke made of an agent's work is deleted seven days after it was made, or
+sooner with the agent's transcript. An agent you archive or delete loses its
+folder from your Mac as soon as the archive reaches it, or within minutes of
+your Mac's next being online once our service no longer lists the agent; one
+where your Mac's check finds work that no remote has, or cannot tell, is kept
+for seven days, and then deleted. Only the agents this copy of Luke started
+are ever touched, never another copy's sharing your Mac. Nothing of this
+happens until you turn This Mac on. Turning it on registers a login item that
+runs Luke's host program, `luke-host`, on your Mac at each login, whether the
+app is open or not, and the app keeps it registered from then on; removing
+This Mac in Settings › Hosts stops its agents, and it runs none until you turn
+it on again. To run them, `luke-host` downloads Claude Code, Codex, and
+GitHub's CLI from their publishers once, and keeps each in Luke's own folder
+on your Mac only once it matches the checksum Luke pins. An agent that ran on
+your Mac before Luke gave each agent a folder of its own is not started again;
 continue it into a new agent.
 
 **A local agent on a host.** A host is a Linux machine or Mac of your own
-that you add to Luke to run your agents, as This Mac does. It has no git login of yours, so
-for each agent on it that works in a repository, our service hands the host a
-short-lived GitHub token over HTTPS. It is a Luke GitHub App installation
-token cut to that one repository, good for an hour and renewed every 50
-minutes. Your own saved GitHub token is never sent. Each agent on a host runs
-in a virtual machine of its own (smolvm), and the token stays on the box,
-outside that machine and outside every folder it can see: the host keeps it in
-a file readable only by its own user for one turn of the agent's, and
-deletes it as the turn ends. The agent's machine lasts only for that turn too:
-it is made fresh as the turn starts and deleted as the turn ends, whatever
-ended it. As on This Mac, as each turn ends the host saves the agent's
-unpushed work, its session files, and its attachments, encrypted on the box
-under the agent's own key, straight to Luke's private store, on the same
-terms and for as long; a save that fails leaves its file, already encrypted,
-in the host's own state folder until it uploads. As on This Mac, the host
-deletes the agent's folder 15 minutes after a turn whose save landed, or
-sooner while its disk is nearly full, saves a folder no save holds without a
-turn, one agent at a time, and deletes an archived or deleted agent's folder,
-machine, and token once the archive reaches it or our service no
-longer lists the agent; a folder whose save has not landed is saved first
-where it can be, and otherwise kept for seven days, then deleted. The agent
-sees only a placeholder.
-Its `git` and
-`gh` send that placeholder, and smolvm, on the box, puts the real token in
-place of it only on HTTPS requests to GitHub. The token is never logged and
-never written to the conversation's record. As on This Mac, a Claude Code agent's plan
-token or key is handed into its machine, where a command it runs can read it.
+that you add to Luke to run your agents, as This Mac does. Each agent on
+it runs straight on the box, as the user Luke's host program runs as there, in
+a folder of its own, with full access to whatever that user can reach: the
+box's files, the host program's own folder and the secret it holds among them,
+every other agent's folder, its running programs, and its network; where the
+host runs as root, that is the whole box. It has no git login of yours, so for
+each agent on it that works in a repository, our service hands the host a
+short-lived GitHub token over HTTPS. It is a Luke GitHub App installation token
+cut to that one repository, good for an hour and renewed every 50 minutes. Your
+own saved GitHub token is never sent. The host writes the token into `gh`'s
+sign-in in the agent's own folder, where the agent's `git` and `gh` read it and
+any command it runs can too, rewrites it as it renews, and deletes it as each
+turn ends. The token is never logged and never written to the conversation's
+record. As on This Mac, a Claude Code agent's plan token or key is in the
+agent's environment, where a command it runs can read it, and no copy of an
+agent's work goes to Luke: its folder stays on the box for the agent's life.
+The host deletes an archived or deleted agent's folder once the archive reaches
+it or our service no longer lists the agent; one where the host's check finds
+work that no remote has, or cannot tell, is kept for seven days, then deleted.
 
 **Connecting a host with a code.** A host can also join your account with a
 code rather than an install token. The box asks our service for a code with no

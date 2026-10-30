@@ -19,16 +19,12 @@
  * stopped, which stops every runner it started with it, or until Luke
  * refuses the box's secret, the host removed, when it stops them and exits 0,
  * which the service's `Restart=on-failure` leaves stopped. Every agent runs
- * in a smolvm VM of its own (`hostPlatform`), on the image's own `gh`, with
- * `/dev/kvm` passed through where the box has it, through the `smolvm` the
- * install script put at a fixed path and named in the service's environment
- * (`LINUX_HOST`'s `smolvm`), never the one `PATH` happens to hold, or, on a
- * Mac, the pinned release fetched and checked under its state
- * (`DARWIN_HOST`'s). Before it follows anything on Linux it asks that
- * `smolvm` for its `--version` (`hostSmolvm`) and, where it is not the
- * pinned release, says so and exits `RUN_EXIT.SMOLVM_REFUSED`, which the
- * service's `RestartPreventExitStatus` leaves stopped, since a restart would
- * only repeat the refusal.
+ * straight on the box (`hostPlatform`), as a child of this process, on its
+ * Node, and as its user, so a box needs neither smolvm nor KVM. The `smolvm`
+ * its agents ran their VMs in before, where the install script put one at
+ * the path its service names (`LINUX_HOST`'s `smolvm`), or the pinned
+ * release a Mac fetched under its state (`DARWIN_HOST`'s), is handed on
+ * unasked (`hostSmolvmLeft`), only to delete what those VMs left standing.
  *
  * `enroll` is run once as the box is set up: it reads the install token on stdin,
  * where `--token` gives none, prints the one line the script shows, and
@@ -66,12 +62,12 @@ import {
   hostDaemon,
   hostPlatform,
   hostRuntime,
-  hostSmolvm,
+  hostSmolvmLeft,
   readHostDevice,
 } from "@luke/host/daemon";
 import { Environment, reporterLayer } from "@luke/host/effect";
 import { reportToStderr } from "@luke/host/node";
-import { ConfigProvider, Duration, Effect, Exit, Layer, Option, Result } from "effect";
+import { ConfigProvider, Duration, Effect, Exit, Layer, Option } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 /** The daemon's version, which the release's build writes in; a development run is below every floor. */
@@ -104,9 +100,6 @@ const CONNECT_EXIT = {
   BRAKED: 5,
   USAGE: 64,
 } as const;
-
-/** The exit codes of `run` that end the service for good: the sysexits `EX_CONFIG`, which the install script's unit names in `RestartPreventExitStatus`. */
-const RUN_EXIT = { SMOLVM_REFUSED: 78 } as const;
 
 const COMMAND = { RUN: "run", CONNECT: "connect", ENROLL: "enroll", VERSION: "version" } as const;
 
@@ -155,7 +148,7 @@ const arch = ({ os: hostOs }: HostRuntime) =>
       : Effect.succeed(read);
   });
 
-/** The daemon on the box's record, or a rest until there is one, its agents' VMs run by the `smolvm` given; it ends once Luke refuses the box's secret. */
+/** The daemon on the box's record, or a rest until there is one, the VMs its agents left from before deleted by the `smolvm` given; it ends once Luke refuses the box's secret. */
 const follow = (runtime: HostRuntime, smolvm: HostPlatformOptions["smolvm"]) =>
   Effect.gen(function* () {
     const { stateRoot } = runtime;
@@ -182,7 +175,8 @@ const follow = (runtime: HostRuntime, smolvm: HostPlatformOptions["smolvm"]) =>
       stateRoot,
       smolvm,
       runnerFolder: process.env.LUKE_HOST_RUNNER_FOLDER,
-      // Note that every command in an agent's VM runs as the daemon's user, luke-host or the member, which owns the agent's folder it mounts.
+      node: process.execPath,
+      // Note that every agent runs as the daemon's user, the member's own or root on a dedicated box.
       user: { uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0 },
     });
     reportToStderr(
@@ -195,17 +189,9 @@ const follow = (runtime: HostRuntime, smolvm: HostPlatformOptions["smolvm"]) =>
     return true;
   }).pipe(Effect.repeat({ until: (removed) => removed }));
 
-/** `luke-host run`: the daemon, once the machine's `smolvm` is the pinned release; the exit code it ends with otherwise. */
+/** `luke-host run`: the daemon, until Luke refuses the box's secret. */
 const run = (runtime: HostRuntime) =>
-  Effect.gen(function* () {
-    const smolvm = yield* hostSmolvm(runtime.os.smolvm, process.env);
-    if (Result.isFailure(smolvm)) {
-      reportToStderr(smolvm.failure);
-      return RUN_EXIT.SMOLVM_REFUSED;
-    }
-    yield* follow(runtime, smolvm.success);
-    return 0;
-  });
+  Effect.as(follow(runtime, hostSmolvmLeft(runtime.os.smolvm, process.env)), 0);
 
 /** `luke-host enroll`: the install token traded for the box's secret, and the one line the install script shows. */
 const enroll = (runtime: HostRuntime, token: string, name: string, origin: string) =>

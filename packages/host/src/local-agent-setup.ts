@@ -4,7 +4,7 @@ import { type LocalAgentClis, LocalAgentClisUnavailable } from "./effect/seams.j
 import { keptToolBinary, localAgentTool } from "./local-agent-tools.js";
 
 /**
- * local-agent-setup.ts -- what a device has before it registers ready to take an agent, beside what its VMs run on: the Claude Code, Codex, and GitHub CLI its agents run, each fetched and kept under the device's own state, and the words it registers its setup failed with.
+ * local-agent-setup.ts -- what a device has before it registers ready to take an agent: the Claude Code, Codex, and GitHub CLI its agents run on, each fetched and kept under the device's own state, and the words it registers its setup failed with.
  *
  * Every host keeps its own copy of each CLI, a Linux host and a Mac's
  * `luke-host` alike, This Mac's among them, at `agent-tools/` under its

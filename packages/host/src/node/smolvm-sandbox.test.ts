@@ -39,8 +39,6 @@ import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { ConfigProvider, Duration, Effect, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "../compose-local-agents.js";
-import { LINUX_HOST } from "../daemon/host-os.js";
-import { hostPlatform } from "../daemon/host-platform.js";
 import { Environment, LocalAgentPlatform, Reporter } from "../effect/seams.js";
 import { fakeClis } from "../testing/fake-sandbox.js";
 import { type ScriptedSpawner, scriptedSpawner } from "../testing/scripted-spawner.js";
@@ -229,6 +227,7 @@ const following = (input: {
       Layer.succeed(Reporter, { report: () => undefined }),
       Layer.succeed(LocalAgentPlatform, {
         launch: vm.launch,
+        tools: vm.sandbox.tools,
         sandbox: vm.sandbox,
         clis: fakeClis(),
         runnerBundle: RUNNER_BUNDLE,
@@ -737,17 +736,15 @@ it.effect(
         if (program !== SMOLVM) return undefined;
         return isSmolvm("status")({ program, args }) ? { exitCode: 1 } : { exitCode: 0 };
       });
-      const platform = hostPlatform({
-        os: LINUX_HOST,
-        installFolder: "/opt/luke-host",
-        runnerFolder: spaced,
-        arch: DEVICE_ARCH.ARM64,
-        stateRoot: `${root}/state`,
+      const vm = smolvmSandbox({
         smolvm: SMOLVM,
+        stateRoot: `${root}/state`,
+        runnerFolder: spaced,
         user: USER,
+        nested: false,
       });
 
-      yield* platform.sandbox
+      yield* vm.sandbox
         .started({ agentId: AGENT_ID, folder, github: false })
         .pipe(Effect.provide(spawner.layer));
 
@@ -756,6 +753,6 @@ it.effect(
         `${folder}:${folder}`,
         `${spaced}:/opt/luke-runner:ro`,
       ]);
-      assert.equal(platform.runnerBundle, "/opt/luke-runner/agent-runner.mjs");
+      assert.equal(vm.runnerFolder, "/opt/luke-runner");
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
 );

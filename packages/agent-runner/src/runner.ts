@@ -183,7 +183,7 @@ const resumePointOf = Effect.fn("agent-runner/resumePointOf")(function* (
 /**
  * The command sandbox every command the agent runs is under in the cloud's
  * sandbox: bubblewrap, the network on, and the credentials denied. A local
- * agent's VM runs none (`RUNNER_PLACE.HOST`).
+ * agent on a host runs none (`RUNNER_PLACE.HOST`).
  */
 function commandSandbox(config: ClaudeCodeConfig): NonNullable<Options["sandbox"]> {
   return {
@@ -207,8 +207,8 @@ function commandSandbox(config: ClaudeCodeConfig): NonNullable<Options["sandbox"
 
 /**
  * The documented options a launch runs `query()` with (the plan's P05), the
- * same wherever the runner runs but for the command sandbox: a local agent's
- * VM runs none (`RUNNER_PLACE.HOST`). Note that nothing else may follow the
+ * same wherever the runner runs but for the command sandbox: a local agent
+ * on a host runs none (`RUNNER_PLACE.HOST`). Note that nothing else may follow the
  * place, because the CLI decides its permission mode from more than
  * `permissionMode`: 2.1.304 forces `default` under
  * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`, which a host launch once set and which

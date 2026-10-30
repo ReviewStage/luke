@@ -8,6 +8,7 @@ import {
 } from "@luke/features/device-agent-wire";
 import { Effect, Option, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
+import { agentFolders } from "./local-agent-box.js";
 
 /**
  * local-agent-requests.ts -- what a local agent's tools ask of this Mac, answered only inside the agent's own folder: a file read.
@@ -21,9 +22,11 @@ import * as FileSystem from "effect/FileSystem";
  * installed skills all stand beneath it. Anything else is refused as a path
  * that names no file the agent may read, and a read answers no bytes. A
  * path that does not exist resolves to nothing, and is refused the same
- * way. A read inside the agent's own `gh` sign-in (`layout.githubConfig`),
- * where a host keeps the agent's GitHub token, is refused too, however it
- * is reached, so no token reaches a tool's answer.
+ * way. A read inside the agent's own `gh` sign-in, where a host keeps the
+ * agent's GitHub token, is refused too, however it is reached, so no token
+ * reaches a tool's answer: gh's config in the agent's home, where a host
+ * whose agents run on the box writes it (`local-agent-box.ts`), and the
+ * folder a host kept it in before (`layout.githubConfig`).
  *
  * A read answers at most the bytes asked for, and never more than one past
  * `DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES`, so the caller still sees a file
@@ -81,8 +84,10 @@ const answeredRead = (layout: DeviceAgentLayout, args: unknown) =>
     const path = yield* confinedPath(layout, read.value.path);
     if (Option.isNone(path)) return answer(null);
     const fileSystem = yield* FileSystem.FileSystem;
-    const withheld = yield* Effect.option(fileSystem.realPath(layout.githubConfig));
-    if (Option.isSome(withheld) && within(withheld.value, path.value)) return answer(null);
+    for (const sealed of [layout.githubConfig, agentFolders(layout.folder).gh]) {
+      const withheld = yield* Effect.option(fileSystem.realPath(sealed));
+      if (Option.isSome(withheld) && within(withheld.value, path.value)) return answer(null);
+    }
     const bound = Math.max(
       0,
       Math.min(read.value.maxBytes, DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES + 1),

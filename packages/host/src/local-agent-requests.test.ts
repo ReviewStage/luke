@@ -10,7 +10,7 @@ const AGENT = "6f1c2b9e-1d3a-4c55-9a0e-2f6b8c1d0e11";
 
 const NODE = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
 
-/** A home with one agent's worktree holding a file, a secret beside the home, the agent's gh sign-in, and a symlink in the worktree pointing at each. */
+/** A home with one agent's worktree holding a file, a secret beside the home, the agent's gh sign-in where a host kept it before and where it keeps it now, in gh's config in the agent's home, and a symlink in the worktree pointing at each. */
 const staged = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const root = yield* temporaryDirectoryScoped("luke-local-agent-");
@@ -22,6 +22,10 @@ const staged = Effect.gen(function* () {
   yield* fileSystem.makeDirectory(layout.githubConfig, { recursive: true });
   yield* fileSystem.writeFileString(`${layout.githubConfig}/hosts.yml`, "oauth_token: ghs_fixture");
   yield* fileSystem.symlink(`${layout.githubConfig}/hosts.yml`, `${layout.checkoutPath}/gh.yml`);
+  const ghConfig = `${layout.folder}/home/.config/gh`;
+  yield* fileSystem.makeDirectory(ghConfig, { recursive: true });
+  yield* fileSystem.writeFileString(`${ghConfig}/hosts.yml`, "oauth_token: ghs_fixture");
+  yield* fileSystem.symlink(`${ghConfig}/hosts.yml`, `${layout.checkoutPath}/home-gh.yml`);
   return { root, layout };
 });
 
@@ -61,6 +65,14 @@ describe("answeredLocalAgentRequest", () => {
     {
       case: "a symlink in the worktree pointing at the agent's gh sign-in",
       path: (root: string) => `${root}/home/.luke/agents/${AGENT}/repository/gh.yml`,
+    },
+    {
+      case: "gh's config in the agent's home, where a host whose agents run on the box keeps its GitHub token",
+      path: (root: string) => `${root}/home/.luke/agents/${AGENT}/home/.config/gh/hosts.yml`,
+    },
+    {
+      case: "a symlink in the worktree pointing at gh's config in the agent's home",
+      path: (root: string) => `${root}/home/.luke/agents/${AGENT}/repository/home-gh.yml`,
     },
   ])("refuses $case", ({ path }) =>
     Effect.gen(function* () {

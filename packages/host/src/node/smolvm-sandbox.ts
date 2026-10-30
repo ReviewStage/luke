@@ -15,6 +15,7 @@ import {
   type LocalAgentSandboxCommand,
   LocalAgentSandboxUnavailable,
 } from "../effect/seams.js";
+import { agentFolders } from "../local-agent-box.js";
 import { SETUP_FAILURE } from "../local-agent-setup.js";
 import { keptToolBinary, localAgentTool } from "../local-agent-tools.js";
 
@@ -85,6 +86,13 @@ import { keptToolBinary, localAgentTool } from "../local-agent-tools.js";
  * Nothing `smolvm` prints is kept but the last line of a failure to make or
  * start a machine, which names no secret: a credential is only ever a
  * reference to its file there.
+ *
+ * Every host now runs its agents straight on the box, so a host asks this
+ * only for the machines its agents' runs from before left standing, and
+ * deletes them. A device with no `smolvm` (`SmolvmSandboxOptions.smolvm`
+ * none, or a pinned release it never fetched) holds no machine, and every
+ * delete there is done, so a box that never had smolvm is never held up by
+ * one.
  */
 
 /** The machine's workload: one that never exits, so `machine exec` always has a running container to run in. */
@@ -109,12 +117,6 @@ const IMAGE_SEEDED = ".image-seeded";
 
 /** The throwaway machine's command, which only has to boot for smolvm to keep the image's seed. */
 const SEED_COMMAND = ["true"] as const;
-
-/** The folders under the agent's own its VM's home and caches are kept in. */
-const VM_FOLDER = { HOME: "home", CACHE: "cache" } as const;
-
-/** Where under the VM's home pnpm and npm keep what a global install puts there. */
-const VM_HOME_FOLDER = { PNPM: ".local/share/pnpm", NPM: ".npm-global" } as const;
 
 /** The variables of the device's own that stay with `smolvm` and are never handed into the VM. */
 const DEVICE_VARIABLES: ReadonlySet<string> = new Set(["HOME", "PATH", "SHELL", "USER", "LOGNAME"]);
@@ -170,8 +172,8 @@ const VM_RUNNER_FOLDER = "/opt/luke-runner";
 const MOUNTS_ESCAPED = /[\s\\]/u;
 
 interface SmolvmSandboxOptions {
-  /** The `smolvm` the device runs: a program at the path given, as on a Linux host, or the pinned release it fetches and checks under its state, as on a Mac. */
-  readonly smolvm: string | AgentToolPin;
+  /** The `smolvm` the device runs: a program at the path given, as on a Linux host, or the pinned release it fetches and checks under its state, as on a Mac; none where it has none. */
+  readonly smolvm?: string | AgentToolPin | undefined;
   /** The device's own state, under which each agent's GitHub credential is kept, outside every folder a VM mounts. */
   readonly stateRoot: string;
   /** The folder of the runner's bundle, mounted read-only in each VM (`vmRunnerFolder`). */
@@ -195,17 +197,6 @@ function shellQuoted(word: string): string {
 /** The machine an agent runs in, by its id, one per agent. */
 function machineOf(agentId: string): string {
   return `luke-${agentId}`;
-}
-
-/** The VM's own folders, inside the agent's: its home, its caches, and pnpm's and npm's global folders. */
-function vmFolders(folder: string) {
-  const home = [folder, VM_FOLDER.HOME].join("/");
-  return {
-    home,
-    cache: [folder, VM_FOLDER.CACHE].join("/"),
-    pnpm: [home, VM_HOME_FOLDER.PNPM].join("/"),
-    npm: [home, VM_HOME_FOLDER.NPM].join("/"),
-  };
 }
 
 /** The states smolvm says a machine that is not running is in, by its own names: made and never started, stopped, or crashed. */
@@ -247,11 +238,22 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
   readonly runnerFolder: string;
 } {
   const user = `${options.user.uid}:${options.user.gid}`;
-  const pinned = typeof options.smolvm === "string" ? undefined : options.smolvm;
+  const pinned = typeof options.smolvm === "object" ? options.smolvm : undefined;
   const program =
-    typeof options.smolvm === "string"
-      ? options.smolvm
-      : keptToolBinary(options.stateRoot, options.smolvm);
+    typeof options.smolvm === "object"
+      ? keptToolBinary(options.stateRoot, options.smolvm)
+      : (options.smolvm ?? "");
+  /**
+   * Whether the device has the `smolvm` it would run: the one its service
+   * names, or the pinned release where it was fetched and kept; yes where
+   * that could not be read, so no machine is taken as gone where it may
+   * stand.
+   */
+  const present = Effect.gen(function* () {
+    if (pinned === undefined) return program.length > 0;
+    const fileSystem = yield* FileSystem.FileSystem;
+    return yield* fileSystem.exists(program).pipe(Effect.orElseSucceed(() => true));
+  });
   /** A `smolvm` command as the process it is started as, the cap on its seed folder beside the device's own environment. */
   const spawned = (args: readonly string[]) => ({
     command: program,
@@ -370,7 +372,7 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
     });
 
   const exec = (command: LocalAgentSandboxCommand): LocalAgentCommand => {
-    const folders = vmFolders(command.folder);
+    const folders = agentFolders(command.folder);
     const handed = Object.keys(command.env).filter((name) => !DEVICE_VARIABLES.has(name));
     const started = spawned([
       "machine",
@@ -512,7 +514,7 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
       Effect.gen(function* () {
         if (!AGENT_ID.test(agentId)) return yield* unavailable("the agent's id names no machine");
         const fileSystem = yield* FileSystem.FileSystem;
-        const folders = vmFolders(folder);
+        const folders = agentFolders(folder);
         for (const each of [folders.home, folders.cache]) {
           yield* fileSystem.makeDirectory(each, { recursive: true, mode: 0o700 });
         }
@@ -574,7 +576,7 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
     deleted: (agentId) =>
       Effect.gen(function* () {
         if (!AGENT_ID.test(agentId)) return true;
-        const gone = yield* machineGone(agentId);
+        const gone = (yield* present) ? yield* machineGone(agentId) : true;
         const fileSystem = yield* FileSystem.FileSystem;
         yield* Effect.ignore(
           fileSystem.remove(credentialsOf(agentId).folder, { recursive: true, force: true }),
@@ -582,14 +584,20 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
         return gone;
       }),
 
-    machines: Effect.map(
-      machinesListed,
-      Option.map((names): ReadonlySet<string> => {
-        const prefix = machineOf("");
-        return new Set(
-          names.flatMap((name) => (name.startsWith(prefix) ? [name.slice(prefix.length)] : [])),
-        );
-      }),
+    machines: Effect.flatMap(present, (has) =>
+      has
+        ? Effect.map(
+            machinesListed,
+            Option.map((names): ReadonlySet<string> => {
+              const prefix = machineOf("");
+              return new Set(
+                names.flatMap((name) =>
+                  name.startsWith(prefix) ? [name.slice(prefix.length)] : [],
+                ),
+              );
+            }),
+          )
+        : Effect.succeed(Option.some<ReadonlySet<string>>(new Set())),
     ),
 
     githubToken: (agentId, token) =>

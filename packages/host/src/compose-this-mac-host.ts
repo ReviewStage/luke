@@ -38,11 +38,11 @@ import type { RunMode } from "./run-mode.js";
  * This Mac runs agents only once the member turns it on, with Turn on under
  * This Mac in Settings › Hosts (`THIS_MAC_HOST_TURN_ON`), because turning it
  * on registers a login item that runs `luke-host` at login, the app open or
- * not, and `luke-host` downloads what its VMs run on. The Mac is turned on
+ * not, and `luke-host` downloads what its agents run on. The Mac is turned on
  * in one sequence, in order: it is enrolled on the member's own sign-in
  * under the device id the account has on this Mac (`local-agent-state.ts`),
  * minted the first time (`enrollOwn`), which converts its device in place,
- * so its agents, folders and VMs carry over; its record is written where
+ * so its agents and their folders carry over; its record is written where
  * `luke-host` reads it, the app's own state folder
  * (`host-device-record.ts`); the launches kept under the account are handed
  * to the device, whose follower settles them; and its login item is
@@ -61,7 +61,7 @@ import type { RunMode } from "./run-mode.js";
  * that failed says why and waits for the same act, Retry; the app never
  * follows the queue itself.
  *
- * `luke-host` fetches what its VMs run on once each time it starts, and
+ * `luke-host` fetches what its agents run on once each time it starts, and
  * registers with the service whether that is still under way or failed, so
  * where it stands is read with the setup the service lists for this Mac. A
  * setup that failed waits for Retry, which starts `luke-host` again by
@@ -72,7 +72,7 @@ import type { RunMode } from "./run-mode.js";
  *
  * It turns on beside a standalone `luke-host` the install command put on
  * this Mac, whichever account that one runs agents for: each keeps its own
- * state folder, and each agent's VM and folder are named for the agent.
+ * state folder, and each agent's folder is named for the agent.
  *
  * Where it stands is read again every `IDLE` while the account is signed
  * in: running while a follower holds the machine's lease, which only
@@ -316,7 +316,7 @@ export function composeThisMacHost(
 
     /**
      * `luke-host` started again, its login item unregistered and registered,
-     * so it fetches what its VMs run on again; the setup it failed is taken
+     * so it fetches what its agents run on again; the setup it failed is taken
      * as unread until the next read, since it has not registered again yet.
      */
     const restarted = (deviceId: string) =>
@@ -366,7 +366,7 @@ export function composeThisMacHost(
             return yield* set(standingOf(THIS_MAC_HOST_STANDING.OTHER_ACCOUNT));
           }
           if ((yield* Ref.get(turnOnFailed)) && !explicit) return yield* Ref.get(standing);
-          // Note that a Mac is never enrolled on its own, because turning it on registers a login item and downloads what its VMs run on.
+          // Note that a Mac is never enrolled on its own, because turning it on registers a login item and downloads what its agents run on.
           if (Option.isNone(record) && !explicit) {
             return yield* set(standingOf(THIS_MAC_HOST_STANDING.NOT_TURNED_ON));
           }
