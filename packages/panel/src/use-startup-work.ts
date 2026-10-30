@@ -58,7 +58,9 @@ function sameWord(
     before.permitted === after.permitted &&
     before.appVersion === after.appVersion &&
     before.packaged === after.packaged &&
-    before.accountId === after.accountId
+    before.accountId === after.accountId &&
+    before.name === after.name &&
+    before.email === after.email
   );
 }
 

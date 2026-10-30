@@ -118,13 +118,25 @@ export interface AppAudioSlice {
 }
 
 /**
+ * What the host answers about recording: whether this run may record, and
+ * the signed-in account a recording is filed under, by its opaque id with the
+ * name and email the person is shown by. All three are absent while signed
+ * out, and are read off one snapshot of the session, so they never name two
+ * accounts at once.
+ */
+export interface SessionReplayState {
+  permitted: boolean;
+  accountId?: string;
+  name?: string;
+  email?: string;
+}
+
+/**
  * What this run may record, as its two halves: what the host answered, and
  * whether an action that ended the account it files under has stood recording
  * down for the rest of the run.
  */
-interface AppSessionReplaySlice {
-  permitted: boolean;
-  accountId?: string;
+interface AppSessionReplaySlice extends SessionReplayState {
   halted: boolean;
 }
 
@@ -643,6 +655,8 @@ export function sessionReplayBootstrap(
     appVersion: state.run.appVersion,
     packaged: state.run.packaged,
     ...(state.sessionReplay.accountId ? { accountId: state.sessionReplay.accountId } : undefined),
+    ...(state.sessionReplay.name ? { name: state.sessionReplay.name } : undefined),
+    ...(state.sessionReplay.email ? { email: state.sessionReplay.email } : undefined),
   };
 }
 
