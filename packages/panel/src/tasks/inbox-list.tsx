@@ -876,9 +876,18 @@ const SEARCH_INBOX = "Search inbox";
  * leaves Escape to the surface behind it. Note that the field holds its own
  * words and hands them to the list in a transition, so a key paints in the
  * field at once and the list is ranked for it a render behind, in a render
- * the next key may cut short, as ⌘K ranks its rows.
+ * the next key may cut short, as ⌘K ranks its rows. The list's own acts end
+ * the row (`end`), so a head named in the window's title bar leaves no row
+ * of its own over the list.
  */
-function ListSearch({ search }: { search: InboxSearchHead }): React.JSX.Element {
+function ListSearch({
+  search,
+  end,
+}: {
+  search: InboxSearchHead;
+  /** The list's acts after the field: the view's menu, or a channel's Unarchive; none where the list's bar holds them. */
+  end?: React.ReactNode;
+}): React.JSX.Element {
   const [words, setWords] = useState(search.query);
   const { onQuery } = search;
   const type = (next: string) => {
@@ -886,27 +895,32 @@ function ListSearch({ search }: { search: InboxSearchHead }): React.JSX.Element 
     startTransition(() => onQuery(next));
   };
   return (
-    <search className="inbox-search block px-column-inset pb-row-inset">
-      <SearchField
-        label={SEARCH_INBOX}
-        placeholder={SEARCH_INBOX}
-        value={words}
-        onChange={type}
-        onClear={() => type("")}
-        onEscape={words === "" ? undefined : () => type("")}
-      />
+    <search className="inbox-search flex items-center gap-control-gap px-column-inset pb-row-inset">
+      <div className="min-w-0 flex-1">
+        <SearchField
+          label={SEARCH_INBOX}
+          placeholder={SEARCH_INBOX}
+          value={words}
+          onChange={type}
+          onClear={() => type("")}
+          onEscape={words === "" ? undefined : () => type("")}
+        />
+      </div>
+      {end}
     </search>
   );
 }
 
 /**
  * The list's head: the Inbox's name, whatever it lists, or a channel's, and
- * on the window's Inbox the view's menu at the list's top right, which
- * chooses the scope and whom the items are addressed to; a channel and a
- * task's own Inbox list everything they hold, and offer no menu. On the window's Inbox its heading and its button glide as the
- * sidebar folds, the name moving to the list's middle, clear of the
- * sidebar's toggle, and the button keeping to the list's edge. Where the
- * list offers a search, its field stands under the head (`ListSearch`).
+ * on the window's Inbox the view's menu, which chooses the scope and whom
+ * the items are addressed to; a channel and a task's own Inbox list
+ * everything they hold, and offer no menu. Where the list offers a search,
+ * its field stands under the name, ended by the list's acts, the view's
+ * menu or a channel's Unarchive (`ListSearch`), so where the window's title
+ * bar names the Inbox no row stands over the list. Where no title bar
+ * stands, the name heads the list's own bar, and glides as the sidebar
+ * folds, moving to the list's middle, clear of the sidebar's toggle.
  */
 function ListHead({
   head,
@@ -1009,17 +1023,22 @@ function ListHead({
       {view === undefined ? null : <ViewOptions shown={shown} choices={view} readerId={readerId} />}
     </>
   );
+  // Note that the window's Inbox's acts end its search row where it offers one, and its bar holds them only where it offers none.
+  const inRow = head.tab !== true && head.search !== undefined;
+  const barActions = inRow ? undefined : options;
   return (
     <>
-      {/* Note that a task's own Inbox is a tab, whose bar is every tab's; the window's Inbox is a page, whose head glides with the sidebar. */}
+      {/* Note that a task's own Inbox is a tab, whose bar is every tab's; the window's Inbox is a page, named in the window's title bar where one stands. */}
       {head.tab === true ? (
         <PaneBar title={title} actions={options} />
       ) : channel?.archivedAt === undefined ? (
-        <InboxBar title={title} detail={channel?.detail} task={head.task} actions={options} />
+        <InboxBar title={title} detail={channel?.detail} task={head.task} actions={barActions} />
       ) : (
-        <ArchivedChannelBar title={title} archivedAt={channel.archivedAt} actions={options} />
+        <ArchivedChannelBar title={title} archivedAt={channel.archivedAt} actions={barActions} />
       )}
-      {search}
+      {head.search === undefined ? null : (
+        <ListSearch search={head.search} end={inRow ? options : undefined} />
+      )}
       <ErrorLine
         level={ANNOUNCE.ALERT}
         error={refusedShown(channel?.refusal, FAILURE_SURFACE.CHANNEL_POST)}
@@ -1032,10 +1051,12 @@ function ListHead({
 }
 
 /**
- * The window's Inbox's bar, its actions at its end, and the Inbox's name:
- * at the bar's head, or in the window's title bar where one stands, the
- * task the Inbox is narrowed to after it, the Inbox's own name a press
- * back to every task's items, as the task's chip under the bar clears it.
+ * The window's Inbox's name: in the window's title bar where one stands, the
+ * task the Inbox is narrowed to after it, the Inbox's own name a press back
+ * to every task's items, as the task's chip over the list clears it; else at
+ * the head of the list's own bar. The bar stands under the title bar only
+ * where it holds actions, which the search row holds wherever the list
+ * offers one, so the Inbox's sheet starts under the title bar.
  */
 function InboxBar({
   title,
@@ -1046,7 +1067,7 @@ function InboxBar({
   title: string;
   detail: string | undefined;
   task?: InboxTaskHead | undefined;
-  actions: React.ReactNode;
+  actions: React.ReactNode | undefined;
 }): React.JSX.Element {
   const up = useTitleBar() !== null;
   const trail: ToolbarPlace[] | undefined =
@@ -1060,12 +1081,14 @@ function InboxBar({
           detail={detail}
         />
       </TitleBarPlace>
-      <Toolbar
-        title={up ? undefined : title}
-        detail={up ? undefined : detail}
-        actions={actions}
-        end={TOOLBAR_INSET.COLUMN}
-      />
+      {up && actions === undefined ? null : (
+        <Toolbar
+          title={up ? undefined : title}
+          detail={up ? undefined : detail}
+          actions={actions}
+          end={TOOLBAR_INSET.COLUMN}
+        />
+      )}
     </>
   );
 }
@@ -1082,7 +1105,7 @@ function ArchivedChannelBar({
 }: {
   title: string;
   archivedAt: number;
-  actions: React.ReactNode;
+  actions: React.ReactNode | undefined;
 }): React.JSX.Element {
   return (
     <InboxBar

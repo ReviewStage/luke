@@ -106,6 +106,7 @@ import {
 } from "./side-panel.js";
 import { type TabViews, useTabViews } from "./strip-tabs.js";
 import { taskCardOf } from "./task-card.js";
+import { useTitleBar } from "./title-bar.js";
 
 /**
  * desktop-inbox.tsx -- the window's Inbox: every item of every task of the listed workspace holding one in a list of its own, and the chosen item read beside it.
@@ -233,6 +234,8 @@ export const DesktopInbox = memo(function DesktopInbox({
   const narrowedTo = narrowed ? channelPlace.channelId : undefined;
   // A task chosen narrows the Inbox to its own items instead, Channels on or off, which a chip over the list names and clears.
   const narrowedTask = useInboxTask();
+  // The window's title bar names the Inbox where one stands, so its sheet starts under the bar with no row of its own.
+  const titled = useTitleBar() !== null;
   const narrowedTaskName = tasks.tasks.find((task) => task.id === narrowedTask)?.name;
   const channels = useChannels(channelsOn ? tasks.workspace?.id : undefined);
   // A channel chosen that is open no more is looked for among the archived ones, and shown to read where it is one.
@@ -774,7 +777,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                         : columns.shown !== INBOX_COLUMNS.BOTH
                     }
                   >
-                    <Toolbar />
+                    {titled ? null : <Toolbar />}
                     {missing ? (
                       <NotFound
                         thing={NOT_FOUND_THING.INBOX_ITEM}
