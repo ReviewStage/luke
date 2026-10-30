@@ -49,10 +49,6 @@ import { trimmedText } from "./text-schema.js";
  * by id.
  * A task is worked by its agents or by a pilot (`TASK_MODE`), which its
  * summary names.
- * A task's agents' pull requests merge on green or wait for a member's go
- * (`MERGE_POLICY`), which its summary names.
- * A task is running or stopped, the switch a pilot tree's agents follow from
- * its top task, which its summary names.
  * A task opened whole also names, by id, the tasks it waits on and the tasks
  * that wait on it, as Linear's blocked-by and blocks.
  * The starting account and the conversation a task resumes in are the
@@ -150,25 +146,11 @@ export const TASK_MODE = {
 
 export type TaskMode = (typeof TASK_MODE)[keyof typeof TASK_MODE];
 
-/**
- * What becomes of a pull request a task's agents open once its checks pass:
- * merged on green, or held for a member's go. A task starts at merge on
- * green.
- */
-export const MERGE_POLICY = {
-  MERGE_ON_GREEN: "merge-on-green",
-  HOLD: "hold",
-} as const;
-
-export type MergePolicy = (typeof MERGE_POLICY)[keyof typeof MERGE_POLICY];
-
 export const taskStatusSchema = EffectSchema.Literals(Object.values(TASK_STATUS));
 
 export const taskPrioritySchema = EffectSchema.Literals(Object.values(TASK_PRIORITY));
 
 export const taskModeSchema = EffectSchema.Literals(Object.values(TASK_MODE));
-
-export const mergePolicySchema = EffectSchema.Literals(Object.values(MERGE_POLICY));
 
 /**
  * The member a task is assigned to, by their account's id, as a start or a
@@ -327,8 +309,6 @@ function updateNamesAChange(update: {
   status?: TaskStatus;
   priority?: TaskPriority;
   assigneeId?: string | null;
-  mergePolicy?: MergePolicy;
-  running?: boolean;
   runsOn?: TaskRunsOnRequest;
 }): boolean {
   return Object.keys(update).length > 0;
@@ -344,9 +324,7 @@ function positionIsPinned(update: { pinned?: boolean; pinPosition?: string }): b
  * where its pin stands in the sidebar's Pinned section (`pin-order.ts`),
  * which comes only with `pinned: true` and pins a plan not yet pinned,
  * whether it is archived, the workspace it moves to, where it stands, how
- * much it matters, who it is assigned to, what becomes of its agents' pull
- * requests once their checks pass, whether a pilot tree's agents may work
- * (`running`, a top pilot task's alone), or any of them at once. A rename is one of these; a repository is confirmed reachable by the
+ * much it matters, who it is assigned to, or any of them at once. A rename is one of these; a repository is confirmed reachable by the
  * workspace before it is kept, and null clears it. An assignee is confirmed a
  * member of the task's workspace before it is kept, and null clears it. A move is the task's
  * owner's alone, into a workspace they are a member of whose GitHub reaches
@@ -366,18 +344,13 @@ export const taskUpdateRequestSchema = EffectSchema.Struct({
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
-  mergePolicy: EffectSchema.optionalKey(mergePolicySchema),
-  running: EffectSchema.optionalKey(EffectSchema.Boolean),
   runsOn: EffectSchema.optionalKey(taskRunsOnRequestSchema),
 }).check(EffectSchema.makeFilter(updateNamesAChange), EffectSchema.makeFilter(positionIsPinned));
 
 export type TaskUpdateRequest = typeof taskUpdateRequestSchema.Type;
 
-/** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), its merge policy, its running switch, or any of them. */
-export type TaskStanding = Pick<
-  TaskUpdateRequest,
-  "status" | "priority" | "assigneeId" | "mergePolicy" | "running"
->;
+/** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), or any of them. */
+export type TaskStanding = Pick<TaskUpdateRequest, "status" | "priority" | "assigneeId">;
 
 /** Which side of a block the other task stands on, as the task a change names reads it: one it waits on, or one that waits on it. */
 export const TASK_BLOCK_RELATION = {
@@ -588,10 +561,6 @@ const taskSummaryFields = {
   parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
   /** How the task is worked; absent from a service before modes, where every task is worked by its agents. */
   mode: EffectSchema.optionalKey(taskModeSchema),
-  /** What becomes of its agents' pull requests once their checks pass; absent from a service before it, where they merge on green. */
-  mergePolicy: EffectSchema.optionalKey(mergePolicySchema),
-  /** Whether a pilot tree's agents may work, set on its top task; absent from a service before it, read as stopped. */
-  running: EffectSchema.optionalKey(EffectSchema.Boolean),
   /**
    * True while a task it waits on (`blockedBy`) is neither done nor
    * canceled, as its sidebar row is marked; absent while none is, and from a

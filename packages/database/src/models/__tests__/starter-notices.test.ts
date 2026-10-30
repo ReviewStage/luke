@@ -79,7 +79,6 @@ const settledTurn = (
     readonly failure?: string;
     readonly cancelRequestKey?: string;
     readonly cancelRequestedBy?: string;
-    readonly cancelRequestedForRunning?: boolean;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -143,12 +142,6 @@ const UNTOLD = [
     kind: AGENT_KIND.CODER,
     end: ({ agent }: { agent: Agent }) =>
       settledTurn(agent, TURN_STATUS.CANCELLED, T0 + 1_000, { cancelRequestKey: "call_stop" }),
-  },
-  {
-    name: "a Stop its pilot tree's Running switched off made",
-    kind: AGENT_KIND.CODER,
-    end: ({ agent }: { agent: Agent }) =>
-      settledTurn(agent, TURN_STATUS.CANCELLED, T0 + 1_000, { cancelRequestedForRunning: true }),
   },
   {
     name: "an archive by the starter itself",

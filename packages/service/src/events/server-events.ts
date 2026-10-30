@@ -216,11 +216,8 @@ export interface ServerEventProperties {
     duration: Values<typeof SERVER_TURN_DURATION>;
     agent_kind: AgentKind;
   };
-  /** A member's Stop, and whether it stopped a pilot's agents with it. */
-  [SERVER_EVENT.AGENT_STOP]: {
-    agent_kind: AgentKind;
-    stopped_tree: boolean;
-  };
+  /** A member's Stop. */
+  [SERVER_EVENT.AGENT_STOP]: { agent_kind: AgentKind };
   [SERVER_EVENT.AGENT_ARCHIVE]: { agent_kind: AgentKind };
   [SERVER_EVENT.PULL_REQUEST_MERGE]: Record<string, never>;
   [SERVER_EVENT.ACCOUNT_SIGN_UP]: { method: Values<typeof SERVER_SIGN_IN_METHOD> };
