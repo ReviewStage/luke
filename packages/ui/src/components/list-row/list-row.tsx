@@ -120,7 +120,10 @@ export type { ListSelection } from "../selection/list-selection.js";
  *
  * The open row is current in one of two ways (`LIST_ROW_CURRENT`): the page
  * shown beside the list, as an Inbox's item is, or the one item chosen in
- * its set. An unread row's title stands in the heavier weight, and its
+ * its set. It is lifted as a sheet on the ground, as a sidebar's is, or, in a
+ * list that stands beside the page it opens (`LIST_ROW_CURRENT_LOOK.TINT`),
+ * filled with the accent's tint, which reads in either theme and stands apart
+ * from the neutral fill of a row under the pointer. An unread row's title stands in the heavier weight, and its
  * description in the body's ink, until it is read, as a mail app's unread
  * thread does. A row whose thing is done with stands back (`muted`), as a
  * done to-do grays: its words in the palette's quieter inks, still legible,
@@ -197,6 +200,14 @@ export const LIST_ROW_CURRENT = {
 } as const;
 
 export type ListRowCurrent = (typeof LIST_ROW_CURRENT)[keyof typeof LIST_ROW_CURRENT];
+
+/** How the open row is lifted from the rest: a sheet over the ground, as a sidebar's is, or the accent's tint, as a list beside its page reads it. */
+export const LIST_ROW_CURRENT_LOOK = {
+  SHEET: "sheet",
+  TINT: "tint",
+} as const;
+
+export type ListRowCurrentLook = (typeof LIST_ROW_CURRENT_LOOK)[keyof typeof LIST_ROW_CURRENT_LOOK];
 
 /** Where a row's metadata stands: at the row's middle, or at the end of its title's line. */
 export const LIST_ROW_META = {
@@ -511,6 +522,7 @@ export function ListRow({
   hint,
   density,
   ink = LIST_ROW_INK.TEXT,
+  currentLook = LIST_ROW_CURRENT_LOOK.SHEET,
   menuOpen = false,
   chevron = false,
   keepFocus = false,
@@ -563,6 +575,8 @@ export function ListRow({
   density?: ListDensity | undefined;
   /** The ink its title rests in. */
   ink?: ListRowInk | undefined;
+  /** How the open row is lifted from the rest, where it is current. */
+  currentLook?: ListRowCurrentLook | undefined;
   /** Whether the row's own menu is open, which rings it and keeps its acts shown. */
   menuOpen?: boolean | undefined;
   /** Whether a chevron at its end says the press goes somewhere deeper. */
@@ -873,6 +887,7 @@ export function ListRow({
         data-lead={above ? LIST_ROW_LEAD.ABOVE : undefined}
         data-actions={actsOnHover ? LIST_ROW_ACTIONS.HOVER : undefined}
         data-current={current === undefined ? undefined : "true"}
+        data-current-look={currentLook}
         data-selected={chosen ? "true" : undefined}
         data-unread={unread === true ? "true" : undefined}
         data-muted={muted === true ? "true" : undefined}

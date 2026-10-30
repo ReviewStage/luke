@@ -62,11 +62,18 @@
 
   /* The open row is drawn in the work sheet's ground, lifted by a hairline
      and a soft shadow, as the sheet itself is. */
-  .luke-list-row[data-current="true"] {
+  .luke-list-row[data-current="true"][data-current-look="sheet"] {
     background: var(--luke-color-ground);
     box-shadow:
       0 0 0 1px var(--luke-color-border),
       0 1px 2px var(--luke-color-shadow-soft);
+  }
+
+  /* A list standing beside the page it opens fills its open row with the
+     accent's tint instead, so it reads on the list's own ground in either
+     theme; it sets no shadow, so a row whose menu is open keeps its ring. */
+  .luke-list-row[data-current="true"][data-current-look="tint"] {
+    background: var(--luke-color-fill-current);
   }
 
   /* A row chosen in its list's selection is filled as a Mac's list fills
