@@ -316,6 +316,7 @@ export function DesktopInbox({
   const { onMark: markItem } = marks;
   // K and J choose the item above or below, the keyboard following it to its row.
   const step = (listed: InboxListed) => {
+    timeOpen(listed.item.id);
     choose(listed);
     columns.onStep();
   };

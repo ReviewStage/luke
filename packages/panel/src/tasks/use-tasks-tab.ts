@@ -1199,6 +1199,10 @@ export function useTasksTab(input: {
     launchedStandIn(loadedTasksFixture()?.fixturePlace(input.run)),
   );
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
+  // Note that the Inbox already open has no opening to time.
+  const timeInboxOpen = () => {
+    if (inboxView === undefined) beginPanelSpan(PANEL_SPAN.INBOX_OPEN);
+  };
   // Whether the window's Inbox shows one column, as it measures itself.
   const [inboxSingle, setInboxSingle] = useState(false);
   const agentView = standIn?.kind === STAND_IN.AGENT ? standIn : undefined;
@@ -2952,6 +2956,7 @@ export function useTasksTab(input: {
       case LINK_PLACE.INBOX: {
         // Note that a link to the Inbox opens it as its sidebar row does, on nothing chosen.
         listLinked(workspace);
+        timeInboxOpen();
         standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
         return;
       }
@@ -2964,6 +2969,7 @@ export function useTasksTab(input: {
         if (!channelsOn) return;
         standChannelPlace(place.channelId);
         // Note that a channel's link opens it as its row does: on no item.
+        timeInboxOpen();
         standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
         return;
       }
@@ -3353,8 +3359,7 @@ export function useTasksTab(input: {
       // Note that it opens on nothing chosen, so one column shows the list and two an empty pane beside it (`inbox-columns.ts`).
       // With Channels on, it leaves any channel shown, so the Inbox lists every channel's items.
       onOpen: guard(() => {
-        // Note that the Inbox already open has no opening to time.
-        if (inboxView === undefined) beginPanelSpan(PANEL_SPAN.INBOX_OPEN);
+        timeInboxOpen();
         setHistoryFor(undefined);
         if (channelsOn) leaveChannel();
         setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });
@@ -3372,6 +3377,7 @@ export function useTasksTab(input: {
         );
       }),
       onOpenChannel: guard((channelId: string) => {
+        timeInboxOpen();
         setHistoryFor(undefined);
         chooseChannel(channelId);
         setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });

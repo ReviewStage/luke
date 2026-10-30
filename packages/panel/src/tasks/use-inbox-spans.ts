@@ -45,5 +45,12 @@ export function useInboxItemOpenSpan(shownId: string | undefined, held: boolean)
     asked.current = undefined;
     endPanelSpan(PANEL_SPAN.INBOX_ITEM_OPEN, () => ({ [PANEL_SPAN_ATTRIBUTE.HELD]: held ? 1 : 0 }));
   }, [shownId, held]);
+  // Note that a thread asked for and never drawn is left untimed once its Inbox goes.
+  useEffect(
+    () => () => {
+      if (asked.current !== undefined) leavePanelSpan(PANEL_SPAN.INBOX_ITEM_OPEN);
+    },
+    [],
+  );
   return timeOpen;
 }
