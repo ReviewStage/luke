@@ -73,7 +73,10 @@ afterEach(() => {
 });
 
 /** Draws the task's head with its relations' door, answering each ask as it stands; drawing again hands the head the next ask. */
-function head(door: Omit<TaskBlocksDoor, "ask">): (ask: TaskRelationAsk) => void {
+function head(
+  door: Omit<TaskBlocksDoor, "ask">,
+  task: Task = TASK,
+): (ask: TaskRelationAsk) => void {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -82,7 +85,7 @@ function head(door: Omit<TaskBlocksDoor, "ask">): (ask: TaskRelationAsk) => void
     act(() =>
       root.render(
         createElement(TaskStandingChips, {
-          task: TASK,
+          task,
           onSet: undefined,
           blocks: { ...door, ask },
         }),
@@ -148,4 +151,18 @@ test("on Sub-task a task above this one or in another repository says why and ta
     ) ?? assert.fail("no New sub-task row");
   act(() => create.click());
   assert.equal(composed, 1);
+});
+
+test("a task from a service before statuses, which draws no chips, still opens the add menu on an ask", () => {
+  const parents: [string, string | null][] = [];
+  const { status: _status, priority: _priority, ...before } = TASK;
+  const ask = head(
+    { ...DOOR, onSetParent: (taskId, parentTaskId) => parents.push([taskId, parentTaskId]) },
+    before,
+  );
+
+  ask({ kind: TASK_RELATION_KIND.PARENT, request: 1 });
+  act(() => row("Docs pass").click());
+
+  assert.deepEqual(parents, [[TASK.id, PEER.id]]);
 });

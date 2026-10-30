@@ -502,7 +502,21 @@ export function TaskStandingChips({
       : undefined,
   );
   const lines = blocks === undefined ? null : <TaskBlockLines task={task} door={blocks} />;
-  if (status === undefined || priority === undefined) return lines;
+  // The box the add menu hangs from, standing with or without the chips, so the task's menus and ⌘K open it on any task.
+  const asked =
+    blocks === undefined ? null : (
+      <TaskRelationAsked task={task} door={blocks} ask={blocks.ask} onAsked={blocks.onAsked} />
+    );
+  if (status === undefined || priority === undefined) {
+    return asked === null ? (
+      lines
+    ) : (
+      <div className="plan-task-standing">
+        {asked}
+        {lines}
+      </div>
+    );
+  }
   return (
     <div className="plan-task-standing">
       {/* Note that the line is pulled back by a chip's inset, so the status's mark stands on the title's edge. */}
@@ -532,9 +546,7 @@ export function TaskStandingChips({
           assignee={task.assignee}
           onPick={onSet === undefined ? undefined : (assigneeId) => onSet({ assigneeId })}
         />
-        {blocks === undefined ? null : (
-          <TaskRelationAsked task={task} door={blocks} ask={blocks.ask} onAsked={blocks.onAsked} />
-        )}
+        {asked}
       </Inline>
       {lines}
     </div>
