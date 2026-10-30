@@ -255,7 +255,7 @@ test("a child task stands under its parent, folded until the parent's chevron op
     );
   const chevron = (within: HTMLElement, name: string) => {
     const found = within.querySelector<HTMLButtonElement>(
-      `button[aria-label="Child tasks of ${name}"]`,
+      `button[aria-label="Sub-tasks of ${name}"]`,
     );
     assert.ok(found, `${name}'s fold is drawn`);
     return found;
@@ -294,7 +294,7 @@ function rowNames(within: HTMLElement, list: string): (string | null | undefined
 /** The chevron folding a task's child tasks. */
 function childFold(within: HTMLElement, name: string): HTMLButtonElement {
   const found = within.querySelector<HTMLButtonElement>(
-    `button[aria-label="Child tasks of ${name}"]`,
+    `button[aria-label="Sub-tasks of ${name}"]`,
   );
   assert.ok(found, `${name}'s fold is drawn`);
   return found;

@@ -753,7 +753,14 @@ function PlanDocument({
   const workspaceName = home?.name ?? "";
   // The task's blocks name and offer the tasks of its own workspace, and a press on one opens it as a list's row would.
   const openedWorkspace = opened?.workspaceId;
-  const { tasks: everyTask, onSelect: selectTask, onSetTaskBlock } = tasks;
+  const {
+    tasks: everyTask,
+    onSelect: selectTask,
+    onSetTaskBlock,
+    onSetTaskParent,
+    onNewChildTask,
+    relationMenu,
+  } = tasks;
   const blockTasks = useMemo(
     () => everyTask.filter((each) => each.workspaceId === openedWorkspace),
     [everyTask, openedWorkspace],
@@ -763,9 +770,36 @@ function PlanDocument({
       ? undefined
       : (change: TaskBlockRequest) => onSetTaskBlock(openedId, change),
   );
+  const setParent = useSteadyDoor(openedId === undefined ? undefined : onSetTaskParent);
+  const newSubTask = useSteadyDoor(
+    openedId === undefined ? undefined : () => onNewChildTask(openedId),
+  );
+  // The task's menus and ⌘K ask the head to open the add menu, each ask counted and answered as the repository chip's is, once the plan is in sight.
+  const [answeredRelation, setAnsweredRelation] = useState(0);
+  const relationPending =
+    relationMenu !== undefined &&
+    relationMenu.taskId === openedId &&
+    relationMenu.request > answeredRelation
+      ? relationMenu
+      : undefined;
+  const relationAsk = planInSight ? relationPending : undefined;
+  useEffect(() => {
+    if (relationPending === undefined || planInSight) return;
+    if (!planShown) choosePanelTab(SIDE_PANEL_TAB.PLAN);
+    setActivityAsked(undefined);
+  }, [relationPending, planShown, planInSight, choosePanelTab]);
   const blocks = useMemo<TaskBlocksDoor>(
-    () => ({ workspaceName, tasks: blockTasks, onOpen: selectTask, onChange: changeBlock }),
-    [workspaceName, blockTasks, selectTask, changeBlock],
+    () => ({
+      workspaceName,
+      tasks: blockTasks,
+      onOpen: selectTask,
+      onChange: changeBlock,
+      onSetParent: setParent,
+      onNewSubTask: newSubTask,
+      ask: relationAsk,
+      onAsked: setAnsweredRelation,
+    }),
+    [workspaceName, blockTasks, selectTask, changeBlock, setParent, newSubTask, relationAsk],
   );
   // Note that S opens the status chip only while the plan is in sight, never behind an agent's tab or Activity's list.
   const standing = useMemo<TaskStandingDoor>(

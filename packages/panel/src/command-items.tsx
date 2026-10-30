@@ -19,7 +19,7 @@
  * draws its row from a `PanelCommand` and says what choosing it does there.
  */
 
-import { TASK_STATUS } from "@luke/features/task-wire";
+import { TASK_RELATION_KIND, TASK_STATUS, type TaskRelationKind } from "@luke/features/task-wire";
 import {
   APP_COMMAND,
   type AppCommand,
@@ -36,9 +36,11 @@ import {
   MailIcon,
   MailOpenIcon,
   ScrollTextIcon,
+  UnlinkIcon,
   UserCheckIcon,
 } from "@luke/ui/icons";
 import type { MenuAction } from "./desktop/action-menu.js";
+import { TaskRelationIcon } from "./tasks/task-relation-menu.js";
 
 /** Where a command is offered: a menu on a row that names its thing, or ⌘K, whose row names nothing. */
 export const COMMAND_PLACE = {
@@ -137,10 +139,29 @@ export const PANEL_COMMAND = {
   CANCEL_TASK: unkeyed("Cancel task", <TaskStatusMark status={TASK_STATUS.CANCELED} />),
   CHANGE_REPOSITORY: unkeyed("Change repository", <GLYPH.REPOSITORY />),
   MOVE_TO_WORKSPACE: unkeyed("Move to workspace", <GLYPH.MOVE />),
-  NEW_CHILD_TASK: unkeyed("New child task", <GLYPH.ADD />),
+  NEW_CHILD_TASK: unkeyed("New sub-task", <GLYPH.ADD />),
+  ADD_SUB_TASK: unkeyed("Add sub-task…", <TaskRelationIcon kind={TASK_RELATION_KIND.SUB_TASK} />),
+  SET_PARENT: unkeyed("Set parent…", <TaskRelationIcon kind={TASK_RELATION_KIND.PARENT} />),
+  MARK_BLOCKED_BY: unkeyed(
+    "Mark as blocked by…",
+    <TaskRelationIcon kind={TASK_RELATION_KIND.BLOCKED_BY} />,
+  ),
+  MARK_BLOCKING: unkeyed(
+    "Mark as blocking…",
+    <TaskRelationIcon kind={TASK_RELATION_KIND.BLOCKS} />,
+  ),
+  REMOVE_PARENT: unkeyed("Remove parent", <UnlinkIcon />),
   OPEN_ON_GITHUB: keyed(APP_COMMAND.OPEN_ON_GITHUB, <GLYPH.OPEN_ON_GITHUB />),
   COPY_GITHUB_LINK: unkeyed("Copy GitHub link", <GLYPH.LINK />),
 } as const satisfies Record<string, PanelCommand>;
+
+/** Each relation's command, which opens the add menu on its kind (`task-relation-menu.tsx`), as the task's menus and ⌘K offer it. */
+export const RELATION_COMMAND = {
+  [TASK_RELATION_KIND.SUB_TASK]: PANEL_COMMAND.ADD_SUB_TASK,
+  [TASK_RELATION_KIND.PARENT]: PANEL_COMMAND.SET_PARENT,
+  [TASK_RELATION_KIND.BLOCKED_BY]: PANEL_COMMAND.MARK_BLOCKED_BY,
+  [TASK_RELATION_KIND.BLOCKS]: PANEL_COMMAND.MARK_BLOCKING,
+} as const satisfies Record<TaskRelationKind, PanelCommand>;
 
 /**
  * Each command a chord reaches, by that chord's command: the item worded as

@@ -66,6 +66,7 @@ import {
   commandWords,
   PANEL_COMMAND,
   type PanelCommand,
+  RELATION_COMMAND,
 } from "../command-items.js";
 import { usePlanDrafted } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -84,6 +85,7 @@ import {
   taskLinkPlace,
   versionHistoryItem,
 } from "../tasks/task-menu-items.js";
+import { TASK_RELATION_ORDER } from "../tasks/task-relation-menu.js";
 import {
   NO_ASSIGNEE,
   PRIORITY_ROWS,
@@ -144,9 +146,13 @@ import { ChosenTasksContext, chosenRowMenu } from "./tasks-selection.js";
  * name where the door draws it: the sidebar's row turns into a field, and
  * the Plan tab's ⋯ puts the caret in the plan's own title. Version history
  * opens the plan's versions over the whole window, opening the task first
- * where it is not the open one, the one item that moves it. New child task
+ * where it is not the open one, the one item that moves it. New sub-task
  * opens New task's card for a child of the task, in its workspace and
- * repository (`new-task-composer.tsx`). Pin moves the
+ * repository (`new-task-composer.tsx`). Add sub-task…, Set parent…, Mark as
+ * blocked by…, and Mark as blocking… open the add menu on their kind from
+ * the task's head (`task-relation-menu.tsx`), opening the task first as
+ * Change repository does, and Remove parent takes it out from under its
+ * parent at once, with Undo. Pin moves the
  * task in the sidebar at once and is undone from the same menu. A pick in
  * Status sets the task there, said in a toast whose Undo puts back the
  * status it stood at, asking nothing, since no status stops an agent; a
@@ -389,7 +395,9 @@ export type TaskMenuSurface = (typeof TASK_MENU_SURFACE)[keyof typeof TASK_MENU_
  * One task's actions in the groups a rule divides, offering only those that
  * apply to it now, for the surface that offers them. A row's menu holds
  * Copy link; then Rename, Version history, and Mark as unread or read; then
- * Status, Priority, and Assignee; then New child task; then Pin, Move to section, and Move to
+ * Status, Priority, and Assignee; then New sub-task, the four relations
+ * (Add sub-task…, Set parent…, Mark as blocked by…, Mark as blocking…), and
+ * Remove parent where the task has one; then Pin, Move to section, and Move to
  * workspace where the task may be moved; then the repository changed from
  * any row and Open on GitHub where it has one. The Plan tab's document
  * menu leads with Copy plan, since Copy formats the document drawn, and
@@ -437,6 +445,15 @@ function taskActionGroups(
     () => tasks.onNewChildTask(taskId),
     drawn,
   );
+  // Each relation opens the add menu on its kind in the task's head; Remove parent only where the task has one.
+  const relations: MenuAction[] = TASK_RELATION_ORDER.map((kind) =>
+    commandAction(RELATION_COMMAND[kind], () => tasks.onAddRelation(taskId, kind), drawn),
+  );
+  const unparent: MenuAction[] =
+    task?.parentTaskId === undefined
+      ? []
+      : [commandAction(PANEL_COMMAND.REMOVE_PARENT, () => tasks.onRemoveTaskParent(taskId), drawn)];
+  const relate = [child, ...relations, ...unparent];
   const versions = versionHistoryItem(() => tasks.history.onOpen(taskId), drawn);
   const section: MenuEntry[] = doors.section === undefined ? [] : [doors.section];
   const change = commandAction(
@@ -461,7 +478,7 @@ function taskActionGroups(
       ? [
           [...copy, ...link],
           [rename, versions, ...read],
-          [child],
+          relate,
           [...pinAction(tasks, task, lettered), ...section, ...move],
           open,
           [remove],
@@ -470,7 +487,7 @@ function taskActionGroups(
           link,
           [rename, versions, ...read],
           [...doors.standing],
-          [child],
+          relate,
           [...pinAction(tasks, task, lettered), ...section, ...move],
           [change, ...open],
           [remove],
@@ -911,7 +928,7 @@ export function SidebarTask({
                   <ListRowCount
                     settled={childCount.finished}
                     total={childCount.total}
-                    label={`${childCount.finished} of ${childCount.total} child tasks finished`}
+                    label={`${childCount.finished} of ${childCount.total} sub-tasks finished`}
                   />
                 )}
                 <Time at={at} now={now} hint={false} />
