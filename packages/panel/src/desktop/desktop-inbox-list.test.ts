@@ -1198,6 +1198,11 @@ test("a row says Needs you to a reader only outside Needs you, whose name says i
   const time = rowNamed(page, CODED.title).querySelector("time")?.textContent;
   showScope(page, "All");
   assert.equal(
+    page.querySelector("nav.inbox-tasks")?.getAttribute("aria-label"),
+    "Inbox items",
+    "the head names All itself",
+  );
+  assert.equal(
     heardRow(page, CODED.title)[0],
     `Invites Unread Expire after 7 days? Needs you ${time}`,
   );

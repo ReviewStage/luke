@@ -264,7 +264,7 @@ const ARCHIVED_WORDS = {
   UNARCHIVING: "Unarchiving",
 } as const;
 
-/** What the list's region is named, before its scope, which a reader hears there once rather than on every row (`needsYouShown`), since the head names no scope on Needs you. */
+/** What the list's region is named. */
 const INBOX_ITEMS = "Inbox items";
 
 /** What an unread row says to a reader, its dot being drawn for the eye alone. */
@@ -306,6 +306,18 @@ const INBOX_SCOPES = [INBOX_SHOW.TO_DO, INBOX_SHOW.ALL] as const satisfies reado
 /** The Inbox's name at its head: the scope after it, but for Needs you, where the Inbox opens, since no other control on the head says it. */
 function inboxTitle(show: InboxShow): string {
   return show === INBOX_SHOW.TO_DO ? "Inbox" : `Inbox · ${SCOPE_WORDS[show].label}`;
+}
+
+/**
+ * The list's region's name, Needs you after it only on the window's Inbox
+ * on Needs you, whose head names no scope and whose rows leave it unsaid
+ * (`needsYouShown`), so a reader hears the scope once; every other head
+ * names its scope itself, or names All, where the rows say Needs you.
+ */
+function regionLabel(head: InboxListHead): string {
+  return head.show.show === INBOX_SHOW.TO_DO && head.channel === undefined
+    ? `${INBOX_ITEMS} · ${NEEDS_YOU.LABEL}`
+    : INBOX_ITEMS;
 }
 
 /** A channel's name at the head of the Inbox narrowed to it: the scope after it, but for All, where a channel opens. */
@@ -1800,7 +1812,7 @@ export function InboxList({
     <nav
       ref={rowFocus.ref}
       className="inbox-tasks relative flex min-h-0 min-w-0 flex-col border-r border-border"
-      aria-label={`${INBOX_ITEMS} · ${SCOPE_WORDS[head.show.show].label}`}
+      aria-label={regionLabel(head)}
       hidden={columns === INBOX_COLUMNS.ITEM}
       onFocus={rowFocus.onFocus}
       onBlur={rowFocus.onBlur}
