@@ -53,6 +53,7 @@ async function mounted(source: SkillSource = SOURCE) {
   act(() => root?.render(createElement(Picker)));
   return {
     page,
+    close: () => act(() => latest?.onTrigger(undefined)),
     type: async (query: string, start = 0) => {
       const trigger: ComposerTrigger = { start, query, rect: { left: 0, top: 0, bottom: 0 } };
       act(() => latest?.onTrigger(trigger));
@@ -81,7 +82,7 @@ test("a search no skill matches reads the one no-match line", async () => {
   assert.ok(page.textContent?.includes("No skills match"));
 });
 
-test("another `/` opening the list draws the skills last read at once and reads them again behind, offering a skill added since", async () => {
+test("another `/` opening the list, at the same place or another, draws the skills last read at once and reads them again behind, offering a skill added since", async () => {
   const added: SkillsRead = {
     skills: [
       ...("skills" in READ ? READ.skills : []),
@@ -93,7 +94,7 @@ test("another `/` opening the list draws the skills last read at once and reads 
     new Promise((resolve) => {
       reads.push(resolve);
     });
-  const { page, type } = await mounted(source);
+  const { page, close, type } = await mounted(source);
   const offered = () => [...page.querySelectorAll("[role='option']")].map((row) => row.textContent);
 
   await type("");
@@ -105,4 +106,9 @@ test("another `/` opening the list draws the skills last read at once and reads 
   assert.equal(offered().length, 1, "the skills last read stand while it reads");
   await act(async () => reads[1]?.(added));
   assert.equal(offered().length, 2);
+
+  // The word left, a `/` typed again where it stood is another opening.
+  close();
+  await type("", 12);
+  assert.equal(reads.length, 3, "a `/` typed again at the same place reads them again");
 });

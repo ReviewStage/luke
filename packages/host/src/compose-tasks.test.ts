@@ -3067,6 +3067,37 @@ it.effect(
 );
 
 it.effect(
+  "a plan moved to another workspace on the same repository has its skills read there, never answered with the last workspace's",
+  () =>
+    Effect.gen(function* () {
+      const invites = {
+        ...task(INVITES, "Teammate invitations", "# Invites", 10),
+        repository: "acme/relay",
+      };
+      const service = fakeService([invites]);
+      const installed = (name: string): TaskSkillsAnswer => ({
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [{ name, description: "", source: TASK_SKILL_SOURCE.WORKSPACE }],
+        },
+      });
+      const { call, listed } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      const asked = () => call(GATEWAY_METHOD.TASKS_SKILLS, { planId: INVITES });
+      service.skills[INVITES] = installed("review");
+      assert.deepEqual(yield* asked(), installed("review"));
+
+      // Moved to another workspace, the plan offers that workspace's installed skills.
+      service.tasks = [{ ...invites, workspaceId: "workspace-acme" }];
+      service.skills[INVITES] = installed("release");
+      yield* listed();
+      assert.deepEqual(yield* asked(), installed("release"));
+    }),
+);
+
+it.effect(
   "a pull request is read by its workspace, its repository, and its number, none is answered as none, a service that did not answer as unanswered, and a number off the wire is refused before the service",
   () =>
     Effect.gen(function* () {

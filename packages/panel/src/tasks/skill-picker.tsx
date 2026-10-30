@@ -264,10 +264,14 @@ export function useSkillPicker({
   // Note that a message already naming a skill reads them too, so its chips are drawn.
   const wantsSkills = source !== undefined && (asked > 0 || holdsSlashWord(draft));
 
-  // A word closed with Escape stays closed only while the caret is in it.
+  // A word closed with Escape stays closed only while the caret is in it,
+  // and a word left is no longer the one the skills were read for, so a `/`
+  // typed again where it stood opens the list as another word does.
   const inWord = mention !== undefined;
   useEffect(() => {
-    if (!inWord) setClosedAt(undefined);
+    if (inWord) return;
+    setClosedAt(undefined);
+    setRead((was) => (was?.start === undefined ? was : { ...was, start: undefined }));
   }, [inWord]);
 
   // The skills are read as a `/` word opens the list, and again each time

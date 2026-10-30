@@ -266,9 +266,10 @@ function linkReadKept(exit: Exit.Exit<unknown>): Duration.Duration {
 /** A call on a task's Browser tabs behind a closed gate, or of a service that did not answer. */
 const BROWSER_TABS_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
-/** A plan's skills, by its id and the repository the list names it on, so a plan moved to another repository is another key. */
+/** A plan's skills, by its id and the workspace and repository the list names it in, so a plan moved to another of either is another key, its workspace's installed skills among what is read. */
 class PlanSkillsKey extends Data.Class<{
   readonly planId: string;
+  readonly workspaceId: string | undefined;
   readonly repository: string | undefined;
 }> {}
 
@@ -1774,12 +1775,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) {
           return carried<TasksSkillsAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
+        const listed =
+          "planId" in asked ? view.tasks.find((each) => each.id === asked.planId) : undefined;
         const key: SkillsKey =
           "planId" in asked
             ? new PlanSkillsKey({
                 planId: asked.planId,
-                repository:
-                  view.tasks.find((each) => each.id === asked.planId)?.repository ?? undefined,
+                workspaceId: listed?.workspaceId,
+                repository: listed?.repository ?? undefined,
               })
             : new RepositorySkillsKey({
                 workspaceId: asked.workspaceId,
