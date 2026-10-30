@@ -414,9 +414,9 @@ interface TaskRowNode {
   readonly children: readonly TaskRowNode[];
 }
 
-/** The parent a row stands under where `rows` holds it: a task's parent task; none for an agent, a task at the top, or one naming itself. */
+/** The parent a row stands under where `rows` holds it: a task's parent task; none for an agent, a task at the top, one naming itself, or a pinned one, which stands on its own pin. */
 function parentIn(row: TaskRow, held: ReadonlySet<string>): string | undefined {
-  if (row.kind !== TASK_ROW.TASK) return undefined;
+  if (row.kind !== TASK_ROW.TASK || row.task.pinnedAt !== undefined) return undefined;
   const { id, parentTaskId } = row.task;
   return parentTaskId !== undefined && parentTaskId !== id && held.has(parentTaskId)
     ? parentTaskId
@@ -461,10 +461,10 @@ function holdsStanding(node: TaskRowNode, standing: (row: TaskRow) => boolean): 
  * The rows as a list nesting child tasks draws them, in order: each row,
  * then the child tasks under it while `opened` says it stands open, to any
  * depth, each in the order `rows` hands it. A task stands under its parent
- * only where `rows` holds that parent: a child whose parent the list leaves
- * out, one the reader cannot see, the view filters out, a pin holds, or
- * another group or section holds, stands at the top, so it is never out of
- * reach, and no row stands twice. A row folded shut still draws the one
+ * where `rows` holds that parent, which the sidebar sees to across its
+ * lists (`homedTaskRows`); one whose parent `rows` leaves out, as a fold
+ * leaves out all but the open task, stands at the top, so it is never out
+ * of reach, and no row stands twice. A row folded shut still draws the one
  * `standing` keeps (the open task), and the rows between it and that one,
  * so the task worked on never leaves the list, as a folded group keeps it.
  */
@@ -485,6 +485,49 @@ export function drawnTaskRows(
   };
   for (const node of taskRowTree(rows)) draw(node, 0);
   return drawn;
+}
+
+/**
+ * The sidebar's lists, each as it draws its rows: Pinned, a section, or a
+ * group under Tasks. A child task stands only under its parent, wherever a
+ * list holds that parent, so each is moved out of the list it would sort
+ * into and into the list holding its top task, or its nearest pinned one,
+ * after that list's own rows, where `drawnTaskRows` nests it; and one with
+ * an ancestor no list holds, finished and hidden by the view, filtered out,
+ * or out of the reader's sight, is drawn nowhere, never at the top. A
+ * pinned task stays in Pinned, under no parent.
+ */
+export function homedTaskRows(lists: readonly (readonly TaskRow[])[]): TaskRow[][] {
+  const listOf = new Map<string, number>();
+  const byId = new Map<string, TaskSummary>();
+  lists.forEach((rows, list) => {
+    for (const row of rows) {
+      if (row.kind !== TASK_ROW.TASK || listOf.has(row.task.id)) continue;
+      listOf.set(row.task.id, list);
+      byId.set(row.task.id, row.task);
+    }
+  });
+  const homeOf = (row: TaskRow, list: number): number | undefined => {
+    if (row.kind !== TASK_ROW.TASK) return list;
+    const walked = new Set([row.task.id]);
+    let at = row.task;
+    // Note that a loop of parents, which nothing writes, ends the walk where it closes, at the last task it reached.
+    while (at.pinnedAt === undefined && at.parentTaskId !== undefined) {
+      const parent = byId.get(at.parentTaskId);
+      if (parent === undefined) return undefined;
+      if (walked.has(parent.id)) break;
+      walked.add(parent.id);
+      at = parent;
+    }
+    return listOf.get(at.id);
+  };
+  const homed = lists.map((rows, list) => rows.map((row) => ({ row, home: homeOf(row, list) })));
+  return lists.map((_, list) => [
+    ...(homed[list] ?? []).flatMap(({ row, home }) => (home === list ? [row] : [])),
+    ...homed.flatMap((rows, from) =>
+      from === list ? [] : rows.flatMap(({ row, home }) => (home === list ? [row] : [])),
+    ),
+  ]);
 }
 
 /** How many of a task's child tasks are finished, of all of them. */

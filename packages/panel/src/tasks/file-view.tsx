@@ -725,9 +725,10 @@ export function FileView({
   const readText = (): Promise<WholeText> =>
     read.kind === FILE_READ.READY
       ? Promise.resolve({ kind: WHOLE_TEXT.READ, text: read.text })
-      : readAt({ path: file.path, firstLine: 1, lastLine: 1, raw: true }).then(wholeTextOf, () => ({
-          kind: WHOLE_TEXT.UNREAD,
-        }));
+      : readAt({ path: file.path, firstLine: 1, lastLine: 1, raw: true }).then(
+          wholeTextOf,
+          (cause: unknown) => ({ kind: WHOLE_TEXT.UNREAD, cause }),
+        );
   const fileViewEnd = useFileViewEnd({
     path: file.path,
     ready: read.kind === FILE_READ.READY,

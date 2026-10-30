@@ -1,5 +1,6 @@
 import type { TasklessAgent } from "@luke/features/agent-wire";
 import { OPERATOR_NAME } from "@luke/features/model-label";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
@@ -46,9 +47,14 @@ const RESET_WORDS = {
   DONE: "Luke reset",
 } as const;
 
-/** The toast a Reset or its Undo that did not land says its reason in. */
-function refusedNotice(reason: string): ToastNotice {
-  return { words: reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED };
+/** The toast a Reset or its Undo that did not land says its reason in, reporting the answer that refused it. */
+function refusedNotice(refused: { readonly reason: string }): ToastNotice {
+  return {
+    words: refused.reason,
+    tone: STATUS_TONE.DANGER,
+    hold: TOAST_HOLD.FAILED,
+    failure: { surface: FAILURE_SURFACE.OPERATOR_RESET, cause: refused },
+  };
 }
 
 /** Luke's glyph: his face, giving way to the working mark while he works. */
@@ -95,7 +101,7 @@ export function SidebarLuke({
       .restore(retiredId)
       .then(opened)
       .then((result) => {
-        if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) toast(refusedNotice(result.reason));
+        if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) toast(refusedNotice(result));
       });
   const reset = (retiredId: string) => {
     const settle = working(RESET_WORDS.RUNNING);
@@ -106,7 +112,7 @@ export function SidebarLuke({
         settle(
           result.status === ACTION_RESULT_STATUS.ACCEPTED
             ? undoToast(RESET_WORDS.DONE, () => undo(retiredId))
-            : refusedNotice(result.reason),
+            : refusedNotice(result),
         ),
       );
   };

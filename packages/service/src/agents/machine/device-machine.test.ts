@@ -1,5 +1,5 @@
 /**
- * device-machine.test.ts -- a local agent's machine over a real dialect: its launch's secrets sealed in the row and handed over open once, a read that waits for its Mac's answer or is unavailable while the Mac is away, a launch or a message refused while it is away, a turn whose runner the Mac settled as gone settled lost, a run taken from a Mac quiet past its lease, and, on Luke Sync, every write to the agent's lines and requests notifying its account, which wakes the Mac's held reads and the machine's waits within a coalesce window.
+ * device-machine.test.ts -- a local agent's machine over a real dialect: its launch's secrets sealed in the row and handed over open once, the agent's saved state among them only for a device that takes it, a read that waits for its Mac's answer or is unavailable while the Mac is away, a launch or a message refused while it is away, a turn whose runner the Mac settled as gone settled lost, a run taken from a Mac quiet past its lease, and, on Luke Sync, every write to the agent's lines and requests notifying its account, which wakes the Mac's held reads and the machine's waits within a coalesce window.
  *
  * Synthetic accounts, agents, Macs, bearers, and keys throughout.
  */
@@ -8,6 +8,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import {
+  commitAgentState,
+  ensureAgentStateKey,
+  grantAgentStateUpload,
+} from "@luke/database/models/agent-state-store";
 import {
   createAgent,
   hasRepository,
@@ -27,6 +32,7 @@ import {
 } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import { enrollOwnDevice, removeHost } from "@luke/database/models/host-store";
+import { openAgentStateKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { storeWriter } from "@luke/database/models/writer";
 import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
@@ -38,18 +44,26 @@ import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
+  DEVICE_CAPABILITY,
   DEVICE_LAUNCH_REFUSAL,
+  type DeviceAgentLaunchSecrets,
+  type DeviceLaunchRefusal,
   deviceAgentLaunchPayloadSchema,
   deviceAgentLayout,
 } from "@luke/features/device-agent-wire";
 import { TURN_FAILURE } from "@luke/features/turn-run";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Fiber, Layer, Option, Redacted, Schema } from "effect";
+import { Clock, Effect, Fiber, Layer, Option, Redacted, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
 import { sweepDeviceLeases } from "../../maintenance/device-lease-sweep.js";
+import {
+  AGENT_STATE_GRANT,
+  agentStateBlobsFake,
+  agentStateBlobUrl,
+} from "../../testing/agent-state-blobs-fake.js";
 import {
   connectWorkspaceGitHub,
   GITHUB_FIXTURE_BOT,
@@ -165,7 +179,10 @@ const untilAsked = (userId: string, deviceId: string) =>
     return Option.getOrThrow(Option.fromNullishOr(request));
   });
 
-it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT), NO_GITHUB))(
+/** What a machine reaches beyond its store: no GitHub, and a store of saved state with nothing behind it. */
+const REACHED = Layer.merge(NO_GITHUB, agentStateBlobsFake().layer);
+
+it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT), REACHED))(
   "a local agent's machine",
   (it) => {
     it.effect(
@@ -231,6 +248,89 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
         assert.ok(Option.isNone(second), "a line is claimed once");
         assert.equal(after?.sealed, null, "the claim clears the row's copy");
       }),
+    );
+
+    it.effect(
+      "a launch carries the agent's newest saved state, its read and its key, to a device that registered the capability, and none to one that did not",
+      () =>
+        Effect.gen(function* () {
+          const capable = yield* openLocalAgent;
+          const incapable = yield* openLocalAgent;
+          yield* registerDevice(capable.userId, {
+            id: capable.deviceId,
+            name: "Studio",
+            ...DEVICE_LAYOUT,
+            capabilities: [DEVICE_CAPABILITY.AGENT_STATE],
+          });
+          const pathOf = (agentId: string) => `agent-state/${agentId}/${randomUUID()}`;
+          const saved = (opened: Effect.Success<typeof openLocalAgent>, path: string) =>
+            Effect.andThen(
+              grantAgentStateUpload(
+                opened.userId,
+                { agentId: opened.agent.id, deviceId: opened.deviceId, path },
+                new Date(0),
+              ),
+              commitAgentState(
+                opened.userId,
+                {
+                  agentId: opened.agent.id,
+                  fromGeneration: null,
+                  path,
+                  bytes: 749,
+                  sha256: "c".repeat(64),
+                  baseCommit: null,
+                  deviceId: opened.deviceId,
+                },
+                new Date(0),
+              ),
+            );
+          const capablePath = pathOf(capable.agent.id);
+          yield* saved(capable, capablePath);
+          yield* saved(incapable, pathOf(incapable.agent.id));
+          const claimedLaunch = (opened: Effect.Success<typeof openLocalAgent>) =>
+            Effect.gen(function* () {
+              const { handle } = yield* launched(opened);
+              const claimed = yield* claimedDeviceAgentLine(
+                opened.userId,
+                opened.deviceId,
+                handle.command,
+              );
+              const line = Option.getOrThrow(claimed);
+              return {
+                payload: Schema.decodeUnknownSync(deviceAgentLaunchPayloadSchema)(
+                  line.line.payload,
+                ),
+                // SAFETY: a launch line's claim hands over the secrets its seal held, decoded by their schema.
+                secrets: ("secrets" in line ? line.secrets : undefined) as
+                  | DeviceAgentLaunchSecrets
+                  | undefined,
+              };
+            });
+
+          const withState = yield* claimedLaunch(capable);
+          const without = yield* claimedLaunch(incapable);
+
+          const ring = Result.getOrThrow(parseKeyRing(Redacted.make(RING)));
+          const owner = { userId: capable.userId, agentId: capable.agent.id };
+          const sealed = Option.getOrThrow(
+            yield* ensureAgentStateKey(ring, owner.userId, owner.agentId),
+          );
+          const key = Redacted.value(Result.getOrThrow(openAgentStateKey(ring, owner, sealed)));
+          const claimedState = withState.secrets?.state;
+          assert.ok(claimedState !== undefined, "the capable device's launch carries its state");
+          const { expiresAt: _expiresAt, ...state } = claimedState;
+          assert.equal(withState.payload.stateGeneration, 1);
+          assert.deepEqual(state, {
+            generation: 1,
+            url: agentStateBlobUrl(AGENT_STATE_GRANT.READ, capablePath),
+            bytes: 749,
+            sha256: "c".repeat(64),
+            baseCommit: null,
+            key,
+          });
+          assert.equal(without.payload.stateGeneration, undefined);
+          assert.deepEqual(without.secrets, { env: ENV, stdin: FIRST_LINES });
+        }),
     );
 
     it.effect(
@@ -431,31 +531,31 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
         }),
     );
 
+    /** A local agent's launch claimed with a turn queued, then settled unstarted by its device with the refusal given: the agent, and its turn as the store reads it after. */
+    const refusedTurn = (refusal: DeviceLaunchRefusal) =>
+      Effect.gen(function* () {
+        const opened = yield* openLocalAgent;
+        const { userId, deviceId, agent } = opened;
+        const launch = yield* launched(opened);
+        yield* claimedDeviceAgentLine(userId, deviceId, launch.handle.command);
+        const writer = yield* storeWriter({ tools: {} });
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(
+          { userId, conversationId: agent.conversationId },
+          { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+        );
+        yield* settledDeviceAgentLine(userId, deviceId, launch.handle.command, 1, refusal);
+        const turn = (yield* latestTurnsOfReached([agent.conversationId])).get(
+          agent.conversationId,
+        );
+        return { agent, turn };
+      });
+
     it.effect(
       "a launch its Mac settled unstarted because the agent ran directly on it settles the turn as a session that ended, naming the folder its work is still in",
       () =>
         Effect.gen(function* () {
-          const opened = yield* openLocalAgent;
-          const { userId, deviceId, agent } = opened;
-          const launch = yield* launched(opened);
-          yield* claimedDeviceAgentLine(userId, deviceId, launch.handle.command);
-          const writer = yield* storeWriter({ tools: {} });
-          const turnId = randomUUID();
-          yield* writer.enqueueTurn(
-            { userId, conversationId: agent.conversationId },
-            { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
-          );
-
-          yield* settledDeviceAgentLine(
-            userId,
-            deviceId,
-            launch.handle.command,
-            1,
-            DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY,
-          );
-          const turn = (yield* latestTurnsOfReached([agent.conversationId])).get(
-            agent.conversationId,
-          );
+          const { agent, turn } = yield* refusedTurn(DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY);
 
           assert.equal(turn?.status, TURN_STATUS.FAILED);
           assert.equal(turn?.failure, TURN_FAILURE.SESSION_ENDED);
@@ -463,6 +563,17 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             ranDirectlyFolderOf(turn),
             deviceAgentLayout(DEVICE_LAYOUT.home, agent.id).checkoutPath,
           );
+        }),
+    );
+    it.effect(
+      "a launch its device settled unstarted because the agent's saved state could not be restored fails the turn as one its next message tries again after, never as a session that ended",
+      () =>
+        Effect.gen(function* () {
+          const { turn } = yield* refusedTurn(DEVICE_LAUNCH_REFUSAL.STATE_NOT_RESTORED);
+
+          assert.equal(turn?.status, TURN_STATUS.FAILED);
+          assert.equal(turn?.failure, TURN_FAILURE.MODEL);
+          assert.equal(ranDirectlyFolderOf(turn), undefined);
         }),
     );
     it.effect(

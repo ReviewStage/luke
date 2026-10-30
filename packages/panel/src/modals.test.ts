@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { FEEDBACK_KIND } from "@luke/features/feedback";
 import { CONFIRM_LOSS, ConfirmDialog, useConfirmDialog } from "@luke/ui";
+import { recordedFailure } from "@luke/ui/testing/reported-failure";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement, useState } from "react";
@@ -57,8 +58,10 @@ function owned(open: () => void, dialog: ReactElement | null): ReactElement {
 }
 
 function ConfirmOwner({ shown }: OwnerProps): ReactElement {
-  const confirm = useConfirmDialog({ subject: true, surfaceOpen: shown }, () =>
-    Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+  const confirm = useConfirmDialog(
+    { subject: true, surfaceOpen: shown },
+    () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+    () => recordedFailure().failure,
   );
   return owned(
     confirm.ask,

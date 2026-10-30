@@ -1,4 +1,5 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   ConfirmDialog,
   INSET,
@@ -11,7 +12,9 @@ import {
 import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useState } from "react";
+import { firstRefusal, type Kept } from "../act.js";
 import { COMMAND_PLACE, commandWords, PANEL_COMMAND } from "../command-items.js";
+import { confirmFailure } from "../failure-report.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { closeAllQuestion, closedNote, type InboxCloser } from "./inbox-close.js";
 import { type InboxListed, isUnread } from "./inbox-model.js";
@@ -38,12 +41,12 @@ import { type MarkSaying, markedNote } from "./use-inbox-read-marks.js";
 /** What the bar's Resolve says. */
 const RESOLVE = "Resolve";
 
-/** Marks one listed item read or unread, answering whether the service took it. */
+/** Marks one listed item read or unread, answering whether the service took it, with what refused it where it did not. */
 export type InboxListMark = (
   listed: InboxListed,
   unread: boolean,
   saying?: MarkSaying,
-) => Promise<boolean>;
+) => Promise<Kept>;
 
 /**
  * The bar over the Inbox's list holding the items `listed`, chosen there;
@@ -78,29 +81,36 @@ export function InboxSelectionBar({
     open.some((each) => each.item.id === item.id && each.item.revision === item.revision),
   );
   const asked = unchanged ? resolving : [];
-  const confirm = useConfirmDialog({ subject: asked.length > 0, surfaceOpen: shown }, () => {
-    const closing = asked;
-    if (onClose !== undefined) {
-      void Promise.all(closing.map(({ item }) => onClose(item, { quiet: true }))).then((taken) => {
-        const refused = taken.filter((each) => !each).length;
-        if (refused === 0) return;
-        toast({
-          words: closedNote(taken.length - refused, refused),
-          tone: STATUS_TONE.DANGER,
-          hold: TOAST_HOLD.FAILED,
-        });
-      });
-    }
-    onClear();
-    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-  });
+  const confirm = useConfirmDialog(
+    { subject: asked.length > 0, surfaceOpen: shown },
+    () => {
+      const closing = asked;
+      if (onClose !== undefined) {
+        void Promise.all(closing.map(({ item }) => onClose(item, { quiet: true }))).then(
+          (taken) => {
+            const refused = taken.filter((each) => !each.kept).length;
+            if (refused === 0) return;
+            toast({
+              words: closedNote(taken.length - refused, refused),
+              tone: STATUS_TONE.DANGER,
+              hold: TOAST_HOLD.FAILED,
+              failure: { surface: FAILURE_SURFACE.INBOX_CLOSE, cause: firstRefusal(taken) },
+            });
+          },
+        );
+      }
+      onClear();
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+    confirmFailure(FAILURE_SURFACE.INBOX_CLOSE),
+  );
 
   // Note that each item's mark goes on its own, there being no act marking several, and one toast answers them all once each did.
   const markAll = (marking: readonly InboxListed[], unread: boolean, undoable: boolean) => {
     if (onMark === undefined || marking.length === 0) return;
     void Promise.all(marking.map((entry) => onMark(entry, unread, { quiet: true }))).then(
       (taken) => {
-        const landed = marking.filter((_, at) => taken[at] === true);
+        const landed = marking.filter((_, at) => taken[at]?.kept === true);
         const refused = marking.length - landed.length;
         if (undoable && landed.length > 0) {
           const note = markedNote(unread, landed.length, refused);
@@ -112,6 +122,7 @@ export function InboxSelectionBar({
           words: markedNote(unread, landed.length, refused),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.INBOX_MARK, cause: firstRefusal(taken) },
         });
       },
     );

@@ -44,6 +44,7 @@ import {
   Predicate,
   Result,
   Schema,
+  type Scope,
 } from "effect";
 import {
   FetchHttpClient,
@@ -56,6 +57,7 @@ import { afterResponse } from "../../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
+  HOSTED_REFUSAL_STATUS,
   type HostedRefusal,
   hostedJsonResponse,
   hostedNotFoundRoute,
@@ -625,13 +627,39 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
   });
 }
 
+/** How many events a batch that would not decode says it holds, where it holds an array of them. */
+function eventCountOf(parsed: unknown): number | undefined {
+  if (!Predicate.isObject(parsed) || !("events" in parsed)) return undefined;
+  return Array.isArray(parsed.events) ? parsed.events.length : undefined;
+}
+
+/**
+ * A runner's batch refused for good, logged by its status, size, and event
+ * count, never its body. Note that it is logged here because the runner
+ * ends on such a refusal (`packages/agent-runner/src/events.ts`), and its turn falls
+ * to the sweep, which can say only that the runner went.
+ */
+const batchRefused = (
+  ids: { readonly agentId: string; readonly conversationId: string },
+  refusal: HostedRefusal,
+  size: { readonly bytes: number | string; readonly events?: number | undefined },
+) =>
+  Effect.logWarning(`runner-events: a batch was refused: ${refusal.error}`).pipe(
+    Effect.annotateLogs({
+      ...ids,
+      status: HOSTED_REFUSAL_STATUS[refusal.error],
+      bytes: size.bytes,
+      events: size.events ?? "unknown",
+    }),
+  );
+
 /** POST: one batch of a runner's events, admitted by its bearer and applied once. */
 const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint")(function* <R>(
   options: RunnerEventsOptions<R>,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest | DatabaseServices | R
+  HttpServerRequest.HttpServerRequest | DatabaseServices | Scope.Scope | R
 > {
   const { read, ended, idled, alive, title, turnEnded } = options;
   const incoming = yield* HttpServerRequest.HttpServerRequest;
@@ -644,6 +672,8 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   const admitted = yield* hostedStoreOrUnavailable(admitRunnerBearer(bearer));
   if (Option.isNone(admitted)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   const { target } = admitted.value;
+  // Every line the batch writes, and every issue it raises, names the account the agent runs for.
+  yield* Effect.annotateLogsScoped({ userId: target.userId });
   const agent = yield* hostedStoreOrUnavailable(
     readAgentOfConversation(target.userId, target.conversationId),
   );
@@ -652,9 +682,25 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   const runtime = Option.map(routing, (row) => row.runtime);
   const codex = Option.contains(runtime, CONVERSATION_RUNTIME.CODEX);
   const reader = read ?? (codex ? codexMoments : claudeCodeMoments);
-  const body = yield* readBodyBytesEffect(MAX_BODY_BYTES);
-  const batch = readBatch(yield* parseJsonBytes(body));
-  if (Option.isNone(batch)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const refusedFor = { agentId: agent.value.id, conversationId: target.conversationId };
+  const body = yield* readBodyBytesEffect(MAX_BODY_BYTES).pipe(
+    Effect.tapError((refusal) =>
+      batchRefused(refusedFor, refusal, {
+        bytes: request.headers.get("content-length") ?? `over ${MAX_BODY_BYTES}`,
+      }),
+    ),
+  );
+  const parsed = yield* parseJsonBytes(body).pipe(
+    Effect.tapError((refusal) => batchRefused(refusedFor, refusal, { bytes: body.byteLength })),
+  );
+  const batch = readBatch(parsed);
+  if (Option.isNone(batch)) {
+    yield* batchRefused(refusedFor, HOSTED_REFUSAL.INVALID_REQUEST, {
+      bytes: body.byteLength,
+      events: eventCountOf(parsed),
+    });
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
   const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
   const applying: Applying = {
     target,

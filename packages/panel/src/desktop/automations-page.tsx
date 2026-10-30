@@ -10,11 +10,11 @@ import {
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCallFailure,
-  type AutomationRunView,
   type AutomationView,
 } from "@luke/features/automation-view";
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { momentText } from "@luke/features/time-format";
 import { REFRESH_FAILED_WORDS } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
@@ -63,10 +63,11 @@ import { ACTOR_KIND, actorName } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { BotIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useCallback, useState } from "react";
-import { useAct } from "../act.js";
+import { unreachedAs, useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
+import { confirmFailure, unreadShown } from "../failure-report.js";
 import { MemberDirectory, useCreator } from "../member-directory.js";
 import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -254,7 +255,7 @@ function useRunNow(automationId: string): { readonly running: boolean; readonly 
   const run = () => {
     setRunning(true);
     act(ACT_KIND.AUTOMATIONS_RUN, { automationId, idempotencyKey: crypto.randomUUID() })
-      .catch((): AutomationRunView => ({ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }))
+      .catch(unreachedAs(AUTOMATION_CALL_FAILURE.UNANSWERED))
       .then((answer) => {
         setRunning(false);
         if ("failure" in answer) {
@@ -262,6 +263,11 @@ function useRunNow(automationId: string): { readonly running: boolean; readonly 
             words: RUN_REFUSAL_WORDS[answer.failure],
             tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
+            failure: {
+              surface: FAILURE_SURFACE.AUTOMATION_RUN,
+              cause: answer,
+              about: { automationId },
+            },
           });
         }
       });
@@ -483,19 +489,23 @@ function useRowDeletion(
     groups.some((group) => group.automations.some((each) => each.id === asking.id))
       ? asking
       : undefined;
-  const confirm = useConfirmDialog({ subject: asked !== undefined, surfaceOpen: true }, () => {
-    if (asked === undefined) return Promise.resolve(ACCEPTED);
-    return remove(asked.id).then((answer): ActionResult => {
-      if ("failure" in answer) {
-        return {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: DELETE_REFUSAL_WORDS[answer.failure],
-        };
-      }
-      onDeleted(asked.id);
-      return ACCEPTED;
-    });
-  });
+  const confirm = useConfirmDialog(
+    { subject: asked !== undefined, surfaceOpen: true },
+    () => {
+      if (asked === undefined) return Promise.resolve(ACCEPTED);
+      return remove(asked.id).then((answer): ActionResult => {
+        if ("failure" in answer) {
+          return {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: DELETE_REFUSAL_WORDS[answer.failure],
+          };
+        }
+        onDeleted(asked.id);
+        return ACCEPTED;
+      });
+    },
+    confirmFailure(FAILURE_SURFACE.AUTOMATION_DELETE, { automationId: asked?.id }),
+  );
   const { ask: askConfirm } = confirm;
   const ask = useCallback(
     (automation: AutomationSummary) => {
@@ -608,18 +618,30 @@ function ListPage({
       skeleton={<AutomationListSkeleton narrow={room === SHELL_ROOM.NARROW} />}
       error={
         workspacesUnread ? (
-          <ErrorState onRetry={tasks.onRetryWorkspaces} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.WORKSPACES_READ)}
+            onRetry={tasks.onRetryWorkspaces}
+            placement={ERROR_STATE_PLACEMENT.CENTRED}
+          >
             {WORKSPACES_UNREAD_LINE}
           </ErrorState>
         ) : (
-          <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.AUTOMATIONS_READ)}
+            onRetry={reload}
+            placement={ERROR_STATE_PLACEMENT.CENTRED}
+          >
             {UNREAD_LINE}
           </ErrorState>
         )
       }
     >
       {/* A refresh that failed after the list was read leaves it drawn, with a line over it. */}
-      {refreshFailed ? <ErrorState onRetry={reload}>{REFRESH_FAILED_WORDS}</ErrorState> : null}
+      {refreshFailed ? (
+        <ErrorState failure={unreadShown(FAILURE_SURFACE.AUTOMATIONS_REFRESH)} onRetry={reload}>
+          {REFRESH_FAILED_WORDS}
+        </ErrorState>
+      ) : null}
       {groups.length === 0 ? (
         <div className="automations-empty flex min-h-0 flex-1 flex-col before:flex-2 before:content-[''] after:flex-3 after:content-[''] [&>.luke-empty-state]:flex-none">
           <EmptyState icon={<ZapIcon />}>No automations yet.</EmptyState>
@@ -743,11 +765,19 @@ function RunsPage({
       skeleton={<RunsSkeleton />}
       error={
         workspacesUnread ? (
-          <ErrorState onRetry={tasks.onRetryWorkspaces} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.WORKSPACES_READ)}
+            onRetry={tasks.onRetryWorkspaces}
+            placement={ERROR_STATE_PLACEMENT.CENTRED}
+          >
             {WORKSPACES_UNREAD_LINE}
           </ErrorState>
         ) : (
-          <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.AUTOMATION_RUNS_READ)}
+            onRetry={reload}
+            placement={ERROR_STATE_PLACEMENT.CENTRED}
+          >
             {RUNS_UNREAD_LINE}
           </ErrorState>
         )
@@ -822,7 +852,11 @@ function UnreadPage({
 }): React.JSX.Element {
   return (
     <AutomationAbsentPage onBack={onBack} phone={phone}>
-      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+      <ErrorState
+        failure={unreadShown(FAILURE_SURFACE.AUTOMATION_READ)}
+        onRetry={onRetry}
+        placement={ERROR_STATE_PLACEMENT.CENTRED}
+      >
         {line}
       </ErrorState>
     </AutomationAbsentPage>

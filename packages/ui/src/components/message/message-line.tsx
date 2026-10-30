@@ -34,6 +34,11 @@ function drawsSomething(node: ReactNode): boolean {
   return node !== undefined && node !== null && typeof node !== "boolean";
 }
 
+/** The time's inset: at its end, and at its start too where it opens a received message's line, so it stands at the bubble's inset as the head over it does (`MessageHead`). */
+function timeInset(named: boolean, align: MessageLineAlign): string {
+  return !named && align === MESSAGE_LINE_ALIGN.START ? "px-luke-4" : "pe-luke-4";
+}
+
 /** The line under a message: `sender`, `at`, and `actions`, each left out where the message has none, the actions on the side away from `align`'s edge. */
 export function MessageLine({
   sender,
@@ -42,7 +47,7 @@ export function MessageLine({
   align = MESSAGE_LINE_ALIGN.END,
   wrap = false,
 }: {
-  /** Who sent it, as the caller's own mark and name; none for the reader's own. */
+  /** Who sent it, as the caller's own mark and name, or what else leads the line, such as how long a turn worked; none for the reader's own. */
   sender?: ReactNode;
   /** When it was sent. */
   at?: number | undefined;
@@ -68,7 +73,9 @@ export function MessageLine({
         </span>
       ) : null}
       {at === undefined ? null : (
-        <span className="luke-message-line-time flex flex-none items-center gap-luke-6 pe-luke-4 whitespace-nowrap tabular-nums">
+        <span
+          className={`luke-message-line-time flex flex-none items-center gap-luke-6 whitespace-nowrap tabular-nums ${timeInset(named, align)}`}
+        >
           {named ? <span aria-hidden="true">·</span> : null}
           <Time at={at} look={TIME_LOOK.DAY} />
         </span>

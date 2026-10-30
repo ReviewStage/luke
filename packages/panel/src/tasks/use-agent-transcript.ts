@@ -20,7 +20,7 @@ import {
 } from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
-import { askAct } from "../act.js";
+import { askAct, type Unreached } from "../act.js";
 import { jsonBytes, PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
 import { type AgentRun, agentStillWriting } from "./agent-model.js";
 
@@ -53,6 +53,11 @@ import { type AgentRun, agentStillWriting } from "./agent-model.js";
 /** How one read is asked at once: the agent, the cursor to read past, and the worker's call where it is a worker's, answered as the view hears it. Copy transcript reads this way. */
 export type TranscriptReader = (params: AgentMessagesParams) => Promise<AgentMessagesAnswerView>;
 
+/** A page as the window hears it: one the host pushed, or one saying the stream itself could not open or broke, with the error it broke with, which never crosses the act port. */
+export type HeardTranscriptPage =
+  | AgentTranscriptPage
+  | Unreached<typeof AGENT_CALL_FAILURE.UNANSWERED>;
+
 /**
  * How the window follows a transcript: each page is handed to `hear` as it
  * is pushed, a stream that could not open or broke as a page that could not
@@ -60,7 +65,7 @@ export type TranscriptReader = (params: AgentMessagesParams) => Promise<AgentMes
  */
 export type TranscriptFollower = (
   transcript: AgentTranscriptKey,
-  hear: (page: AgentTranscriptPage) => void,
+  hear: (page: HeardTranscriptPage) => void,
 ) => () => void;
 
 /** How the page below the oldest message held is read: the transcript and where to read below, answered as the view hears it. */
@@ -88,8 +93,8 @@ export const windowTranscriptFollower: TranscriptFollower = (transcript, hear) =
       if (!stopped) hear(page);
     }
   });
-  following.catch(() => {
-    if (!stopped) hear({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+  following.catch((cause: unknown) => {
+    if (!stopped) hear({ failure: AGENT_CALL_FAILURE.UNANSWERED, cause });
   });
   return () => {
     stopped = true;
@@ -145,6 +150,8 @@ export interface AgentTranscriptControl {
   reading: boolean;
   /** Whether the last read did not answer, so the tab offers to try again. */
   failed: boolean;
+  /** What the last read that did not answer failed with, for the tab to report: the page saying so, with what failed beneath it; nothing while none failed. */
+  failedWith: unknown;
   onRetry: () => void;
 }
 
@@ -176,6 +183,7 @@ interface Held {
   /** The rewind the newest page held was read at; none before a page landed or where the transcript was never rewound. */
   rewound: number | undefined;
   failed: boolean;
+  failedWith: unknown;
 }
 
 function fresh(transcript: AgentTranscriptKey): Held {
@@ -201,6 +209,7 @@ function fresh(transcript: AgentTranscriptKey): Held {
     queue: undefined,
     rewound: undefined,
     failed: false,
+    failedWith: undefined,
   };
 }
 
@@ -246,12 +255,12 @@ function meets(held: readonly AgentTranscriptMessage[], page: AgentTranscriptPag
 }
 
 /** A page pushed, joined to what is held: its messages by id, and where the agent stands as it says. */
-function joined(was: Held, page: AgentTranscriptPage): Held {
+function joined(was: Held, page: HeardTranscriptPage): Held {
   // Note that a transcript the account does not reach draws nothing it held of it, as one the host drew from what it held before access was checked.
   if ("failure" in page) {
     return page.failure === AGENT_CALL_FAILURE.NOT_FOUND
-      ? { ...fresh(was.transcript), pages: was.pages, failed: true }
-      : { ...was, failed: true };
+      ? { ...fresh(was.transcript), pages: was.pages, failed: true, failedWith: page }
+      : { ...was, failed: true, failedWith: page };
   }
   // Note that a newest page that does not meet what is held replaces it, older pages and all, rather than leave a gap,
   // and so does one read at another rewind, since the rewind dropped messages a join would keep.
@@ -293,6 +302,7 @@ function joined(was: Held, page: AgentTranscriptPage): Held {
     ),
     queue: page.queue,
     failed: false,
+    failedWith: undefined,
   };
 }
 
@@ -430,7 +440,7 @@ export function useAgentTranscript(input: {
   }, [transcript, before, olderOut]);
 
   const onRetry = useCallback(() => {
-    setHeld((was) => ({ ...was, failed: false }));
+    setHeld((was) => ({ ...was, failed: false, failedWith: undefined }));
     setAttempt((count) => count + 1);
   }, []);
 
@@ -457,6 +467,7 @@ export function useAgentTranscript(input: {
     queue: held.queue,
     reading: shown && !held.failed && held.messages.length === 0 && writing,
     failed: held.failed,
+    failedWith: held.failedWith,
     onRetry,
   };
 }

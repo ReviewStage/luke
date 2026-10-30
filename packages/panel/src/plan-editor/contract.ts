@@ -61,7 +61,7 @@ export interface EditorFormatDoors {
 
 /** What a format toolbar does to an editor's selection, and where it reads it standing. */
 export interface EditorFormatting {
-  /** Where the selected words stand in the window, the editor focused or not; none where nothing is laid out to measure. */
+  /** Where the selected words stand in the window, as much of them as the editor shows, the editor focused or not; none where nothing is laid out to measure. */
   readonly selectionBox: () => EditorBox | undefined;
   /** A mark laid on every selected word, or taken off where every one wears it. */
   readonly toggleMark: (mark: Exclude<WritingMark, typeof WRITING_MARK.LINK>) => void;

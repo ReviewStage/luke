@@ -114,7 +114,7 @@ const CODEX_ITEMS: readonly {
       results: null,
     },
     line: ["Searched the web for", "banker's rounding in JavaScript"],
-    body: ['"type": "search"'],
+    body: ["type: search"],
   },
 
   {
@@ -131,7 +131,7 @@ const CODEX_ITEMS: readonly {
     input: { server: "sentry", tool: "search_issues", arguments: { query: "invoice" } },
     output: "3 issues match invoice",
     line: ["Ran", "search_issues", "Sentry"],
-    body: ['"query": "invoice"', "3 issues match invoice"],
+    body: ["Inputinvoice", "3 issues match invoice"],
   },
 ];
 
@@ -162,7 +162,7 @@ test("a file change's update marks the lines Codex's diff changed, a file delete
     ),
   );
   const line = container.querySelector("summary") ?? assert.fail("the call is a fold's line");
-  assert.ok(line.textContent?.includes(`${CHECKOUT}/src/a.ts +1`), line.textContent ?? "");
+  assert.ok(line.textContent?.includes(`${CHECKOUT}/src/b.ts +1`), line.textContent ?? "");
   act(() => line.click());
   const marked = (kind: string) =>
     [...container.querySelectorAll(`[data-row="${kind}"]`)].map((each) => each.textContent);
@@ -250,13 +250,13 @@ test("Codex's reasoning summary is drawn as the agent's reasoning", () => {
   );
 });
 
-test("Luke's read_inbox, called over its MCP server and stored under its own name, opens the inbox", () => {
+test("Luke's read_agent, called over its MCP server and stored under its own name, opens the agent", () => {
   const { container, opened: targets } = drawn(
-    storedPart("read_inbox", {}, { status: "accepted", inbox: [] }),
+    storedPart("read_agent", { agentId: "agent-7" }, { status: "running" }),
   );
   const row =
-    container.querySelector<HTMLButtonElement>('button[data-call-id="item_read_inbox"]') ??
+    container.querySelector<HTMLButtonElement>('button[data-call-id="item_read_agent"]') ??
     assert.fail("the row is a button");
   act(() => row.click());
-  assert.deepEqual(targets, [{ kind: TOOL_TARGET.INBOX }]);
+  assert.deepEqual(targets, [{ kind: TOOL_TARGET.AGENT, agent: "agent-7" }]);
 });

@@ -1,4 +1,5 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   PLAN_ACTOR,
   TASK_BOUNDS,
@@ -70,6 +71,7 @@ import { usePlanDrafted } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChordLinks } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
+import { confirmFailure } from "../failure-report.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref.js";
 import { lastEditOf } from "../tasks/plan-body.js";
@@ -586,8 +588,10 @@ export function useTaskMenuItems(
 ) {
   const task = taskOf(tasks, taskId);
   const reads = useReadMarks();
-  const deletion = useConfirmDialog({ subject: task !== undefined, surfaceOpen: tasks.shown }, () =>
-    tasks.onDeleteTask(taskId),
+  const deletion = useConfirmDialog(
+    { subject: task !== undefined, surfaceOpen: tasks.shown },
+    () => tasks.onDeleteTask(taskId),
+    confirmFailure(FAILURE_SURFACE.TASK_DELETE, { taskId }),
   );
   // Mark done as the chord runs it: on a task not already done, and nothing otherwise.
   const markDone =

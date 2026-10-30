@@ -1,5 +1,6 @@
 import type { AgentOverviewPullRequest } from "@luke/features/agent-wire";
 import { PULL_REQUEST_ACTION, PULL_REQUEST_REFUSAL } from "@luke/features/pull-request-write-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
   ANNOUNCE,
@@ -14,6 +15,7 @@ import {
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
+import { confirmFailure } from "../failure-report.js";
 import { PLACEMENT_END, type PlanEditorPlacement } from "../plan-editor/contract.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { EDITOR_NOTE_CLASS, MarkdownEditor } from "./markdown-editor.js";
@@ -328,6 +330,7 @@ export function PullRequestDescription({
       }
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
+    confirmFailure(FAILURE_SURFACE.PULL_REQUEST_DESCRIPTION),
   );
   const read = drawn ?? (
     <p className="pull-request-words m-0 min-w-0 select-text text-body-size leading-reading text-muted-foreground">

@@ -2,6 +2,7 @@ import type { PlanDocument, PlanRevisionLine } from "@luke/features/task-wire";
 import type { TasksRevisionAnswer, TasksRevisionsAnswer } from "@luke/features/tasks-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ActedResult, askKept, type Kept } from "../act.js";
 import { revisionOfSave } from "./plan-history-model.js";
 
 /**
@@ -128,7 +129,7 @@ export interface PlanHistoryControl {
   /** Reads the page of revisions older than the oldest read; answers whether it landed. */
   onLoadEarlier: () => Promise<boolean>;
   /** Restores the version `seq`, or the one chosen, as the plan's content; the caller hears it landed through `onRestored`. */
-  onRestore: (seq?: number) => Promise<ActionResult>;
+  onRestore: (seq?: number) => Promise<ActedResult>;
 }
 
 /** What a restore the service did not carry answers, so its press says why. */
@@ -258,7 +259,7 @@ export function usePlanHistory(input: {
    * Says a restore landed, with the way to undo it: a restore of the
    * version that stood before it, where the history read names one.
    */
-  onRestored: (undo: (() => Promise<boolean>) | undefined) => void;
+  onRestored: (undo: (() => Promise<Kept>) | undefined) => void;
 }): PlanHistoryControl {
   const { source, taskId, editedAt, name, shown, seek, returnTo, onRestored } = input;
   const [list, setList] = useState<HeldList | undefined>(undefined);
@@ -471,16 +472,16 @@ export function usePlanHistory(input: {
     });
   }, [readBefore]);
 
-  const onRestore = async (at = seq): Promise<ActionResult> => {
+  const onRestore = async (at = seq): Promise<ActedResult> => {
     if (taskId === undefined || at === undefined) return RESTORE_REFUSED;
     // The version standing before the restore is the newest the list read.
     const before = newest;
-    const restored = await source.restore(taskId, at).catch(() => false);
-    if (!restored) return RESTORE_REFUSED;
+    const restored = await askKept(source.restore(taskId, at));
+    if (!restored.kept) return { ...RESTORE_REFUSED, cause: restored.cause };
     onRestored(
       before === undefined || before === at
         ? undefined
-        : () => latest.current.restore(taskId, before).catch(() => false),
+        : () => askKept(latest.current.restore(taskId, before)),
     );
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };

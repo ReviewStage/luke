@@ -3,12 +3,14 @@ import {
   type AgentAttachment,
   type AgentTranscriptMessage,
 } from "@luke/features/agent-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { andList, countWords, type Noun } from "@luke/features/words";
 import { CONFIRM_LOSS, ConfirmDialog, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
 import { createContext, type ReactNode, useContext } from "react";
 import { MessageAction } from "../ai-elements/message.js";
+import { confirmFailure } from "../failure-report.js";
 import type { EditComposerDoors } from "./edit-composer.js";
 
 /**
@@ -232,10 +234,14 @@ export function RevertMessageAction({ messageId }: { messageId: string }): React
   const doors = useContext(RewindContext);
   const lineId = doors?.revertsAt.get(messageId);
   // Note that the revert answers at once: the box takes it in turn behind any send, and says there if it did not go.
-  const confirm = useConfirmDialog({ subject: lineId !== undefined, surfaceOpen: true }, () => {
-    if (lineId !== undefined) doors?.onRevert(lineId);
-    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-  });
+  const confirm = useConfirmDialog(
+    { subject: lineId !== undefined, surfaceOpen: true },
+    () => {
+      if (lineId !== undefined) doors?.onRevert(lineId);
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+    confirmFailure(FAILURE_SURFACE.AGENT_REWIND),
+  );
   if (doors === undefined || lineId === undefined) return null;
   return (
     <>

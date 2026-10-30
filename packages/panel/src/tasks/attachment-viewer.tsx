@@ -6,6 +6,7 @@ import {
   type FileChip,
   sizeLabel,
 } from "@luke/features/attachment-model";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
 import {
   Button,
@@ -55,6 +56,7 @@ import {
 import type { MenuAction } from "../desktop/action-menu.js";
 import { PhoneHead, PlaceMore } from "../desktop/phone-head.js";
 import { diagramAlt, useAppearance, useDrawing } from "../diagram-drawing.js";
+import { failureShown } from "../failure-report.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { linkPressOf } from "./use-open-link.js";
@@ -404,7 +406,16 @@ function AttachmentBody({
     return (
       <div className="attachment-viewer-body min-h-0 flex-auto attachment-viewer-lines mx-auto flex w-viewer-text flex-col bg-card-code">
         {diagram.refused ? (
-          <FailureNote onRetry={diagram.retry}>{DIAGRAM_REFUSED_LINE}</FailureNote>
+          <FailureNote
+            failure={failureShown({
+              surface: FAILURE_SURFACE.PLAN_DIAGRAM,
+              cause: FAILURE_CONDITION.REFUSED,
+              refused: true,
+            })}
+            onRetry={diagram.retry}
+          >
+            {DIAGRAM_REFUSED_LINE}
+          </FailureNote>
         ) : null}
         <WholeFile
           name={file.name}

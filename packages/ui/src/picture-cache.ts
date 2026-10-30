@@ -1,4 +1,6 @@
+import { FAILURE_CONDITION } from "@luke/features/shown-failure";
 import { useEffect, useReducer, useState, useSyncExternalStore } from "react";
+import type { ReportedFailure } from "./reported-failure.js";
 
 /**
  * picture-cache.ts -- the pictures this window read, each read once through the host and shared by every place that draws it, up to a byte budget.
@@ -13,8 +15,9 @@ import { useEffect, useReducer, useState, useSyncExternalStore } from "react";
  * cannot reach, or whose bytes are gone, is kept as missing; a read that did
  * not land is not kept, so the next place to ask reads it again, and the
  * place that asked draws it as failed, with the retry that reads it again
- * there. Nothing here knows whose pictures they are: the place drawing one
- * hands its read.
+ * there, and the failure beneath it as the place reports it. Nothing here
+ * knows whose pictures they are: the place drawing one hands its read, and
+ * what a read that did not land is reported as.
  */
 
 /** Where a picture's read stands: still out, landed as its `data:` URL, answered as none, or not landed this time. */
@@ -33,7 +36,14 @@ export type PictureState =
       readonly kind: typeof PICTURE_STATE.FAILED;
       /** Reads the picture again, as the place drawing it asked for it the first time. */
       readonly retry: () => void;
+      /** The read that did not land, as the place drawing it reports it. */
+      readonly failure: ReportedFailure;
     };
+
+/** A picture's read that did not land, one for each attempt, as a place reporting it takes it: its condition, as its code. */
+export interface PictureUnread {
+  readonly code: typeof FAILURE_CONDITION.UNREAD;
+}
 
 /** What a read answers: the bytes in base64 under their type, or why there are none, `NOT_FOUND_FAILURE` among them. */
 export type PictureAnswer =
@@ -200,6 +210,7 @@ export function usePicture(
   owner: string,
   id: string,
   read: (owner: string, id: string) => Promise<PictureAnswer>,
+  failure: (unread: PictureUnread) => ReportedFailure,
   drawn = true,
 ): PictureState {
   const [, redraw] = useReducer((count: number) => count + 1, 0);
@@ -208,12 +219,14 @@ export function usePicture(
   const generation = useSyncExternalStore(heedForgetting, () => forgotten);
   const state = pictureNow(owner, id);
   // Note that a failure is this picture's own, so another drawn in its place still reads.
-  const [failed, setFailed] = useState<{
-    owner: string;
-    id: string;
-    generation: number;
-    attempt: number;
-  }>();
+  const [failed, setFailed] = useState<
+    PictureUnread & {
+      owner: string;
+      id: string;
+      generation: number;
+      attempt: number;
+    }
+  >();
   useEffect(() => {
     let standing = true;
     const kept = keptPicture(owner, id, () => read(owner, id));
@@ -222,7 +235,7 @@ export function usePicture(
     kept.read.then((answered) => {
       if (!standing) return;
       if (answered === undefined && keptPictures.get(owner)?.get(id) === undefined) {
-        setFailed({ owner, id, generation, attempt });
+        setFailed({ code: FAILURE_CONDITION.UNREAD, owner, id, generation, attempt });
       }
       redraw();
     });
@@ -239,7 +252,7 @@ export function usePicture(
     failed.generation === generation &&
     failed.attempt === attempt;
   return mine && state.kind === PICTURE_STATE.READING
-    ? { kind: PICTURE_STATE.FAILED, retry }
+    ? { kind: PICTURE_STATE.FAILED, retry, failure: failure(failed) }
     : state;
 }
 

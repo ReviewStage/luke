@@ -445,7 +445,7 @@ const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL]
 const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...MEMORY_TOOLS,
   ...taskToolsOf({ taskId: "any" }),
-  ...repositoryToolsOf({ repository: "any", kind: AGENT_KIND.CODER }),
+  ...repositoryToolsOf({ repository: "any" }),
   ...kindToolsOf({ kind: AGENT_KIND.OPERATOR }),
   ...kindToolsOf({ kind: AGENT_KIND.CODER }),
   ...starterToolsOf({ underPilot: false }),

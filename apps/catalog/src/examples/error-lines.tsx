@@ -1,5 +1,6 @@
 import { ErrorLine, FormField, GAP, SettingsRow, Stack, TextField } from "@luke/ui";
 import { useState } from "react";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -9,7 +10,10 @@ import { CatalogSection } from "../section";
  */
 
 /** The refusal every sample says. */
-const REFUSED = "The GitHub installation no longer reaches acme/old-name.";
+const REFUSED = {
+  words: "The GitHub installation no longer reaches acme/old-name.",
+  failure: CATALOG_FAILURE,
+};
 
 /** A form field whose value was refused. */
 function RefusedField(): React.JSX.Element {
@@ -26,7 +30,7 @@ function ErrorLines(): React.JSX.Element {
     <CatalogSection id="error-line-places" title="Alone, in a field, and in a Settings row">
       <div className="catalog-column">
         <Stack gap={GAP.FIELD}>
-          <ErrorLine>{REFUSED}</ErrorLine>
+          <ErrorLine error={REFUSED} />
           <RefusedField />
           <SettingsRow
             label="GitHub"

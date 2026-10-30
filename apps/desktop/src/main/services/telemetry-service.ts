@@ -1,3 +1,4 @@
+import { signedInAccountId } from "@luke/credentials/snapshot";
 import {
   PRODUCT_EVENT,
   productSessionCountBucket,
@@ -5,6 +6,7 @@ import {
 } from "@luke/features/analytics";
 import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
 import { feedbackDeliveryFromEnvironment } from "@luke/features/feedback";
+import { sentryUser } from "@luke/features/sentry-account";
 import {
   eventWithoutAccessTokens,
   SPANS_NAMING_ACCESS_TOKENS,
@@ -14,10 +16,11 @@ import {
 import { type SentryCapture, sentryReporterLayer } from "@luke/features/sentry-reporting";
 import { SENTRY_TRACES_SAMPLE_RATE } from "@luke/features/sentry-tracing";
 import { type RunMode, sentryReportingEnabled } from "@luke/host";
+import type { AppStateStore } from "@luke/host/client";
 import type { EffectDesktopService } from "@luke/host/desktop-service";
 import type { SentryEnvironment } from "@luke/host/sentry-environment";
 import * as Sentry from "@sentry/electron/main";
-import { Effect, Exit, type Layer, Scope } from "effect";
+import { Effect, Exit, type Layer, Scope, Stream } from "effect";
 import {
   sampleWindowMemory,
   type UnresponsiveEpisode,
@@ -79,6 +82,28 @@ export const mainSentry: SentryCapture = {
  * and the host, so their fibers and the acts' runs all report through it.
  */
 export const mainErrorReporting: Layer.Layer<never> = sentryReporterLayer(mainSentry);
+
+/**
+ * Names the signed-in account as Sentry's user, by its id alone, for as long
+ * as `scope` stands: set as one signs in, changed as another does, and
+ * cleared as they sign out, from main's own document. Every report main
+ * sends takes it: its own, a window's or the preload's event as it passes
+ * through, and a native crash's. A window's log line is not among them, and
+ * names the account as it leaves the window (`@luke/features/sentry-account`).
+ */
+export function followAccountInReports(
+  state: AppStateStore,
+): Effect.Effect<void, never, Scope.Scope> {
+  return Effect.asVoid(
+    Effect.forkScoped(
+      state.changes.pipe(
+        Stream.map((document) => signedInAccountId(document.account)),
+        Stream.changes,
+        Stream.runForEach((accountId) => Effect.sync(() => Sentry.setUser(sentryUser(accountId)))),
+      ),
+    ),
+  );
+}
 
 /**
  * One episode of a panel not answering, as one Sentry event: how long it

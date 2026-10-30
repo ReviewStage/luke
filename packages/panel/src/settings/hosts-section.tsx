@@ -7,10 +7,10 @@ import {
   hostInstallCommand,
   hostUpgradeCommand,
 } from "@luke/features/host-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { agoText, momentText } from "@luke/features/time-format";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   ANNOUNCE,
@@ -53,7 +53,7 @@ import {
   presenceStanding,
   useDevicePresence,
 } from "../device-presence.js";
-import { useExperiment } from "../use-app-state.js";
+import { confirmFailure, unreadShown } from "../failure-report.js";
 import { MenuRow } from "./menu-row.js";
 import {
   ThisMacAct,
@@ -81,19 +81,18 @@ import {
  * In the desktop app this Mac stands first, with where its `luke-host`
  * stands under it (`this-mac-host-row.tsx`) and Retry where it failed: on
  * its own machine's row, matched by the device it is enrolled as, or, where
- * the service lists no machine for it (removed, never enrolled, a turn-on
+ * the service lists no machine for it (not turned on, removed, a turn-on
  * that failed, or another account's), on a This Mac row of its own with
- * Turn on again or Retry, so there is always a way back. A browser tab has
- * no This Mac, so it draws neither.
+ * Turn on, Turn on again, or Retry, so there is always a way in. A browser
+ * tab has no This Mac, so it draws neither, and with no host says what one
+ * is above Add hosts.
  *
  * Add hosts mints an install token here, in the window, and hands the
  * service its SHA-256 alone, so the token never leaves the window that
  * shows it: it stands in this section's state while the dialog is open,
  * inside the install command the member runs on each host, and is gone once
  * the dialog closes. Revoke this command stops new servers enrolling with it, and none it
- * already enrolled. The section stands nowhere while the local agents
- * experiment is off, which hosts sit behind as This Mac does, and neither
- * does its page (`settings-rows.ts`'s `PAGE_EXPERIMENT`).
+ * already enrolled.
  */
 
 /** The bytes of randomness behind an install token, as many as a device secret's. */
@@ -115,6 +114,7 @@ const WORDS = {
   ADDING: "Making a command",
   ADD_FAILED: "Could not make an install command. Try again.",
   READ_FAILED: "Could not read your hosts.",
+  NONE: "No hosts yet. A host is a Mac or Linux server of yours that runs your agents instead of the cloud.",
   SIGNED_OUT: "Sign in to see your hosts.",
   ONLINE: "Online",
   UNKNOWN: "Can't check status",
@@ -208,7 +208,11 @@ function HostRow({
   /** Where this Mac stands, on the row of the machine it is enrolled as alone. */
   thisMac?: ThisMacHost | undefined;
 }): React.JSX.Element {
-  const removing = useConfirmDialog({ subject: true, surfaceOpen: true }, () => onRemove(host.id));
+  const removing = useConfirmDialog(
+    { subject: true, surfaceOpen: true },
+    () => onRemove(host.id),
+    confirmFailure(FAILURE_SURFACE.HOST_REMOVE),
+  );
   // Note that a service older than platforms listed only Linux servers.
   const platform = host.platform ?? DEVICE_PLATFORM.LINUX;
   const seen = `${DEVICE_PLATFORM_NAME[platform]} · ${seenWords(host, book, now)}`;
@@ -293,7 +297,11 @@ function AddHostsDialog({
   onRevoke: () => Promise<ActionResult>;
   onClose: () => void;
 }): React.JSX.Element {
-  const revoking = useConfirmDialog({ subject: true, surfaceOpen: true }, onRevoke);
+  const revoking = useConfirmDialog(
+    { subject: true, surfaceOpen: true },
+    onRevoke,
+    confirmFailure(FAILURE_SURFACE.HOST_REVOKE),
+  );
   return (
     <Dialog
       open
@@ -335,24 +343,23 @@ function AddHostsDialog({
 
 /** The Hosts page's one group, untitled under the page's own title: the member's machines, read when the page opens, or why they cannot be drawn, and Add hosts under them. */
 export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element | null {
-  const on = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   const { act } = useAct();
   const now = useSecond();
   const minute = Math.floor(useMinute() / MINUTE_MS);
   const [hosts, setHosts] = useState<readonly Host[] | undefined>(undefined);
   // Note that the list is read once a minute for the hosts that join or leave, while each host's beat is the window's shared presence, read often enough that a host that keeps beating never reads offline.
-  const book = useDevicePresence(on && signedIn);
+  const book = useDevicePresence(signedIn);
   const [installScriptUrl, setInstallScriptUrl] = useState<string | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [adding, setAdding] = useState(false);
   const [addFailed, setAddFailed] = useState(false);
   const [shown, setShown] = useState<ShownToken | undefined>(undefined);
-  const thisMac = useThisMacHost(on && signedIn);
+  const thisMac = useThisMacHost(signedIn);
 
   // The page opening reads the hosts the service holds now, which a server may just have joined.
   useEffect(() => {
-    if (!on || !signedIn) return;
+    if (!signedIn) return;
     let live = true;
     setHosts(undefined);
     setReadFailed(false);
@@ -373,13 +380,13 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
     return () => {
       live = false;
     };
-  }, [act, on, signedIn, attempt]);
+  }, [act, signedIn, attempt]);
 
   // A server that joins while the page stands is drawn within a minute, with no skeleton over the list the member is reading.
   const mountMinute = useRef(minute);
   useEffect(() => {
     // The mount's own read is the effect above, so the minute it began in stands as it is.
-    if (!on || !signedIn || minute === mountMinute.current) return;
+    if (!signedIn || minute === mountMinute.current) return;
     let live = true;
     act(ACT_KIND.HOSTS_LIST).then(
       (answer) => {
@@ -391,7 +398,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
     return () => {
       live = false;
     };
-  }, [act, on, signedIn, minute]);
+  }, [act, signedIn, minute]);
 
   const add = useCallback(() => {
     setAdding(true);
@@ -439,7 +446,6 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
       });
   }, [act, shown]);
 
-  if (!on) return null;
   const thisMacId = thisMac.standing?.deviceId;
   const listedMac =
     thisMacId === undefined ? undefined : hosts?.find((host) => host.id === thisMacId);
@@ -451,39 +457,42 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const thisMacAlone = listedMac === undefined && thisMac.line !== null;
   return (
     <>
-      {loaded && ordered.length === 0 && !thisMacAlone ? null : (
-        // Note that signed out the section holds the search anchor, since Add hosts is drawn only for a signed-in member.
-        <SettingsSection anchor={signedIn ? undefined : SETTINGS_SEARCH_ROW.ADD_HOSTS}>
-          {!signedIn ? (
-            <SettingsLine>{WORDS.SIGNED_OUT}</SettingsLine>
-          ) : loaded ? (
-            <>
-              {thisMacAlone && thisMac.line !== null ? (
-                <ThisMacHostRow thisMac={thisMac} line={thisMac.line} />
-              ) : null}
-              {ordered.map((host) => (
-                <HostRow
-                  key={host.id}
-                  host={host}
-                  book={book}
-                  now={now}
-                  installScriptUrl={installScriptUrl}
-                  onRemove={remove}
-                  thisMac={host === listedMac ? thisMac : undefined}
-                />
-              ))}
-            </>
-          ) : readFailed ? (
-            <SettingsLine>
-              <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
-                {WORDS.READ_FAILED}
-              </ErrorState>
-            </SettingsLine>
-          ) : (
-            <SettingsRowsSkeleton label={readingWords("your hosts")} rows={HOSTS_SKELETON} />
-          )}
-        </SettingsSection>
-      )}
+      {/* Note that signed out the section holds the search anchor, since Add hosts is drawn only for a signed-in member. */}
+      <SettingsSection anchor={signedIn ? undefined : SETTINGS_SEARCH_ROW.ADD_HOSTS}>
+        {!signedIn ? (
+          <SettingsLine>{WORDS.SIGNED_OUT}</SettingsLine>
+        ) : loaded && ordered.length === 0 && !thisMacAlone ? (
+          <SettingsLine>{WORDS.NONE}</SettingsLine>
+        ) : loaded ? (
+          <>
+            {thisMacAlone && thisMac.line !== null ? (
+              <ThisMacHostRow thisMac={thisMac} line={thisMac.line} />
+            ) : null}
+            {ordered.map((host) => (
+              <HostRow
+                key={host.id}
+                host={host}
+                book={book}
+                now={now}
+                installScriptUrl={installScriptUrl}
+                onRemove={remove}
+                thisMac={host === listedMac ? thisMac : undefined}
+              />
+            ))}
+          </>
+        ) : readFailed ? (
+          <SettingsLine>
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.HOSTS_READ)}
+              onRetry={() => setAttempt((count) => count + 1)}
+            >
+              {WORDS.READ_FAILED}
+            </ErrorState>
+          </SettingsLine>
+        ) : (
+          <SettingsRowsSkeleton label={readingWords("your hosts")} rows={HOSTS_SKELETON} />
+        )}
+      </SettingsSection>
       {signedIn ? (
         <div className={ADD_LINE} {...searchAnchorProps(SETTINGS_SEARCH_ROW.ADD_HOSTS)}>
           <Button
@@ -495,7 +504,17 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
           >
             {WORDS.ADD}
           </Button>
-          <ErrorLine level={ANNOUNCE.ALERT}>{addFailed ? WORDS.ADD_FAILED : null}</ErrorLine>
+          <ErrorLine
+            level={ANNOUNCE.ALERT}
+            error={
+              addFailed
+                ? {
+                    words: WORDS.ADD_FAILED,
+                    failure: unreadShown(FAILURE_SURFACE.HOST_INSTALL_COMMAND),
+                  }
+                : undefined
+            }
+          />
         </div>
       ) : null}
       {shown === undefined ? null : (

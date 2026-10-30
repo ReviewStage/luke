@@ -33,6 +33,13 @@ import {
 } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import {
+  type AppHolderInbox,
+  type AppHolderInboxes,
+  type AppHostRead,
+  type AppInboxItems,
+  UNREAD,
+} from "@luke/host/app-state";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { Effect } from "effect";
@@ -57,7 +64,8 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
 import { ToastHost } from "../toast.js";
 import "../file-tree/index.js";
-import { followedInboxes } from "../testing/followed-inboxes.js";
+import { askKept } from "../act.js";
+import { handHostReads } from "../testing/app-state.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
@@ -198,6 +206,10 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
     }),
   });
   const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  // The account's feed holds nothing of the plan, which stands for its inbox whole.
+  handHostReads({
+    items: { rows: { [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: [] }, [INBOX_SCOPE_KIND.AGENT]: {} } },
+  });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   act(() =>
@@ -218,10 +230,7 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
               strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
               tab: SIDE_PANEL_TAB.INBOX,
             },
-            agents: agentsControl({
-              agentIds: [agentId],
-              inboxFollower: followedInboxes(() => ({ items: [] })).follower,
-            }),
+            agents: agentsControl({ agentIds: [agentId] }),
           }),
         }),
       ),
@@ -307,6 +316,8 @@ async function narrowTaskInbox(
   reader: Pick<TasksControl, "me"> & Partial<Pick<TasksControl["agents"], "answerInbox">> = {
     me: undefined,
   },
+  /** The account's feed, which the tab draws first where it holds the plan; one holding nothing yet unless given. */
+  feed: AppHostRead<AppInboxItems> = UNREAD,
 ) {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -316,14 +327,25 @@ async function narrowTaskInbox(
       removeEventListener: () => undefined,
     }),
   });
-  // The inbox is pushed as `items` once followed, or as `first` says once it settles, and
-  // again as `later` says once it settles.
-  const main = followedInboxes(() => (first === undefined ? { items } : undefined));
-  const pushed = (answer: AgentInboxAnswerView) =>
-    main.push(
-      { kind: INBOX_SCOPE_KIND.PLAN, id: TASK.id },
-      "failure" in answer ? { failure: answer.failure } : { items: answer.items },
-    );
+  // The plan's held read holds `items` from the start, or what `first` says once it settles, and
+  // again what `later` says once it settles; one that fails after it answered keeps its rows, as the host keeps them.
+  const heldOf = (read: AppHolderInbox): AppHolderInboxes => ({
+    [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: read },
+    [INBOX_SCOPE_KIND.AGENT]: {},
+  });
+  let standing: AppHolderInbox = first === undefined ? { rows: items } : UNREAD;
+  // Note that the window is a fresh one, so nothing a test before handed it stands.
+  fakeAppBridge({});
+  const reads = handHostReads({ items: feed, holders: heldOf(standing) });
+  const pushed = (answer: AgentInboxAnswerView) => {
+    standing =
+      "failure" in answer
+        ? standing.rows === undefined
+          ? { failed: true }
+          : standing
+        : { rows: answer.items };
+    reads.deliverHolders(heldOf(standing));
+  };
   void first?.then(pushed);
   void later.then(pushed);
   const container = document.body.appendChild(document.createElement("div"));
@@ -352,7 +374,6 @@ async function narrowTaskInbox(
               ...(reader.answerInbox === undefined
                 ? undefined
                 : { answerInbox: reader.answerInbox }),
-              inboxFollower: main.follower,
             }),
           }),
         }),
@@ -713,23 +734,34 @@ test("a task's Inbox whose read failed offers Retry though To do lists nothing i
   first.unmount();
 
   const read = heldAnswer();
-  const inbox = await narrowTaskInbox(settled, 1_200, read.promise);
-  assert.deepEqual(inbox.rows(), [], "Needs you, kept from before, lists nothing");
+  const inbox = await narrowTaskInbox(settled, 1_200, undefined, read.promise);
   await read.settle({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+  assert.deepEqual(inbox.rows(), [], "Needs you, kept from before, lists nothing");
   assert.deepEqual(inbox.failure(), [true, true]);
   window.localStorage.clear();
   inbox.unmount();
 });
 
-test("a task's Inbox whose refresh failed keeps the rows it holds and says Could not refresh with Retry at their foot", async () => {
+test("a task's Inbox whose own read failed keeps the rows the account's feed holds, drawn before the read answers, and says Could not refresh with Retry at their foot", async () => {
   window.localStorage.clear();
   showEverything();
   const items = [
     approvedItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
   ];
+  // The account's feed holds the task's items, which the tab draws first, while the task's own read is out.
   const refresh = heldAnswer();
-  const inbox = await narrowTaskInbox(items, 1_200, refresh.promise);
+  const inbox = await narrowTaskInbox(
+    [],
+    1_200,
+    undefined,
+    refresh.promise,
+    { me: undefined },
+    {
+      rows: { [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: items }, [INBOX_SCOPE_KIND.AGENT]: {} },
+    },
+  );
+  assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   assert.deepEqual(inbox.refreshFailure(), [null, false], "nothing is said while the read stands");
   await refresh.settle({ failure: AGENT_CALL_FAILURE.UNANSWERED });
   assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
@@ -1127,7 +1159,7 @@ function standingPageMounted(keeps: boolean) {
               sidePanel: DOCUMENT_PANEL,
               onSetTaskStanding: (_taskId, standing) => {
                 sent.push(standing);
-                return Promise.resolve(keeps);
+                return askKept(Promise.resolve(keeps));
               },
             }),
           }),

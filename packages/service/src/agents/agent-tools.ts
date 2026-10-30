@@ -434,6 +434,9 @@ export const START_AGENT_REFUSAL = {
     "Not started: that task is worked in pilot mode and has no pilot, so this agent would be its " +
     "pilot, and Pilot is off for the member you start for. Ask them to turn it on in Settings › " +
     "Experimental.",
+  TREE_STOPPED:
+    "Not started: that task is a child task of a stopped pilot tree, so no agent starts or goes " +
+    "on there until someone presses Start on the top task.",
   STARTER_CONTINUE:
     "Not started: you can't continue an agent that started you, directly or through the agents " +
     "between you, since the agents it started would report to a pilot you started; tell its " +
@@ -471,12 +474,11 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING, START_AGENT_REFUSAL.CREDENTIAL_MISSING],
   [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE, START_AGENT_REFUSAL.API_KEY_UNREADABLE],
   [HOSTED_API_ERROR.DEVICE_REMOVED, START_AGENT_REFUSAL.DEVICE_REMOVED],
+  [HOSTED_API_ERROR.TREE_STOPPED, START_AGENT_REFUSAL.TREE_STOPPED],
 ]);
 
 /** Why a start on a device refused it, in words the calling model can act on: by what the device refused it for, bar another member's device, which names whose it is (`notOwnerWords`). */
 const LOCAL_AGENT_REFUSAL_WORDS = {
-  [LOCAL_AGENT_REFUSAL.OFF]:
-    "Not started: this task runs its agents on a device, and Local agents is off for the member you start for. Ask them to turn it on, or to change where the task runs.",
   [LOCAL_AGENT_REFUSAL.MAC_AWAY]:
     "Not started: the device this task runs its agents on is away, asleep or with Luke closed, so it cannot take an agent. Try again once it is back, or ask the member to change where the task runs.",
   [LOCAL_AGENT_REFUSAL.CODEX]:
@@ -2281,7 +2283,7 @@ const stopOf = (
     );
     const before = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
     const eveOf = eve === undefined ? Effect.fail(HOSTED_REFUSAL.UNAVAILABLE) : Effect.succeed(eve);
-    const cancelled = earlier ? false : yield* cancelledTurn(eveOf, writer, agent, key, by);
+    const cancelled = earlier ? false : yield* cancelledTurn(eveOf, writer, agent, { key, by });
     const after = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
     const status = agentStatusOf(after.turn, {
       createdAt: agent.createdAt,

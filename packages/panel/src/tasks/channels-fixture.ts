@@ -11,11 +11,7 @@
  */
 
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import {
-  AGENT_CALL_FAILURE,
-  type AgentInboxChanged,
-  INBOX_SCOPE_KIND,
-} from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import {
   AGENT_KIND,
   AGENT_STATUS,
@@ -1244,12 +1240,6 @@ function changed(channelId: string, change: (channel: ChannelSeed) => ChannelSee
 }
 
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
-  [ACT_KIND.AGENTS_INBOX_FOLLOW]: ({ kind, id }) => {
-    const pushed: AgentInboxChanged["inbox"] = {
-      items: kind === INBOX_SCOPE_KIND.AGENT ? strayItems() : itemsOf(id),
-    };
-    return pushedOnce(pushed);
-  },
   [ACT_KIND.AGENTS_PAGE]: ({ agentId }) =>
     agentId === STRAY.agentId
       ? {

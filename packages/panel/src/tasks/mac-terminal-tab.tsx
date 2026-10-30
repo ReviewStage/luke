@@ -3,6 +3,7 @@ import {
   MAC_TERMINAL_PORT_MESSAGE,
   macTerminalPortOutboundSchema,
 } from "@luke/features/mac-terminal-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -22,12 +23,13 @@ import {
 import { GLYPH, PlayIcon } from "@luke/ui/icons";
 import type { MacTerminalStripTab } from "@luke/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { Option, Schema } from "effect";
+import { Cause, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef, useState } from "react";
 import { askActResult, useAct } from "../act.js";
 import { TERMINAL_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
+import { confirmFailure, failureShown } from "../failure-report.js";
 import { useBusyPress } from "../settings/busy-press.js";
 import { usePhoneRoom } from "../stage-room.js";
 import type { TerminalHandle } from "../terminal/contract.js";
@@ -274,7 +276,11 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
     );
   };
   // Stopping ends what runs, which nothing brings back, so it asks first; a refusal is said in the question.
-  const stopping = useConfirmDialog({ subject: running, surfaceOpen: true }, stopRun);
+  const stopping = useConfirmDialog(
+    { subject: running, surfaceOpen: true },
+    stopRun,
+    confirmFailure(FAILURE_SURFACE.TERMINAL_STOP),
+  );
   const stop = stopping.ask;
   // Note that a refusal is written on the screen, so a press that opened nothing says why.
   const opening = useBusyPress(() =>
@@ -380,7 +386,14 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
       <Fill flow={FILL_FLOW.ROW} clip className={TERMINAL_BODY_CLASS}>
         <div className={TERMINAL_HOST_CLASS}>
           {AsyncResult.isFailure(loaded) ? (
-            <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={retry}>
+            <ErrorState
+              failure={failureShown({
+                surface: FAILURE_SURFACE.BUNDLE_LOAD,
+                cause: Cause.squash(loaded.cause),
+              })}
+              placement={ERROR_STATE_PLACEMENT.CENTRED}
+              onRetry={retry}
+            >
               {TERMINAL_LOAD_FAILED}
             </ErrorState>
           ) : (

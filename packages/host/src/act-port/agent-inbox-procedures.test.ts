@@ -16,7 +16,6 @@ import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
 import {
   AGENT_CALL_FAILURE,
-  type AgentInboxChanged,
   type AgentInboxScope,
   INBOX_SCOPE_KIND,
 } from "@luke/features/agent-view";
@@ -405,18 +404,13 @@ async function until(ready: () => boolean): Promise<void> {
   for (let turn = 0; turn < 200 && !ready(); turn += 1) await nextTurn();
 }
 
-it("a panel's inbox stream follows the inbox at the host, hears each change told of it alone, and lets it go once its last stream closes", async () => {
+it("a panel's hold on an inbox follows it at the host once for every stream of it, hears nothing down the hold, and lets it go once its last stream closes", async () => {
   const asked: string[] = [];
-  const listeners = new Set<(changed: AgentInboxChanged) => void>();
-  const follows: Pick<HostAsk, "agentInboxFollow" | "agentInboxUnfollow" | "onInboxChanged"> = {
+  const follows: Pick<HostAsk, "agentInboxFollow" | "agentInboxUnfollow"> = {
     agentInboxFollow: () => Effect.sync(() => void asked.push("follow")),
     agentInboxUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
-    onInboxChanged: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
   };
-  // SAFETY: the stream reaches the follow asks alone.
+  // SAFETY: the hold reaches the follow asks alone.
   const host = follows as HostAsk;
   const port = testActPort(agentInboxProcedures({ host }));
   ports.push(port);
@@ -426,21 +420,16 @@ it("a panel's inbox stream follows the inbox at the host, hears each change told
   const one = await client[AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW](scope);
   const two = await client[AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW](scope);
   const first = one.next();
-  const second = two.next();
   await until(() => asked.length === 1);
-  for (const listener of [...listeners]) {
-    listener({ scope: { kind: INBOX_SCOPE_KIND.AGENT, id: AGENT_ID }, inbox: UNANSWERED });
-    listener({ scope, inbox: { items: [ITEM] } });
-  }
-  assert.deepEqual((await first).value, { items: [ITEM] });
-  assert.deepEqual((await second).value, { items: [ITEM] });
+  assert.deepEqual(asked, ["follow"], "the host follows the inbox once for both streams");
 
   await one.return(undefined);
-  await until(() => listeners.size === 1);
-  assert.deepEqual(asked, ["follow"], "the host follows the inbox once for both streams");
+  await nextTurn();
+  assert.deepEqual(asked, ["follow"], "the first stream closing lets nothing go");
   await two.return(undefined);
   await until(() => asked.length === 2);
   assert.deepEqual(asked, ["follow", "unfollow"]);
+  assert.deepEqual(await first, { done: true, value: undefined }, "the hold carried nothing");
 });
 
 it("a window that is not a panel is refused an inbox stream, and the host follows nothing", async () => {
@@ -449,7 +438,6 @@ it("a window that is not a panel is refused an inbox stream, and the host follow
   const host = {
     agentInboxFollow: () => Effect.sync(() => void asked.push("follow")),
     agentInboxUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
-    onInboxChanged: () => () => undefined,
   } as unknown as HostAsk;
   const port = testActPort(agentInboxProcedures({ host }));
   ports.push(port);

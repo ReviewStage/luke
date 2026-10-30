@@ -10,7 +10,10 @@ what we collect, who we send it to, and how to turn it off.
 - **What Luke stores.** On your Mac, only its window layout and the messages
   you have not sent yet. On our service: your account, your tasks and their
   plans, your agents' transcripts, and your conversation. Agents work
-  in sandboxes on our service, not on your Mac. See [What we
+  in sandboxes on our service, not on your Mac. An agent you run on This Mac
+  or on a host works in a folder there instead, and as each of its turns ends
+  saves its unpushed work, its session files, and its attachments, encrypted,
+  to a private store of ours, kept seven days after its last save. See [What we
   collect](#what-we-collect) and [Storage](#storage).
 - **Models run on your keys.** Dictation goes to OpenAI, and
   agents go to Anthropic or OpenAI, on the API key or subscription you
@@ -18,8 +21,8 @@ what we collect, who we send it to, and how to turn it off.
 - **Who else gets data.** GitHub for your repositories. Vercel runs our
   service and the sandboxes, and Neon hosts our database. PostHog gets usage
   data and screen recordings with every word masked. Sentry gets crash,
-  error, and performance reports, which leave out what a model was sent or
-  answered. Any integration you connect gets what your agents ask it. See
+  error, and performance reports, and a log of the errors Luke shows you,
+  which leave out what a model was sent or answered. Any integration you connect gets what your agents ask it. See
   [Who we send it to](#who-we-send-it-to).
 - **Commands on your Mac.** Agents can run commands on your Mac, and
   what those commands print leaves it. See "Commands agents run on your Mac"
@@ -473,8 +476,8 @@ earlier in its life is not tracked, and its snapshot stays until Vercel lets
 it expire. The sandbox of each session a task's own Luke ran, before tasks
 lost him, is deleted the same way, shortly after his conversation is removed.
 
-**A local agent on your Mac.** For the accounts in the early test of local
-agents, an agent you start on This Mac runs Claude Code, or Codex for a
+**A local agent on your Mac.** Once you turn on This Mac in Settings ›
+Hosts, an agent you start on This Mac runs Claude Code, or Codex for a
 GPT model, on your Mac, each in a virtual machine of its own (smolvm) that sees
 only that agent's folder, and its transcript, its events, and the files its
 tools read still reach our service as any agent's do. It runs on the
@@ -486,12 +489,59 @@ handed into its machine with Claude Code, where a command the agent runs can
 read it, unlike in a Vercel Sandbox. It reaches GitHub with a short-lived token our
 service hands your Mac, as for a host below: the token stays on your Mac,
 outside the machine and every folder it can see, and the agent sees only a
-placeholder. To run them, the app downloads smolvm from its GitHub release
-once, keeps it in Luke's own folder on your Mac only once it matches the
-checksum Luke pins, checks the files it runs against those checksums again
-before each use, and pulls the public sandbox image our hosts run. An agent
-that ran directly on your Mac before this is not started again; continue it
-into a new agent.
+placeholder. Each machine lasts only for one turn of its agent's: it is made
+fresh as the turn starts and deleted as the turn ends, whatever ended it, and
+the token kept for it is deleted with it. As a turn ends, Luke saves what of
+the agent nothing else holds: the work in its repository that no remote has
+(commits not pushed, changes not committed, stashes), the session files Claude
+Code or Codex resumes from, and the files attached to its messages, but never
+a credential file of Claude Code's, Codex's, or `gh`'s. Inside the agent's
+machine, before it is deleted, they are packed into one file in the agent's
+folder; once the machine is gone, your Mac encrypts that file with AES-256-GCM
+under a key drawn for that agent alone, which our service keeps encrypted
+under a server-only secret and hands your Mac only to save or restore the
+agent, and which your Mac holds in memory alone, and uploads it straight to a
+private Vercel Blob store of Luke's. Our service holds both the file and its
+key, so the encryption keeps it from anyone who reaches the store alone, not
+from our service. Each save goes once a newer one lands, and the newest seven
+days after it was made, or later while the agent runs; all of them go sooner
+with the agent's transcript, seven days after you delete the agent or its
+task, and at once with your account. A save that fails leaves the agent's
+folder as it is, and a file already encrypted waits in Luke's own folder on
+your Mac, outside every folder the machine sees, until it uploads or a later
+turn's save replaces it; a state over 500 MB is not saved, and the reason is
+said in plain words. A turn that finds none of the agent's work on your Mac
+brings its newest save back: your Mac downloads it into Luke's own folder,
+outside every folder the machine sees, checks its size and digest, decrypts it
+into the agent's folder, where the agent's machine unpacks it, and deletes
+both files once it has; a restore that fails deletes nothing, is said in plain
+words, and is tried again with the agent's next message. Luke's log on your
+Mac names each save's and each restore's size, digest, generation, and how
+long it took, never what it holds.
+Once a turn's save has landed, your Mac keeps the agent's folder for 15
+minutes, so a message soon after goes on from it, or for less while your disk
+has under a tenth free, then deletes it, and the agent's next turn brings its
+save back. A folder whose save did not land, or that no save ever held, as an
+agent's from before saves did, is saved without a turn, one agent at a time,
+minutes apart, and less often after each save that fails; it stays until one
+lands, then goes after the same 15 minutes. An agent you archive or delete
+loses its folder, its machine, and its token from
+your Mac as soon as the archive reaches it, or within minutes of your Mac's
+next being online once our service no longer lists the agent; a folder whose
+save has not landed is saved first where it can be, and one that still is not
+is kept wherever the Mac's check finds work in it that no remote has, or
+cannot tell, for seven days, and then deleted. Only the agents this copy of
+Luke started are ever touched, never another copy's sharing your Mac. Nothing
+of this happens until you turn This Mac on. Turning it on registers a login
+item that runs Luke's host program, `luke-host`, on your Mac at each login,
+whether the app is open or not, and the app keeps it registered from then on;
+removing This Mac in Settings › Hosts stops its agents, and it runs none until
+you turn it on again. To run them, `luke-host` downloads smolvm from its
+GitHub release once, keeps it in Luke's own folder on your Mac only once it
+matches the checksum Luke pins, checks the files it runs against those
+checksums again before each use, and pulls the public sandbox image our hosts
+run. An agent that ran directly on your Mac before this is not started again;
+continue it into a new agent.
 
 **A local agent on a host.** A host is your own Linux server that you add
 to Luke to run your agents, as This Mac does. It has no git login of yours, so
@@ -501,8 +551,22 @@ token cut to that one repository, good for an hour and renewed every 50
 minutes. Your own saved GitHub token is never sent. Each agent on a host runs
 in a virtual machine of its own (smolvm), and the token stays on the box,
 outside that machine and outside every folder it can see: the host keeps it in
-a file readable only by its own user for as long as the agent runs, and
-deletes it with the agent. The agent sees only a placeholder. Its `git` and
+a file readable only by its own user for one turn of the agent's, and
+deletes it as the turn ends. The agent's machine lasts only for that turn too:
+it is made fresh as the turn starts and deleted as the turn ends, whatever
+ended it. As on This Mac, as each turn ends the host saves the agent's
+unpushed work, its session files, and its attachments, encrypted on the box
+under the agent's own key, straight to Luke's private store, on the same
+terms and for as long; a save that fails leaves its file, already encrypted,
+in the host's own state folder until it uploads. As on This Mac, the host
+deletes the agent's folder 15 minutes after a turn whose save landed, or
+sooner while its disk is nearly full, saves a folder no save holds without a
+turn, one agent at a time, and deletes an archived or deleted agent's folder,
+machine, and token once the archive reaches it or our service no
+longer lists the agent; a folder whose save has not landed is saved first
+where it can be, and otherwise kept for seven days, then deleted. The agent
+sees only a placeholder.
+Its `git` and
 `gh` send that placeholder, and smolvm, on the box, puts the real token in
 place of it only on HTTPS requests to GitHub. The token is never logged and
 never written to the conversation's record. As on This Mac, a Claude Code agent's plan
@@ -996,7 +1060,10 @@ already changed on GitHub, and the record of it, stays.
 
 **Usage data.** We count how Luke's features are used on the Mac, and attach
 your name and email to that record. The counts are event names and values from
-a fixed list. A count
+a fixed list. Among them is which kind of page or pane you opened (a task's
+plan, an agent, the Inbox, a channel, a pull request, a file, a terminal, a
+browser, Settings, and the like, never which one) and whether Luke's window
+was wide or narrow as you opened it. A count
 made before you sign in waits in Luke's memory and is sent under your account
 if you sign in before Luke quits, and is dropped otherwise. The mark that you
 used Luke on a day is counted once a day for each account signed in, so Luke
@@ -1011,8 +1078,14 @@ counts off (see "Your choices").
 
 Our service also counts, under the same account, the work done through it:
 a task or a workspace made (with where it was started from), an agent started (with the model and effort
-it runs on, and whether an automation started it), a pull request an agent
-opened (as you or as Luke's GitHub App, and whether as a draft), an Inbox item
+it runs on, and whether an automation started it), a message you sent an agent
+(with what runs it, where, what kind of agent it is, and whether it was at
+work), each of an agent's turns ended (with how it ended: answered, failed,
+stopped, or given up on by our service, roughly how long it ran, and what
+kind of agent it is), an agent stopped or archived (with what kind of agent
+it is, and whether a task's Running switch stopped its whole tree), a pull
+request an agent opened (as you or as Luke's GitHub App, and whether as a
+draft) and one it opened merged, an Inbox item
 answered, an issue filed, an automation made (with
 what triggers it), an integration connected or disconnected (with which
 provider), and a pull request's chapters generated (with how it came out, how
@@ -1048,8 +1121,14 @@ masking cannot reach, so leaving it out is
 its only line, and recording what a canvas draws is switched off. A mention drawn as a chip carries what it names, such as a
 plan section's heading, only in its words, never in an attribute the masking
 leaves, so the recording keeps its shape alone. Luke does not report what you
-clicked. Each recording carries Luke's version and whether it is a released
-build or a development one; only a released build records at all.
+clicked. Luke records only while you are signed in: nothing is recorded
+before you sign in, a visit to the web app that never signs in records
+nothing, and signing out stops it. Each recording is filed under your
+account, which carries your name and email address as you are shown in
+Luke, so that we can find the recordings of a person who reports a problem;
+deleting your account erases them. Each recording carries Luke's version,
+whether it is a released build or a development one, and whether it came
+from the Mac app or the web app; only a released build records at all.
 
 **Tab switcher previews.** When you hold ⌃Tab in the Mac app, each card shows a
 small, downscaled still of a screen you visited, taken by the app as you
@@ -1107,13 +1186,6 @@ each tab at its last address on resume. No other agent reaches that profile;
 an agent's workers share its sandbox, so they share it. Deleting the task, or
 your account, deletes the sandbox and its snapshot as described there.
 
-Recording starts just after the panel first draws when Luke opens, before
-you sign in, so it covers the signed-out panel and the sign-in. A recording
-that begins before you sign in is attached to your account if you sign in
-while it runs; one that never reaches a sign-in belongs to nobody, so
-deleting your account does not reach it — we have no way to tell it was
-yours.
-
 **Crash and performance reports from the Mac app.** In ordinary runs, Luke
 sends Sentry reports of unhandled exceptions in its Electron main, preload,
 and renderer code, and of the errors it caught but could not recover from: a
@@ -1137,10 +1209,31 @@ one is replaced. In
 the address of a request or of the page that a trace carries, the value of
 each query parameter and the fragment are replaced, and so is any part of its
 path shaped like a credential, such as a long token; the scheme, the host, the
-rest of the path, and the parameters' names are sent as they were. Luke does
-not attach your Luke account, and does not enable Sentry Replay, screenshots,
-or profiling.
+rest of the path, and the parameters' names are sent as they were. Each
+report and log line names the Luke account signed in at the time by its id
+alone, never your email, your name, or your GitHub or Google login, so that we
+can find every error one person met; one sent while nobody is signed in names
+no account. Luke does not enable Sentry Replay, screenshots, or profiling.
 Fixture and evidence runs send nothing to Sentry.
+
+**Errors Luke shows you.** Each time the Mac app or Luke in a browser shows
+you an error, such as a notice that something you asked for could not be
+done, it also sends Sentry a log line saying so; where the error is not one
+our service or the app named, as a limit you reached is, it sends an error
+report besides. Each carries where in Luke the error was shown, its code, the
+name, code, HTTP status, and message of the error behind it, with every run
+shaped like a credential replaced and the message cut short, the ids of what
+it was about (such as the workspace, task, agent, conversation, inbox item,
+channel, automation, or pull request number), whether your Mac or browser was
+online, whether you were signed in, and, while you were, your Luke
+account's id, as every report described above does. It never carries what
+you typed, a
+transcript, a plan, or a file's contents. The message is the error's own, or
+our service's sentence for a refusal, so it can name what that error named,
+such as an address. Both go under the data collection described above. An
+error notice's Copy details button puts the same facts on your clipboard, with
+the time, the app's version, and the ids Sentry gave the report, and sends
+nothing anywhere: they go only where you paste them.
 
 **Error, performance, and agent reports from our service.** Our service and
 Luke's agents send Sentry reports so that we can find and fix failures. Our
@@ -1154,7 +1247,10 @@ browser's or app's user agent, and the query's text; every line they log,
 with the values it was logged under, such as the ids of the agent, the
 conversation, and the turn it is about; counts and timings; and, each minute, whether the scheduled sweep ran. They do
 not send a request's headers or body, the values of local variables, or the IP
-address a request came from. Luke's agents send what Sentry's SDK collects by
+address a request came from, except the trace id a request names in its
+`traceparent` header, which its trace, its errors, and its log lines carry, in
+Sentry and in our service's own logs alike, so the app's report of a request
+that failed and the service's record of the same request share one id. Luke's agents send what Sentry's SDK collects by
 default, apart from request bodies and what a model is sent or answers: every
 error they did not handle or that ended work they started apart from a turn,
 with its message, stack trace, the lines of code around it, and the values of
@@ -1181,9 +1277,14 @@ and so is any part of its path shaped like a credential, such as a long token;
 the scheme, the host, the rest of the path, and the parameters' names are sent
 as the request carried them. An address written elsewhere, such as in a header
 or the words of an error or a log line, is sent as it was written. Terminal
-tabs' bytes are not sent. What reaches
-Sentry is kept under Sentry's retention, not tied to your account, and is not
-erased when you delete your account.
+tabs' bytes are not sent. A report or a log line made while
+answering a request you signed in for, or while running one of your agents,
+names your Luke account by its id alone, never your email, your name, or a
+login, wherever our service knows whose it was, so that we can find every
+error one person met. What reaches Sentry is kept under Sentry's retention
+and is not erased when you delete your account: Sentry gives us no way to
+erase one account's reports, so they stay, naming an account that no longer
+exists, until that retention ends.
 
 **What earlier versions left on our service.** Earlier versions of Luke
 followed your agent sessions, kept a notebook, and pushed briefings to
@@ -1430,17 +1531,19 @@ recordings", with every word masked and the same parts left out, and with
 the tab's address, which names the workspace and what it opens, and the
 address of the page that sent you there, replaced by the app's own; only the
 site's production deployment records, never a preview of it. A recording
-follows your account in that browser: signing out files what follows under
-nobody, and deleting your account in one tab stops the recording in every
-tab of that browser until you sign in again. It sends Sentry reports of the
-errors it did not handle and of a tab that could not draw, and performance
+follows your account in that browser: a visit that never signs in records
+nothing, signing out stops it, and deleting your account in one tab stops
+the recording in every tab of that browser until you sign in again. It sends Sentry reports of the
+errors it did not handle and of a tab that could not draw, the errors it
+shows you, as described under "Errors Luke shows you", and performance
 traces for about one page load in ten, and a warning for each kind of request
 the page's security policy refused, once in each tab, naming only the
 policy's directive and the refused address's origin, or the browser's own
 word for it, such as inline, all using Sentry's default data
-collection, as described under "Crash and performance reports from the Mac
-app", where the page's address, your browser's details, and the addresses of
-the requests it made take the place of the Mac's. Your browser contacts
+collection and each naming the account signed in in that tab, as described
+under "Crash and performance reports from the Mac app", where the page's
+address, your browser's details, and the addresses of the requests it made
+take the place of the Mac's. Your browser contacts
 PostHog and Sentry (see "Who we send it to") directly, so each sees your
 network address.
 
@@ -1462,8 +1565,8 @@ are kept with that Mac's settings. Luke in a browser keeps your settings in
 that browser's own storage for the site, and no sign-in token at all: it is
 signed in by the site's session cookie, which only the browser holds. Its
 screen recording keeps, in that browser's storage for the site, the
-anonymous id it records under, the account id it files under once you sign
-in, and whether it may send, under `luke_app_replay` and
+account id it files under while you are signed in, an id of its own it
+keeps beside it, and whether it may send, under `luke_app_replay` and
 `luke_app_replay_consent`, apart from the site's own counting. A connect
 started there, such as connecting GitHub, keeps in its tab's session storage a
 random id naming the connect, or the address it left from, until the page it
@@ -1513,7 +1616,8 @@ and error, performance, and agent reports by Sentry.
   PostHog keeps what it holds.
   Luke stops recording for the rest of the session, and starts again the next
   time you open it or sign in. Sentry reporting continues, and what Sentry
-  already received is not tied to your account and is not erased with it. Deleting does not affect your Google or GitHub account
+  already received, which names your account by its id, is not erased with
+  it but kept until Sentry's retention ends. Deleting does not affect your Google or GitHub account
   or the account at any service you connected, and does not revoke the Luke
   GitHub App (revoke it in GitHub's settings). It asks Vercel Connect to
   revoke every integration's grant it holds; if Vercel Connect cannot

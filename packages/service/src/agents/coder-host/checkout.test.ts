@@ -11,7 +11,7 @@ import {
 import { createAutomation } from "@luke/database/models/automation-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { AGENT_AUTHOR, AGENT_KIND, type AgentAuthor } from "@luke/features/agent-wire";
+import { AGENT_AUTHOR, type AgentAuthor } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -161,16 +161,12 @@ const openGoogleUser = Effect.gen(function* () {
 /**
  * An account with one agent on a plan of the repository given, the
  * installation given connected to the plan's workspace; the account signed
- * in with GitHub unless it is handed one, the agent started by an
- * automation of the account's where asked, and a pilot where asked.
+ * in with GitHub unless it is handed one, and the agent started by an
+ * automation of the account's where asked.
  */
 const openAgent = (
   installation: InstallationFixture,
-  options: {
-    readonly userId?: string;
-    readonly byAutomation?: boolean;
-    readonly kind?: typeof AGENT_KIND.PILOT;
-  } = {},
+  options: { readonly userId?: string; readonly byAutomation?: boolean } = {},
 ) =>
   Effect.gen(function* () {
     const userId = options.userId ?? (yield* openGithubUser());
@@ -210,7 +206,6 @@ const openAgent = (
       planSnapshot: "# Teammate invitations\n",
       prompt: null,
       repository: RELAY_FULL_NAME,
-      kind: options.kind,
       automationId: automation?.id,
       automationOrigin:
         automation === undefined
@@ -334,41 +329,6 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
           repositories: [RELAY.name],
           permissions: { contents: "write", pull_requests: "write" },
         });
-      }),
-  );
-
-  it.effect(
-    "a pilot's sandbox is handed a token that reads the repository, its pull requests, and their CI alone, so GitHub refuses its push or merge; a coding agent's is handed one that writes",
-    () =>
-      Effect.gen(function* () {
-        const pilotInstallation = installationOf(16);
-        const coderInstallation = installationOf(17);
-        const pilot = yield* openAgent(pilotInstallation, { kind: AGENT_KIND.PILOT });
-        const coder = yield* openAgent(coderInstallation);
-        const github = githubReaching(
-          [pilotInstallation, coderInstallation],
-          undefined,
-          {},
-          developerReach(false),
-        );
-
-        const minted: unknown[] = [];
-        for (const { agent, target } of [pilot, coder]) {
-          const sandbox = sandboxDouble(() => undefined);
-          const standing = yield* checkOutAndDeepen(target, agent, sandbox).pipe(
-            Effect.provide(github.layer),
-          );
-          assert.deepEqual(standing, APP_CREDENTIAL);
-          minted.push(repositoryMints(github.sent).at(-1));
-        }
-
-        assert.deepEqual(minted, [
-          { repositories: [RELAY.name], permissions: { contents: "read", pull_requests: "read" } },
-          {
-            repositories: [RELAY.name],
-            permissions: { contents: "write", pull_requests: "write" },
-          },
-        ]);
       }),
   );
 

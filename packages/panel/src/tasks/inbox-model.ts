@@ -44,10 +44,8 @@ import {
   openAskOf,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/link-grammar";
-import { insideCode, linksIn } from "@luke/features/mention-link";
+import { insideCode } from "@luke/features/mention-link";
 import { agentGivenName, OPERATOR_NAME } from "@luke/features/model-label";
-import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem, AppInboxWaitingItem } from "@luke/host/app-state";
@@ -819,81 +817,6 @@ function sentenceCased(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
-/** What a row's media strip shows of an item: a picture by its attachment, or a page by its place, a task or an agent with no task, and id. */
-export const INBOX_MEDIA = {
-  IMAGE: "image",
-  PAGE: "page",
-} as const;
-
-export type InboxMedia =
-  | {
-      readonly kind: typeof INBOX_MEDIA.IMAGE;
-      readonly attachmentId: string;
-    }
-  | {
-      readonly kind: typeof INBOX_MEDIA.PAGE;
-      /** What the page stands on: a task, or an agent with no task. */
-      readonly place: PagePlace;
-      readonly pageId: string;
-    };
-
-/** How many of an item's media its row shows at most, so a row stays a row. */
-const MAX_ROW_MEDIA = 4;
-
-/** The types a file on the thread may be drawn as a picture by: the ones an image block's attachment is kept as, or a WebM an agent recorded, played where a picture is drawn. */
-const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(CONVERSATION_MEDIA_TYPE));
-
-/** The page a link's place names as media: a task's, or an agent with no task's; none for a place that is no page. */
-function pageMediaOf(place: ReadLink["place"] | undefined): InboxMedia | undefined {
-  if (place?.kind !== LINK_PLACE.PAGE) return undefined;
-  const owner = "planId" in place ? { taskId: place.planId } : { agentId: place.agentId };
-  return { kind: INBOX_MEDIA.PAGE, place: owner, pageId: place.pageId };
-}
-
-/** Whether two media are one picture, or one page of one place. */
-function sameMedia(a: InboxMedia, b: InboxMedia): boolean {
-  if (a.kind === INBOX_MEDIA.IMAGE) {
-    return b.kind === INBOX_MEDIA.IMAGE && b.attachmentId === a.attachmentId;
-  }
-  return (
-    b.kind === INBOX_MEDIA.PAGE &&
-    b.pageId === a.pageId &&
-    pagePlaceId(b.place) === pagePlaceId(a.place)
-  );
-}
-
-/**
- * The media an item carries, as its row shows them, at most
- * {@link MAX_ROW_MEDIA}: each message's of its thread in turn, oldest
- * first, the pictures its words draw by their addresses (`picturesDrawn`)
- * and the pages it links to, outside code, labelled, an `@` mention, or
- * bare, in the order its words name them, each once, then the pictures
- * among its files. A file that is no picture is no media.
- */
-export function inboxMedia(item: InboxItem): readonly InboxMedia[] {
-  const found: InboxMedia[] = [];
-  const add = (media: InboxMedia) => {
-    if (!found.some((each) => sameMedia(each, media))) found.push(media);
-  };
-  for (const message of item.thread ?? []) {
-    const named: { readonly at: number; readonly media: InboxMedia }[] = [];
-    for (const { at, attachmentId } of picturesDrawn(message.text, item.id)) {
-      named.push({ at, media: { kind: INBOX_MEDIA.IMAGE, attachmentId } });
-    }
-    for (const link of linksIn(message.text)) {
-      const media = pageMediaOf(readLink(link.target)?.place);
-      if (media !== undefined) named.push({ at: link.start, media });
-    }
-    for (const each of named.toSorted((a, b) => a.at - b.at)) add(each.media);
-    for (const file of message.files ?? []) {
-      if (PICTURE_TYPES.has(file.mediaType)) {
-        add({ kind: INBOX_MEDIA.IMAGE, attachmentId: file.attachmentId });
-      }
-    }
-  }
-  return found.slice(0, MAX_ROW_MEDIA);
-}
-
 /**
  * The item's own pictures a message's words draw, where each is drawn: a
  * picture, `![alt](address)`, whose address names one of the item's, as
@@ -928,10 +851,23 @@ export function inboxPreview(
   nameOf: (member: InboxMember | undefined) => string,
   ticked?: readonly number[],
 ): string {
-  const thread = item.thread ?? [];
-  const asking = openAskOf(thread);
-  if (asking !== undefined && knownAsk(asking.ask)) return askLine(asking.ask, ticked ?? []);
-  return lastSaid(thread, nameOf);
+  const line = itemLine(item);
+  return previewOf(line, nameOf, ticked, line.words);
+}
+
+/**
+ * What a reader hears of an item's row's second line (`inboxPreview`): the
+ * same words, but a message cut to its first line, the one the eye reads
+ * before the row cuts it short, so a code block under it is never heard
+ * whole.
+ */
+export function inboxPreviewHeard(
+  item: InboxItem,
+  nameOf: (member: InboxMember | undefined) => string,
+  ticked?: readonly number[],
+): string {
+  const line = itemLine(item);
+  return previewOf(line, nameOf, ticked, line.heard);
 }
 
 /** What an item's second line leads with, as its glyph says it: the kind of ask that waits, an answer that settled it, or words alone. */
@@ -947,19 +883,7 @@ export type InboxLineKind = (typeof INBOX_LINE)[keyof typeof INBOX_LINE];
 
 /** Which glyph leads an item's second line (`inboxPreview`): its open ask's kind, an answer where its latest message carries one, or none. */
 export function inboxLineKind(item: InboxItem): InboxLineKind {
-  const thread = item.thread ?? [];
-  const asking = openAskOf(thread);
-  if (asking !== undefined && knownAsk(asking.ask)) {
-    switch (asking.ask.type) {
-      case INBOX_ASK.DECIDE:
-        return INBOX_LINE.DECIDE;
-      case INBOX_ASK.DO:
-        return INBOX_LINE.DO;
-      case INBOX_ASK.ANSWER:
-        return INBOX_LINE.ANSWER;
-    }
-  }
-  return thread.at(-1)?.answers === undefined ? INBOX_LINE.SAID : INBOX_LINE.SETTLED;
+  return itemLine(item).kind;
 }
 
 /** What an item's hover card reads of its thread: the ask that waits, where one does, and the agent's latest words, plain. */
@@ -989,8 +913,8 @@ export function inboxShownTicks(
   draft: Pick<InboxDraft, "steps" | "press"> | undefined,
 ): readonly number[] {
   if (draft === undefined) return [];
-  const ask = openAskOf(item.thread ?? [])?.ask;
-  if (ask === undefined || !knownAsk(ask) || ask.type !== INBOX_ASK.DO) return draft.steps ?? [];
+  const { ask } = itemLine(item);
+  if (ask === undefined || ask.type !== INBOX_ASK.DO) return draft.steps ?? [];
   return shownTicks(ask, draft);
 }
 
@@ -1073,7 +997,7 @@ function askLine(ask: InboxKnownAsk, ticked: readonly number[]): string {
         .join(" / ");
     case INBOX_ASK.DO: {
       const steps = ask.steps.map((step) => plainWords(step));
-      if (steps.length === 0) return "Mark it done";
+      if (steps.length === 0) return "Mark done";
       const done = new Set(ticked.filter((at) => at < steps.length));
       const next = steps.find((_, at) => !done.has(at));
       if (next === undefined) return "Every step ticked · Mark done";
@@ -1087,34 +1011,108 @@ function askLine(ask: InboxKnownAsk, ticked: readonly number[]): string {
   }
 }
 
+/** The glyph an open ask's line leads with, by the kind of ask. */
+const ASK_LINE = {
+  [INBOX_ASK.DECIDE]: INBOX_LINE.DECIDE,
+  [INBOX_ASK.DO]: INBOX_LINE.DO,
+  [INBOX_ASK.ANSWER]: INBOX_LINE.ANSWER,
+} as const satisfies Record<InboxKnownAsk["type"], InboxLineKind>;
+
+/** What an item's row says of its thread as the item alone says it, read once and kept with it (`itemLine`). */
+interface ItemLine {
+  readonly kind: InboxLineKind;
+  /** The open ask the line says, where one waits that this build knows. */
+  readonly ask: InboxKnownAsk | undefined;
+  /** The ask's words with no step ticked, or the latest message's words without who said them. */
+  readonly words: string;
+  /** The same words as a reader hears them: the latest message's first line alone. */
+  readonly heard: string;
+  /** Whether the latest message is the agent's, whose words its row says alone, its tile saying who. */
+  readonly byAgent: boolean;
+  /** The member who said the latest message, where the agent did not. */
+  readonly member: InboxMember | undefined;
+}
+
+/** Each item's line as `itemLine` last read it, kept for as long as the item stands. */
+const itemLines = new WeakMap<InboxItem, ItemLine>();
+
 /**
- * A thread's latest message as its row says it: an answer by its answerer,
- * its stamp's words first, "You: Chose 7 days · and say it in the docs", a
- * member's words by their writer, and the agent's words alone, its tile
- * saying who; its files where it said nothing.
+ * What an item's row says of its thread, as the item alone says it: the
+ * glyph its line leads with, the ask that waits, and the words of the ask
+ * or of the thread's latest message: an answer by its stamp's words first,
+ * "Chose 7 days · and say it in the docs", a message's words, or its files
+ * where it said nothing. Note that it is read from the thread's markdown
+ * once and kept with the item, as its search words are (`inboxItemWords`),
+ * because every row of a long Inbox asks for it as it draws, and an item
+ * that changes arrives as a new one; who said it, and the steps a draft
+ * ticks, are the row's to add (`inboxPreview`).
  */
-function lastSaid(
-  thread: readonly InboxMessage[],
-  nameOf: (member: InboxMember | undefined) => string,
-): string {
+function itemLine(item: InboxItem): ItemLine {
+  const held = itemLines.get(item);
+  if (held !== undefined) return held;
+  const thread = item.thread ?? [];
+  const asking = openAskOf(thread);
   const last = thread.at(-1);
-  if (last === undefined) return "";
-  const agent = last.author === INBOX_MESSAGE_AUTHOR.AGENT;
-  const words = plainWords(last.text);
+  const line =
+    asking !== undefined && knownAsk(asking.ask)
+      ? {
+          kind: ASK_LINE[asking.ask.type],
+          ask: asking.ask,
+          words: askLine(asking.ask, []),
+          heard: askLine(asking.ask, []),
+          byAgent: true,
+          member: undefined,
+        }
+      : {
+          kind: last?.answers === undefined ? INBOX_LINE.SAID : INBOX_LINE.SETTLED,
+          ask: undefined,
+          words: last === undefined ? "" : lastWords(thread, last, plainWords),
+          heard: last === undefined ? "" : lastWords(thread, last, firstWords),
+          byAgent: last === undefined || last.author === INBOX_MESSAGE_AUTHOR.AGENT,
+          member: last?.member,
+        };
+  itemLines.set(item, line);
+  return line;
+}
+
+/** An item's second line from its line's `words`: the ask, as the draft ticks it, or the message's words after who said them where the agent did not. */
+function previewOf(
+  line: ItemLine,
+  nameOf: (member: InboxMember | undefined) => string,
+  ticked: readonly number[] | undefined,
+  words: string,
+): string {
+  if (line.ask !== undefined) {
+    return ticked === undefined || ticked.length === 0 ? line.words : askLine(line.ask, ticked);
+  }
+  return line.byAgent ? words : `${nameOf(line.member)}: ${words}`;
+}
+
+/** A message's first line that says anything, as plain words (`plainWords`): a fence's line is passed over, and nothing under the first is kept. */
+function firstWords(text: string): string {
+  return (
+    text
+      .split("\n")
+      .map(plainWords)
+      .find((line) => line !== "") ?? ""
+  );
+}
+
+/**
+ * A thread's latest message as its row says it, before who said it: an
+ * answer by its stamp's words first, "Chose 7 days · and say it in the
+ * docs", a message's words, and its files where it said nothing.
+ */
+function lastWords(
+  thread: readonly InboxMessage[],
+  last: InboxMessage,
+  read: (text: string) => string,
+): string {
+  const words = read(last.text);
   const answers = last.answers;
-  const said =
-    answers === undefined
-      ? words === ""
-        ? (filesWords(last.files) ?? "")
-        : words
-      : (() => {
-          const stamp = sentStamp(
-            answers,
-            thread.find((each) => each.id === answers.ask)?.ask,
-          ).words;
-          return words === "" ? stamp : `${stamp}${PREVIEW_PART}${words}`;
-        })();
-  return agent ? said : `${nameOf(last.member)}: ${said}`;
+  if (answers === undefined) return words === "" ? (filesWords(last.files) ?? "") : words;
+  const stamp = sentStamp(answers, thread.find((each) => each.id === answers.ask)?.ask).words;
+  return words === "" ? stamp : `${stamp}${PREVIEW_PART}${words}`;
 }
 
 /**
@@ -1209,9 +1207,22 @@ export type InboxHolder =
   | { readonly kind: typeof INBOX_HOLDER.TASK; readonly task: TaskSummary }
   | { readonly kind: typeof INBOX_HOLDER.AGENT; readonly agent: TasklessInboxAgent };
 
+/**
+ * Each task's and each agent's holder as last made, kept for as long as what
+ * it holds for stands. Note that a list read again from the same task or
+ * agent is held by the same holder, because the window's document keeps the
+ * identity of what a delivery did not change (`keepIdentity`), and every
+ * object the list makes of a holder is kept by it in turn.
+ */
+const keptHolders = new WeakMap<TaskSummary | TasklessInboxAgent, InboxHolder>();
+
 /** The agent with no task as the holder of its items. */
 export function agentHolder(agent: TasklessInboxAgent): InboxHolder {
-  return { kind: INBOX_HOLDER.AGENT, agent };
+  const kept = keptHolders.get(agent);
+  if (kept !== undefined) return kept;
+  const holder: InboxHolder = { kind: INBOX_HOLDER.AGENT, agent };
+  keptHolders.set(agent, holder);
+  return holder;
 }
 
 /** Whether a holder is the member's operator, Luke, whose items stand in a group of his own. */
@@ -1232,9 +1243,13 @@ function holderKey(holder: InboxHolder): string {
   return holder.agent.automationId ?? NO_AUTOMATION_KEY;
 }
 
-/** A task as the holder of its items. */
+/** A task as the holder of its items, kept as an agent's is (`keptHolders`). */
 export function taskHolder(task: TaskSummary): InboxHolder {
-  return { kind: INBOX_HOLDER.TASK, task };
+  const kept = keptHolders.get(task);
+  if (kept !== undefined) return kept;
+  const holder: InboxHolder = { kind: INBOX_HOLDER.TASK, task };
+  keptHolders.set(task, holder);
+  return holder;
 }
 
 /**
@@ -1353,7 +1368,7 @@ export function agentGroups(
       holders.set(agent.agentId, agentHolder(agent));
     }
   }
-  return [...holders].map(([agentId, holder]) => ({ holder, items: read.get(agentId) ?? [] }));
+  return [...holders].map(([agentId, holder]) => inboxGroup(holder, read.get(agentId) ?? NO_ITEMS));
 }
 
 /**
@@ -1446,6 +1461,42 @@ export interface InboxGroup {
 export interface InboxListed {
   readonly holder: InboxHolder;
   readonly item: InboxItem;
+}
+
+/** A holder holding nothing, the one empty list every such group holds. */
+export const NO_ITEMS: readonly InboxItem[] = [];
+
+/** Each holder's group as last made, kept while it holds the same items (`inboxGroup`). */
+const keptGroups = new WeakMap<InboxHolder, InboxGroup>();
+
+/**
+ * A holder and every item it holds as one group: the one made last for the
+ * holder while its items are the same list, so a list read again from items
+ * that did not move groups them in the objects it grouped them in before.
+ */
+export function inboxGroup(holder: InboxHolder, items: readonly InboxItem[]): InboxGroup {
+  const kept = keptGroups.get(holder);
+  if (kept?.items === items) return kept;
+  const group = { holder, items };
+  keptGroups.set(holder, group);
+  return group;
+}
+
+/** Each item as last listed, kept while the same holder holds it (`inboxListed`). */
+const keptListed = new WeakMap<InboxItem, InboxListed>();
+
+/**
+ * An item listed under what holds it: the one listed last while its holder
+ * is the same, so a list drawn again lists an item that did not move in the
+ * object it listed it in before, and the item's row, which is drawn again
+ * only for another (`InboxItemRow`), stands as it was.
+ */
+function inboxListed(holder: InboxHolder, item: InboxItem): InboxListed {
+  const kept = keptListed.get(item);
+  if (kept?.holder === holder) return kept;
+  const listed = { holder, item };
+  keptListed.set(item, listed);
+  return listed;
 }
 
 /**
@@ -1602,7 +1653,7 @@ export function channelGroups(
  */
 export function openItems(groups: readonly InboxGroup[]): readonly InboxListed[] {
   return groups
-    .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
+    .flatMap(({ holder, items }) => items.map((item) => inboxListed(holder, item)))
     .filter((listed) => needsYou(listed, undefined))
     .toSorted((a, b) => newestFirst(a.item, b.item));
 }
@@ -1746,7 +1797,7 @@ export function inboxList(
     .filter((group) => group.items.length > 0)
     .toSorted((a, b) => firstOrder(a.items[0], b.items[0], order));
   const items = groups
-    .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
+    .flatMap(({ holder, items }) => items.map((item) => inboxListed(holder, item)))
     .toSorted((a, b) => order(a.item, b.item));
   if (view.grouping === INBOX_GROUPING.TASK) {
     return { grouping: INBOX_GROUPING.TASK, groups: holderGroups(items), readerId };
@@ -1839,7 +1890,7 @@ export function inboxCounts(
   whose: InboxWhose = EVERYONES,
 ): InboxCounts {
   const items = tasks
-    .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
+    .flatMap(({ holder, items }) => items.map((item) => inboxListed(holder, item)))
     .filter(({ item }) => whoseItem(whose, item, readerId));
   const count = (show: InboxShow) =>
     items.filter((listed) => showsItem(show, listed, readerId)).length;

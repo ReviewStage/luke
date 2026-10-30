@@ -238,6 +238,8 @@ export interface TaskChanges {
   readonly assigneeId?: string | null;
   /** What becomes of its agents' pull requests once their checks pass. */
   readonly mergePolicy?: MergePolicy;
+  /** Whether a pilot tree's agents may work, set on its top task. */
+  readonly running?: boolean;
 }
 
 /** How a task's repository was reached, as a write takes it. */
@@ -278,6 +280,7 @@ const TASK_SUMMARY_COLUMNS = {
   parentTaskId: task.parentTaskId,
   mode: task.mode,
   mergePolicy: task.mergePolicy,
+  running: task.running,
   completedAt: task.completedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -309,6 +312,7 @@ const TaskSummaryRowSchema = Schema.Struct({
   parentTaskId: Schema.NullOr(Schema.String),
   mode: taskModeSchema,
   mergePolicy: mergePolicySchema,
+  running: Schema.Boolean,
   completedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -667,6 +671,7 @@ function summaryOf(
     ...(row.parentTaskId === null ? undefined : { parentTaskId: row.parentTaskId }),
     mode: row.mode,
     mergePolicy: row.mergePolicy,
+    running: row.running,
   };
 }
 
@@ -845,6 +850,7 @@ const findTaskHeader = SqlSchema.findOneOption({
     parentTaskId: Schema.NullOr(Schema.String),
     mode: taskModeSchema,
     mergePolicy: mergePolicySchema,
+    running: Schema.Boolean,
   }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
@@ -860,6 +866,7 @@ const findTaskHeader = SqlSchema.findOneOption({
           parentTaskId: task.parentTaskId,
           mode: task.mode,
           mergePolicy: task.mergePolicy,
+          running: task.running,
         })
         .from(task)
         .where(reachableTask(userId, taskId))
@@ -964,13 +971,14 @@ const TaskColumnChangesSchema = Schema.Struct({
   priority: Schema.optionalKey(taskPrioritySchema),
   assigneeId: Schema.optionalKey(Schema.NullOr(Schema.String)),
   mergePolicy: Schema.optionalKey(mergePolicySchema),
+  running: Schema.optionalKey(Schema.Boolean),
   machine: Schema.optionalKey(MachineSchema),
   deviceId: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
 type TaskColumnChanges = typeof TaskColumnChangesSchema.Type;
 
-/** The row changed: whichever of the name, the workspace and its number there, the repository, the status, the priority, the assignee, and the merge policy the change names, in one statement. */
+/** The row changed: whichever of the name, the workspace and its number there, the repository, the status, the priority, the assignee, the merge policy, and the running switch the change names, in one statement. */
 const applyChanges = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -1081,9 +1089,10 @@ export interface TaskCommitted<A> {
   readonly txid?: string;
 }
 
-/** A task changed, as `updateTaskCommitted` answers it: whether its merge policy moved, judged under the row's lock, beside what `TaskCommitted` carries. */
+/** A task changed, as `updateTaskCommitted` answers it: whether its merge policy and its running switch moved, judged under the row's lock, beside what `TaskCommitted` carries. */
 export interface TaskUpdated<A> extends TaskCommitted<A> {
   readonly mergePolicyMoved: boolean;
+  readonly runningMoved: boolean;
 }
 
 /**
@@ -1224,6 +1233,8 @@ export interface TaskHeader {
   readonly mode: TaskMode;
   /** What becomes of its agents' pull requests once their checks pass. */
   readonly mergePolicy: MergePolicy;
+  /** Whether a pilot tree's agents may work, as its own column holds it; a child's is its top task's (`readEffectiveRunning`). */
+  readonly running: boolean;
 }
 
 /**
@@ -1248,39 +1259,52 @@ export function readTaskHeader(
       parentTaskId: row.parentTaskId,
       mode: row.mode,
       mergePolicy: row.mergePolicy,
+      running: row.running,
     })),
   );
 }
 
-/** A task's merge policy, its parent, and its workspace, which is all the walk up to its top task reads. */
-const MergePolicyRowSchema = Schema.Struct({
+/** A task's tree-wide switches, its mode, its parent, and its workspace, which is all the walk up to its top task reads. */
+const TopTaskRowSchema = Schema.Struct({
   organizationId: Schema.String,
   parentTaskId: Schema.NullOr(Schema.String),
+  mode: taskModeSchema,
   mergePolicy: mergePolicySchema,
+  running: Schema.Boolean,
 });
 
-const MERGE_POLICY_COLUMNS = {
+type TopTaskRow = typeof TopTaskRowSchema.Type;
+
+/** A task's own row and its top task's, which is its own where it stands at the top. */
+interface TreeRows {
+  readonly own: TopTaskRow;
+  readonly top: TopTaskRow;
+}
+
+const TOP_TASK_COLUMNS = {
   organizationId: task.organizationId,
   parentTaskId: task.parentTaskId,
+  mode: task.mode,
   mergePolicy: task.mergePolicy,
+  running: task.running,
 };
 
-const findMergePolicyRow = SqlSchema.findOneOption({
+const findTopTaskRow = SqlSchema.findOneOption({
   Request: TaskKeySchema,
-  Result: MergePolicyRowSchema,
+  Result: TopTaskRowSchema,
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
-      db.select(MERGE_POLICY_COLUMNS).from(task).where(reachableTask(userId, taskId)).limit(1),
+      db.select(TOP_TASK_COLUMNS).from(task).where(reachableTask(userId, taskId)).limit(1),
     ),
 });
 
-const findAncestorMergePolicyRow = SqlSchema.findOneOption({
+const findAncestorTopTaskRow = SqlSchema.findOneOption({
   Request: Schema.Struct({ taskId: Schema.String, organizationId: Schema.String }),
-  Result: MergePolicyRowSchema,
+  Result: TopTaskRowSchema,
   execute: ({ taskId, organizationId }) =>
     Database.use((db) =>
       db
-        .select(MERGE_POLICY_COLUMNS)
+        .select(TOP_TASK_COLUMNS)
         .from(task)
         .where(and(eq(task.id, taskId), eq(task.organizationId, organizationId)))
         .limit(1),
@@ -1288,29 +1312,25 @@ const findAncestorMergePolicyRow = SqlSchema.findOneOption({
 });
 
 /**
- * What becomes of the pull requests of a task's agents once their checks
- * pass (`MERGE_POLICY`): the policy of the task's top task, found by walking
- * `parent_task_id` up to the root, so one switch on the top task governs the
- * whole tree and a child's own column is never read once it has a parent.
- * Nothing for a task the account does not reach. The parents above it are
- * read without a second reach check, but only within its workspace: a child
- * is made under a parent of its own workspace, and one moved away since
- * leaves the walk, and the policy of a task the account may not read, behind.
- * A walk that meets a task it has already seen stops there, with that task's
- * own policy, since the row constraint only refuses a task its own parent.
+ * The row of a task, and of its top task, found by walking `parent_task_id` up to the
+ * root, so one switch on the top task governs the whole tree and a child's
+ * own columns are never read once it has a parent. Nothing for a task the
+ * account does not reach. The parents above it are read without a second
+ * reach check, but only within its workspace: a child is made under a
+ * parent of its own workspace, and one moved away since leaves the walk, and
+ * the switches of a task the account may not read, behind. A walk that meets
+ * a task it has already seen stops there, with that task's own row, since
+ * the row constraint only refuses a task its own parent.
  */
-export function readEffectiveMergePolicy(
-  userId: string,
-  taskId: string,
-): TaskStoreEffect<Option.Option<MergePolicy>> {
+function readTopTaskRow(userId: string, taskId: string): TaskStoreEffect<Option.Option<TreeRows>> {
   return Effect.gen(function* () {
-    const first = yield* findMergePolicyRow({ userId, taskId });
+    const first = yield* findTopTaskRow({ userId, taskId });
     if (Option.isNone(first)) return Option.none();
     const seen = new Set([taskId]);
     let top = first.value;
     while (top.parentTaskId !== null && !seen.has(top.parentTaskId)) {
       seen.add(top.parentTaskId);
-      const parent = yield* findAncestorMergePolicyRow({
+      const parent = yield* findAncestorTopTaskRow({
         taskId: top.parentTaskId,
         organizationId: first.value.organizationId,
       });
@@ -1318,8 +1338,71 @@ export function readEffectiveMergePolicy(
       if (Option.isNone(parent)) break;
       top = parent.value;
     }
-    return Option.some(top.mergePolicy);
+    return Option.some({ own: first.value, top });
   });
+}
+
+/**
+ * What becomes of the pull requests of a task's agents once their checks
+ * pass (`MERGE_POLICY`): the policy of the task's top task
+ * (`readTopTaskRow`). Nothing for a task the account does not reach.
+ */
+export function readEffectiveMergePolicy(
+  userId: string,
+  taskId: string,
+): TaskStoreEffect<Option.Option<MergePolicy>> {
+  return Effect.map(
+    readTopTaskRow(userId, taskId),
+    Option.map(({ top }) => top.mergePolicy),
+  );
+}
+
+/**
+ * Whether a task's tree may work: the running switch of the task's top task
+ * (`readTopTaskRow`). Nothing for a task the account does not reach.
+ */
+export function readEffectiveRunning(
+  userId: string,
+  taskId: string,
+): TaskStoreEffect<Option.Option<boolean>> {
+  return Effect.map(
+    readTopTaskRow(userId, taskId),
+    Option.map(({ top }) => top.running),
+  );
+}
+
+/**
+ * Whether a task's agents are held still: it is a child task, and its top
+ * task (`readTopTaskRow`) is worked in pilot mode with its running switch
+ * off. A top task never is, since its pilot plans and talks to the developer
+ * while its tree is stopped, nor is a child of a tree worked any other way,
+ * whose switch nothing sets. False for a task the account does not reach.
+ */
+export function readTreeStopped(userId: string, taskId: string): TaskStoreEffect<boolean> {
+  return Effect.map(readTopTaskRow(userId, taskId), (rows) =>
+    Option.match(rows, {
+      onNone: () => false,
+      // Note that a child whose parent left the walk is its own top, and so is held by nothing.
+      onSome: ({ own, top }) => top !== own && top.mode === TASK_MODE.PILOT && !top.running,
+    }),
+  );
+}
+
+/**
+ * Whether nothing automated may wake a task's agents: its top task
+ * (`readTopTaskRow`), itself where it stands at the top, is worked in pilot
+ * mode with its running switch off. Unlike `readTreeStopped`, the top task
+ * counts, since Running off stops its pilot too; a member's own message
+ * still wakes the pilot, and a member's Start still lands there, so only the
+ * automated doors read this one. False for a task the account does not reach.
+ */
+export function readTreeHeld(userId: string, taskId: string): TaskStoreEffect<boolean> {
+  return Effect.map(readTopTaskRow(userId, taskId), (rows) =>
+    Option.match(rows, {
+      onNone: () => false,
+      onSome: ({ top }) => top.mode === TASK_MODE.PILOT && !top.running,
+    }),
+  );
 }
 
 /**
@@ -1395,6 +1478,9 @@ function columnChangesOf(
     ...(changes.mergePolicy === undefined || changes.mergePolicy === standing.mergePolicy
       ? undefined
       : { mergePolicy: changes.mergePolicy }),
+    ...(changes.running === undefined || changes.running === standing.running
+      ? undefined
+      : { running: changes.running }),
   };
 }
 
@@ -1522,9 +1608,10 @@ export function updateTask<E = never, R = never>(
 /**
  * A task changed, as `updateTask` changes one, and the transaction the change
  * committed in, read from the write that changed the row or the reader's pin;
- * none where the change wrote neither. Whether the merge policy moved is
- * judged against the row as it stood under the lock, so of two switches
- * racing, the one that lands second is the one that moved it.
+ * none where the change wrote neither. Whether the merge policy or the
+ * running switch moved is judged against the row as it stood under the lock,
+ * so of two switches racing, the one that lands second is the one that moved
+ * it.
  */
 export function updateTaskCommitted<E = never, R = never>(
   userId: string,
@@ -1612,11 +1699,14 @@ export function updateTaskCommitted<E = never, R = never>(
           }
         }
         const changed = yield* taskOf(userId, row);
-        const mergePolicyMoved = columns.mergePolicy !== undefined;
+        const switched = {
+          mergePolicyMoved: columns.mergePolicy !== undefined,
+          runningMoved: columns.running !== undefined,
+        };
         return Option.some(
           txid === undefined
-            ? { task: changed, mergePolicyMoved }
-            : { task: changed, txid, mergePolicyMoved },
+            ? { task: changed, ...switched }
+            : { task: changed, txid, ...switched },
         );
       }),
     ),

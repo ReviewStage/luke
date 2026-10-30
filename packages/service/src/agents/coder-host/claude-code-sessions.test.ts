@@ -104,17 +104,20 @@ import { RUNNER_TAG, vercelMachineLayer } from "../machine/vercel-machine.js";
 import { NATIVE_TEMPLATE } from "../native-sandbox-template.js";
 import { DESK_LEAD } from "../operator-desk.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
+import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { REPOSITORY_SNAPSHOT } from "../repository-snapshot.js";
 import { deploymentOidcToken, SESSION_TAG } from "../vercel-sandbox-api.js";
 import { handOnQueue } from "./agent-queue.js";
 import { CODER } from "./bounds.js";
-import {
-  type ClaudeCodeSessionsOptions,
-  claudeCodeDeniedTools,
-  claudeCodeSessions,
-} from "./claude-code-sessions.js";
+import { claudeCodeSessions } from "./claude-code-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
-import { RUNNER_ENDED, retireWarmRunner, runnerEnded, runnerIdled } from "./runner-sessions.js";
+import {
+  RUNNER_ENDED,
+  type RunnerSessionsOptions,
+  retireWarmRunner,
+  runnerEnded,
+  runnerIdled,
+} from "./runner-sessions.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
 import { agentFailureOf } from "./status.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -237,7 +240,7 @@ const openAgent = Effect.tap(openAgentWithoutPlan, ({ userId }) => savePlan(user
 
 /** The sessions for the account, the next event number read from the counter given. */
 function sessionsFor(userId: string, sequence: { next: number }) {
-  const options: ClaudeCodeSessionsOptions = {
+  const options: RunnerSessionsOptions = {
     userId,
     eventsUrl: EVENTS_URL,
     linesUrl: LINES_URL,
@@ -245,7 +248,6 @@ function sessionsFor(userId: string, sequence: { next: number }) {
     integrations: () => Effect.succeed([LINEAR_SERVER]),
     instructions: () => Effect.succeed(INSTRUCTIONS),
     nextSequence: () => Effect.sync(() => sequence.next),
-    deniedTools: () => [],
   };
   return claudeCodeSessions(options);
 }
@@ -373,6 +375,13 @@ const newestTurn = (agent: Agent) =>
     const turn = turns.get(agent.conversationId);
     return { status: turn?.status, failure: agentFailureOf(turn) };
   });
+
+/** Why the agent's newest turn failed, as its record keeps it. */
+const newestFailureDetail = (agent: Agent) =>
+  Effect.map(
+    latestTurnsOfReached([agent.conversationId]),
+    (turns) => turns.get(agent.conversationId)?.failureDetail,
+  );
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -2581,44 +2590,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
 
-  it.effect("a pilot's launch denies the tools that edit a file, and a coder's denies none", () =>
-    Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-      const api = runnerSandboxApi();
-      const { userId, agent: coder } = yield* openAgent;
-      assert.ok(coder.taskId !== null);
-      const started = yield* createAgent(userId, {
-        taskId: coder.taskId,
-        idempotencyKey: "start-pilot",
-        model: "anthropic/claude-opus-5.5",
-        effort: "high",
-        planSnapshot: null,
-        prompt: null,
-        repository: null,
-        kind: AGENT_KIND.PILOT,
-      });
-      assert.ok(Option.isSome(started));
-      const sessions = yield* claudeCodeSessions({
-        userId,
-        eventsUrl: EVENTS_URL,
-        linesUrl: LINES_URL,
-        mcpUrl: MCP_URL,
-        integrations: () => Effect.succeed([]),
-        instructions: () => Effect.succeed(INSTRUCTIONS),
-        nextSequence: () => Effect.succeed(0),
-        deniedTools: claudeCodeDeniedTools,
-      }).pipe(Effect.provide(services(api)));
-
-      yield* sessions.open(message(started.value.agent, "Plan it."));
-      yield* sessions.open(message(coder, "Fix it."));
-
-      const [pilotConfig] = (yield* launchLines(api.commands[0])) as [ClaudeCodeConfig];
-      const [coderConfig] = (yield* launchLines(api.commands[1])) as [ClaudeCodeConfig];
-      assert.deepEqual(pilotConfig.deniedTools, ["Edit", "Write", "NotebookEdit"]);
-      assert.equal(coderConfig.deniedTools, undefined);
-    }),
-  );
-
   it.effect(
     "a warm runner whose integrations changed since its launch is ended and relaunched for the next message, and one at work keeps going on what it has",
     () =>
@@ -2636,7 +2607,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           integrations: () => Effect.sync(() => handed.servers),
           instructions: () => Effect.succeed(INSTRUCTIONS),
           nextSequence: () => Effect.sync(() => sequence.next),
-          deniedTools: () => [],
         }).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
@@ -2903,6 +2873,95 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           status: TURN_STATUS.FAILED,
           failure: AGENT_FAILURE.SANDBOX,
         });
+        assert.equal(
+          yield* newestFailureDetail(agent),
+          `${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE} Vercel Sandbox stdin answered 400: stdin_refused: the command's stdin was refused`,
+        );
+      }),
+  );
+
+  it.effect(
+    "a checkout whose sandbox command Vercel never answered keeps the checkout's sentence and Vercel's answer after it",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        api.hooks.onRun = () => Promise.reject(new Error("socket hang up"));
+
+        yield* sessions.open(message(agent, "Push a branch."));
+
+        const detail = (yield* newestFailureDetail(agent)) ?? "";
+        assert.ok(
+          detail.startsWith(`${REPOSITORY_REFUSAL.CHECKOUT_FAILED} Vercel Sandbox cmd`),
+          detail,
+        );
+        assert.ok(detail.includes("socket hang up"), detail);
+      }),
+  );
+
+  it.effect(
+    "a launch past its Start that dies, or is interrupted before its sandbox opened, reads as the agent's failed turn saying what cut it off, and one interrupted as its runner starts is left to that runner",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const dying = runnerSandboxApi();
+        const died = yield* openAgent;
+        const diedKept = keptAfterResponse();
+        const diedSessions = yield* sessionsFor(died.userId, { next: 0 }).pipe(
+          Effect.provide(
+            Layer.merge(
+              services(dying),
+              Layer.succeed(RunnerBundle, { contents: Effect.die(new TypeError("unreadable")) }),
+            ),
+          ),
+        );
+        yield* diedSessions.open(message(died.agent, "Go.")).pipe(Effect.provide(diedKept.layer));
+        yield* diedKept.run;
+
+        // Each launch is held at a call it never gets past, and interrupted there: the clone, before
+        // its sandbox opened, and the runner's start, once it had.
+        const interruptedAt = (
+          sessions: Effect.Success<ReturnType<typeof sessionsFor>>,
+          agent: Agent,
+          held: ReturnType<typeof gate>,
+        ) =>
+          Effect.gen(function* () {
+            const kept = keptAfterResponse();
+            yield* sessions.open(message(agent, "Go.")).pipe(Effect.provide(kept.layer));
+            const launching = yield* Effect.forkChild(kept.run);
+            yield* Effect.promise(() => held.arrived);
+            yield* Fiber.interrupt(launching);
+          });
+        const cloning = runnerSandboxApi();
+        const cloned = yield* repositoryAgent(cloning, ownInstallation());
+        const atClone = gate();
+        cloning.hooks.onRun = atClone.pass;
+        yield* interruptedAt(cloned.sessions, cloned.agent, atClone);
+        const starting = runnerSandboxApi();
+        const started = yield* openAgent;
+        const startingSessions = yield* sessionsFor(started.userId, { next: 0 }).pipe(
+          Effect.provide(services(starting)),
+        );
+        const atStart = gate();
+        starting.hooks.onStart = atStart.pass;
+        yield* interruptedAt(startingSessions, started.agent, atStart);
+
+        for (const { agent } of [died, cloned]) {
+          assert.deepEqual(yield* newestTurn(agent), {
+            status: TURN_STATUS.FAILED,
+            failure: AGENT_FAILURE.SANDBOX,
+          });
+        }
+        assert.equal(
+          yield* newestFailureDetail(died.agent),
+          `${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE} the launch died: TypeError`,
+        );
+        assert.equal(
+          yield* newestFailureDetail(cloned.agent),
+          `${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE} the launch was interrupted`,
+        );
+        assert.equal((yield* newestTurn(started.agent)).status, undefined);
       }),
   );
 

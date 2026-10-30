@@ -1,6 +1,7 @@
 import { FIELD_WORDS } from "@luke/features/words";
 import { type ReactNode, type Ref, useState } from "react";
 import { HideSecretIcon, ShowSecretIcon } from "../../icons/lucide-glyphs.js";
+import type { ShownError } from "../../reported-failure.js";
 import { IconButton } from "../button/button.js";
 import { FormField } from "../form-field/form-field.js";
 import { GAP, Inline } from "../layout/layout.js";
@@ -42,8 +43,8 @@ export function SecretField({
 }: {
   label: ReactNode;
   description?: ReactNode;
-  /** What is wrong with the secret, or nothing while it is fine. */
-  error?: ReactNode;
+  /** What is wrong with the secret, or what refused it, and the failure beneath; nothing while it is fine. */
+  error?: ShownError | undefined;
   /** Whether the field may be left empty, which its label then says. */
   optional?: boolean | undefined;
   /** Whether a secret is already kept, which the field says without showing it. */

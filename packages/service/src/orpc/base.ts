@@ -30,7 +30,8 @@ import { hostedContract } from "@luke/features/contract";
 import { middlewareGen, type WithEffectContext } from "@orpc/experimental-effect";
 import { implement } from "@orpc/server";
 import type { ResponseHeadersHandlerPluginContext } from "@orpc/server/plugins";
-import { Context, Effect, Option, References, Result } from "effect";
+import { Context, Effect, Option, References, Result, Tracer } from "effect";
+import { Headers, HttpTraceContext } from "effect/http";
 import {
   admittedHostVersion,
   hostCallerOf,
@@ -65,50 +66,93 @@ export interface HostedCaller {
   readonly userId: string;
 }
 
+/** A caller handed on with the services its procedure runs under, the caller's account among their log annotations (`forAccount`). */
+type AccountContext<Caller extends HostedCaller> = Caller & WithEffectContext<WebServices>;
+
 /** A Better Auth session's account, and the headers that carry it on to the plugin. */
 interface HostedSessionCaller extends HostedCaller {
   readonly sessionHeaders: Headers;
 }
 
 /**
- * Every log line a procedure writes carries its path as `procedure`, so a
- * store failure (`http/store-failure.ts`) names the route it was met on.
- * Note that the annotation is set on the services handed to the handler, not
- * with `Effect.annotateLogs` around `next()`, because `next` runs the handler
- * as a fiber of its own, which an annotation of this one never reaches.
+ * Every procedure runs under a server span named by its path, whose parent
+ * is the caller's trace as its `traceparent` names it, and every log line it
+ * writes carries its path as `procedure`, so a store failure
+ * (`http/store-failure.ts`) names the route it was met on, and the span's
+ * trace id as `traceId`, so a caller's failure report and the server's lines
+ * for the same call are found by one id. A request with no `traceparent`, or
+ * one that does not parse, starts a trace of its own.
+ *
+ * Note that the caller's trace is read for correlation alone: its trace id is
+ * continued and its sampling flag followed, as Sentry's own propagation does
+ * (`observability/sentry.ts`'s `sentryTelemetry`), and no other header value
+ * reaches a span or a log line. An unsampled call is a span that records
+ * nothing but still names the caller's trace id, so its lines carry it too.
+ *
+ * Note that the span and the annotations are set on the services handed to
+ * the handler, not with `Effect.withSpan` or `Effect.annotateLogs` around
+ * `next()`, because `next` runs the handler as a fiber of its own, which
+ * neither of this one's reaches.
  */
-const procedureAnnotated = middlewareGen<HostedContext, WithEffectContext<WebServices>>(function* ({
+const procedureTraced = middlewareGen<HostedContext, WithEffectContext<WebServices>>(function* ({
   context,
   path,
   next,
 }) {
-  const annotated = Context.add(context["effect/context"], References.CurrentLogAnnotations, {
-    ...Context.get(context["effect/context"], References.CurrentLogAnnotations),
-    procedure: path.join("."),
+  const procedure = path.join(".");
+  const caller = HttpTraceContext.w3c(Headers.fromInput(context.request.headers));
+  const options = { kind: "server", parent: Option.getOrUndefined(caller) } as const;
+  return yield* Effect.useSpan(procedure, options, (span) => {
+    const services = context["effect/context"];
+    const annotated = Context.add(services, References.CurrentLogAnnotations, {
+      ...Context.get(services, References.CurrentLogAnnotations),
+      procedure,
+      traceId: span.traceId,
+    });
+    return next({ context: { "effect/context": Context.add(annotated, Tracer.ParentSpan, span) } });
   });
-  return yield* next({ context: { "effect/context": annotated } });
 });
 
+/**
+ * The services handed on with the caller's account among their log
+ * annotations, as `userId`, so every line the procedure writes names the
+ * account and every issue it raises names it as Sentry's user
+ * (`observability/sentry.ts`), on the terms `procedureAnnotated` sets its path.
+ */
+function forAccount(context: HostedContext, userId: string): WithEffectContext<WebServices> {
+  const services = context["effect/context"];
+  return {
+    "effect/context": Context.add(services, References.CurrentLogAnnotations, {
+      ...Context.get(services, References.CurrentLogAnnotations),
+      userId,
+    }),
+  };
+}
+
 /** The hosted contract to implement, every procedure taking the context above. */
-export const hosted = implement(hostedContract).$context<HostedContext>().use(procedureAnnotated);
+export const hosted = implement(hostedContract).$context<HostedContext>().use(procedureTraced);
 
 /** The caller by its bearer, or with no `Authorization` at all, the browser's session cookie (`auth/bearer.ts`'s `resolveHostedUserId`). */
 export function accountMiddleware(resolveUserId: UserIdResolver) {
-  return middlewareGen<HostedContext, HostedCaller>(function* ({ context, next }) {
+  return middlewareGen<HostedContext, AccountContext<HostedCaller>>(function* ({ context, next }) {
     const account = yield* resolvedAccount(resolveUserId, context.request);
     if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    return yield* next({ context: { userId: account.value } });
+    return yield* next({
+      context: { userId: account.value, ...forAccount(context, account.value) },
+    });
   });
 }
 
 /** The caller by its bearer alone: a request with no `Authorization`, one only a cookie could name, is refused (`hostedCarriesBearer`). */
 export function bearerOnlyMiddleware(resolveUserId: UserIdResolver) {
-  return middlewareGen<HostedContext, HostedCaller>(function* ({ context, next }) {
+  return middlewareGen<HostedContext, AccountContext<HostedCaller>>(function* ({ context, next }) {
     if (!hostedCarriesBearer(context.request))
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     const account = yield* resolvedAccount(resolveUserId, context.request);
     if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    return yield* next({ context: { userId: account.value } });
+    return yield* next({
+      context: { userId: account.value, ...forAccount(context, account.value) },
+    });
   });
 }
 
@@ -147,10 +191,11 @@ export function actsForDevice(caller: DeviceCaller, deviceId: string): boolean {
 
 /** The caller as a device (`deviceCallerOf`), by its bearer alone, on `bearerOnlyMiddleware`'s terms. */
 export function deviceMiddleware(resolveUserId: UserIdResolver) {
-  return middlewareGen<HostedContext, DeviceCaller>(function* ({ context, next }) {
+  return middlewareGen<HostedContext, AccountContext<DeviceCaller>>(function* ({ context, next }) {
     if (!hostedCarriesBearer(context.request))
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    return yield* next({ context: yield* deviceCallerOf(resolveUserId, context.request) });
+    const caller = yield* deviceCallerOf(resolveUserId, context.request);
+    return yield* next({ context: { ...caller, ...forAccount(context, caller.userId) } });
   });
 }
 
@@ -202,7 +247,10 @@ export const keyRingMiddleware = middlewareGen<HostedContext, { readonly ring: K
  * unauthenticated.
  */
 export function sessionMiddleware(resolveSessionUserId: SessionUserIdResolver) {
-  return middlewareGen<HostedContext, HostedSessionCaller>(function* ({ context, next }) {
+  return middlewareGen<HostedContext, AccountContext<HostedSessionCaller>>(function* ({
+    context,
+    next,
+  }) {
     const sessionHeaders = sessionCredential(context.request.headers);
     if (sessionHeaders === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     // The resolver reads a request's headers alone, so it is handed one carrying the credential and nothing else.
@@ -212,6 +260,8 @@ export function sessionMiddleware(resolveSessionUserId: SessionUserIdResolver) {
       Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
     );
     if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    return yield* next({ context: { userId: account.value, sessionHeaders } });
+    return yield* next({
+      context: { userId: account.value, sessionHeaders, ...forAccount(context, account.value) },
+    });
   });
 }

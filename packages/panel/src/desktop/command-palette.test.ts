@@ -1,11 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  AGENT_CALL_FAILURE,
-  type AgentInboxChanged,
-  INBOX_SCOPE_KIND,
-} from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import {
   AGENT_KIND,
   AGENT_STATUS,
@@ -315,6 +311,7 @@ const SETTINGS_PAGES = [
   "Account",
   "Workspace",
   "Agents",
+  "Hosts",
   "Integrations",
   "Skills",
   "Appearance",
@@ -3065,8 +3062,11 @@ const PREVIEWS: InboxItem = {
   settledAt: 9_000,
 };
 
+/** The task's items as the feed holds them, or why it holds none. */
+type FedInbox = { readonly items: readonly InboxItem[] } | { readonly failure: string };
+
 /** The account's feed holding the items given on the listed workspace's task, or refused. */
-function fedOf(inbox: AgentInboxChanged["inbox"]): AppHostRead<AppInboxItems> {
+function fedOf(inbox: FedInbox): AppHostRead<AppInboxItems> {
   if ("failure" in inbox) return { failed: true };
   return {
     rows: { [INBOX_SCOPE_KIND.PLAN]: { [ROTATION.id]: inbox.items }, [INBOX_SCOPE_KIND.AGENT]: {} },
@@ -3074,7 +3074,7 @@ function fedOf(inbox: AgentInboxChanged["inbox"]): AppHostRead<AppInboxItems> {
 }
 
 /** The palette over a window whose listed workspace's task holds the items the account's feed holds as `inbox` says, main's word of it last changed at `changed`, every Inbox item it opens recorded; and how the feed moves. */
-function paletteOverInbox(inbox: AgentInboxChanged["inbox"], changed = 9_000) {
+function paletteOverInbox(inbox: FedInbox, changed = 9_000) {
   const deliver = handInboxItems(fedOf(inbox));
   const opened: InboxChoice[] = [];
   const tasks = tasksControl({
@@ -3089,7 +3089,7 @@ function paletteOverInbox(inbox: AgentInboxChanged["inbox"], changed = 9_000) {
     PANEL_TAB.TASKS,
     AtomRegistry.make(),
   );
-  return { deliver: (next: AgentInboxChanged["inbox"]) => deliver(fedOf(next)), opened };
+  return { deliver: (next: FedInbox) => deliver(fedOf(next)), opened };
 }
 
 test("the Inbox searched lists what needs you first, each item beside its task", async () => {

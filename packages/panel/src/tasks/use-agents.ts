@@ -1,6 +1,5 @@
 import {
   AGENT_CALL_FAILURE,
-  type AgentAgentAnswer,
   type AgentChangesAnswerView,
   type AgentDefaultAnswer,
   type AgentListAnswer,
@@ -32,13 +31,14 @@ import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
 } from "@luke/features/pull-request-chapters-view";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskMode } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
 import { STATUS_TONE } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ActHandle } from "../act.js";
+import { type ActedResult, type ActHandle, type AgentActAnswer, unreachedAs } from "../act.js";
 import {
   DRAFT_PLACE,
   type Draft,
@@ -47,6 +47,7 @@ import {
   useDraftWriter,
   useNewAgentDraft,
 } from "../composer-drafts.js";
+import type { ShownFailure } from "../failure-report.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
@@ -83,7 +84,6 @@ import {
   type TranscriptReader,
   windowTranscriptFollower,
 } from "./use-agent-transcript.js";
-import { type InboxFollower, windowInboxFollower } from "./use-followed-inboxes.js";
 import type {
   InboxAnswerer,
   InboxImageReader,
@@ -95,6 +95,12 @@ import type {
 const CHAPTERS_UNANSWERED: PullRequestChaptersAnswerView = {
   failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
 };
+
+/** Why a Start did not start, with the answer that said so, which a shown failure reports. */
+type StartFailure = Failure & { readonly cause?: unknown };
+
+/** An agent's act that never answered, settled as unanswered with the error beneath. */
+const agentUnreached = unreachedAs(AGENT_CALL_FAILURE.UNANSWERED);
 
 /** No words to listen for, one array so a render that has none hands down the same one. */
 const NO_KEYWORDS: readonly string[] = [];
@@ -143,9 +149,10 @@ const MODELS_READ_BOUND_MS = 15_000;
  * at once with the words it was started on as its first line (`opening`),
  * before the task's list or the agent's transcript is read, and one
  * the service refused leaves the task a draft holding the words, the files,
- * and the model New task's chip named, with why (`onHandDraft`), under the
- * key that start carried, so its tab's Retry is an agent's own Start on the
- * task and answers the agent the first start made where it made one.
+ * and the model picked on New task's chip, where one was, with why
+ * (`onHandDraft`), under the key that start carried, so its tab's Retry is
+ * an agent's own Start on the task and answers the agent the first start
+ * made where it made one.
  *
  * An agent may be archived on its own, which the service does only once a
  * turn it still runs is stopped. The archived agents are split from the
@@ -314,15 +321,15 @@ export interface AgentsControl {
     reason: string | undefined;
     /** Whether a Start is out. */
     busy: boolean;
-    /** Starts an agent on the choice given, or on the account's default with none; answers why it did not start, or nothing once it did or while it could not be pressed. */
-    onPress: (choice?: ModelChoice) => Promise<Failure | undefined>;
+    /** Starts an agent on the choice given, or on the account's default with none; answers why it did not start, with the answer that said so as its cause, or nothing once it did or while it could not be pressed. */
+    onPress: (choice?: ModelChoice) => Promise<StartFailure | undefined>;
     /** The agent a Start on the open task is still making, its tab standing under the press's key until the service answers; none while none is out. */
     pending?: StartingAgent | undefined;
   };
   /** Stops one agent, answering whether the service took the Stop, which the task list then carries; a refusal is said in a toast. */
   onStop: (agentId: string) => Promise<boolean>;
   /** Takes one agent back to just before one of the developer's lines, stopping it first. */
-  onRewind: (agentId: string, messageId: string) => Promise<AgentAgentAnswer>;
+  onRewind: (agentId: string, messageId: string) => Promise<AgentActAnswer>;
   /** Sends one agent a message under the key the composer made. */
   onMessage: MessageSender;
   /** Changes one agent's model and effort for its next step, drawn at once by the host. */
@@ -343,13 +350,14 @@ export interface AgentsControl {
    * offering Undo in a toast; a refusal puts it back and is answered rather
    * than said, for the caller to say in its dialog or a toast of its own.
    */
-  onArchive: (agentId: string, archived: boolean, drawn?: ArchiveDrawn) => Promise<ActionResult>;
+  /** Archives or unarchives an agent, answering whether it was kept, with what refused it beneath a refusal. */
+  onArchive: (agentId: string, archived: boolean, drawn?: ArchiveDrawn) => Promise<ActedResult>;
   /**
    * Deletes one agent for good, a turn it still runs stopped first, taking
    * it out of the list and saying so in a toast; a refusal is answered
    * rather than said, for the dialog that asked to say.
    */
-  onDelete: (agentId: string) => Promise<ActionResult>;
+  onDelete: (agentId: string) => Promise<ActedResult>;
   /** Reads one agent again now by its id, as its own page reads it, answering it as it stands, or nothing where the read did not land. */
   readAgent: (agentId: string) => Promise<AgentSummary | undefined>;
   /** One read of an agent's transcript past a cursor at once, as Copy transcript asks it. */
@@ -405,8 +413,6 @@ export interface AgentsControl {
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a repository. */
   readSkills: SkillSource | undefined;
-  /** How a task's or an agent's inbox is followed, and heard pushed, as the Inbox tab draws it. */
-  inboxFollower: InboxFollower;
   /** One answer to an inbox item, as a card sends it. */
   answerInbox: InboxAnswerer;
   /** One message on an inbox item's thread, as its box sends it. */
@@ -457,7 +463,7 @@ function taskDraft(
   };
 }
 
-/** What New task hands a task it started whose agent was refused: the key that start carried, the prompt, its files, the choice its chip made, none for the account's default, and why. */
+/** What New task hands a task it started whose agent was refused: the key that start carried, the prompt, its files, the choice picked on its chip, none where the chip was left on the account's default, which the draft's tab then reads afresh, and why. */
 interface HandedDraft {
   readonly id: string;
   readonly prompt: string;
@@ -720,7 +726,8 @@ export function useAgents(input: {
   const continues = useRef(new Map<string, PendingContinue>());
   const toast = useToast();
   const failed = useCallback(
-    (words: string) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+    (words: string, failure: ShownFailure) =>
+      toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED, failure }),
     [toast],
   );
   // Note that the acts and the opening are read through a ref, because the
@@ -867,12 +874,12 @@ export function useAgents(input: {
   const askStart = (
     on: string,
     asked: Omit<PortActPayload<typeof ACT_KIND.AGENTS_START>, "taskId">,
-  ): Promise<AgentAgentAnswer> => {
+  ): Promise<AgentActAnswer> => {
     setStarting(true);
     // Note that a Start from the page's agent names no task, so the service puts it where that agent is.
     const where = on === taskId ? { taskId: on } : undefined;
     return act(ACT_KIND.AGENTS_START, { ...where, ...asked })
-      .catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }))
+      .catch(agentUnreached)
       .then((answer) => {
         setStarting(false);
         return answer;
@@ -889,7 +896,7 @@ export function useAgents(input: {
     latest.current.onStarted(agent.id);
   };
 
-  const pressStart = async (choice?: ModelChoice): Promise<Failure | undefined> => {
+  const pressStart = async (choice?: ModelChoice): Promise<StartFailure | undefined> => {
     if (taskId === undefined || repository === null || starting) return undefined;
     // The key is the press's own, and a press asked again after the service
     // did not answer carries the one it minted, so the service answers the
@@ -911,7 +918,7 @@ export function useAgents(input: {
     if ("failure" in answer) {
       // Only a service that never answered is asked again under the same key.
       if (answer.failure !== AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
-      return startFailureNote(answer, taskId, input.device);
+      return { ...startFailureNote(answer, taskId, input.device), cause: answer };
     }
     pending.current = undefined;
     landed(taskId, answer.agent);
@@ -944,7 +951,13 @@ export function useAgents(input: {
       if (answer.failure !== AGENT_CALL_FAILURE.UNANSWERED) {
         continues.current.delete(sourceId);
       }
-      if ((latest.current.taskId ?? latest.current.agentId) !== startsOn) failed(START_FAILED_AWAY);
+      if ((latest.current.taskId ?? latest.current.agentId) !== startsOn) {
+        failed(START_FAILED_AWAY, {
+          surface: FAILURE_SURFACE.AGENT_START,
+          cause: answer,
+          about: { agentId: sourceId },
+        });
+      }
       return continueFailureNote(answer, taskId ?? null);
     }
     continues.current.delete(sourceId);
@@ -1230,17 +1243,21 @@ export function useAgents(input: {
 
   // A refused Stop leaves the button as it was, so it says so in a toast.
   const onStop = async (agentId: string): Promise<boolean> => {
-    const answer = await act(ACT_KIND.AGENTS_STOP, { agentId }).catch(() => undefined);
-    const took = answer !== undefined && !("failure" in answer);
-    if (!took) failed(STOP_FAILED);
+    const answer = await act(ACT_KIND.AGENTS_STOP, { agentId }).catch(agentUnreached);
+    const took = !("failure" in answer);
+    if (!took) {
+      failed(STOP_FAILED, {
+        surface: FAILURE_SURFACE.AGENT_STOP,
+        cause: answer,
+        about: { agentId },
+      });
+    }
     return took;
   };
 
   const onRewind = useCallback(
-    (agentId: string, messageId: string): Promise<AgentAgentAnswer> =>
-      act(ACT_KIND.AGENTS_REWIND, { agentId, messageId }).catch(
-        (): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
-      ),
+    (agentId: string, messageId: string): Promise<AgentActAnswer> =>
+      act(ACT_KIND.AGENTS_REWIND, { agentId, messageId }).catch(agentUnreached),
     [act],
   );
 
@@ -1248,12 +1265,12 @@ export function useAgents(input: {
     async (agentId, text, clientKey, attachments) => {
       // Note that a message that opens the agent's sandbox anew while its image is prepared is
       // taken at once, its relaunch waiting on the image in the service, so it is asked once.
-      const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_MESSAGE, {
+      const answer: AgentActAnswer = await act(ACT_KIND.AGENTS_MESSAGE, {
         agentId,
         text,
         clientKey,
         ...(attachments.length === 0 ? undefined : { attachments }),
-      }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
+      }).catch(agentUnreached);
       return answer;
     },
     [act],
@@ -1262,9 +1279,7 @@ export function useAgents(input: {
   // A change of model is drawn by the host the moment it is asked, and taken back should the service refuse it.
   const onChoose = useCallback<ChoiceWriter>(
     (agentId, choice) =>
-      act(ACT_KIND.AGENTS_CHOOSE, { agentId, ...choiceRequest(choice) }).catch(
-        (): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
-      ),
+      act(ACT_KIND.AGENTS_CHOOSE, { agentId, ...choiceRequest(choice) }).catch(agentUnreached),
     [act],
   );
 
@@ -1277,11 +1292,17 @@ export function useAgents(input: {
     async (agentId, disabledServers) => {
       const change = (switches.current.get(agentId) ?? 0) + 1;
       switches.current.set(agentId, change);
-      const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_SERVERS, {
+      const answer: AgentActAnswer = await act(ACT_KIND.AGENTS_SERVERS, {
         agentId,
         disabledServers,
-      }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
-      if ("failure" in answer && switches.current.get(agentId) === change) failed(SERVERS_FAILED);
+      }).catch(agentUnreached);
+      if ("failure" in answer && switches.current.get(agentId) === change) {
+        failed(SERVERS_FAILED, {
+          surface: FAILURE_SURFACE.AGENT_SERVERS,
+          cause: answer,
+          about: { agentId },
+        });
+      }
       return answer;
     },
     [act, failed],
@@ -1294,12 +1315,18 @@ export function useAgents(input: {
   const onRename = async (agentId: string, title: string): Promise<boolean> => {
     const rename = (renames.current.get(agentId) ?? 0) + 1;
     renames.current.set(agentId, rename);
-    const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_RENAME, {
+    const answer: AgentActAnswer = await act(ACT_KIND.AGENTS_RENAME, {
       agentId,
       title,
-    }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
+    }).catch(agentUnreached);
     if (!("failure" in answer)) return true;
-    if (renames.current.get(agentId) === rename) failed(RENAME_FAILED);
+    if (renames.current.get(agentId) === rename) {
+      failed(RENAME_FAILED, {
+        surface: FAILURE_SURFACE.AGENT_RENAME,
+        cause: answer,
+        about: { agentId },
+      });
+    }
     return false;
   };
 
@@ -1311,14 +1338,14 @@ export function useAgents(input: {
     agentId: string,
     archived: boolean,
     drawn: ArchiveDrawn = ARCHIVE_DRAWN.AT_ONCE,
-  ): Promise<ActionResult> => {
+  ): Promise<ActedResult> => {
     setArchivesOut((count) => count + 1);
-    const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_ARCHIVE, {
+    const answer: AgentActAnswer = await act(ACT_KIND.AGENTS_ARCHIVE, {
       agentId,
       archived,
       ...(drawn === ARCHIVE_DRAWN.ON_ANSWER ? { drawn } : undefined),
     })
-      .catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }))
+      .catch(agentUnreached)
       .finally(() => setArchivesOut((count) => count - 1));
     const words = archiveWords(archived);
     if ("failure" in answer) {
@@ -1326,31 +1353,40 @@ export function useAgents(input: {
       return {
         status: ACTION_RESULT_STATUS.REJECTED,
         reason: notReady ? ARCHIVE_NOT_READY : words.refused,
+        cause: answer,
       };
     }
-    toast(undoToast(words.done, () => archiveNow.current(agentId, !archived).then(sayRefusal)));
+    toast(
+      undoToast(words.done, () =>
+        archiveNow.current(agentId, !archived).then((result) => sayRefusal(result, agentId)),
+      ),
+    );
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
   const archiveNow = useRef(onArchive);
   archiveNow.current = onArchive;
 
-  const onDelete = async (agentId: string): Promise<ActionResult> => {
-    const answer = await act(ACT_KIND.AGENTS_DELETE, { agentId }).catch(() => ({
-      failure: AGENT_CALL_FAILURE.UNANSWERED,
-    }));
+  const onDelete = async (agentId: string): Promise<ActedResult> => {
+    const answer = await act(ACT_KIND.AGENTS_DELETE, { agentId }).catch(agentUnreached);
     if ("failure" in answer) {
       const notReady = answer.failure === AGENT_CALL_FAILURE.AGENT_NOT_READY;
       return {
         status: ACTION_RESULT_STATUS.REJECTED,
         reason: notReady ? ARCHIVE_NOT_READY : DELETE_WORDS.refused,
+        cause: answer,
       };
     }
     // Note that a page's agent is read again, which drops a read already out that still holds it.
     readAgain();
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
-  const sayRefusal = (result: ActionResult) => {
-    if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) failed(result.reason);
+  const sayRefusal = (result: ActionResult, agentId: string) => {
+    if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
+    failed(result.reason, {
+      surface: FAILURE_SURFACE.AGENT_ARCHIVE,
+      cause: result,
+      about: { agentId },
+    });
   };
 
   const readAgent = useCallback((named: string) => readAgentById(act, named), [act]);
@@ -1476,8 +1512,6 @@ export function useAgents(input: {
     [act],
   );
 
-  const inboxFollower = windowInboxFollower;
-
   const answerInbox = useCallback<InboxAnswerer>(
     (params) => act(ACT_KIND.AGENTS_INBOX_ANSWER, params),
     [act],
@@ -1597,7 +1631,6 @@ export function useAgents(input: {
     readPullRequestViewed,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
-    inboxFollower,
     answerInbox,
     messageInbox,
     startInboxThread,

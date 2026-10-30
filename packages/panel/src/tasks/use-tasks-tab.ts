@@ -15,6 +15,7 @@ import type { CatalogModel, MacOffer, ModelChoice } from "@luke/features/models-
 import type { PageLine } from "@luke/features/page-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
 import {
   type CodeRef,
@@ -97,13 +98,26 @@ import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ActHandle } from "../act.js";
+import {
+  type ActHandle,
+  askKept,
+  firstRefusal,
+  KEPT,
+  type Kept,
+  notKept,
+  unreachedAs,
+} from "../act.js";
 import { streamFrom } from "../act-stream.js";
 import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
-import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
+import {
+  beginPanelSpan,
+  PANEL_SPAN,
+  PANEL_SPAN_ATTRIBUTE,
+  recordPanelSpan,
+} from "../panel-spans.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
@@ -437,7 +451,8 @@ interface AutomationsViewControl {
  * The coding agent New task's Agent mode starts on the task it started:
  * the key its start carries, which the card keeps for a press asking the
  * same again (`new-task-composer.tsx`), its prompt, the files attached, and
- * the model its chip named, none for the account's default.
+ * the model picked on its chip, none where the chip was left on the
+ * account's default, so the service runs the default it holds at the start.
  */
 export interface NewTaskAgent {
   readonly idempotencyKey: string;
@@ -446,7 +461,7 @@ export interface NewTaskAgent {
   readonly choice: ModelChoice | undefined;
 }
 
-/** The agent a task's start starts on it, as the act carries it: the card's key, the prompt, the files where any, and the chip's model where it named one. */
+/** The agent a task's start starts on it, as the act carries it: the card's key, the prompt, the files where any, and the chip's model where one was picked. */
 function agentRequest(handed: NewTaskAgent) {
   return {
     idempotencyKey: handed.idempotencyKey,
@@ -496,8 +511,9 @@ export interface NewTaskPreset {
 /**
  * What New task's card held as it pressed Start, which it hands its start
  * so a card opened again on a refusal starts where it was left: the
- * repository, the model on its chip, and the press it
- * made, whose key a Retry asking the same carries again.
+ * repository, the model picked on its chip, none where it was left on the
+ * account's default, and the press it made, whose key a Retry asking the
+ * same carries again.
  */
 interface NewTaskCardKept {
   /** What the card started, which it opens again for; a task's agent where none is named. */
@@ -707,12 +723,12 @@ export interface TasksControl {
   onChangeRepository: (taskId: string) => void;
   /** Gives a task its repository, or takes it away with null; answers why the service refused, or nothing once it is kept. */
   onSetRepository: (taskId: string, repository: string | null) => Promise<string | undefined>;
-  /** Sets where a task stands, how much it matters, or who it is assigned to, drawn at once by the assignee's name where the caller knows it; answers whether the service kept it. */
+  /** Sets where a task stands, how much it matters, or who it is assigned to, drawn at once by the assignee's name where the caller knows it; answers whether the service kept it, with what refused it where it did not. */
   onSetTaskStanding: (
     taskId: string,
     standing: TaskStanding,
     assigneeName?: string,
-  ) => Promise<boolean>;
+  ) => Promise<Kept>;
   /** Adds one block of a task or takes it away, which the open document draws as the service answers it; a refusal says why in a toast. */
   onSetTaskBlock: (taskId: string, block: TaskBlockRequest) => void;
   /** Opens a task's repository on GitHub in the browser. */
@@ -1015,14 +1031,19 @@ function summaryOfTaskless({ automationId, ...agent }: TasklessAgent): AgentSumm
   return automationId === null ? agent : { ...agent, automationId };
 }
 
-/** How an agent's pin asked of the service landed: written, refused, or never asked, the account having changed while it waited its turn. */
+/** A task's act that never answered, settled as unanswered with the error beneath. */
+const taskUnreached = unreachedAs(TASK_CALL_FAILURE.UNANSWERED);
+
+/** How an agent's pin asked of the service landed, where it was not refused: written, or never asked, the account having changed while it waited its turn. */
 const AGENT_PIN_ASKED = {
   CHANGED: "changed",
-  REFUSED: "refused",
   UNASKED: "unasked",
 } as const;
 
-type AgentPinAsked = (typeof AGENT_PIN_ASKED)[keyof typeof AGENT_PIN_ASKED];
+/** How an agent's pin landed: as above, or refused, with the answer or error that refused it. */
+type AgentPinAsked =
+  | (typeof AGENT_PIN_ASKED)[keyof typeof AGENT_PIN_ASKED]
+  | { readonly refused: unknown };
 
 /** No pin of an agent on a plan, the same array every render. */
 const NO_TASK_AGENT_PINS: readonly TaskAgentPin[] = [];
@@ -1178,6 +1199,10 @@ export function useTasksTab(input: {
     launchedStandIn(loadedTasksFixture()?.fixturePlace(input.run)),
   );
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
+  // Note that the Inbox already open has no opening to time.
+  const timeInboxOpen = () => {
+    if (inboxView === undefined) beginPanelSpan(PANEL_SPAN.INBOX_OPEN);
+  };
   // Whether the window's Inbox shows one column, as it measures itself.
   const [inboxSingle, setInboxSingle] = useState(false);
   const agentView = standIn?.kind === STAND_IN.AGENT ? standIn : undefined;
@@ -1805,10 +1830,19 @@ export function useTasksTab(input: {
   shownNow.current = shown;
   const deleteTask = async (taskId: string): Promise<ActionResult> => {
     if (fixture !== undefined) return DELETE_REFUSED;
-    const deleted = await act(ACT_KIND.TASKS_DELETE, { taskId }).catch(() => false);
-    if (deleted) return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    const deleted = await askKept(act(ACT_KIND.TASKS_DELETE, { taskId }));
+    if (deleted.kept) return { status: ACTION_RESULT_STATUS.ACCEPTED };
     if (!shownNow.current) {
-      toast({ words: DELETE_REFUSED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      toast({
+        words: DELETE_REFUSED_NOTE,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: {
+          surface: FAILURE_SURFACE.TASK_DELETE,
+          cause: deleted.cause,
+          about: { taskId },
+        },
+      });
     }
     return DELETE_REFUSED;
   };
@@ -1832,18 +1866,23 @@ export function useTasksTab(input: {
   // above waits on.
   const markTask = (taskId: string, mark: TaskMark): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
-    return act(ACT_KIND.TASKS_PIN, { taskId, pinned: mark === TASK_MARK.PIN })
-      .catch(() => false)
-      .then((changed) => {
-        if (!changed) {
+    return askKept(act(ACT_KIND.TASKS_PIN, { taskId, pinned: mark === TASK_MARK.PIN })).then(
+      (changed) => {
+        if (!changed.kept) {
           toast({
             words: MARK_FAILED_NOTES[mark],
             tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
+            failure: {
+              surface: FAILURE_SURFACE.TASK_MARK,
+              cause: changed.cause,
+              about: { taskId },
+            },
           });
         }
-        return changed;
-      });
+        return changed.kept;
+      },
+    );
   };
   markTaskNow.current = markTask;
   // A fixture's repositories are pinned nowhere, as its tasks are marked
@@ -1853,16 +1892,15 @@ export function useTasksTab(input: {
   // refusal says so in a toast, since the menu that asked has closed.
   const pinRepository = (repository: string, pinned: boolean) => {
     if (fixture !== undefined) return;
-    act(ACT_KIND.TASKS_PIN_REPOSITORY, { repository, pinned })
-      .catch(() => false)
-      .then((changed) => {
-        if (changed) return;
-        toast({
-          words: pinned ? REPOSITORY_PIN_FAILED_NOTES.PIN : REPOSITORY_PIN_FAILED_NOTES.UNPIN,
-          tone: STATUS_TONE.DANGER,
-          hold: TOAST_HOLD.FAILED,
-        });
+    askKept(act(ACT_KIND.TASKS_PIN_REPOSITORY, { repository, pinned })).then((changed) => {
+      if (changed.kept) return;
+      toast({
+        words: pinned ? REPOSITORY_PIN_FAILED_NOTES.PIN : REPOSITORY_PIN_FAILED_NOTES.UNPIN,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.REPOSITORY_PIN, cause: changed.cause },
       });
+    });
   };
 
   // Each agent's pins in flight, the newest last, which the next waits on,
@@ -1892,8 +1930,8 @@ export function useTasksTab(input: {
       (): Promise<AgentPinAsked> | AgentPinAsked =>
         accountNow.current === pressedBy
           ? act(ACT_KIND.AGENTS_PIN, { agentId, pinned, ...placed }).then(
-              (answer) => ("agent" in answer ? AGENT_PIN_ASKED.CHANGED : AGENT_PIN_ASKED.REFUSED),
-              () => AGENT_PIN_ASKED.REFUSED,
+              (answer) => ("agent" in answer ? AGENT_PIN_ASKED.CHANGED : { refused: answer }),
+              (error: unknown) => ({ refused: error }),
             )
           : AGENT_PIN_ASKED.UNASKED,
     );
@@ -1911,6 +1949,7 @@ export function useTasksTab(input: {
         words: pinned ? AGENT_PIN_FAILED_NOTES.PIN : AGENT_PIN_FAILED_NOTES.UNPIN,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.AGENT_PIN, cause: asked.refused, about: { agentId } },
       });
     });
   };
@@ -1965,16 +2004,16 @@ export function useTasksTab(input: {
     const pressedBy = input.account;
     const asked = moves.map(({ agent, id, position }) => {
       const flights = agentPinFlights.current;
-      const flight: Promise<boolean | undefined> = agent
+      const flight: Promise<Kept | undefined> = agent
         ? (flights.get(id) ?? Promise.resolve(true)).then(() =>
             accountNow.current === pressedBy
               ? act(ACT_KIND.AGENTS_PIN, { agentId: id, pinned: true, position }).then(
-                  (answer) => "agent" in answer,
-                  () => false,
+                  (answer) => ("agent" in answer ? KEPT : notKept(answer)),
+                  notKept,
                 )
               : undefined,
           )
-        : act(ACT_KIND.TASKS_PIN, { taskId: id, pinned: true, position }).catch(() => false);
+        : askKept(act(ACT_KIND.TASKS_PIN, { taskId: id, pinned: true, position }));
       if (agent) flights.set(id, flight);
       return flight.then((changed) => {
         if (agent && flights.get(id) === flight) flights.delete(id);
@@ -1982,9 +2021,15 @@ export function useTasksTab(input: {
       });
     });
     Promise.all(asked).then((answers) => {
-      if (!answers.includes(false)) return;
+      const asked = answers.filter((answer) => answer !== undefined);
+      if (asked.every((answer) => answer.kept)) return;
       putBack?.();
-      toast({ words: PIN_MOVE_FAILED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      toast({
+        words: PIN_MOVE_FAILED_NOTE,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.PIN_MOVE, cause: firstRefusal(asked) },
+      });
     });
   };
 
@@ -1996,16 +2041,15 @@ export function useTasksTab(input: {
   const writeSections = (writes: readonly TaskSectionWrite[]) => {
     const [first, ...rest] = writes;
     if (first === undefined || fixture !== undefined) return;
-    act(ACT_KIND.TASKS_WRITE_SECTION, { writes: [first, ...rest] })
-      .catch(() => false)
-      .then((changed) => {
-        if (changed) return;
-        toast({
-          words: SECTION_WRITE_FAILED_NOTE,
-          tone: STATUS_TONE.DANGER,
-          hold: TOAST_HOLD.FAILED,
-        });
+    askKept(act(ACT_KIND.TASKS_WRITE_SECTION, { writes: [first, ...rest] })).then((changed) => {
+      if (changed.kept) return;
+      toast({
+        words: SECTION_WRITE_FAILED_NOTE,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.SECTION_WRITE, cause: changed.cause },
       });
+    });
   };
 
   // Each task's status choices made here so far, counted as each is sent,
@@ -2024,24 +2068,26 @@ export function useTasksTab(input: {
   };
   // A change of where a task stands, its status, priority, or assignee, is
   // sent, which main draws at once and puts back where the service refused
-  // it. Answers whether the service kept it.
+  // it. Answers whether the service kept it, with what refused it where it did not.
   const sendStanding = (
     taskId: string,
     standing: TaskStanding,
     assigneeName?: string,
-  ): Promise<boolean> => {
+  ): Promise<Kept> => {
     if (standing.status !== undefined) chooseStatus(taskId);
     // Note that the name the reader knows a member by goes with them, so main draws them by it until the list carries them.
     const named = standing.assigneeId && assigneeName !== undefined ? { assigneeName } : undefined;
-    return act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing, ...named }).catch(() => false);
+    return askKept(act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing, ...named }));
   };
   // Each status change is sent as one standing. Answers which tasks the
-  // service kept and how many it refused.
+  // service kept, how many it refused, and what refused the first of them.
   const sendStatuses = (changes: readonly StatusChange[]) => {
     const answers = changes.map(({ taskId, status }) => sendStanding(taskId, { status }));
     return Promise.all(answers).then((changed) => {
-      const landed = changes.filter((_, index) => changed[index]).map(({ taskId }) => taskId);
-      return { landed, refused: changes.length - landed.length };
+      const landed = changes
+        .filter((_, index) => changed[index]?.kept === true)
+        .map(({ taskId }) => taskId);
+      return { landed, refused: changes.length - landed.length, cause: firstRefusal(changed) };
     });
   };
 
@@ -2056,12 +2102,13 @@ export function useTasksTab(input: {
     const sent = sendStatuses(asked);
     // The status choice each task stood at once this press was sent, which a later choice moves on.
     const choices = new Map(asked.map(({ taskId }) => [taskId, statusChoices.current.get(taskId)]));
-    sent.then(({ landed, refused }) => {
+    sent.then(({ landed, refused, cause }) => {
       if (landed.length === 0) {
         toast({
           words: settleFailedNote(status, refused),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.TASK_SETTLE, cause },
         });
         return;
       }
@@ -2090,12 +2137,13 @@ export function useTasksTab(input: {
       standingTasksOf(changes.map(({ taskId }) => taskId)),
     );
     if (due.length === 0) return;
-    sendStatuses(due).then(({ refused }) => {
+    sendStatuses(due).then(({ refused, cause }) => {
       if (refused === 0) return;
       toast({
         words: STATUS_RESTORE_FAILED_NOTE,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.TASK_SETTLE, cause },
       });
     });
   };
@@ -2243,7 +2291,12 @@ export function useTasksTab(input: {
     return act(kind).then(
       () => true,
       (refused: Error) => {
-        toast({ words: refused.message, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+        toast({
+          words: refused.message,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.GITHUB_ACCOUNT, act: kind, cause: refused },
+        });
         return false;
       },
     );
@@ -2280,8 +2333,8 @@ export function useTasksTab(input: {
     taskId: string,
     standing: TaskStanding,
     assigneeName?: string,
-  ): Promise<boolean> => {
-    if (fixture !== undefined) return Promise.resolve(false);
+  ): Promise<Kept> => {
+    if (fixture !== undefined) return Promise.resolve(notKept(FAILURE_CONDITION.NOT_KEPT));
     return sendStanding(taskId, standing, assigneeName);
   };
 
@@ -2291,12 +2344,17 @@ export function useTasksTab(input: {
   const setTaskBlock = (taskId: string, block: TaskBlockRequest) => {
     if (fixture !== undefined) return;
     void act(ACT_KIND.TASKS_BLOCK, { taskId, block })
-      .catch(() => ({ failure: TASK_CALL_FAILURE.UNANSWERED }) as const)
+      .catch(taskUnreached)
       .then((answer) => {
         if (!("failure" in answer)) return;
         const words =
           answer.failure === TASK_BLOCK_FAILURE.CYCLE ? BLOCK_CYCLE_NOTE : BLOCK_REFUSED_NOTE;
-        toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+        toast({
+          words,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.TASK_BLOCK, cause: answer, about: { taskId } },
+        });
       });
   };
 
@@ -2313,7 +2371,7 @@ export function useTasksTab(input: {
     if (fixture !== undefined) return Promise.resolve(false);
     const choicesThen = workspaceChoices.current;
     return act(ACT_KIND.TASKS_MOVE, { taskId, workspaceId })
-      .catch(() => ({ failure: TASK_CALL_FAILURE.UNANSWERED }) as const)
+      .catch(taskUnreached)
       .then((answer) => {
         if (!("failure" in answer)) {
           // A first workspace read landing meanwhile lists one too, but nobody chose it.
@@ -2323,7 +2381,16 @@ export function useTasksTab(input: {
           return true;
         }
         if (told?.quiet !== true) {
-          toast({ words: MOVE_REFUSED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+          toast({
+            words: MOVE_REFUSED_NOTE,
+            tone: STATUS_TONE.DANGER,
+            hold: TOAST_HOLD.FAILED,
+            failure: {
+              surface: FAILURE_SURFACE.TASK_MOVE,
+              cause: answer,
+              about: { taskId, workspaceId },
+            },
+          });
         }
         return false;
       });
@@ -2889,6 +2956,7 @@ export function useTasksTab(input: {
       case LINK_PLACE.INBOX: {
         // Note that a link to the Inbox opens it as its sidebar row does, on nothing chosen.
         listLinked(workspace);
+        timeInboxOpen();
         standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
         return;
       }
@@ -2901,6 +2969,7 @@ export function useTasksTab(input: {
         if (!channelsOn) return;
         standChannelPlace(place.channelId);
         // Note that a channel's link opens it as its row does: on no item.
+        timeInboxOpen();
         standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
         return;
       }
@@ -3290,6 +3359,7 @@ export function useTasksTab(input: {
       // Note that it opens on nothing chosen, so one column shows the list and two an empty pane beside it (`inbox-columns.ts`).
       // With Channels on, it leaves any channel shown, so the Inbox lists every channel's items.
       onOpen: guard(() => {
+        timeInboxOpen();
         setHistoryFor(undefined);
         if (channelsOn) leaveChannel();
         setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });
@@ -3307,6 +3377,7 @@ export function useTasksTab(input: {
         );
       }),
       onOpenChannel: guard((channelId: string) => {
+        timeInboxOpen();
         setHistoryFor(undefined);
         chooseChannel(channelId);
         setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });

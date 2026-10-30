@@ -40,12 +40,12 @@ import {
   INBOX_GROUPING,
   INBOX_HOLDER,
   INBOX_LINE,
-  INBOX_MEDIA,
   INBOX_SHOW,
   INBOX_SORT,
   INBOX_STATUS_GROUP,
   INBOX_WHOSE,
   type InboxDraft,
+  type InboxGroup,
   type InboxGrouping,
   type InboxListView,
   type InboxShow,
@@ -54,9 +54,9 @@ import {
   inboxBoard,
   inboxCommentFiles,
   inboxCounts,
+  inboxGroup,
   inboxLineKind,
   inboxList,
-  inboxMedia,
   inboxMissing,
   inboxPlaces,
   inboxPreview,
@@ -480,6 +480,34 @@ test("the list holds every item the latest changed first, under its plan, the pl
     ),
     ["retry", "expiry", "threshold", "channel"],
   );
+});
+
+test("a list drawn again from a task's same items lists each in the object it listed it in before, and groups them in the same group; an item that changed is listed anew, and its task grouped anew", () => {
+  const view = {
+    grouping: INBOX_GROUPING.NONE,
+    show: INBOX_SHOW.ALL,
+    readerId: undefined,
+    chosen: undefined,
+  };
+  const items = [item({ id: "threshold", updatedAt: 30 }), item({ id: "retry", updatedAt: 50 })];
+  const group = inboxGroup(taskHolder(BILLING), items);
+  assert.equal(inboxGroup(taskHolder(BILLING), items), group, "the same items, the same group");
+  const listed = (groups: readonly InboxGroup[], id: string) =>
+    listedItems(inboxList(groups, view)).find(({ item }) => item.id === id);
+  const threshold = listed([group], "threshold");
+  const retry = listed([group], "retry");
+  assert.equal(listed([group], "threshold"), threshold, "drawn again, an item is listed alike");
+
+  const [kept, changed] = items;
+  assert.ok(kept !== undefined && changed !== undefined);
+  const after = inboxGroup(taskHolder(BILLING), [kept, { ...changed, unread: true }]);
+  assert.notEqual(after, group, "a task whose items changed is grouped anew");
+  assert.equal(
+    listed([after], "threshold"),
+    threshold,
+    "an item that did not change is listed alike",
+  );
+  assert.notEqual(listed([after], "retry"), retry, "an item that changed is listed anew");
 });
 
 test("an item whose place is held stands where the list drew it, under the status it stood under, whatever it changed to since, under either sort and every grouping", () => {
@@ -1178,68 +1206,6 @@ test("a thread's latest message by a member is its row's preview, led by who wro
   assert.equal(inboxPreview(open(filesOnly), previewName), "Charles Pan: Sent a file");
 });
 
-test("an item's media are the pages its thread names, by any link outside code, each page of each task once, then the pictures among a message's files, a file that is no picture left out, and four at most", () => {
-  const task = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-  const elsewhere = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
-  const pageLink = (pageId: string, planId = task) =>
-    linkOf({ kind: LINK_PLACE.PAGE, planId, pageId }, "acme");
-  const funnel = "3c4d5e6f-0000-4000-8000-000000000001";
-  const pricing = "3c4d5e6f-0000-4000-8000-000000000002";
-  const hidden = "3c4d5e6f-0000-4000-8000-000000000004";
-  const sent = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c72";
-  const cut = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c73";
-  const threaded = item({
-    id: "m1",
-    thread: [
-      message({
-        text: `See [@Invite funnel](${pageLink(funnel)}) first, not \`${pageLink(hidden)}\`, and [its twin](${pageLink(funnel, elsewhere)}).`,
-        createdAt: 1_000,
-        author: INBOX_MESSAGE_AUTHOR.AGENT,
-      }),
-      message({
-        text: `Priced it on [the pricing page](${pageLink(pricing)}), then ${pageLink(funnel)} again.`,
-        createdAt: 2_000,
-        member: YOU,
-        files: [
-          { attachmentId: sent, name: "notes.pdf", mediaType: "application/pdf" },
-          { attachmentId: sent, name: "before.webp", mediaType: "image/webp" },
-          { attachmentId: cut, name: "after.png", mediaType: "image/png" },
-        ],
-      }),
-    ],
-  });
-  assert.deepEqual(inboxMedia(threaded), [
-    { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: funnel },
-    { kind: INBOX_MEDIA.PAGE, place: { taskId: elsewhere }, pageId: funnel },
-    { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: pricing },
-    { kind: INBOX_MEDIA.IMAGE, attachmentId: sent },
-  ]);
-  assert.deepEqual(inboxMedia(item({ id: "m2" })), []);
-});
-
-test("an item's media take the page of an agent with no task as they take a task's, by its place, each page of each place once", () => {
-  const agent = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-  const task = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-  const ledger = "3c4d5e6f-0000-4000-8000-000000000003";
-  const agentLink = linkOf({ kind: LINK_PLACE.PAGE, agentId: agent, pageId: ledger }, "acme");
-  const taskLink = linkOf({ kind: LINK_PLACE.PAGE, planId: task, pageId: ledger }, "acme");
-  const carrying = item({
-    id: "m4",
-    thread: [
-      {
-        id: "n2",
-        author: INBOX_MESSAGE_AUTHOR.AGENT,
-        text: `[@Flake ledger](${agentLink}) and ${taskLink}, the ledger again: ${agentLink}`,
-        createdAt: 1_000,
-      },
-    ],
-  });
-  assert.deepEqual(inboxMedia(carrying), [
-    { kind: INBOX_MEDIA.PAGE, place: { agentId: agent }, pageId: ledger },
-    { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: ledger },
-  ]);
-});
-
 /** The agent's message ending with `ask`, open unless it says otherwise. */
 function asking(ask: InboxAsk, id = "b1b2c3d4-0000-4000-8000-000000000001"): InboxMessage {
   return {
@@ -1578,7 +1544,7 @@ test("a thread's row says the ask itself while one is open: a choice's options, 
   assert.equal(rowOf(steps, [0]), "2 steps left · Add it");
   assert.equal(rowOf(steps, [0, 2]), "1 step left · Add it");
   assert.equal(rowOf(steps, [0, 1, 2]), "Every step ticked · Mark done");
-  assert.equal(rowOf({ type: INBOX_ASK.DO, steps: [] }, [0]), "Mark it done");
+  assert.equal(rowOf({ type: INBOX_ASK.DO, steps: [] }, [0]), "Mark done");
   assert.equal(lineOf(steps), INBOX_LINE.DO);
   assert.equal(
     rowOf({
@@ -1609,61 +1575,6 @@ test("a thread's row says the ask itself while one is open: a choice's options, 
   });
   assert.equal(inboxPreview(closed, previewName), "Which way?", "the agent's words stand alone");
   assert.equal(inboxLineKind(closed), INBOX_LINE.SAID);
-});
-
-test("a thread's row media are the pictures its messages' words draw by address and the pages they link to, outside code, in the order written, then their files' pictures, message by message, each once and four at most", () => {
-  const itemId = "a1b2c3d4-0000-4000-8000-0000000000f1";
-  const task = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-  const place = { kind: LINK_PLACE.INBOX_ITEM, planId: task, itemId } as const;
-  const picture = (attachmentId: string) =>
-    `![A chart](<${linkOf(place, "acme")}/files/${attachmentId}>)`;
-  const pageLink = (pageId: string) =>
-    linkOf({ kind: LINK_PLACE.PAGE, planId: task, pageId }, "acme");
-  const chart = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c80";
-  const after = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c81";
-  const sent = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c82";
-  const elsewhere = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c83";
-  const funnel = "3c4d5e6f-0000-4000-8000-000000000011";
-  const asked = {
-    ...asking({ type: INBOX_ASK.ANSWER }),
-    text: `See [@Invite funnel](${pageLink(funnel)}), then:\n\n${picture(chart)}`,
-  };
-  const answer = message({
-    text: `Here it is after:\n\n${picture(after)}\n\nand ${picture(chart)} again.`,
-    createdAt: 2_000,
-    member: YOU,
-    answers: { ask: asked.id, reply: INBOX_REPLY.ANSWERED },
-    files: [
-      { attachmentId: sent, name: "notes.pdf", mediaType: "application/pdf" },
-      { attachmentId: sent, name: "before.png", mediaType: "image/png" },
-    ],
-  });
-  const threaded = item({
-    id: itemId,
-    status: INBOX_STATUS.ANSWERED,
-    thread: [standing(asked, INBOX_ASK_STATUS.ANSWERED), answer],
-  });
-  assert.deepEqual(inboxMedia(threaded), [
-    { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: funnel },
-    { kind: INBOX_MEDIA.IMAGE, attachmentId: chart },
-    { kind: INBOX_MEDIA.IMAGE, attachmentId: after },
-    { kind: INBOX_MEDIA.IMAGE, attachmentId: sent },
-  ]);
-  const another = { ...place, itemId: "a1b2c3d4-0000-4000-8000-0000000000f2" };
-  const foreign = `![Not ours](<${linkOf(another, "acme")}/files/${elsewhere}>)`;
-  const quoted = [
-    foreign,
-    `Write \`${picture(chart)}\` to draw it,`,
-    "```md",
-    picture(after),
-    "```",
-    `or link it bare: ${linkOf(place, "acme")}/files/${sent}`,
-  ].join("\n");
-  assert.deepEqual(
-    inboxMedia({ ...threaded, thread: [{ ...asked, text: quoted }] }),
-    [],
-    "another item's picture, one quoted in code, and a bare address draw no picture, so the row shows none",
-  );
 });
 
 test("a comment's files are drawn after its words but for a picture its words draw as one, the pictures apart from every other file; a file the words only link to, quote in code, or draw though it is no picture is still drawn", () => {

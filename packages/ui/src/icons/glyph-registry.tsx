@@ -20,6 +20,7 @@ import {
   FolderKanban,
   GitBranch,
   GitPullRequest,
+  Globe,
   GripVertical,
   Hash,
   Layers,
@@ -122,6 +123,8 @@ export const GLYPH = {
   SECTION: lucideGlyph(FolderKanban),
   REPOSITORY: lucideGlyph(FolderGit),
   PAGE: lucideGlyph(AppWindow),
+  // A page of the web, outside the app, as a website chip names it.
+  WEBSITE: lucideGlyph(Globe),
   PLAN: DocumentIcon,
   // What one version of a plan changed: its changed sections.
   VERSION_CHANGES: lucideGlyph(FilePenLine),

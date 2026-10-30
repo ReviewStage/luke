@@ -18,7 +18,7 @@ import {
 import { Effect, FiberSet, type Scope, Stream } from "effect";
 import { AccountAccessClient, accountAccessHolder } from "./account-access-client.js";
 import type { AccountSession } from "./account-source.js";
-import type { AppAccessSlice } from "./app-state.js";
+import type { AppAccessSlice, SessionReplayState } from "./app-state.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
@@ -60,7 +60,7 @@ export interface AccountComposer extends Composer {
    * none, as it reads no token.
    */
   readonly sessionCredential: CallCredential;
-  sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }>;
+  sessionReplayState: Effect.Effect<SessionReplayState>;
   /** What the signed-in account may open in the app, as last read for it; no admin for anyone else. */
   accessState: Effect.Effect<AppAccessSlice>;
   /**
@@ -176,16 +176,19 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
 
   // The id is the session's own, so a source that keeps no account in the
   // settings file (a browser's cookie session) still names who is recorded.
-  const sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }> = Effect.sync(
-    () => {
-      const account = session.snapshot();
-      const accountId = account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
-      return {
-        permitted: runMode.sendsNetwork && !sessionReplayEndedByDeletion,
-        ...(accountId ? { accountId } : undefined),
-      };
-    },
-  );
+  // The name and email ride with it, read off the same snapshot, so the
+  // person a recording is filed under is never named from another account.
+  const sessionReplayState: Effect.Effect<SessionReplayState> = Effect.sync(() => {
+    const account = session.snapshot();
+    const permitted = runMode.sendsNetwork && !sessionReplayEndedByDeletion;
+    if (account.status !== ACCOUNT_STATUS.SIGNED_IN || !account.id) return { permitted };
+    return {
+      permitted,
+      accountId: account.id,
+      email: account.email,
+      ...(account.name ? { name: account.name } : undefined),
+    };
+  });
 
   // Note that the answer is read from the session as it stands, with nothing
   // to wait on, so no late answer can restart recording under the person

@@ -1,7 +1,7 @@
 import { CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import { remedyLabel } from "@luke/features/failure-remedy";
 import {
-  AGENT_DEFAULT_CHOICE,
+  agentFallbackChoice,
   type CatalogModel,
   MODEL_PROVIDER,
   type ModelChoice,
@@ -12,6 +12,7 @@ import {
   type ProviderKeyStatus,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
@@ -35,6 +36,7 @@ import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
+import { refusalShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
 import { OPEN_SETTINGS_LABEL } from "../open-settings.js";
 import {
@@ -74,25 +76,27 @@ import { SwitchRow } from "./switch-row.js";
  * each saying how Claude Code or Codex is connected and opening the dialog
  * that connects it with a plan or an API key (`agent-auth-section.tsx`),
  * then this file's Default model, then the model a Generate chapters runs
- * on (`chapters-model-section.tsx`), then the page's schema rows, Run agents
- * on this Mac among them while local agents are on. The harnesses and the Default model
- * share the one read of the keys, so a
+ * on (`chapters-model-section.tsx`), then the page's schema rows. The
+ * harnesses and the Default model share the one read of the keys, so a
  * key saved or removed above is what the model row says at once. The default model's one value is the account's, kept
  * on the service beside the settings preferences and written by this page
- * and by a Start that named a model alike, so the page reads it afresh as it
- * opens and shows what the last Start wrote. The model row is the same picker every settings row uses,
+ * alone; until the page writes it, the service answers the fallback the
+ * account's credentials pay for (`agentFallbackChoice`), so the page reads
+ * it as it opens and again at each answer of the keys, which may move that
+ * fallback. The model row is the same picker every settings row uses,
  * searched because the catalog is long: each base model under the mark
  * of the harness that runs it, the newest first within each provider, every fast
  * version folded into its model, the chosen one checked; a model no
  * subscription or API key of the account's pays for says "Connect Claude" or
  * "Connect Codex" at its end, and its pick lands on that harness's row above
- * rather than keeping it, and a default that is such a model, as a new
- * account's Claude default is on an OpenAI key alone, says it cannot run
- * under the row, with the same press. Under it a Fast
+ * rather than keeping it, and a default that is such a model, as a stored
+ * Claude default is once no Claude credential pays for it, says it cannot
+ * run under the row, with the same press. Under it a Fast
  * switch runs the model's fast version, resting where the model has none
  * or the service withholds it because Anthropic never granted the key's
  * organization fast mode, saying which, and on the account's own key with
- * a link to ask Anthropic for it;
+ * a link to ask Anthropic for it; for a model nothing pays for, its press
+ * lands on that harness's row as the pick's does, and writes nothing;
  * the stored id is the catalog's own, the fast version's where the switch
  * is on. The effort row is a segmented control over the efforts the chosen
  * model lists, and for a model that offers two context windows a context
@@ -101,8 +105,8 @@ import { SwitchRow } from "./switch-row.js";
  * where the next model offers two. A write is one ask of the service, the rows resting until
  * it answers; the model, Effort, and Context rows each write through
  * `useSettingWrite`, so each says its own refusal under it and ticks Saved
- * once its write lands, and Modified while it differs from a new account's
- * default. Fast is a `SwitchRow` like every other settings switch, so its
+ * once its write lands, and Modified while it differs from the fallback this
+ * account would start on with none stored. Fast is a `SwitchRow` like every other settings switch, so its
  * refusal is said in a toast as the switch flips back. With no account signed in
  * there is no default to show, and the page says so.
  *
@@ -196,6 +200,8 @@ function DefaultRows({
   const contextWrite = useSettingWrite(onChange);
   const listed = models?.find((model) => model.id === choice.model);
   const ownKey = listed === undefined ? undefined : ownKeys.get(listed.provider);
+  // Modified reads against the default this account would run on with none stored, as its credentials decide it.
+  const fallback = agentFallbackChoice(models ?? []);
   const remedy = useRepositoryRemedy();
   // A default nothing pays for says so in the key's note's place, with the press that connects it.
   const unrunnable = models === undefined ? undefined : unrunnableChoice(models, choice);
@@ -239,9 +245,9 @@ function DefaultRows({
       <PickerRow
         label="Default model"
         detail={note}
-        changed={read.base !== AGENT_DEFAULT_CHOICE.model}
+        changed={read.base !== fallback.model}
         saves={modelWrite.saves}
-        error={modelWrite.rejection}
+        error={refusalShown(modelWrite.rejection, FAILURE_SURFACE.SETTING_WRITE)}
         value={read.base}
         valueLabel={modelLabel(read.base, models)}
         valueIcon={listed !== undefined ? <HarnessMark provider={listed.provider} /> : null}
@@ -264,7 +270,12 @@ function DefaultRows({
             modelsRetrying ? (
               <Spinner delay label={readingWords("models")} />
             ) : (
-              <ErrorState onRetry={onRetryModels}>{MODELS_READ_FAILED}</ErrorState>
+              <ErrorState
+                failure={unreadShown(FAILURE_SURFACE.MODELS_READ)}
+                onRetry={onRetryModels}
+              >
+                {MODELS_READ_FAILED}
+              </ErrorState>
             )
           ) : undefined
         }
@@ -309,22 +320,21 @@ function DefaultRows({
           checked={read.fast}
           anchor={SETTINGS_SEARCH_ROW.AGENT_FAST}
           disabled={busy || base?.fast === undefined}
-          onChange={(fast) =>
-            base === undefined
-              ? Promise.resolve(WRITE_ACCEPTED)
-              : onChange(choiceAt(choiceModelId(base, fast)))
-          }
+          onChange={(fast) => {
+            if (base === undefined) return Promise.resolve(WRITE_ACCEPTED);
+            // A model nothing pays for runs no faster: the press goes to connect it, as its pick does, and the switch stands.
+            const missing = modelConnectFailure(base.model);
+            if (missing !== undefined) return remedy(missing)?.();
+            return onChange(choiceAt(choiceModelId(base, fast)));
+          }}
         />
       )}
       <SettingsRow
         label="Effort"
         adornment={
-          <SettingMarks
-            changed={choice.effort !== AGENT_DEFAULT_CHOICE.effort}
-            saves={effortWrite.saves}
-          />
+          <SettingMarks changed={choice.effort !== fallback.effort} saves={effortWrite.saves} />
         }
-        error={effortWrite.rejection}
+        error={refusalShown(effortWrite.rejection, FAILURE_SURFACE.SETTING_WRITE)}
       >
         {() => (
           <ChoiceBar
@@ -345,7 +355,7 @@ function DefaultRows({
             <SettingMarks changed={window !== CONTEXT_WINDOW.LONG} saves={contextWrite.saves} />
           }
           description={longWindowNote(windows)}
-          error={contextWrite.rejection}
+          error={refusalShown(contextWrite.rejection, FAILURE_SURFACE.SETTING_WRITE)}
         >
           {() => (
             <ChoiceBar
@@ -389,7 +399,7 @@ function AgentsSection({
   const [modelReads, setModelReads] = useState(0);
   const [modelsRetrying, setModelsRetrying] = useState(false);
 
-  // The page opening reads the default the service holds now, which a Start may just have written.
+  // The page opening reads the default the service holds now, which another window may just have written.
   useEffect(() => {
     if (!signedIn) return;
     let live = true;
@@ -412,6 +422,22 @@ function AgentsSection({
       live = false;
     };
   }, [act, signedIn, attempt]);
+
+  // A key saved or removed may move the fallback an account that stored no default reads, so each answer of
+  // the keys after the first, which the read above stands for, reads the default again, the one shown standing meanwhile.
+  useEffect(() => {
+    if (!signedIn || keysAnswered < 2) return;
+    let live = true;
+    act(ACT_KIND.AGENTS_DEFAULT_READ).then(
+      (answer) => {
+        if (live && !("failure" in answer)) setChoice(answer.choice);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [act, signedIn, keysAnswered]);
 
   const keysRead = ownKeys !== undefined;
   // The models are read once the keys are, and again at every answer of a save or removal, a replacement included, since the service offers fast versions by the organization of the Anthropic key the agents run on.
@@ -477,7 +503,10 @@ function AgentsSection({
         />
       ) : readFailed ? (
         <SettingsLine>
-          <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.AGENT_DEFAULTS_READ)}
+            onRetry={() => setAttempt((count) => count + 1)}
+          >
             {PAGE_LINE.FAILED}
           </ErrorState>
         </SettingsLine>

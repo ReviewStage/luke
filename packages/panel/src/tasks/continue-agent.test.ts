@@ -315,7 +315,10 @@ test("the end line's words and whether it tells of a failure come apart, and nam
     words: "Stopped",
     failed: false,
   });
-  assert.equal(endLineParts(AGENT_STATUS.FAILED, undefined)?.words, "Failed");
+  assert.equal(
+    endLineParts(AGENT_STATUS.FAILED, undefined)?.words,
+    "Failed: the run ended without saying why",
+  );
   // Note that an agent that ran directly on its Mac says why and where its work is, rather than its session's end.
   assert.deepEqual(
     endLineParts(AGENT_STATUS.FAILED, AGENT_FAILURE.SESSION_ENDED, undefined, true, {

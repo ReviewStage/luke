@@ -550,6 +550,32 @@ it.layer(getTestDB())("a held live read's looks", (it) => {
         assert.equal(liveDigestOf(held.queries), standing);
       }),
   );
+
+  it.effect(
+    "a part added to the read answers released desktops at once: the account inbox is held for one that sends where the parts it keeps stand",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const first = yield* askTask({ bearer: dana });
+        const { agents: _, ...kept } = Schema.decodeUnknownSync(accountInboxLiveAnswerSchema)(
+          first.body,
+        ).queries;
+        // As v0.22.0 sends it: its schema keeps five parts and strips `agents`, which it never knew.
+        const after = liveDigestOf(kept);
+        assert.ok(after !== undefined);
+
+        const unchanged = yield* Effect.forkChild(askTask({ bearer: dana, poll: true, after }));
+        yield* TestClock.adjust(Duration.seconds(25));
+        const held = Schema.decodeUnknownSync(accountInboxLiveAnswerSchema)(
+          (yield* Fiber.join(unchanged)).body,
+        );
+        assert.deepEqual(
+          Object.values(held.queries).filter((query) => query.rows !== undefined),
+          [],
+          "unchanged carries no rows",
+        );
+      }),
+  );
 });
 
 it.layer(getTestDB())("the account's inbox items' live read", (it) => {

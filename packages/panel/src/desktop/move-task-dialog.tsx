@@ -1,3 +1,4 @@
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { countWords, TERM } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
@@ -17,6 +18,7 @@ import { CONFIRM_STAGE, confirmAsked } from "@luke/ui/confirm-state";
 import { strandedTaskHome, workspaceReaches } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
+import { confirmFailure } from "../failure-report.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { sharedWords } from "./workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";
@@ -212,7 +214,9 @@ function MoveTaskCard({
             <li>{`Its agents keep running, now in ${chosen.name}.`}</li>
           </ul>
         )}
-        {rejection !== undefined && !moving ? <ErrorState>{rejection}</ErrorState> : null}
+        {rejection !== undefined && !moving ? (
+          <ErrorState failure={rejection.failure}>{rejection.words}</ErrorState>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -268,7 +272,11 @@ export function useMoveTaskDialog(
           : { status: ACTION_RESULT_STATUS.REJECTED, reason: MOVE_REFUSED },
       );
   };
-  const confirm = useConfirmDialog({ subject: offered, surfaceOpen: tasks.shown }, move);
+  const confirm = useConfirmDialog(
+    { subject: offered, surfaceOpen: tasks.shown },
+    move,
+    confirmFailure(FAILURE_SURFACE.TASK_MOVE),
+  );
   const open = confirm.standing && (confirmAsked(confirm.stage) || confirm.rejection !== undefined);
   return {
     ask: offered

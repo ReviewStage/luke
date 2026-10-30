@@ -1,3 +1,4 @@
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   TASK_BOUNDS,
   TASK_STATUS,
@@ -96,6 +97,7 @@ import { FolderGitIcon, SquareKanbanIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { unreadShown } from "../failure-report.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
@@ -834,14 +836,23 @@ export function TasksBoard({
         </EmptyState>
       }
       error={
-        <ErrorState onRetry={tasks.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+        <ErrorState
+          failure={unreadShown(FAILURE_SURFACE.TASKS_READ)}
+          onRetry={tasks.onRetryList}
+          placement={ERROR_STATE_PLACEMENT.CENTRED}
+        >
           {UNREAD_LINE}
         </ErrorState>
       }
     >
       {/* A refresh that failed after the tasks were read leaves them drawn, with a line over them. */}
       {tasks.listFailed && listed.length > 0 ? (
-        <ErrorState onRetry={tasks.onRetryList}>{REFRESH_FAILED_WORDS}</ErrorState>
+        <ErrorState
+          failure={unreadShown(FAILURE_SURFACE.TASKS_REFRESH)}
+          onRetry={tasks.onRetryList}
+        >
+          {REFRESH_FAILED_WORDS}
+        </ErrorState>
       ) : null}
       <ListMotion root={board}>
         <SelectionRegion

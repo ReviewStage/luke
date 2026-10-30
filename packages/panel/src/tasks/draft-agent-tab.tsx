@@ -56,9 +56,12 @@ import { WorkingLine } from "./working-time.js";
  *
  * A draft New task handed over (`use-agents.ts`'s `onHandDraft`)
  * is a task whose agent the service refused as New task started them
- * both: it holds the words, files, and model New task's box held, and why
- * (`refused`), which the tab shows under the box with Retry and what mends
- * it, as a refused send of the developer's own would, until the next send.
+ * both: it holds the words and files New task's box held, the model picked
+ * on its chip where one was, and why (`refused`), which the tab shows under
+ * the box with Retry and what mends it, as a refused send of the
+ * developer's own would, until the next send. Where New task's chip was
+ * left on the account's default, the draft holds no model, so its chip
+ * shows the default this tab read and its Retry names none.
  */
 
 /** A draft has nothing to stop and has published nothing, so its box's Stop and doors answer nothing. */

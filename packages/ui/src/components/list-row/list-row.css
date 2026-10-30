@@ -296,8 +296,8 @@
   /* A row whose thing is done with stands back in the palette's quieter
      inks rather than by fading its words, which still name what it opens
      and so read at AA (`docs/DESIGN.md`): its title takes the muted ink
-     its description and metadata already wear. Only its marks,
-     the leading glyph and the attachments its words already say, fade.
+     its description and metadata already wear. Only its mark,
+     the leading glyph its words already say, and its attachments fade.
      Its fill, which says it is open or in hand, and its acts stay as they
      are. */
   .luke-list-row[data-muted="true"] .luke-list-row-title {
@@ -332,11 +332,13 @@
   }
 
   /* Metadata on the title's line ends it, the title giving way first, and
-     a lead on a line of its own, the description, and attachments run the
-     words' and the end's tracks
+     the description runs the words' and the end's tracks
      whole under both; the row's marks stand level with the title's line
-     rather than the row's middle. The words and the title's line lend their
-     parts to the press's tracks, so each lands in its own. */
+     rather than the row's middle. A lead on a line of its own over the title
+     takes the title's place on that first line, as tall as the title's so
+     the marks still stand level with it, and the title runs whole under it.
+     The words and the first line lend their parts to the press's tracks, so
+     each lands in its own. */
   /* Note that a swiped row holds its press inside its slide, so the press is
      matched wherever it stands in the row. */
   .luke-list-row[data-meta="title"] :is(.luke-list-row-text, .luke-list-row-head) {
@@ -349,29 +351,25 @@
     align-self: start;
   }
 
-  .luke-list-row[data-meta="title"] .luke-list-row-title {
+  .luke-list-row[data-meta="title"]
+    :is(.luke-list-row-title, .luke-list-row-lead[data-at="above"]) {
     grid-column: text;
   }
 
-  .luke-list-row[data-meta="title"]
-    :is(
-      .luke-list-row-lead[data-at="line"],
-      .luke-list-row-description,
-      .luke-list-row-attachments
-    ) {
+  .luke-list-row[data-meta="title"] .luke-list-row-lead[data-at="above"] {
+    height: var(--luke-type-label-leading);
+  }
+
+  .luke-list-row[data-meta="title"] .luke-list-row-description {
     grid-column: text-start / end-end;
   }
 
-  .luke-list-row[data-meta="title"] .luke-list-row-lead[data-at="line"] {
-    margin-block-start: var(--luke-space-2);
+  .luke-list-row[data-meta="title"]:has(.luke-list-row-lead[data-at="above"]) .luke-list-row-title {
+    grid-column: text-start / end-end;
   }
 
   .luke-list-row[data-meta="title"] .luke-list-row-description {
     margin-block-start: var(--luke-space-2);
-  }
-
-  .luke-list-row[data-meta="title"] .luke-list-row-attachments {
-    margin-block-start: var(--luke-space-6);
   }
 
   /* Acts that always stand do so in their own track beside the press, as
@@ -760,11 +758,23 @@
      and the title never moves. The mark gives way to the chevron while the
      pointer rests on the row or the keyboard is on the chevron, as a group's
      head gives its glyph way (`group-header.tsx`), and on a screen with no
-     hover, where nothing would bring it, the chevron stands at rest. */
+     hover, where nothing would bring it, the chevron stands at rest. Note
+     that the chevron's box is the mark's own, the cell less the press's
+     inset before it and the mark's gap after it, so the two share a centre
+     whatever the mark's size, and stands level with the mark on a mail-style
+     row as the ⋯ does. */
   .luke-list-row-fold {
-    margin-inline-start: var(--luke-list-row-inset-inline);
+    justify-self: stretch;
+    margin-block: 0;
+    margin-inline: var(--luke-list-row-inset-inline) var(--luke-icon-gap);
     opacity: 0;
     transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  .luke-list-row[data-meta="title"] .luke-list-row-fold {
+    align-self: start;
+    height: var(--luke-type-label-leading);
+    margin-block-start: var(--luke-list-row-inset-block);
   }
 
   .luke-list-row:has(.luke-list-row-fold) .luke-list-row-leading {

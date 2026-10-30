@@ -13,6 +13,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
+import { KEPT } from "../act.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { INBOX_COLUMNS, type InboxColumnsShown, useInboxRowPresses } from "./inbox-columns.js";
@@ -26,7 +27,8 @@ import { INBOX_GROUPING, INBOX_HOLDER, type InboxListView } from "./inbox-model.
  * described by the item's title, and the menu key all open the same menu,
  * its items worded as ⌘K words them, and none opens the item. The list alone
  * over two unread items of one task, the first of which the list marks; a
- * finger's list standing alone draws no row open.
+ * finger's list standing alone draws no row open, and its rows draw no ⋯,
+ * their menu a long press away.
  */
 
 declare global {
@@ -123,7 +125,7 @@ function mount(
       onChoose: (listed) => opened.push(listed.item.id),
       onMark: async (listed) => {
         marked.push(listed.item.id);
-        return true;
+        return KEPT;
       },
     });
   }
@@ -212,7 +214,7 @@ test("a row's ⋯ takes the keyboard's focus, is described by the item's title, 
   expect(opened).toEqual([]);
 });
 
-test("a finger's list standing alone draws no row open at rest, its chosen row still the one U acts on", () => {
+test("a finger's list standing alone draws no row open and no ⋯ at rest, a long press opening its chosen row's menu, still the one U acts on", () => {
   vi.spyOn(window, "matchMedia").mockImplementation(
     (query) =>
       ({
@@ -225,7 +227,28 @@ test("a finger's list standing alone draws no row open at rest, its chosen row s
   mount(VIEW.items[0]?.item.id, INBOX_COLUMNS.LIST);
 
   expect(document.querySelector('[aria-current="page"]')).toBeNull();
-  act(() => moreOf(firstRow()).click());
+  const row = firstRow();
+  expect(row.querySelector("button[aria-label='Inbox item actions']")).toBeNull();
+  vi.useFakeTimers();
+  try {
+    act(() => {
+      row.querySelector("button.luke-list-row-main")?.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          pointerId: 1,
+          pointerType: "touch",
+          isPrimary: true,
+          clientX: 12,
+          clientY: 8,
+        }),
+      );
+    });
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
   expect(
     menuItems()
       .find((words) => words.startsWith("Mark as"))

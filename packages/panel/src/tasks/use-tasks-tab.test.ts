@@ -44,7 +44,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import type { ActHandle } from "../act.js";
+import { type ActHandle, KEPT, type Kept } from "../act.js";
 import {
   installWindowHistory,
   useWindowHistory,
@@ -59,6 +59,7 @@ import {
 import { PANEL_TAB } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { FAKE_ANSWER, fakeActPort, fakeActs } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -164,7 +165,10 @@ function mount(
     ...initial,
   };
   let windowHistory: WindowHistoryLists | undefined;
-  if (standing.history) installWindowHistory(memoryHistory());
+  if (standing.history) {
+    fakeAppPlatform(QUIET_PANEL);
+    installWindowHistory(memoryHistory());
+  }
   /** The window's history over the tab, as the panel's root keeps it, on the room the tab stands in. */
   function WindowHistoryProbe({ tasks, room }: { tasks: TasksControl; room: ShellRoom }) {
     windowHistory = useWindowHistory({
@@ -422,7 +426,7 @@ test("a member assigned from a chip goes to main with the name the reader knows 
     { shown: true, tasks: listRead([listed()]) },
     { [ACT_KIND.TASKS_SET_STANDING]: () => Promise.resolve(false) },
   );
-  let kept: Promise<boolean> = Promise.resolve(true);
+  let kept: Promise<Kept> = Promise.resolve(KEPT);
 
   await act(async () => {
     kept = tab
@@ -448,7 +452,7 @@ test("a member assigned from a chip goes to main with the name the reader knows 
       },
     ],
   );
-  assert.equal(await kept, false);
+  assert.equal((await kept).kept, false);
 });
 
 test("New plan opens its dialog over the open plan, which stays open; a second press leaves it as it stands, only a plan that starts closes it, and leaving the tab puts it away", async () => {

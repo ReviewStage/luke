@@ -770,9 +770,6 @@ test("start_agent on a task that runs on another member's device is refused in w
   const deviceId = randomUUID();
   const onTheirDevice = await database.run(
     Effect.gen(function* () {
-      yield* writeAccountPreferences(agents.teammates.userId, {
-        experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
-      });
       yield* registerDevice(agents.teammates.userId, {
         id: deviceId,
         name: "Studio",
@@ -1034,6 +1031,47 @@ test("start_agent on a pilot task with no pilot starts its pilot, held to Pilot 
   assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
   const pilot = Option.getOrThrow(await database.run(readAgent(caller.userId, started.agent.id)));
   assert.equal(pilot.kind, AGENT_KIND.PILOT);
+});
+
+test("start_agent on a child task of a pilot tree whose Running switch is off is refused saying so, while the top task's pilot still starts, and the child starts once Running is on", async () => {
+  const { workspaceId, agents, plans } = await openWorkspaces();
+  const { caller } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  await database.run(
+    writeAccountPreferences(caller.userId, { experiments: { [EXPERIMENT.PILOT]: true } }),
+  );
+  const setTop = (columns: Partial<typeof task.$inferInsert>) =>
+    database.run(
+      Effect.flatMap(Database, (db) =>
+        db.update(task).set(columns).where(eq(task.id, plans.billing)),
+      ),
+    );
+  await setTop({ mode: TASK_MODE.PILOT });
+  const child = await database.run(
+    createTask(caller.userId, {
+      organizationId: workspaceId,
+      parentTaskId: plans.billing,
+      repository: RELAY_FULL_NAME,
+    }),
+  );
+  const onChild = { taskId: child.id, prompt: "Bill by seat." };
+
+  assert.deepEqual(await call(CODER_TOOL.START_AGENT, onChild, "call-stopped"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: START_AGENT_REFUSAL.TREE_STOPPED,
+  });
+  assert.equal(eve.sent.length, 0, "a stopped tree's child starts nothing");
+  const pilot = await call(
+    CODER_TOOL.START_AGENT,
+    { taskId: plans.billing, prompt: "Plan billing." },
+    "call-top-pilot",
+  );
+  assert.equal(pilot.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(pilot));
+  await setTop({ running: true });
+  const started = await call(CODER_TOOL.START_AGENT, onChild, "call-running");
+
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
 });
 
 test("start_agent with a branch starts an agent whose checkout is cloned at that branch and who is told to cut its own from it, and a branch GitHub does not hold is refused before anything starts", async () => {
@@ -1927,7 +1965,6 @@ test("a task an agent makes runs on the device its member last chose, away or no
   const studio = randomUUID();
   await database.run(
     Effect.gen(function* () {
-      yield* writeAccountPreferences(bob, { experiments: { [EXPERIMENT.LOCAL_AGENTS]: true } });
       yield* registerDevice(bob, { id: studio, name: "Studio", ...DEVICE_LAYOUT });
       // The Studio last beat at the epoch, so it is away.
       const db = yield* Database;
@@ -2527,6 +2564,55 @@ test("message_agent to a pilot a continue took over and archived reaches the pil
     ),
   );
   assert.deepEqual(line?.metadata, { channel: MESSAGE_CHANNEL.AGENT_MESSAGE });
+});
+
+test("message_agent to an agent on a pilot tree whose Running switch is off, on a child task or the top task's pilot, is refused saying so, and reaches it once Running is on", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const setTop = (columns: Partial<typeof task.$inferInsert>) =>
+    database.run(
+      Effect.flatMap(Database, (db) =>
+        db.update(task).set(columns).where(eq(task.id, tasks.invitations)),
+      ),
+    );
+  await setTop({ mode: TASK_MODE.PILOT });
+  const child = await database.run(
+    createTask(agents.caller.userId, {
+      organizationId: workspaceId,
+      parentTaskId: tasks.invitations,
+      repository: RELAY_FULL_NAME,
+    }),
+  );
+  const start = { ...AGENT_CHOICE, planSnapshot: "# Teammate invitations", prompt: null };
+  const pilot = await claimed(agents.caller.userId, {
+    ...start,
+    taskId: tasks.invitations,
+    idempotencyKey: randomUUID(),
+    kind: AGENT_KIND.PILOT,
+  });
+  const worker = await claimed(agents.caller.userId, {
+    ...start,
+    taskId: child.id,
+    idempotencyKey: randomUUID(),
+    startedByAgentId: pilot.id,
+  });
+
+  assert.deepEqual(await directMessage(host, pilot, worker, eve.services, "call-stopped"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: MESSAGE_AGENT_REFUSAL.TREE_STOPPED,
+  });
+  assert.deepEqual(await directMessage(host, worker, pilot, eve.services, "call-up"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: MESSAGE_AGENT_REFUSAL.TREE_STOPPED,
+  });
+  assert.equal(eve.sent.length, 0, "a stopped tree's agents, its pilot among them, hear no agent");
+  await setTop({ running: true });
+  const down = await directMessage(host, pilot, worker, eve.services, "call-running");
+  const up = await directMessage(host, worker, pilot, eve.services, "call-running-up");
+
+  assert.equal(down.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(down));
+  assert.equal(up.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(up));
 });
 
 test("a message to an agent whose session eve no longer runs opens a fresh session over its conversation rather than being refused, and settles the turn the ended session was running as failed for its session's end, once", async () => {
@@ -3553,7 +3639,7 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
   });
 });
 
-test("read_task names a grandchild's merge policy as its top task's, whatever the grandchild's own column holds", async () => {
+test("read_task names a grandchild's merge policy and running switch as its top task's, whatever the grandchild's own columns hold", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const { caller } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -3567,14 +3653,17 @@ test("read_task names a grandchild's merge policy as its top task's, whatever th
   );
   await database.run(
     Effect.flatMap(Database, (db) =>
-      db.update(task).set({ mergePolicy: MERGE_POLICY.HOLD }).where(eq(task.id, top.id)),
+      db
+        .update(task)
+        .set({ mergePolicy: MERGE_POLICY.HOLD, running: true })
+        .where(eq(task.id, top.id)),
     ),
   );
 
   const read = await call(CODER_TOOL.READ_TASK, { taskId: grandchild.id });
-  assert.equal(
-    isRecord(read.task) && read.task.topTaskMergePolicy,
-    MERGE_POLICY.HOLD,
+  assert.deepEqual(
+    isRecord(read.task) && [read.task.topTaskMergePolicy, read.task.topTaskStarted],
+    [MERGE_POLICY.HOLD, true],
     JSON.stringify(read),
   );
 });

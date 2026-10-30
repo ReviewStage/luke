@@ -29,10 +29,7 @@ test("a link to the Keyboard shortcuts page shows it on the desktop and Profile 
   );
 });
 
-test.each([
-  { name: "Memory", view: SETTINGS_VIEW.MEMORY, experiment: EXPERIMENT.MEMORY },
-  { name: "Hosts", view: SETTINGS_VIEW.HOSTS, experiment: EXPERIMENT.LOCAL_AGENTS },
-])(
+test.each([{ name: "Memory", view: SETTINGS_VIEW.MEMORY, experiment: EXPERIMENT.MEMORY }])(
   "a link to the $name page shows it only while the account has its experiment on, and Profile otherwise",
   ({ view, experiment }) => {
     assert.equal(shownSettingsView(view, DESKTOP_CAPABILITIES, { [experiment]: true }), view);

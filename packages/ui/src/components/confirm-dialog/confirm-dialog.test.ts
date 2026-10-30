@@ -6,7 +6,11 @@ import { act, createElement, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { holdExits } from "../../testing/held-exits.js";
+import { recordedFailure } from "../../testing/reported-failure.js";
 import { CONFIRM_LOSS, ConfirmDialog, useConfirmDialog } from "./confirm-dialog.js";
+
+/** The failure beneath a refusal. */
+const { failure: FAILURE } = recordedFailure();
 
 /**
  * confirm-dialog.test.ts -- a question opened from a button lands on
@@ -58,6 +62,7 @@ function Owner({
   const confirm = useConfirmDialog(
     { subject, surfaceOpen },
     () => new Promise<ActionResult>((answer) => answers.push(answer)),
+    () => FAILURE,
   );
   return createElement(
     "div",

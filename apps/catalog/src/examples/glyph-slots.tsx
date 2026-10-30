@@ -3,6 +3,7 @@ import {
   Button,
   CheckIcon,
   CodeIcon,
+  DocumentIcon,
   GAP,
   GLYPH_ARRIVAL,
   GLYPH_INK,
@@ -10,8 +11,10 @@ import {
   Stack,
   TEXT_VARIANT,
   Text,
+  UserIcon,
   WingFace,
 } from "@luke/ui";
+import { ICON_SIZE } from "@luke/ui/icons";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -21,7 +24,8 @@ import { CatalogSection } from "../section";
  * call's muted glyph, the full ink of the one item in progress, the ink its
  * holder sets, and Luke's face in his blue; a to-do's seat as tall as its
  * first line before words that wrap; a slot its container sizes larger;
- * and a to-do's glyph arriving as a press moves the step on.
+ * a page's outline inset a step inside its slot beside a person's; and a
+ * to-do's glyph arriving as a press moves the step on.
  */
 
 /** A step a press moves on, its glyph arriving on each change: taken up, then done. */
@@ -97,6 +101,22 @@ function GlyphSlots(): React.JSX.Element {
             <Text>Fold every copy of the 16px icon box into one seat the design system owns</Text>
           </span>
         </div>
+      </CatalogSection>
+      <CatalogSection id="glyph-slots-inset" title="Inset, an outline beside a person's mark">
+        <Stack gap={GAP.CONTROL}>
+          <span className="catalog-glyph-line">
+            <GlyphSlot size={ICON_SIZE.MEDIUM} inset>
+              <DocumentIcon />
+            </GlyphSlot>
+            <Text variant={TEXT_VARIANT.CAPTION}>Teammate invitations</Text>
+          </span>
+          <span className="catalog-glyph-line">
+            <GlyphSlot size={ICON_SIZE.MEDIUM}>
+              <UserIcon />
+            </GlyphSlot>
+            <Text variant={TEXT_VARIANT.CAPTION}>Ada Lovelace</Text>
+          </span>
+        </Stack>
       </CatalogSection>
       <CatalogSection id="glyph-slots-arrival" title="Arriving as its step changes">
         <ArrivingStep />

@@ -10,8 +10,9 @@
  * settled, a settle not taken is asked again, a runner whose launch is no
  * longer named is stopped as a stop line stops it, and neither a launch
  * claimed after the beat was sent nor one still starting is touched; a
- * launch kept from a run that ended has its VM stopped and is settled; and a
- * runner's GitHub token is renewed by its age on the wall clock. Synthetic
+ * runner's VM is deleted as its turn ends, and a launch kept from a run that
+ * ended has its VM deleted and is settled; and a runner's GitHub token is
+ * renewed by its age on the wall clock. Synthetic
  * ids and tokens throughout.
  */
 
@@ -32,7 +33,7 @@ import {
   deviceAgentLayout,
 } from "@luke/features/device-agent-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Clock, ConfigProvider, Deferred, Duration, Effect, Layer } from "effect";
+import { Clock, ConfigProvider, Deferred, Duration, Effect, Layer, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { systemError } from "effect/PlatformError";
 import { TestClock } from "effect/testing";
@@ -121,8 +122,8 @@ const followingDevice = (
     readonly listsNoLaunches?: boolean;
     /** The clock the follower reads, the test's own where none is named. */
     readonly clock?: Clock.Clock;
-    /** How many of the first stops of a VM fail, as smolvm's can. */
-    readonly vmStopFails?: number;
+    /** How many of the first deletes of a VM fail, as smolvm's can. */
+    readonly vmDeleteFails?: number;
     /** Setting the commit identity in the VM fails, so the launch is given up after its VM started. */
     readonly identityFails?: boolean;
   } = {},
@@ -218,23 +219,27 @@ const followingDevice = (
       requests: () => Effect.never,
       claimRequest: () => Effect.succeed({ claimed: false as const }),
       answerRequest: () => Effect.succeed(true),
+      liveAgents: () => Effect.succeed(undefined),
       githubToken: (agentId: string) =>
         Effect.sync(() => {
           asked.push(agentId);
           return `ghs_fixture_${asked.length}`;
         }),
+
+      saveState: () => Effect.succeed(undefined),
+      commitState: () => Effect.succeed(undefined),
     };
     const vm = fakeSandbox(ready);
-    let stopFails = options.vmStopFails ?? 0;
+    let deleteFails = options.vmDeleteFails ?? 0;
     const sandbox: LocalAgentSandbox = {
       ...vm.sandbox,
-      stopped: (agentId) =>
-        stopFails > 0
+      deleted: (agentId) =>
+        deleteFails > 0
           ? Effect.sync(() => {
-              stopFails -= 1;
+              deleteFails -= 1;
               return false;
             })
-          : vm.sandbox.stopped(agentId),
+          : vm.sandbox.deleted(agentId),
       ...(options.started === undefined ? undefined : { started: options.started }),
       // Note that a runner signalled in its VM ends there, as the one the platform starts does.
       signalled: (agentId) =>
@@ -288,6 +293,7 @@ const followingDevice = (
         launch: ({ env }) => ({ command: VM_RUNNER, args: [], env }),
         sandbox,
         formerlyDirect: options.formerlyDirect ?? true,
+        storesOwned: false,
         runnerBundle: "/opt/luke/agent-runner.mjs",
         runnerEnv: {},
         deviceName: "Studio",
@@ -296,6 +302,9 @@ const followingDevice = (
         deviceIsolation: DEVICE_ISOLATION.SANDBOX,
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
+        stateSealed: () => Effect.die("this device saves no state"),
+        stateOpened: () => Effect.die("this device restores no state"),
+        diskFree: () => Effect.succeed(Option.none()),
       }),
     );
     const clock = options.clock ?? (yield* Clock.Clock);
@@ -678,24 +687,24 @@ it.effect(
 );
 
 it.effect(
-  "a runner's VM that would not stop as it ended keeps its launch unsettled until a beat has stopped it, then settles it with the exit code",
+  "a runner's VM that could not be deleted as its turn ended keeps its launch unsettled until a beat has deleted it, then settles it with the exit code",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const { settled, files, spawned, vm, reported } = yield* followingDevice(
           () => Effect.void,
-          { vmStopFails: 1 },
+          { vmDeleteFails: 1 },
         );
         yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
         yield* TestClock.adjust(Duration.seconds(1));
         yield* until(() => reported.length > 0);
 
-        assert.deepEqual(reported, ["a local agent's VM could not be stopped"]);
-        assert.deepEqual([settled, vm.stopped, keptLaunches(files)], [[], [], [LINE_ID]]);
+        assert.deepEqual(reported, ["a local agent's VM could not be deleted"]);
+        assert.deepEqual([settled, vm.deleted, keptLaunches(files)], [[], [], [LINE_ID]]);
         yield* beatsOn(1);
         yield* until(() => settled.length > 0);
 
-        assert.deepEqual(vm.stopped, [AGENT_ID]);
+        assert.deepEqual(vm.deleted, [AGENT_ID]);
         assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
         yield* until(() => keptLaunches(files).length === 0);
       }),
@@ -703,21 +712,21 @@ it.effect(
 );
 
 it.effect(
-  "a launch given up after its VM started, whose VM would not stop, is settled as not started only once a beat has stopped it",
+  "a launch given up after its VM started, whose VM could not be deleted, is settled as not started only once a beat has deleted it",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const { settled, files, vm, reported } = yield* followingDevice(() => Effect.void, {
           identityFails: true,
-          vmStopFails: 1,
+          vmDeleteFails: 1,
         });
-        yield* until(() => reported.includes("a local agent's VM could not be stopped"));
+        yield* until(() => reported.includes("a local agent's VM could not be deleted"));
 
-        assert.deepEqual([settled, vm.stopped, keptLaunches(files)], [[], [], [LINE_ID]]);
+        assert.deepEqual([settled, vm.deleted, keptLaunches(files)], [[], [], [LINE_ID]]);
         yield* beatsOn(1);
         yield* until(() => settled.length > 0);
 
-        assert.deepEqual(vm.stopped, [AGENT_ID]);
+        assert.deepEqual(vm.deleted, [AGENT_ID]);
         assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 1 }]);
       }),
     ),
@@ -743,7 +752,7 @@ it.effect(
 );
 
 it.effect(
-  "a runner whose launch the service no longer names is stopped as a stop line stops it, signalled in its VM before the VM stops, and its exit settled",
+  "a runner whose launch the service no longer names is stopped as a stop line stops it, signalled in its VM before the VM is deleted, and its exit settled",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -760,7 +769,7 @@ it.effect(
         yield* until(() => settled.length > 0);
 
         assert.deepEqual(vm.signalled, [AGENT_ID]);
-        assert.deepEqual(vm.stopped, [AGENT_ID]);
+        assert.deepEqual(vm.deleted, [AGENT_ID]);
         assert.equal(spawned.find((each) => each.program === VM_RUNNER)?.ended, "exited");
         assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 143 }]);
         assert.deepEqual(reported, [
@@ -812,7 +821,7 @@ it.effect("a launch still starting, its VM not yet up, is not settled by a beat 
 );
 
 it.effect(
-  "after a restart, a launch kept from the run before has its agent's VM stopped and is settled as a runner gone",
+  "after a restart, a launch kept from the run before has its agent's VM deleted and is settled as a runner gone",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -828,7 +837,7 @@ it.effect(
         const { settled, vm } = yield* followingDevice(() => Effect.void, { files, lines: [] });
         yield* until(() => settled.length > 0);
 
-        assert.deepEqual(vm.stopped, [GONE_AGENT_ID]);
+        assert.deepEqual(vm.deleted, [GONE_AGENT_ID]);
         assert.deepEqual(settled, [{ id: GONE_LINE_ID }]);
         assert.deepEqual(keptLaunches(files), []);
       }),
@@ -910,7 +919,7 @@ it.effect(
 );
 
 it.effect(
-  "after a restart, a kept launch whose VM would not stop is settled only once a beat has stopped it",
+  "after a restart, a kept launch whose VM could not be deleted is settled only once a beat has deleted it",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -926,14 +935,14 @@ it.effect(
         const { settled, vm, beats } = yield* followingDevice(() => Effect.void, {
           files,
           lines: [],
-          vmStopFails: 2,
+          vmDeleteFails: 2,
         });
         yield* until(() => beats.length > 0);
 
         assert.deepEqual([settled, keptLaunches(files)], [[], [GONE_LINE_ID]]);
         yield* beatsOn(1);
         yield* until(() => settled.length > 0);
-        assert.deepEqual(vm.stopped, [GONE_AGENT_ID]);
+        assert.deepEqual(vm.deleted, [GONE_AGENT_ID]);
         assert.deepEqual(settled, [{ id: GONE_LINE_ID }]);
       }),
     ),

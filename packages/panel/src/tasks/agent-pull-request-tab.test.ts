@@ -708,7 +708,7 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     /@charlespan asked\./u,
     "a mention stands as GitHub drew it",
   );
-  assert.equal(description.querySelector(".luke-code-card-title")?.textContent, "ts");
+  assert.equal(description.querySelector(".luke-code-card-title")?.textContent, "TypeScript");
   assert.equal(
     description.querySelector(".luke-code-card-body")?.textContent,
     "const days = 7;\n\nexport default days;",

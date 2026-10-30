@@ -3,10 +3,15 @@
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
+import { type ShownError, UNREPORTED } from "../../reported-failure.js";
+import { recordedFailure } from "../../testing/reported-failure.js";
 import { Announcer } from "../announcer/announcer.js";
 import { Button } from "../button/button.js";
 import { Switch } from "../switch/switch.js";
 import { SettingsRow } from "./settings-row.js";
+
+/** The failure beneath every refusal a row says here. */
+const { failure: FAILURE } = recordedFailure();
 
 /**
  * settings-row.test.ts -- a row's words are its control's: its label names
@@ -49,7 +54,7 @@ function wordsOf(element: Element, attribute: string): string {
 
 /** A row whose switch's write is refused once pressed, as a settings write can be. */
 function RefusedRow(): React.JSX.Element {
-  const [error, setError] = useState<string | undefined>(undefined);
+  const [error, setError] = useState<ShownError | undefined>(undefined);
   return createElement(SettingsRow, {
     label: "Show captions",
     description: "Words the call hears stand under its video.",
@@ -60,7 +65,7 @@ function RefusedRow(): React.JSX.Element {
         label: "Show captions",
         describedBy: control["aria-describedby"],
         "aria-invalid": control["aria-invalid"],
-        onChange: () => setError("The setting could not be saved."),
+        onChange: () => setError({ words: "The setting could not be saved.", failure: FAILURE }),
       }),
   });
 }
@@ -112,7 +117,7 @@ test("an empty description and error say nothing, so the control is neither desc
     createElement(SettingsRow, {
       label: "Sign out",
       description: "",
-      error: null,
+      error: { words: "", failure: UNREPORTED.INPUT },
       children: (control) =>
         createElement(Button, {
           "aria-describedby": control["aria-describedby"],
@@ -160,7 +165,7 @@ test("what a row grows below its line is read after the row's words, and its err
   const container = mount(
     createElement(SettingsRow, {
       label: "Anthropic",
-      error: "The key was refused.",
+      error: { words: "The key was refused.", failure: FAILURE },
       below: () => createElement("input", { "aria-label": "Anthropic API key" }),
       children: () => createElement(Button, { children: "Add key" }),
     }),
@@ -178,7 +183,7 @@ test("a control as wide as the row stands under its words, named by the label an
     createElement(SettingsRow, {
       label: "Avatar",
       description: "Who Luke appears as on video.",
-      error: "The setting could not be saved.",
+      error: { words: "The setting could not be saved.", failure: FAILURE },
       below: (control) =>
         createElement("fieldset", {
           "aria-labelledby": control.labelId,

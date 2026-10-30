@@ -21,7 +21,8 @@ import {
   type TurnRow,
 } from "@luke/features/turn-rows";
 import { MESSAGE_ROLE } from "@luke/wire";
-import { blockSays, TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
+import { unreachedAs } from "../act.js";
+import { blockSays, bodyWords, TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import {
   AGENT_PART,
   type AgentPart,
@@ -239,7 +240,7 @@ function agentBlock(part: AgentPart): CopiedBlock[] {
  * A block's words as its row draws them, open: words and a thought as they
  * are; a call's line as one phrase, its verb or a described command's
  * purpose, its subject where the body does not say it whole (`blockSays`),
- * and where it ran; then its input, and its error or else its answer.
+ * and where it ran; then its body as its cards draw it (`bodyWords`).
  */
 function drawnWords(block: CopiedBlock): readonly string[] {
   if (block.kind !== COPIED_BLOCK.CALL) return [block.text];
@@ -251,8 +252,7 @@ function drawnWords(block: CopiedBlock): readonly string[] {
   const lead = [line.verb, said ? undefined : line.subject, callPlace(call, server)];
   return [
     lead.filter((words) => words !== undefined).join(" "),
-    ...(input === undefined ? [] : [input.text]),
-    ...(error !== undefined ? [error] : output === undefined ? [] : [output.text]),
+    ...bodyWords(input, output, error),
   ];
 }
 
@@ -300,7 +300,7 @@ function developerTurn(message: AgentTranscriptMessage): CopiedTurn {
  */
 function sentLineWords(message: AgentTranscriptMessage): string | undefined {
   const github = githubLineOf(message);
-  if (github !== undefined) return githubLineWords(github);
+  if (github !== undefined) return githubLineWords(github, messageWords(message));
   const thread = threadLineOf(message);
   if (thread === undefined) return undefined;
   return [THREAD_LINE_LEAD[thread.event], threadLineWords(messageWords(message), thread.event)]
@@ -564,16 +564,19 @@ export function transcriptMarkdown(transcript: CopiedTranscript, copy: Transcrip
   ].join("\n\n")}\n`;
 }
 
-/** The rest of a transcript from a page on: the messages held with each page joined, until a page shorter than the most one carries, or nothing where a read did not answer. */
+/** A transcript that could not be read whole: the answer or error the read that failed came to, which a shown failure reports. */
+export interface TranscriptUnread {
+  readonly unread: unknown;
+}
+
+/** The rest of a transcript from a page on: the messages held with each page joined, until a page shorter than the most one carries, or why a read did not answer. */
 async function pagesFrom(
   read: TranscriptReader,
   params: Parameters<TranscriptReader>[0],
   held: readonly AgentTranscriptMessage[],
-): Promise<readonly AgentTranscriptMessage[] | undefined> {
-  const answer = await read(params).catch(() => ({
-    failure: AGENT_CALL_FAILURE.UNANSWERED,
-  }));
-  if ("failure" in answer) return undefined;
+): Promise<readonly AgentTranscriptMessage[] | TranscriptUnread> {
+  const answer = await read(params).catch(unreachedAs(AGENT_CALL_FAILURE.UNANSWERED));
+  if ("failure" in answer) return { unread: answer };
   const messages = applyMessagesPage(held, answer.messages);
   if (answer.messages.length < AGENT_BOUNDS.MESSAGES_PAGE) return messages;
   return pagesFrom(read, { ...params, after: answer.cursor }, messages);
@@ -582,7 +585,7 @@ async function pagesFrom(
 /**
  * Every message of an agent's transcript, or of one of its workers' under
  * the call that started it, as it stands now, read from the start, or
- * nothing where a read did not answer. Note that a page shorter than the
+ * why a read did not answer. Note that a page shorter than the
  * most one carries ends the read rather than an empty one, because the
  * service holds a read with nothing past its cursor open while the agent
  * runs, and a copy waits on no hold.
@@ -590,7 +593,7 @@ async function pagesFrom(
 export function readWholeTranscript(
   read: TranscriptReader,
   of: { agentId: string; callId?: string | undefined },
-): Promise<readonly AgentTranscriptMessage[] | undefined> {
+): Promise<readonly AgentTranscriptMessage[] | TranscriptUnread> {
   const { agentId, callId } = of;
   const params = { agentId, after: AGENT_CURSOR_START };
   return pagesFrom(read, callId === undefined ? params : { ...params, callId }, []);

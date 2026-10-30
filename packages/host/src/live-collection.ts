@@ -23,7 +23,8 @@
  * scope's close cleans the collection up, so a test's clock stays its own.
  * How long a read's scope stands is its lifetime class, declared here once
  * rather than by each read: an account read (`accountReads`) stands for the
- * signed-in session.
+ * signed-in session, and a read a window holds (`heldReads`) stands while
+ * any window holds it and among the few let go latest after.
  */
 
 import {
@@ -45,6 +46,8 @@ import {
   Equal,
   Exit,
   FiberMap,
+  MutableHashMap,
+  Option,
   Queue,
   type Scope,
   Stream,
@@ -468,6 +471,89 @@ export function accountReads<Name extends string>(
       open: (name, read) => run(name, read, true),
       reopen: (name, read) => run(name, read, false),
       end,
+    };
+  });
+}
+
+/** How many reads no window holds any longer stay open, the latest let go kept, so a window stepping back to one draws it from where it stands rather than from cold. */
+export const RECENT_READS = 8;
+
+/**
+ * The reads the windows hold, as a plan's or an agent's inbox is: each
+ * opened by the first window's hold and kept while any holds it; once the
+ * last lets go it stays open among the `RECENT_READS` let go latest, until
+ * later ones push it out, or the session ends.
+ */
+export interface HeldReads<Key> {
+  /** Holds `key`'s read for the caller's scope, opening it unless it stands. */
+  readonly hold: (key: Key) => Effect.Effect<void, never, Scope.Scope>;
+  /** Opens `key`'s read again at once, as Try again asks, where a window holds it or let it go lately; nothing otherwise. */
+  readonly reopen: (key: Key) => Effect.Effect<void>;
+  /** Opens every read a window holds again, as the account signing in asks, so a hold taken while nobody was signed in reads now. */
+  readonly reopenHeld: Effect.Effect<void>;
+  /** Closes every read, those let go lately among them: the session ended. The windows' holds stand, for `reopenHeld`. */
+  readonly end: Effect.Effect<void>;
+}
+
+/**
+ * The held lifetime over `read`, each key's read run as its own fiber until
+ * it is closed; `closed` runs as one key's read is closed for good, and
+ * `ended` once every read is, so what each told is let go.
+ */
+export function heldReads<Key>(
+  read: (key: Key) => Effect.Effect<void>,
+  closed: (key: Key) => Effect.Effect<void>,
+  ended: Effect.Effect<void>,
+): Effect.Effect<HeldReads<Key>, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const fibers = yield* FiberMap.make<Key>();
+    /** How many windows hold each read. */
+    const holders = MutableHashMap.empty<Key, number>();
+    /** The reads let go by every window, the latest last. */
+    let recent: Key[] = [];
+    const holdersOf = (key: Key) => Option.getOrElse(MutableHashMap.get(holders, key), () => 0);
+    const notRecent = (key: Key) => recent.filter((other) => !Equal.equals(other, key));
+    const close = (key: Key) => Effect.andThen(FiberMap.remove(fibers, key), closed(key));
+    const release = (key: Key) =>
+      Effect.gen(function* () {
+        const left = holdersOf(key) - 1;
+        if (left > 0) {
+          MutableHashMap.set(holders, key, left);
+          return;
+        }
+        MutableHashMap.remove(holders, key);
+        recent = [...notRecent(key), key];
+        // Note that a read let go is closed only once later ones push it out, so a window stepping back a few draws from where it stands.
+        for (const gone of recent.slice(0, Math.max(0, recent.length - RECENT_READS))) {
+          yield* close(gone);
+        }
+        recent = recent.slice(-RECENT_READS);
+      });
+    return {
+      hold: (key) =>
+        Effect.gen(function* () {
+          MutableHashMap.set(holders, key, holdersOf(key) + 1);
+          recent = notRecent(key);
+          yield* FiberMap.run(fibers, key, read(key), { onlyIfMissing: true });
+          yield* Effect.addFinalizer(() => release(key));
+        }),
+      reopen: (key) =>
+        Effect.suspend(() =>
+          holdersOf(key) > 0 || recent.some((other) => Equal.equals(other, key))
+            ? FiberMap.run(fibers, key, read(key))
+            : Effect.void,
+        ),
+      reopenHeld: Effect.suspend(() =>
+        Effect.forEach(
+          [...MutableHashMap.keys(holders)],
+          (key) => FiberMap.run(fibers, key, read(key)),
+          { discard: true },
+        ),
+      ),
+      end: Effect.suspend(() => {
+        recent = [];
+        return Effect.andThen(FiberMap.clear(fibers), ended);
+      }),
     };
   });
 }

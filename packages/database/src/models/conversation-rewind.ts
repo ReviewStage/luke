@@ -173,6 +173,7 @@ const settleKeptTurn = SqlSchema.void({
           cancelRequestedAt: null,
           cancelRequestKey: null,
           cancelRequestedBy: null,
+          cancelRequestedForRunning: false,
           failure: null,
           failureDetail: null,
         })

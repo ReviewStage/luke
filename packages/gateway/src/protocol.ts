@@ -340,13 +340,16 @@ export const GATEWAY_METHOD = {
   /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
   /**
-   * One plan's inbox, or one agent's, followed from now until it is let go
-   * or the account signs out, over Neon Realtime. What it holds is heard as
-   * `INBOX_CHANGED` events, never answered; following again starts over.
+   * One plan's inbox, or one agent's, held followed for a window from now
+   * until it is let go, over Neon Realtime, and a while after among the
+   * holders let go lately. What it holds is heard as `HOLDER_INBOXES_CHANGED`
+   * events, on the app state every window draws, never answered.
    */
   AGENTS_INBOX_FOLLOW: "agents.inboxFollow",
-  /** One plan's or agent's inbox let go: no more `INBOX_CHANGED` events of it until it is followed again. */
+  /** One plan's or agent's inbox let go by the window that held it: it stays among the holders let go lately until later ones push it out. */
   AGENTS_INBOX_UNFOLLOW: "agents.inboxUnfollow",
+  /** One plan's or agent's held inbox read again at once, as Try again asks; never answered. */
+  AGENTS_INBOX_RETRY: "agents.inboxRetry",
   /** One item of a task's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
   AGENTS_INBOX_ANSWER: "agents.inboxAnswer",
   /** One open item of a task's inbox closed without an answer against the revision the panel drew, under the panel's own key; answered as an answer is. */
@@ -553,8 +556,8 @@ export const GATEWAY_EVENT = {
   WORKSPACE_PEOPLE_CHANGED: "workspacePeople.changed",
   /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
   WORKSPACE_INVITATIONS_CHANGED: "workspaceInvitations.changed",
-  /** One followed plan's or agent's inbox, its items whole or why there are none, each time it changes while it is followed. */
-  INBOX_CHANGED: "inbox.changed",
+  /** Every plan's or agent's inbox the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  HOLDER_INBOXES_CHANGED: "holderInboxes.changed",
   /** What waits across the followed account, whole or why there is none, each time it moves while it is followed. */
   ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
   /** Every inbox item the account reaches, whole, as the host's read of them for the session stands, each time it moves. */

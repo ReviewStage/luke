@@ -39,7 +39,7 @@ import {
  * under it, a swipe left, and a press up or down never act. A row that keeps
  * focus leaves it on the field that held it; one out of the tab order still
  * takes the focus it is handed; one unavailable refuses its press; one a
- * field drives is found by its id; a chevron and attachments say nothing to a reader; acts
+ * field drives is found by its id; a chevron says nothing to a reader; acts
  * shown on hover are still a Tab stop after the row; and an app hears
  * whether the title is cut short. Synthetic members.
  */
@@ -268,7 +268,7 @@ test("a row's lead stands on the line under its title, before the description's 
   expect(lead?.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
 });
 
-test("a row's lead may stand on a line of its own between its title and its description, read between the two and apart from both", () => {
+test("a row's lead may stand on a line of its own over its title, read first with the time at its end, then the title, then the description", () => {
   const container = draw(
     createElement(List, {
       label: "Threads",
@@ -276,7 +276,7 @@ test("a row's lead may stand on a line of its own between its title and its desc
         title: "Retry the webhook?",
         description: "Choice · 2 options",
         lead: { icon: glyph(), label: "Billing usage alerts for every workspace" },
-        leadAt: LIST_ROW_LEAD.LINE,
+        leadAt: LIST_ROW_LEAD.ABOVE,
         meta: "2h",
         metaAt: LIST_ROW_META.TITLE,
         onPress: () => undefined,
@@ -285,7 +285,7 @@ test("a row's lead may stand on a line of its own between its title and its desc
   );
   const row = button(
     container,
-    "Retry the webhook?2hBilling usage alerts for every workspaceChoice · 2 options",
+    "Billing usage alerts for every workspace2hRetry the webhook?Choice · 2 options",
   );
   const lead = row.querySelector(".luke-list-row-lead");
   expect(lead?.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
@@ -317,12 +317,12 @@ test("a row whose lead stands on a line of its own draws it with no description 
       children: createElement(ListRow, {
         title: "Retry the webhook?",
         lead: { icon: glyph(), label: "Billing usage alerts" },
-        leadAt: LIST_ROW_LEAD.LINE,
+        leadAt: LIST_ROW_LEAD.ABOVE,
         onPress: () => undefined,
       }),
     }),
   );
-  expect(button(container, "Retry the webhook?Billing usage alerts")).toBeTruthy();
+  expect(button(container, "Billing usage alertsRetry the webhook?")).toBeTruthy();
 });
 
 test("Tab meets the list's one row, then each row's acts, the other rows left to the arrows", () => {
@@ -774,23 +774,6 @@ test("a row's chevron says nothing to a reader, so the row still reads as its wo
   );
   const row = button(container, "create_issueOpens an issue");
   expect(row.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
-});
-
-test("a row's attachments stand under its description, hidden from a reader, so the row still reads as its words", () => {
-  const container = draw(
-    createElement(List, {
-      label: "Inbox",
-      children: createElement(ListRow, {
-        title: "Alert at 80%?",
-        description: "Agent: here is the chart",
-        attachments: createElement("img", { alt: "The chart", src: "data:image/png;base64," }),
-        onPress: () => undefined,
-      }),
-    }),
-  );
-  const row = button(container, "Alert at 80%?Agent: here is the chart");
-  const attachments = row.querySelector("img")?.closest('[aria-hidden="true"]');
-  expect(attachments).not.toBeNull();
 });
 
 /**

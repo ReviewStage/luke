@@ -1,6 +1,8 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { Cause } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -14,6 +16,7 @@ import {
   sameLook,
   sameNotes,
 } from "../diff-view/contract.js";
+import { failureShown } from "../failure-report.js";
 import { useFileViewSettings } from "./file-view-settings.js";
 
 /**
@@ -171,7 +174,14 @@ export function PierreDiff({
 
   if (AsyncResult.isFailure(loaded)) {
     return (
-      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={retry}>
+      <ErrorState
+        failure={failureShown({
+          surface: FAILURE_SURFACE.DIFF_READ,
+          cause: Cause.squash(loaded.cause),
+        })}
+        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        onRetry={retry}
+      >
         {DIFF_LOAD_FAILED}
       </ErrorState>
     );

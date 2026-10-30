@@ -18,6 +18,7 @@ import {
   openAskOf,
 } from "@luke/features/inbox-wire";
 import { markdownLink } from "@luke/features/link-grammar";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BackButton,
@@ -81,6 +82,7 @@ import {
 import { useAutomation } from "../automation-directory.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { PhoneHead } from "../desktop/phone-head.js";
+import { unreadShown } from "../failure-report.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
@@ -935,11 +937,11 @@ function InboxItemMenu({
   heading?: React.ReactNode;
 }): React.JSX.Element | null {
   const menu = useMenu(shown);
-  const { close, groups: itemGroups } = useInboxItemActions(item, {
+  const close = useInboxClose(item, onClose, shown);
+  const { groups: itemGroups } = useInboxItemActions(item, {
     onMark,
     onMove,
-    onClose,
-    shown,
+    onAskClose: close.ask,
     keyed: true,
   });
   const groups = itemGroups(lead);
@@ -1506,7 +1508,12 @@ export function InboxPane({
               </Stack>
             </ItemWords>
             {control.failed ? (
-              <ErrorState onRetry={control.onRetry}>{INBOX_NOT_READ}</ErrorState>
+              <ErrorState
+                failure={unreadShown(FAILURE_SURFACE.INBOX_READ)}
+                onRetry={control.onRetry}
+              >
+                {INBOX_NOT_READ}
+              </ErrorState>
             ) : null}
           </ConversationContent>
           <ConversationScrollButton />

@@ -1,5 +1,6 @@
 import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { INBOX_STATUS, type InboxItem, type InboxStatus } from "@luke/features/inbox-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { countWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -14,9 +15,10 @@ import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Equal } from "effect";
 import { useCallback, useRef, useState } from "react";
-import type { ActHandle } from "../act.js";
+import { type ActHandle, KEPT, type Kept, notKept, unreachedAs } from "../act.js";
 import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter, withoutPicks } from "../composer-drafts.js";
 import type { MenuAction } from "../desktop/action-menu.js";
+import { confirmFailure } from "../failure-report.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { messageFailureWords } from "./agent-model.js";
 import { cardTitle } from "./tool-call-model.js";
@@ -39,8 +41,8 @@ import { cardTitle } from "./tool-call-model.js";
  * open, and with the revision it was asked on once the agent changes it.
  */
 
-/** What a close the act channel refused hears, as the service not answering. */
-const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
+/** What a close the act channel refused hears, as the service not answering, with the error beneath. */
+const unreached = unreachedAs(AGENT_CALL_FAILURE.UNANSWERED);
 
 /**
  * What the close is called in a menu and on its question card's ×, which
@@ -64,11 +66,11 @@ interface CloseSaying {
 
 /**
  * Closes an open item without an answer, and answers once the service did
- * whether it was closed; a close of it already on its way answers as closed,
- * since that one answers its own press, and one of an item no longer open as
- * not.
+ * whether it was closed, with what refused it where it was not; a close of
+ * it already on its way answers as closed, since that one answers its own
+ * press, and one of an item no longer open as not.
  */
-export type InboxCloser = (item: InboxItem, saying?: CloseSaying) => Promise<boolean>;
+export type InboxCloser = (item: InboxItem, saying?: CloseSaying) => Promise<Kept>;
 
 /** A close's key and the revision it was made for, kept so a press again on the same item goes under the same key. */
 interface Attempt {
@@ -95,8 +97,10 @@ export function useInboxCloser({
   heard.current = onHeard;
   return useCallback(
     (item: InboxItem, saying?: CloseSaying) => {
-      if (out.current.has(item.id)) return Promise.resolve(true);
-      if (item.status !== INBOX_STATUS.OPEN) return Promise.resolve(false);
+      if (out.current.has(item.id)) return Promise.resolve(KEPT);
+      if (item.status !== INBOX_STATUS.OPEN) {
+        return Promise.resolve(notKept(FAILURE_CONDITION.GONE));
+      }
       const was = attempts.current.get(item.id);
       const key = was?.revision === item.revision ? was.key : crypto.randomUUID();
       attempts.current.set(item.id, { key, revision: item.revision });
@@ -105,24 +109,33 @@ export function useInboxCloser({
       const pressed = writer.heldAt(
         (place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id,
       );
-      const say = (words: string) => {
+      const say = (words: string, cause: unknown) => {
         if (saying?.quiet !== true) {
-          toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+          toast({
+            words,
+            tone: STATUS_TONE.DANGER,
+            hold: TOAST_HOLD.FAILED,
+            failure: {
+              surface: FAILURE_SURFACE.INBOX_CLOSE,
+              cause,
+              about: { inboxItemId: item.id, agentId: item.agentId, channelId: item.channelId },
+            },
+          });
         }
-        return false;
+        return notKept(cause);
       };
       return act(ACT_KIND.AGENTS_INBOX_CLOSE, {
         itemId: item.id,
         revision: item.revision,
         clientKey: key,
       })
-        .catch(() => UNANSWERED)
+        .catch(unreached)
         .then((answer) => {
           out.current.delete(item.id);
-          if ("failure" in answer) return say(messageFailureWords(answer.failure));
+          if ("failure" in answer) return say(messageFailureWords(answer.failure), answer);
           attempts.current.delete(item.id);
           if (!answer.taken) {
-            return say(NOT_TAKEN[answer.item.status]);
+            return say(NOT_TAKEN[answer.item.status], { failure: answer.item.status });
           }
           // Note that only the answer the box held as the close was pressed goes, since a message on the thread may have been begun while the close was out.
           if (pressed !== undefined) {
@@ -133,7 +146,7 @@ export function useInboxCloser({
             );
           }
           if (item.needsReply) heard.current?.();
-          return true;
+          return KEPT;
         });
     },
     [act, toast, writer],
@@ -177,50 +190,96 @@ export function closedNote(landed: number, refused: number): string {
     : `${countWords(landed, TERM.INBOX_ITEM)} resolved, ${refused} could not be`;
 }
 
-/** One item's close as a menu and its question card's × offer it, and the question it asks through, which the caller draws beside them. */
-export interface InboxClose {
-  /** The menu's item, and what the × presses; none where the item cannot be closed. */
-  readonly action: MenuAction | undefined;
+/** The closes a surface asks first, of whichever of its items asked last, through one question it draws once. */
+interface InboxCloseAsk {
+  /** Asks to close the item given, as it stands now. */
+  readonly ask: (item: InboxItem) => void;
   readonly dialog: React.JSX.Element;
 }
 
 /**
- * One item's close, asked first: offered while the item is open and a
- * closer is handed, which a surface that answers nothing, an archived
- * task's say, hands none of. The question goes once the surface is put
- * away or the item is open no longer.
+ * The closes of the items a surface draws, each asked first through the one
+ * question, so a list of a thousand rows draws one rather than a thousand
+ * standing shut; `current` finds an item as the surface draws it now, none
+ * once it draws it no longer. The question goes once the surface is put
+ * away, or the item it asks about is drawn, open, or at the revision it was
+ * asked on no longer, so the agent's change while it stands withdraws it
+ * rather than closing what the reader never saw.
+ */
+export function useInboxCloseAsk(
+  closer: InboxCloser | undefined,
+  surfaceOpen: boolean,
+  current: (itemId: string) => InboxItem | undefined,
+): InboxCloseAsk {
+  // The item as it stood when the question was asked, whose words the question says through its fade.
+  const [asked, setAsked] = useState<InboxItem | undefined>(undefined);
+  const now = asked === undefined ? undefined : current(asked.id);
+  const standing =
+    now !== undefined && now.status === INBOX_STATUS.OPEN && now.revision === asked?.revision;
+  const confirm = useConfirmDialog(
+    { subject: standing, surfaceOpen },
+    () => {
+      if (now !== undefined) void closer?.(now);
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+    confirmFailure(FAILURE_SURFACE.INBOX_CLOSE),
+  );
+  const { ask: confirmAsk } = confirm;
+  const ask = useCallback(
+    (item: InboxItem) => {
+      setAsked(item);
+      confirmAsk();
+    },
+    [confirmAsk],
+  );
+  return {
+    ask,
+    dialog: (
+      <ConfirmDialog
+        open
+        confirm={confirm}
+        question={closeAllQuestion(asked === undefined ? [] : [asked])}
+        restoreTo={nextRowOrHead}
+      />
+    ),
+  };
+}
+
+/**
+ * An item's close as its menu offers it, last: while the item is open and
+ * the surface hands an ask, which one that answers nothing, an archived
+ * task's say, hands none of.
+ */
+export function closeAction(
+  item: InboxItem,
+  ask: ((item: InboxItem) => void) | undefined,
+): MenuAction | undefined {
+  return ask === undefined || item.status !== INBOX_STATUS.OPEN
+    ? undefined
+    : { label: CLOSE_ITEM_LABEL, icon: <GLYPH.CLOSE />, onSelect: () => ask(item) };
+}
+
+/** One item's close as a menu and its question card's × offer it, and the question it asks through, which the caller draws beside them. */
+export interface InboxClose {
+  /** The menu's item, and what the × presses; none where the item cannot be closed. */
+  readonly action: MenuAction | undefined;
+  /** Asks to close the item; none where it cannot be closed. */
+  readonly ask: ((item: InboxItem) => void) | undefined;
+  readonly dialog: React.JSX.Element;
+}
+
+/**
+ * One item's close, asked first (`useInboxCloseAsk`), as the pane that shows
+ * it offers it: offered while the item is open and a closer is handed.
  */
 export function useInboxClose(
   item: InboxItem,
   closer: InboxCloser | undefined,
   surfaceOpen: boolean,
 ): InboxClose {
-  const open = item.status === INBOX_STATUS.OPEN;
-  // The revision the question was asked on, so the agent's change while it stands withdraws it rather than closing what the reader never saw.
-  const [asked, setAsked] = useState(item.revision);
-  const confirm = useConfirmDialog(
-    { subject: open && item.revision === asked, surfaceOpen },
-    () => {
-      void closer?.(item);
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+  const { ask, dialog } = useInboxCloseAsk(closer, surfaceOpen, (itemId) =>
+    itemId === item.id ? item : undefined,
   );
-  const ask = () => {
-    setAsked(item.revision);
-    confirm.ask();
-  };
-  return {
-    action:
-      closer === undefined || !open
-        ? undefined
-        : { label: CLOSE_ITEM_LABEL, icon: <GLYPH.CLOSE />, onSelect: ask },
-    dialog: (
-      <ConfirmDialog
-        open
-        confirm={confirm}
-        question={closeQuestion(item)}
-        restoreTo={nextRowOrHead}
-      />
-    ),
-  };
+  const handed = closer === undefined ? undefined : ask;
+  return { action: closeAction(item, handed), ask: handed, dialog };
 }

@@ -1,3 +1,4 @@
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { ACT_KIND } from "@luke/host/acts";
 import { UPDATE_ENDPOINT } from "@luke/host/update-service";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
@@ -17,6 +18,7 @@ import {
   SettingsSection,
 } from "@luke/ui";
 import { useAct } from "../act.js";
+import { failureShown } from "../failure-report.js";
 
 /**
  * The row's one act, in the outline face every Settings row's act wears:
@@ -116,6 +118,10 @@ export function UpdatesSection({
               row.failed
                 ? () => (
                     <FailureNote
+                      failure={failureShown({
+                        surface: FAILURE_SURFACE.UPDATE_CHECK,
+                        cause: FAILURE_CONDITION.UNREAD,
+                      })}
                       onRetry={
                         row.action === UPDATE_ROW_ACTION.RETRY
                           ? () => void control.onCheck()

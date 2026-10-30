@@ -10,7 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useEditedLinksHost } from "../link-menu.js";
-import { PANEL_SPAN, useKeystrokeSpans } from "../panel-spans.js";
+import { type KeystrokeSpanName, PANEL_SPAN, useKeystrokeSpans } from "../panel-spans.js";
 import type {
   ComposerChip,
   ComposerEditorHandle,
@@ -131,6 +131,7 @@ export function ComposerField({
   mentions,
   takesFocus = true,
   focus,
+  keystrokeSpan = PANEL_SPAN.KEYSTROKE_COMPOSER,
   children,
 }: {
   /** The editor bundle; nothing until it has loaded, while the field stands inert. */
@@ -162,13 +163,15 @@ export function ComposerField({
   takesFocus?: boolean;
   /** Whether the editor takes the caret as it mounts, over `takesFocus` and whoever is typing elsewhere; left out, those decide. Read as it mounts. */
   focus?: boolean | undefined;
+  /** The span its keystrokes are timed under. */
+  keystrokeSpan?: KeystrokeSpanName;
   /** What stands over the field, a list it opened. */
   children?: ReactNode;
 }): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null);
   // A link in the draft opens, from its right-click, where the box stands.
   const editedLinks = useEditedLinksHost();
-  const keystrokes = useKeystrokeSpans(PANEL_SPAN.KEYSTROKE_COMPOSER);
+  const keystrokes = useKeystrokeSpans(keystrokeSpan);
   const roomHost = useCallback(
     (element: HTMLDivElement | null) => {
       room.current = element;

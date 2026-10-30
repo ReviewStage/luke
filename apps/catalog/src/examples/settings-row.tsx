@@ -8,6 +8,7 @@ import {
   Inline,
   JUSTIFY,
   MARK_PROVIDER,
+  PlusIcon,
   PROVIDER_MARK_SIZE,
   ProviderMark,
   SETTINGS_ROW_DENSITY,
@@ -34,7 +35,9 @@ import {
   Text,
   TextField,
 } from "@luke/ui";
+import { ExternalLinkIcon } from "@luke/ui/icons";
 import { useState } from "react";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -42,8 +45,10 @@ import { CatalogSection } from "../section";
  * settings-row.tsx -- a settings row with a switch, led by an account's face,
  * with a button and no description, with a failed write, and with long
  * words, each at a settings page's measure and in a column narrower than the
- * 380px its controls drop below its words under; compact rows in a
- * popover narrower than that, whose controls stay beside their words; and
+ * 380px its name fades under; a row whose two presses would squeeze its
+ * words in a column a little wider than that, which drops them below its
+ * words, beside a row whose one press still fits; compact rows in a
+ * popover narrower than 380px, whose controls stay beside their words; and
  * list rows, a reference list's lines in a card, each a command and its chord;
  * and the slots: a Modified word riding a label, a key's field grown under
  * its row with a refusal under that, and accounts indented under their
@@ -83,7 +88,7 @@ function Rows(): React.JSX.Element {
       <SettingsRow
         label="Show captions"
         description="Words the call hears stand under its video."
-        error="The setting could not be saved. Try again."
+        error={{ words: "The setting could not be saved. Try again.", failure: CATALOG_FAILURE }}
       >
         {(control) => <HeldSwitch label="Show captions" control={control} />}
       </SettingsRow>
@@ -144,7 +149,10 @@ function SlottedRows(): React.JSX.Element {
         label="Linear"
         leading={<Mark provider={MARK_PROVIDER.LINEAR} />}
         below={() => <KeyForm />}
-        error="Linear did not accept this key. Check it and try again."
+        error={{
+          words: "Linear did not accept this key. Check it and try again.",
+          failure: CATALOG_FAILURE,
+        }}
       >
         {() => null}
       </SettingsRow>
@@ -170,6 +178,37 @@ function SlottedRows(): React.JSX.Element {
         leading={<Mark provider={MARK_PROVIDER.GITHUB} />}
       >
         {() => null}
+      </SettingsRow>
+    </SettingsSection>
+  );
+}
+
+/** A row whose two presses leave its words too little room beside them, as Workspace connections' GitHub stands, and a row whose one press leaves enough. */
+function PressRows(): React.JSX.Element {
+  return (
+    <SettingsSection>
+      <SettingsRow
+        label="GitHub"
+        description="Add accounts and choose repositories on GitHub."
+        leading={<Mark provider={MARK_PROVIDER.GITHUB} />}
+      >
+        {() => (
+          <>
+            <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PlusIcon />}>
+              Add repository
+            </Button>
+            <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ExternalLinkIcon aria-hidden="true" />}>
+              Manage on GitHub
+            </Button>
+          </>
+        )}
+      </SettingsRow>
+      <SettingsRow
+        label="Sentry"
+        description="Not installed."
+        leading={<Mark provider={MARK_PROVIDER.SENTRY} />}
+      >
+        {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Install for workspace</Button>}
       </SettingsRow>
     </SettingsSection>
   );
@@ -267,7 +306,7 @@ function CompactRows(): React.JSX.Element {
       <SettingsRow
         density={SETTINGS_ROW_DENSITY.COMPACT}
         label="Line numbers"
-        error="The setting could not be saved. Try again."
+        error={{ words: "The setting could not be saved. Try again.", failure: CATALOG_FAILURE }}
       >
         {(control) => <HeldSwitch label="Line numbers" control={control} />}
       </SettingsRow>
@@ -304,6 +343,11 @@ function SettingsRows(): React.JSX.Element {
       <CatalogSection id="settings-row-narrow" title="Narrower than 380px">
         <div className="catalog-settings catalog-settings-narrow">
           <Rows />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-row-presses" title="Two presses, past 380px but too wide to fit">
+        <div className="catalog-settings catalog-settings-between">
+          <PressRows />
         </div>
       </CatalogSection>
       <CatalogSection id="settings-row-slots" title="Adornment, below, and indented">

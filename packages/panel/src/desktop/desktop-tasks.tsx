@@ -1,6 +1,7 @@
 import type { AgentStatus } from "@luke/features/agent-wire";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskBlockRequest, TaskStanding } from "@luke/features/task-wire";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -31,6 +32,7 @@ import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import { failureShown, unreadShown } from "../failure-report.js";
 import { FindScope } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -69,7 +71,6 @@ import { DesktopWelcome } from "./desktop-welcome.js";
 import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
 import { PhoneBack, PhoneHead, PlaceMore, phoneBar } from "./phone-head.js";
 import { PlanAgents } from "./plan-agents.js";
-import { PlanBreakdown } from "./plan-breakdown.js";
 import { type InboxItemAsk, SideInboxTab } from "./side-inbox-tab.js";
 import {
   COLUMN,
@@ -800,43 +801,17 @@ function PlanDocument({
       pullRequestCardDoor,
     ],
   );
-  // The task's agents head its plan, a row opening its agent in this column
-  // as its tab does, under a pilot's breakdown where one waits for the go.
-  const { tasks: allTasks } = tasks;
-  const openTask = useSteadyDoor(tasks.onSelect);
+  // The task's agents head its plan, a row opening its agent in this column as its tab does.
   const planAgents = useMemo(
     () => (
-      <>
-        {opened === undefined || workspace === undefined ? null : (
-          <PlanBreakdown
-            task={opened}
-            tasks={allTasks}
-            agents={agents}
-            place={{ workspace, repository: opened.repository }}
-            workspaceName={workspaceName}
-            onOpenTask={openTask}
-          />
-        )}
-        <PlanAgents
-          agents={agents}
-          held={views.held}
-          main={{ tab, onChoose: openAgentTab }}
-          onOpenPullRequest={openPullRequestDoor}
-        />
-      </>
+      <PlanAgents
+        agents={agents}
+        held={views.held}
+        main={{ tab, onChoose: openAgentTab }}
+        onOpenPullRequest={openPullRequestDoor}
+      />
     ),
-    [
-      opened,
-      workspace,
-      allTasks,
-      workspaceName,
-      openTask,
-      agents,
-      views.held,
-      tab,
-      openAgentTab,
-      openPullRequestDoor,
-    ],
+    [agents, views.held, tab, openAgentTab, openPullRequestDoor],
   );
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
@@ -949,6 +924,7 @@ function PlanDocument({
         <Fill as={FILL_ELEMENT.SECTION} className="desktop-empty-region">
           {region.kind === DOCUMENT_REGION.FAILED ? (
             <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.TASK_DOCUMENT_READ)}
               onRetry={tasks.onRetryDocument}
               placement={ERROR_STATE_PLACEMENT.CENTRED}
               exit={close}
@@ -1153,7 +1129,15 @@ function PlanDocument({
                           actions={
                             <>
                               {rename.refused ? (
-                                <FailureNote>{RENAME_FAILED_NOTE}</FailureNote>
+                                <FailureNote
+                                  failure={failureShown({
+                                    surface: FAILURE_SURFACE.TASK_RENAME,
+                                    cause: FAILURE_CONDITION.REFUSED,
+                                    refused: true,
+                                  })}
+                                >
+                                  {RENAME_FAILED_NOTE}
+                                </FailureNote>
                               ) : null}
                               <CopyChord copy={tasks.copy} />
                               {terminalDoors.terminals ? (

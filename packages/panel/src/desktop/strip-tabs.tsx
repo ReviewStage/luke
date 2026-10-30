@@ -1,4 +1,5 @@
 import type { AgentStatus, AgentSummary } from "@luke/features/agent-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   IconButton,
@@ -34,6 +35,7 @@ import type { HeldTranscript } from "../tasks/agent-tab-card.js";
 import {
   type CopiedTranscript,
   type TranscriptCopy,
+  type TranscriptUnread,
   transcriptMarkdown,
 } from "../tasks/transcript-copy.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
@@ -630,8 +632,8 @@ export function AddTabButton({
   );
 }
 
-/** A transcript read on demand for a copy, nothing where it could not be read. */
-export type TranscriptRead = () => Promise<CopiedTranscript | undefined>;
+/** A transcript read on demand for a copy, or why it could not be read; nothing where no read says why. */
+export type TranscriptRead = () => Promise<CopiedTranscript | TranscriptUnread | undefined>;
 
 /** A copy of a transcript as the strips' tabs and the sidebar's pins offer it: read, then put on the clipboard as concise or full markdown. */
 export type TranscriptCopier = (read: TranscriptRead) => (copy: TranscriptCopy) => void;
@@ -640,16 +642,19 @@ export type TranscriptCopier = (read: TranscriptRead) => (copy: TranscriptCopy) 
 export function useTranscriptCopier(): TranscriptCopier {
   const copyWithToast = useCopyToast();
   const toast = useToast();
-  const unread = () =>
-    toast({ words: TRANSCRIPT_UNREAD_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+  const unread = (cause: unknown) =>
+    toast({
+      words: TRANSCRIPT_UNREAD_NOTE,
+      tone: STATUS_TONE.DANGER,
+      hold: TOAST_HOLD.FAILED,
+      failure: { surface: FAILURE_SURFACE.TRANSCRIPT_COPY, cause },
+    });
   return (read) => (copy) => {
-    read().then(
-      (transcript) =>
-        transcript === undefined
-          ? unread()
-          : copyWithToast(transcriptMarkdown(transcript, copy), TRANSCRIPT_COPIED_NOTE),
-      unread,
-    );
+    read().then((transcript) => {
+      if (transcript === undefined) return unread(FAILURE_CONDITION.UNREAD);
+      if ("unread" in transcript) return unread(transcript.unread);
+      return copyWithToast(transcriptMarkdown(transcript, copy), TRANSCRIPT_COPIED_NOTE);
+    }, unread);
   };
 }
 

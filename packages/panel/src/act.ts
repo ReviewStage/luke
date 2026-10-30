@@ -9,7 +9,8 @@
  *   rejects it with the sentence the host drew, for the caller to show.
  * - `pressAct` (`press`): a person pressed something and nothing reads the
  *   answer. A refusal, or any other failure, raises a FAILED toast carrying
- *   the act's own refusal sentence, so a press never fails silently.
+ *   the act's own refusal sentence, so a press never fails silently, and
+ *   reports it, by the act's kind and the ids its payload names.
  * - `tellAct` (`tell`): a report nobody pressed, such as a browser view let
  *   go or a refresh after a turn. It stays quiet whatever comes back,
  *   because a toast nobody asked for is noise.
@@ -18,6 +19,8 @@
  * pressed anything.
  */
 
+import type { AGENT_CALL_FAILURE, AgentAgentAnswer } from "@luke/features/agent-view";
+import { FAILURE_CONDITION, FAILURE_SURFACE, failureAboutOf } from "@luke/features/shown-failure";
 import { ACT_UNREACHED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -34,6 +37,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ORPCError } from "@orpc/client";
 import { useMemo } from "react";
 import { actPort } from "./app-bridge.js";
+import type { ShownFailure } from "./failure-report.js";
 import { loadedTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import { showToast, TOAST_HOLD } from "./toast.js";
 import { appStateNow } from "./use-app-state.js";
@@ -108,7 +112,7 @@ async function portAct(
     return await call(payload);
   } catch (error) {
     if (error instanceof ORPCError && error.code === ACT_ERROR.REFUSED) {
-      throw new ActRefusal(error.message);
+      throw new ActRefusal(error.message, { cause: error });
     }
     // Note that the failure's own text goes to the log, where a fault is diagnosed, and never to a person.
     console.error(`The act ${kind} failed on its way to the service.`, error);
@@ -146,12 +150,18 @@ function actFailureWords(error: unknown): string {
 }
 
 /**
- * Says an act's failure in a FAILED toast: a refusal in its own words, and
- * any other failure in the one fixed sentence. A press that must also undo
- * what it drew before the answer (`askAct`'s caller) says its failure here.
+ * Says an act's failure in a FAILED toast, which reports it: a refusal in its
+ * own words, and any other failure in the one fixed sentence. A press that
+ * must also undo what it drew before the answer (`askAct`'s caller) says its
+ * failure here.
  */
-export function toastActFailure(error: unknown): void {
-  showToast({ words: actFailureWords(error), tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+export function toastActFailure(failure: ShownFailure): void {
+  showToast({
+    words: actFailureWords(failure.cause),
+    tone: STATUS_TONE.DANGER,
+    hold: TOAST_HOLD.FAILED,
+    failure,
+  });
 }
 
 /**
@@ -164,21 +174,84 @@ export function pressAct<Kind extends PortActKind>(
   kind: Kind,
   ...[payload]: ActArguments<Kind>
 ): Promise<void> {
-  return performAct(kind, payload).then(() => undefined, toastActFailure);
+  return performAct(kind, payload).then(
+    () => undefined,
+    (cause: unknown) =>
+      toastActFailure({
+        surface: FAILURE_SURFACE.ACT,
+        act: kind,
+        cause,
+        about: failureAboutOf(payload),
+      }),
+  );
 }
+
+/**
+ * An act's answer as a row reads it, with what failed beneath where the act
+ * itself failed, which a shown failure reports (`failure-report.ts`) and
+ * nothing draws.
+ */
+export type ActedResult = ActionResult & { readonly cause?: unknown };
 
 /**
  * An act whose answer a row reads as an `ActionResult`, a refusal and any
  * other failure settled into the REJECTED one carrying the sentence a
- * refusal drew, or the one fixed sentence, so a control that waits on the
- * answer is never left waiting on a rejection.
+ * refusal drew, or the one fixed sentence, and the error beneath, so a
+ * control that waits on the answer is never left waiting on a rejection and
+ * an act that never arrived is reported as such rather than as a refusal.
  */
-export async function askActResult(asked: Promise<ActionResult>): Promise<ActionResult> {
+export async function askActResult(asked: Promise<ActionResult>): Promise<ActedResult> {
   try {
     return await asked;
   } catch (error) {
-    return { status: ACTION_RESULT_STATUS.REJECTED, reason: actFailureWords(error) };
+    return { status: ACTION_RESULT_STATUS.REJECTED, reason: actFailureWords(error), cause: error };
   }
+}
+
+/** Whether a write was kept, with what refused it where it was not, which a shown failure reports. */
+export type Kept = { readonly kept: true } | { readonly kept: false; readonly cause: unknown };
+
+/** A write kept. */
+export const KEPT: Kept = { kept: true };
+
+/** A write not kept, with what refused it: the answer that said so, or the error the act failed with. */
+export function notKept(cause: unknown): Kept {
+  return { kept: false, cause };
+}
+
+/**
+ * A write whose act answers whether it was kept, answered with what refused
+ * it where it was not: the condition, where the act said no and nothing
+ * more, or the error the act failed with.
+ */
+export function askKept(asked: Promise<boolean>): Promise<Kept> {
+  return asked.then((kept) => (kept ? KEPT : notKept(FAILURE_CONDITION.NOT_KEPT)), notKept);
+}
+
+/** What refused the first of several writes that was not kept; nothing where each was kept. */
+export function firstRefusal(answers: readonly Kept[]): unknown {
+  const refused = answers.find((answer) => !answer.kept);
+  return refused === undefined || refused.kept ? undefined : refused.cause;
+}
+
+/**
+ * An answer a caller settled an act that never answered into: the failure
+ * its words draw, with the error beneath, which a shown failure reports. It
+ * is the window's own and never crosses the act port, so it holds the error
+ * itself, where an answer the host sends holds the facts of one
+ * (`@luke/features/failure-facts`).
+ */
+export interface Unreached<Failure extends string> {
+  readonly failure: Failure;
+  readonly cause: unknown;
+}
+
+/** An agent's act as the window hears it: the host's answer, or one that never arrived. */
+export type AgentActAnswer = AgentAgentAnswer | Unreached<typeof AGENT_CALL_FAILURE.UNANSWERED>;
+
+/** Settles an act that never answered into the failure given, with the error beneath. */
+export function unreachedAs<const Failure extends string>(failure: Failure) {
+  return (cause: unknown): Unreached<Failure> => ({ failure, cause });
 }
 
 /**

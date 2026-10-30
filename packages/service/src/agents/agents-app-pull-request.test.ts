@@ -28,6 +28,7 @@ import { PULL_REQUEST_WRITE_BOUNDS, REACTION } from "@luke/features/pull-request
 import type { WireBoundaryInput } from "@luke/wire";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
+import { SERVER_EVENT } from "../events/server-events.js";
 import { PULL_REQUEST_QUEUED_OPERATION } from "../github/pull-request-merging.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -38,6 +39,7 @@ import {
   AGENT_PULL_REQUEST_ACTION,
   AGENT_PULL_REQUEST_VIEWED,
   type Answer,
+  countedFor,
   openTask,
   PUBLISHED,
   PULL_REQUEST_NODE_ID,
@@ -2195,7 +2197,7 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
   );
 
   it.effect(
-    "a read that first finds the pull request merged notes it for the owner's operator, once however often it is read",
+    "a read that first finds the pull request merged notes it for the owner's operator, and counts it, once however often it is read",
     () =>
       Effect.gen(function* () {
         const standing: Standing = { mergedAt: null };
@@ -2223,6 +2225,7 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
         yield* read;
         yield* read;
         assert.deepEqual(yield* kinds, [OPERATOR_NOTICE_KIND.PR_MERGED]);
+        assert.equal(countedFor(owner, SERVER_EVENT.PULL_REQUEST_MERGE), 1);
       }),
   );
 });

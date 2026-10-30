@@ -6,8 +6,10 @@
  * hold on to.
  */
 
+import { signedInAccountId } from "@luke/credentials/snapshot";
 import { readLink } from "@luke/features/link-grammar";
 import { LINK_ORIGIN } from "@luke/features/link-home";
+import { eventNamingAccount, logNamingAccount } from "@luke/features/sentry-account";
 import {
   eventWithoutAccessTokens,
   SPANS_NAMING_ACCESS_TOKENS,
@@ -15,12 +17,17 @@ import {
   withoutAccessTokens,
 } from "@luke/features/sentry-breadcrumbs";
 import { SENTRY_TRACES_SAMPLE_RATE } from "@luke/features/sentry-tracing";
+import { sendShownFailure } from "@luke/features/shown-failure";
+import { appStateNow } from "@luke/panel/use-app-state";
 import {
   browserTracingIntegration,
   captureException,
   captureMessage,
+  getActiveSpan,
   getClient,
+  getCurrentScope,
   init,
+  logger,
   startBrowserTracingPageLoadSpan,
   withStreamedSpan,
 } from "@sentry/browser";
@@ -86,13 +93,22 @@ function nameByRoute(client: Client): void {
   });
 }
 
+/** The account the tab's host has signed in, as its document says now. */
+function accountId(): string | undefined {
+  return signedInAccountId(appStateNow()?.account);
+}
+
 /**
  * Starts the SDK with its default data collection, under the build's DSN,
  * environment, and release, and the desktop renderer's filters: a
  * breadcrumb or an event that names an access token is dropped whole, and
  * so is a span that names one as it starts, while every span sent has its
  * addresses scrubbed (`@luke/features/sentry-breadcrumbs`). Each page load
- * and navigation is named by the kind of place it opens, never its path.
+ * and navigation is named by the kind of place it opens, never its path. A
+ * failure the panel showed is sent as a log line, and as an issue besides
+ * where nothing named it (`@luke/features/shown-failure`). Each event and log
+ * line names the account signed in as it leaves, by its id alone, as
+ * Sentry's user (`@luke/features/sentry-account`).
  */
 export function initWebSentry(build: WebSentryBuild): WebSentry {
   init({
@@ -107,7 +123,8 @@ export function initWebSentry(build: WebSentryBuild): WebSentry {
     ],
     tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
     beforeBreadcrumb: withoutAccessTokens,
-    beforeSend: eventWithoutAccessTokens,
+    beforeSend: (event) => eventWithoutAccessTokens(eventNamingAccount(event, accountId())),
+    beforeSendLog: (log) => logNamingAccount(log, accountId()),
     ignoreSpans: SPANS_NAMING_ACCESS_TOKENS,
     beforeSendSpan: withStreamedSpan(spanWithoutAccessTokens),
   });
@@ -121,5 +138,7 @@ export function initWebSentry(build: WebSentryBuild): WebSentry {
     reportRefusal: (directive, origin) => {
       captureMessage(`Content-Security-Policy refused ${directive} to ${origin}`, "warning");
     },
+    reportShownFailure: (report) =>
+      sendShownFailure({ captureException, logger, getActiveSpan, getCurrentScope }, report),
   };
 }

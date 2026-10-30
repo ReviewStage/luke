@@ -22,6 +22,7 @@ import {
   beginTaskWorkCommitted,
   readTask,
   readTaskWorkspace,
+  readTreeStopped,
   type StoredTask,
 } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
@@ -63,14 +64,14 @@ import {
 } from "@luke/features/agent-wire";
 import type { GitHubAccess } from "@luke/features/github-repositories-wire";
 import { agentName, automationRun } from "@luke/features/model-label";
-import { AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
+import { agentFallbackChoice, type ModelChoice } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import { TASK_MODE, type Task } from "@luke/features/task-wire";
-import { bothInOrder, failureKind } from "@luke/runtime/effect";
+import { bothInOrder, causeKind, failureKind } from "@luke/runtime/effect";
 import { EXPERIMENT } from "@luke/settings";
 import { MESSAGE_CHANNEL, START_LINE_BRIEF } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
-import { Clock, Effect, Option, Result } from "effect";
+import { Cause, Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   recordServerEvent,
@@ -103,10 +104,13 @@ import {
   type AgentSessions,
   describeUnreachable,
   EVE_SEND_OUTCOME,
+  type EveFailed,
   type EveTypedTurn,
+  RUNTIME_REFUSAL,
 } from "../eve-host/eve-sessions.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
+import { agentFailureSaid, agentLogIds } from "./agent-log.js";
 import {
   type AccountKeyRows,
   AgentCredentialMissing,
@@ -118,6 +122,7 @@ import {
   markedUnconnected,
 } from "./agent-runtime-choice.js";
 import { contextWindowOf } from "./context.js";
+import { isNativeRuntime } from "./native-runtime.js";
 import {
   type FittedReplay,
   replayOf,
@@ -222,6 +227,10 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * coding agent's `start_agent`, which is how a pilot gives a child task its
  * sub-pilot; every later one makes a coder, as every Start on any other task
  * does. A pilot is refused for an account with the Pilot experiment off.
+ * Any Start on a child task of a pilot tree whose Running switch is off
+ * (`readTreeStopped`) is refused, a member's or a coding agent's, fresh or
+ * from another agent, until the switch is on; the top task's own pilot
+ * never is, since it plans and talks while its tree is stopped.
  * The member's operator is the one blank Start with no task: in a workspace
  * the account is a member of, on no repository, from no other agent and
  * with no prompt or note, and no other Start is an operator's. Every other
@@ -230,8 +239,11 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * answers the operator already standing where there is one
  * (`createAgent`), so a Start of it is an ensure.
  * An eve that did not take the opening leaves no agent behind, so the retry
- * under the same key starts afresh. A choice an ask names
- * runs that one agent and is never kept as the account's default, which only
+ * under the same key starts afresh, and so does one that could not be
+ * reached, a first line that could not be written, and a Start cut short
+ * before eve took it, each said as an error naming the agent (`agent-log.ts`).
+ * A choice an ask names runs that one agent and is never kept as the
+ * account's default, which only
  * Settings writes. Who reaches eve is the caller's: the route holds the developer's
  * own bearer, and the voice brain's and a coding agent's tool act as the
  * deployment for the account, which the coder channel's table admits for
@@ -311,7 +323,7 @@ export type StartServices = DatabaseServices | HttpClient.HttpClient | GitHubApp
 /** What an account may start an agent on: the models the catalog offers it, and the choice a Start naming none runs on. */
 export interface AccountModelChoices {
   readonly offered: readonly OfferedModel[];
-  /** The account's stored default, or Luke's where it stored none; it may have since left the catalog. */
+  /** The account's stored default, which may have since left the catalog, or where it stored none the fallback its credentials pay for (`agentFallbackChoice`). */
   readonly defaultChoice: ModelChoice;
 }
 
@@ -320,8 +332,9 @@ export interface AccountModelChoices {
  * is offered it (`offeredToAccount`), so a fast version withheld from it,
  * its key's organization never granted fast mode, is not among them, and
  * the account's default choice beside them. This is the one source a Start
- * is checked against and the agent tools list the choices from, so the two
- * never disagree. A catalog or a store that could not be read is an outage.
+ * is checked against, the agent tools list the choices from, and the
+ * preferences snapshot answers an unstored default from, so none of them
+ * disagree. A catalog or a store that could not be read is an outage.
  */
 export const accountModelChoices = (userId: string) =>
   Effect.map(modelChoicesRead(userId), (read) => read.choices);
@@ -359,7 +372,7 @@ const modelChoicesRead = /* @__PURE__ */ Effect.fnUntraced(function* (
     markedUnconnected(userId, offeredToAccount(read, fastOffer), keys),
   );
   const stored = preferences?.agent;
-  return { choices: { offered, defaultChoice: stored ?? AGENT_DEFAULT_CHOICE }, keys };
+  return { choices: { offered, defaultChoice: stored ?? agentFallbackChoice(offered) }, keys };
 });
 
 /**
@@ -578,6 +591,10 @@ const landingOf = Effect.fnUntraced(function* (
       : yield* hostedStoreOrUnavailable(readTask(userId, place.taskId));
   if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { task, ownerId } = read.value;
+  // A child task of a stopped pilot tree takes no agent, fresh or continued, until Running is on.
+  if (yield* hostedStoreOrUnavailable(readTreeStopped(userId, task.id))) {
+    return yield* Effect.fail(HOSTED_REFUSAL.TREE_STOPPED);
+  }
   const mover = ownerId === userId ? userId : undefined;
   // A Start from another agent goes its source's way; only a fresh one can make the task's pilot.
   const kind = place.from === undefined ? yield* freshKindOn(userId, task) : AGENT_KIND.CODER;
@@ -762,7 +779,12 @@ const stoppedSource = (
   /** The coding agent whose `start_agent` continues the source; none for a member's Continue. */
   by: string | undefined,
 ) =>
-  cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source, undefined, by).pipe(
+  cancelledTurn(
+    eve,
+    storeWriter({ tools: CODER_TOOL_SET }),
+    source,
+    by === undefined ? {} : { by },
+  ).pipe(
     Effect.as(true),
     Effect.catch((refusal) =>
       Effect.as(
@@ -788,6 +810,32 @@ const archivedPilot = (userId: string, pilot: Agent, by: Agent | undefined) => {
     Effect.catch((failure) => Effect.as(logStoreFailure(failure), Option.none<string>())),
   );
 };
+
+/**
+ * Whether an open's refusal is a named outcome the developer is told as
+ * such, which is logged and never reported: the plan or the key refused, the
+ * device removed or away, or the image still being prepared.
+ */
+function namedOpenRefusal(failed: EveFailed): boolean {
+  return (
+    failed.planRefusal !== undefined ||
+    failed.keyRefusal !== undefined ||
+    (failed.runtimeRefusal !== undefined && failed.runtimeRefusal !== RUNTIME_REFUSAL.NOT_HERE)
+  );
+}
+
+/**
+ * The agent a Start made discarded because its session never opened, so a
+ * retry under the same key starts it afresh and no agent stands to read as
+ * never started: why said once as an error and reported
+ * (`agentFailureSaid`), in the caller's scope, which names the agent; a
+ * discard that fails is logged.
+ */
+const discardedAt = (userId: string, agent: Agent, said: string, reason: string) =>
+  Effect.andThen(
+    agentFailureSaid(said, reason, true),
+    Effect.ignore(hostedStoreOrUnavailable(discardAgent(userId, agent.id))),
+  );
 
 /**
  * The pilot a continue keeps as its starter: the one that started its
@@ -1222,61 +1270,122 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   // none: its first words open its session as they reach it (`steer.ts`).
   const handed = brief.prompt ?? brief.planSnapshot;
   if (handed !== null) {
-    const sessions = yield* eve;
-    // Each image is kept beside the new agent's conversation first, so the agent is told its id; one the
-    // store could not keep goes unnamed, as before, rather than failing a Start whose agent already stands.
-    const files = yield* keptHandedImages(
-      { userId: agent.userId, conversationId: agent.conversationId },
-      attachments,
-    ).pipe(Effect.catch((failure) => Effect.as(logStoreFailure(failure), attachments)));
-    const mentioned =
-      words === undefined ? undefined : mentionedContext(words, landing.task, reads);
-    // The first message is written here, awaiting its turn, on every runtime, so it says what it is and
-    // who sent it: a native harness's runner names the line back as it takes it (`native-events/`), and
-    // eve's receipt takes it by its words (`relay.ts`'s `#received`) rather than writing a typed line.
-    // A launch refused discards the agent, line and all. A line that could not be written discards the
-    // agent, as a refused launch does, so a retry under the same key starts it afresh rather than
-    // finding an agent that was never launched.
-    const line = yield* openingLine(
-      agent,
-      handed,
-      files,
-      mentioned,
-      openingOf(
-        agent,
-        ask,
-        brief,
-        from === undefined ? undefined : { source: from.source, continued },
-      ),
-    ).pipe(
-      Effect.tapError(() =>
-        Effect.ignore(hostedStoreOrUnavailable(discardAgent(userId, agent.id))),
-      ),
-    );
-    const opened = yield* sessions
-      .open({
-        conversationId: agent.conversationId,
-        turn: EVE_HOST_TURN.TYPED,
-        message: eveContent(handed, files, mentioned),
-        lineId: line,
-      })
-      .pipe(
-        Effect.catchTag("EveUnreachable", (failure) =>
-          Effect.as(
-            Effect.logWarning(
-              `eve could not be reached to start a coding agent: ${describeUnreachable(failure)}`,
-            ),
-            undefined,
+    // Every line the opening says names the agent, the runtime's own past the answer included. Note
+    // that the agent stands from here, so an opening cut short before eve was asked, as a caller's
+    // deadline cuts a `start_agent`, discards it as a refused one does, in a finalizer the
+    // interruption cannot cut short, and says so, rather than leaving an agent no session was opened
+    // for. One cut short while eve was asked is said alone, since its session may have opened, a
+    // native launch handed on past the answer, and the agent is that session's.
+    let asked = false;
+    const opened = yield* Effect.gen(function* () {
+      const sessions = yield* eve.pipe(
+        Effect.tapError((refusal) =>
+          discardedAt(
+            userId,
+            agent,
+            `eve could not be reached to start a coding agent: ${refusal.error}`,
+            refusal.error,
           ),
         ),
       );
-    if (opened === undefined || opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
-      yield* hostedStoreOrUnavailable(discardAgent(userId, agent.id));
-      // An image still being prepared is answered by name, so the Start is made again under its key.
-      return yield* Effect.fail(
-        opened === undefined ? HOSTED_REFUSAL.UNAVAILABLE : failedCallRefusal(opened),
+      // Each image is kept beside the new agent's conversation first, so the agent is told its id; one the
+      // store could not keep goes unnamed, as before, rather than failing a Start whose agent already stands.
+      const files = yield* keptHandedImages(
+        { userId: agent.userId, conversationId: agent.conversationId },
+        attachments,
+      ).pipe(Effect.catch((failure) => Effect.as(logStoreFailure(failure), attachments)));
+      const mentioned =
+        words === undefined ? undefined : mentionedContext(words, landing.task, reads);
+      // The first message is written here, awaiting its turn, on every runtime, so it says what it is and
+      // who sent it: a native harness's runner names the line back as it takes it (`native-events/`), and
+      // eve's receipt takes it by its words (`relay.ts`'s `#received`) rather than writing a typed line.
+      // A launch refused discards the agent, line and all. A line that could not be written discards the
+      // agent, as a refused launch does, so a retry under the same key starts it afresh rather than
+      // finding an agent that was never launched.
+      const line = yield* openingLine(
+        agent,
+        handed,
+        files,
+        mentioned,
+        openingOf(
+          agent,
+          ask,
+          brief,
+          from === undefined ? undefined : { source: from.source, continued },
+        ),
+      ).pipe(
+        Effect.tapError((refusal) =>
+          discardedAt(
+            userId,
+            agent,
+            `a Start's first line was not written: ${refusal.error}`,
+            refusal.error,
+          ),
+        ),
       );
+      // The runtime says why an open it refused was refused; eve that could not be asked is said here.
+      asked = true;
+      return yield* sessions
+        .open({
+          conversationId: agent.conversationId,
+          turn: EVE_HOST_TURN.TYPED,
+          message: eveContent(handed, files, mentioned),
+          lineId: line,
+        })
+        .pipe(
+          Effect.catchTag("EveUnreachable", (failure) =>
+            Effect.as(
+              agentFailureSaid(
+                `eve could not be reached to start a coding agent: ${describeUnreachable(failure)}`,
+                failure._tag,
+                true,
+              ),
+              undefined,
+            ),
+          ),
+        );
+    }).pipe(
+      Effect.onError((cause) =>
+        Cause.hasFails(cause)
+          ? Effect.void
+          : asked
+            ? agentFailureSaid(
+                `a Start was cut short while its agent's session was opening: ${causeKind(cause)}`,
+                causeKind(cause),
+                true,
+              )
+            : discardedAt(
+                userId,
+                agent,
+                `a Start was cut short before its agent's session opened: ${causeKind(cause)}`,
+                causeKind(cause),
+              ),
+      ),
+      Effect.annotateLogs(agentLogIds(agent)),
+    );
+    if (opened === undefined || opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
+      // An image still being prepared is answered by name, so the Start is made again under its key.
+      const refusal = opened === undefined ? HOSTED_REFUSAL.UNAVAILABLE : failedCallRefusal(opened);
+      // A native harness says why it refused where its harness decided it (`runner-sessions.ts`), so
+      // eve's refusal, and a harness this function cannot reach, are said here.
+      if (
+        opened !== undefined &&
+        (!isNativeRuntime(runtime.runtime) || opened.runtimeRefusal === RUNTIME_REFUSAL.NOT_HERE)
+      ) {
+        yield* agentFailureSaid(
+          `a Start's open was refused: ${refusal.error}, status ${opened.status}`,
+          refusal.error,
+          !namedOpenRefusal(opened),
+        ).pipe(Effect.annotateLogs(agentLogIds(agent)));
+      }
+      yield* hostedStoreOrUnavailable(discardAgent(userId, agent.id)).pipe(
+        Effect.annotateLogs(agentLogIds(agent)),
+      );
+      return yield* Effect.fail(refusal);
     }
+    yield* Effect.logInfo("a Start opened its agent's session").pipe(
+      Effect.annotateLogs(agentLogIds(agent)),
+    );
   }
   // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
   const stopped = continued ? yield* stoppedSource(eve, from.source, ask.startedBy?.id) : false;

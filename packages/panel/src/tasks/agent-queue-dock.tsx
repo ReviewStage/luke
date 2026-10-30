@@ -1,4 +1,5 @@
 import { QUEUE_PAUSE, type QueuedMessage, type QueuePaused } from "@luke/features/agent-queue-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
   BANNER_LOOK,
@@ -25,6 +26,7 @@ import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useState } from "react";
 import { useRowDrag } from "../desktop/use-row-drag.js";
+import { confirmFailure } from "../failure-report.js";
 import { COMPOSER_DOCK_CLASS } from "./agent-composer.js";
 import { KeptFileChips } from "./agent-pictures.js";
 import { SentWords } from "./skill-chip.js";
@@ -134,10 +136,13 @@ export function AgentQueueDock({
   const [doomed, setDoomed] = useState<QueuedMessage>();
   // The question goes with its message, which a hand-off may send while it is asked.
   const asked = doomed !== undefined && messages.some((message) => message.id === doomed.id);
-  const confirm = useConfirmDialog({ subject: asked, surfaceOpen: true }, () =>
-    doomed === undefined
-      ? Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED })
-      : onDelete(doomed),
+  const confirm = useConfirmDialog(
+    { subject: asked, surfaceOpen: true },
+    () =>
+      doomed === undefined
+        ? Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED })
+        : onDelete(doomed),
+    confirmFailure(FAILURE_SURFACE.AGENT_QUEUE_DELETE),
   );
   if (messages.length === 0) return null;
   return (

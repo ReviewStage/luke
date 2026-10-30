@@ -37,7 +37,7 @@ import {
 } from "@luke/database/models/recorded-session";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { LOCAL_AGENT_REFUSAL } from "@luke/features/agent-wire";
-import { causeKind } from "@luke/runtime/effect";
+import { causeKind, failureKind } from "@luke/runtime/effect";
 import { Clock, Context, Effect, Option } from "effect";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
@@ -61,6 +61,7 @@ import {
   RUNTIME_REFUSAL,
   type RuntimeRefusal,
 } from "../eve-host/eve-sessions.js";
+import { agentLogIds } from "./agent-log.js";
 import { isNativeRuntime, type NativeRuntime, nativeRuntimeOfSession } from "./native-runtime.js";
 
 /** What a change of model or effort came to at a native agent's runner. */
@@ -189,16 +190,17 @@ function routed<Turn extends EveHostTurn>(
   const harness = (runtime: NativeRuntime, actingFor: string) =>
     Option.flatMap(native, (service) => service.sessions(runtime, actingFor));
 
-  /** The route, or none where it could not be read, which is said in the log by its kind alone. */
+  /** The route, or none where it could not be read, which is said in the log by its kind alone, naming the conversation. */
   const routeOrUnread = (conversationId: string) =>
     routeOf(conversationId).pipe(
       Effect.map(Option.some),
       Effect.catch((failure) =>
         Effect.as(
-          Effect.logWarning(`a coding agent's runtime could not be read: ${failure._tag}`),
+          Effect.logWarning(`a coding agent's runtime could not be read: ${failureKind(failure)}`),
           Option.none<Route>(),
         ),
       ),
+      Effect.annotateLogs(agentLogIds({ conversationId })),
     );
 
   /** The session a native open answered claimed as the conversation's record, as eve's door claims eve's; a claim that fails is logged, and the next message finds the session by its tag all the same. */
@@ -214,6 +216,7 @@ function routed<Turn extends EveHostTurn>(
       Effect.catchCause((cause) =>
         Effect.logWarning(`a native session did not claim its record: ${causeKind(cause)}`),
       ),
+      Effect.annotateLogs(agentLogIds({ conversationId: message.conversationId }, sessionId)),
       Effect.provideContext(store),
     );
 
@@ -301,10 +304,13 @@ export const runnerChoiceApplied = (agent: {
   }).pipe(
     Effect.catch((failure) =>
       Effect.as(
-        Effect.logWarning(`a native agent's choice did not reach its runner: ${failure._tag}`),
+        Effect.logWarning(
+          `a native agent's choice did not reach its runner: ${failureKind(failure)}`,
+        ),
         RUNNER_CHOICE.FAILED,
       ),
     ),
+    Effect.annotateLogs(agentLogIds(agent)),
   );
 
 /**

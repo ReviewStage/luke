@@ -31,6 +31,8 @@ import {
   type PullRequestThreadView,
 } from "@luke/features/link-grammar";
 import { formatCount } from "@luke/features/number-format";
+import type { FailureSurface } from "@luke/features/shown-failure";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { workingTime } from "@luke/features/time-format";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
@@ -141,6 +143,7 @@ import {
   type TabActionGroups,
   useHandedTabActions,
 } from "../desktop/strip-tabs.js";
+import { pictureUnread, unreadShown } from "../failure-report.js";
 import { lazyRoute } from "../lazy-route.js";
 import { scrollerOf } from "../scroll-within.js";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -691,7 +694,7 @@ function ProxiedCheckAvatar({
   name: string;
   src: string;
 }): React.JSX.Element {
-  const state = usePicture(agentId, src, useGitHubImageRead());
+  const state = usePicture(agentId, src, useGitHubImageRead(), pictureUnread);
   return (
     <CheckSquare name={name} src={state.kind === PICTURE_STATE.READY ? state.url : undefined} />
   );
@@ -751,16 +754,20 @@ function CheckLead({
  * screen; a press opens its page where it has one. Note that a running
  * count stands only while the Checks tab is shown (`live`), because the
  * tab stays mounted behind `hidden`, and a count left reading the clock
- * there would tick for no one.
+ * there would tick for no one. A GitHub line's card draws its checks with
+ * it too (`line-cards.tsx`), each saying how it ended where its App would be.
  */
-function CheckRow({
+export function CheckRow({
   agentId,
   check,
   live,
+  says,
 }: {
   agentId: string;
   check: PullRequestCheck;
   live: boolean;
+  /** What the row says under its name in place of its App: how a check a GitHub line names ended, since the line names no App. */
+  says?: string | undefined;
 }): React.JSX.Element {
   const openLink = useOpenLink();
   const duration = durationOf(check);
@@ -783,7 +790,7 @@ function CheckRow({
           <VisuallyHidden>, {CHECK_WORDS[check.state]}</VisuallyHidden>
         </>
       }
-      description={check.app ?? undefined}
+      description={says ?? check.app ?? undefined}
       meta={running ? live ? <Time at={startedAt} look={TIME_LOOK.DURATION} /> : null : duration}
       onPress={url === null ? undefined : () => openLink(url)}
       linkHref={url ?? undefined}
@@ -823,8 +830,8 @@ function Checks({
   );
 }
 
-/** The checks' list, which the checks and their placeholder rows both stand in. */
-function CheckList({ children }: { children: ReactNode }): React.JSX.Element {
+/** The checks' list, which the checks and their placeholder rows both stand in, and a GitHub line's card its checks. */
+export function CheckList({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <List label="Check list" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.DENSE}>
       {children}
@@ -929,10 +936,21 @@ function TitleSkeleton(): React.JSX.Element {
 }
 
 /** A part whose read failed: its sentence and its own Retry, where the part would have stood. */
-function PartFailure({ line, onRetry }: { line: string; onRetry: () => void }): React.JSX.Element {
+function PartFailure({
+  line,
+  surface,
+  onRetry,
+}: {
+  line: string;
+  /** Where the read failed, which its report names. */
+  surface: FailureSurface;
+  onRetry: () => void;
+}): React.JSX.Element {
   return (
     <div className="pull-request-failure px-row-inset">
-      <ErrorState onRetry={onRetry}>{line}</ErrorState>
+      <ErrorState failure={unreadShown(surface)} onRetry={onRetry}>
+        {line}
+      </ErrorState>
     </div>
   );
 }
@@ -1567,7 +1585,13 @@ function PullRequestHead({
     return <HeadSkeleton />;
   }
   if (part.kind !== PART.LANDED) {
-    return <PartFailure line={PULL_REQUEST_WORDS.FAILED} onRetry={parts.ask.pullRequest} />;
+    return (
+      <PartFailure
+        line={PULL_REQUEST_WORDS.FAILED}
+        surface={FAILURE_SURFACE.PULL_REQUEST_READ}
+        onRetry={parts.ask.pullRequest}
+      />
+    );
   }
   const pullRequest = part.value;
   const { author, mergedAt } = pullRequest;
@@ -1801,7 +1825,11 @@ function ChecksPart({
       {part.kind === PART.PENDING ? (
         <ChecksSkeleton />
       ) : (
-        <PartFailure line={PULL_REQUEST_WORDS.CHECKS_FAILED} onRetry={parts.ask.checks} />
+        <PartFailure
+          line={PULL_REQUEST_WORDS.CHECKS_FAILED}
+          surface={FAILURE_SURFACE.PULL_REQUEST_CHECKS_READ}
+          onRetry={parts.ask.checks}
+        />
       )}
     </Section>
   );
@@ -1906,6 +1934,7 @@ function ConversationPart({
           <ConversationSkeleton />
         ) : (
           <PartFailure
+            surface={FAILURE_SURFACE.PULL_REQUEST_CONVERSATION_READ}
             line={PULL_REQUEST_WORDS.CONVERSATION_FAILED}
             onRetry={parts.ask.conversation}
           />
@@ -2461,9 +2490,19 @@ function useThreadJumps(input: {
   const gone = jump !== undefined && conversation.kind === PART.LANDED && target === undefined;
   useEffect(() => {
     if (!gone) return;
-    toast({ words: THREAD_REVEAL_WORDS.GONE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+    toast({
+      words: THREAD_REVEAL_WORDS.GONE,
+      tone: STATUS_TONE.DANGER,
+      hold: TOAST_HOLD.FAILED,
+      failure: {
+        surface: FAILURE_SURFACE.PULL_REQUEST_THREAD,
+        cause: FAILURE_CONDITION.GONE,
+        about: { agentId, pullRequest: number },
+        refused: true,
+      },
+    });
     setJump(undefined);
-  }, [gone, toast]);
+  }, [gone, toast, agentId, number]);
   const letGo = useCallback((ask: number) => {
     setJump((was) => (was?.ask === ask ? undefined : was));
   }, []);
@@ -2490,6 +2529,12 @@ function useThreadJumps(input: {
               words: THREAD_REVEAL_WORDS.FILE_GONE,
               tone: STATUS_TONE.DANGER,
               hold: TOAST_HOLD.FAILED,
+              failure: {
+                surface: FAILURE_SURFACE.PULL_REQUEST_THREAD,
+                cause: FAILURE_CONDITION.GONE,
+                about: { agentId, pullRequest: number },
+                refused: true,
+              },
             });
             latestView.current(PULL_REQUEST_VIEW.CONVERSATION);
             start(target.id, PULL_REQUEST_THREAD_VIEW.CONVERSATION);

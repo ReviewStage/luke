@@ -4,7 +4,8 @@
  * ones carrying an action, whose × shows under the pointer or focus, the
  * Undo one draining its countdown, paused under the pointer; then one whose
  * work is under way, turned in place into done or failed by a press, and
- * one to drag or sweep sideways away, shown again by a press.
+ * one to drag or sweep sideways away, shown again by a press; and failures
+ * that offer their details to copy, alone and beside a Retry.
  */
 
 import {
@@ -26,6 +27,9 @@ function noop(): void {}
 
 /** How long the Undo toast's countdown runs, as the window's hold for a toast with an action. */
 const ACTION_HOLD_MS = 5000;
+
+/** How long a failure toast's countdown runs, as the window's hold for a refusal. */
+const FAILED_HOLD_MS = 6000;
 
 /** A toast with an action, as an undoable change carries one. */
 function Acting({
@@ -96,6 +100,56 @@ function Toasts(): React.JSX.Element {
             words="Your OpenAI account is out of credit."
             label="Add credit"
             href="https://platform.openai.com/settings/organization/billing/overview"
+          />
+        </ToastStack>
+      </div>
+    </CatalogSection>
+  );
+}
+
+/** What a failure's Copy details puts on the clipboard, as the panel builds it from the failure's report. */
+const FAILURE_DETAILS = [
+  "Luke showed an error. Find it in Sentry and the logs by these details:",
+  "time: 2026-10-29T18:20:03.198Z",
+  "failure.surface: agent.stop",
+  "failure.kind: unexpected",
+  "failure.code: TypeError",
+].join("\n");
+
+/** A catalog's clipboard: the browser's own. */
+function copyToClipboard(text: string): Promise<void> {
+  return navigator.clipboard.writeText(text);
+}
+
+/** Failure toasts, each offering its details to copy: one with nothing else to press, and one beside its Retry. */
+function Failures(): React.JSX.Element {
+  const copy = { text: FAILURE_DETAILS, what: "details", copy: copyToClipboard };
+  return (
+    <CatalogSection id="toast-failure-copy" title="Failures copy their details">
+      <div className="catalog-toast-stage">
+        <ToastStack
+          label="Failure notifications"
+          polite=""
+          alert="Your plan edits could not be saved."
+        >
+          <Toast
+            tone={STATUS_TONE.DANGER}
+            words="The agent could not be stopped."
+            countdown={FAILED_HOLD_MS}
+            actions={<ToastActions copy={copy} dismissLabel="Dismiss" onDismiss={noop} />}
+          />
+          <Toast
+            tone={STATUS_TONE.DANGER}
+            words="Your plan edits could not be saved."
+            actions={
+              <ToastActions
+                label="Retry"
+                onPress={noop}
+                copy={copy}
+                dismissLabel="Dismiss"
+                onDismiss={noop}
+              />
+            }
           />
         </ToastStack>
       </div>
@@ -177,6 +231,7 @@ function AllToasts(): React.JSX.Element {
   return (
     <>
       <Toasts />
+      <Failures />
       <Working />
       <Swiped />
     </>

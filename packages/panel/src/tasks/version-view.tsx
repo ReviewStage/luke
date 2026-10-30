@@ -1,3 +1,4 @@
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { dayAndTimeText, momentText } from "@luke/features/time-format";
 import { readFailedWords } from "@luke/features/words";
 import {
@@ -18,7 +19,9 @@ import {
 import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useRef, useState } from "react";
+import type { Kept } from "../act.js";
 import { PhoneHead } from "../desktop/phone-head.js";
+import { unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { TOAST_HOLD, type ToastNotice, undoToast, useToast } from "../toast.js";
 import { DocumentScroll } from "./document-frame.js";
@@ -214,7 +217,9 @@ function VersionContent({
   if (read.kind === HISTORY_READ.FAILED) {
     return (
       <div className={VERSION_NOTE}>
-        <ErrorState onRetry={onRetry}>{VERSION_FAILED}</ErrorState>
+        <ErrorState failure={unreadShown(FAILURE_SURFACE.PLAN_VERSION_READ)} onRetry={onRetry}>
+          {VERSION_FAILED}
+        </ErrorState>
       </div>
     );
   }
@@ -270,7 +275,14 @@ export function useVersionRestore(
       restoring.current = false;
       setBusy(false);
       if (result.status === ACTION_RESULT_STATUS.ACCEPTED) onRestored();
-      else toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      else {
+        toast({
+          words: result.reason,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.PLAN_RESTORE, cause: result },
+        });
+      }
     });
   };
   return { busy, onRestore };
@@ -283,7 +295,7 @@ export function useVersionRestore(
  */
 export function sayRestored(
   toast: (notice: ToastNotice) => void,
-  undo: (() => Promise<boolean>) | undefined,
+  undo: (() => Promise<Kept>) | undefined,
 ): void {
   if (undo === undefined) {
     toast({ words: VERSION_RESTORED_NOTE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
@@ -292,9 +304,10 @@ export function sayRestored(
   toast(
     undoToast(VERSION_RESTORED_NOTE, () => {
       undo().then((undone) => {
-        if (undone) return;
+        if (undone.kept) return;
         toast({
           words: RESTORE_UNDO_REFUSED_NOTE,
+          failure: { surface: FAILURE_SURFACE.PLAN_RESTORE, cause: undone.cause },
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
         });

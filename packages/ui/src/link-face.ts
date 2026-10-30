@@ -7,8 +7,10 @@
  * says the address as a reader names a page instead: the host without its
  * `www.`, then the path, a short query kept and the fragment dropped, and
  * past a bound the middle steps folded to `…` and a long last step cut. The
- * whole address stays the link's own, shown on hover. Nothing here draws:
- * both of the desktop's Markdown renderers read the same face.
+ * whole address stays the link's own, shown on hover. A bare address the
+ * transcript draws as a website chip says its site alone (`siteName`).
+ * Nothing here draws: both of the desktop's Markdown renderers read the
+ * same face.
  */
 
 import { TEXT_LINK_LOOK } from "./components/text-link/text-link-look.js";
@@ -79,8 +81,19 @@ export function shortUrl(href: string): string | undefined {
   return steps.length > 1 ? `${host}/${FOLD}/${leaf}` : `${host}/${leaf}`;
 }
 
+/** Whether a link's words are its own address, spelled with or without its scheme and trailing slash. */
+export function saysOwnAddress(href: string, words: string): boolean {
+  return bareAddress(words) === bareAddress(href);
+}
+
+/** The site a web address is of, as a website chip names it: its host without its `www.`; nothing for an address that is not the web's. */
+export function siteName(href: string): string | undefined {
+  if (!WEB_SCHEME.test(href) || !URL.canParse(href)) return undefined;
+  return new URL(href).hostname.replace(/^www\./u, "");
+}
+
 /** What a link to `href` labelled `words` says: its address cut short where the words are the address, its label otherwise. */
 export function linkFace(href: string, words: string): LinkFace {
-  const short = bareAddress(words) === bareAddress(href) ? shortUrl(href) : undefined;
+  const short = saysOwnAddress(href, words) ? shortUrl(href) : undefined;
   return short === undefined ? { words, shortened: false } : { words: short, shortened: true };
 }

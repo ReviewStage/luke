@@ -5,6 +5,7 @@ import {
 } from "@luke/features/sign-in-provider";
 import { SIGN_IN_FAILURE, SIGN_IN_FAILURE_WORDS } from "@luke/features/words";
 import type { ReactNode } from "react";
+import type { ReportedFailure, Unreported } from "../../reported-failure.js";
 import { ProviderButton } from "../provider-button/provider-button.js";
 import { AuthPage } from "./auth-page.js";
 
@@ -84,7 +85,7 @@ export function SocialSignInCard({
   description,
   footnote,
   pending,
-  failed = false,
+  failed,
   onPress,
 }: {
   mark?: ReactNode;
@@ -93,8 +94,8 @@ export function SocialSignInCard({
   footnote?: ReactNode;
   /** The provider whose sign-in is opening, if one is. */
   pending: SocialProvider | undefined;
-  /** Whether the last sign-in could not start. */
-  failed?: boolean;
+  /** Why the last sign-in could not start, as the page reports it, or nothing while it has not failed. */
+  failed?: ReportedFailure | Unreported | undefined;
   onPress: (provider: SocialProvider) => void;
 }): React.JSX.Element {
   return (
@@ -102,7 +103,7 @@ export function SocialSignInCard({
       mark={mark}
       title={title}
       description={description}
-      error={failed ? SIGN_IN_UNFINISHED : undefined}
+      error={failed === undefined ? undefined : { words: SIGN_IN_UNFINISHED, failure: failed }}
       footnote={footnote}
     >
       <SocialSignInChoices pending={pending} onPress={onPress} />

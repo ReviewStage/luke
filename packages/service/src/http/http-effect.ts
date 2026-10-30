@@ -3,7 +3,7 @@ import type { InstalledSkillFilesRefusal } from "@luke/features/installed-skill-
 import type { ModelProvider } from "@luke/features/models-wire";
 import type { RepositoryUnreached } from "@luke/features/repository-reach-wire";
 import { readEither } from "@luke/wire/effect";
-import { type Cause, Effect, type Layer, Option, Result, Stream } from "effect";
+import { type Cause, Effect, type Layer, Option, Result, type Scope, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { type UnparsedWireValue, unparsedWire, wireUuidSchema } from "../core.js";
 import { ANY_METHOD, ANY_PATH } from "../route.js";
@@ -70,6 +70,8 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.RUNS_ON_LOCKED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.AGENT_STATE_STALE]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.TREE_STOPPED]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -181,6 +183,10 @@ export const HOSTED_REFUSAL = {
   CHILD_REPOSITORY_LOCKED: { error: HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED },
   /** A block asked for would close a cycle among the workspace's tasks; nothing was written. */
   TASK_BLOCK_CYCLE: { error: HOSTED_API_ERROR.TASK_BLOCK_CYCLE },
+  /** A device agent's save named a generation no longer its newest; nothing was granted or committed. */
+  AGENT_STATE_STALE: { error: HOSTED_API_ERROR.AGENT_STATE_STALE },
+  /** The task is a child of a pilot tree whose Running switch is off (`readTreeStopped`); nothing was written. */
+  TREE_STOPPED: { error: HOSTED_API_ERROR.TREE_STOPPED },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */
@@ -304,14 +310,20 @@ export function resolvedAccount<Input>(
   );
 }
 
-/** The bearer's account, or the invalid-token refusal. */
+/**
+ * The bearer's account, or the invalid-token refusal. The account is the
+ * request's log annotation `userId` from here until the request's scope
+ * closes, so every line the route writes after it names the account, and
+ * every issue it raises names it as Sentry's user (`observability/sentry.ts`).
+ */
 export const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: { readonly resolveUserId: UserIdResolver },
   request: Request,
-): Effect.fn.Return<string, HostedRefusal> {
+): Effect.fn.Return<string, HostedRefusal, Scope.Scope> {
   const account = yield* resolvedAccount(seams.resolveUserId, request);
   if (Option.isNone(account))
     return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.INVALID_TOKEN);
+  yield* Effect.annotateLogsScoped({ userId: account.value });
   return account.value;
 });
 

@@ -7,7 +7,7 @@ import { agentCallIdSchema } from "@luke/features/agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
 import { HTTP_METHOD } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Layer, Option, Result } from "effect";
+import { Effect, Layer, Option, Result, type Scope } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { unparsedWire } from "../core.js";
 import type { HostedEnvironment } from "../environment.js";
@@ -72,7 +72,7 @@ export type AgentsAppServices =
   | ModelCatalog
   | HostedEnvironment;
 
-type AgentsServices = AgentsAppServices | HttpServerRequest.HttpServerRequest;
+type AgentsServices = AgentsAppServices | HttpServerRequest.HttpServerRequest | Scope.Scope;
 
 /** The one id the path named under `id`. */
 const idOf = (request: Request) => uuidOf(request, QUERY.ID);

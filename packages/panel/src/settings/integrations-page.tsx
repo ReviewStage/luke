@@ -26,6 +26,7 @@ import {
   integrationAccountLabel,
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
@@ -86,6 +87,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
+import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { type GitHubConnectControl, useGitHubConnection } from "../github-connect.js";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "../integration-grant.js";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
@@ -646,8 +648,10 @@ function IntegrationRow({
   };
 
   const connected = status === INTEGRATION_STATUS.CONNECTED;
-  const disconnect = useConfirmDialog({ subject: connected, surfaceOpen: true }, () =>
-    disconnectAccount(act, github, row, statuses),
+  const disconnect = useConfirmDialog(
+    { subject: connected, surfaceOpen: true },
+    () => disconnectAccount(act, github, row, statuses),
+    confirmFailure(FAILURE_SURFACE.INTEGRATION_DISCONNECT),
   );
 
   const line = rowLine(provider, status, health, signIn);
@@ -718,7 +722,7 @@ function IntegrationRow({
             ) : line === undefined ? null : (
               <RowLineText line={line} />
             ),
-          error: rejection,
+          error: refusedShown(rejection, FAILURE_SURFACE.INTEGRATION_RENAME),
           control: waiting ? (
             <>
               <Button
@@ -969,7 +973,12 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
       {statuses.readFailed ? (
         <SettingsSection>
           <SettingsLine>
-            <ErrorState onRetry={() => void statuses.read()}>{PAGE_LINE.READ_FAILED}</ErrorState>
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.INTEGRATIONS_READ)}
+              onRetry={() => void statuses.read()}
+            >
+              {PAGE_LINE.READ_FAILED}
+            </ErrorState>
           </SettingsLine>
         </SettingsSection>
       ) : null}

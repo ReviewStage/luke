@@ -11,10 +11,8 @@ import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { OpenHereProvider } from "./use-open-link.js";
 
 /**
- * pull-request-call.test.ts -- a pull request an agent opened is one row that
- * reads "Opened pull request #N title" behind the pull request's mark and
- * opens its Pull request tab, and one that was refused is a fold that says it
- * opened none and shows the reason.
+ * pull-request-call.test.ts -- a pull request an agent was refused is a fold
+ * that says it opened none and shows the reason.
  */
 
 const roots: Root[] = [];
@@ -74,17 +72,6 @@ function drawn(output: WireRecord | undefined) {
   );
   return { container, links };
 }
-
-test("an opened pull request reads as its number and title behind its mark, and its row opens its tab", () => {
-  const url = "https://github.com/acme/app/pull/4951";
-  const { container, links } = drawn({ status: "accepted", url, number: 4951 });
-  const row = container.querySelector<HTMLButtonElement>('button[data-call-id="call-open"]');
-  assert.ok(row, "the row is a button");
-  assert.equal(row.textContent, `Opened pull request #4951 ${OPEN.title}`);
-  assert.equal(container.querySelector("details"), null, "nothing folds open in place");
-  act(() => row.click());
-  assert.deepEqual(links, [url]);
-});
 
 test("a refused pull request is a fold that says it opened none and shows the reason", () => {
   const reason = "A pull request already exists for feat/export.";

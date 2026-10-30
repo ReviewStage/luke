@@ -3,6 +3,7 @@ import type { AgentSummary } from "@luke/features/agent-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
 import { readFailedWords, readingWords } from "@luke/features/words";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
@@ -49,6 +50,7 @@ import { useAppCommand } from "../app-commands.js";
 import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { copyLinkItem, useChordLinks } from "../copy-link-item.js";
+import { unreadShown } from "../failure-report.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { centreWithin } from "../scroll-within.js";
@@ -464,7 +466,9 @@ function EarlierRow({
   return (
     <div className="version-earlier mx-0 mt-control-gap mb-0 px-row-inset py-row-inset text-caption text-muted-foreground">
       {failed ? (
-        <FailureNote onRetry={read}>Could not read older versions.</FailureNote>
+        <FailureNote failure={unreadShown(FAILURE_SURFACE.PLAN_HISTORY_OLDER_READ)} onRetry={read}>
+          Could not read older versions.
+        </FailureNote>
       ) : (
         <ShowMoreRow
           more={before - 1}
@@ -636,7 +640,11 @@ function VersionPage({
       )}
       <Fill className="desktop-empty-region">
         {list.kind === HISTORY_READ.FAILED ? (
-          <ErrorState onRetry={versions.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.PLAN_HISTORY_READ)}
+            onRetry={versions.onRetry}
+            placement={ERROR_STATE_PLACEMENT.CENTRED}
+          >
             The history could not be read.
           </ErrorState>
         ) : (
@@ -921,6 +929,7 @@ export function DesktopVersionHistory({
                     />
                     {failed ? (
                       <ErrorState
+                        failure={unreadShown(FAILURE_SURFACE.PLAN_VERSION_READ)}
                         onRetry={versions.onRetryVersion}
                         placement={ERROR_STATE_PLACEMENT.ROWS}
                       >

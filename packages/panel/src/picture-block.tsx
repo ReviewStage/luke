@@ -168,7 +168,12 @@ export function PictureBlock({
           padding={CARD_PADDING.NONE}
           className={PICTURE_MISSING_CLASS}
         >
-          <PictureStandIn state={PICTURE_STATE.FAILED} words={alt} onRetry={state.retry} />
+          <PictureStandIn
+            state={PICTURE_STATE.FAILED}
+            words={alt}
+            onRetry={state.retry}
+            failure={state.failure}
+          />
         </Card>
         {said}
       </span>

@@ -1,5 +1,7 @@
 import { GAP, SecretField, Stack } from "@luke/ui";
+import type { ShownError } from "@luke/ui/reported-failure";
 import { useState } from "react";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -20,7 +22,7 @@ function Sample({
   label: string;
   saved?: boolean;
   optional?: boolean;
-  error?: string;
+  error?: ShownError;
   start?: string;
 }): React.JSX.Element {
   const [value, setValue] = useState(start);
@@ -46,7 +48,10 @@ function SecretFields(): React.JSX.Element {
           <Sample label="Personal access token" saved />
           <Sample
             label="Anthropic API key"
-            error="Anthropic refused the key. Check it was copied whole, then try again."
+            error={{
+              words: "Anthropic refused the key. Check it was copied whole, then try again.",
+              failure: CATALOG_FAILURE,
+            }}
             start="sk-ant-not-a-real-key"
           />
           <Sample label="Webhook signing secret" optional />

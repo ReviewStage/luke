@@ -2,6 +2,7 @@ import {
   GITHUB_ACCESS,
   type WorkspaceTokenRepository,
 } from "@luke/features/github-repositories-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { noMatchWords, readFailedWords, readingWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -30,6 +31,7 @@ import { PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
+import { confirmFailure, unreadShown } from "../failure-report.js";
 import { SettingsPageLink } from "../open-settings.js";
 import { repositoryMenuRow } from "../repository-row.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
@@ -264,13 +266,16 @@ function TokenRepositoryRow({
   repository: WorkspaceTokenRepository;
   onRemove: () => Promise<string | undefined>;
 }): React.JSX.Element {
-  const removal = useConfirmDialog({ subject: repository.removable, surfaceOpen: true }, () =>
-    onRemove().then(
-      (refused): ActionResult =>
-        refused === undefined
-          ? { status: ACTION_RESULT_STATUS.ACCEPTED }
-          : { status: ACTION_RESULT_STATUS.REJECTED, reason: refused },
-    ),
+  const removal = useConfirmDialog(
+    { subject: repository.removable, surfaceOpen: true },
+    () =>
+      onRemove().then(
+        (refused): ActionResult =>
+          refused === undefined
+            ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+            : { status: ACTION_RESULT_STATUS.REJECTED, reason: refused },
+      ),
+    confirmFailure(FAILURE_SURFACE.WORKSPACE_REPOSITORY_REMOVE),
   );
   const [owner = repository.fullName] = repository.fullName.split("/");
   return (
@@ -338,7 +343,12 @@ export function TokenRepositoryRows({
   if (repositories.read === TOKEN_REPOSITORIES_READ.FAILED) {
     return (
       <SettingsLine>
-        <ErrorState onRetry={repositories.retry}>{WORDS.ROWS_NOT_READ}</ErrorState>
+        <ErrorState
+          failure={unreadShown(FAILURE_SURFACE.WORKSPACE_REPOSITORIES_READ)}
+          onRetry={repositories.retry}
+        >
+          {WORDS.ROWS_NOT_READ}
+        </ErrorState>
       </SettingsLine>
     );
   }

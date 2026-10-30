@@ -3,6 +3,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
+import { UNREPORTED } from "../../reported-failure.js";
 import { SIGN_IN_UNFINISHED, SocialSignInCard } from "./social-sign-in.js";
 
 /**
@@ -64,7 +65,7 @@ test("a sign-in that could not start is said in the alert region", () => {
     createElement(SocialSignInCard, {
       title: "Sign in",
       pending: undefined,
-      failed: true,
+      failed: UNREPORTED.NO_REPORTER,
       onPress: () => undefined,
     }),
   );

@@ -1,4 +1,4 @@
-import type { Layer } from "effect";
+import { Effect, type Layer, Option, Tracer } from "effect";
 import type { HttpRouter } from "effect/http";
 
 /**
@@ -42,3 +42,20 @@ export type WebRoutes<R> = Layer.Layer<
   never,
   HttpRouter.HttpRouter | HttpRouter.Request.From<"Requires", R>
 >;
+
+/**
+ * A request's work with every log line it writes carrying its trace id as
+ * `traceId`, beside Sentry's own lines, which read it from the active span:
+ * the server span Effect's router opens for the request, whose parent is the
+ * caller's `traceparent` where it sent one (`observability/sentry.ts`'s
+ * `sentryTelemetry` continues it), so the caller's failure report and the
+ * server's lines for the same call are found by one id. Work under no span
+ * is left as it is.
+ */
+export const traceIdAnnotated = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  Effect.flatMap(Effect.serviceOption(Tracer.ParentSpan), (span) =>
+    Option.match(span, {
+      onNone: () => effect,
+      onSome: ({ traceId }) => Effect.annotateLogs(effect, "traceId", traceId),
+    }),
+  );

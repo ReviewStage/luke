@@ -38,6 +38,15 @@ import { Redacted, Result, Schema } from "effect";
  * bound beside them, so the seal opens for no other agent's line. The
  * rewrap does not visit those rows, which the Mac's claim clears.
  *
+ * A device agent's state key, the 32 random bytes its saved bundles are
+ * encrypted with, is minted and sealed here (`mintAgentStateKey`) and kept
+ * sealed for the agent's life (`agent_state_key`), with purposes of its own
+ * (`luke/agent-state/*`) and the account and the agent bound beside them.
+ * The key is drawn inside the seal, so it is in the clear only within this
+ * module and in what `openAgentStateKey` answers. The rewrap moves those
+ * rows too (`rewrapAgentStateKey`), so a version leaves the list once it
+ * has run.
+ *
  * Rotation is a new version at the head of the environment's list: new
  * saves wrap under it, and `scripts/rewrap-provider-keys.sh` moves every
  * standing row onto it by unwrapping and rewrapping its data key, never
@@ -67,6 +76,7 @@ const SEAL_PURPOSE = {
   PROVIDER_KEY: { DATA_KEY: "luke/provider-key/data-key", SECRET: "luke/provider-key/key" },
   GITHUB_TOKEN: { DATA_KEY: "luke/github-token/data-key", SECRET: "luke/github-token/token" },
   MAC_LAUNCH: { DATA_KEY: "luke/mac-launch/data-key", SECRET: "luke/mac-launch/secrets" },
+  AGENT_STATE: { DATA_KEY: "luke/agent-state/data-key", SECRET: "luke/agent-state/key" },
 } as const;
 
 /** One kind of secret's purposes: the data key's wrap, and the secret's own seal. */
@@ -123,6 +133,21 @@ const decodeSealedMacLaunch = Schema.decodeUnknownResult(
 
 /** Whose a local agent's launch is: its starter and the agent, which its seal binds. */
 export interface MacLaunchOwner {
+  readonly userId: string;
+  readonly agentId: string;
+}
+
+/** What a row holds of one agent's state key. */
+export interface SealedAgentStateKey {
+  readonly keyVersion: number;
+  /** base64 of nonce, ciphertext, and tag: the data key under the key-encryption key. */
+  readonly sealedDataKey: string;
+  /** base64 of nonce, ciphertext, and tag: the state key, as standard base64 of its bytes, under the data key. */
+  readonly sealedKey: string;
+}
+
+/** Whose a device agent's state key is: its starter and the agent, which its seal binds. */
+export interface AgentStateKeyOwner {
   readonly userId: string;
   readonly agentId: string;
 }
@@ -391,4 +416,54 @@ export function openMacLaunchSecrets(
     read.success.sealed,
   );
   return secrets === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(secrets);
+}
+
+/**
+ * A fresh state key for the agent, 32 random bytes, sealed for its row
+ * under a fresh data key, wrapped under the ring's current version. The
+ * key is drawn here and never answered in the clear.
+ */
+export function mintAgentStateKey(ring: KeyRing, owner: AgentStateKeyOwner): SealedAgentStateKey {
+  const key = randomBytes(SEAL.KEY_BYTES);
+  const { sealed, ...wrapped } = sealSecret(
+    ring,
+    SEAL_PURPOSE.AGENT_STATE,
+    [owner.userId, owner.agentId],
+    Redacted.make(key.toString("base64")),
+  );
+  key.fill(0);
+  return { ...wrapped, sealedKey: sealed };
+}
+
+/** The agent's state key, as standard base64 of its 32 bytes, or unreadable where any part of its seal does not open for this owner. */
+export function openAgentStateKey(
+  ring: KeyRing,
+  owner: AgentStateKeyOwner,
+  sealed: SealedAgentStateKey,
+): Result.Result<Redacted.Redacted<string>, ProviderKeyUnreadable> {
+  const key = openSecret(
+    ring,
+    SEAL_PURPOSE.AGENT_STATE,
+    [owner.userId, owner.agentId],
+    sealed,
+    sealed.sealedKey,
+  );
+  return key === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(key);
+}
+
+/** The agent's sealed state key with its data key wrapped again under the ring's current version, the key itself untouched, or unreadable where its wrap does not open for this owner. */
+export function rewrapAgentStateKey(
+  ring: KeyRing,
+  owner: AgentStateKeyOwner,
+  sealed: SealedAgentStateKey,
+): Result.Result<SealedAgentStateKey, ProviderKeyUnreadable> {
+  const wrapped = rewrapSecret(
+    ring,
+    SEAL_PURPOSE.AGENT_STATE,
+    [owner.userId, owner.agentId],
+    sealed,
+  );
+  return wrapped === undefined
+    ? Result.fail(PROVIDER_KEY_UNREADABLE)
+    : Result.succeed({ ...wrapped, sealedKey: sealed.sealedKey });
 }

@@ -8,6 +8,7 @@ import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
 import { openLukeFromMac } from "./open-luke";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
+import { UNREPORTED } from "@luke/ui/reported-failure";
 import { mountPrerenderedPage } from "./mount-page";
 
 // The provider client forwards the authorization server's signed `oauth_query`
@@ -45,7 +46,7 @@ function SignIn(): React.JSX.Element {
       mark={<AuthMark provider={provider} tone={provider ? undefined : LANDING_TONE.DANGER} />}
       title={provider ? "Sign in to Luke" : "Luke could not continue"}
       description={provider ? undefined : "Start sign-in again."}
-      error={failed ? SIGN_IN_UNFINISHED : undefined}
+      error={failed ? { words: SIGN_IN_UNFINISHED, failure: UNREPORTED.NO_REPORTER } : undefined}
       action={provider ? undefined : openLukeFromMac()}
       footnote={provider ? "You can close this window after Luke confirms the sign-in." : undefined}
     >

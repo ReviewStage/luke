@@ -6,14 +6,10 @@ import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
   INBOX_FIELD,
-  INBOX_IMAGE_TYPE,
   INBOX_REPLY,
   INBOX_STATUS,
   type InboxItem,
-  type InboxMessage,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
-import { pageFrameUrl } from "@luke/features/page-frame";
 import { TASK_STATUS } from "@luke/features/task-wire";
 import type { AppInboxTask, AppInboxTaskHolding } from "@luke/host/app-state";
 import { Effect } from "effect";
@@ -37,12 +33,12 @@ import {
   confirmClose,
   EXPIRY,
   EXPIRY_ASK,
-  FUNNEL,
   foldedCounts,
   GROUPING_KEY,
   headerNamed,
   headTitle,
   heardName,
+  heardOf,
   hoveredCard,
   INVITES,
   inOrder,
@@ -78,7 +74,6 @@ import {
   SHOW_KEY,
   SORT_KEY,
   SWEEP_AGENT,
-  saying,
   settle,
   showScope,
   standKeymap,
@@ -87,6 +82,7 @@ import {
   takenCloses,
   threadItem,
   threadMessage,
+  titleOf,
   viewItem,
   waitingTaskless,
   world,
@@ -163,186 +159,6 @@ test("the list holds every plan's items under the sidebar's group header for eac
   assert.deepEqual(listed(page), oneRun);
 });
 
-/** Presses Media previews in the view's menu, handing back whether it stood checked before. */
-function toggleMediaPreviews(page: HTMLElement): string | null {
-  const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
-  act(() => options?.click());
-  const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')].find(
-    (each) => each.textContent?.includes("Media previews"),
-  );
-  assert.ok(item, "the view's menu offers Media previews");
-  const checked = item.getAttribute("aria-checked");
-  act(() => item.click());
-  return checked;
-}
-
-test("Second line in the view's menu, checked at first, makes every row one line once unchecked, its title alone, and the choice outlives a relaunch", async () => {
-  let { page } = mount();
-  await settle();
-  const described = (title: string) =>
-    rowNamed(page, title).querySelector(".luke-list-row-description") !== null;
-  assert.ok(described("Alert at 80%?"), "a row has its second line at first");
-  const toggle = () => {
-    const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
-    act(() => options?.click());
-    const item = [
-      ...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]'),
-    ].find((each) => each.textContent?.includes("Second line"));
-    assert.ok(item, "the view's menu offers Second line");
-    const checked = item.getAttribute("aria-checked");
-    act(() => item.click());
-    return checked;
-  };
-  assert.equal(toggle(), "true");
-  await settle();
-  assert.equal(described("Alert at 80%?"), false, "unchecked, the row is one line");
-  assert.equal(described("Expire after 7 days?"), false);
-
-  act(() => world.root?.unmount());
-  world.root = undefined;
-  ({ page } = mount());
-  await settle();
-  assert.equal(described("Alert at 80%?"), false, "the choice outlives a relaunch");
-});
-
-test("rows show no media until Media previews is checked in the view's menu, then the pictures and pages each item carries under its preview, and the choice outlives a relaunch", async () => {
-  const shot = {
-    attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c70",
-    name: "The chart.png",
-    mediaType: INBOX_IMAGE_TYPE.PNG,
-  };
-  const funnel = linkOf({ kind: LINK_PLACE.PAGE, planId: BILLING.id, pageId: FUNNEL.id }, "acme");
-  world.inboxes.set(BILLING.id, [
-    saying(THRESHOLD, `Compare [@Invite funnel](${funnel}).`, [shot]),
-    RETRY,
-  ]);
-  const mediaOf = (page: HTMLElement, title: string) => {
-    const strip = rowNamed(page, title).querySelector(".luke-list-row-attachments");
-    if (strip === null) return null;
-    return [...strip.children].map(
-      (tile) =>
-        tile.querySelector("img")?.getAttribute("src") ??
-        tile.querySelector("iframe")?.getAttribute("src") ??
-        "",
-    );
-  };
-  const landImages = async () => {
-    await settle();
-    for (const land of world.imageReads.splice(0)) land();
-    await settle();
-  };
-  let { page } = mount();
-  await landImages();
-  assert.equal(mediaOf(page, "Alert at 80%?"), null, "no media stand until asked for");
-
-  assert.equal(toggleMediaPreviews(page), "false");
-  await landImages();
-  assert.deepEqual(mediaOf(page, "Alert at 80%?"), [
-    pageFrameUrl({ taskId: BILLING.id, pageId: FUNNEL.id, version: FUNNEL.version }),
-    "data:image/png;base64,iVBORw0KGgo=",
-  ]);
-  assert.equal(mediaOf(page, "Expire after 7 days?"), null, "an item carrying none shows none");
-  assert.equal(
-    rowNamed(page, "Alert at 80%?").querySelector(".luke-list-row-description")?.textContent,
-    "Retry 3 times over an hour (recommended) / Retry once",
-    "the preview's words stand over the media",
-  );
-
-  act(() => world.root?.unmount());
-  world.root = undefined;
-  ({ page } = mount());
-  await landImages();
-  assert.equal(mediaOf(page, "Alert at 80%?")?.length, 2);
-  assert.equal(toggleMediaPreviews(page), "true");
-  assert.equal(mediaOf(page, "Alert at 80%?"), null);
-});
-
-test("a row's page is drawn at its newest version, read again once its item changes, as when its agent shows the page anew, holding its place until each version loads", async () => {
-  const funnel = linkOf({ kind: LINK_PLACE.PAGE, planId: INVITES.id, pageId: FUNNEL.id }, "acme");
-  const words = `See [the funnel](${funnel}).`;
-  world.inboxes.set(INVITES.id, [saying(EXPIRY, words)]);
-  world.taskPages.set(INVITES.id, [FUNNEL]);
-  const frame = (page: HTMLElement) =>
-    rowNamed(page, "Expire after 7 days?").querySelector("iframe")?.getAttribute("src");
-  const { page } = mount();
-  await settle();
-  toggleMediaPreviews(page);
-  await settle();
-  assert.equal(
-    frame(page),
-    pageFrameUrl({ taskId: INVITES.id, pageId: FUNNEL.id, version: FUNNEL.version }),
-  );
-  const tile = () =>
-    rowNamed(page, "Expire after 7 days?").querySelector("iframe")?.parentElement?.dataset.loaded;
-  const loads = () =>
-    act(() => {
-      rowNamed(page, "Expire after 7 days?")
-        .querySelector("iframe")
-        ?.dispatchEvent(new Event("load", { bubbles: false }));
-    });
-  loads();
-  assert.equal(tile(), "true");
-
-  world.taskPages.set(INVITES.id, [{ ...FUNNEL, version: 3 }]);
-  world.inboxes.set(INVITES.id, [{ ...saying(EXPIRY, words), updatedAt: 6_000 }]);
-  act(() =>
-    world.setHolding([
-      { taskId: INVITES.id, items: 1, updatedAt: 6_000 },
-      { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
-    ]),
-  );
-  await settle();
-  assert.equal(frame(page), pageFrameUrl({ taskId: INVITES.id, pageId: FUNNEL.id, version: 3 }));
-  assert.equal(tile(), "false", "the new version holds its place until it loads");
-  loads();
-  assert.equal(tile(), "true");
-});
-
-test("a row's picture is let go once its item is reposted carrying no media, so the picture shown again is read anew and holds its place until it lands", async () => {
-  const shot = {
-    attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c73",
-    name: "The chart.png",
-    mediaType: INBOX_IMAGE_TYPE.PNG,
-  };
-  const words = "Here is the chart.";
-  const picture = (page: HTMLElement) =>
-    rowNamed(page, "Expire after 7 days?")
-      .querySelector(".luke-list-row-attachments img")
-      ?.getAttribute("src");
-  const repost = async (files: InboxMessage["files"], revision: number, updatedAt: number) => {
-    world.inboxes.set(INVITES.id, [{ ...saying(EXPIRY, words, files), revision, updatedAt }]);
-    act(() =>
-      world.setHolding([
-        { taskId: INVITES.id, items: 1, updatedAt },
-        { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
-      ]),
-    );
-    await settle();
-  };
-  const land = async () => {
-    for (const each of world.imageReads.splice(0)) each();
-    await settle();
-  };
-  world.inboxes.set(INVITES.id, [saying(EXPIRY, words, [shot])]);
-  const { page } = mount();
-  await settle();
-  toggleMediaPreviews(page);
-  await settle();
-  await land();
-  assert.equal(picture(page), "data:image/png;base64,iVBORw0KGgo=");
-
-  await repost([], 2, 6_000);
-  assert.equal(picture(page), undefined, "the reposted item carries no media");
-  await repost([shot], 3, 7_000);
-  assert.equal(
-    picture(page),
-    undefined,
-    "the picture let go holds its place until it is read anew",
-  );
-  await land();
-  assert.equal(picture(page), "data:image/png;base64,iVBORw0KGgo=");
-});
-
 /** ⌘-clicks the row of the item so titled, as a Mac's list chooses a row in or out. */
 function commandClick(page: HTMLElement, title: string): void {
   act(() => {
@@ -355,8 +171,8 @@ function commandClick(page: HTMLElement, title: string): void {
 /** The titles of the rows the list holds chosen, in the order drawn. */
 function picked(page: HTMLElement): string[] {
   return [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main")]
-    .filter((row) => row.getAttribute("aria-description") === "Selected")
-    .map((row) => row.querySelector(ROW_TITLE)?.textContent ?? "");
+    .filter((row) => heardOf(row.getAttribute("aria-describedby")).startsWith("Selected, "))
+    .map(titleOf);
 }
 
 /** The selection's bar under the list, or none while nothing is chosen. */
@@ -513,7 +329,7 @@ test("a plain click still opens its item, leaving what is chosen as it stands", 
 test("a plan main says changed is read again, so an item answered on another Mac lists as settled, gray where it stood while the pointer is over the list and sorted anew once it leaves; To do then lists only what still needs you, and the choice outlives a relaunch", async () => {
   let { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
-  const list = page.querySelector('nav[aria-label="Inbox items"]');
+  const list = page.querySelector('nav[aria-label^="Inbox items"]');
   assert.ok(list !== null);
   pointerCross(document.body, list);
   world.inboxes.set(INVITES.id, [
@@ -550,14 +366,14 @@ test("a plan main says changed is read again, so an item answered on another Mac
 
   showScope(page, "Needs you");
   assert.deepEqual(scopes(page), ["Inbox", "[Needs you]", "All"]);
-  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ Alert at 80%?"]);
 
   act(() => world.root?.unmount());
   world.root = undefined;
   ({ page } = mount([], { chosen: ON_THRESHOLD }));
   await settle();
   assert.deepEqual(scopes(page), ["Inbox", "[Needs you]", "All"]);
-  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ Alert at 80%?"]);
 
   showScope(page, "All");
   assert.deepEqual(scopes(page), ["Inbox · All", "Needs you", "[All]"]);
@@ -633,7 +449,7 @@ test("a fresh profile opens the Inbox on To do, grouped by nothing, None first a
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   assert.deepEqual(scopes(page), ["Inbox", "[Needs you]", "All"]);
-  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["▸ Expire after 7 days?", "Alert at 80%?"]);
   const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   act(() => options?.click());
   act(() => viewItem("Group by").click());
@@ -680,7 +496,7 @@ test("a task done or canceled keeps its items listed and counted as any other's,
   await settle();
   assert.deepEqual(scopes(page), ["Inbox", "[Needs you]", "All"]);
   const rows = listed(page);
-  for (const row of ["*Alert at 80%?", "*Expire after 7 days?", "*Quarantine the flaky test?"]) {
+  for (const row of ["Alert at 80%?", "Expire after 7 days?", "Quarantine the flaky test?"]) {
     assert.ok(
       rows.some((each) => each.replace(/^▸ /u, "") === row),
       `To do lists ${row}: ${rows.join(" | ")}`,
@@ -777,49 +593,42 @@ test("Order by in the view's menu offers Latest first and Oldest first, which li
   assert.equal(viewItem("Latest first").getAttribute("aria-checked"), "true");
 });
 
-test("grouped by person or by nothing, each row names its task on a line of its own between its title and its preview, never on its title's line, which the title keeps whole, nor in the preview, which keeps its line whole; grouped by task, the header names it and the rows name none", async () => {
+test("in every grouping, each row names its task on its first line with its time at that line's end, then its title on a line of its own, then its preview", async () => {
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
   const { page } = mount();
   await settle();
-  const chips = () =>
+  const lines = () =>
     ["Alert at 80%?", "Expire after 7 days?"].map((title) => {
       const row = rowNamed(page, title);
+      const head = row.querySelector(".luke-list-row-head");
       return {
-        chip: row.querySelector('.luke-list-row-text > .luke-list-row-lead[data-at="line"]')
-          ?.textContent,
-        firstLine: row.querySelector(".luke-list-row-head")?.textContent?.includes(title)
-          ? row.querySelector(".luke-list-row-head .luke-list-row-lead, .home-row-context")
-          : "the title is not on the first line",
+        task: head?.querySelector('.luke-list-row-lead[data-at="above"]')?.textContent,
+        time: head?.querySelector(".home-row-meta time") !== null,
+        titleOnFirstLine: head?.textContent?.includes(title),
         preview: row.querySelector(".luke-list-row-description")?.textContent,
       };
     });
-  assert.deepEqual(
-    chips().map(({ chip }) => chip),
-    [undefined, undefined],
-  );
+  const expected = [
+    {
+      task: "Billing usage alerts",
+      time: true,
+      titleOnFirstLine: false,
+      preview: "Retry 3 times over an hour (recommended) / Retry once",
+    },
+    {
+      task: "Invites",
+      time: true,
+      titleOnFirstLine: false,
+      preview: "Retry 3 times over an hour (recommended) / Retry once",
+    },
+  ];
+  assert.deepEqual(lines(), expected, "grouped by task, the rows still name it");
 
   chooseView(page, "Group by", "None");
-  assert.deepEqual(chips(), [
-    {
-      chip: "Billing usage alerts",
-      firstLine: null,
-      preview: "Retry 3 times over an hour (recommended) / Retry once",
-    },
-    {
-      chip: "Invites",
-      firstLine: null,
-      preview: "Retry 3 times over an hour (recommended) / Retry once",
-    },
-  ]);
+  assert.deepEqual(lines(), expected);
 
   chooseView(page, "Group by", "Person");
-  assert.deepEqual(
-    chips().map(({ chip, firstLine }) => [chip, firstLine]),
-    [
-      ["Billing usage alerts", null],
-      ["Invites", null],
-    ],
-  );
+  assert.deepEqual(lines(), expected);
 });
 
 test("a folded plan counts what in it needs you, and one where nothing does counts nothing", async () => {
@@ -907,6 +716,11 @@ test("an Inbox with nothing in it stands its empty state in the pane beside the 
   assert.deepEqual(
     [emptyStateIn(page, ".inbox-tasks"), emptyStateIn(page, ".inbox-view-items")],
     [null, "Nothing needs you"],
+  );
+  assert.doesNotMatch(
+    page.querySelector(".inbox-tasks")?.textContent ?? "",
+    /Nothing needs you/u,
+    "the list beside the pane says nothing, the pane saying it once",
   );
   const offered = emptyStateAction(page, ".inbox-view-items");
   assert.equal(offered?.textContent, "New task", "the empty Inbox offers New task");
@@ -1068,9 +882,9 @@ test("one column wide, an answered item that To do draws no row for shows no cou
   showScope(page, "Needs you");
   assert.deepEqual(listed(page), [
     "# Invites",
-    "*Expire after 7 days?",
+    "Expire after 7 days?",
     "# Billing usage alerts",
-    "*Alert at 80%?",
+    "Alert at 80%?",
   ]);
   layOut(page, 800);
   assert.equal(readTitle(page), "How is a failed email retried?");
@@ -1095,7 +909,7 @@ test("on To do, a focused row whose item is answered on another Mac leaves the k
     ]),
   );
   await settle();
-  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ Alert at 80%?"]);
   assert.ok(
     document.activeElement === page.querySelector('button[aria-label="View options"]'),
     "the keyboard is on View options",
@@ -1126,7 +940,7 @@ test("on a phone, a focused row whose item is answered elsewhere leaves the keyb
     ]),
   );
   await settle();
-  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ Alert at 80%?"]);
   assert.ok(document.activeElement === more(), "the keyboard is on the head's ⋯");
 });
 
@@ -1192,7 +1006,7 @@ test("on To do, an item answered on another Mac slides out from where its row st
   act(() => {
     for (const fade of fades) fade.finish();
   });
-  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ Alert at 80%?"]);
   assert.equal(page.querySelector("[data-leaving]"), null);
 });
 
@@ -1211,7 +1025,7 @@ function pending(): PendingRead {
   return { promise, settle };
 }
 
-test("an item's row reads as two lines, its title and time over the last word in its thread: what an open item asks, an answer by who gave it, You for the reader, a teammate's latest message by their name, and the agent's words alone where it took its ask back", async () => {
+test("an item's row reads as its task line and time, then its title, over the last word in its thread: what an open item asks, an answer by who gave it, You for the reader, a teammate's latest message by their name, and the agent's words alone where it took its ask back", async () => {
   const NIGHT = asking(
     item("a1b2c3d4-0000-4000-8000-000000000004", "Page on-call at night?", 2_000),
     { type: INBOX_ASK.DO, steps: ["Add the **rota** to PagerDuty."] },
@@ -1327,7 +1141,7 @@ function unreadOf(page: HTMLElement, title: string): boolean | "?" {
   const marks = [
     row.querySelector(".luke-unread-gutter .luke-unread-dot") !== null,
     row.closest("li")?.dataset.unread === "true",
-    [...row.querySelectorAll(".luke-list-row-meta .luke-visually-hidden")].some(
+    [...row.querySelectorAll(`${ROW_TITLE} .luke-visually-hidden`)].some(
       (each) => each.textContent === "Unread",
     ),
   ];
@@ -1336,6 +1150,71 @@ function unreadOf(page: HTMLElement, title: string): boolean | "?" {
 }
 
 /** The mark a row's hover offers over its time. */
+/** The row of the item so titled as a reader hears it: its name, then its description. */
+function heardRow(page: HTMLElement, title: string): [string, string] {
+  const row = rowNamed(page, title);
+  return [
+    heardOf(row.getAttribute("aria-labelledby")),
+    heardOf(row.getAttribute("aria-describedby")),
+  ];
+}
+
+/** Expire after 7 days? as an unread notice whose message shows its code under its first line. */
+const CODED: InboxItem = {
+  ...EXPIRY,
+  unread: true,
+  thread: [
+    threadMessage(
+      "a1b2c3d4-0000-4000-8000-0000000000c1",
+      "agent",
+      [
+        "A link opened twice adds them twice:",
+        "",
+        "```ts",
+        "await db.members.add(invite);",
+        "```",
+      ].join("\n"),
+      4_000,
+    ),
+  ],
+};
+
+test("a row is heard as its task, Unread, its title, and its time, and described by its latest message's first line alone, never the code under it", async () => {
+  world.inboxes.set(INVITES.id, [CODED]);
+  const { page } = mount();
+  await settle();
+  showScope(page, "Needs you");
+  const time = rowNamed(page, CODED.title).querySelector("time")?.textContent;
+  assert.deepEqual(heardRow(page, CODED.title), [
+    `Invites Unread Expire after 7 days? ${time}`,
+    "A link opened twice adds them twice:",
+  ]);
+});
+
+test("a row says Needs you to a reader only outside Needs you, whose name says it of every row", async () => {
+  world.inboxes.set(INVITES.id, [CODED]);
+  const { page } = mount();
+  await settle();
+  const time = rowNamed(page, CODED.title).querySelector("time")?.textContent;
+  showScope(page, "All");
+  assert.equal(
+    page.querySelector("nav.inbox-tasks")?.getAttribute("aria-label"),
+    "Inbox items",
+    "the head names All itself",
+  );
+  assert.equal(
+    heardRow(page, CODED.title)[0],
+    `Invites Unread Expire after 7 days? Needs you ${time}`,
+  );
+  showScope(page, "Needs you");
+  assert.equal(heardRow(page, CODED.title)[0], `Invites Unread Expire after 7 days? ${time}`);
+  assert.equal(
+    page.querySelector("nav.inbox-tasks")?.getAttribute("aria-label"),
+    "Inbox items · Needs you",
+    "the list says it once, since the head names no scope",
+  );
+});
+
 test("an unread item wears the blue dot in its row's gutter, its title in the unread weight, and says Unread to a reader; opening it marks it read at once, and the Inbox opening, choosing nothing, marks none", async () => {
   world.inboxes.set(BILLING.id, [
     { ...THRESHOLD, unread: true },
@@ -1450,9 +1329,6 @@ test("Mark all as read in the view's menu, under Group by, marks every unread it
     "—",
     "Whose",
     "—",
-    "Second line",
-    "Media previews",
-    "—",
     "Mark all as read",
   ]);
   act(() => menuItem("Mark all as read").click());
@@ -1533,6 +1409,7 @@ test("a row swiped right marks its item: a long swipe marks an unread item read 
   await settle();
   const button = item.querySelector<HTMLButtonElement>("button[data-swipe-act]");
   assert.equal(button?.textContent, "Unread");
+  assert.equal(button?.getAttribute("aria-label"), "Mark as unread", "named as the menu names it");
   act(() => button?.click());
   await settle();
   assert.deepEqual(world.readMarks, [`read:${RETRY.id}`, `unread:${RETRY.id}`]);
@@ -1687,6 +1564,26 @@ test("a teammate chosen in Whose with nothing in the scope shown says so, and of
   act(() => everyone?.click());
   assert.equal(whoseChip(page), null);
   assert.equal(listed(page).length, 5);
+});
+
+test("Me chosen in Whose with nothing of the reader's in the scope shown says so in the reader's words", async () => {
+  world.listedWorkspace = SHARED_WORKSPACE;
+  world.members = SHARED_MEMBERS;
+  for (const [holder, items] of world.inboxes) {
+    world.inboxes.set(
+      holder,
+      items.map((item) => ({ ...item, startedBy: TEAMMATE })),
+    );
+  }
+  const { page } = mount();
+  await settle();
+  chooseView(page, "Whose", "Me");
+  assert.deepEqual(listed(page), []);
+  assert.deepEqual(listEmpty(page), [
+    undefined,
+    "Nothing in the inbox is yours",
+    "Show everyone's items",
+  ]);
 });
 
 test("grouped by status, what needs you stands under the attention mark, then what waits on a teammate, then what is answered, each folding as a task's group does, a folded group counting what in it needs you and its rows passed over by K and J", async () => {

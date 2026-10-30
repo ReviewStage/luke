@@ -1,5 +1,7 @@
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { FailureNote } from "@luke/ui";
 import { createContext, type ReactNode, useContext } from "react";
+import { failureShown } from "../failure-report.js";
 
 /**
  * undelivered-mark.tsx -- the quiet mark under a line the developer sent that did not go: "Not delivered" where the agent refused it for good, "Not sent" with Retry where it was refused for now, each a `FailureNote`.
@@ -42,6 +44,30 @@ const NO_MARKS: SentLineMarks = {
 
 const MarksContext = createContext<SentLineMarks>(NO_MARKS);
 
+/** What a line that did not go is reported under: its condition, as its code, one for each line. */
+interface LineCause {
+  readonly code: typeof FAILURE_CONDITION.REFUSED | typeof FAILURE_CONDITION.NOT_KEPT;
+}
+
+/**
+ * Each line's cause by its id, refused for good or for now, so a line that
+ * did not go is a failure of its own and two such lines are two, while one
+ * line drawn again is the same.
+ */
+const LINE_CAUSES = {
+  [FAILURE_CONDITION.REFUSED]: new Map<string, LineCause>(),
+  [FAILURE_CONDITION.NOT_KEPT]: new Map<string, LineCause>(),
+} as const;
+
+/** The cause the line drawn under `messageId` is reported under, kept for it. */
+function lineCause(messageId: string, code: LineCause["code"]): LineCause {
+  const kept = LINE_CAUSES[code].get(messageId);
+  if (kept !== undefined) return kept;
+  const made = { code };
+  LINE_CAUSES[code].set(messageId, made);
+  return made;
+}
+
 /** Hands an agent's transcript the lines that did not go. */
 export const UndeliveredLines = MarksContext.Provider;
 
@@ -65,8 +91,28 @@ export function useLineMarked(messageId: string): boolean {
 export function UndeliveredMark({ messageId }: { messageId: string }): ReactNode {
   const marks = useContext(MarksContext);
   if (marks.undelivered.has(messageId)) {
-    return <FailureNote>{UNDELIVERED_WORDS}</FailureNote>;
+    return (
+      <FailureNote
+        failure={failureShown({
+          surface: FAILURE_SURFACE.AGENT_SEND,
+          cause: lineCause(messageId, FAILURE_CONDITION.REFUSED),
+          refused: true,
+        })}
+      >
+        {UNDELIVERED_WORDS}
+      </FailureNote>
+    );
   }
   if (!marks.unsent.has(messageId)) return null;
-  return <FailureNote onRetry={() => marks.retry(messageId)}>{UNSENT_WORDS}</FailureNote>;
+  return (
+    <FailureNote
+      failure={failureShown({
+        surface: FAILURE_SURFACE.AGENT_SEND,
+        cause: lineCause(messageId, FAILURE_CONDITION.NOT_KEPT),
+      })}
+      onRetry={() => marks.retry(messageId)}
+    >
+      {UNSENT_WORDS}
+    </FailureNote>
+  );
 }

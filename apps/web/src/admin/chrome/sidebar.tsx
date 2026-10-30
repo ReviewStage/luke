@@ -42,6 +42,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
+import { UNREPORTED } from "@luke/ui/reported-failure";
 import { LogOutIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -161,7 +162,9 @@ function AdminSidebar({
       </SidebarPlaces>
       <div className="min-h-0 flex-1" />
       <SidebarFoot>
-        {refused ? <FailureNote>{SIGN_OUT_REFUSED}</FailureNote> : null}
+        {refused ? (
+          <FailureNote failure={UNREPORTED.NO_REPORTER}>{SIGN_OUT_REFUSED}</FailureNote>
+        ) : null}
         <SidebarAccountRow>
           {account === undefined ? null : (
             <AccountFoot account={account} shown={inSight} onSignOut={signOut} />

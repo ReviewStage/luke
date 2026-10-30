@@ -1,5 +1,6 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { remedyLabel } from "@luke/features/failure-remedy";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   TERMINAL_ASK,
   TERMINAL_TARGET,
@@ -118,10 +119,25 @@ export function TerminalCommands({
       if (failure === undefined) return;
       const label = remedyLabel(failure);
       const remedy = repositoryRemedy(failure, startAgent);
+      const shown = {
+        surface: FAILURE_SURFACE.AGENT_START,
+        cause: failure.cause ?? { failure: failure.reason },
+        about: { taskId: "taskId" in failure ? failure.taskId : undefined },
+      };
       toast(
         label === undefined || remedy === undefined
-          ? { words: failure.text, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }
-          : { words: failure.text, tone: STATUS_TONE.DANGER, action: { label, onPress: remedy } },
+          ? {
+              words: failure.text,
+              tone: STATUS_TONE.DANGER,
+              hold: TOAST_HOLD.FAILED,
+              failure: shown,
+            }
+          : {
+              words: failure.text,
+              tone: STATUS_TONE.DANGER,
+              action: { label, onPress: remedy },
+              failure: shown,
+            },
       );
     });
   };

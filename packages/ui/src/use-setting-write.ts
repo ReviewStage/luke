@@ -9,11 +9,18 @@ function failureWords(error: unknown): string {
   return error instanceof Error && error.message !== "" ? error.message : WRITE_FAILED_WORDS;
 }
 
+/** Why a setting's write was refused: its sentence, and the answer or the error that refused it, the same object for as long as the refusal stands. */
+export interface SettingRefusal {
+  readonly words: string;
+  readonly cause: unknown;
+}
+
 /**
  * The round trip a settings control waits on. Each change is asked of the
  * store, the control rests until it answers rather than claiming a state it
  * may not get, and a refusal is kept here — under this control — rather than
- * on a line shared with every other row. One write in flight must not still
+ * on a line shared with every other row, with the answer or the error that
+ * refused it, which the row reports as it says it. One write in flight must not still
  * another control.
  *
  * Some choices cannot be refused (the voice, the pace): those answer void,
@@ -26,7 +33,7 @@ export function useSettingWrite<Value>(
   onChange: (value: Value) => void | Promise<ActionResult>,
 ) {
   const [busy, setBusy] = useState(false);
-  const [rejection, setRejection] = useState<string>();
+  const [rejection, setRejection] = useState<SettingRefusal>();
   const [saves, setSaves] = useState(0);
   const run = (value: Value) => {
     const reply = onChange(value);
@@ -37,19 +44,19 @@ export function useSettingWrite<Value>(
     void reply.then(
       (result) => {
         const accepted = result.status === ACTION_RESULT_STATUS.ACCEPTED;
-        setRejection(accepted ? undefined : result.reason);
+        setRejection(accepted ? undefined : { words: result.reason, cause: result });
         if (accepted) setSaves((landed) => landed + 1);
         setBusy(false);
       },
       (error: unknown) => {
-        setRejection(failureWords(error));
+        setRejection({ words: failureWords(error), cause: error });
         setBusy(false);
       },
     );
   };
   return { busy, rejection, saves, run } satisfies {
     busy: boolean;
-    rejection: string | undefined;
+    rejection: SettingRefusal | undefined;
     saves: number;
     run: (value: Value) => void;
   };
@@ -59,7 +66,8 @@ export function useSettingWrite<Value>(
  * The round trip a switch waits on, answered before it comes. The switch
  * shows the value pressed at once, from a local one, rather than resting
  * until the store answers; a write the store refuses, or whose call
- * rejects, puts the value back and says why through `onRefused`, and the
+ * rejects, puts the value back and says why through `onRefused`, with the
+ * answer or the error that refused it, and the
  * switch is never disabled for it, so nothing locks it. The local value is
  * dropped once the stored one agrees, so the switch then follows the store
  * again, other windows' changes included.
@@ -73,7 +81,7 @@ export function useOptimisticSettingWrite<Value>(
   stored: Value,
   // biome-ignore lint/suspicious/noConfusingVoidType: a draft's switch cannot be refused, so its change answers void
   onChange: (value: Value) => void | Promise<ActionResult>,
-  onRefused: (reason: string) => void,
+  onRefused: (reason: string, cause: unknown) => void,
 ) {
   const [ahead, setAhead] = useState<{ readonly value: Value }>();
   const [saves, setSaves] = useState(0);
@@ -86,16 +94,16 @@ export function useOptimisticSettingWrite<Value>(
     if (!(reply instanceof Promise)) return;
     const write = ++newest.current;
     setAhead({ value });
-    const refused = (reason: string) => {
-      onRefused(reason);
+    const refused = (reason: string, cause: unknown) => {
+      onRefused(reason, cause);
       if (write === newest.current) setAhead(undefined);
     };
     void reply.then(
       (result) => {
         if (result.status === ACTION_RESULT_STATUS.ACCEPTED) setSaves((landed) => landed + 1);
-        else refused(result.reason);
+        else refused(result.reason, result);
       },
-      (error: unknown) => refused(failureWords(error)),
+      (error: unknown) => refused(failureWords(error), error),
     );
   };
   return { value: ahead === undefined ? stored : ahead.value, saves, run };

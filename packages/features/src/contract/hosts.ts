@@ -2,8 +2,7 @@
  * hosts.ts -- the account's hosts as Settings › Hosts draws them (`../host-wire.ts`): listed, removed, and the install tokens that add them kept and revoked.
  *
  * Every procedure is the account's own, on its sign-in or its browser
- * session, and answers nothing to an account with the `local-agents`
- * experiment off. The outputs are the wire schemas flipped, so oRPC's output
+ * session. The outputs are the wire schemas flipped, so oRPC's output
  * check encodes the handler's value into the bytes the wire carries
  * (`packages/service/src/orpc/base.ts`).
  */

@@ -57,6 +57,7 @@ import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   AGENT_BOUNDS,
   AGENT_CURSOR_START,
+  AGENT_MACHINE,
   AGENT_STATUS,
   type AgentMessagesAnswer,
   type AgentNewestAnswer,
@@ -77,6 +78,7 @@ import { middlewareGen } from "@orpc/experimental-effect";
 import { ORPCError } from "@orpc/server";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { unparsedWire } from "../core.js";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { afterResponse } from "../http/after-response.js";
 import {
   HOSTED_REFUSAL,
@@ -395,10 +397,19 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       .send.effect(function* ({ input, context }) {
         const { agent } = yield* reachedAgent(context.userId, input.params.id);
         const eve = yield* eveFor<EveTypedTurn>(seams, context.request, context.userId);
-        const { txid } = yield* steerAgentWritten(eve, writer, context.userId, agent, {
+        const { txid, sent } = yield* steerAgentWritten(eve, writer, context.userId, agent, {
           ...input.body,
           sender: { kind: MESSAGE_SENDER.MEMBER, userId: context.userId },
         });
+        // A member's own message, counted under them once the line is written; a repeat under its key is not.
+        if (sent !== undefined) {
+          yield* recordServerEvent(SERVER_EVENT.MESSAGE_SEND, context.userId, {
+            runtime: sent.runtime,
+            machine: agent.machine ?? AGENT_MACHINE.VERCEL,
+            agent_kind: agent.kind,
+            turn_running: sent.turnRunning,
+          });
+        }
         const summary = yield* summaryOf(context.userId, agent);
         // The transaction that wrote the line, which the host waits to see live before it confirms the send.
         return txid === undefined ? { agent: summary } : { agent: summary, txid };

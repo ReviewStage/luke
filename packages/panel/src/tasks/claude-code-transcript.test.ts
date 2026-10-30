@@ -321,42 +321,16 @@ test("Claude Code's task calls are drawn as the agent's to-do list as it stood a
   }
 });
 
-const LUKE_CALLS: readonly {
-  readonly tool: string;
-  readonly input: WireRecord;
-  readonly output: WireRecord;
-  readonly target: ToolTarget;
-}[] = [
-  {
-    tool: "read_inbox",
-    input: {},
-    output: { status: "accepted", inbox: [] },
-    target: { kind: TOOL_TARGET.INBOX },
-  },
-  {
-    tool: "edit_plan",
-    input: { notes: [{ kind: "add", section: "Goal", text: "Export invoices" }] },
-    output: { status: "accepted" },
-    target: { kind: TOOL_TARGET.PLAN },
-  },
-  {
-    tool: "show_page",
-    input: { title: "Rounding explorer", path: "rounding.html" },
-    output: { status: "accepted", page: { id: "page-1", version: 1 } },
-    target: { kind: TOOL_TARGET.PAGE, page: "page-1" },
-  },
-];
-
-for (const call of LUKE_CALLS) {
-  test(`Luke's ${call.tool}, called over its MCP server and stored under its own name, opens what it always opens`, () => {
-    const { container, opened } = drawn(storedPart(call.tool, call.input, call.output));
-    const row =
-      container.querySelector<HTMLButtonElement>(`button[data-call-id="toolu_${call.tool}"]`) ??
-      assert.fail("the row is a button");
-    act(() => row.click());
-    assert.deepEqual(opened, [call.target]);
-  });
-}
+test("Luke's read_agent, called over its MCP server and stored under its own name, opens what it always opens", () => {
+  const { container, opened } = drawn(
+    storedPart("read_agent", { agentId: "agent-7" }, { status: "running" }),
+  );
+  const row =
+    container.querySelector<HTMLButtonElement>('button[data-call-id="toolu_read_agent"]') ??
+    assert.fail("the row is a button");
+  act(() => row.click());
+  assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: "agent-7" }]);
+});
 
 test("an agent paid for by a plan says the plan where an agent on a key says dollars", () => {
   const usage = { inputTokens: 1_200_000, outputTokens: 30_000, costUsd: 2.41 };

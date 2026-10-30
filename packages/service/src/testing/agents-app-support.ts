@@ -245,6 +245,8 @@ export function fakeEve(
   options: {
     readonly reachable?: boolean;
     readonly cancels?: boolean;
+    /** Whether eve answers every cancel that the turn it names had already ended. */
+    readonly turnEnded?: boolean;
     readonly sends?: SendAnswer;
     /** How many cancels eve holds every cancel's answer for, so a caller asking them one at a time never hears back. */
     readonly cancelsTogether?: number;
@@ -316,7 +318,9 @@ export function fakeEve(
           Effect.andThen(together.await, options.cancelling ?? Effect.void),
           options.cancels === false
             ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
-            : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED },
+            : options.turnEnded === true
+              ? { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN }
+              : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED },
         );
       }),
     reset: (sessionId) =>
@@ -349,8 +353,13 @@ const NO_KEYS: HostedEnvironmentValues = {
 const ANALYTICS = recordingProductAnalytics();
 
 /** How many of one event the account was counted for. */
-export const countedFor = (userId: string, name: string) =>
-  ANALYTICS.recorded.filter((event) => event.userId === userId && event.name === name).length;
+export const countedFor = (userId: string, name: string) => countedWith(userId, name).length;
+
+/** The properties of each of one event the account was counted for, in order. */
+export const countedWith = (userId: string, name: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === name)
+    .map((event) => event.properties);
 
 /**
  * The public path of each route the hosted oRPC router answers, by the

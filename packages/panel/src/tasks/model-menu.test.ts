@@ -16,8 +16,8 @@ import { ModelMenu } from "./model-menu.js";
  * model-menu.test.ts -- a model no subscription or API key of the account's
  * pays for is never a dead row: its pick lands on its harness's row in
  * Settings › Agents rather than choosing it, and where an automation's
- * choice is such a model, as a new account's Claude default is on an OpenAI
- * key alone, the menu says it cannot run and offers the same Connect; a
+ * choice is such a model, as a stored Claude default is once no Claude
+ * credential pays for it, the menu says it cannot run and offers the same Connect; a
  * running agent's chip, which its starter's credentials pay for, says
  * nothing of it. Synthetic catalog.
  */

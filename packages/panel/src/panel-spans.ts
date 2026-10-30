@@ -3,7 +3,8 @@
  *
  * The panel times a task opening and its agent's transcript drawing and
  * catching up, the window's own start to its first state drawn and to its
- * first task list read, and a keystroke in a box timed to the paint that
+ * first task list read, the Inbox opening to its rows drawn and a row chosen to
+ * its thread drawn, and a keystroke in a box timed to the paint that
  * followed it, and hands each one, once it ended, to the recorder its shell
  * installed: the desktop's panel window answers it with Sentry's renderer
  * SDK (`apps/desktop/src/renderer/desktop-sentry-sdk.ts`), which samples it
@@ -35,16 +36,26 @@ export const PANEL_SPAN = {
   KEYSTROKE_COMPOSER: "keystroke.composer",
   /** A key pressed in ⌘K's search field to the paint after it. */
   KEYSTROKE_COMMAND_PALETTE: "keystroke.command_palette",
+  /** The Inbox's row pressed, or a link to the Inbox followed, to its list drawn with rows. */
+  INBOX_OPEN: "inbox.open",
+  /** An Inbox row chosen to its thread drawn in the pane, on the Inbox page or the side panel's tab. */
+  INBOX_ITEM_OPEN: "inbox.item_open",
+  /** A key pressed in an Inbox item's answer box to the paint after it. */
+  KEYSTROKE_INBOX_ANSWER: "keystroke.inbox_answer",
 } as const;
 type PanelSpanName = (typeof PANEL_SPAN)[keyof typeof PANEL_SPAN];
+
+/** The spans timed from a press to a surface drawn, begun by `beginPanelSpan` and ended once by `endPanelSpan`. */
+type PressSpanName = typeof PANEL_SPAN.INBOX_OPEN | typeof PANEL_SPAN.INBOX_ITEM_OPEN;
 
 /** The spans timed from the window's start, each at most once a window. */
 type WindowSpanName = typeof PANEL_SPAN.WINDOW_FIRST_PAINT | typeof PANEL_SPAN.WINDOW_FIRST_USABLE;
 
 /** The spans a box's keystrokes are timed under. */
-type KeystrokeSpanName =
+export type KeystrokeSpanName =
   | typeof PANEL_SPAN.KEYSTROKE_COMPOSER
-  | typeof PANEL_SPAN.KEYSTROKE_COMMAND_PALETTE;
+  | typeof PANEL_SPAN.KEYSTROKE_COMMAND_PALETTE
+  | typeof PANEL_SPAN.KEYSTROKE_INBOX_ANSWER;
 
 /** What a span says of what it waited on, by Sentry's attribute names. */
 export const PANEL_SPAN_ATTRIBUTE = {
@@ -58,6 +69,10 @@ export const PANEL_SPAN_ATTRIBUTE = {
   PLAN_CHARS: "task.plan_chars",
   /** How many tasks, of every workspace, the sidebar's first list read answered. */
   TASK_COUNT: "window.task_count",
+  /** How many items the Inbox's list held as the span ended. */
+  ITEM_COUNT: "inbox.item_count",
+  /** Whether the thread drew from rows the host already held, 1, or waited on a read, 0. */
+  HELD: "inbox.held",
   /** How long a keystroke waited before its handlers ran, in milliseconds. */
   INPUT_DELAY: "keystroke.input_delay_ms",
   /** How long a keystroke's handlers ran, in milliseconds. */
@@ -97,6 +112,9 @@ let recorder: PanelSpanRecorder | undefined;
 
 /** When this window's root started, and the spans timed from it that have ended; none where the shell times no start. */
 let windowStart: { readonly at: number; readonly ended: Set<WindowSpanName> } | undefined;
+
+/** When each press span last began and has not yet ended. */
+const begun = new Map<PressSpanName, number>();
 
 /** The boxes whose keystrokes are timed, each by the span it is timed under. */
 const timedBoxes = new Map<Element, KeystrokeSpanName>();
@@ -179,6 +197,28 @@ export function installPanelSpanRecorder(installed: PanelSpanRecorder): () => vo
 /** Hands one ended span to the window's recorder; a window with none records nothing. */
 export function recordPanelSpan(span: PanelSpan): void {
   recorder?.(span);
+}
+
+/** Begins a press span now, replacing one begun and not ended; a window with no recorder begins none. */
+export function beginPanelSpan(name: PressSpanName): void {
+  if (recorder === undefined) return;
+  begun.set(name, Date.now());
+}
+
+/** Ends a press span begun, recording it from then to now; one not begun records nothing. */
+export function endPanelSpan(
+  name: PressSpanName,
+  attributes: PanelSpan["attributes"] = () => ({}),
+): void {
+  const startedAt = begun.get(name);
+  if (startedAt === undefined) return;
+  begun.delete(name);
+  recordPanelSpan({ name, startedAt, endedAt: Date.now(), attributes });
+}
+
+/** Lets a press span go untimed, as when what it waited for never came to stand. */
+export function leavePanelSpan(name: PressSpanName): void {
+  begun.delete(name);
 }
 
 /**

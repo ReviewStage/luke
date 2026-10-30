@@ -9,7 +9,6 @@ import {
   type AgentGitHubImageView,
   type AgentInboxAnsweredView,
   type AgentInboxAttachmentView,
-  type AgentInboxChanged,
   type AgentInboxMessagedView,
   type AgentInboxReadAllView,
   type AgentInboxReadStateView,
@@ -84,6 +83,7 @@ import {
   TRANSCRIPT_KIND,
 } from "@luke/features/agent-view";
 import { AGENT_ARCHIVER, CONTEXT_WINDOW } from "@luke/features/agent-wire";
+import { FAILURE_FACT, type FailureFacts, GATE_CLOSED_BY } from "@luke/features/failure-facts";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import {
   acknowledgedNow,
@@ -111,7 +111,12 @@ import { Effect, Equal, FiberHandle, FiberMap, Option, RcMap, type Scope } from 
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followAccountItems } from "./account-items-follow.js";
-import { type AppHostRead, type AppInboxItems, UNREAD } from "./app-state.js";
+import {
+  type AppHolderInboxes,
+  type AppHostRead,
+  type AppInboxItems,
+  UNREAD,
+} from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -130,7 +135,8 @@ import {
 } from "./live-collection.js";
 import type { RunMode } from "./run-mode.js";
 import {
-  followInbox,
+  type HolderInboxes,
+  holderInboxes,
   InboxScopeKey,
   type ScopeInboxes,
   scopeInboxes,
@@ -149,8 +155,9 @@ import { type TranscriptHeld, transcriptHeld } from "./transcript-held.js";
 /**
  * compose-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the task's inbox, one item of it answered, and what waits across the account.
  *
- * Nothing is held here but the transcripts' subscriptions, and the followed
- * inboxes' (`scope-inbox-follow.ts`), heard as `INBOX_CHANGED` events. The window holds the agents it draws and the cursor it reads
+ * Nothing is held here but the transcripts' subscriptions, and the held
+ * inboxes' (`scope-inbox-follow.ts`), told as `HOLDER_INBOXES_CHANGED`
+ * events to the app state every window draws. The window holds the agents it draws and the cursor it reads
  * from, asks when a task opens, when it starts or stops an agent, and while
  * an agent's tab shows its running transcript, and every ask is one call of
  * the service answered whole. The transcript read is held open here while
@@ -271,20 +278,41 @@ export interface AgentsComposer extends Composer {
   readonly reset: Effect.Effect<void>;
 }
 
-const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
+/** What a call the closed gate kept from the service answers: unanswered, as the window draws it, with why the host asked nothing. */
+interface GateClosed {
+  readonly failure: typeof AGENT_CALL_FAILURE.UNANSWERED;
+  readonly cause: FailureFacts;
+}
+
+/** Why the service may not be asked now: a run that sends nothing, or no account behind the gate; none where it may. */
+function closedBy({ kernel, account }: AgentsDependencies): string | undefined {
+  if (!kernel.runMode.sendsNetwork) return GATE_CLOSED_BY.NO_NETWORK;
+  return account.capabilitiesActive() ? undefined : GATE_CLOSED_BY.NO_ACCOUNT;
+}
+
+/** The answer of a call the gate kept from the service, saying why, so it is never reported as a service that did not answer. */
+function gateClosed(by: string): GateClosed {
+  return {
+    failure: AGENT_CALL_FAILURE.UNANSWERED,
+    cause: { _tag: FAILURE_FACT.GATE_CLOSED, code: by },
+  };
+}
 
 /** Whether the service may be asked now: a run that sends, behind an open account gate. */
-function gateOf({ kernel, account }: AgentsDependencies): () => boolean {
-  return () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
+function gateOf(dependencies: AgentsDependencies): () => boolean {
+  return () => closedBy(dependencies) === undefined;
 }
 
 /** The service asked behind the gate, over the host's own HTTP client. */
 function askedOf(dependencies: AgentsDependencies, http: HttpClient.HttpClient) {
-  const gate = gateOf(dependencies);
   return <Answer>(
     call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
-  ): Effect.Effect<Answer | typeof UNANSWERED> =>
-    gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
+  ): Effect.Effect<Answer | GateClosed> => {
+    const by = closedBy(dependencies);
+    return by === undefined
+      ? Effect.provideService(call, HttpClient.HttpClient, http)
+      : Effect.succeed(gateClosed(by));
+  };
 }
 
 export function composeAgents(
@@ -328,6 +356,13 @@ export function composeAgents(
     const gate = gateOf(dependencies);
     const tellItems = (read: AppHostRead<AppInboxItems>) =>
       Effect.sync(() => dependencies.kernel.emit(GATEWAY_EVENT.INBOX_ITEMS_CHANGED, carried(read)));
+    const holders = yield* holderInboxes(inboxes, {
+      gate,
+      tell: (held: AppHolderInboxes) =>
+        Effect.sync(() =>
+          dependencies.kernel.emit(GATEWAY_EVENT.HOLDER_INBOXES_CHANGED, carried(held)),
+        ),
+    });
     // Note that a session's reads close before the window is told it holds none, so nothing the last account drew lands after.
     const sessionReads = yield* accountReads<LiveRead>(
       () => (gate() ? dependencies.accountId() : undefined),
@@ -343,13 +378,13 @@ export function composeAgents(
         userId,
         tellItems,
       );
-    const inboxFollows = yield* FiberMap.make<InboxScopeKey>();
+    const inboxHolds = yield* FiberMap.make<InboxScopeKey>();
     const accountFollow = yield* FiberHandle.make();
     return composed(
       dependencies,
       http,
       { transcripts, followed, held },
-      { inboxes, followed: inboxFollows, reads },
+      { inboxes, holders, holds: inboxHolds, reads },
       { accounts, followed: accountFollow },
       { reads: sessionReads, followItems },
     );
@@ -363,10 +398,11 @@ interface Transcripts {
   readonly held: TranscriptHeld<TranscriptKey>;
 }
 
-/** The scopes' subscriptions the windows share, and the follows main asked for, one fiber per scope. */
+/** The scopes' subscriptions the windows share, the held lifetime over them, and the windows' holds, one fiber per scope held. */
 interface ScopeFollows {
   readonly inboxes: ScopeInboxes;
-  readonly followed: FiberMap.FiberMap<InboxScopeKey>;
+  readonly holders: HolderInboxes;
+  readonly holds: FiberMap.FiberMap<InboxScopeKey>;
   /** The followed inboxes' waits, the account's among them, which a mark, an answer, or a close waits on. */
   readonly reads: InboxReads;
 }
@@ -388,7 +424,7 @@ function composed(
   dependencies: AgentsDependencies,
   http: HttpClient.HttpClient,
   { transcripts, followed, held }: Transcripts,
-  { inboxes, followed: inboxFollows, reads }: ScopeFollows,
+  { inboxes, holders, holds: inboxHolds, reads }: ScopeFollows,
   /** What waits across the account, and main's one follow of it. */
   { accounts, followed: accountFollow }: AccountFollow,
   /** The session's account reads, every item the account reaches among them. */
@@ -396,6 +432,8 @@ function composed(
 ): AgentsComposer {
   const { client, kernel } = dependencies;
   const gate = gateOf(dependencies);
+  /** What a follow the gate keeps from the service is told; no account where the gate stands open but names none. */
+  const gateKept = () => gateClosed(closedBy(dependencies) ?? GATE_CLOSED_BY.NO_ACCOUNT);
   const asked = askedOf(dependencies, http);
   const listed = dependencies.listed ?? (() => Effect.void);
   const writeAgent: RowWrite<AgentRow> =
@@ -647,7 +685,7 @@ function composed(
               memoryOf(key),
               tell,
             )
-          : tell(UNANSWERED);
+          : tell(gateKept());
         yield* FiberMap.run(followed, key, follow);
         return {};
       }),
@@ -986,6 +1024,7 @@ function composed(
         const answer = yield* asked(client.githubImage(agentId, src));
         return carried<AgentGitHubImageView>(answer);
       }),
+    // Note that the windows' hold on a scope is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AGENTS_INBOX_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const scope = yield* readParams(
@@ -993,11 +1032,13 @@ function composed(
           params,
           "following an inbox names a plan or an agent",
         );
-        const tell = (inbox: AgentInboxChanged["inbox"]) =>
-          Effect.sync(() => kernel.emit(GATEWAY_EVENT.INBOX_CHANGED, carried({ scope, inbox })));
         const key = new InboxScopeKey(scope);
-        const follow = gate() ? followInbox(inboxes, key, tell) : tell(UNANSWERED);
-        yield* FiberMap.run(inboxFollows, key, follow);
+        yield* FiberMap.run(
+          inboxHolds,
+          key,
+          Effect.scoped(Effect.andThen(holders.hold(key), Effect.never)),
+          { onlyIfMissing: true },
+        );
         return {};
       }),
     [GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW]: (params) =>
@@ -1007,7 +1048,17 @@ function composed(
           params,
           "letting an inbox go names a plan or an agent",
         );
-        yield* FiberMap.remove(inboxFollows, new InboxScopeKey(scope));
+        yield* FiberMap.remove(inboxHolds, new InboxScopeKey(scope));
+        return {};
+      }),
+    [GATEWAY_METHOD.AGENTS_INBOX_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const scope = yield* readParams(
+          agentInboxScopeSchema,
+          params,
+          "reading an inbox again names a plan or an agent",
+        );
+        yield* holders.retry(new InboxScopeKey(scope));
         return {};
       }),
     [GATEWAY_METHOD.AGENTS_INBOX_ATTACHMENT]: (params) =>
@@ -1147,7 +1198,7 @@ function composed(
         const follow =
           gate() && userId !== undefined
             ? followAccountInbox(accounts, userId, tell)
-            : tell(UNANSWERED);
+            : tell(gateKept());
         yield* FiberHandle.run(accountFollow, follow);
         return {};
       }),
@@ -1157,9 +1208,10 @@ function composed(
       Effect.as(sessionReads.reopen(LIVE_READ.INBOX_ITEMS, followItems), {}),
   };
 
+  // Note that the windows' holds stand through a sign-out, so a session signing in follows them anew (`open`).
   const reset = Effect.gen(function* () {
     yield* FiberMap.clear(followed);
-    yield* FiberMap.clear(inboxFollows);
+    yield* holders.end;
     yield* FiberHandle.clear(accountFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
     yield* held.clear;
@@ -1171,7 +1223,7 @@ function composed(
   return {
     methods,
     lifetime: Effect.void,
-    open: sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems),
+    open: Effect.andThen(sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems), holders.open),
     reset,
   };
 }

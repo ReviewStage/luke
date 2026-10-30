@@ -45,6 +45,7 @@ import { createNativeNode, type NativeNode } from "./native-node";
 import { colourCodeInUtilityProcess } from "./task-code-colouring";
 import {
   createTelemetryService,
+  followAccountInReports,
   mainErrorReporting,
   type TelemetryService,
 } from "./telemetry-service";
@@ -213,6 +214,8 @@ export function composeDesktop(
         ),
         services,
       );
+      // Every report main sends names the account signed in, from its first document on.
+      yield* followAccountInReports(state);
       const native = createNativeNode({ config, state });
       const operator = yield* createOperatorClient({
         report: config.report,

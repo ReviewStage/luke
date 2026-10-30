@@ -12,6 +12,7 @@ import {
   INSTALLED_SKILL_SCOPE,
   type InstalledSkillScope,
 } from "@luke/features/installed-skill-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { parseSkillPaste, SKILL_PASTE_KIND } from "@luke/features/skill-paste";
 import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
 import { countWords, TERM } from "@luke/features/words";
@@ -58,9 +59,11 @@ import {
   TextButton,
   TextField,
 } from "@luke/ui";
+import { inputProblem } from "@luke/ui/reported-failure";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { enterKeyHint, enterSubmitKey } from "../enter-sends.js";
+import { failureShown, refusedShown } from "../failure-report.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { SkillMark } from "../tasks/skill-ref.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
@@ -593,7 +596,7 @@ function TextSkill({
       <Stack gap={GAP.FIELD}>
         <FormField
           label={SKILLS_LINE.NAME}
-          error={nameProblem === undefined ? undefined : problemsLine([nameProblem])}
+          error={nameProblem === undefined ? undefined : inputProblem(problemsLine([nameProblem]))}
           description={
             declares.name
               ? SKILLS_LINE.DECLARED
@@ -613,7 +616,11 @@ function TextSkill({
         </FormField>
         <FormField
           label={SKILLS_LINE.WHEN}
-          error={descriptionProblem === undefined ? undefined : problemsLine([descriptionProblem])}
+          error={
+            descriptionProblem === undefined
+              ? undefined
+              : inputProblem(problemsLine([descriptionProblem]))
+          }
           description={declares.description ? SKILLS_LINE.DECLARED : undefined}
           count={
             declares.description
@@ -897,7 +904,7 @@ export function AddSkillDialog({
           <FormField
             label={SKILLS_LINE.PASTE_LABEL}
             description={SKILLS_LINE.PASTE_HINT}
-            error={refusal}
+            error={refusedShown(refusal, FAILURE_SURFACE.SKILL_ADD)}
           >
             {(field) => (
               <TextArea
@@ -925,7 +932,12 @@ export function AddSkillDialog({
           </FormField>
         )}
         {folded || line === undefined ? null : failed !== undefined && previewRetries(failed) ? (
-          <ErrorState onRetry={retry}>{line.text}</ErrorState>
+          <ErrorState
+            failure={failureShown({ surface: FAILURE_SURFACE.SKILL_PREVIEW, cause: failed })}
+            onRetry={retry}
+          >
+            {line.text}
+          </ErrorState>
         ) : (
           <DetectedText line={line} />
         )}

@@ -17,6 +17,7 @@ import {
   retriesBesideRemedy,
 } from "@luke/features/failure-remedy";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { INTEGRATION_LABEL, pasteCutWords } from "@luke/features/words";
 import type { ShortcutChord } from "@luke/settings/shortcuts";
 import {
@@ -33,6 +34,7 @@ import {
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { GLYPH } from "@luke/ui/icons";
 import { OPENAI_KEY_MISSING_NOTE } from "@luke/ui/microphone-access";
+import { type ReportedFailure, UNREPORTED, type Unreported } from "@luke/ui/reported-failure";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   type ComponentProps,
@@ -46,6 +48,7 @@ import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { modEnterSends } from "../enter-sends.js";
+import { failureShown, unreadShown } from "../failure-report.js";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
@@ -530,6 +533,8 @@ export function AgentComposer({
   // list carries the stop a moment after the answer.
   if (stopping && !stoppable) setStopping(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  // Whether the refusal standing is the files handed to the box checked, which is the person's input and no failure of the app's.
+  const [filesRefused, setFilesRefused] = useState(false);
   // Whether the last paste was cut to the room the box has left, until the words change again.
   const [cut, setCut] = useState(false);
   // Note that a move's retry is read through a ref, because it lands a while
@@ -542,7 +547,10 @@ export function AgentComposer({
   const files = useAttachedFiles({
     holder: { attachments: composer.attachments, update: composer.setAttachments },
     held,
-    onRefusal: setRefusal,
+    onRefusal: (words) => {
+      setRefusal(words);
+      setFilesRefused(words !== undefined);
+    },
   });
   const editingQueued = queueing?.editing === true;
   // Note that an edit's Save stands with the box emptied, since saving nothing gives the edit up.
@@ -610,6 +618,24 @@ export function AgentComposer({
   const retries = note !== undefined && note === composer.note;
   // An editor that could not be loaded is read again by its own Retry, while its note is the one shown.
   const reloads = unloaded !== undefined && words === unloaded;
+  // Note that a cut paste is the person's input checked, and an editor that did not load, a send that
+  // did not go, and every other note are failures of the app's, each reported under its own surface.
+  const noteFailure: ReportedFailure | Unreported | undefined =
+    note === undefined
+      ? undefined
+      : (cut && words === pasteCutWords(maxLength)) ||
+          (filesRefused && words !== undefined && words === refusal)
+        ? UNREPORTED.INPUT
+        : reloads
+          ? unreadShown(FAILURE_SURFACE.BUNDLE_LOAD)
+          : note === composer.note
+            ? failureShown({ surface: FAILURE_SURFACE.AGENT_SEND, cause: note, about: { agentId } })
+            : failureShown({
+                surface: FAILURE_SURFACE.AGENT_COMPOSER,
+                cause: note.reason,
+                about: { agentId },
+                refused: true,
+              });
   const repositoryRemedy = useRepositoryRemedy();
   const remedy =
     note === undefined
@@ -682,7 +708,10 @@ export function AgentComposer({
         handed: stoppable ? SERVER_HANDED.STEERS : SERVER_HANDED.OPENS,
       },
     },
-    onNote: setRefusal,
+    onNote: (words) => {
+      setRefusal(words);
+      setFilesRefused(false);
+    },
     // Escape with no list open gives up an edit of a queued message, the box keeping the caret.
     onLeave: editingQueued ? queueing?.onCancel : onLeave,
     side: listSide,
@@ -926,10 +955,11 @@ export function AgentComposer({
               : undefined
           }
           note={
-            note === undefined
+            note === undefined || noteFailure === undefined
               ? undefined
               : {
                   words: note.text,
+                  failure: noteFailure,
                   remedy:
                     remedyWords === undefined || remedy === undefined
                       ? undefined

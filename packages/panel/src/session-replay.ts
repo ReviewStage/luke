@@ -31,19 +31,18 @@
  * through `sessionReplay` here, so the masking is stated once and no shell can
  * record under any other.
  *
- * What a shell decides is only what is its own: the project key its build
- * carries (none, and nothing records), the address its window says it has in
- * place of the one it has, and where its recorder's bundle is. Whether a run
- * records at all is the host's word (`SessionReplayBootstrap`): there is no
- * switch, and no account is among the reasons. Recording begins at the first
- * paint, as soon as the recorder's bundle and the client have loaded beside
- * it, before anyone has signed in, because the launch is where what goes
- * wrong goes wrong and a recording that waited for a sign-in never saw it. A
- * session that reaches one is joined to the person there; a session that
- * never does stays anonymous, which is the part `PRIVACY.md` has to say
- * plainly, because such a recording cannot be erased with an account.
+ * What a shell decides is only what is its own: the platform it is, the
+ * project key its build carries (none, and nothing records), the address its
+ * window says it has in place of the one it has, and where its recorder's
+ * bundle is. Whether a run may record at all is the host's word
+ * (`SessionReplayBootstrap`): there is no switch. Where it may, recording
+ * waits for an account: nothing loads and nothing records while signed out,
+ * so a visit that never signs in sends nothing, and every recording is filed
+ * under a person, named by the account's name and email, from its first
+ * frame, and can be erased with the account. `PRIVACY.md` says so.
  */
 
+import type { ProductPlatform } from "@luke/features/analytics";
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import { isRecord, text, type UnparsedWireValue, type WireValue } from "@luke/wire";
 import type { PostHog, Properties } from "posthog-js/dist/module.no-external";
@@ -125,19 +124,14 @@ declare global {
   }
 }
 
-/** The shells that record, by the `app_name` their recordings are registered under. */
-export const SESSION_REPLAY_APP = {
-  /** The desktop's panel window. */
-  DESKTOP: "desktop",
-  /** The web app's tab. */
-  WEB: "web",
-} as const;
-type SessionReplayApp = (typeof SESSION_REPLAY_APP)[keyof typeof SESSION_REPLAY_APP];
-
 /** What a shell that records answers for itself; everything else is decided here. */
 export interface SessionReplayShell {
-  /** The `app_name` its recordings are registered under, beside the build's version. */
-  readonly appName: SessionReplayApp;
+  /**
+   * The shell it is, `PRODUCT_PLATFORM.DESKTOP` for the desktop's panel window
+   * and `PRODUCT_PLATFORM.WEB` for the web app's tab: registered on what it
+   * sends and set on the person, beside the build's version.
+   */
+  readonly platform: ProductPlatform;
   /**
    * The analytics project its recordings are filed under, fixed by its build;
    * empty for a build that records nothing, such as a development one.
@@ -161,6 +155,15 @@ export interface SessionReplayShell {
    * client; a shell with the origin to itself leaves them as they are.
    */
   readonly storage?: { readonly persistence: string; readonly consent: string };
+}
+
+/** The run's word on recording where it names a signed-in account, the only word that records. */
+type SignedInBootstrap = SessionReplayBootstrap & { accountId: string };
+
+/** The word as one that names a signed-in account, or none while signed out. */
+function signedIn(bootstrap: SessionReplayBootstrap): SignedInBootstrap | undefined {
+  const accountId = bootstrap.accountId;
+  return accountId ? { ...bootstrap, accountId } : undefined;
 }
 
 /** Brings recording into line with the run's word on it; a test may stand its own recorder bundle in. */
@@ -261,32 +264,49 @@ function optIn(posthog: PostHog): void {
  * Which build these came from, registered on every start rather than once at
  * init: stopping calls `reset`, which clears the registered properties along
  * with the person, so a recording resumed afterwards would otherwise say
- * nothing about the version it came from. `app_version` and `packaged` are
- * the names the counted events are stamped with, so one filter separates
- * both, and `app_name` tells the shells apart.
+ * nothing about the version it came from. `app_version`, `packaged`, and
+ * `platform` are the names the counted events are stamped with, so one filter
+ * separates both; `app_name` says the same as `platform`, under the name the
+ * recordings made before it were filed by.
  */
 function registerBuild(
   posthog: PostHog,
   bootstrap: SessionReplayBootstrap,
-  appName: SessionReplayApp,
+  platform: ProductPlatform,
 ): void {
   posthog.register({
-    app_name: appName,
+    app_name: platform,
     app_version: bootstrap.appVersion,
     packaged: bootstrap.packaged,
-    platform: navigator.platform,
+    platform,
   });
+}
+
+/**
+ * Who the person a recording is filed under is, as the analytics project
+ * shows them: the account's name and email, which the host already holds for
+ * the signed-in account, and the shell it was last seen on.
+ */
+function personProperties(
+  bootstrap: SessionReplayBootstrap,
+  platform: ProductPlatform,
+): Properties {
+  return {
+    platform,
+    ...(bootstrap.name ? { name: bootstrap.name } : undefined),
+    ...(bootstrap.email ? { email: bootstrap.email } : undefined),
+  };
 }
 
 /**
  * The window's one recording controller, over what its shell answers. The
  * shell calls this once per window and hands the answer to the panel as its
  * platform's `applySessionReplay`, which the panel calls at bootstrap and
- * again on every account transition, so a deletion stops the recording where
- * it stands rather than at the next launch, and a sign-in that lands while a
- * recording runs files it under the account then: being signed out is no
- * reason to stop, so a sign-in leaves the answer where it was and only the
- * account moves.
+ * again on every account transition, so a deletion or a sign-out stops the
+ * recording where it stands rather than at the next launch, and a sign-in
+ * starts one at once. Note that recording waits for an account even where the
+ * host permits it, because a recording of nobody is one no deletion can
+ * reach and nobody can find.
  */
 export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
   let started = false;
@@ -294,53 +314,57 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
   let loading = false;
   /** The client, once its module has landed after the recorder. */
   let client: PostHog | undefined;
-  /** The run's latest word on recording, which a recorder that finishes loading starts under. */
-  let latest: SessionReplayBootstrap | undefined;
-  /** The account the running recording is filed under, cleared with the person on a stop. */
-  let identified: string | undefined;
+  /** The run's latest word asking for a recording, which a recorder that finishes loading starts under. */
+  let latest: SignedInBootstrap | undefined;
+  /** The account the running recording is filed under, as last identified, cleared with the person on a stop. */
+  let identified: SignedInBootstrap | undefined;
 
   /**
-   * Files what is being recorded under the account, when there is one, and
-   * under nobody's once there is none.
+   * Files what is being recorded under the signed-in account, and sets the
+   * name, email, and platform the person is shown by.
    *
    * The id is the same opaque one the counted events resolve to, so a recording
    * and the counts around it belong to one person — which is what makes
    * deleting the account erase the recordings with it.
    *
-   * Signed out there is no id and none is invented: the recording runs under
-   * the anonymous id the library made for itself, and a sign-in that lands
-   * later calls this, which is where the library joins that anonymous session
-   * to the person. What never reaches a sign-in stays anonymous, and so cannot
-   * be erased with an account — `PRIVACY.md` says so, because it is true.
-   * The person goes the moment the account does, signed out, deleted in
-   * another window, or replaced by someone else: the library is reset to a
-   * new anonymous id, and the build registered again, since `reset` clears
-   * it, so nothing recorded after is filed under the person who left, and the
-   * next sign-in is joined to a stretch of no one's but its own.
+   * A sign-out or a deletion stops the recording and resets the person
+   * (`stop`). Someone else signing in in place of the account, with no
+   * sign-out between, resets it here: the library is given a new anonymous id,
+   * and the build registered again, since `reset` clears it, so nothing
+   * recorded after is filed under the person who left.
    * Note that an account already identified is not identified again, because
    * every account transition re-answers recording, most of them for nothing
-   * that moved.
+   * that moved; where its name or email moved (a cookie session re-read when
+   * a tab comes back), only the person's properties are set again, so the
+   * recording stays findable by what the account is called now.
    */
-  const followAccount = (posthog: PostHog, bootstrap: SessionReplayBootstrap): void => {
-    const accountId = bootstrap.accountId;
-    if (accountId === identified) return;
-    if (identified !== undefined) {
-      posthog.reset();
-      registerBuild(posthog, bootstrap, shell.appName);
+  const followAccount = (posthog: PostHog, bootstrap: SignedInBootstrap): void => {
+    const before = identified;
+    identified = bootstrap;
+    if (before?.accountId === bootstrap.accountId) {
+      if (before.name !== bootstrap.name || before.email !== bootstrap.email) {
+        // A name taken away is unset, since setting only what is there would leave the old one standing.
+        if (before.name && !bootstrap.name) posthog.unsetPersonProperties(["name"]);
+        posthog.setPersonProperties(personProperties(bootstrap, shell.platform));
+      }
+      return;
     }
-    identified = accountId;
-    if (accountId) posthog.identify(accountId);
+    if (before !== undefined) {
+      posthog.reset();
+      registerBuild(posthog, bootstrap, shell.platform);
+    }
+    posthog.identify(bootstrap.accountId, personProperties(bootstrap, shell.platform));
   };
 
   /** Starts the client over a recorder already loaded: built once per window, resumed after that. */
-  const record = (posthog: PostHog, key: string, bootstrap: SessionReplayBootstrap): void => {
+  const record = (posthog: PostHog, key: string, bootstrap: SignedInBootstrap): void => {
     if (initialized) {
       // The client is built once per window. A second `init` would not rebuild
       // it, so a recording resumed after an account change is started rather
       // than re-configured — but it must still be told whose recording it is,
       // because the person may have changed since the last one.
       optIn(posthog);
-      registerBuild(posthog, bootstrap, shell.appName);
+      registerBuild(posthog, bootstrap, shell.platform);
       followAccount(posthog, bootstrap);
       posthog.startSessionRecording();
       return;
@@ -390,7 +414,7 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
     // reads at launch — so without opting back in here, a run that had ever
     // been stopped would come up recording nothing for the rest of the install.
     optIn(posthog);
-    registerBuild(posthog, bootstrap, shell.appName);
+    registerBuild(posthog, bootstrap, shell.platform);
     followAccount(posthog, bootstrap);
   };
 
@@ -430,7 +454,7 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
     void importRecorder().then(loadClient, failed);
   };
 
-  const start = (bootstrap: SessionReplayBootstrap, importRecorder: BundleImporter<unknown>) => {
+  const start = (bootstrap: SignedInBootstrap, importRecorder: BundleImporter<unknown>) => {
     const key = shell.projectApiKey();
     if (!key) return;
     started = true;
@@ -453,15 +477,18 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
   };
 
   return (bootstrap, importRecorder = shell.importRecorder) => {
-    latest = bootstrap;
-    // Whether recording should be running: the host's word, and nothing else.
-    const wanted = bootstrap.permitted;
-    if (wanted !== started) {
-      if (wanted) start(bootstrap, importRecorder);
-      else stop();
+    // Whether recording should be running: the host's word, and an account to file it under.
+    const wanted = bootstrap.permitted ? signedIn(bootstrap) : undefined;
+    if (wanted === undefined) {
+      if (started) stop();
       return;
     }
-    // A client still loading starts under `latest`, which already names the account, or none.
-    if (started && initialized && client !== undefined) followAccount(client, bootstrap);
+    latest = wanted;
+    if (!started) {
+      start(wanted, importRecorder);
+      return;
+    }
+    // A client still loading starts under `latest`, which already names the account.
+    if (initialized && client !== undefined) followAccount(client, wanted);
   };
 }

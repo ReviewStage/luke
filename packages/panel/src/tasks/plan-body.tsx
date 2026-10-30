@@ -8,6 +8,7 @@ import {
 } from "@luke/features/mention-link";
 import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
 import { type PlanSection, planSections } from "@luke/features/plan-document";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   PLAN_ACTOR,
   type PlanLastEdit,
@@ -35,6 +36,7 @@ import { GLYPH } from "@luke/ui/icons";
 import type { MarkdownTaskToggler } from "@luke/ui/markdown";
 import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { KEPT, type Kept, notKept } from "../act.js";
 import { ActorStack } from "../actor-ref.js";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
@@ -636,7 +638,7 @@ function taskSet(text: string, at: number, line: string, ticked: boolean): strin
  * stands until the saved plan is drawn.
  */
 interface PlanWrites {
-  last: Promise<boolean>;
+  last: Promise<Kept>;
   saved: { readonly taskId: string; readonly over: string; readonly text: string } | undefined;
 }
 
@@ -654,11 +656,8 @@ function planTextNow(writes: PlanWrites, drawn: DrawnPlan): string {
     : drawn.body;
 }
 
-/** `write` sent once every write before it settles, answering whether it saved. */
-function queuedWrite(
-  writes: PlanWrites,
-  write: () => Promise<boolean> | boolean,
-): Promise<boolean> {
+/** `write` sent once every write before it settles, answering whether it saved, with what refused it where it did not. */
+function queuedWrite(writes: PlanWrites, write: () => Promise<Kept> | Kept): Promise<Kept> {
   const sent = writes.last.then(write);
   writes.last = sent;
   return sent;
@@ -666,7 +665,8 @@ function queuedWrite(
 
 /**
  * The plan saved from `base` to `value` while `drawn` stands, answering
- * whether it saved; once saved, `kept` stands as the plan's text until the
+ * whether it saved, with the answer or error that refused it where it did
+ * not; once saved, `kept` stands as the plan's text until the
  * plan drawn moves, or nothing does where it is not known.
  */
 function savedOver(
@@ -675,16 +675,13 @@ function savedOver(
   drawn: DrawnPlan,
   edit: { readonly base: string; readonly value: string },
   kept: string | undefined,
-): Promise<boolean> {
-  return save({ document: edit }).then(
-    (answer) => {
-      if (!("saved" in answer)) return false;
-      writes.saved =
-        kept === undefined ? undefined : { taskId: drawn.id, over: drawn.body, text: kept };
-      return true;
-    },
-    () => false,
-  );
+): Promise<Kept> {
+  return save({ document: edit }).then((answer) => {
+    if (!("saved" in answer)) return notKept(answer);
+    writes.saved =
+      kept === undefined ? undefined : { taskId: drawn.id, over: drawn.body, text: kept };
+    return KEPT;
+  }, notKept);
 }
 
 /** What a toast says where a tick or a date written from the plan at rest was not saved. */
@@ -1132,7 +1129,7 @@ export const PlanBody = memo(function PlanBody({
   /** The caret's jumps when the view last followed it. */
   const followedJumps = useRef(jumps);
   /** The ticks and dates written from the words at rest, each sent once the one before it settles. */
-  const writes = useRef<PlanWrites>({ last: Promise.resolve(true), saved: undefined });
+  const writes = useRef<PlanWrites>({ last: Promise.resolve(KEPT), saved: undefined });
 
   useEffect(() => {
     const element = scroller.current;
@@ -1239,7 +1236,17 @@ export const PlanBody = memo(function PlanBody({
   // A tick or a date that did not save goes back, and says so here, since nothing beside the box or the chip does.
   const toast = useToast();
   const sayNotSaved = useCallback(
-    () => toast({ words: PLAN_NOT_SAVED, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+    (taskId: string, cause: unknown) =>
+      toast({
+        words: PLAN_NOT_SAVED,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: {
+          surface: FAILURE_SURFACE.PLAN_SAVE,
+          cause,
+          about: { taskId },
+        },
+      }),
     [toast],
   );
   // The plan as drawn last, which a tick waiting its turn and a date read as the picker closes are written over.
@@ -1257,17 +1264,18 @@ export const PlanBody = memo(function PlanBody({
     const queue = writes.current;
     const sent = queuedWrite(queue, () => {
       const now = latestPlan.current;
-      if (save === undefined || unit === undefined || item === undefined) return false;
-      if (now.id !== pressedOn) return false;
+      if (save === undefined || unit === undefined || item === undefined)
+        return notKept(FAILURE_CONDITION.NOT_KEPT);
+      if (now.id !== pressedOn) return notKept(FAILURE_CONDITION.NOT_KEPT);
       const base = planTextNow(queue, now);
       const value = taskSet(base, unit.from + at, item.line, ticked);
-      if (value === undefined) return false;
-      if (value === base) return true;
+      if (value === undefined) return notKept(FAILURE_CONDITION.NOT_KEPT);
+      if (value === base) return KEPT;
       return savedOver(queue, save, now, { base, value }, value);
     });
     return sent.then((saved) => {
-      if (!saved) sayNotSaved();
-      return saved;
+      if (!saved.kept) sayNotSaved(pressedOn, saved.cause);
+      return saved.kept;
     });
   };
   const latestTick = useRef(tick);
@@ -1296,12 +1304,12 @@ export const PlanBody = memo(function PlanBody({
               // taken leaves the date as it was, as an unticked box flips back, and says so.
               const sent = queuedWrite(queue, () => {
                 const now = latestPlan.current;
-                if (now.id !== pickedOn) return false;
+                if (now.id !== pickedOn) return notKept(FAILURE_CONDITION.NOT_KEPT);
                 const kept = planTextNow(queue, now) === base ? value : undefined;
                 return savedOver(queue, save, now, { base, value }, kept);
               });
               sent.then((saved) => {
-                if (!saved) sayNotSaved();
+                if (!saved.kept) sayNotSaved(pickedOn, saved.cause);
               });
             },
           }

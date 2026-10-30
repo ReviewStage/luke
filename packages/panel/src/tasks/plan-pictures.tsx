@@ -18,6 +18,7 @@ import {
   useState,
 } from "react";
 import { useAct } from "../act.js";
+import { pictureUnread } from "../failure-report.js";
 import type { PictureDrawer } from "../markdown-message.js";
 import { OUTSIDE_GLYPH_CLASS, PictureBlock } from "../picture-block.js";
 import { TextLink } from "../text-link.js";
@@ -177,7 +178,7 @@ function PlanPicture({
   alt: string;
   caption: string | undefined;
 }): React.JSX.Element {
-  const state = usePicture(owner, id, door.read);
+  const state = usePicture(owner, id, door.read, pictureUnread);
   door.name(id, alt);
   const own = owner === door.taskId;
   return (

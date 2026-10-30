@@ -242,6 +242,7 @@ export const APP_SLICE = {
   AGENTS: sliceAtom("agents"),
   INBOX: sliceAtom("inbox"),
   INBOX_ITEMS: sliceAtom(LIVE_READ.INBOX_ITEMS),
+  HOLDER_INBOX: sliceAtom(LIVE_READ.HOLDER_INBOX),
   MAC_COMMANDS: sliceAtom("macCommands"),
   NOTIFICATIONS: sliceAtom("notifications"),
   NETWORK: sliceAtom("network"),

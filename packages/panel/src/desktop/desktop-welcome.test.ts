@@ -212,7 +212,7 @@ test("the welcome's composer leaves the caret in a field the developer is typing
   assert.ok(document.activeElement === field, "the field keeps the caret");
 });
 
-test("Return in the welcome's composer starts the task in the listed workspace, and an agent on the words with the chip's model", async () => {
+test("Return in the welcome's composer starts the task in the listed workspace, and an agent on the words naming no model while the chip is unpicked", async () => {
   const { page, started } = mount();
   await settle();
   typeInComposer(page, "Make the sidebar keep its folds.");
@@ -229,7 +229,7 @@ test("Return in the welcome's composer starts the task in the listed workspace, 
   assert.deepEqual(handed, {
     prompt: "Make the sidebar keep its folds.",
     attachments: [],
-    choice: DEFAULT_CHOICE,
+    choice: undefined,
   });
   assert.ok(idempotencyKey, "the agent's start carries the card's key");
   assert.equal(started.length, 1);

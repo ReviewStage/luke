@@ -10,7 +10,7 @@
  * turn ended, an Inbox item posted, or an automation's run that failed, is
  * said by the window's own marks and counts instead. Each is a
  * card of its words, an optional second line under them, each cut at two
- * lines, and at most one action, such as Undo, at its end. Up to three stand at once, newest at the
+ * lines, and at most one action, such as Undo, at its end, beside a failure's copy. Up to three stand at once, newest at the
  * bottom, or two in a window too short for three to leave the rest of it in
  * sight; one more pushes the oldest out. A toast saying what
  * one standing already says takes that one's place rather than stacking a
@@ -18,6 +18,17 @@
  * corner, over whatever docks at its foot, a plan's call bar or an agent's
  * composer, for no longer than its hold; one with an action there can be
  * dismissed to reach End call or Send under it.
+ *
+ * A toast saying a failure carries the failure, which is reported as it is
+ * shown (`failure-report.ts`), so no failure the panel says in a toast goes
+ * unreported. It offers the details of that report to copy, by the window's
+ * copy button after its action, named "Copy details", which answers on
+ * itself and leaves the toast and any action on it standing, so a person can
+ * paste them to an agent to find the failure in Sentry and the logs. Its
+ * glyph alone stands there, so the failure's words keep their room, and a
+ * failure toast with nothing else to press takes the pointer for it, and so
+ * pauses its hold under it, drains its bar, and may be dismissed. A window
+ * with nothing to report through offers no copy (`reportShownFailure`).
  *
  * Each stands for its own hold, paused while the pointer is over it or focus
  * is in it, and leaves by itself once it runs out. Only one
@@ -49,12 +60,22 @@
 
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { MOTION_DURATION_MS } from "@luke/brand";
-import { STATUS_TONE, TOAST_HOLD, Toast, ToastActions, ToastStack, type ToastTone } from "@luke/ui";
+import {
+  STATUS_TONE,
+  TOAST_HOLD,
+  Toast,
+  ToastActions,
+  type ToastCopy,
+  ToastStack,
+  type ToastTone,
+} from "@luke/ui";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { Clock, Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
+import { appPlatform } from "./app-platform.js";
+import { reportShownFailure, type ShownFailure } from "./failure-report.js";
 import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
 
 /** The tones said in the polite region: all but a refusal, which is an alert. */
@@ -73,12 +94,24 @@ export { TOAST_HOLD };
 /** What a toast's action says when it takes back what the toast reports. */
 const UNDO_LABEL = "Undo";
 
+/** What a failure toast's copy button copies, as "Copy details" names it. */
+const DETAILS_WHAT = "details";
+
 /** A toast's one action: its button's label, and what a press of it does; one that opens a page names it as `href`, so it is drawn as a link, and its press opens it through the window's door. */
 interface ToastAction {
   readonly label: string;
   readonly href?: string | undefined;
   readonly onPress: () => void;
 }
+
+/**
+ * A toast's tone, and, where it says a failure, the failure it says, which
+ * is reported as the toast is shown (`failure-report.ts`): a failure toast
+ * cannot be built without it, so none reaches a screen unreported.
+ */
+type ToastSaying =
+  | { readonly tone: Exclude<ToastTone, typeof STATUS_TONE.DANGER>; readonly failure?: never }
+  | { readonly tone: typeof STATUS_TONE.DANGER; readonly failure: ShownFailure };
 
 /**
  * A toast to show: its words, an optional second line under them, and its
@@ -90,32 +123,36 @@ interface ToastAction {
  * whoever showed it says so, which withdraws it by its `subject`. Its `subject` is what it
  * is about, by which whoever showed it may withdraw it once it is stale.
  * One of `STATUS_TONE.WORKING` has no hold and no action: it stands until the
- * work it says is under way settles it (`useWorkingToast`).
+ * work it says is under way settles it (`useWorkingToast`). One of
+ * `STATUS_TONE.DANGER` carries the failure it says (`ToastSaying`).
  */
 export type ToastNotice = {
   readonly words: string;
   /** The glyph it leads with in place of its tone's, where what it says has one of its own (`Toast`'s `glyph`). */
   readonly glyph?: () => React.JSX.Element;
   readonly detail?: string;
-  readonly tone: ToastTone;
   readonly subject?: string;
-} & (
-  | { readonly hold: Duration.Duration; readonly action?: never; readonly persists?: never }
-  | { readonly action: ToastAction; readonly hold?: Duration.Duration; readonly persists?: never }
-  | { readonly action: ToastAction; readonly persists: true; readonly hold?: never }
-  | {
-      readonly subject: string;
-      readonly persists: true;
-      readonly action?: never;
-      readonly hold?: never;
-    }
-  | {
-      readonly tone: typeof STATUS_TONE.WORKING;
-      readonly hold?: never;
-      readonly action?: never;
-      readonly persists?: never;
-    }
-);
+} & ToastSaying &
+  (
+    | { readonly hold: Duration.Duration; readonly action?: never; readonly persists?: never }
+    | { readonly action: ToastAction; readonly hold?: Duration.Duration; readonly persists?: never }
+    | { readonly action: ToastAction; readonly persists: true; readonly hold?: never }
+    | {
+        readonly subject: string;
+        readonly persists: true;
+        readonly action?: never;
+        readonly hold?: never;
+      }
+    | {
+        readonly tone: typeof STATUS_TONE.WORKING;
+        readonly hold?: never;
+        readonly action?: never;
+        readonly persists?: never;
+      }
+  );
+
+/** A notice as the stack keeps it: one saying a failure with the details of its report a person may copy. */
+type KeptNotice = ToastNotice & { readonly details?: string | undefined };
 
 /** How long a toast takes to leave, as `--luke-duration-exit` says it. */
 const TOAST_EXIT = Duration.millis(MOTION_DURATION_MS.EXIT);
@@ -147,7 +184,7 @@ const TOAST_STEP = {
 } as const;
 
 type ToastStep =
-  | { readonly kind: typeof TOAST_STEP.SHOW; readonly notice: ToastNotice }
+  | { readonly kind: typeof TOAST_STEP.SHOW; readonly notice: KeptNotice }
   | {
       readonly kind: typeof TOAST_STEP.PAUSE | typeof TOAST_STEP.RESUME | typeof TOAST_STEP.DISMISS;
       readonly id: number;
@@ -155,7 +192,7 @@ type ToastStep =
   | {
       readonly kind: typeof TOAST_STEP.SETTLE;
       readonly subject: string;
-      readonly notice: ToastNotice;
+      readonly notice: KeptNotice;
     }
   | { readonly kind: typeof TOAST_STEP.WITHDRAW; readonly subject: string }
   | { readonly kind: typeof TOAST_STEP.ROOM; readonly room: number };
@@ -169,7 +206,7 @@ type ToastStep =
  */
 interface ToastShown {
   readonly id: number;
-  readonly notice: ToastNotice;
+  readonly notice: KeptNotice;
   readonly leaving: boolean;
   readonly left: Duration.Duration | undefined;
   readonly since: number | undefined;
@@ -179,7 +216,7 @@ interface ToastShown {
 interface ToastLine {
   readonly count: number;
   readonly shown: readonly ToastShown[];
-  readonly waiting: readonly ToastNotice[];
+  readonly waiting: readonly KeptNotice[];
   readonly room: number;
 }
 
@@ -194,7 +231,7 @@ function holdOf(notice: ToastNotice): Duration.Duration | undefined {
 }
 
 /** A notice standing from `now`, as the stack's next. */
-function stand(stack: ToastLine, notice: ToastNotice, now: number): ToastLine {
+function stand(stack: ToastLine, notice: KeptNotice, now: number): ToastLine {
   const toast = { id: stack.count + 1, notice, leaving: false, left: holdOf(notice), since: now };
   return { ...stack, count: toast.id, shown: [...stack.shown, toast] };
 }
@@ -262,7 +299,7 @@ function settle(stack: ToastLine, now: number): ToastLine {
  */
 function crowd(stack: ToastLine, now: number): ToastLine {
   let next = stack;
-  const aside: ToastNotice[] = [];
+  const aside: KeptNotice[] = [];
   for (;;) {
     const older = staying(next).slice(0, -1);
     const oldest = older.find((toast) => toast.left !== undefined) ?? older[0];
@@ -277,7 +314,7 @@ function crowd(stack: ToastLine, now: number): ToastLine {
  * A notice arriving at `now`: it takes the place of a toast already saying
  * it, or stands at the bottom, pushing the oldest out where the stack is full.
  */
-function arrive(stack: ToastLine, notice: ToastNotice, now: number): ToastLine {
+function arrive(stack: ToastLine, notice: KeptNotice, now: number): ToastLine {
   const twin = stack.shown.find((toast) => !toast.leaving && sameSaying(toast.notice, notice));
   const unmatched = { ...stack, shown: stack.shown.filter((toast) => toast !== twin) };
   return crowd(stand(unmatched, notice, now), now);
@@ -288,12 +325,7 @@ function arrive(stack: ToastLine, notice: ToastNotice, now: number): ToastLine {
  * and for that one's whole hold, or, waiting, turned where it waits; where
  * none stands or waits, as when it was pushed out, `notice` arrives anew.
  */
-function settleWork(
-  stack: ToastLine,
-  subject: string,
-  notice: ToastNotice,
-  now: number,
-): ToastLine {
+function settleWork(stack: ToastLine, subject: string, notice: KeptNotice, now: number): ToastLine {
   const working = (about: ToastNotice) =>
     about.tone === STATUS_TONE.WORKING && about.subject === subject;
   const standing = stack.shown.find((toast) => !toast.leaving && working(toast.notice));
@@ -357,6 +389,18 @@ function stepped(stack: ToastLine, step: ToastStep, now: number): ToastLine {
 }
 
 /**
+ * Reports the failure a notice says, where it says one, as it is shown at
+ * `at` or a working toast turns into it, and answers the step with the
+ * notice keeping the details of that report to copy.
+ */
+function reportSaid(step: ToastStep, at: number): ToastStep {
+  if (step.kind !== TOAST_STEP.SHOW && step.kind !== TOAST_STEP.SETTLE) return step;
+  if (step.notice.tone !== STATUS_TONE.DANGER) return step;
+  const details = reportShownFailure(step.notice.failure, at);
+  return { ...step, notice: { ...step.notice, details } };
+}
+
+/**
  * The toasts' lives, as an atom whose work is their waits: each step lands
  * on the stack, which then runs down to its next change and lets it happen,
  * until nothing in it changes by itself. Note that it is kept alive, because
@@ -368,7 +412,8 @@ const toastLifeAtom = Atom.keepAlive(
   rendererRuntime.fn((step: ToastStep, get) =>
     Effect.gen(function* () {
       const at = yield* Clock.currentTimeMillis;
-      let stack = settle(stepped(get(toastStackAtom), step, at), at);
+      const said = yield* Effect.sync(() => reportSaid(step, at));
+      let stack = settle(stepped(get(toastStackAtom), said, at), at);
       get.set(toastStackAtom, stack);
       // Note that the stack is carried here rather than read back, because
       // nothing else writes it while this runs, and each settle past a due
@@ -490,9 +535,14 @@ function ToastCard({
   step: (step: ToastStep) => void;
 }): React.JSX.Element {
   const { id, notice, leaving } = shown;
-  const { action } = notice;
+  const { action, details } = notice;
   const hold = holdOf(notice);
   const dismiss = () => step({ kind: TOAST_STEP.DISMISS, id });
+  const copy: ToastCopy | undefined =
+    details === undefined
+      ? undefined
+      : { text: details, what: DETAILS_WHAT, copy: (text) => appPlatform().copyText(text) };
+  const acts = action !== undefined || copy !== undefined;
   return (
     <Toast
       tone={notice.tone}
@@ -500,13 +550,14 @@ function ToastCard({
       words={notice.words}
       detail={notice.detail}
       leaving={leaving}
-      countdown={action === undefined || hold === undefined ? undefined : Duration.toMillis(hold)}
+      countdown={!acts || hold === undefined ? undefined : Duration.toMillis(hold)}
       actions={
-        action === undefined ? undefined : (
+        !acts ? undefined : (
           <ToastActions
-            label={action.label}
-            href={action.href}
-            onPress={action.onPress}
+            {...(action === undefined
+              ? {}
+              : { label: action.label, href: action.href, onPress: action.onPress })}
+            copy={copy}
             dismissLabel={DISMISS_LABEL}
             onDismiss={dismiss}
           />

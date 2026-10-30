@@ -34,6 +34,7 @@ import {
 } from "./agent-wire.js";
 import { CONVERSATION_MEDIA_TYPE } from "./conversation-picture-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
+import { failureFactsSchema } from "./failure-facts.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
 import { githubTokenAnswerSchema, githubTokenSaveRequestSchema } from "./github-token-wire.js";
@@ -50,7 +51,6 @@ import {
   inboxAnsweredSchema,
   inboxAnswerSchema,
   inboxCloseRequestSchema,
-  inboxItemSchema,
   inboxMessagedSchema,
   inboxMessageRequestSchema,
   inboxReadAllRequestSchema,
@@ -144,18 +144,23 @@ export const AGENT_CALL_FAILURE = {
   OPENAI_KEY_MISSING: "openai-key-missing",
   /** The task runs its agents on a device that would not take this one, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
+  /** The task is a child task of a stopped pilot tree, so no agent starts on it until someone presses Start on the top task. */
+  TREE_STOPPED: "tree-stopped",
 } as const;
 
 export type AgentCallFailure = (typeof AGENT_CALL_FAILURE)[keyof typeof AGENT_CALL_FAILURE];
 
 const failureSchema = EffectSchema.Literals(Object.values(AGENT_CALL_FAILURE));
 
-/** A failed call, as every answer below spells one. */
-const failed = EffectSchema.Struct({ failure: failureSchema });
+/** A failed call, as every answer below spells one, with the facts of what failed beneath it where the host caught it (`failure-facts.ts`), which the window reports and never draws. */
+const failed = EffectSchema.Struct({
+  failure: failureSchema,
+  cause: EffectSchema.optionalKey(failureFactsSchema),
+});
 
 /** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), when a plan's reached limit resets where it is that, the provider whose credential is missing where it is that, and why the task's device would not take the agent, with the device and its owner where it is another member's, where it is that. */
 const failedReaching = EffectSchema.Struct({
-  failure: failureSchema,
+  ...failed.fields,
   unreached: EffectSchema.optionalKey(repositoryUnreachedSchema),
   resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
   provider: EffectSchema.optionalKey(modelProviderSchema),
@@ -666,17 +671,6 @@ export const agentInboxScopeSchema = EffectSchema.Struct({
 });
 
 export type AgentInboxScope = typeof agentInboxScopeSchema.Type;
-
-/** A followed inbox as it now stands, as the window hears it pushed: its items whole, or why there are none. */
-export const agentInboxChangedSchema = EffectSchema.Struct({
-  scope: agentInboxScopeSchema,
-  inbox: EffectSchema.Union([
-    EffectSchema.Struct({ items: EffectSchema.Array(inboxItemSchema) }),
-    failed,
-  ]),
-});
-
-export type AgentInboxChanged = typeof agentInboxChangedSchema.Type;
 
 /** The task's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
 const agentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);

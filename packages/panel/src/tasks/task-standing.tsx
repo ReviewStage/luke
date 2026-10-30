@@ -1,7 +1,7 @@
 import type { MacOffer } from "@luke/features/models-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   MERGE_POLICY,
-  type MergePolicy,
   TASK_PRIORITY,
   TASK_PRIORITY_ORDER,
   TASK_STATUS,
@@ -15,21 +15,21 @@ import {
 import { noMatchWords, readFailedWords, TERM } from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BUTTON_VARIANT,
+  Button,
   CHIP_WIDTH,
-  CHOICE_BAR_LOOK,
-  CHOICE_BAR_SIZE,
-  ChoiceBar,
-  type ChoiceItem,
   ErrorState,
   FailureNote,
   GAP,
   Inline,
+  LabeledSwitch,
   type MenuRow,
+  PlayIcon,
   POPOVER_ALIGN,
   Spinner,
+  StopIcon,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -41,12 +41,12 @@ import {
 import { useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { failureShown, unreadShown } from "../failure-report.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
 import { Picker } from "../settings/picker-row.js";
-import { useExperiment } from "../use-app-state.js";
-import { MERGE_POLICY_CHOICES, mergePolicySwitchOf } from "./merge-policy-switch.js";
+import { mergePolicySwitchOf, runningSwitchOf } from "./pilot-switches.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip.js";
 import { TaskRunsOnChip } from "./runs-on.js";
 import { TaskBlockAdd, TaskBlockLines, type TaskBlocksDoor } from "./task-blocks.js";
@@ -66,8 +66,9 @@ import { TaskBlockAdd, TaskBlockLines, type TaskBlocksDoor } from "./task-blocks
  * the search over every repository the workspace reaches, and which ⌘K's
  * Change repository opens the same way; and, while local agents are on, a
  * fifth for where its agents run (`runs-on.tsx`); on a pilot tree's top
- * task, a two-way switch for its merge policy, merge on green or hold every
- * PR (`merge-policy-switch.ts`); and last, where the page hands their door,
+ * task, an Auto-merge switch for its merge policy, merge on green while on and
+ * hold every PR while off, and Start, which lets the tree's agents work, or
+ * Stop while they do, which stops them (`pilot-switches.ts`); and last, where the page hands their door,
  * Add relation, with the task's blocks on a line of their own under the chips
  * (`task-blocks.tsx`). A pick is handed back for the page to send;
  * without a door to send it, as on an archived task, the chips only say.
@@ -120,12 +121,6 @@ export const PRIORITY_ROWS: readonly MenuRow[] = TASK_PRIORITY_ORDER.map((priori
 function statusOf(id: string): TaskStatus | undefined {
   return TASK_STATUS_ORDER.find((status) => status === id);
 }
-
-/** The merge-policy switch's two options, merge on green first, as every task starts. */
-const MERGE_POLICY_ITEMS: readonly ChoiceItem<MergePolicy>[] = [
-  MERGE_POLICY.MERGE_ON_GREEN,
-  MERGE_POLICY.HOLD,
-].map((policy) => ({ value: policy, ...MERGE_POLICY_CHOICES[policy] }));
 
 /** The priority a picked row names; none for a row that names no priority. */
 function priorityOf(id: string): TaskPriority | undefined {
@@ -218,7 +213,9 @@ function TaskAssigneePicker({
       noMatch={noMatchWords(TERM.MEMBER)}
       note={
         membersRefused ? (
-          <ErrorState onRetry={retry}>{readFailedWords(TERM.MEMBER.many)}</ErrorState>
+          <ErrorState failure={unreadShown(FAILURE_SURFACE.MEMBERS_READ)} onRetry={retry}>
+            {readFailedWords(TERM.MEMBER.many)}
+          </ErrorState>
         ) : membersReading ? (
           <Spinner delay label="Reading members" />
         ) : undefined
@@ -249,7 +246,8 @@ export interface TaskRepositoryDoor {
 /** What the page hands the task's head: its workspace's name, which the key is drawn from, the door a pick is sent through, none where the task takes no change, the repository chip's doors, none where the task's repository is not changed from here, and the member's devices, as the models answer last listed them, which say whether a cloud task shows its Runs on. */
 export interface TaskStandingDoor {
   readonly workspaceName: string;
-  readonly onSet?: ((standing: TaskStanding) => void) | undefined;
+  /** Settles once the service has answered, where the page waits on it. */
+  readonly onSet?: ((standing: TaskStanding) => void | Promise<void>) | undefined;
   readonly repository?: TaskRepositoryDoor | undefined;
   readonly devices?: readonly MacOffer[] | undefined;
   /** The task's blocks' door: the tasks they name, where a press opens one, and where a change is sent; none where they are not drawn. */
@@ -354,12 +352,72 @@ function TaskStatusPicker({
   );
 }
 
+/** What a pilot tree's run button says, worded once. */
+const TREE_RUN_COPY = {
+  START: "Start",
+  STARTING: "Starting",
+  STOP: "Stop",
+  STOPPING: "Stopping",
+} as const;
+
+/**
+ * A pilot tree's run button on its top task: Start, the place's own act,
+ * while the tree is stopped, and Stop, an ending act that is not the place's
+ * own, while it runs, as the Mac terminal's Run and Stop are drawn. A press
+ * sends the other side, and where the page waits on the service the button
+ * stays busy until it answers, taking no second press meanwhile.
+ */
+function TreeRunButton({
+  running,
+  onSet,
+}: {
+  running: boolean;
+  onSet: ((standing: TaskStanding) => void | Promise<void>) | undefined;
+}): React.JSX.Element {
+  // The side a press sent, while the service has yet to answer it.
+  const [sent, setSent] = useState<boolean | undefined>(undefined);
+  const press = () => {
+    if (sent !== undefined || onSet === undefined) return;
+    const asked = !running;
+    const settles = onSet({ running: asked });
+    // Note that a door that answers at once has nothing to wait on.
+    if (!(settles instanceof Promise)) return;
+    setSent(asked);
+    settles.finally(() => setSent(undefined));
+  };
+  // Note that the press's own face stays while it is out, because the tab
+  // draws the side sent at once, which would name the busy press the other act.
+  const stops = sent === undefined ? running : !sent;
+  return stops ? (
+    <Button
+      variant={BUTTON_VARIANT.DANGER_OUTLINE}
+      icon={<StopIcon />}
+      disabled={onSet === undefined}
+      busy={sent !== undefined}
+      busyLabel={TREE_RUN_COPY.STOPPING}
+      onClick={press}
+    >
+      {TREE_RUN_COPY.STOP}
+    </Button>
+  ) : (
+    <Button
+      variant={BUTTON_VARIANT.PRIMARY}
+      icon={<PlayIcon />}
+      disabled={onSet === undefined}
+      busy={sent !== undefined}
+      busyLabel={TREE_RUN_COPY.STARTING}
+      onClick={press}
+    >
+      {TREE_RUN_COPY.START}
+    </Button>
+  );
+}
+
 /**
  * The task's status, priority, and assignee chips, under its title, its
  * repository's where the page hands the chip's doors, with the service's
  * refusal of the last pick beside it, and where its agents run while the
- * Local agents experiment is on and the member has a device or the task
- * runs on one, and the merge-policy switch on a pilot tree's top task. A
+ * member has a device or the task runs on one, and the Auto-merge switch and Start or Stop on a pilot tree's top task. A
  * task from a service before statuses draws none of the
  * standing chips, and still its repository's, which does not wait on them,
  * since the plan's menu leaves Change repository to the chip.
@@ -373,7 +431,8 @@ export function TaskStandingChips({
   inSight = true,
 }: {
   task: Task;
-  onSet: ((standing: TaskStanding) => void) | undefined;
+  /** Where a pick is sent, settling once the service has answered where the page waits on it; without one the chips only say. */
+  onSet: ((standing: TaskStanding) => void | Promise<void>) | undefined;
   repository?: TaskRepositoryDoor | undefined;
   devices?: readonly MacOffer[] | undefined;
   /** The task's blocks' door; without it no block is drawn. */
@@ -382,7 +441,6 @@ export function TaskStandingChips({
   inSight?: boolean | undefined;
 }): React.JSX.Element | null {
   const { status, priority } = task;
-  const localAgents = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   const standing = status !== undefined && priority !== undefined;
   // S opens the status chip's menu while the chip is in sight and takes a pick, each press counted so it opens it again.
   const [statusAsks, setStatusAsks] = useState(0);
@@ -394,10 +452,9 @@ export function TaskStandingChips({
   );
   if (!standing && repository === undefined) return null;
   const mergePolicy = standing ? mergePolicySwitchOf(task) : undefined;
+  const running = standing ? runningSwitchOf(task) : undefined;
   const runsOnDrawn =
-    standing &&
-    localAgents &&
-    ((devices !== undefined && devices.length > 0) || task.runsOn !== undefined);
+    standing && ((devices !== undefined && devices.length > 0) || task.runsOn !== undefined);
   return (
     <div className="plan-task-standing">
       <Inline gap={GAP.CONTROL}>
@@ -443,20 +500,31 @@ export function TaskStandingChips({
             width={CHIP_WIDTH.AUTO}
           />
         )}
-        {repository?.note === undefined ? null : <FailureNote>{repository.note}</FailureNote>}
+        {repository?.note === undefined ? null : (
+          <FailureNote
+            failure={failureShown({
+              surface: FAILURE_SURFACE.REPOSITORY_PIN,
+              cause: FAILURE_CONDITION.REFUSED,
+              refused: true,
+            })}
+          >
+            {repository.note}
+          </FailureNote>
+        )}
         {runsOnDrawn ? <TaskRunsOnChip runsOn={task.runsOn} /> : null}
         {mergePolicy === undefined ? null : (
-          <ChoiceBar<MergePolicy>
-            label="Merge policy"
-            items={MERGE_POLICY_ITEMS}
-            value={mergePolicy}
-            look={CHOICE_BAR_LOOK.SEGMENTED}
-            size={CHOICE_BAR_SIZE.COMPACT}
+          <LabeledSwitch
+            label="Auto-merge"
+            checked={mergePolicy === MERGE_POLICY.MERGE_ON_GREEN}
             disabled={onSet === undefined}
-            onChange={(picked) => {
-              if (picked !== mergePolicy) onSet?.({ mergePolicy: picked });
-            }}
+            onChange={(on) =>
+              onSet?.({ mergePolicy: on ? MERGE_POLICY.MERGE_ON_GREEN : MERGE_POLICY.HOLD })
+            }
           />
+        )}
+        {running === undefined ? null : (
+          // Keyed by the task, so a press still out on one task never stands busy on another.
+          <TreeRunButton key={task.id} running={running} onSet={onSet} />
         )}
         {blocks?.onChange === undefined ? null : (
           <TaskBlockAdd task={task} door={blocks} onChange={blocks.onChange} />

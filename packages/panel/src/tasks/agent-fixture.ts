@@ -477,6 +477,14 @@ const LONG_MESSAGES: readonly AgentTranscriptMessage[] = [
         text: "Both would read the invite before either marked it accepted, so both would join. I'll mark it accepted in the same update that checks `acceptedAt`, so only one of them wins.",
       },
       toolPart(
+        "read_web_page",
+        "fixture-race-docs",
+        { url: "https://www.postgresql.org/docs/current/sql-update.html" },
+        {
+          text: "UPDATE changes the values of the specified columns in all rows that satisfy the condition.",
+        },
+      ),
+      toolPart(
         "apply_patch",
         "fixture-race-patch",
         { patchText: "*** Begin Patch\n*** Update File: src/members/invite.ts\n*** End Patch" },
@@ -494,7 +502,7 @@ const LONG_MESSAGES: readonly AgentTranscriptMessage[] = [
       ),
       {
         type: "text",
-        text: "A second accept of the same link now reads as no longer valid, and a test opens one link twice at once.",
+        text: "A second accept of the same link now reads as no longer valid, and a test opens one link twice at once. Postgres takes a row's lock for the update, as https://www.postgresql.org/docs/current/sql-update.html says.",
       },
     ],
   }),

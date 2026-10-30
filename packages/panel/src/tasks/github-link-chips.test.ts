@@ -295,10 +295,10 @@ test("a pull request's link says its number, live title, and state, wearing its 
   );
 
   assert.deepEqual(chips(container), [
-    ["#42 Expire old invitations", "Merged", PULL_REQUEST_STATE.MERGED],
-    ["#42 Expire old invitations", "Merged", PULL_REQUEST_STATE.MERGED],
-    ["#42 Expire old invitations", "Merged", PULL_REQUEST_STATE.MERGED],
-    ["#5 Settle nightly", "Open", PULL_REQUEST_STATE.OPEN],
+    ["#42", "Merged", PULL_REQUEST_STATE.MERGED],
+    ["#42", "Merged", PULL_REQUEST_STATE.MERGED],
+    ["#42", "Merged", PULL_REQUEST_STATE.MERGED],
+    ["#5", "Open", PULL_REQUEST_STATE.OPEN],
     ["secret#7", null, undefined],
   ]);
   assert.deepEqual(
@@ -327,7 +327,7 @@ test("a pull request's chip drawn again, as a plan's section opening in its edit
   );
 
   assert.deepEqual(chips(container), [
-    ["#42 Expire old invitations", "Merged", PULL_REQUEST_STATE.MERGED],
+    ["#42", "Merged", PULL_REQUEST_STATE.MERGED],
   ]);
 });
 
@@ -350,7 +350,7 @@ test("a pull request's chip drawn again once GitHub answers it is gone says its 
 test("an open pull request GitHub's merge queue holds says Queued and wears the queued mark, as a chip and as a row standing alone", async () => {
   const { container } = await drawn(`Queued behind ${QUEUED}.`, ACME_WITH_GITHUB);
 
-  assert.deepEqual(chips(container), [["#46 Rotate the signing keys", "Queued", "queued"]]);
+  assert.deepEqual(chips(container), [["#46", "Queued", "queued"]]);
 
   act(() => root?.unmount());
   root = undefined;
@@ -382,7 +382,7 @@ test("on a page with no repository a pull request's and an issue's chip still sa
     [...container.querySelectorAll("[data-mention-ref] .luke-inline-ref-label")].map(
       (label) => label.textContent,
     ),
-    ["#42 Expire old invitations", "#5 Settle nightly", "#7 Invitations expire too soon"],
+    ["#42", "#5", "#7 Invitations expire too soon"],
   );
 });
 
@@ -408,9 +408,9 @@ test("where the workspace has no GitHub App installed, nothing is asked and the 
   );
 });
 
-test("a pull request's or an issue's address no GitHub App answers for is called by its key, `#42` in the plan's repository and `ledger#5` in another, and a link with a label of its own keeps it", async () => {
+test("a pull request's or an issue's address no GitHub App answers for is called by its key, `#42` in the plan's repository and `ledger#5` in another, and a link with a label of its own keeps it, bar one written as its number and title, which says its number", async () => {
   const { container } = await drawn(
-    `${MERGED}, [the expiry change](${MERGED}), ${ELSEWHERE}, and ${OPEN_ISSUE}.`,
+    `${MERGED}, [the expiry change](${MERGED}), [@#42 Expire old invitations](${MERGED}), ${ELSEWHERE}, and ${OPEN_ISSUE}.`,
     ACME,
   );
 
@@ -418,14 +418,14 @@ test("a pull request's or an issue's address no GitHub App answers for is called
     [...container.querySelectorAll("[data-mention-ref] .luke-inline-ref-label")].map(
       (label) => label.textContent,
     ),
-    ["#42", "the expiry change", "ledger#5", "#7"],
+    ["#42", "the expiry change", "#42", "ledger#5", "#7"],
   );
 });
 
 test("on a page with no repository an address no GitHub App answers for names its repository, and one GitHub does answer still says its number and title", async () => {
   for (const [workspace, said] of [
     [ACME, ["relay#42", "ledger#5"]],
-    [ACME_WITH_GITHUB, ["#42 Expire old invitations", "#5 Settle nightly"]],
+    [ACME_WITH_GITHUB, ["#42", "#5"]],
   ] as const) {
     const { container } = await drawn(
       `${MERGED} and ${ELSEWHERE}.`,

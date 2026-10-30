@@ -8,6 +8,7 @@ import {
 } from "@luke/features/agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -83,6 +84,7 @@ import { appPlatform } from "../app-platform.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
+import { confirmFailure } from "../failure-report.js";
 import { FindScope } from "../find-in-tab.js";
 import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
@@ -963,8 +965,8 @@ function stripTabs(input: {
         agentId: delegation.agent,
         callId: tab.subagent,
       }).then((messages) =>
-        messages === undefined
-          ? undefined
+        "unread" in messages
+          ? messages
           : agentTranscript({
               title: label,
               messages,
@@ -1401,10 +1403,14 @@ function PanelTabs({
  */
 function useMacTerminalClose(panel: SidePanelControl) {
   const closing = useRef<MacTerminalStripTab | undefined>(undefined);
-  const confirm = useConfirmDialog({ subject: true, surfaceOpen: true }, () => {
-    if (closing.current !== undefined) panel.onClose(closing.current);
-    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-  });
+  const confirm = useConfirmDialog(
+    { subject: true, surfaceOpen: true },
+    () => {
+      if (closing.current !== undefined) panel.onClose(closing.current);
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+    confirmFailure(FAILURE_SURFACE.TERMINAL_CLOSE),
+  );
   const close = (tab: MacTerminalStripTab) => {
     if (!macTerminalGoing(tab.macTerminal)) {
       panel.onClose(tab);
@@ -1746,7 +1752,7 @@ export function taskCards(input: {
   // Note that each agent's cards are the same value for as long as these are, so a transcript handed them draws nothing again for them.
   const byAgent = new Map<string, TranscriptCards>();
   return {
-    call: { target, agent, worker: () => undefined },
+    call: { target, agent, standsOn: pages, worker: () => undefined },
     agent: (agentId) => {
       const known = byAgent.get(agentId);
       if (known !== undefined) return known;
@@ -1754,6 +1760,7 @@ export function taskCards(input: {
         target,
         agent,
         task,
+        standsOn: pages,
         worker: ({ callId, task: job, status }) =>
           card(
             drawnSubagent(

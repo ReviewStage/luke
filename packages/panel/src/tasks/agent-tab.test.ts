@@ -9,10 +9,12 @@ import {
   agentMessageReplyLine,
 } from "@luke/features/agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import type { PlanMention } from "@luke/features/mention-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { ProviderMark } from "@luke/ui";
+import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -36,9 +38,10 @@ import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 
 /**
- * agent-tab.test.ts -- a call about something the window draws in a tab of
- * its own is a row that opens that tab, and every other call a row that
- * folds open in place; a run of calls and a finished turn's lead fold under
+ * agent-tab.test.ts -- a call about an agent is a row that opens the
+ * agent's tab, a call that made a page, a thread, a task, or a pull request
+ * a row that folds open in place naming it by its chip, and every other
+ * call a row that folds open in place; a run of calls and a finished turn's lead fold under
  * a line saying whether it is open. A row that opens an agent's or a
  * worker's tab hangs that tab's card. A call of an integration's own tool is one row
  * wearing the integration's mark, with the `connection_execute` that ran it
@@ -69,26 +72,36 @@ function assistant(parts: readonly WireRecord[]): AgentTranscriptMessage {
   return { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts };
 }
 
-/** The message drawn as an agent's turn is, every target its rows open recorded, its workers standing as their own sessions say. */
+/** The message drawn as an agent's turn is, every target its rows open recorded, its workers standing as their own sessions say, in the transcript of `page`'s agent on its task's page where one is given. */
 function drawn(
   message: AgentTranscriptMessage,
   moving = false,
   standings?: ReadonlyMap<string, AgentSubagentStanding>,
+  page?: TaskMentionsValue,
 ) {
   const opened: ToolTarget[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const turn = createElement(AgentMessage, {
+    message,
+    plan: false,
+    lead: AGENT_LEAD,
+    moving,
+    delegation: { models: [], standings, onOpenTarget: (target) => opened.push(target) },
+  });
   act(() =>
     root.render(
-      createElement(AgentMessage, {
-        message,
-        plan: false,
-        lead: AGENT_LEAD,
-        moving,
-        delegation: { models: [], standings, onOpenTarget: (target) => opened.push(target) },
-      }),
+      page === undefined
+        ? turn
+        : onRegistry(
+            AtomRegistry.make(),
+            createElement(TaskMentions, {
+              value: page,
+              children: createElement(TranscriptAgent, { value: TASK_AGENT, children: turn }),
+            }),
+          ),
     ),
   );
   return { container, opened };
@@ -96,19 +109,26 @@ function drawn(
 
 const ACCEPTED = { status: "accepted" };
 
+/** A call that opens something: an agent's, whose row is one button that opens its tab, or what the call made, whose row folds as any call's and names it, after `verb`, by the chip `made` labels, whose press `opens` the link it leaves by, or the task it opens in place. */
 const OPENING_CALLS: readonly {
   readonly name: string;
   readonly tool: string;
   readonly input: WireRecord;
   readonly output?: WireRecord;
   readonly target: ToolTarget;
+  readonly verb?: string;
+  readonly made?: string;
+  readonly opens?: string;
 }[] = [
   {
-    name: "a page shown opens its tab",
+    name: "a page shown, named by its title until the window holds its name",
     tool: "show_page",
     input: { title: "Pricing explorer", path: "pricing.html" },
     output: { status: "accepted", page: { id: "page-1", version: 2 } },
     target: { kind: TOOL_TARGET.PAGE, page: "page-1" },
+    verb: "Showed",
+    made: "Pricing explorer",
+    opens: "https://tryluke.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/page/page-1",
   },
   {
     name: "a read of an agent opens its tab",
@@ -125,47 +145,119 @@ const OPENING_CALLS: readonly {
     target: { kind: TOOL_TARGET.AGENT, agent: "agent-9" },
   },
   {
-    name: "a plan edit opens the plan",
+    name: "a plan edit, named by the plan's chip, called Plan until the window holds its name, and no count",
     tool: "edit_plan",
     input: { notes: [{ kind: "add", section: "Goal", text: "Export invoices" }] },
     output: ACCEPTED,
     target: { kind: TOOL_TARGET.PLAN },
+    verb: "Updated",
+    made: "Plan",
+    opens: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
   },
   {
-    name: "a post to the inbox opens the Inbox",
-    tool: "post_to_inbox",
-    input: { title: "Which currency?", response: { type: "text" } },
-    output: { items: [] },
-    target: { kind: TOOL_TARGET.INBOX },
+    name: "a post on a thread, named by the thread's title",
+    tool: "post_thread",
+    input: { key: "currency", title: "Which currency?", body: "Euros or dollars?" },
+    output: { inbox: [{ id: "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d", key: "currency" }] },
+    target: { kind: TOOL_TARGET.INBOX, key: "currency" },
+    verb: "Posted",
+    made: "Which currency?",
+    opens:
+      "https://tryluke.dev/acme/agent/8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21/inbox/9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
   },
   {
-    name: "a close in the inbox opens the Inbox",
-    tool: "close_inbox_item",
-    input: { key: "currency", reason: "Settled in the plan" },
-    output: { items: [] },
-    target: { kind: TOOL_TARGET.INBOX },
-  },
-  {
-    name: "a read of the inbox opens the Inbox",
-    tool: "read_inbox",
-    input: {},
-    output: { items: [] },
-    target: { kind: TOOL_TARGET.INBOX },
+    name: "a pull request opened, named by its number",
+    tool: "open_pull_request",
+    input: { head: "feat/invoices", title: "Export invoices", body: "" },
+    output: { url: "https://github.com/acme/relay/pull/214", number: 214 },
+    target: { kind: TOOL_TARGET.PULL_REQUEST, url: "https://github.com/acme/relay/pull/214" },
+    verb: "Opened",
+    made: "#214",
+    opens: "https://github.com/acme/relay/pull/214",
   },
 ];
 
 for (const call of OPENING_CALLS) {
-  test(`${call.name}: its row is one button that opens it`, () => {
-    const { container, opened } = drawn(assistant([toolPart(call.tool, call.input, call.output)]));
-    const row = container.querySelector<HTMLButtonElement>(
-      `button[data-call-id="call-${call.tool}"]`,
+  if (call.made === undefined) {
+    test(`${call.name}: its row is one button that opens it`, () => {
+      const { container, opened } = drawn(
+        assistant([toolPart(call.tool, call.input, call.output)]),
+      );
+      const row = container.querySelector<HTMLButtonElement>(
+        `button[data-call-id="call-${call.tool}"]`,
+      );
+      assert.ok(row, "the row is a button");
+      assert.equal(container.querySelector("details"), null, "the row folds nothing open in place");
+      act(() => row.click());
+      assert.deepEqual(opened, [call.target]);
+    });
+    continue;
+  }
+  test(`${call.name}: its row folds as any call's, its verb alone before the chip, whose press folds nothing`, () => {
+    fakeAppBridge({});
+    const left: string[] = [];
+    fakeAppPlatform({
+      ...QUIET_PANEL,
+      openWeb: (url) => left.push(url),
+      openGitHub: (url) => left.push(url),
+    });
+    const page = {
+      ...TASK_PAGE,
+      doors: { ...TASK_PAGE.doors, onOpenTask: (plan: PlanMention) => left.push(plan.taskId) },
+    };
+    const { container } = drawn(
+      assistant([toolPart(call.tool, call.input, call.output)]),
+      false,
+      undefined,
+      page,
     );
-    assert.ok(row, "the row is a button");
-    assert.equal(container.querySelector("details"), null, "the row folds nothing open in place");
+    const row = container.querySelector<HTMLElement>(`[data-call-id="call-${call.tool}"] summary`);
+    assert.ok(row, "the row is a fold's line");
+    const chip = row.querySelector<HTMLElement>("[data-mention-ref]");
+    assert.equal(chip?.querySelector(".luke-inline-ref-label")?.textContent, call.made);
+    assert.equal(row.querySelector(".tool-label")?.textContent?.trim(), call.verb);
+    act(() => chip?.click());
+    assert.deepEqual(left, [call.opens], "the chip's press opens what it names");
+    assert.equal(row.getAttribute("aria-expanded"), "false", "the chip's press folds nothing");
     act(() => row.click());
-    assert.deepEqual(opened, [call.target]);
+    assert.equal(row.getAttribute("aria-expanded"), "true", "the row's press folds it open");
   });
 }
+
+test("a call's row opened while it runs stays open as its answer lands and names what it made", () => {
+  fakeAppBridge({});
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const input = { title: "Pricing explorer", path: "pricing.html" };
+  const draw = (part: WireRecord) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(TaskMentions, {
+            value: TASK_PAGE,
+            children: createElement(AgentMessage, {
+              message: assistant([part]),
+              plan: false,
+              lead: AGENT_LEAD,
+              moving: true,
+              delegation: { models: [], onOpenTarget: () => undefined },
+            }),
+          }),
+        ),
+      ),
+    );
+  draw(toolPart("show_page", input));
+  const row = () =>
+    container.querySelector<HTMLElement>('[data-call-id="call-show_page"] summary') ??
+    assert.fail("the row is a fold's line");
+  act(() => row().click());
+  draw(toolPart("show_page", input, { status: "accepted", page: { id: "page-1", version: 1 } }));
+  assert.ok(row().querySelector("[data-mention-ref]"), "the row names the page by its chip");
+  assert.equal(row().getAttribute("aria-expanded"), "true", "the row stands open");
+});
 
 const SENT_CALLS: readonly {
   readonly name: string;
@@ -211,6 +303,10 @@ const FOLDING_CALLS: readonly {
   readonly name: string;
   readonly part: WireRecord;
 }[] = [
+  {
+    name: "a read of the inbox, which made nothing to name",
+    part: toolPart("read_inbox", {}, { items: [] }),
+  },
   {
     name: "a command on the Mac",
     part: toolPart(
@@ -344,7 +440,7 @@ const FAILURE_LINES: readonly {
       failedPart("run_on_mac", { command: "pnpm test" }),
       toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
     ],
-    label: "2 tool calls, a call failed",
+    label: "2 tool calls, 1 failed",
   },
   {
     name: "a stopped turn's run of calls that all answered",
@@ -362,7 +458,16 @@ const FAILURE_LINES: readonly {
       toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
       { type: "text", text: "Read it." },
     ],
-    label: "2 tool calls, 1 message, a call failed",
+    label: "2 tool calls, 1 message, 1 failed",
+  },
+  {
+    name: "a finished turn's lead holding two calls that failed",
+    parts: [
+      failedPart("run_on_mac", { command: "pnpm test" }),
+      failedPart("read_file", { filePath: "src/new.ts" }),
+      { type: "text", text: "Neither ran." },
+    ],
+    label: "2 tool calls, 2 failed",
   },
   {
     name: "a finished turn's lead whose calls all answered",
@@ -391,15 +496,18 @@ const FAILURE_LINES: readonly {
         },
       ],
     ]),
-    label: "1 tool call, 1 subagent, a call failed",
+    label: "1 tool call, 1 subagent, 1 failed",
   },
 ];
 
 for (const { name, parts, standings, label } of FAILURE_LINES) {
-  test(`a closed fold's line wears the failed mark where a call it holds failed: ${name}`, () => {
+  test(`a closed fold's line wears the failed mark and says how many failed where calls it holds failed: ${name}`, () => {
     const { container } = drawn(assistant(parts), false, standings);
     const line = container.querySelector("[data-turn-fold] > summary");
     assert.deepEqual(failureOn(line), { marked: label !== undefined, label });
+    // The label's last part is how many failed, which the line says in words beside its mark.
+    const failed = label?.slice(label.lastIndexOf(", ") + 2);
+    if (failed !== undefined) assert.ok(line?.textContent?.endsWith(failed), failed);
   });
 }
 
@@ -746,6 +854,24 @@ test("a call about an agent the place lists not, whose answer names no model, we
   fakeAppBridge({});
 });
 
+/** The page of the task `taskId` in the workspace `acme`, whose transcript links what its calls made. */
+function onTask(taskId: string): TaskMentionsValue {
+  return {
+    ...TASK_PAGE,
+    holder: { taskId },
+    doors: { ...TASK_PAGE.doors, holder: { taskId } },
+  };
+}
+
+/** The chip a call's row names what the call made by. */
+function madeChip(container: HTMLElement, callId: string): HTMLElement {
+  return (
+    container.querySelector<HTMLElement>(
+      `[data-call-id="call-${callId}"] summary [data-mention-ref]`,
+    ) ?? assert.fail("the call's row names what it made by its chip")
+  );
+}
+
 test("a call that showed or read a page hangs the page's card as its tab does, previewing it, and one the window holds not yet its name as the row says it", async () => {
   const taskId = "task-pricing";
   const snapshot = signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" });
@@ -789,12 +915,15 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(AgentMessage, {
-          message,
-          plan: false,
-          lead: AGENT_LEAD,
-          moving: true,
-          delegation: { models: [], onOpenTarget: () => undefined, cards: cards.call },
+        createElement(TaskMentions, {
+          value: onTask(taskId),
+          children: createElement(AgentMessage, {
+            message,
+            plan: false,
+            lead: AGENT_LEAD,
+            moving: true,
+            delegation: { models: [], onOpenTarget: () => undefined, cards: cards.call },
+          }),
         }),
       ),
     ),
@@ -803,10 +932,9 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
   const cardOf = (callId: string) => {
-    const row = container.querySelector<HTMLElement>(`button[data-call-id="call-${callId}"]`);
-    assert.ok(row, "the call's row opens the page's tab");
+    const chip = madeChip(container, callId);
     document.documentElement.dataset.keyboard = "true";
-    focusRestOn(row);
+    focusRestOn(chip);
     const card = [...document.querySelectorAll(".luke-tooltip-card [data-page-card]")].at(-1);
     return {
       name: card?.querySelector(".luke-hover-card-name")?.textContent,
@@ -866,25 +994,30 @@ test("a call about the plan or another task hangs that task's card as its Plan t
   ]);
   act(() =>
     root.render(
-      createElement(ChipCards, {
-        value: { taskCard },
-        children: createElement(AgentMessage, {
-          message,
-          plan: false,
-          lead: AGENT_LEAD,
-          moving: false,
-          delegation: { models: [], onOpenTarget: () => undefined, cards: cards.call },
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(TaskMentions, {
+          value: onTask("task-invoices"),
+          children: createElement(ChipCards, {
+            value: { taskCard },
+            children: createElement(AgentMessage, {
+              message,
+              plan: false,
+              lead: AGENT_LEAD,
+              moving: false,
+              delegation: { models: [], onOpenTarget: () => undefined, cards: cards.call },
+            }),
+          }),
         }),
-      }),
+      ),
     ),
   );
   const fold = container.querySelector<HTMLElement>("[data-turn-fold] > summary");
   act(() => fold?.click());
   const cardOf = (callId: string) => {
-    const row = container.querySelector<HTMLElement>(`button[data-call-id="call-${callId}"]`);
-    assert.ok(row, "the call's row opens the task");
+    const chip = madeChip(container, callId);
     document.documentElement.dataset.keyboard = "true";
-    focusRestOn(row);
+    focusRestOn(chip);
     const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
     return {
       task: card?.getAttribute("data-task-card") ?? undefined,
@@ -929,7 +1062,7 @@ test("a call of an integration's tool is one row wearing the integration's mark,
   );
   act(() => row.click());
   const body = container.querySelector('[data-call-id="call-linear_remote"]')?.textContent ?? "";
-  assert.ok(body.includes('"team": "LUKE"'), "the body holds the input list_issues was sent");
+  assert.ok(body.includes("LUKE"), "the body holds the input list_issues was sent");
   assert.ok(!body.includes("parentCallId"), "the body holds no envelope around it");
 });
 
@@ -995,6 +1128,7 @@ function agentMessageDrawn(
   message: AgentTranscriptMessage,
   page?: TaskMentionsValue,
   agentId?: string,
+  sender?: Actor,
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -1008,6 +1142,7 @@ function agentMessageDrawn(
       lead: AGENT_LEAD,
       moving: false,
       delegation: { models: [] },
+      sender,
     }),
   });
   act(() =>
@@ -1035,7 +1170,7 @@ test("a message another agent sent draws as its sender's bubble at the left, nam
   assert.ok(bubble, "the message draws as its sender's bubble");
   assert.equal(bubble.dataset.messageId, "message", "a link to the line finds its bubble");
   assert.match(
-    bubble.querySelector(".luke-message-line-sender")?.textContent ?? "",
+    bubble.querySelector(".luke-message-head-sender")?.textContent ?? "",
     /Invite expiry/u,
   );
   assert.equal(
@@ -1047,10 +1182,13 @@ test("a message another agent sent draws as its sender's bubble at the left, nam
 test("a message from an agent the line keeps no chip of is named by the name its row keeps", () => {
   const bubble = agentMessageDrawn(AGENT_MESSAGE).querySelector("[data-agent-message]");
   assert.match(
-    bubble?.querySelector(".luke-message-line-sender")?.textContent ?? "",
+    bubble?.querySelector(".luke-message-head-sender")?.textContent ?? "",
     /Invite emails/u,
   );
 });
+
+/** The agent whose transcript a task's page draws. */
+const TASK_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 /** A task's page in the workspace `acme`, whose agent's transcript draws a thread's chip. */
 const TASK_PAGE: TaskMentionsValue = {
@@ -1068,7 +1206,7 @@ const TASK_PAGE: TaskMentionsValue = {
   },
 };
 
-test("a member's message on a thread is headed by what they did and the thread's chip, its words without the header that names the item to the agent, whatever its title spells", () => {
+test("a teammate's message on a thread is headed by who sent it, what they did and the thread's chip named by the thread's title, its words without the header that names the item to the agent, whatever its title spells", () => {
   fakeAppBridge({});
   const container = agentMessageDrawn(
     {
@@ -1087,18 +1225,55 @@ test("a member's message on a thread is headed by what they did and the thread's
       },
     },
     TASK_PAGE,
-    "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    TASK_AGENT,
+    { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED, name: "Ada Lovelace" },
   );
   const head = container.querySelector<HTMLElement>("[data-thread-line]");
   assert.match(head?.textContent ?? "", /^Thread message/u);
-  assert.ok(head?.querySelector("[data-mention-ref]"), "the head wears the thread's chip");
+  assert.equal(
+    head?.querySelector("[data-mention-ref] .luke-inline-ref-label")?.textContent,
+    'Ship " (key fake): the invites?',
+    "the head wears the thread's chip, named by its title before the item is read",
+  );
+  assert.match(
+    container.querySelector("[data-message-id]")?.textContent ?? "",
+    /^Ada Lovelace\s*Thread message.*Which PRs first\?/u,
+    "who sent it heads the line, over its words",
+  );
   assert.equal(
     container.querySelector(".message-content")?.textContent?.trim(),
     "Which PRs first?",
   );
 });
 
-test("a review from GitHub draws as a card of who said what on the pull request, their words, and each inline comment by its line, without the agent's instructions", () => {
+/** The head that folds a GitHub card, by which a reader names it: who did what to which pull request. */
+function cardHead(card: HTMLElement): HTMLElement {
+  return card.querySelector<HTMLElement>("summary") ?? assert.fail("The card has no head");
+}
+
+/** A GitHub line the agent was told, as the service steers one in. */
+function githubLine(
+  id: string,
+  text: string,
+  metadata: Record<string, unknown>,
+): AgentTranscriptMessage {
+  return {
+    id,
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text }],
+    metadata: {
+      channel: "github",
+      repository: "acme/relay",
+      number: 42,
+      url: "https://github.com/acme/relay/commit/c0ffee/checks",
+      by: "github-actions[bot]",
+      ...metadata,
+    },
+    sentBy: { kind: "github", name: "github-actions[bot]" },
+  };
+}
+
+test("a review from GitHub draws as a folding card, open, headed by who did what to the pull request and how many comments it holds, holding their words and each inline comment by its file and line, without the agent's instructions", () => {
   const container = agentMessageDrawn({
     id: "github-line",
     role: MESSAGE_ROLE.USER,
@@ -1130,9 +1305,88 @@ test("a review from GitHub draws as a card of who said what on the pull request,
   });
   const card = container.querySelector<HTMLElement>("[data-github-line]");
   assert.ok(card, "the line draws as GitHub's card");
-  const text = card.textContent ?? "";
-  assert.match(text, /^@octocat requested changes on .*#42/u);
-  assert.match(text, /Close, but the store reads the list twice\./u);
-  assert.match(text, /apps\/web\/store\.ts:12\s*Guard the empty list here\./u);
+  const head = cardHead(card);
+  assert.equal(head.getAttribute("aria-label"), "octocat requested changes on #42, 1 comment");
+  assert.equal(head.getAttribute("aria-expanded"), "true");
+  const body = card.textContent ?? "";
+  assert.match(body, /Close, but the store reads the list twice\./u);
+  assert.match(body, /apps\/web\/store\.ts L12\s*Guard the empty list here\./u);
   assert.doesNotMatch(container.textContent ?? "", /Act on it|github-review/u);
+});
+
+test("a check line is headed by how many of its checks failed on the pull request, and holds the Pull request tab's rows of them, those that failed first, each saying how it ended", () => {
+  const container = agentMessageDrawn(
+    githubLine("checks-failed", "Every check finished on `c0ffee`.\n\nAt least one failed.", {
+      event: "checks_completed",
+      sha: "c0ffee",
+      failing: true,
+      checks: [
+        { name: "lint", conclusion: "success" },
+        { name: "test (webkit)", conclusion: "failure" },
+        {
+          name: "e2e",
+          conclusion: "timed_out",
+          url: "https://github.com/acme/relay/actions/runs/3",
+        },
+      ],
+    }),
+  );
+  const card = container.querySelector<HTMLElement>("[data-github-line]");
+  assert.ok(card, "the line draws as GitHub's card");
+  assert.equal(
+    cardHead(card).getAttribute("aria-label"),
+    "github-actions[bot] 2 of 3 checks failed on #42",
+  );
+  const rows = [...card.querySelectorAll("li")].map((row) => row.textContent ?? "");
+  assert.deepEqual(
+    rows.map((row) => /^(.*?),/u.exec(row)?.[1]),
+    ["test (webkit)", "e2e", "lint"],
+  );
+  assert.match(rows[1] ?? "", /Timed out/u);
+});
+
+test("a check line whose checks were skipped rather than passed says so, and holds their rows", () => {
+  const container = agentMessageDrawn(
+    githubLine("checks-skipped", "Every check finished on `c0ffee`.\n\nNone failed.", {
+      event: "checks_completed",
+      failing: false,
+      checks: [{ name: "deploy", conclusion: "skipped" }],
+    }),
+  );
+  const card = container.querySelector<HTMLElement>("[data-github-line]");
+  assert.ok(card, "the line draws as GitHub's card");
+  const head = cardHead(card);
+  assert.equal(head.getAttribute("aria-label"), "github-actions[bot] 1 check skipped on #42");
+  assert.equal(head.getAttribute("aria-expanded"), "true");
+  assert.match(card.textContent ?? "", /deploy.*Skipped/u);
+});
+
+test.each([
+  {
+    held: "an approval with no words",
+    line: githubLine("approved", "@octocat approved your pull request #42.", {
+      event: "review",
+      url: "https://github.com/acme/relay/pull/42#pullrequestreview-2",
+      by: "octocat",
+      verdict: "approved",
+    }),
+    head: "octocat approved #42",
+  },
+  {
+    held: "every check passing",
+    line: githubLine("checks-passed", "Every check finished on `c0ffee`.", {
+      event: "checks_completed",
+      failing: false,
+      checks: [{ name: "lint", conclusion: "success" }],
+    }),
+    head: "github-actions[bot] 1 check passed on #42",
+  },
+])("$held draws its card's head alone, with nothing to open", ({ line, head }) => {
+  const card = agentMessageDrawn(line).querySelector<HTMLElement>("[data-github-line]");
+  assert.ok(card, "the line draws as GitHub's card");
+  const summary = cardHead(card);
+  assert.equal(summary.getAttribute("aria-label"), head);
+  act(() => summary.click());
+  assert.equal(summary.getAttribute("aria-expanded"), "false", "a press opens nothing");
+  assert.equal(card.textContent?.trim(), "");
 });

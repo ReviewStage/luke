@@ -26,9 +26,8 @@
  * its device secret, a Linux box and a Mac alike, read as a device caller
  * (`../../orpc/base.ts`'s `deviceCallerOf`, which refuses a released
  * desktop build on its own sign-in's bearer as needing an upgrade) and held
- * to one rule (`deviceGithubToken`): the member's Local agents experiment
- * on, the agent the member's own and pinned to the caller's own device,
- * and that device running its agents in a VM. It is
+ * to one rule (`deviceGithubToken`): the agent the member's own and pinned
+ * to the caller's own device, and that device running its agents in a VM. It is
  * answered only an installation token the App mints for the agent's
  * repository, on the terms the cloud's checkout mints its sandbox's
  * (`coder-host/checkout.ts`'s `agentRepositoryToken`): good for an hour, cut
@@ -40,7 +39,6 @@
 
 import type { RunnerTokenAnswer } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
-import { accountExperimentOn } from "@luke/database/models/account-store";
 import {
   type Agent,
   hasRepository,
@@ -57,7 +55,6 @@ import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
 import { DEVICE_ISOLATION, deviceAgentLaunchPayloadSchema } from "@luke/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { type HostGithubTokenAnswer, hostGithubTokenRequestSchema } from "@luke/features/host-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { HTTP_METHOD } from "@luke/wire";
 import { Duration, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
@@ -188,8 +185,7 @@ const repositoryTokenFor = /* @__PURE__ */ Effect.fn("web/repositoryTokenFor")(f
 /**
  * A GitHub token for a device's own agent named in the body, the one rule
  * every device caller is held to: an installation token for the agent's
- * repository, where the member's Local agents experiment is on, the agent
- * is the member's own and pinned to the caller's own device
+ * repository, where the agent is the member's own and pinned to the caller's own device
  * (`actsForDevice`), that device runs its agents in a VM
  * of their own (`DEVICE_ISOLATION.SANDBOX`), since an agent run directly on
  * a device pushes on its developer's own login, and the agent works in a
@@ -205,9 +201,6 @@ const deviceGithubToken = /* @__PURE__ */ Effect.fn("web/deviceGithubToken")(fun
   HttpServerRequest.HttpServerRequest | DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   const { userId } = caller;
-  if (!(yield* hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS)))) {
-    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  }
   const found = yield* askedAgent(userId);
   // Note that a teammate's agent the member reaches in a shared workspace is refused, as is one in the cloud.
   const agent = Option.filter(

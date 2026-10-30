@@ -6,6 +6,7 @@ import {
 import type { FileChip } from "@luke/features/attachment-model";
 import { PICTURE_BOUNDS } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   PICTURE_KEEP_FAILURE,
   TASK_CALL_FAILURE,
@@ -16,7 +17,7 @@ import { isVideoDataUrl, STATUS_TONE } from "@luke/ui";
 import { keepPictureRead } from "@luke/ui/picture-cache";
 import { ImagePlusIcon } from "lucide-react";
 import { useMemo } from "react";
-import { useAct } from "../act.js";
+import { unreachedAs, useAct } from "../act.js";
 import { encodeImage } from "../feedback-images.js";
 import { TOAST_HOLD, undoToast, useToast, useWorkingToast } from "../toast.js";
 import type { ViewerAction } from "./attachment-viewer.js";
@@ -99,22 +100,22 @@ function wordsOf(chip: FileChip): string {
   return dot > 0 ? chip.name.slice(0, dot) : chip.name;
 }
 
-/** The plan's text after an edit written on whatever it stands as now; nothing where no edit saved. */
+/** The plan's text after an edit written on whatever it stands as now; what refused it where no edit saved: the answer that refused it, or the condition where nothing more was said. */
 async function edited(
   save: (base: string, value: string) => Promise<TasksEditAnswer>,
   change: (text: string) => string | undefined,
   known: string,
-): Promise<string | undefined> {
+): Promise<string | { readonly refused: unknown }> {
   let base = known;
   for (let tried = 0; tried < EDIT_TRIES; tried += 1) {
     const value = change(base);
-    if (value === undefined) return undefined;
+    if (value === undefined) return { refused: FAILURE_CONDITION.NOT_KEPT };
     const answer = await save(base, value);
     if ("saved" in answer) return value;
-    if (!("conflict" in answer)) return undefined;
+    if (!("conflict" in answer)) return { refused: answer };
     base = answer.conflict.current;
   }
-  return undefined;
+  return { refused: FAILURE_CONDITION.CONFLICT };
 }
 
 /**
@@ -132,21 +133,29 @@ export function useAddToPlan(): ViewerAction | undefined {
     const { workspace } = page;
     const save = (base: string, value: string): Promise<TasksEditAnswer> =>
       act(ACT_KIND.TASKS_EDIT, { taskId: taskId, edit: { document: { base, value } } }).catch(
-        (): TasksEditAnswer => ({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+        unreachedAs(TASK_CALL_FAILURE.UNANSWERED),
       );
     const add = async (chip: FileChip) => {
       const settle = working(ADD_WORDS.ADDING);
-      const failed = (words: string) =>
-        settle({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      const failed = (words: string, cause: unknown, refused?: true) =>
+        settle({
+          words,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: {
+            surface: FAILURE_SURFACE.PLAN_ADD,
+            cause,
+            about: { taskId },
+            ...(refused === undefined ? {} : { refused }),
+          },
+        });
       const keeping = await keptUrlOf(chip);
-      if ("refused" in keeping) return failed(keeping.refused);
+      if ("refused" in keeping) return failed(keeping.refused, keeping.refused, true);
       const { url } = keeping;
       const kept = await act(ACT_KIND.TASKS_PICTURE_KEEP, { planId: taskId, picture: url }).catch(
-        () => ({
-          failure: PICTURE_KEEP_FAILURE.UNANSWERED,
-        }),
+        unreachedAs(PICTURE_KEEP_FAILURE.UNANSWERED),
       );
-      if ("failure" in kept) return failed(KEEP_FAILED_WORDS[kept.failure]);
+      if ("failure" in kept) return failed(KEEP_FAILED_WORDS[kept.failure], kept);
       keepPictureRead(taskId, kept.id, url);
       const address = planAttachmentAddress({ taskId: taskId, attachmentId: kept.id }, workspace);
       const line = taskPictureLine(wordsOf(chip), address);
@@ -164,13 +173,22 @@ export function useAddToPlan(): ViewerAction | undefined {
         },
         page.text(),
       );
-      if (saved === undefined) return failed(ADD_WORDS.NOT_SAVED);
+      if (typeof saved !== "string") return failed(ADD_WORDS.NOT_SAVED, saved.refused);
       const added = addition;
       const undo = async () => {
         const undone = await edited(save, (text) => withoutPictureLine(text, added), saved);
         toast(
-          undone === undefined
-            ? { words: ADD_WORDS.NOT_UNDONE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }
+          typeof undone !== "string"
+            ? {
+                words: ADD_WORDS.NOT_UNDONE,
+                tone: STATUS_TONE.DANGER,
+                hold: TOAST_HOLD.FAILED,
+                failure: {
+                  surface: FAILURE_SURFACE.PLAN_ADD,
+                  cause: undone.refused,
+                  about: { taskId },
+                },
+              }
             : { words: ADD_WORDS.UNDONE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE },
         );
       };

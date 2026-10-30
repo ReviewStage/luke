@@ -6,7 +6,8 @@
  * press doing its own; on a toolbar it is the same one alert, its whole
  * sentence its hint; the glyph that marks it as a fault says nothing to a
  * reader; a row that is itself the retry says its failure as an alert and
- * is named by it and Retry.
+ * is named by it and Retry. Every failure offers Copy details beside its
+ * presses.
  */
 
 // @vitest-environment jsdom
@@ -15,6 +16,7 @@ import { MOTION_DELAY_MS } from "@luke/brand";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
+import { recordedFailure } from "../../testing/reported-failure.js";
 import { ERROR_STATE_PLACEMENT, ErrorState, RetryRowLabel } from "./error-state.js";
 
 declare global {
@@ -24,6 +26,9 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const LINE = "The inbox could not be read.";
+
+/** The failure beneath every line drawn here. */
+const { failure: FAILURE } = recordedFailure();
 
 const roots: Root[] = [];
 
@@ -53,11 +58,14 @@ for (const placement of [ERROR_STATE_PLACEMENT.INLINE, ERROR_STATE_PLACEMENT.CEN
       createElement(ErrorState, {
         placement,
         onRetry: () => pressed.push("retry"),
+        failure: FAILURE,
         children: LINE,
       }),
     );
-    const buttons = alert.querySelectorAll("button");
-    expect(buttons).toHaveLength(1);
+    const buttons = [...alert.querySelectorAll("button")];
+    expect(
+      buttons.map((button) => button.getAttribute("aria-label") ?? button.textContent),
+    ).toEqual(["Retry", "Copy details"]);
     const [retry] = buttons;
     expect(alert.textContent).toBe(`${LINE}Retry`);
     expect(retry?.textContent).toBe("Retry");
@@ -67,30 +75,36 @@ for (const placement of [ERROR_STATE_PLACEMENT.INLINE, ERROR_STATE_PLACEMENT.CEN
 }
 
 test("Retry is a button the keyboard can stand on", () => {
-  const alert = mountAlert(createElement(ErrorState, { onRetry: () => undefined, children: LINE }));
+  const alert = mountAlert(
+    createElement(ErrorState, { onRetry: () => undefined, failure: FAILURE, children: LINE }),
+  );
   const retry = alert.querySelector("button");
   expect(retry?.disabled).toBe(false);
   act(() => retry?.focus());
   expect(document.activeElement).toBe(retry);
 });
 
-test("a failure with no Retry says its sentence alone, and offers no button", () => {
-  const alert = mountAlert(createElement(ErrorState, { children: LINE }));
+test("a failure with no Retry says its sentence alone, and offers Copy details alone", () => {
+  const alert = mountAlert(createElement(ErrorState, { failure: FAILURE, children: LINE }));
   expect(alert.textContent).toBe(LINE);
-  expect(alert.querySelector("button")).toBeNull();
+  expect([...alert.querySelectorAll("button")].map((button) => button.ariaLabel)).toEqual([
+    "Copy details",
+  ]);
 });
 
 for (const placement of [ERROR_STATE_PLACEMENT.INLINE, ERROR_STATE_PLACEMENT.CENTRED]) {
   test(`a ${placement} failure's glyph marks it without saying anything to a reader`, () => {
-    const alert = mountAlert(createElement(ErrorState, { placement, children: LINE }));
+    const alert = mountAlert(
+      createElement(ErrorState, { placement, failure: FAILURE, children: LINE }),
+    );
     const glyphs = [...alert.querySelectorAll("svg")];
-    expect(glyphs).toHaveLength(1);
+    expect(glyphs.length).toBeGreaterThan(0);
     expect(glyphs.every((glyph) => glyph.closest("[aria-hidden='true']") !== null)).toBe(true);
     expect(alert.textContent).toBe(LINE);
   });
 }
 
-test("a failure among rows offers its remedy, Retry, Remove, and Dismiss in that order, each press doing its own", () => {
+test("a failure among rows offers its remedy, Retry, Copy details, Remove, and Dismiss in that order, each press doing its own", () => {
   const pressed: string[] = [];
   const alert = mountAlert(
     createElement(ErrorState, {
@@ -98,6 +112,7 @@ test("a failure among rows offers its remedy, Retry, Remove, and Dismiss in that
       onRetry: () => pressed.push("retry"),
       onRemove: () => pressed.push("remove"),
       onDismiss: () => pressed.push("dismiss"),
+      failure: FAILURE,
       children: LINE,
     }),
   );
@@ -105,6 +120,7 @@ test("a failure among rows offers its remedy, Retry, Remove, and Dismiss in that
   expect(buttons.map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual([
     "Connect GitHub",
     "Retry",
+    "Copy details",
     "Remove",
     "Dismiss",
   ]);
@@ -116,12 +132,19 @@ test("a failure among rows offers its remedy, Retry, Remove, and Dismiss in that
 test("a failure among rows offers only the presses it is given", () => {
   const pressed: string[] = [];
   const alert = mountAlert(
-    createElement(ErrorState, { onDismiss: () => pressed.push("dismiss"), children: LINE }),
+    createElement(ErrorState, {
+      onDismiss: () => pressed.push("dismiss"),
+      failure: FAILURE,
+      children: LINE,
+    }),
   );
   const buttons = [...alert.querySelectorAll("button")];
-  expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual(["Dismiss"]);
+  expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+    "Copy details",
+    "Dismiss",
+  ]);
   expect(alert.textContent).toBe(LINE);
-  act(() => buttons[0]?.click());
+  act(() => buttons[1]?.click());
   expect(pressed).toEqual(["dismiss"]);
 });
 
@@ -154,6 +177,7 @@ test("a failure on a toolbar is one alert with its sentence and presses, its who
       placement: ERROR_STATE_PLACEMENT.TOOLBAR,
       remedy: { label: "Connect GitHub", onClick: () => pressed.push("remedy") },
       onRetry: () => pressed.push("retry"),
+      failure: FAILURE,
       children: LINE,
     }),
   );
@@ -181,8 +205,8 @@ function hintOn(target: Element): string | undefined {
 
 test("a failure's dismiss says Dismiss in a hint on hover", () => {
   const alert = mountAlert(
-    createElement(ErrorState, { onDismiss: () => undefined, children: LINE }),
+    createElement(ErrorState, { onDismiss: () => undefined, failure: FAILURE, children: LINE }),
   );
-  const dismiss = alert.querySelector("button") ?? expect.fail("no dismiss button");
+  const dismiss = alert.querySelector('[aria-label="Dismiss"]') ?? expect.fail("no dismiss button");
   expect(hintOn(dismiss)).toBe(dismiss.getAttribute("aria-label"));
 });

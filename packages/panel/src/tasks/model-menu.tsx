@@ -1,6 +1,7 @@
 import { CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import { remedyLabel } from "@luke/features/failure-remedy";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { readingWords } from "@luke/features/words";
 import {
   ErrorState,
@@ -12,6 +13,7 @@ import {
   SearchableMenu,
   Spinner,
 } from "@luke/ui";
+import { unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
 import { OPEN_SETTINGS_LABEL } from "../open-settings.js";
 import {
@@ -60,11 +62,12 @@ import { useRepositoryRemedy } from "./repository-remedy.js";
  * the model has none or the service withholds it, saying which, which
  * leaves the menu open. A model whose provider no subscription or API key
  * of the account's pays for says "Connect Claude" or "Connect Codex" at its
- * row's end, and its pick closes the menu and lands on that harness's row
- * in Settings › Agents rather than choosing it. On an automation's
+ * row's end, and its pick, or Fast's press where it is the choice, closes
+ * the menu and lands on that harness's row in Settings › Agents rather
+ * than choosing it. On an automation's
  * menu, whose choice a new agent starts on and the reader's own
- * credentials pay for, a choice that is such a model, as a new account's
- * Claude default is on an OpenAI key alone, has a Connect row head the
+ * credentials pay for, a choice that is such a model, as a stored Claude
+ * default is once no Claude credential pays for it, has a Connect row head the
  * pinned rows and the last line say why it cannot run; a running agent's
  * chip says nothing of it, since the catalog marks what the reader's
  * account lacks and the agent runs on what its starter's pays. The id a choice names is
@@ -233,6 +236,9 @@ export function ModelMenu(props: {
           on: read.fast,
           onToggle: () => {
             if (offered === undefined) return;
+            // A model nothing pays for is never chosen, fast or not: the press goes to connect it, as its pick does.
+            const missing = modelConnectFailure(offered.model);
+            if (missing !== undefined) return connect(missing);
             const next = choiceAt(choiceModelId(offered, !read.fast), chosen.effort);
             if (next !== undefined) onChoose(next);
           },
@@ -302,7 +308,9 @@ export function ModelMenu(props: {
       note={
         models === undefined ? (
           props.failed ? (
-            <ErrorState onRetry={props.onRetry}>{MODELS_READ_FAILED}</ErrorState>
+            <ErrorState failure={unreadShown(FAILURE_SURFACE.MODELS_READ)} onRetry={props.onRetry}>
+              {MODELS_READ_FAILED}
+            </ErrorState>
           ) : (
             <Spinner delay label={readingWords("models")} />
           )

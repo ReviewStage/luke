@@ -121,10 +121,34 @@ export function eveFor<Turn extends EveHostTurn = never>(
       if (origin === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* routed(yield* eveSessions<Turn>({ origin, caller: { authorization }, mount }));
     }
-    if (reach.eveAs !== undefined) return yield* routed(reach.eveAs(account));
-    // Note that a runtime without the deployment's environment refuses a cookie's request as
-    // unavailable on purpose, as one whose environment names no secret does: the deployment acts
-    // for no account it cannot prove itself to eve as, and nothing falls back to another caller.
+    return yield* eveActingFor<Turn>(reach, account, mount);
+  });
+}
+
+/**
+ * eve as the deployment reaches it acting for the account, under the
+ * deployment's own secret (`../deployment-eve.ts`): a cookie's request
+ * reaches it so (`eveFor`), and so does a line Luke sends an agent on its own
+ * rather than on a caller's word, as the agent's starter, whichever member's
+ * act it follows (`../../tasks/running-tree.ts`).
+ */
+export function eveActingFor<Turn extends EveHostTurn = never>(
+  reach: EveReach,
+  account: string,
+  mount: EveMount = EVE_MOUNT.CODER,
+): Effect.Effect<
+  AgentSessions<NoInfer<Turn>>,
+  HostedRefusal,
+  HttpClient.HttpClient | DatabaseServices
+> {
+  return Effect.gen(function* () {
+    if (reach.eveAs !== undefined) {
+      const eve: AgentSessions<NoInfer<Turn>> = reach.eveAs(account);
+      return mount === EVE_MOUNT.CODER ? yield* routedSessions(eve, account) : eve;
+    }
+    // Note that a runtime without the deployment's environment refuses as unavailable on purpose,
+    // as one whose environment names no secret does: the deployment acts for no account it cannot
+    // prove itself to eve as, and nothing falls back to another caller.
     const eveAs = yield* deploymentEve<Turn>(reach.eveOrigin(), mount);
     return eveAs(account);
   });
@@ -207,17 +231,28 @@ function stoppable(turn: AgentLatestTurn | undefined): turn is AgentLatestTurn &
   );
 }
 
-/** eve's cancel of the agent's turn under way, as the request's own caller for the account it resolved to (`eveFor`), then the row's stamp; nothing where no turn runs that a Stop has to stop. */
+/** What made a Stop, written on the turn's row beside its instant (`TurnCancelRequest`): none of it for a member's Stop. */
+export interface TurnStop {
+  /** eve's id for the tool call the Stop is made under, where an agent's `stop_agent` made it. */
+  readonly key?: string;
+  /** The coding agent whose `stop_agent` or continue makes the Stop; none for the developer's or Luke's. */
+  readonly by?: string;
+  /** Whether the Stop is its pilot tree's Running switched off (`../../tasks/running-tree.ts`). */
+  readonly forRunning?: boolean;
+}
+
+/** eve's cancel of the agent's turn under way, as the request's own caller for the account it resolved to (`eveFor`), then the row's stamp, and whether eve took it (`cancelledTurn`); nothing where no turn runs that a Stop has to stop. */
 export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   reach: EveReach,
   writer: Effect.Effect<StoreWriter>,
   request: Request,
   account: string,
   agent: Agent,
-): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
+  stop: TurnStop = {},
+): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   // An agent its starter's plan pays for is stopped by those the plan's policy admits.
   yield* admitsPlanWriter(account, agent);
-  yield* cancelledTurn(eveFor(reach, request, account), writer, agent);
+  return yield* cancelledTurn(eveFor(reach, request, account), writer, agent, stop);
 });
 
 /**
@@ -229,7 +264,8 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
  * composed only once there is a turn to cancel. A tool call's Stop names its
  * key, written beside the stamp where eve took the cancel, so the call run
  * again finds the turn it stopped, and one that stopped nothing is run
- * again as it first ran.
+ * again as it first ran; who made the Stop is written beside it as `stop`
+ * names it.
  */
 export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   eveOf: Effect.Effect<
@@ -239,9 +275,7 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   >,
   writer: Effect.Effect<StoreWriter>,
   agent: Agent,
-  key?: string,
-  /** The coding agent whose `stop_agent` or continue makes the Stop; none for the developer's or Luke's. */
-  by?: string,
+  { key, by, forRunning }: TurnStop = {},
 ): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   // A native agent's released wait left wakeups with no turn running to name, which a Stop ends
@@ -283,6 +317,7 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
         at,
         ...(key === undefined || !accepted ? undefined : { key }),
         ...(by === undefined ? undefined : { by }),
+        ...(forRunning === true && accepted ? { forRunning } : undefined),
       }),
     ),
   );

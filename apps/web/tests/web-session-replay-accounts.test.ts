@@ -8,7 +8,7 @@ import { applyWebSessionReplay } from "../src/app/web-session-replay";
 
 /**
  * A recording follows the account: it is filed under whoever is signed in,
- * under nobody once they leave, and it stops in every tab of the browser
+ * stops when they leave, and stops in every tab of the browser
  * when one of them deletes the account, since each tab runs a host of its
  * own that would otherwise go on recording, signed out, after the deletion.
  */
@@ -54,26 +54,26 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("a sign-out files what follows under nobody, and a sign-in after it or in place of the account is never joined to the person before", async () => {
+test("a sign-out stops the recording, and a sign-in after it or in place of the account is never joined to the person before", async () => {
   applyWebSessionReplay(signedIn("user-1"));
   await vi.waitFor(() => assert.equal(posthog.get_distinct_id(), "user-1"));
 
   applyWebSessionReplay(signedOut());
-  assert.equal(posthog.sessionRecordingStarted(), true);
-  const anonymous = posthog.get_distinct_id();
-  assert.notEqual(anonymous, "user-1");
+  assert.equal(posthog.sessionRecordingStarted(), false);
+  assert.notEqual(posthog.get_distinct_id(), "user-1");
 
   applyWebSessionReplay(signedIn("user-5"));
+  assert.equal(posthog.sessionRecordingStarted(), true);
   assert.equal(posthog.get_distinct_id(), "user-5");
-  assert.equal(identifiedAs("user-5")?.properties.$anon_distinct_id, anonymous);
+  assert.notEqual(identifiedAs("user-5")?.properties.$anon_distinct_id, "user-1");
 
   // Someone else in place of the account, with no sign-out between.
   applyWebSessionReplay(signedIn("user-6"));
   assert.equal(posthog.get_distinct_id(), "user-6");
   assert.equal(posthog.sessionRecordingStarted(), true);
   assert.notEqual(identifiedAs("user-6")?.properties.$anon_distinct_id, "user-5");
-  // The build is still named on what is sent after the reset.
-  assert.equal(identifiedAs("user-6")?.properties.app_name, "web");
+  // The build and the shell are still named on what is sent after the reset.
+  assert.equal(identifiedAs("user-6")?.properties.platform, "web");
 });
 
 test("an account deleted in another tab stands this tab's recording down until it sees a sign-in after the sign-out", async () => {
@@ -128,12 +128,18 @@ test("an account deleted in this tab is told to every other tab once it lands, a
 });
 
 test("a tab already signed out when another tab deletes the account records again at its next sign-in", async () => {
-  applyWebSessionReplay(signedOut());
+  applyWebSessionReplay(signedIn("user-12"));
   await vi.waitFor(() => assert.equal(posthog.sessionRecordingStarted(), true));
+  applyWebSessionReplay(signedOut());
+  assert.equal(posthog.sessionRecordingStarted(), false);
 
   const otherTab = new BroadcastChannel(RECORDING_CHANNEL);
-  otherTab.postMessage("account-deleted");
-  await vi.waitFor(() => assert.equal(posthog.sessionRecordingStarted(), false));
+  const heard = Promise.withResolvers<void>();
+  otherTab.addEventListener("message", () => heard.resolve());
+  const notice = new BroadcastChannel(RECORDING_CHANNEL);
+  notice.postMessage("account-deleted");
+  notice.close();
+  await heard.promise;
   otherTab.close();
 
   applyWebSessionReplay(signedIn("user-11"));

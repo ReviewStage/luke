@@ -22,7 +22,6 @@ import {
   type AgentInboxAnswerParams,
   type AgentInboxAttachmentParams,
   type AgentInboxAttachmentView,
-  type AgentInboxChanged,
   type AgentInboxCloseParams,
   type AgentInboxMessagedView,
   type AgentInboxMessageParams,
@@ -77,7 +76,6 @@ import {
   agentGitHubImageViewSchema,
   agentInboxAnsweredViewSchema,
   agentInboxAttachmentViewSchema,
-  agentInboxChangedSchema,
   agentInboxMessagedViewSchema,
   agentInboxReadAllViewSchema,
   agentInboxReadStateViewSchema,
@@ -398,7 +396,13 @@ import {
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
-import type { AppAccessSlice, AppHostRead, AppInboxItems } from "./app-state.js";
+import type {
+  AppAccessSlice,
+  AppHolderInboxes,
+  AppHostRead,
+  AppInboxItems,
+  SessionReplayState,
+} from "./app-state.js";
 import { type ThisMacHostStanding, thisMacHostStandingSchema } from "./contract/this-mac-host.js";
 import {
   type MacCommandAnswer,
@@ -420,7 +424,7 @@ import {
 export interface HostBootstrap {
   settings: AppSettings;
   account: AccountSnapshot;
-  sessionReplay: { permitted: boolean; accountId?: string };
+  sessionReplay: SessionReplayState;
   /** What the signed-in account may open in the app, as the host last read it. */
   access: AppAccessSlice;
 }
@@ -429,11 +433,6 @@ interface HostSettingsChange {
   settings: AppSettings;
   /** The opaque reporter whose write produced the change, so the relay can skip echoing it. */
   reporter?: string;
-}
-
-interface HostSessionReplay {
-  permitted: boolean;
-  accountId?: string;
 }
 
 export interface HostOperator {
@@ -844,12 +843,14 @@ export interface HostOperator {
   dictationTranscribe(
     params: DictationTranscribeParams,
   ): Effect.Effect<DictationTranscribeAnswerView>;
-  /** One task's or agent's inbox, followed from now until let go or signed out, heard through `onInboxChanged`; following again starts over. */
+  /** One task's or agent's inbox held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onHolderInboxesChanged`. */
   agentInboxFollow(scope: AgentInboxScope): Effect.Effect<void>;
-  /** One task's or agent's inbox let go: nothing more is heard of it until it is followed again. */
+  /** One task's or agent's inbox let go by the windows: it stays followed among those let go lately until later ones push it out. */
   agentInboxUnfollow(scope: AgentInboxScope): Effect.Effect<void>;
-  /** A followed inbox, its items whole or why there are none, each time it changes. */
-  onInboxChanged(listener: (changed: AgentInboxChanged) => void): () => void;
+  /** One held task's or agent's inbox read again at once, as Try again asks. */
+  agentInboxRetry(scope: AgentInboxScope): Effect.Effect<void>;
+  /** Every task's or agent's inbox the host holds for the windows, whole, each time any of them moves. */
+  onHolderInboxesChanged(listener: (held: AppHolderInboxes) => void): () => void;
   /** One item of a task's inbox answered; the item as it then stands and whether the answer was taken, or why there is no answer. */
   agentInboxAnswer(params: AgentInboxAnswerParams): Effect.Effect<AgentInboxAnsweredView>;
   /** One open item of a task's inbox closed without an answer; the item as it then stands and whether the close was taken, or why there is no answer. */
@@ -889,7 +890,7 @@ export interface HostOperator {
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onAccountAccessChanged(listener: (access: AppAccessSlice) => void): () => void;
-  onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
+  onSessionReplayChanged(listener: (replay: SessionReplayState) => void): () => void;
   onTasksChanged(listener: (view: TasksView) => void): () => void;
   /** The commands agents asked to run on this Mac that wait on the developer, whole, each time one is asked or answered. */
   onMacCommandAsksChanged(listener: (asks: readonly MacCommandAsk[]) => void): () => void;
@@ -2156,13 +2157,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           id: scope.id,
         }),
       ),
-    onInboxChanged: (listener) =>
+    agentInboxRetry: (scope) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_INBOX_RETRY, { kind: scope.kind, id: scope.id })),
+    onHolderInboxesChanged: (listener) =>
       on(
-        GATEWAY_EVENT.INBOX_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(agentInboxChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
+        GATEWAY_EVENT.HOLDER_INBOXES_CHANGED,
+        // Note that the held inboxes are the host's own, handed over in this process, so they are passed on as built, as the account's items are.
+        (payload) => (isRecord(payload) ? answered<AppHolderInboxes>(payload) : undefined),
         listener,
       ),
     agentInboxAnswer: (params) =>
@@ -2459,11 +2460,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     onSessionReplayChanged: (listener) =>
       on(
         GATEWAY_EVENT.SESSION_REPLAY_CHANGED,
-        (payload): HostSessionReplay | undefined =>
+        (payload): SessionReplayState | undefined =>
           isRecord(payload) && isWireBoolean(payload.permitted)
             ? {
                 permitted: payload.permitted,
                 ...(isWireString(payload.accountId) ? { accountId: payload.accountId } : undefined),
+                ...(isWireString(payload.name) ? { name: payload.name } : undefined),
+                ...(isWireString(payload.email) ? { email: payload.email } : undefined),
               }
             : undefined,
         listener,

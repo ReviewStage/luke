@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { TaskSummary } from "@luke/features/task-wire";
+import { TASK_STATUS, type TaskStatus, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -276,4 +276,73 @@ test("grouped by assignee, a group whose last task is given away slides out wher
     groups(container).map(([heard]) => heard),
     ["Ada Lovelace"],
   );
+});
+
+test("grouped by assignee, a child task stands under its parent in the parent's group, never in its own assignee's", () => {
+  const shared = { ...WORKSPACE, memberCount: 2 };
+  window.localStorage.setItem(
+    "luke.sidebarTaskViews",
+    JSON.stringify({ [WORKSPACE.id]: { grouping: "assignee", order: "updated" } }),
+  );
+  const ada = { userId: "user-ada", name: "Ada Lovelace" };
+  const grace = { userId: "user-grace", name: "Grace Hopper" };
+  const { container, draw } = mountSidebar([]);
+  draw(
+    [
+      { ...task("t-1", "Cleanup", 2), assignee: ada },
+      { ...task("t-2", "Probe", 1), assignee: grace, parentTaskId: "t-1" },
+    ],
+    { workspace: shared, workspaces: [shared] },
+  );
+  assert.deepEqual(groups(container), [["Ada Lovelace", ["Cleanup"]]]);
+
+  const fold = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Child tasks of Cleanup"]',
+  );
+  act(() => fold?.click());
+  assert.deepEqual(groups(container), [["Ada Lovelace", ["Cleanup", "Probe"]]]);
+});
+
+test("a chosen child task whose parent the view comes to hide is no longer chosen, so a menu on another chosen row acts on that row alone", () => {
+  const working = { status: TASK_STATUS.IN_PROGRESS };
+  const listed = (parentStatus: TaskStatus) => [
+    { ...task("t-1", "Cleanup", 3), status: parentStatus },
+    { ...task("t-2", "Probe", 2), ...working, parentTaskId: "t-1" },
+    { ...task("t-3", "Usage report", 1), ...working },
+  ];
+  const { container, draw } = mountSidebar(listed(TASK_STATUS.IN_PROGRESS));
+  const fold = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Child tasks of Cleanup"]',
+  );
+  act(() => fold?.click());
+  const rowOf = (name: string) =>
+    [...container.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find((each) =>
+      each.textContent?.includes(name),
+    ) ?? assert.fail(`no ${name} row`);
+  const heading = () => {
+    act(() => {
+      rowOf("Usage report").dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }),
+      );
+    });
+    const words = document.querySelector(".luke-menu-heading")?.textContent;
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    return words;
+  };
+  for (const name of ["Probe", "Usage report"]) {
+    act(() => {
+      rowOf(name).dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
+      );
+    });
+  }
+  assert.equal(heading(), "2 tasks");
+
+  draw(listed(TASK_STATUS.DONE));
+  assert.deepEqual(names(container), ["Usage report"]);
+  assert.notEqual(heading(), "2 tasks");
 });

@@ -118,13 +118,25 @@ export interface AppAudioSlice {
 }
 
 /**
+ * What the host answers about recording: whether this run may record, and
+ * the signed-in account a recording is filed under, by its opaque id with the
+ * name and email the person is shown by. All three are absent while signed
+ * out, and are read off one snapshot of the session, so they never name two
+ * accounts at once.
+ */
+export interface SessionReplayState {
+  permitted: boolean;
+  accountId?: string;
+  name?: string;
+  email?: string;
+}
+
+/**
  * What this run may record, as its two halves: what the host answered, and
  * whether an action that ended the account it files under has stood recording
  * down for the rest of the run.
  */
-interface AppSessionReplaySlice {
-  permitted: boolean;
-  accountId?: string;
+interface AppSessionReplaySlice extends SessionReplayState {
   halted: boolean;
 }
 
@@ -256,22 +268,43 @@ export interface AppHostRead<Rows> {
 /** A read that has not answered yet, as every read stands as a session opens. */
 export const UNREAD: AppHostRead<never> = {};
 
+/** One value for each holder of inbox items, a plan or an agent, by its kind and then its id, never by a key built from both. */
+type ByInboxHolder<Value> = {
+  readonly [Kind in InboxHolderKind]: Readonly<Record<string, Value>>;
+};
+
 /**
  * Every inbox item the account reaches, settled ones of the read's window
  * among them, by the plan each is on, or its agent where that has no task,
  * each holder's in the order its own read answers them. A holder it holds
  * nothing of holds nothing now.
  */
-export type AppInboxItems = {
-  readonly [Kind in InboxHolderKind]: Readonly<Record<string, readonly InboxItem[]>>;
-};
+export type AppInboxItems = ByInboxHolder<readonly InboxItem[]>;
 
 /** The kind of holder an inbox item is on: a plan, or an agent with no task. */
 type InboxHolderKind = (typeof INBOX_SCOPE_KIND)[keyof typeof INBOX_SCOPE_KIND];
 
-/** The rows of each read the host holds for the panel, by its name. */
+/** One plan's or agent's own inbox, as the host's read of it stands: its items whole, every open one and the latest settled, once it answered. */
+export type AppHolderInbox = AppHostRead<readonly InboxItem[]>;
+
+/**
+ * Each plan's or agent's inbox the host holds for the windows
+ * (`scope-inbox-follow.ts`): the holders a window chose, and the few let go
+ * lately, by kind and then by id, each as its own read stands. A holder
+ * absent is held by nobody, so a surface draws it from the account's feed.
+ */
+export type AppHolderInboxes = ByInboxHolder<AppHolderInbox>;
+
+/** No holder's inbox held, as the host stands before any window chooses one and after the session ends. */
+export const NO_HOLDER_INBOXES: AppHolderInboxes = {
+  [INBOX_SCOPE_KIND.PLAN]: {},
+  [INBOX_SCOPE_KIND.AGENT]: {},
+};
+
+/** The rows of each read the host holds for the panel, by its name: a keyed read's are one key's rows. */
 export interface AppHostReads {
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
+  [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
 }
 
 /**
@@ -352,6 +385,8 @@ export interface AppState {
   inbox: AppInboxSlice;
   /** Every inbox item the account reaches, held for the signed-in session: what the window's Inbox, its search, and a person's page list. */
   [LIVE_READ.INBOX_ITEMS]: AppHostRead<AppInboxItems>;
+  /** Each plan's or agent's inbox the windows chose, held while a window holds it and a while after: what a chosen item's pane, a task's Inbox tab, and an agent's page read past the feed. */
+  [LIVE_READ.HOLDER_INBOX]: AppHolderInboxes;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;
@@ -422,31 +457,28 @@ export interface AppStateDelivery {
   readonly entries: { readonly [Entry in AppStateEntry]?: AppStateSnapshot[Entry] };
   readonly gone?: readonly AppStateEntry[];
   /** Each holder of the account's feed that moved since the window's last delivery, whole, one gone as null, in place of the feed's entry, where the window held its rows and still does. */
-  readonly inboxHolders?: AppInboxHolders;
+  readonly inboxHolders?: InboxHoldersMoved<readonly InboxItem[]>;
+  /** Each held inbox that moved since the window's last delivery, its read whole, one let go as null, in place of the held inboxes' entry, where the window held the entry. */
+  readonly holderInboxes?: InboxHoldersMoved<AppHolderInbox>;
 }
 
-/** The holders of the account's feed that moved, by kind: each whole, or null where it is gone, which an empty list is not. */
-type AppInboxHolders = {
-  readonly [Kind in InboxHolderKind]: Readonly<Record<string, readonly InboxItem[] | null>>;
-};
+/** The holders that moved, by kind: each whole, or null where it is gone, which an empty value is not. */
+type InboxHoldersMoved<Value extends object> = ByInboxHolder<Value | null>;
 
 /**
- * Each holder of the account's feed that moved from `sent` to `next`, one
- * gone as null; none where either holds no rows, which crosses whole, or
- * where none moved. Note that a change crosses as the holders it moved,
- * since the largest workspace's feed is megabytes and a change moves one
- * task's list.
+ * Each holder that moved from `before` to `after`, whole, and each gone as
+ * null; none where none moved. Note that a change crosses as the holders
+ * it moved, since the largest workspace's feed is megabytes, a held inbox
+ * is a task's whole, and a change moves one holder's.
  */
-function inboxHoldersPatch(
-  sent: AppHostRead<AppInboxItems> | undefined,
-  next: AppHostRead<AppInboxItems> | undefined,
-): AppInboxHolders | undefined {
-  const [before, after] = [sent?.rows, next?.rows];
-  if (before === undefined || after === undefined) return undefined;
+function inboxHoldersMoved<Value extends object>(
+  before: ByInboxHolder<Value>,
+  after: ByInboxHolder<Value>,
+): InboxHoldersMoved<Value> | undefined {
   const ofKind = (kind: InboxHolderKind) =>
     Object.fromEntries([
       ...Object.entries(after[kind]).filter(
-        ([id, items]) => !Equal.equals(before[kind][id], items),
+        ([id, value]) => !Equal.equals(before[kind][id], value),
       ),
       ...Object.keys(before[kind])
         .filter((id) => !Object.hasOwn(after[kind], id))
@@ -461,26 +493,33 @@ function inboxHoldersPatch(
     : undefined;
 }
 
-/** The account's feed once `patch` lands on `held`: each holder moved laid in, keeping what of it did not move, each gone dropped, and every other the very list held. */
-function withInboxHolders(
-  held: AppHostRead<AppInboxItems> | undefined,
-  patch: AppInboxHolders,
-): AppHostRead<AppInboxItems> {
+/** The holders once `patch` lands on `held`: each moved laid in, keeping what of it did not move, each gone dropped, and every other the very value held. */
+function withInboxHoldersMoved<Value extends object>(
+  held: ByInboxHolder<Value> | undefined,
+  patch: InboxHoldersMoved<Value>,
+): ByInboxHolder<Value> {
   const ofKind = (kind: InboxHolderKind) => {
-    const next: Record<string, readonly InboxItem[]> = { ...held?.rows?.[kind] };
-    for (const [id, items] of Object.entries(patch[kind])) {
+    const next: Record<string, Value> = { ...held?.[kind] };
+    for (const [id, value] of Object.entries(patch[kind])) {
       const was = next[id];
-      if (items === null) Reflect.deleteProperty(next, id);
-      else next[id] = was === undefined ? items : keepIdentity(was, items);
+      if (value === null) Reflect.deleteProperty(next, id);
+      else next[id] = was === undefined ? value : keepIdentity(was, value);
     }
     return next;
   };
   return {
-    rows: {
-      [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN),
-      [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT),
-    },
+    [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN),
+    [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT),
   };
+}
+
+/** Each holder of the account's feed that moved from `sent` to `next`; none where either holds no rows, which crosses whole. */
+function inboxHoldersPatch(
+  sent: AppHostRead<AppInboxItems> | undefined,
+  next: AppHostRead<AppInboxItems> | undefined,
+): InboxHoldersMoved<readonly InboxItem[]> | undefined {
+  const [before, after] = [sent?.rows, next?.rows];
+  return before === undefined || after === undefined ? undefined : inboxHoldersMoved(before, after);
 }
 
 /**
@@ -498,14 +537,27 @@ export function appStateDelivery(
     (name) => name !== "version",
   ) as AppStateEntry[];
   const holders = inboxHoldersPatch(sent?.[LIVE_READ.INBOX_ITEMS], next[LIVE_READ.INBOX_ITEMS]);
-  // Note that the feed's entry is compared by its holders alone where it crosses as them, so its whole is never walked twice.
+  const heldBefore = sent?.[LIVE_READ.HOLDER_INBOX];
+  const holderInboxes =
+    heldBefore === undefined
+      ? undefined
+      : inboxHoldersMoved(heldBefore, next[LIVE_READ.HOLDER_INBOX]);
+  // Note that the feed's entry, and the held inboxes', are compared by their holders alone where they cross as them, so neither whole is walked twice.
   const moved = names.filter(
     (name) =>
       (holders === undefined || name !== LIVE_READ.INBOX_ITEMS) &&
+      (heldBefore === undefined || name !== LIVE_READ.HOLDER_INBOX) &&
       (sent === undefined || !Equal.equals(sent[name], next[name])),
   );
   const gone = moved.filter((name) => next[name] === undefined);
-  if (sent !== undefined && moved.length === 0 && holders === undefined) return undefined;
+  if (
+    sent !== undefined &&
+    moved.length === 0 &&
+    holders === undefined &&
+    holderInboxes === undefined
+  ) {
+    return undefined;
+  }
   return {
     version: next.version,
     entries: Object.fromEntries(
@@ -513,6 +565,7 @@ export function appStateDelivery(
     ),
     ...(gone.length === 0 ? undefined : { gone }),
     ...(holders === undefined ? undefined : { inboxHolders: holders }),
+    ...(holderInboxes === undefined ? undefined : { holderInboxes }),
   };
 }
 
@@ -537,12 +590,26 @@ export function withAppStateDelivery(
     delivery.inboxHolders === undefined
       ? undefined
       : {
-          [LIVE_READ.INBOX_ITEMS]: withInboxHolders(
-            held[LIVE_READ.INBOX_ITEMS],
-            delivery.inboxHolders,
+          [LIVE_READ.INBOX_ITEMS]: {
+            rows: withInboxHoldersMoved(held[LIVE_READ.INBOX_ITEMS].rows, delivery.inboxHolders),
+          },
+        };
+  const holderInboxes =
+    delivery.holderInboxes === undefined
+      ? undefined
+      : {
+          [LIVE_READ.HOLDER_INBOX]: withInboxHoldersMoved(
+            held[LIVE_READ.HOLDER_INBOX],
+            delivery.holderInboxes,
           ),
         };
-  const next: AppStateSnapshot = { ...held, ...entries, ...holders, version: delivery.version };
+  const next: AppStateSnapshot = {
+    ...held,
+    ...entries,
+    ...holders,
+    ...holderInboxes,
+    version: delivery.version,
+  };
   // Note that an entry gone is held as no key at all, as the document holds it.
   for (const name of delivery.gone ?? []) Reflect.deleteProperty(next, name);
   return next;
@@ -588,6 +655,8 @@ export function sessionReplayBootstrap(
     appVersion: state.run.appVersion,
     packaged: state.run.packaged,
     ...(state.sessionReplay.accountId ? { accountId: state.sessionReplay.accountId } : undefined),
+    ...(state.sessionReplay.name ? { name: state.sessionReplay.name } : undefined),
+    ...(state.sessionReplay.email ? { email: state.sessionReplay.email } : undefined),
   };
 }
 

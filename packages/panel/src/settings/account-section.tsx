@@ -2,6 +2,7 @@ import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { GitHubTokenSummary } from "@luke/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { IRREVERSIBLE_WORDS, VERB } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
@@ -26,6 +27,7 @@ import type { ActionResult } from "@luke/wire";
 import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { confirmFailure, unreadShown } from "../failure-report.js";
 import { showToast, TOAST_HOLD } from "../toast.js";
 import { useHeldThroughExit } from "../use-held-through-exit.js";
 import { useBusyPress } from "./busy-press.js";
@@ -56,8 +58,13 @@ const SIGN_OUT_FAILED = "The account could not be signed out. Try again.";
 export async function signOutSayingFailure(onSignOut: () => Promise<void>): Promise<void> {
   try {
     await onSignOut();
-  } catch {
-    showToast({ words: SIGN_OUT_FAILED, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+  } catch (cause) {
+    showToast({
+      words: SIGN_OUT_FAILED,
+      tone: STATUS_TONE.DANGER,
+      hold: TOAST_HOLD.FAILED,
+      failure: { surface: FAILURE_SURFACE.ACCOUNT_SIGN_OUT, cause },
+    });
   }
 }
 
@@ -112,7 +119,10 @@ function GitHubTokenRow(): React.JSX.Element {
         below={
           token === undefined && readFailed
             ? () => (
-                <FailureNote onRetry={() => setAttempt((n) => n + 1)}>
+                <FailureNote
+                  failure={unreadShown(FAILURE_SURFACE.ACCOUNT_TOKEN_READ)}
+                  onRetry={() => setAttempt((n) => n + 1)}
+                >
                   {TOKEN_READ_FAILED}
                 </FailureNote>
               )
@@ -161,7 +171,11 @@ export function AccountSection({
   const signOut = useBusyPress(() => signOutSayingFailure(onSignOut));
   // Note that the section is only drawn while its page is, so the page
   // leaving takes the question with it.
-  const deletion = useConfirmDialog({ subject: true, surfaceOpen: true }, onDeleteAccount);
+  const deletion = useConfirmDialog(
+    { subject: true, surfaceOpen: true },
+    onDeleteAccount,
+    confirmFailure(FAILURE_SURFACE.ACCOUNT_DELETE),
+  );
 
   // Note that each row stands in a wrapper wearing its search anchor, because
   // a pressed result lands on and rings the whole row, as it did before the

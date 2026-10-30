@@ -5,7 +5,12 @@ import {
 } from "@luke/features/agent-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { readLink } from "@luke/features/link-grammar";
-import { mayNameMention } from "@luke/features/mention-link";
+import {
+  decodeMention,
+  encodeMention,
+  MENTION_KIND,
+  mayNameMention,
+} from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { formatBytes } from "@luke/features/number-format";
 import { planAttachmentOf } from "@luke/features/plan-attachment-link";
@@ -19,6 +24,8 @@ import {
   callPlace,
   isAgentCallKind,
   isCommandKind,
+  type MadeCallKind,
+  madeCallLine,
   sameFieldsBy,
   sameTurnRow,
   TURN_ROW,
@@ -43,6 +50,9 @@ import {
   InlineRef,
   LAYOUT_ELEMENT,
   LineButton,
+  LineRow,
+  NOTE_LINE_LOOK,
+  NoteLine,
   OneLine,
   ProviderMark,
   RollingNumber,
@@ -99,6 +109,7 @@ import {
   TimerIcon,
   WrenchIcon,
 } from "@luke/ui/icons";
+import { saysOwnAddress, siteName } from "@luke/ui/link-face";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import {
   MARKDOWN_HTML_STEP,
@@ -108,6 +119,8 @@ import {
   markdownStep,
   TRANSCRIPT_REMARK_STEPS,
 } from "@luke/ui/markdown";
+import { QUOTE_CLASS } from "@luke/ui/quote-face";
+import { UNREPORTED } from "@luke/ui/reported-failure";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
   type ComponentProps,
@@ -148,13 +161,14 @@ import {
   type ToolState,
   ToolStateMark,
   ToolSummary,
+  ToolTerminal,
 } from "../ai-elements/tool.js";
 import { OUTSIDE_GLYPH_CLASS } from "../picture-block.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { TextLink } from "../text-link.js";
 import { useInboxPictureDrawer } from "./inbox-pictures.js";
 import { LoneLinkCard } from "./lone-link-card.js";
-import { linkChip } from "./mention-chip.js";
+import { linkChip, type MentionDoors } from "./mention-chip.js";
 import { ModelLabel } from "./model-label.js";
 import { usePlanPictureDrawer } from "./plan-pictures.js";
 import { SubagentMark } from "./tab-look.js";
@@ -197,7 +211,8 @@ export const INERT_LINK_CLASS =
 /**
  * A link in a transcript's words. A web page, such as the pull request an
  * agent opened or the docs it read, is a plain link (`../text-link.tsx`)
- * that opens in the browser over the act channel (`use-open-link.ts`); any
+ * that opens in the browser over the act channel (`use-open-link.ts`), or,
+ * written bare, as its own address, its website chip (`SiteChip`); any
  * other address is drawn as words that go nowhere, with the address as its
  * hint. `words` are its label's, which say whether it is its own address.
  * Note that the press is ours rather than Streamdown's, because Streamdown's
@@ -221,10 +236,38 @@ function TranscriptLink({
       </Tooltip>
     );
   }
+  if (saysOwnAddress(href, words) && siteName(href) !== undefined) return <SiteChip href={href} />;
   return (
     <TextLink href={href} words={words} onOpen={openLink}>
       {children}
     </TextLink>
+  );
+}
+
+/**
+ * A page of the web as a chip: a globe and its site, its whole address in
+ * its hint, opening in the browser (`use-open-link.ts`). Note that it
+ * fetches no favicon, because that would tell a third party every page a
+ * transcript names; and that the press stops at the chip, because a call's
+ * row it stands in would fold.
+ */
+function SiteChip({ href }: { href: string }): ReactNode {
+  const openLink = useOpenLink();
+  return (
+    <InlineRef
+      look={INLINE_REF_LOOK.PILL}
+      glyph={<GLYPH.WEBSITE />}
+      label={siteName(href) ?? href}
+      hintLabel={href}
+      onPress={(event: MouseEvent<HTMLElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openLink(href);
+      }}
+      linkHref={href}
+      leaves
+      data-site-chip=""
+    />
   );
 }
 
@@ -1098,6 +1141,45 @@ function chippedLine(
   };
 }
 
+/** The kinds of call that name files, which a row names by the first one's chip. */
+const FILE_CALLS: ReadonlySet<CallKind> = new Set([
+  CALL_KIND.READ_FILE,
+  CALL_KIND.WRITE_FILE,
+  CALL_KIND.EDIT,
+]);
+
+/**
+ * The chip a call's row names what it read or wrote by: the first file's,
+ * of the task's repository, with its hover card, or the website chip of the
+ * page it fetched; nothing where it names neither, or the place knows no
+ * repository, or the path is no file of it, as an absolute one or one that
+ * climbs out is not, and the row says its subject as words.
+ */
+function calledChip(
+  kind: CallKind,
+  files: readonly string[] | undefined,
+  page: string | undefined,
+  doors: MentionDoors,
+): ReactNode | undefined {
+  if (kind === CALL_KIND.WEB_PAGE) {
+    return page === undefined || siteName(page) === undefined ? undefined : (
+      <SiteChip href={page} />
+    );
+  }
+  const first = FILE_CALLS.has(kind) ? files?.[0] : undefined;
+  const repository = doors.place.repository;
+  if (first === undefined || repository === null) return undefined;
+  const target = encodeMention({ kind: MENTION_KIND.FILE, path: first }, doors.place);
+  // Note that a path that climbs out of the checkout reads back as no file, or as some other page of GitHub's, so it stays words.
+  if (decodeMention(target, repository)?.kind !== MENTION_KIND.FILE) return undefined;
+  return linkChip(target, target, doors);
+}
+
+/** How many files a call named past the first, which its row says after the first one's chip; none for one file. */
+function moreFiles(files: readonly string[] | undefined): string | undefined {
+  return files === undefined || files.length < 2 ? undefined : `+${files.length - 1}`;
+}
+
 /** Whose Mac a transcript's Mac commands ran on, its agent's starter, the reader's own among them (`macOwnerOf`); none where the window cannot tell, whose ran on the reader's own as far as it knows. */
 const MacOwnerContext = createContext<Actor | undefined>(undefined);
 
@@ -1117,6 +1199,12 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
     agent?: Actor | undefined;
     /** For a call about one coding agent, the agent's card, which its chip hangs; none where the place hangs none. */
     agentCard?: ReactNode;
+    /** For a call that made or is about a page, the plan, a thread, a task, or a pull request, that thing's chip, which the row names it by after its verb alone, its press alone opening it; none where the place cannot link it. */
+    made?: { readonly kind: MadeCallKind; readonly chip: ReactNode } | undefined;
+    /** For a call that read, wrote, or edited files, their paths, which the row names by the first one's chip and how many more. */
+    files?: readonly string[] | undefined;
+    /** For a read of a web page, its whole address, which the row names by its website chip. */
+    page?: string | undefined;
     input: ToolBlock;
     /** Nothing while the call has not answered. */
     output: ToolBlock | undefined;
@@ -1127,11 +1215,16 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
 
 /**
  * One tool call: its row saying what it did, closed until clicked, and its
- * input and answer under it once opened. A command is the closed row's
+ * input and answer under it once opened, a command's as one terminal card
+ * (`ToolTerminal`). A command is the closed row's
  * preview, dropped once the body under it shows the command whole behind
  * its prompt, or by a find, which draws that body hidden, and so is any
  * subject the input says whole, a read's path or a search's pattern
- * (`blockSays`); a description stays, since the body does not say it.
+ * (`blockSays`); a description stays, since the body does not say it. A
+ * call that made something names it by its chip, as a call about an agent
+ * names the agent by its own; one that read, wrote, or edited files names
+ * the first by its chip, and one that fetched a page names it by its
+ * website chip (`calledChip`), which stays as the row opens.
  */
 export function TranscriptTool({
   state,
@@ -1142,6 +1235,9 @@ export function TranscriptTool({
   description,
   agent,
   agentCard,
+  made,
+  files,
+  page,
   input,
   output,
   errorText,
@@ -1149,7 +1245,13 @@ export function TranscriptTool({
   ...props
 }: TranscriptToolProps): ReactNode {
   const Icon = CALL_ICON[kind];
-  const { line, chip } = chippedLine(kind, subject, description, agent, undefined, agentCard);
+  const called = calledChip(kind, files, page, useMentionDoors());
+  const { line, chip } =
+    made !== undefined
+      ? { line: madeCallLine(made.kind), chip: made.chip }
+      : called === undefined
+        ? chippedLine(kind, subject, description, agent, undefined, agentCard)
+        : { line: { ...callLine(kind, moreFiles(files), undefined), code: false }, chip: called };
   const command = isCommandKind(kind);
   const macOwner = useContext(MacOwnerContext);
   return (
@@ -1181,16 +1283,32 @@ export function TranscriptTool({
         }
       />
       <ToolContent bare>
-        <ToolInput block={input} />
-        {cut === undefined ? (
-          <ToolOutput block={output} errorText={errorText} />
+        {input.kind === TOOL_BLOCK.COMMAND ? (
+          cut === undefined ? (
+            <ToolTerminal input={input} block={output} errorText={errorText} />
+          ) : (
+            <CutWords cut={cut} waiting={CUT_WORDS.OUTPUT}>
+              <ToolTerminal
+                input={input}
+                block={{ kind: TOOL_BLOCK.TEXT, text: cutText(cut) }}
+                errorText={undefined}
+              />
+            </CutWords>
+          )
         ) : (
-          <CutWords cut={cut} waiting={CUT_WORDS.OUTPUT}>
-            <ToolOutput
-              block={{ kind: TOOL_BLOCK.TEXT, text: cutText(cut) }}
-              errorText={undefined}
-            />
-          </CutWords>
+          <>
+            <ToolInput block={input} />
+            {cut === undefined ? (
+              <ToolOutput block={output} errorText={errorText} />
+            ) : (
+              <CutWords cut={cut} waiting={CUT_WORDS.OUTPUT}>
+                <ToolOutput
+                  block={{ kind: TOOL_BLOCK.TEXT, text: cutText(cut) }}
+                  errorText={undefined}
+                />
+              </CutWords>
+            )}
+          </>
         )}
       </ToolContent>
     </Tool>
@@ -1199,7 +1317,7 @@ export function TranscriptTool({
 
 /**
  * A call whose subject stands in a tab of its own, as a coding agent's start
- * does once the agent began, or a page once shown: the
+ * does once the agent began, or a skill once loaded: the
  * call's line as a call's row draws it, its icon, what it did, and where it
  * stands, as the one button that opens that tab rather than folding its
  * input and answer open in place, its hover saying what it opens, or
@@ -1284,7 +1402,8 @@ const UNNAMED_AGENT: Actor = {
  * input, its line's preview giving way while they are shown. The agent is
  * reached from its chip (`AgentCallChip`), whose press opens its tab and
  * whose hover hangs its card, so the row keeps one press, the fold, and
- * wears no toggle of its own at its end. Note that an agent the place knows
+ * wears no toggle of its own at its end. What it sent is drawn as the
+ * transcript's own quote, as a quote in an agent's words is. Note that an agent the place knows
  * by no name yet still gets its chip, named as its card names it, because
  * the chip is the row's one way to the agent.
  */
@@ -1318,17 +1437,19 @@ function SentCall({
         subjectIsCode={line.code}
         subjectInBody
       />
-      <ToolContent name="tool-sent-words">
+      <ToolContent name="tool-sent-words" bare>
         {sent.words === undefined ? null : (
-          <div className="px-list-inset py-row-inset">
+          <blockquote className={QUOTE_CLASS}>
             <TranscriptWords text={sent.words} />
-          </div>
+          </blockquote>
         )}
         {sent.note === undefined ? null : (
-          <div className="px-list-inset py-row-inset">
-            <div className="text-caption-inline text-muted-foreground">{SENT_WORDS.NOTE}</div>
+          <blockquote className={QUOTE_CLASS}>
+            <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {SENT_WORDS.NOTE}
+            </Text>
             <TranscriptWords text={sent.note} />
-          </div>
+          </blockquote>
         )}
       </ToolContent>
     </Tool>
@@ -1465,7 +1586,9 @@ export function TranscriptTodos({
       <FoldBody className="mt-list-gap mr-0 mb-tight-gap ml-transcript-gutter select-text">
         <TodoItems todos={todos} live={live} />
         {errorText === undefined ? null : (
-          <FailureNote time={FAILURE_NOTE_TIME.PAST}>{errorText}</FailureNote>
+          <FailureNote failure={UNREPORTED.TOOL} time={FAILURE_NOTE_TIME.PAST}>
+            {errorText}
+          </FailureNote>
         )}
       </FoldBody>
     </Tool>
@@ -1495,7 +1618,7 @@ export function TranscriptTodosDock({
 }): ReactNode {
   const { done, total } = todosCount(todos);
   return (
-    <Disclosure look={DISCLOSURE_LOOK.CARD} data-todos-dock="" aria-label="To-dos">
+    <Disclosure look={DISCLOSURE_LOOK.DOCK} data-todos-dock="" aria-label="To-dos">
       <DisclosureSummary look={DISCLOSURE_SUMMARY.HEAD}>
         <DisclosureChevron />
         <GlyphSlot>
@@ -1620,13 +1743,9 @@ export function TranscriptSubagent({
       </Tool>
     ) : onOpen === undefined ? (
       // The same line as the one that opens a subagent's tab, pressed by nothing.
-      <div
-        className="subagent-line flex h-7 w-full min-w-0 items-center gap-icon-gap rounded-luke-6 px-tight-gap text-caption text-muted-foreground"
-        data-subagent-row=""
-        data-call-id={callId}
-      >
+      <LineRow data-subagent-row="" data-call-id={callId}>
         {line}
-      </div>
+      </LineRow>
     ) : (
       <Tooltip label={SUBAGENT_HINT} card={card ?? undefined}>
         <LineButton data-subagent-row="" data-call-id={callId} onClick={onOpen}>
@@ -1638,14 +1757,18 @@ export function TranscriptSubagent({
     <div className="subagent-row @container/subagent-row text-caption-inline">
       {row}
       {errorText === undefined ? null : (
-        <FailureNote time={FAILURE_NOTE_TIME.PAST}>{errorText}</FailureNote>
+        <FailureNote failure={UNREPORTED.TOOL} time={FAILURE_NOTE_TIME.PAST}>
+          {errorText}
+        </FailureNote>
       )}
     </div>
   );
 }
 
-/** What the label of a fold's line adds where a call it holds failed. */
-const CALL_FAILED_WORDS = "a call failed";
+/** What a fold's line says beside its failed mark: how many of the calls it holds failed. */
+function failedWords(failed: number): string {
+  return `${failed} failed`;
+}
 
 /**
  * A line that folds the rows beneath it: a run of calls, or a finished
@@ -1655,10 +1778,12 @@ const CALL_FAILED_WORDS = "a call failed";
  * fold's chevron in a row's icon column, as the plan's card does at its
  * head, because its count already says what it holds, so what is left to
  * say is whether it is open, and an icon of its own would read as one more
- * of the calls it opens onto. Where a call it holds failed, the line wears
- * that call's failed mark after its count, open or closed, as an editor's
- * tree marks a folder holding a file with problems either way, so a
- * failure is never folded out of sight, and its label says a call failed.
+ * of the calls it opens onto. Where calls it holds failed, the line wears
+ * the failed mark after its count, open or closed, as an editor's tree
+ * marks a folder holding a file with problems either way, so a failure is
+ * never folded out of sight, and says beside the mark in the danger ink how
+ * many failed ("2 failed"), so the mark is never left for a reader to read
+ * alone; its label says the same.
  */
 function TurnFold({
   summary,
@@ -1669,15 +1794,20 @@ function TurnFold({
 }: {
   summary: string;
   running: boolean;
-  failed: boolean;
+  failed: number;
   open?: boolean;
   children: ReactNode;
 }): ReactNode {
   return (
     <Disclosure defaultOpen={open} data-turn-fold="">
-      <DisclosureSummary aria-label={failed ? `${summary}, ${CALL_FAILED_WORDS}` : undefined}>
+      <DisclosureSummary aria-label={failed > 0 ? `${summary}, ${failedWords(failed)}` : undefined}>
         {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
-        {failed ? <ToolStateMark state={TOOL_STATE.OUTPUT_ERROR} /> : null}
+        {failed > 0 ? (
+          <span className="inline-flex items-center gap-tight-gap text-destructive">
+            <ToolStateMark state={TOOL_STATE.OUTPUT_ERROR} />
+            <span>{failedWords(failed)}</span>
+          </span>
+        ) : null}
       </DisclosureSummary>
       <DisclosureBody>{children}</DisclosureBody>
     </Disclosure>
@@ -1746,9 +1876,5 @@ export function TranscriptRows<B>({
 
 /** A quiet note between a transcript's rows: what was left out, or what stands in a row's place. */
 export function TranscriptNote({ children }: { children: ReactNode }): ReactNode {
-  return (
-    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-      {children}
-    </Text>
-  );
+  return <NoteLine look={NOTE_LINE_LOOK.INSET}>{children}</NoteLine>;
 }

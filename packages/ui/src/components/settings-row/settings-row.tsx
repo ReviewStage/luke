@@ -2,6 +2,7 @@ import { type ReactNode, useId } from "react";
 import { cn } from "../../cn.js";
 import { CheckIcon } from "../../face/glyphs.js";
 import { AlertIcon } from "../../icons/lucide-glyphs.js";
+import type { ShownError } from "../../reported-failure.js";
 import {
   Item,
   ItemActions,
@@ -26,10 +27,10 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  * one `ErrorLine` a form field's is too, said as an alert, since a write
  * that was refused is one the developer believes landed. The row is its own inline-size
  * container, so where its controls stand is decided by the row's width and
- * not the window's: under 380px they stay on the name's line, the name
- * fading where it is cut and only the description wrapping, and they drop
- * below the words to the row's end only where the words would be left with
- * too little room beside them.
+ * not the window's: at any width they stay on the name's line while the
+ * words keep a legible stretch beside them, and drop below the words to the
+ * row's end wherever they would leave the words less; under 380px the name
+ * keeps to one line, fading where it is cut, so only the description wraps.
  * The row owns its padding, the least height its profile gives a row (the
  * window's rows stand even whether or not they carry a description), and the
  * room between its parts; its edges and the rules between rows are its
@@ -42,15 +43,16 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  *
  * A compact row (`SETTINGS_ROW_DENSITY.COMPACT`) stands bare, without
  * padding and at a menu row's least height, where the surface around it, a
- * popover, already insets it. Unlike a card's row it does not stack under
+ * popover, already insets it. Unlike a card's row it neither drops its
+ * controls to keep its words a legible stretch nor fades its name under
  * 380px: a popover is narrower than that throughout, so its controls stay
  * beside its words and wrap below them only where they cannot fit at all.
  *
  * A list row (`SETTINGS_ROW_DENSITY.LIST`) is a card's row read rather than
  * set, a line of a reference list such as the window's keyboard shortcuts:
- * padded at the card's inline inset, ruled, and narrowing under 380px as a
- * card's row does, but at a list's tighter block inset and least height and
- * with its label at body weight.
+ * padded at the card's inline inset, ruled, and giving way where it is
+ * narrow as a card's row does, but at a list's tighter block inset and least
+ * height and with its label at body weight.
  *
  * What rides the label's line without being its name, a Modified word or a
  * mark that something needs a hand, is the row's `adornment`: it stands after
@@ -82,9 +84,9 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  * It is drawn by shadcn/ui's item (`../../shadcn/item.tsx`) in Tailwind
  * utilities over the theme, the row's density picking the item's padding and
  * least height. What a utility cannot say stays in `settings-row.css`: the
- * narrow container's rules and the properties they undo, a finger's
- * whole-row press, and the size of a glyph another component draws in a
- * mark.
+ * controls' drop below the words, the narrow container's rules, and the
+ * properties they undo, a finger's whole-row press, and the size of a glyph
+ * another component draws in a mark.
  */
 
 /** How a row stands: padded in a section's card, a reference list's line in one, or bare inside a surface that insets it. */
@@ -190,8 +192,8 @@ export function SettingsRow({
   leading?: ReactNode;
   /** What rides the label's line after it without naming the control: a Modified word, a mark. */
   adornment?: ReactNode;
-  /** What went wrong with the last write, or nothing while none did. */
-  error?: ReactNode;
+  /** What went wrong with the last write, and the failure beneath it, or nothing while none did. */
+  error?: ShownError | undefined;
   /** How the row stands; in a section's card where none is named. */
   density?: SettingsRowDensity | undefined;
   /** Where the row's edge stands; at the card's where none is named. */
@@ -212,7 +214,7 @@ export function SettingsRow({
   const descriptionId = `${id}description`;
   const errorId = `${id}error`;
   const controlId = `${id}control`;
-  const failed = said(error);
+  const failed = error !== undefined && said(error.words);
   const described = said(description);
   const led = said(leading);
   const describedBy = [described ? descriptionId : undefined, failed ? errorId : undefined]
@@ -280,9 +282,7 @@ export function SettingsRow({
             {below(control)}
           </div>
         )}
-        <ErrorLine id={errorId} level={ANNOUNCE.ALERT}>
-          {failed ? error : null}
-        </ErrorLine>
+        <ErrorLine id={errorId} level={ANNOUNCE.ALERT} error={failed ? error : undefined} />
       </Item>
     </div>
   );

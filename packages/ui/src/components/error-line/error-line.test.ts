@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { recordedFailure } from "../../testing/reported-failure.js";
 import { Announcer } from "../announcer/announcer.js";
 import { FormField } from "../form-field/form-field.js";
 import { SettingsRow } from "../settings-row/settings-row.js";
@@ -40,11 +41,14 @@ function render(element: ReactElement): HTMLElement {
 
 const REFUSED = "GitHub refused the token.";
 
+/** The failure beneath the refusal. */
+const { failure: FAILURE } = recordedFailure();
+
 /** A text field in a form field saying `error`. */
 function formField(error: string | undefined): ReactElement {
   return createElement(FormField, {
     label: "Token",
-    error,
+    error: error === undefined ? undefined : { words: error, failure: FAILURE },
     children: (field) => createElement(TextField, { field, value: "", onChange: () => undefined }),
   });
 }
@@ -53,7 +57,7 @@ function formField(error: string | undefined): ReactElement {
 function settingsRow(error: string | undefined): ReactElement {
   return createElement(SettingsRow, {
     label: "Token",
-    error,
+    error: error === undefined ? undefined : { words: error, failure: FAILURE },
     children: (control) =>
       createElement(TextField, {
         label: "Token",

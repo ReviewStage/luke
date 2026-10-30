@@ -38,12 +38,19 @@ import {
   claimTokenPullRequestPolls,
   recordTokenPullRequestPoll,
 } from "@luke/database/models/token-pull-request-poll";
-import { Data, Duration, Effect, Option, type Redacted, Result, Schema } from "effect";
+import { Data, Duration, Effect, Option, type Redacted, Ref, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { agentPublished } from "../agents/coder-host/published.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
-import { AGENT_WAKE, type AgentWake, githubIdOf, wakeAgents } from "./agent-wakes.js";
+import {
+  AGENT_WAKE,
+  type AgentWake,
+  githubIdOf,
+  type HeadChecksRead,
+  headChecksFor,
+  wakeAgents,
+} from "./agent-wakes.js";
 import {
   GITHUB_HTTP_STATUS,
   type GitHubApp,
@@ -53,7 +60,7 @@ import {
   send,
 } from "./github-app.js";
 import { type MemberGitHubToken, openMemberGitHubToken } from "./github-token.js";
-import { repositoryPath } from "./pull-requests.js";
+import { type HeadChecks, repositoryPath } from "./pull-requests.js";
 
 const TOKEN_PULL_REQUEST_SWEEP = {
   /** How often each pull request is polled. */
@@ -174,7 +181,26 @@ interface Poll {
   readonly eveFor: EveForAccount;
   /** The sweep's instant, in epoch milliseconds. */
   readonly now: number;
+  /** How the failed checks it tells read the head's checks: once for all of them (`failedChecksReadOnce`). */
+  readonly readFailedChecks: HeadChecksRead;
 }
+
+/**
+ * The head's checks read once for every failed check one poll tells, which
+ * all name its one head, so a poll that tells several failed statuses reads
+ * them once to name what failed. A read that failed, or that its wake's bound
+ * cut short, keeps nothing, so the next wake reads again.
+ */
+const failedChecksReadOnce = Effect.map(
+  Ref.make(Option.none<HeadChecks>()),
+  (kept): HeadChecksRead =>
+    (told, sha) =>
+      Effect.flatMap(Ref.get(kept), (held) =>
+        Option.isSome(held)
+          ? Effect.succeed(held)
+          : Effect.tap(headChecksFor(told, sha), (read) => Ref.set(kept, read)),
+      ),
+);
 
 /** One read on the member's token, conditional on the ETag given where there is one. */
 function readIfChanged<A>(
@@ -229,6 +255,8 @@ function tell(
     { ...wake, repository: agent.repository, branches, pullRequest: number },
     key,
     poll.member.githubLogin,
+    // Note that every check finished reads the checks afresh, because it must judge them as they stand after both listings this poll read.
+    wake.kind === AGENT_WAKE.CHECK_FAILED ? poll.readFailedChecks : headChecksFor,
   );
 }
 
@@ -490,6 +518,7 @@ const pollClaimed = /* @__PURE__ */ Effect.fnUntraced(function* (
       claimed,
       eveFor,
       now,
+      readFailedChecks: yield* failedChecksReadOnce,
     };
     return yield* pollPullRequest(poll).pipe(
       Effect.catchTag("TokenRefused", () => Effect.as(member.markInvalid, 0)),

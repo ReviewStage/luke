@@ -6,6 +6,7 @@ import {
   type GitHubTokenStatus,
   type GitHubTokenSummary,
 } from "@luke/features/github-token-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { dayText } from "@luke/features/time-format";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -38,6 +39,7 @@ import {
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { type ReactNode, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { confirmFailure, refusedShown } from "../failure-report.js";
 import { SettingsPageLink } from "../open-settings.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
@@ -158,7 +160,11 @@ function SavedToken({
   token: GitHubTokenSummary;
   onRemove: () => Promise<ActionResult>;
 }): React.JSX.Element {
-  const removal = useConfirmDialog({ subject: true, surfaceOpen: true }, onRemove);
+  const removal = useConfirmDialog(
+    { subject: true, surfaceOpen: true },
+    onRemove,
+    confirmFailure(FAILURE_SURFACE.GITHUB_TOKEN_REMOVE),
+  );
   return (
     <Inline justify={JUSTIFY.BETWEEN}>
       <TokenFacts token={token} />
@@ -219,7 +225,7 @@ function TokenForm({
       <SecretField
         ref={field}
         label="Personal access token"
-        error={problem}
+        error={refusedShown(problem, FAILURE_SURFACE.GITHUB_TOKEN_SAVE)}
         placeholder="ghp_…"
         disabled={saving}
         value={pasted}

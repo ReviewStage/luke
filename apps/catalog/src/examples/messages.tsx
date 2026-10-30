@@ -1,15 +1,20 @@
 /**
- * messages.tsx -- a turn of a conversation and the line under it: who sent it, when, then its actions, in that order, the actions hidden until the pointer rests on the turn or the keyboard is on one of them, and on a touch screen shown by a tap on the turn.
+ * messages.tsx -- a turn of a conversation, the line over a received one naming who sent it and what they did, and the line under every one: when, then its actions, the actions hidden until the pointer rests on the turn or the keyboard is on one of them, and on a touch screen shown by a tap on the turn.
  */
 
 import {
   BUTTON_SIZE,
   CopyIcon,
   IconButton,
+  INLINE_REF_LOOK,
+  InlineRef,
   MESSAGE_LINE_ALIGN,
   MessageActions,
   MessageFrame,
+  MessageHead,
   MessageLine,
+  SUBJECT_FIT,
+  SubjectLine,
   Text,
 } from "@luke/ui";
 import type { Example } from "../examples";
@@ -45,6 +50,38 @@ function Messages(): React.JSX.Element {
               at={SENT_AT}
               actions={COPY}
             />
+          </MessageFrame>
+        </div>
+      </CatalogSection>
+      <CatalogSection
+        id="message-head"
+        title="A received message names its sender over it, the time and actions under it"
+      >
+        <div className="catalog-frame">
+          <MessageFrame revealActionsOnTap>
+            <MessageHead sender="Ada" />
+            <Text>Which browser is it failing on?</Text>
+            <MessageLine align={MESSAGE_LINE_ALIGN.START} at={SENT_AT} actions={COPY} />
+          </MessageFrame>
+        </div>
+      </CatalogSection>
+      <CatalogSection
+        id="message-head-thread"
+        title="A received thread line names its sender, then what they did on the thread"
+      >
+        <div className="catalog-frame">
+          <MessageFrame revealActionsOnTap>
+            <MessageHead sender="Ada">
+              <SubjectLine lead="Thread answer" fit={SUBJECT_FIT.OWN}>
+                <InlineRef
+                  look={INLINE_REF_LOOK.PILL}
+                  label="Expire an invitation after a week?"
+                  onPress={() => {}}
+                />
+              </SubjectLine>
+            </MessageHead>
+            <Text>Yes, a week.</Text>
+            <MessageLine align={MESSAGE_LINE_ALIGN.START} at={SENT_AT} actions={COPY} />
           </MessageFrame>
         </div>
       </CatalogSection>

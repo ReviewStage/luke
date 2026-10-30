@@ -899,7 +899,7 @@ function isInbox(kept: KeptDraft): kept is KeptDraft<InboxPlace> {
 }
 
 /** Whether a draft holds a pick: an option, a field, a step, or a press. */
-export function holdsPicks(draft: Draft): boolean {
+export function holdsPicks(draft: Pick<Draft, "choices" | "values" | "steps" | "press">): boolean {
   return (
     draft.choices.length > 0 ||
     draft.values.length > 0 ||
@@ -967,6 +967,120 @@ export function useInboxItemDraft(
     const kept = drafts.find((each) => isInbox(each) && each.place.itemId === item.id);
     return kept === undefined || draftOfItem(kept, item) !== kept ? undefined : kept;
   });
+}
+
+/**
+ * What a list of inbox rows reads of an item's draft: the item, its picks
+ * and the revision they were made on, and whether it holds words or files,
+ * never the words themselves, so a list reading every row's draft draws
+ * again as a draft comes or goes or a pick moves, never on each word typed.
+ */
+export interface InboxRowDraft extends Pick<Draft, "choices" | "values" | "steps" | "press"> {
+  readonly itemId: string;
+  readonly revision: number | undefined;
+  /** Whether it holds words or files, which its row marks with the pencil whatever its picks. */
+  readonly words: boolean;
+}
+
+/** Every inbox card's draft as its row reads it (`InboxRowDraft`), compared by its contents, so a word typed in a box that held some already tells no list. */
+const inboxRowDraftsAtom = Atom.withEquality(
+  Atom.make((get): readonly InboxRowDraft[] =>
+    get(draftsAtom)
+      .filter(isInbox)
+      .map((kept) => ({
+        itemId: kept.place.itemId,
+        revision: kept.revision,
+        words: kept.text !== "" || kept.attachments.length > 0 || (kept.dropped ?? []).length > 0,
+        choices: kept.choices,
+        values: kept.values,
+        steps: kept.steps,
+        press: kept.press,
+      })),
+  ),
+  Equal.equals,
+);
+
+/** No inbox card holds a draft. */
+const NO_ROW_DRAFTS: ReadonlyMap<string, InboxRowDraft> = new Map();
+
+/**
+ * Every inbox card's draft as a list's rows read it, by item, read once
+ * for the whole list rather than by each row. Note that a row's draft is
+ * the very one it was until it changes, so a row handed it (`memo`) draws
+ * again only as its own draft does.
+ */
+export function useInboxRowDrafts(): ReadonlyMap<string, InboxRowDraft> {
+  const last = useRef(NO_ROW_DRAFTS);
+  return useAtomValue(inboxRowDraftsAtom, (drafts) => {
+    const was = last.current;
+    const kept = drafts.map((draft): [string, InboxRowDraft] => {
+      const held = was.get(draft.itemId);
+      return [draft.itemId, held !== undefined && Equal.equals(held, draft) ? held : draft];
+    });
+    const same = kept.length === was.size && kept.every(([id, draft]) => was.get(id) === draft);
+    if (!same) last.current = new Map(kept);
+    return last.current;
+  });
+}
+
+/** Whether picks made on `revision` stand on an item as it now stands: made on its revision while it is open, or none made at all (`draftOfItem`). */
+export function picksStandOn(
+  revision: number | undefined,
+  picks: boolean,
+  item: Pick<InboxItem, "revision" | "status">,
+): boolean {
+  return !picks || revision === (item.status === INBOX_STATUS.OPEN ? item.revision : null);
+}
+
+/** Whether a row's draft's picks stand on its item as it now stands (`picksStandOn`). */
+function picksStand(draft: InboxRowDraft, item: Pick<InboxItem, "revision" | "status">): boolean {
+  return picksStandOn(draft.revision, holdsPicks(draft), item);
+}
+
+/**
+ * Where an inbox card's draft stands, as a read letting go of the drafts it
+ * no longer holds reads it: its place, the revision its picks were made on,
+ * and whether it holds any, never its words.
+ */
+export interface InboxDraftStanding {
+  readonly place: InboxPlace;
+  readonly revision: number | undefined;
+  readonly picks: boolean;
+}
+
+/** Every inbox card's draft as it stands (`InboxDraftStanding`), compared by its contents, so a word typed in a box tells no reader of these. */
+const inboxDraftStandingsAtom = Atom.withEquality(
+  Atom.make((get): readonly InboxDraftStanding[] =>
+    get(draftsAtom)
+      .filter(isInbox)
+      .map((kept) => ({ place: kept.place, revision: kept.revision, picks: holdsPicks(kept) })),
+  ),
+  Equal.equals,
+);
+
+/**
+ * Where every inbox card's draft stands, for a read that lets go of those
+ * it no longer holds. Note that it moves only as a draft comes or goes or
+ * its picks do, so the page holding the read draws nothing for a word typed.
+ */
+export function useInboxDraftStandings(): readonly InboxDraftStanding[] {
+  return useAtomValue(inboxDraftStandingsAtom);
+}
+
+/** Whether an item's row marks a draft, as `useInboxItemDrafted` says it of its draft as a list read it (`useInboxRowDrafts`). */
+export function rowDrafted(
+  draft: InboxRowDraft | undefined,
+  item: Pick<InboxItem, "revision" | "status">,
+): boolean {
+  return draft !== undefined && (draft.words || (picksStand(draft, item) && holdsPicks(draft)));
+}
+
+/** A row's draft whose picks its row shows, as `useInboxItemDraft` answers it of its draft as a list read it; none where its picks were made on the item before it changed. */
+export function rowPicks(
+  draft: InboxRowDraft | undefined,
+  item: Pick<InboxItem, "revision" | "status">,
+): InboxRowDraft | undefined {
+  return draft === undefined || !picksStand(draft, item) ? undefined : draft;
 }
 
 /**

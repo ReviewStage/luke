@@ -125,9 +125,6 @@ const STATE: AppStateSnapshot = (() => {
 /** Every act the panel told the main process, in order. */
 const told: AnyAct[] = [];
 
-/** Whether the service answers reads of agents; refused otherwise. */
-let answering = true;
-
 /** Whether the service is still to answer every read, so each stands out for as long as a test looks. */
 let pending = false;
 
@@ -155,13 +152,11 @@ afterEach(() => {
   root = undefined;
   document.body.innerHTML = "";
   told.length = 0;
-  answering = true;
   pending = false;
 });
 
 /** What the main process answers: a task's agents, and the workspace's searched, on a task or none, or newest. */
 function answer(request: AnyAct): FakeActAnswer {
-  if (!answering) return { status: FAKE_ANSWER.REFUSED, reason: "Not now." };
   if (request.kind === ACT_KIND.AGENTS_LIST) {
     const agents = request.payload.taskId === BILLING.id ? [PRORATE] : [];
     return { status: FAKE_ANSWER.DONE, value: { agents } };
@@ -493,15 +488,6 @@ test("an agent on no task is found by the name its chip was written with, else a
       { agentId: "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c" },
     ]),
   );
-});
-
-test("a chip of an agent whose read answers nothing draws no mark, leaving its name alone", async () => {
-  answering = false;
-  const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
-
-  const glyph = container.querySelector("[data-mention-ref] .luke-inline-ref-glyph");
-
-  assert.equal(glyph?.childElementCount, 0);
 });
 
 test("two chips of one agent hung one after the other share its read", async () => {

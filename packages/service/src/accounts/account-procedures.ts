@@ -13,13 +13,16 @@
  * desktop syncs, where the account's Luke links open, a synced setting of
  * its own part so a build that predates it neither refuses the snapshot nor
  * clears the choice by writing the shared part back whole, the coding
- * agents' default model, effort, and context window, which Settings and the
- * Start menu both write, the Claude model the account's Generate chapters
+ * agents' default model, effort, and context window, which Settings alone
+ * writes and which reads, until it does, as the fallback a Start naming no
+ * model runs on (`accountModelChoices`), the Claude model the account's Generate chapters
  * runs on, one of a fixed set (`@luke/features/chapters-model-choice`), and the experiments the account turned on in
  * Settings › Experimental. A write carries any of them, a coding-agent
  * choice is accepted only as the catalog accepts it
- * (`packages/service/src/providers/model-catalog.ts`), so what is stored is
- * always a choice a Start could run, and the experiments are a patch read
+ * (`packages/service/src/providers/model-catalog.ts`), and moved only to a
+ * model a credential of the account's pays for, so what is stored is a
+ * choice a Start could run unless its credential has since gone, and the
+ * experiments are a patch read
  * as tolerantly as they are answered: a key this deployment does not list
  * is passed over rather than refused, because it is an older or newer
  * build's experiment and refusing it would refuse the build's every other
@@ -58,6 +61,8 @@ import { readEither } from "@luke/wire/effect";
 import { Effect, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { isAdminRole } from "../admin/admin-access.js";
+import { unconnectedProviders } from "../agents/coder-host/agent-runtime-choice.js";
+import { accountModelChoices } from "../agents/coder-host/start.js";
 import type { EveReach } from "../agents/coder-host/stop.js";
 import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
 import { HostedEnvironment } from "../environment.js";
@@ -74,6 +79,7 @@ import {
   type AccountFastOffer,
   acceptedModelChoice,
   type ModelCatalog,
+  providerModelOf,
 } from "../providers/model-catalog.js";
 import { forgetPosthogPersonEffect } from "../providers/posthog.js";
 import { memoriesProcedures } from "./memories-procedures.js";
@@ -109,15 +115,35 @@ const ModelChoiceSchema = Schema.Struct({
 const readModelChoice = readEither(ModelChoiceSchema);
 
 /**
- * The snapshot as the account answers it, the preferences' instant beside
- * it where the preferences were ever written, and the link choice as a part
- * of its own where the account made one.
+ * The coding-agent default the snapshot answers: the account's stored one,
+ * or where it stored none the fallback a Start naming no model runs on
+ * (`accountModelChoices`), so Settings and every chip draw what that Start
+ * would run. Note that a catalog or a store that cannot be read meanwhile
+ * answers Anthropic's fallback rather than refusing the settings beside it,
+ * because a Start is refused as unavailable then anyway.
  */
-function snapshotAnswer(row: AccountPreferencesRow | undefined) {
+const snapshotAgent = (
+  userId: string,
+  row: AccountPreferencesRow | undefined,
+): Effect.Effect<ModelChoice, never, DatabaseServices | ModelCatalog> =>
+  row?.agent === undefined
+    ? accountModelChoices(userId).pipe(
+        Effect.map((choices) => choices.defaultChoice),
+        Effect.catch(() => Effect.succeed(AGENT_DEFAULT_CHOICE)),
+      )
+    : Effect.succeed(row.agent);
+
+/**
+ * The snapshot as the account answers it, the coding-agent default as
+ * `snapshotAgent` reads it, the preferences' instant beside it where the
+ * preferences were ever written, and the link choice as a part of its own
+ * where the account made one.
+ */
+function snapshotAnswer(row: AccountPreferencesRow | undefined, agent: ModelChoice) {
   const updatedAt = row?.updatedAt;
   return {
     ...accountPreferencesParts(row?.preferences ?? {}),
-    agent: row?.agent ?? AGENT_DEFAULT_CHOICE,
+    agent,
     chaptersModel: row?.chaptersModel ?? CHAPTERS_MODEL_DEFAULT,
     experiments: row?.experiments ?? NO_EXPERIMENTS,
     ...(updatedAt === undefined ? undefined : { updatedAt: updatedAt.getTime() }),
@@ -151,8 +177,14 @@ const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(functio
 
 /**
  * The write's coding-agent part, as the catalog accepts it for the
- * account (`offeredToAccount`): a choice it does not offer is a bad request, and a catalog the instance
- * cannot read is an outage the caller may retry.
+ * account (`offeredToAccount`): a choice it does not offer is a bad request,
+ * as is one that moves the default to a model of a provider no credential
+ * of the account's pays for (`unconnectedProviders`), and a catalog the
+ * instance cannot read is an outage the caller may retry. A write that keeps
+ * the model the default names now, as an Effort or a Context does, is taken
+ * whatever pays for it, because the default it changes was already that
+ * model: the fallback a new account reads, or a default whose credential
+ * has since gone. A Fast flip names another model, so it is checked.
  */
 const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: AccountProcedureSeams,
@@ -162,7 +194,7 @@ const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   const read = readModelChoice(value);
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const fastOffer = yield* hostedStoreOrUnavailable(seams.accountFastOffer(userId));
-  return yield* acceptedModelChoice(read.success, fastOffer).pipe(
+  const accepted = yield* acceptedModelChoice(read.success, fastOffer).pipe(
     Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
     Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
       Effect.logWarning(
@@ -170,6 +202,16 @@ const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
       ).pipe(Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE))),
     ),
   );
+  const row = yield* hostedStoreOrUnavailable(seams.readPreferences(userId));
+  const standing = yield* snapshotAgent(userId, row);
+  if (accepted.model === standing.model) return accepted;
+  // Note that the default never moves to a model nothing pays for, because every Start on it would be refused.
+  const unconnected = yield* hostedStoreOrUnavailable(unconnectedProviders(userId));
+  const provider = providerModelOf(accepted.model)?.provider;
+  if (provider !== undefined && unconnected.has(provider)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return accepted;
 });
 
 /** The account resource: every procedure but the provider keys' own, which are `provider-keys-procedures.ts`'s. */
@@ -211,10 +253,10 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       return { deleted: true } as const;
     }),
 
-    /** The caller's own stored snapshot, or the defaults for a user with none stored. */
+    /** The caller's own stored snapshot, or the defaults for a user with none stored, the coding agents' the one its credentials pay for. */
     preferences: signedIn.preferences.effect(function* ({ context }) {
       const row = yield* hostedStoreOrUnavailable(seams.readPreferences(context.userId));
-      return snapshotAnswer(row);
+      return snapshotAnswer(row, yield* snapshotAgent(context.userId, row));
     }),
 
     /** Whether the caller's own account is an admin, any role but the admin role not. */
@@ -228,7 +270,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
      * settings snapshot that replaces the stored one whole, `linkOpen`,
      * where the account's links open, `agentEnter`, what Enter does in an
      * agent's box while it works, `agent`, a choice the catalog
-     * accepts, `chaptersModel`, one of the chapters' fixed set, and `experiments`, each experiment's on or off merged over
+     * accepts, moved only to a model the account pays for, `chaptersModel`, one of the chapters' fixed set, and `experiments`, each experiment's on or off merged over
      * what stood — and answers the snapshot as it then stands. A body
      * carrying none of them asks for nothing and is refused.
      */
@@ -278,7 +320,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       }
 
       const row = yield* hostedStoreOrUnavailable(seams.writePreferences(context.userId, write));
-      return snapshotAnswer(row);
+      return snapshotAnswer(row, yield* snapshotAgent(context.userId, row));
     }),
 
     ...providerKeysProcedures(seams),

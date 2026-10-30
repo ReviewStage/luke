@@ -11,6 +11,7 @@ import {
 import { PICTURE_STATE, type PictureState, usePicture } from "@luke/ui/picture-cache";
 import { useCallback, useEffect, useId, useState } from "react";
 import { useAct } from "../act.js";
+import { pictureUnread } from "../failure-report.js";
 
 /**
  * image-diff.tsx -- a changed image as Files changed draws it: the picture before and after, side by side, swiped, or one faded over the other, in place of "binary file".
@@ -117,7 +118,9 @@ function SidePicture({ state, label }: { state: PictureState; label: string }) {
   }
   // Note that the side's words are its caption's, drawn above it, so what stands in for it says this picture.
   if (state.kind === PICTURE_STATE.FAILED) {
-    return <PictureStandIn state={state.kind} words="" onRetry={state.retry} />;
+    return (
+      <PictureStandIn failure={state.failure} state={state.kind} words="" onRetry={state.retry} />
+    );
   }
   return <PictureStandIn state={state.kind} words="" />;
 }
@@ -134,7 +137,7 @@ function OneSide({
   label: string;
   note?: string | undefined;
 }): React.JSX.Element {
-  const state = usePicture(agentId, address, useImageRead());
+  const state = usePicture(agentId, address, useImageRead(), pictureUnread);
   return (
     <div className="flex w-full flex-wrap justify-center gap-block-gap">
       <figure className="m-0 flex min-w-0 shrink grow basis-image-diff-side flex-col items-center gap-item-gap [&>figcaption]:text-caption-inline [&>figcaption]:text-muted-foreground">
@@ -201,8 +204,8 @@ function BothSides({
   onComparison: (comparison: Comparison) => void;
 }): React.JSX.Element {
   const read = useImageRead();
-  const beforeState = usePicture(agentId, before, read);
-  const afterState = usePicture(agentId, after, read);
+  const beforeState = usePicture(agentId, before, read, pictureUnread);
+  const afterState = usePicture(agentId, after, read, pictureUnread);
   const { compare, amount } = comparison;
   const ready =
     beforeState.kind === PICTURE_STATE.READY && afterState.kind === PICTURE_STATE.READY

@@ -1364,6 +1364,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ...(task.status === undefined ? undefined : { status: task.status }),
       ...(task.priority === undefined ? undefined : { priority: task.priority }),
       ...(task.number === undefined ? undefined : { number: task.number }),
+      ...(task.mergePolicy === undefined ? undefined : { mergePolicy: task.mergePolicy }),
+      ...(task.running === undefined ? undefined : { running: task.running }),
       assigneeId: task.assignee?.userId ?? null,
       assigneeName: task.assignee?.name ?? null,
       pinnedAt: task.pinnedAt ?? null,
@@ -2104,7 +2106,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           tasksSetStandingParamsSchema,
           params,
-          "setting where a task stands names it and its status, priority, assignee, or merge policy",
+          "setting where a task stands names it and its status, priority, assignee, merge policy, or running switch",
         );
         if (!gate()) return { changed: false };
         const { taskId, assigneeName, ...standing } = read;
@@ -2127,6 +2129,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             ...(standing.mergePolicy === undefined
               ? undefined
               : { mergePolicy: standing.mergePolicy }),
+            ...(standing.running === undefined ? undefined : { running: standing.running }),
             ...(standing.assigneeId === undefined
               ? undefined
               : {

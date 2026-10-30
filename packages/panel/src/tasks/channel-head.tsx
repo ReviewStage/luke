@@ -1,5 +1,5 @@
 import type { Channel } from "@luke/features/channel-wire";
-import { agoText } from "@luke/features/time-format";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -9,6 +9,7 @@ import {
   Toolbar,
 } from "@luke/ui";
 import { useState } from "react";
+import { unreadShown } from "../failure-report.js";
 import type { InboxChannelHead } from "./inbox-list.js";
 
 /**
@@ -39,7 +40,6 @@ export interface ArchivedHead {
 export function useChannelHead(
   channel: HeadedChannel,
   archived: ArchivedHead | undefined,
-  now: number,
 ): InboxChannelHead {
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<{ readonly id: string; readonly words: string }>();
@@ -49,6 +49,7 @@ export function useChannelHead(
     return {
       name: channel.name,
       detail: channel.purpose === "" ? undefined : channel.purpose,
+      archivedAt: undefined,
       unarchive: undefined,
       refusal,
     };
@@ -63,7 +64,8 @@ export function useChannelHead(
   };
   return {
     name: channel.name,
-    detail: `Archived ${agoText(archived.archivedAt, now)}`,
+    detail: undefined,
+    archivedAt: archived.archivedAt,
     unarchive: { busy, onUnarchive: unarchive },
     refusal,
   };
@@ -107,7 +109,11 @@ export function ChannelsNotRead({ onRetry }: { onRetry: () => void }): React.JSX
       aria-label="Channels not read"
     >
       <Toolbar end={TOOLBAR_INSET.COLUMN} />
-      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={onRetry}>
+      <ErrorState
+        failure={unreadShown(FAILURE_SURFACE.CHANNEL_READ)}
+        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        onRetry={onRetry}
+      >
         {CHANNELS_NOT_READ}
       </ErrorState>
     </section>

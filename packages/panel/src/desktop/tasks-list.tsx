@@ -4,6 +4,7 @@ import {
   pinPositionsForInsert,
   pinPositionsForMove,
 } from "@luke/features/pin-order";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
 import { isAgentEntry } from "@luke/features/task-section-writes";
 import {
@@ -108,6 +109,7 @@ import { Schema } from "effect";
 import { Fragment, type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { unreadShown } from "../failure-report.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
@@ -1187,14 +1189,23 @@ export function TasksList({
         </EmptyState>
       }
       error={
-        <ErrorState onRetry={tasks.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+        <ErrorState
+          failure={unreadShown(FAILURE_SURFACE.TASKS_READ)}
+          onRetry={tasks.onRetryList}
+          placement={ERROR_STATE_PLACEMENT.CENTRED}
+        >
           {UNREAD_LINE}
         </ErrorState>
       }
     >
       {/* A refresh that failed after the tasks were read leaves them drawn, with a line over them. */}
       {tasks.listFailed && listed.length > 0 ? (
-        <ErrorState onRetry={tasks.onRetryList}>{REFRESH_FAILED_WORDS}</ErrorState>
+        <ErrorState
+          failure={unreadShown(FAILURE_SURFACE.TASKS_REFRESH)}
+          onRetry={tasks.onRetryList}
+        >
+          {REFRESH_FAILED_WORDS}
+        </ErrorState>
       ) : null}
       <SelectionRegion id={regionId} selection={{ selected, onChange: selection.onChange }}>
         <ListMotion root={list}>

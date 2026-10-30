@@ -19,6 +19,7 @@ import {
   TextArea,
 } from "@luke/ui";
 import { useState } from "react";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -168,7 +169,9 @@ function SettingsSections(): React.JSX.Element {
           </SettingsSection>
           <SettingsSection title="Members">
             <SettingsLine>
-              <ErrorState onRetry={() => undefined}>The members could not be read.</ErrorState>
+              <ErrorState failure={CATALOG_FAILURE} onRetry={() => undefined}>
+                The members could not be read.
+              </ErrorState>
             </SettingsLine>
           </SettingsSection>
         </div>

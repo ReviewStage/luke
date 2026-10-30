@@ -5,24 +5,19 @@ import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { DEVICE_KIND } from "@luke/features/device-agent-wire";
 import { TASK_PRIORITY, TASK_STATUS, type Task, type TaskStanding } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
-import { experimentsOn } from "@luke/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
-import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { TaskStandingChips } from "./task-standing.js";
 
 /**
- * task-standing-runs-on.test.ts -- a task's Runs on chip, with local agents
- * on: it says where the task runs, as set when it was created, and is read-only:
- * a press drops no menu and hands the page no change. Note that it stands in a
- * file of its own, because a window reads its document once, and the gate
- * reads the experiment off that document. Synthetic throughout.
+ * task-standing-runs-on.test.ts -- a task's Runs on chip: it says where the
+ * task runs, as set when it was created, and is read-only: a press drops no
+ * menu and hands the page no change. Synthetic throughout.
  */
 
 const STUDIO = "6f0c1d0e-6b1a-4d43-9a49-2b7b6f1f0a11";
@@ -44,7 +39,6 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  handState(experimentsOn(EXPERIMENT.LOCAL_AGENTS));
   // The service says the Studio beat just now.
   fakeActPort({
     [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [{ deviceId: STUDIO, ageMs: 0 }] }),
@@ -67,7 +61,12 @@ async function runsOnChip(task: Task, sent: TaskStanding[]): Promise<HTMLButtonE
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(TaskStandingChips, { task, onSet: (standing) => sent.push(standing) }),
+        createElement(TaskStandingChips, {
+          task,
+          onSet: (standing) => {
+            sent.push(standing);
+          },
+        }),
       ),
     ),
   );
