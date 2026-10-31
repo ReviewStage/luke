@@ -25,6 +25,7 @@ import {
   type DeviceArch,
   type DevicePlatform,
   deviceSetupSchema,
+  hostUpdateSchema,
 } from "@luke/features/device-agent-wire";
 import { and, asc, eq, exists, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { DateTime, Effect, type Option, Schema } from "effect";
@@ -45,7 +46,7 @@ const HostCallerSchema = Schema.Struct({
 
 export type HostCaller = typeof HostCallerSchema.Type;
 
-/** One of the account's enrolled machines, as Settings lists it: beside its name and beat, its home folder, none before it first registered, and where its setup stands and why it failed, none once it is ready. */
+/** One of the account's enrolled machines, as Settings lists it: beside its name and beat, its home folder, none before it first registered, where its setup stands and why it failed, none once it is ready, and where its update stands and why it failed, as its last beat said, none while no update is under way. */
 const HostRowSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
@@ -55,6 +56,8 @@ const HostRowSchema = Schema.Struct({
   home: Schema.NullOr(Schema.String),
   setup: Schema.NullOr(deviceSetupSchema),
   setupFailure: Schema.NullOr(Schema.String),
+  update: Schema.NullOr(hostUpdateSchema),
+  updateFailure: Schema.NullOr(Schema.String),
 });
 
 export type HostRow = typeof HostRowSchema.Type;
@@ -199,6 +202,8 @@ const findHosts = SqlSchema.findAll({
           home: device.home,
           setup: device.setup,
           setupFailure: device.setupFailure,
+          update: device.updatePhase,
+          updateFailure: device.updateFailure,
         })
         .from(device)
         .where(and(eq(device.userId, userId), listed()))

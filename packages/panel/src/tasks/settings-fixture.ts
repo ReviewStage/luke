@@ -34,7 +34,12 @@ import {
   adminMetricsWindow,
 } from "@luke/features/admin-wire";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { DEVICE_ARCH, DEVICE_PLATFORM, DEVICE_SETUP } from "@luke/features/device-agent-wire";
+import {
+  DEVICE_ARCH,
+  DEVICE_PLATFORM,
+  DEVICE_SETUP,
+  HOST_UPDATE,
+} from "@luke/features/device-agent-wire";
 import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
 import { INSTALLED_SKILL_CALL_FAILURE } from "@luke/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
@@ -93,6 +98,9 @@ const FIXTURE_HOST = {
   OFFLINE: "7d3c2a10-0000-4000-8000-000000000003",
   MAC: "7d3c2a10-0000-4000-8000-000000000005",
   SETUP_FAILED: "7d3c2a10-0000-4000-8000-000000000006",
+  UPDATE_WAITING: "7d3c2a10-0000-4000-8000-000000000007",
+  UPDATING: "7d3c2a10-0000-4000-8000-000000000008",
+  UPDATE_FAILED: "7d3c2a10-0000-4000-8000-000000000009",
 } as const;
 
 /** The staged hosts that beat just now, so they read online: every one but the one staged offline. */
@@ -101,6 +109,9 @@ const BEATING_HOSTS = [
   FIXTURE_HOST.OLD,
   FIXTURE_HOST.MAC,
   FIXTURE_HOST.SETUP_FAILED,
+  FIXTURE_HOST.UPDATE_WAITING,
+  FIXTURE_HOST.UPDATING,
+  FIXTURE_HOST.UPDATE_FAILED,
 ] as const;
 
 /** Where the staged install commands fetch their script. */
@@ -625,6 +636,31 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
         seenAt: NOW,
         version: "0.0.9",
         upgradeNeeded: true,
+      },
+      {
+        id: FIXTURE_HOST.UPDATE_WAITING,
+        name: "ams-01",
+        seenAt: NOW,
+        version: "0.2.1",
+        upgradeNeeded: false,
+        update: HOST_UPDATE.WAITING,
+      },
+      {
+        id: FIXTURE_HOST.UPDATING,
+        name: "ord-01",
+        seenAt: NOW,
+        version: "0.2.1",
+        upgradeNeeded: false,
+        update: HOST_UPDATE.UPDATING,
+      },
+      {
+        id: FIXTURE_HOST.UPDATE_FAILED,
+        name: "nrt-01",
+        seenAt: NOW,
+        version: "0.2.0",
+        upgradeNeeded: false,
+        update: HOST_UPDATE.FAILED,
+        updateFailure: "the download did not match its checksum",
       },
       {
         id: FIXTURE_HOST.OFFLINE,

@@ -7,6 +7,7 @@ import {
   type DeviceAgentAnswer,
   type DeviceAgentLaunchSecrets,
   type DeviceAgentLine,
+  type DeviceAgentRelease,
   type DeviceAgentRequest,
   type DeviceArch,
   type DeviceCapability,
@@ -15,6 +16,7 @@ import {
   type DevicePlatform,
   type DeviceSetup,
   type DeviceSignedIn,
+  type HostUpdate,
 } from "./device-agent-wire.js";
 import {
   type HostPairingPollAnswer,
@@ -67,9 +69,16 @@ export interface DeviceAgentClaimedLine {
   readonly secretsGone?: true | undefined;
 }
 
-/** A beat the service took: the ids of the launches it holds the device to, none from a service before the field (`deviceAgentBeatAnswerSchema`). */
+/** A beat the service took: the ids of the launches it holds the device to, none from a service before the field, and a release newer than the host's, where the service names one (`deviceAgentBeatAnswerSchema`). */
 export interface DeviceAgentBeat {
   readonly openLaunches?: readonly string[] | undefined;
+  readonly release?: DeviceAgentRelease | undefined;
+}
+
+/** Where a host's update stands, as its beat says it while one is under way, and why it failed where it did. */
+export interface DeviceAgentUpdate {
+  readonly update: HostUpdate;
+  readonly updateFailure?: string | undefined;
 }
 
 /** What a Mac registers as: its name, its platform and architecture, its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, which harnesses it is signed in to, the lines beyond the first it takes, and where its setup stands until it is ready. */
@@ -306,13 +315,27 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /** That this Mac is here now, and which harnesses it is signed in to; the launches the service holds it to where it took the beat, and nothing where it did not. */
+  /** That this Mac is here now, which harnesses it is signed in to, and where its update stands while one is under way; the launches the service holds it to and a newer release where it took the beat, and nothing where it did not. */
   beat(
     deviceId: string,
     signedIn: DeviceSignedIn,
+    updating?: DeviceAgentUpdate,
   ): Effect.Effect<DeviceAgentBeat | undefined, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.deviceAgents.beat, { deviceId, signedIn }).pipe(
-      Effect.map((answer): DeviceAgentBeat => ({ openLaunches: answer.openLaunches })),
+    const failure = updating?.updateFailure;
+    const input = {
+      deviceId,
+      signedIn,
+      // Note that a beat updating nothing names neither key, since a service from before them refuses a key it does not know.
+      ...(updating === undefined ? undefined : { update: updating.update }),
+      ...(updating === undefined || failure === undefined ? undefined : { updateFailure: failure }),
+    };
+    return askHosted(this.#hosted.deviceAgents.beat, input).pipe(
+      Effect.map(
+        (answer): DeviceAgentBeat => ({
+          openLaunches: answer.openLaunches,
+          release: answer.release,
+        }),
+      ),
       Effect.orElseSucceed(() => undefined),
     );
   }

@@ -23,6 +23,9 @@
  * register under an id another account holds writes nothing and answers
  * not found too, and a register keeps only the capabilities this service
  * knows (`DEVICE_CAPABILITY`), so a newer follower's list is never refused.
+ * A beat keeps where the host's update stands, cleared by one naming none,
+ * and answers the release published (`HOST_RELEASE`) where the host's
+ * daemon is below it, which the host updates itself to.
  * The live agents' read answers the ids of the account's agents pinned to
  * that Mac and not archived (`GET /api/device-agents/live-agents`), which
  * the Mac keeps and removes everything else of Luke's it holds against.
@@ -61,11 +64,13 @@ import {
   pollHostPairing,
 } from "@luke/database/models/host-pairing-store";
 import { enrollOwnDevice, hostsOf } from "@luke/database/models/host-store";
-import { knownDeviceCapabilities } from "@luke/features/device-agent-wire";
+import { type DeviceAgentRelease, knownDeviceCapabilities } from "@luke/features/device-agent-wire";
+import { HOST_RELEASE } from "@luke/features/host-release";
 import {
   HOST_PAIRING_POLL_STATUS,
   HOST_WIRE,
   hostConnectPath,
+  hostVersionMeets,
   type OwnDeviceEnrollRequest,
   shownHostUserCode,
 } from "@luke/features/host-wire";
@@ -181,6 +186,18 @@ const enrollingMachine = ({ name, platform, arch }: OwnDeviceEnrollRequest) => {
 const keptOrNotFound = (kept: boolean) =>
   kept ? Effect.succeed(DONE) : Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
 
+/**
+ * The release a beat names, where one is published and the request's
+ * daemon is below it (`HOST_RELEASE`); none otherwise, so a host on it or
+ * past it, a Preview's ahead of it among them, is told of nothing.
+ */
+function newerReleaseFor(request: Request): DeviceAgentRelease | undefined {
+  const version = presentedHostVersion(request);
+  if (HOST_RELEASE === undefined || version === undefined) return undefined;
+  if (hostVersionMeets(version, HOST_RELEASE.VERSION)) return undefined;
+  return { version: HOST_RELEASE.VERSION, sha256: HOST_RELEASE.SHA256 };
+}
+
 /** The device-agents resource: the own enroll on the desktop's sign-in, a pairing's start on no credential and its poll on its poll secret, and every other procedure on the device's bearer. */
 export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
   const deviceAgents = hosted.deviceAgents.use(deviceMiddleware(seams.resolveUserId));
@@ -258,14 +275,18 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
     }),
     beat: deviceAgents.beat.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);
+      const { deviceId, signedIn, update, updateFailure } = input;
       yield* keptOrNotFound(
-        yield* hostedStoreOrUnavailable(beatDevice(context.userId, input.deviceId, input.signedIn)),
+        yield* hostedStoreOrUnavailable(
+          beatDevice(context.userId, deviceId, signedIn, { update, updateFailure }),
+        ),
       );
       // Note that the launches are read after the beat is written, so a claim the device finished before it sent the beat is among them.
       const openLaunches = yield* hostedStoreOrUnavailable(
-        openDeviceAgentLaunches(context.userId, input.deviceId),
+        openDeviceAgentLaunches(context.userId, deviceId),
       );
-      return { ...DONE, openLaunches };
+      const release = newerReleaseFor(context.request);
+      return { ...DONE, openLaunches, ...(release === undefined ? undefined : { release }) };
     }),
     liveAgents: deviceAgents.liveAgents.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);

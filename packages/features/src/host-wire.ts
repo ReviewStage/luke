@@ -4,6 +4,8 @@ import {
   DEVICE_PLATFORM,
   DEVICE_SETUP_FAILURE_MAX_CHARS,
   deviceSetupSchema,
+  HOST_UPDATE_FAILURE_MAX_CHARS,
+  hostUpdateSchema,
 } from "./device-agent-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
@@ -306,7 +308,11 @@ export const hostUpgradeNeededDataSchema = EffectSchema.Struct({
  * absent for a Linux machine. A machine whose host program has not
  * called in since it joined says so (`calledIn`): a host an approve made,
  * or one whose box collected its secret, until its program first
- * registers. All four are absent from a service older than them.
+ * registers. All four are absent from a service older than them. A
+ * machine updating itself to a newer release says where that stands
+ * (`HOST_UPDATE`), and why for one that failed, as its last beat said; both
+ * are absent while no update is under way, and from a service older than
+ * them.
  */
 const hostSchema = EffectSchema.Struct({
   id: wireUuidSchema,
@@ -321,6 +327,10 @@ const hostSchema = EffectSchema.Struct({
   ),
   loginName: EffectSchema.optionalKey(EffectSchema.String),
   calledIn: EffectSchema.optionalKey(EffectSchema.Boolean),
+  update: EffectSchema.optionalKey(hostUpdateSchema),
+  updateFailure: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(HOST_UPDATE_FAILURE_MAX_CHARS)),
+  ),
 });
 
 export type Host = typeof hostSchema.Type;

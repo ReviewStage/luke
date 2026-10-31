@@ -1,5 +1,5 @@
 /**
- * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: a desktop's own sign-in is refused as needing an upgrade, a Mac enrolls on that sign-in, created where Luke never saw it and never under another account, and a host calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed; a box pairs with a code a member approves, its secret handed over once, or is denied, or lapses, polled no faster than the interval, while an account that guesses too many codes is held.
+ * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: a desktop's own sign-in is refused as needing an upgrade, a Mac enrolls on that sign-in, created where Luke never saw it and never under another account, and a host calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed, its beat told of a newer release and listing where its update stands; a box pairs with a code a member approves, its secret handed over once, or is denied, or lapses, polled no faster than the interval, while an account that guesses too many codes is held.
  *
  * Synthetic accounts, bearers, codes, Macs, hosts, and keys throughout.
  */
@@ -18,7 +18,9 @@ import {
   DEVICE_PLATFORM,
   DEVICE_SETUP,
   type DeviceSetup,
+  HOST_UPDATE,
 } from "@luke/features/device-agent-wire";
+import { HOST_RELEASE } from "@luke/features/host-release";
 import { HOST_WIRE } from "@luke/features/host-wire";
 import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
@@ -208,6 +210,12 @@ function hostBeat(secret: string, deviceId: string, version: string = HOST_VERSI
   return request(secret, PATH.PRESENCE, { version, body: { deviceId } });
 }
 
+/** The release the service publishes, which every case that names it needs. */
+function publishedRelease() {
+  assert.ok(HOST_RELEASE !== undefined, "a release is published");
+  return HOST_RELEASE;
+}
+
 /** A box's pairing start with no credential, from the address given where one is, at the version given or the floor's. */
 function startPairing(init: { readonly version?: string; readonly ip?: string } = {}) {
   return request(undefined, PATH.PAIRING_START, {
@@ -361,10 +369,16 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
         const ownerList = yield* answerOf(request(owner, PATH.HOSTS));
         const otherList = yield* answerOf(request(other, PATH.HOSTS));
 
-        // Note that a beat answers the launches the service holds the device to, none for a host with no agent.
+        const published = publishedRelease();
+
+        // Note that a beat answers the launches the service holds the device to, none for a host with no agent, and the release published, which a host at the floor is below.
         assert.deepEqual(ownBeat, {
           status: HOSTED_HTTP_STATUS.OK,
-          body: { done: true, openLaunches: [] },
+          body: {
+            done: true,
+            openLaunches: [],
+            release: { version: published.VERSION, sha256: published.SHA256 },
+          },
         });
         assert.deepEqual(
           [otherDeviceBeat, followedByOther],
@@ -379,6 +393,56 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
           otherList.body.hosts.map((each: { readonly id: string }) => each.id),
           [otherHost.deviceId],
         );
+      }),
+  );
+
+  it.effect("a host on the published release is told of no release", () =>
+    Effect.gen(function* () {
+      const owner = yield* account();
+      const host = yield* pairedHost(owner);
+
+      const beat = yield* answerOf(
+        hostBeat(host.secret, host.deviceId, publishedRelease().VERSION),
+      );
+
+      assert.deepEqual(beat, {
+        status: HOSTED_HTTP_STATUS.OK,
+        body: { done: true, openLaunches: [] },
+      });
+    }),
+  );
+
+  it.effect(
+    "where a host's update stands is listed as its beat said it, and a beat naming none clears it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* account();
+        const host = yield* pairedHost(owner);
+        const failure = "the download did not match its checksum";
+        /** The account's one host's update, as Hosts lists it. */
+        const listedUpdate = Effect.map(answerOf(request(owner, PATH.HOSTS)), (listed) =>
+          listed.body.hosts.map(
+            (each: { readonly update?: string; readonly updateFailure?: string }) => [
+              each.update,
+              each.updateFailure,
+            ],
+          ),
+        );
+
+        const failed = yield* statusOf(
+          request(host.secret, PATH.PRESENCE, {
+            version: HOST_VERSION.FLOOR,
+            body: { deviceId: host.deviceId, update: HOST_UPDATE.FAILED, updateFailure: failure },
+          }),
+        );
+        const whileFailed = yield* listedUpdate;
+        // A host from before the field, or one updating nothing, beats with neither.
+        const plain = yield* statusOf(hostBeat(host.secret, host.deviceId));
+        const afterPlain = yield* listedUpdate;
+
+        assert.deepEqual([failed, plain], [HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK]);
+        assert.deepEqual(whileFailed, [[HOST_UPDATE.FAILED, failure]]);
+        assert.deepEqual(afterPlain, [[undefined, undefined]]);
       }),
   );
 

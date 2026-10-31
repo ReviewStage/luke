@@ -2,7 +2,12 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { DEVICE_ARCH, DEVICE_PLATFORM, DEVICE_SETUP } from "@luke/features/device-agent-wire";
+import {
+  DEVICE_ARCH,
+  DEVICE_PLATFORM,
+  DEVICE_SETUP,
+  HOST_UPDATE,
+} from "@luke/features/device-agent-wire";
 import type { Host } from "@luke/features/host-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { THIS_MAC_HOST_STANDING, type ThisMacHostStanding } from "@luke/host/contract";
@@ -344,6 +349,39 @@ test("another Mac's row says why its setup failed and whose login it runs in, an
   assert.ok(text.includes("Couldn't set up: Claude Code could not be installed"));
   assert.ok(text.includes("Runs while charles is logged in."));
   assert.ok(!/this Mac/iu.test(text), "nothing on its row speaks of this Mac");
+});
+
+test("a host's row says its version and where its update stands, and This Mac's leaves its update to its app", async () => {
+  const mac = "7a1c9e3b-2f4d-4c6a-8b0e-5d7f9a1c3e52";
+  const updating: readonly Host[] = [
+    { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "ams-01", update: HOST_UPDATE.WAITING },
+    { id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "ord-01", update: HOST_UPDATE.UPDATING },
+    {
+      id: "5c2e8a1f-3b7d-4e9a-8c6f-1d3b5e7a9c20",
+      name: "nrt-01",
+      update: HOST_UPDATE.FAILED,
+      updateFailure: "the download did not match its checksum",
+    },
+    {
+      id: mac,
+      name: "Studio",
+      platform: DEVICE_PLATFORM.DARWIN,
+      update: HOST_UPDATE.FAILED,
+      updateFailure: "this Mac's disk is full",
+    },
+  ].map((host) => ({ seenAt: 0, version: "0.2.1", upgradeNeeded: false, ...host }));
+  await machinesWithThisMac(
+    updating,
+    { standing: THIS_MAC_HOST_STANDING.RUNNING, deviceId: mac },
+    updating.map((host) => ({ deviceId: host.id, ageMs: 0 })),
+  );
+  const text = document.body.textContent ?? "";
+
+  assert.ok(text.includes("Linux server · Online · 0.2.1"), text);
+  assert.ok(text.includes("Update ready, waiting for agents to finish"));
+  assert.ok(text.includes("Updating…"));
+  assert.ok(text.includes("Couldn't update: the download did not match its checksum"));
+  assert.ok(!text.includes("this Mac's disk is full"), "This Mac's row draws no update line");
 });
 
 test.each([

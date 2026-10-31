@@ -7,6 +7,7 @@ import {
   type DevicePlatform,
   type DeviceSetup,
   type DeviceSignedIn,
+  type HostUpdate,
 } from "@luke/features/device-agent-wire";
 import { sql } from "drizzle-orm";
 import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
@@ -94,6 +95,15 @@ export const device = pgTable(
     setup: text("setup").$type<DeviceSetup>(),
     /** The device's own words for why its setup failed, naming no secret; null unless `setup` is failed. */
     setupFailure: text("setup_failure"),
+    /**
+     * Where the host stands in updating itself to a newer release, as its
+     * last beat said (`HOST_UPDATE`): waiting for its agents to finish,
+     * switching, or failed. Null while no update is under way, as every row
+     * from before the column is; a beat naming none clears it.
+     */
+    updatePhase: text("update_phase").$type<HostUpdate>(),
+    /** The host's own words for why its update failed, naming no secret; null unless `update_phase` is failed. */
+    updateFailure: text("update_failure"),
     /** The device's secret as its SHA-256 in hex, never the secret; null for a device that never enrolled, which Luke no longer takes a call from, and for a removed one. */
     secretHash: text("secret_hash"),
     /** The host program version the device last called with; null for one that never enrolled. */
