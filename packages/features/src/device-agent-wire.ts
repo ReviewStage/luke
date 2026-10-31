@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { checkoutIdentitySchema } from "./checkout-identity.js";
+import { HOST_TARGET } from "./host-release.js";
 import { wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -149,6 +150,29 @@ export const deviceSetupSchema = EffectSchema.Literals(Object.values(DEVICE_SETU
 
 /** The most characters of the words a device says its setup failed for. */
 export const DEVICE_SETUP_FAILURE_MAX_CHARS = 200;
+
+/**
+ * Where a host stands in updating itself to the newer release a beat's
+ * answer named (`deviceAgentBeatAnswerSchema`), as its beats say it: holding
+ * the release, checked, until its agents finish, switching to it, or failed.
+ * A host beats with none while no update is under way, as every host from
+ * before the field does.
+ */
+export const HOST_UPDATE = {
+  /** It holds the release, checked, and waits for its agents to finish before it switches. */
+  WAITING: "waiting",
+  /** It is switching to the release now. */
+  UPDATING: "updating",
+  /** Its update failed, for the reason it beat beside it. */
+  FAILED: "failed",
+} as const;
+
+export type HostUpdate = (typeof HOST_UPDATE)[keyof typeof HOST_UPDATE];
+
+export const hostUpdateSchema = EffectSchema.Literals(Object.values(HOST_UPDATE));
+
+/** The most characters of the words a host says its update failed for. */
+export const HOST_UPDATE_FAILURE_MAX_CHARS = 200;
 
 /** A device's operating system, as Node's `process.platform` names it. */
 export const DEVICE_PLATFORM = {
@@ -408,10 +432,24 @@ export const deviceAgentRegisterRequestSchema = EffectSchema.Struct({
 /** A held read of lines or requests: the device alone. */
 export const deviceAgentDeviceRequestSchema = EffectSchema.Struct(deviceField);
 
-/** A beat: the device, and which harnesses it is signed in to now, where it checked. */
+/**
+ * A beat: the device, which harnesses it is signed in to now, where it
+ * checked, and where its update stands (`HOST_UPDATE`), with why for one
+ * that failed, while one is under way. A beat naming no update clears the
+ * last one; a host sends the key only while it names one, so a service from
+ * before the field, which refuses it, never sees it from a host updating
+ * nothing.
+ */
 export const deviceAgentBeatRequestSchema = EffectSchema.Struct({
   ...deviceField,
   signedIn: EffectSchema.optionalKey(deviceSignedInSchema),
+  update: EffectSchema.optionalKey(hostUpdateSchema),
+  updateFailure: EffectSchema.optionalKey(
+    EffectSchema.String.check(
+      EffectSchema.isMinLength(1),
+      EffectSchema.isMaxLength(HOST_UPDATE_FAILURE_MAX_CHARS),
+    ),
+  ),
 });
 
 /** One line or request claimed by its id. */
@@ -467,17 +505,42 @@ export const deviceAgentDoneAnswerSchema = EffectSchema.Struct({
   done: EffectSchema.Literal(true),
 });
 
+/** A tarball's SHA-256, in lower-case hex. */
+const sha256HexSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{64}$/u));
+
+/**
+ * A release of the host program, as a beat's answer names it (`HostRelease`):
+ * its version, and each target's tarball by its SHA-256 in hex, a Mac's
+ * absent from a release with no Mac package. No address rides with it,
+ * since the host builds each from the version (`hostTarballUrl`), so no
+ * answer can send a host to download from elsewhere.
+ */
+export const deviceAgentReleaseSchema = EffectSchema.Struct({
+  version: EffectSchema.String.check(EffectSchema.isMinLength(1), EffectSchema.isMaxLength(32)),
+  sha256: EffectSchema.Struct({
+    [HOST_TARGET.LINUX_X64]: sha256HexSchema,
+    [HOST_TARGET.LINUX_ARM64]: sha256HexSchema,
+    [HOST_TARGET.DARWIN_ARM64]: EffectSchema.optionalKey(sha256HexSchema),
+  }),
+});
+
+export type DeviceAgentRelease = typeof deviceAgentReleaseSchema.Type;
+
 /**
  * That the service took a beat, and the launches it holds the device to:
  * the ids of its launch lines still unsettled with no stop queued after
  * them, claimed or not, read after the beat was written. The device stops a
  * runner whose launch it does not name and settles a named launch it runs
  * nothing for; a service from before the field names none, and a build from
- * before it ignores it.
+ * before it ignores it. Where the service publishes a release newer than
+ * the version the host called with (`HOST_WIRE.VERSION_HEADER`), it names
+ * that release, which a host updates itself to; a host on it or past it is
+ * named none, and a build from before the field drops it unread.
  */
 export const deviceAgentBeatAnswerSchema = EffectSchema.Struct({
   done: EffectSchema.Literal(true),
   openLaunches: EffectSchema.optionalKey(EffectSchema.Array(wireUuidSchema)),
+  release: EffectSchema.optionalKey(deviceAgentReleaseSchema),
 });
 
 /**

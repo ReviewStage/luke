@@ -1,5 +1,5 @@
 /**
- * device-store.ts -- an account's devices that can run its local agents: registered, beaten, and read for the ones there now.
+ * device-store.ts -- an account's devices that can run its local agents: registered, beaten with where a host's update stands, and read for the ones there now.
  *
  * Every function is an effect over the ambient `SqlClient`, keyed by the
  * account, so no account moves, beats, or reads another's Mac. A register
@@ -22,6 +22,9 @@ import {
   type DeviceSignedIn,
   deviceSetupSchema,
   deviceSignedInSchema,
+  HOST_UPDATE,
+  type HostUpdate,
+  hostUpdateSchema,
   knownDeviceCapabilities,
 } from "@luke/features/device-agent-wire";
 import { and, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
@@ -159,13 +162,25 @@ const touchDevice = SqlSchema.findAll({
     ...DeviceKeySchema.fields,
     now: Schema.Date,
     signedIn: Schema.UndefinedOr(deviceSignedInSchema),
+    updating: Schema.UndefinedOr(
+      Schema.Struct({
+        phase: Schema.NullOr(hostUpdateSchema),
+        failure: Schema.NullOr(Schema.String),
+      }),
+    ),
   }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, id, now, signedIn }) =>
+  execute: ({ userId, id, now, signedIn, updating }) =>
     Database.use((db) =>
       db
         .update(device)
-        .set(signedIn === undefined ? { lastSeenAt: now } : { lastSeenAt: now, signedIn })
+        .set({
+          lastSeenAt: now,
+          ...(signedIn === undefined ? undefined : { signedIn }),
+          ...(updating === undefined
+            ? undefined
+            : { updatePhase: updating.phase, updateFailure: updating.failure }),
+        })
         .where(and(eq(device.id, id), eq(device.userId, userId)))
         .returning({ id: device.id }),
     ),
@@ -303,14 +318,38 @@ export function deviceLayout(
   );
 }
 
-/** Records that the account's Mac is there now, and which harnesses it is signed in to where it says; false where the account holds no such Mac. */
+/** Where a host's update stands as its own beat says it: its phase, and why it failed where it did; neither while no update is under way. */
+export interface DeviceUpdating {
+  readonly update?: HostUpdate | undefined;
+  readonly updateFailure?: string | undefined;
+}
+
+/**
+ * Records that the account's Mac is there now, which harnesses it is signed
+ * in to where it says, and where its update stands where its own beat says,
+ * cleared where that names none; a touch that says nothing of its update, a
+ * held read's, leaves it. False where the account holds no such Mac.
+ */
 export function beatDevice(
   userId: string,
   id: string,
   signedIn?: DeviceSignedIn,
+  updating?: DeviceUpdating,
 ): DeviceEffect<boolean> {
+  const update = updating?.update ?? null;
+  const said =
+    updating === undefined
+      ? undefined
+      : {
+          phase: update,
+          // Note that only a failed update keeps its words, as only a failed setup does.
+          failure: update === HOST_UPDATE.FAILED ? (updating.updateFailure ?? null) : null,
+        };
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(touchDevice({ userId, id, now, signedIn }), (rows) => rows.length > 0),
+    Effect.map(
+      touchDevice({ userId, id, now, signedIn, updating: said }),
+      (rows) => rows.length > 0,
+    ),
   );
 }
 

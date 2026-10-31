@@ -161,6 +161,8 @@ export const deviceSync = defineSyncTable(device, {
     device.capabilities,
     device.setup,
     device.setupFailure,
+    device.updatePhase,
+    device.updateFailure,
     device.secretHash,
     device.version,
     device.removedAt,

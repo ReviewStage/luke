@@ -3,6 +3,7 @@ import {
   DEVICE_PLATFORM,
   DEVICE_SETUP,
   type DevicePlatform,
+  HOST_UPDATE,
 } from "@luke/features/device-agent-wire";
 import {
   HOST_UNINSTALL_COMMAND,
@@ -59,6 +60,7 @@ import {
   presenceStanding,
   useDevicePresence,
 } from "../device-presence.js";
+import { hostUpdateWords } from "../device-setup.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { HostConnectDialog, useHostConnect } from "./host-connect-dialog.js";
 import { MenuRow } from "./menu-row.js";
@@ -80,9 +82,13 @@ import {
  * command, or a Mac its desktop enrolled. The list names each, what it is by
  * its platform (`DEVICE_PLATFORM_NAME`), whether it is online, held against
  * the window's own clock as a Mac's label is (`macOnline`), when it was last
- * seen otherwise, where its setup stands while it is not ready, getting
- * ready or couldn't set up and why, in the words This Mac's row says them
- * in (`setupLineOf`), for a Mac that it runs while its user is logged in,
+ * seen otherwise, the host program's version it last called with, where its
+ * setup stands while it is not ready, getting ready or couldn't set up and
+ * why, in the words This Mac's row says them in (`setupLineOf`), where its
+ * update to a newer release stands while one is under way, waiting for its
+ * agents to finish, updating, or couldn't update and why
+ * (`hostUpdateWords`), on every row but This Mac's, whose line is its own
+ * app's reading, for a Mac that it runs while its user is logged in,
  * since its host runs in their login session, and, where its host program
  * is below the service's floor, Upgrade needed with how to upgrade it: the
  * install command's upgrade, this Mac's app updated, or, for another Mac,
@@ -120,7 +126,7 @@ import {
 /** `useMinute` counts in milliseconds, so the minute the list stands on is read off it in whole ones. */
 const MINUTE_MS = 60_000;
 
-/** How often the list is read while a host is getting ready or Add hosts waits for one, as often as This Mac's row reads its own. */
+/** How often the list is read while a host is getting ready or updating, or Add hosts waits for one, as often as This Mac's row reads its own. */
 const WATCHED_READ_EVERY_MS = 5_000;
 
 /**
@@ -194,6 +200,21 @@ function setupLine(host: Host, standing: DeviceStanding): HostLine | null {
   return setupLineOf(host.setup, host.setupFailure);
 }
 
+/**
+ * Where a host that is not this Mac stands in updating itself: waiting for
+ * its agents to finish or updating, plain, or couldn't update and why,
+ * tinted; nothing while no update is under way, or while it is offline,
+ * whose last word of its update may no longer hold.
+ */
+function updateLine(host: Host, standing: DeviceStanding): HostLine | null {
+  if (host.update === undefined || standing === DEVICE_STANDING.OFFLINE) return null;
+  return {
+    words: hostUpdateWords(host.update, host.updateFailure),
+    state:
+      host.update === HOST_UPDATE.FAILED ? SETTINGS_ROW_STATE.ATTENTION : SETTINGS_ROW_STATE.PLAIN,
+  };
+}
+
 /** How a host is upgraded, under its Upgrade needed: this Mac's app updated, the install command's upgrade run on a server, and either for another Mac. */
 function UpgradeHow({
   platform,
@@ -245,7 +266,7 @@ const REMOVE_WORDS = {
   },
 } as const;
 
-/** One machine's row: its name, what it is and whether it is online, where its setup stands while it is not ready, for a Mac whose login it runs in, Upgrade needed with how to upgrade it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
+/** One machine's row: its name, what it is, whether it is online, and its version, where its setup stands while it is not ready and its update while one is under way, for a Mac whose login it runs in, Upgrade needed with how to upgrade it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
 function HostRow({
   host,
   book,
@@ -270,14 +291,17 @@ function HostRow({
   // Note that a service older than platforms listed only Linux servers.
   const platform = host.platform ?? DEVICE_PLATFORM.LINUX;
   const seen = `${DEVICE_PLATFORM_NAME[platform]} · ${seenWords(host, book, now)}`;
+  const versioned = host.version === null ? seen : `${seen} · ${host.version}`;
   const removeWords =
     thisMac !== undefined
       ? REMOVE_WORDS.THIS_MAC
       : platform === DEVICE_PLATFORM.DARWIN
         ? REMOVE_WORDS.MAC
         : REMOVE_WORDS.SERVER;
-  // Note that this Mac's own line is its app's reading of its `luke-host`, which says its setup and more, with Retry.
-  const line = thisMac !== undefined ? thisMac.line : setupLine(host, hostStanding(host, book));
+  const standing = hostStanding(host, book);
+  // Note that this Mac's own line is its app's reading of its `luke-host`, which says its setup and more, with Retry, and its update is its app's.
+  const line = thisMac !== undefined ? thisMac.line : setupLine(host, standing);
+  const update = thisMac !== undefined ? null : updateLine(host, standing);
   const session: HostLine | null =
     platform === DEVICE_PLATFORM.DARWIN
       ? { words: macSessionWords(host.loginName), state: SETTINGS_ROW_STATE.PLAIN }
@@ -303,11 +327,10 @@ function HostRow({
           ) : undefined,
           description: (
             <>
-              {host.upgradeNeeded && host.version !== null
-                ? `${seen} · runs ${host.version}`
-                : seen}
+              {versioned}
               {session === null ? null : <HostStateLine line={session} />}
               {line === null ? null : <HostStateLine line={line} />}
+              {update === null ? null : <HostStateLine line={update} />}
             </>
           ),
           control: thisMac === undefined ? undefined : <ThisMacAct thisMac={thisMac} />,
@@ -472,9 +495,12 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   }, [act, signedIn, attempt]);
 
   // A server that joins while the page stands is drawn within a minute, with no skeleton over the list the member is reading.
-  // Note that while a host is getting ready, or Add hosts waits for one, the list is read every few seconds instead, so a host reads approved, ready, or why it couldn't set up about as soon as This Mac's row would.
-  const settingUp = hosts?.some((host) => host.setup === DEVICE_SETUP.PREPARING) ?? false;
-  const watched = settingUp || adding !== undefined;
+  // Note that while a host is getting ready or updating, or Add hosts waits for one, the list is read every few seconds instead, so a host reads approved, ready, updated, or why it couldn't about as soon as This Mac's row would.
+  const changing =
+    hosts?.some(
+      (host) => host.setup === DEVICE_SETUP.PREPARING || host.update === HOST_UPDATE.UPDATING,
+    ) ?? false;
+  const watched = changing || adding !== undefined;
   const period = watched ? Math.floor(now / WATCHED_READ_EVERY_MS) : minute;
   // A read after the page's first lands over the list standing, so no skeleton covers the rows the member is reading.
   const relist = useCallback(

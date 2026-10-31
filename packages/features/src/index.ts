@@ -31,6 +31,7 @@ export {
   type DeviceAgentBeat,
   type DeviceAgentClaimedLine,
   type DeviceAgentDevice,
+  type DeviceAgentUpdate,
   HOST_PAIRING_OUTCOME,
   HostedDeviceAgentClient,
   type HostedDeviceAgentClientOptions,

@@ -12,8 +12,9 @@
  * a phone as in the desktop. A host removed is refused at once on its
  * secret (`auth/device-secret.ts`), and its agents' running turns are
  * settled lost with it. Each host is listed with whether its daemon is
- * below the floor, where its setup stands, whether its program has called
- * in since it joined, and, for a Mac, the user it runs as, and every answer
+ * below the floor, where its setup stands, where its update to a newer
+ * release stands, whether its program has called in since it joined, and,
+ * for a Mac, the user it runs as, and every answer
  * names the install script on the service's own origin, which the
  * install and upgrade commands name (`@luke/features/host-wire`).
  *
@@ -154,6 +155,8 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
               row.version === null || !hostVersionMeets(row.version, HOST_VERSION.FLOOR),
             ...(row.setup === null ? undefined : { setup: row.setup }),
             ...(row.setupFailure === null ? undefined : { setupFailure: row.setupFailure }),
+            ...(row.update === null ? undefined : { update: row.update }),
+            ...(row.updateFailure === null ? undefined : { updateFailure: row.updateFailure }),
             ...(loginName === undefined ? undefined : { loginName }),
             // Note that a register always writes the home folder and nothing else does, so a host with none has not called in since it joined.
             calledIn: row.home !== null,

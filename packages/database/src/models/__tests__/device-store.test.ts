@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { DEVICE_CAPABILITY, DEVICE_ISOLATION } from "@luke/features/device-agent-wire";
+import {
+  DEVICE_ARCH,
+  DEVICE_CAPABILITY,
+  DEVICE_ISOLATION,
+  DEVICE_PLATFORM,
+  HOST_UPDATE,
+} from "@luke/features/device-agent-wire";
 import { eq, sql } from "drizzle-orm";
 import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -16,14 +22,15 @@ import {
   devicesSeenSince,
   registerDevice,
 } from "../device-store.js";
+import { enrollOwnDevice, hostsOf } from "../host-store.js";
 
 /**
  * An account's Macs, over a real dialect: a Mac is registered, beaten, and
  * read by its own account alone, an id another account holds is never taken
  * over, a Mac that stopped beating is no longer read as there, a launch
  * reads how the Mac last said it runs its agents and the capabilities of
- * its this build knows, and the Macs a read's
- * local agents name are read by their ids alone.
+ * its this build knows, a host's update stands until its own beat names
+ * none, and the Macs a read's local agents name are read by their ids alone.
  * Synthetic accounts and Macs throughout.
  */
 
@@ -87,6 +94,34 @@ it.layer(getTestDB())("the device store", (it) => {
         [id],
       );
     }),
+  );
+
+  it.effect(
+    "a host's update stands through a touch that says nothing of it, and its own beat naming none clears it",
+    () =>
+      Effect.gen(function* () {
+        const { owner } = yield* openAccounts;
+        const id = randomUUID();
+        yield* enrollOwnDevice(owner, {
+          id,
+          version: "0.2.1",
+          secretHash: `secret-${randomUUID()}`,
+          machine: { name: "fra-01", platform: DEVICE_PLATFORM.LINUX, arch: DEVICE_ARCH.X64 },
+        });
+        const listed = Effect.map(hostsOf(owner), (hosts) =>
+          hosts.map((host) => [host.update, host.updateFailure]),
+        );
+
+        yield* beatDevice(owner, id, undefined, { update: HOST_UPDATE.WAITING });
+        // A held read touches the device with no word of its update.
+        yield* beatDevice(owner, id);
+        const touched = yield* listed;
+        yield* beatDevice(owner, id, undefined, {});
+        const cleared = yield* listed;
+
+        assert.deepEqual(touched, [[HOST_UPDATE.WAITING, null]]);
+        assert.deepEqual(cleared, [[null, null]]);
+      }),
   );
 
   it.effect("a launch reads the isolation the Mac last registered, bare where it named none", () =>
