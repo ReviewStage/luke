@@ -83,6 +83,25 @@ test("a line drawn whole raises no hint, and one cut short says its words whole"
   assert.equal(said(), "sam@example.com");
 });
 
+test("a line whose glyphs stand a pixel past its leading is not cut short, though words that wrap and run below their box are", () => {
+  vi.stubGlobal("ResizeObserver", StandInObserver);
+  const view = render(createElement(OneLine, { children: "Ada Lovelace" }));
+  const line = view.querySelector<HTMLElement>(".luke-one-line") ?? assert.fail("the line");
+  // Note that jsdom reads no stylesheet, so one-line.css's nowrap is stood in for inline.
+  line.style.whiteSpace = "nowrap";
+  vi.spyOn(line, "scrollWidth", "get").mockReturnValue(101);
+  vi.spyOn(line, "clientWidth", "get").mockReturnValue(101);
+  vi.spyOn(line, "scrollHeight", "get").mockReturnValue(19);
+  vi.spyOn(line, "clientHeight", "get").mockReturnValue(18);
+  resize();
+  assert.equal(line.dataset.overflow, "false", "a 16px name on an 18px line fits its 101px");
+  line.style.whiteSpace = "normal";
+  vi.spyOn(line, "scrollHeight", "get").mockReturnValue(54);
+  vi.spyOn(line, "clientHeight", "get").mockReturnValue(36);
+  resize();
+  assert.equal(line.dataset.overflow, "true", "a third line of wrapped words runs below two");
+});
+
 /** The pointer arriving on `target` and resting there past the hint's wait, on a faked clock. */
 function restOn(target: Element): void {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });

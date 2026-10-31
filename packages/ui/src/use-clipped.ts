@@ -1,8 +1,18 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
-/** Whether the box's words run past it: past its end on one line, or below its last line where they are held to a few. */
+/** White-space values that hold words to one line, whose box is cut only past its end. */
+const ONE_LINE_WHITE_SPACE = new Set(["nowrap", "pre"]);
+
+/**
+ * Whether the box's words run past it: past its end on one line, or below
+ * its last line where they wrap and are held to a few. Note that a line held
+ * to one is never cut below, because a face's glyphs may stand a pixel or two
+ * past a tight leading (a 16px name on an 18px line), which cuts no word.
+ */
 function cutShort(element: HTMLElement): boolean {
-  return element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight;
+  if (element.scrollWidth > element.clientWidth) return true;
+  if (ONE_LINE_WHITE_SPACE.has(getComputedStyle(element).whiteSpace)) return false;
+  return element.scrollHeight > element.clientHeight;
 }
 
 /**
