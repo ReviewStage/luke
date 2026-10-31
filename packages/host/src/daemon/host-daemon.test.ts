@@ -246,7 +246,9 @@ describe("a host's daemon", () => {
         yield* TestClock.adjust(Duration.seconds(20));
         yield* Fiber.join(daemon);
         // Note that a daemon handed no releases, as This Mac's copy inside the app, neither fetches the release named nor says it updates.
-        expect(http.requests.filter((request) => !request.url.startsWith(SERVICE))).toEqual([]);
+        expect(http.requests.filter((request) => new URL(request.url).origin !== SERVICE)).toEqual(
+          [],
+        );
         expect(
           at(http.requests, "POST", HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE).some(
             (request) => "update" in JSON.parse(request.body ?? "{}"),

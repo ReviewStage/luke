@@ -226,12 +226,13 @@ import type { RunMode } from "./run-mode.js";
  * `daemon/host-update.ts`) says on every beat where its update stands, and
  * is handed each answered beat's newer release. Once it holds one checked,
  * the device switches to it as soon as it is idle: no runner runs, no
- * launch is starting or waits in a mailbox, and no claim's answer was lost.
- * Its claims stop first, under the lock every claim holds, and idle is
- * read again there, so a launch claimed meanwhile keeps the device on
- * the release it runs and the switch waits for a later beat; once it
- * switches, the lines it did not claim wait in the service for the
- * daemon started on the new release.
+ * line it claimed waits to be delivered or is being delivered, no request
+ * is being answered, and no claim's answer was lost. Its claims of lines
+ * and requests stop first, under the lock every line's claim holds, and
+ * idle is read again there, so a line claimed meanwhile keeps the device
+ * on the release it runs and the switch waits for a later beat; once it
+ * switches, the lines and requests it did not claim wait in the service
+ * for the daemon started on the new release.
  *
  * Requests are each answered on a fiber of their own, inside the agent's
  * folder alone (`local-agent-requests.ts`). Turning the experiment off,
@@ -789,8 +790,10 @@ export function composeLocalAgents(
         const deliveryLocks = new Map<string, Semaphore.Semaphore>();
         /** Done once a beat of this follow is answered, after which the device passes over its agents (`swept`). */
         const beaten = yield* Deferred.make<void>();
-        /** Whether no line is claimed, set under `claiming` once the device switches to a newer release, so the lines wait in the service for the daemon started on it. */
+        /** Whether no line or request is claimed, set under `claiming` once the device switches to a newer release, so they wait in the service for the daemon started on it. */
         let paused = false;
+        /** How many lines were handed to their agents' workers and are not yet delivered, each counted from its hand-over until its worker is done with it. */
+        let undelivered = 0;
 
         const answering = yield* FiberSet.make();
 
@@ -1280,6 +1283,7 @@ export function composeLocalAgents(
         const handedOver = (claimed: DeviceAgentClaimedLine) =>
           Effect.gen(function* () {
             if (claimed.line.kind === DEVICE_AGENT_LINE_KIND.LAUNCH) starting.add(claimed.line.id);
+            undelivered += 1;
             yield* Queue.offer(yield* mailboxOf(claimed.line.agentId), claimed);
           });
 
@@ -1304,9 +1308,9 @@ export function composeLocalAgents(
                 const agentScope = yield* Effect.scope;
                 for (;;) {
                   const claimed = yield* Queue.take(mailbox);
-                  yield* deliveryLockOf(agentId).withPermit(
-                    delivered(agentId, claimed, agentScope),
-                  );
+                  yield* deliveryLockOf(agentId)
+                    .withPermit(delivered(agentId, claimed, agentScope))
+                    .pipe(Effect.ensuring(Effect.sync(() => void (undelivered -= 1))));
                 }
               }),
             );
@@ -1384,6 +1388,7 @@ export function composeLocalAgents(
         /** One request claimed and answered on a fiber of its own. */
         const answered = (request: DeviceAgentRequest) =>
           Effect.gen(function* () {
+            if (paused) return;
             const claimed = yield* asked(client.claimRequest(deviceId, request.id)).pipe(
               Effect.repeat({
                 schedule: Schedule.spaced(CLAIM_RETRY.every),
@@ -1402,6 +1407,7 @@ export function composeLocalAgents(
         /** The requests read, each answered on its own fiber, so a slow read holds up neither the reads nor the others. */
         const requestsFollowed = Effect.forever(
           Effect.gen(function* () {
+            if (paused) return yield* Effect.sleep(REREAD);
             const requests = yield* asked(client.requests(deviceId));
             if (requests === undefined) return yield* Effect.sleep(REREAD);
             for (const request of requests) yield* FiberSet.run(answering, answered(request));
@@ -1493,24 +1499,24 @@ export function composeLocalAgents(
           return beat;
         });
 
-        /** Whether the device runs nothing and has nothing coming: no runner, and no launch starting or line waiting in a mailbox. */
-        const idle = Effect.gen(function* () {
-          if (runners.size > 0 || starting.size > 0) return false;
-          for (const mailbox of mailboxes.values()) {
-            if ((yield* Queue.size(mailbox)) > 0) return false;
-          }
-          return true;
-        });
+        /** Whether the device runs nothing and has nothing under way: no runner, no launch starting, no line it claimed waiting or being delivered, and no request being answered. */
+        const idle = Effect.map(
+          FiberSet.size(answering),
+          (requests) =>
+            runners.size === 0 && starting.size === 0 && undelivered === 0 && requests === 0,
+        );
 
         /**
          * The switch to the release the host's update holds, once the device
-         * is idle: its claims paused under `claiming`, so none is under way,
-         * where it is idle still there and no claim's answer was lost, since
-         * that claim may have been handed a launch only this process could
-         * ask for again. A launch claimed since the first look keeps the
-         * claims going and the switch waits for a later beat, as does a
-         * switch that did not go through; one that did leaves them paused,
-         * since the daemon ends.
+         * is idle: its claims of lines and requests paused under `claiming`,
+         * so no line's claim is under way, where it is idle still there and
+         * no claim's answer was lost, since that claim may have been handed a
+         * launch only this process could ask for again. A line claimed since
+         * the first look keeps the claims going and the switch waits for a
+         * later beat, as does a switch that did not go through; one that did
+         * leaves them paused, since the daemon ends, and since a line it
+         * claimed and a request it is answering are idle's to wait out, the
+         * daemon's end cuts off neither.
          */
         const switchedWhileIdle = (update: LocalAgentsUpdate) =>
           Effect.gen(function* () {

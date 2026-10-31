@@ -139,6 +139,8 @@ const followingDevice = (
     readonly clock?: Clock.Clock;
     /** The host's update of itself, as a host's daemon hands it. */
     readonly update?: LocalAgentsUpdate;
+    /** How long making a folder in the agent's own takes, as a files line's write makes one, none where none is named. */
+    readonly writingTakes?: Duration.Input;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -255,7 +257,10 @@ const followingDevice = (
       NodePath.layer,
       FileSystem.layerNoop({
         exists: (path) => Effect.succeed(options.madeBare === true && path === LAYOUT.checkoutPath),
-        makeDirectory: () => Effect.void,
+        makeDirectory: (path) =>
+          options.writingTakes !== undefined && path.startsWith(LAYOUT.folder)
+            ? Effect.sleep(options.writingTakes)
+            : Effect.void,
         chmod: () => Effect.void,
         readFileString: (path) => {
           const held = files.get(path);
@@ -1068,5 +1073,37 @@ it.effect(
 
       yield* TestClock.adjust(Duration.minutes(75));
       yield* untilOnDisk(Effect.sync(() => fetched.length === 2));
+    }).pipe(Effect.scoped, Effect.provide(NODE)),
+);
+
+it.effect(
+  "a line a host holding a newer release claimed keeps it on the release it runs while the line is being delivered",
+  () =>
+    Effect.gen(function* () {
+      const { archive, release } = yield* newerTarball;
+      const { update, current } = yield* updatingHost(archive);
+      const files: DeviceAgentLine = {
+        id: GONE_LINE_ID,
+        agentId: AGENT_ID,
+        seq: 1,
+        kind: DEVICE_AGENT_LINE_KIND.FILES,
+        payload: {
+          files: [{ path: `${LAYOUT.folder}/home/notes.txt`, mode: 0o600, contents: "bm90ZXM=" }],
+        },
+      };
+      // Note that the files line is claimed at once and its write takes an hour, across every beat the test sends.
+      const { service, said } = yield* followingDevice(() => Effect.void, {
+        lines: [files],
+        claim: () => Effect.succeed({ line: files }),
+        writingTakes: Duration.hours(1),
+        update: update.follower,
+      });
+      service.release = release;
+      yield* untilOnDisk(update.follower.waiting);
+      yield* beatsOn(2);
+      yield* untilOnDisk(Effect.sync(() => said.length >= 3));
+
+      assert.ok(said.every((each) => each?.update !== HOST_UPDATE.UPDATING));
+      assert.equal(yield* current, `versions/${RUNNING}`);
     }).pipe(Effect.scoped, Effect.provide(NODE)),
 );
