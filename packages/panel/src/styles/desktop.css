@@ -1378,8 +1378,10 @@ body,
    starts, or past the title bar's buttons while the sidebar is folded, to
    short of the side panel's toggle where that stands, a head standing its
    controls at a column's inset. Nothing slides beneath the row, so its
-   buttons stand still over the frame. The web's tab and a narrow room stand
-   no title bar (`data-title-bar`), and keep every rule above. */
+   buttons stand still over the frame. The web's tab stands the same bar, its
+   buttons at the window's edge and the bar no handle, since the browser's
+   window has neither traffic lights nor a drag region; a narrow room stands
+   no title bar (`data-title-bar`), and keeps every rule above. */
 :root {
   --title-bar-height: calc(2 * var(--title-bar-middle));
 }

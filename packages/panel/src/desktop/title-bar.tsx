@@ -1,9 +1,9 @@
 /**
- * title-bar.tsx -- the window's one title bar, across a wide desktop window over every pane, which names the place the main column shows: each page draws its head there rather than in its own top row.
+ * title-bar.tsx -- the window's one title bar, across a wide window over every pane, which names the place the main column shows: each page draws its head there rather than in its own top row.
  *
- * The desktop's wide window stands one title bar over its panes, as an
- * editor stands one over its workspace: the traffic lights, the sidebar's
- * toggle, and New task while the sidebar is folded at its start; then the
+ * A wide window stands one title bar over its panes, as an editor stands
+ * one over its workspace: the traffic lights where the installed app's
+ * window has them, the sidebar's toggle, and New task while the sidebar is folded at its start; then the
  * place the main column shows, named by the page itself (a task's
  * `FrameHead`, any other place's `FramePlace`); and the side panel's toggle
  * at its end. Every pane stands under it with its own top row, the main
@@ -14,11 +14,11 @@
  * draws its head into it through a portal (`TitleBarPlace`), so the head
  * is the page's own, reading the page's state and pressing the page's acts,
  * and leaves with the page. A page whose bar names it (`PlaceToolbar`)
- * moves the name up and keeps the rest of its bar where it stood. Where no
- * title bar stands (a phone's room, the web's tab, whose window is the
- * browser's, a page drawn alone in a test, the side panel, and the Inbox
- * kept hidden between visits), `useTitleBar` says so, and a page names
- * itself in its own top row as it always has.
+ * moves the name up and keeps the rest of its bar where it stood. The web's
+ * wide tab stands the same bar, so the two draw one order. Where no title
+ * bar stands (a phone's room, a page drawn alone in a test, the side panel,
+ * and the Inbox kept hidden between visits), `useTitleBar` says so, and a
+ * page names itself in its own top row as it always has.
  */
 
 import { FramePlace, Toolbar, type ToolbarProps } from "@luke/ui";
