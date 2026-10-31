@@ -68,7 +68,7 @@ import { appPlatform } from "./app-platform.js";
 import { drawnVisibly, focusSeek } from "./focus-seek.js";
 import { focusSearchField, Highlighted } from "./search-field.js";
 import { MAC_REPOSITORIES, settingsPageOf, WORKSPACE_CONNECTIONS } from "./settings/pages.js";
-import { settingsPageShown } from "./settings/settings-rows.js";
+import { experimentPages, settingsPageShown } from "./settings/settings-rows.js";
 
 /**
  * Searching the Settings tab.
@@ -208,14 +208,19 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["GitHub personal access token", "classic token PAT add manage"],
         }
       : undefined,
-    // Each experiment's row on Experimental, drawn once an account is signed in: found by its name and what it brings.
+    // Each experiment's row on Experimental, drawn once an account is signed in: found by its name, what it brings, and the pages it holds.
     ...EXPERIMENTS.map((entry) =>
       input.accountDrawn
         ? {
             id: EXPERIMENT_ANCHOR[entry.key],
             label: entry.name,
             page: SETTINGS_VIEW.EXPERIMENTAL,
-            haystack: [entry.name, entry.detail, EXPERIMENT_WORDS],
+            haystack: [
+              entry.name,
+              entry.detail,
+              ...experimentPages(entry.key).map(resultPageWord),
+              EXPERIMENT_WORDS,
+            ],
           }
         : undefined,
     ),

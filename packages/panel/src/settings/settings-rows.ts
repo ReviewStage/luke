@@ -9,7 +9,11 @@ import {
   HOST_CAPABILITY,
   type HostCapability,
 } from "@luke/settings";
-import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
+import {
+  SETTINGS_PAGE_LIST,
+  SETTINGS_VIEW,
+  type SettingsView,
+} from "@luke/settings/settings-views";
 import type { AppSettingsView } from "@luke/settings/wire";
 import type { SettingsSearchInput } from "../settings-search.js";
 import type { WorkspaceSettingsControl } from "./workspace-page.js";
@@ -62,6 +66,11 @@ export function settingsPageExperimentStands(
 ): boolean {
   const experiment = PAGE_EXPERIMENT[view];
   return experiment === undefined || experimentOn(experiments, experiment);
+}
+
+/** The pages an experiment holds, whose names find its row in the search while those pages stand nowhere. */
+export function experimentPages(experiment: Experiment): readonly SettingsView[] {
+  return SETTINGS_PAGE_LIST.filter((view) => PAGE_EXPERIMENT[view] === experiment);
 }
 
 /** Whether a page stands on this platform and for the account's experiments: the sidebar, the command palette, the search, and the page Settings shows all ask it. */
