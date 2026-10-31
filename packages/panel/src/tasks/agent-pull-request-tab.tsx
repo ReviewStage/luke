@@ -1078,17 +1078,18 @@ function ThreadMenu({
   );
 }
 
-/** What the ⋯ of a comment, a review, and the description are called. */
-const ENTRY_THING = { COMMENT: "Comment", REVIEW: "Review", DESCRIPTION: "Description" } as const;
+/** What the ⋯ of a comment and a review are called. */
+const ENTRY_THING = { COMMENT: "Comment", REVIEW: "Review" } as const;
 
 type EntryThing = (typeof ENTRY_THING)[keyof typeof ENTRY_THING];
 
 /**
- * The ⋯ of a comment, a review, or the description: Copy GitHub link, its
- * page's address on GitHub, then Open on GitHub. Note that it offers no
- * Copy link, because no Luke link names one of them (`link-grammar.ts`'s
- * `PULL_REQUEST_THREAD` names a review thread alone), and a GitHub address
- * is never called a link of Luke's.
+ * The ⋯ of a comment or a review: Copy GitHub link, its page's address on
+ * GitHub, then Open on GitHub. The description wears none, because its
+ * address is the pull request's own, which the tab's toolbar opens. Note
+ * that it offers no Copy link, because no Luke link names one of them
+ * (`link-grammar.ts`'s `PULL_REQUEST_THREAD` names a review thread alone),
+ * and a GitHub address is never called a link of Luke's.
  */
 function GitHubEntryMenu({ thing, url }: { thing: EntryThing; url: string }): React.JSX.Element {
   const menu = useMenu(true);
@@ -1882,15 +1883,7 @@ function DescriptionPart({
       </div>
     );
   return (
-    <Section
-      title="Description"
-      fold={fold}
-      end={
-        part.kind === PART.LANDED ? (
-          <GitHubEntryMenu thing={ENTRY_THING.DESCRIPTION} url={part.value.url} />
-        ) : undefined
-      }
-    >
+    <Section title="Description" fold={fold}>
       {part.kind === PART.PENDING ? (
         <PartSkeleton
           label={PULL_REQUEST_WORDS.READING_DESCRIPTION}
