@@ -442,22 +442,32 @@ export function RepositoryChip(
     describedBy?: string | undefined;
     /** A form row's chip: whether the row says its value is refused. */
     invalid?: true | undefined;
+    /** Why the repository is held to `value` and takes no pick, said on hover; none where it may be changed. */
+    held?: string | undefined;
   },
 ): React.JSX.Element {
   const menu = useRepositoryMenu(props);
+  const { held } = props;
+  // Note that a held chip is `aria-disabled` rather than disabled, because a disabled button hears no pointer, and its hint says why.
   return (
     <div className="repository-chip relative min-w-0" data-place={props.place} ref={menu.room}>
-      <Tooltip label={menu.open ? undefined : (props.value ?? undefined)} card={menu.card}>
+      <Tooltip
+        label={held ?? (menu.open ? undefined : (props.value ?? undefined))}
+        card={held === undefined ? menu.card : undefined}
+      >
         <Chip
           look={PLACE_LOOK[props.place]}
           width={props.width}
           chevron={props.place === CHIP_PLACE.FIELD}
           aria-describedby={props.describedBy}
           aria-invalid={props.invalid}
+          aria-disabled={held === undefined ? undefined : true}
           aria-haspopup="dialog"
           aria-expanded={menu.open}
           aria-controls={menu.open ? menu.menuId : undefined}
-          onClick={(event) => menu.press(event.currentTarget)}
+          onClick={(event) => {
+            if (held === undefined) menu.press(event.currentTarget);
+          }}
         >
           {menu.glyph}
           <ChipName>{menu.label}</ChipName>

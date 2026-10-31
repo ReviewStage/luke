@@ -2,7 +2,12 @@ import { AGENT_BOUNDS, AGENT_STATUS, hasWordsOrFiles } from "@luke/features/agen
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { MacOffer, ModelChoice } from "@luke/features/models-wire";
-import { TASK_MODE, type TaskMode } from "@luke/features/task-wire";
+import {
+  TASK_CREATE_RELATION_KIND,
+  TASK_MODE,
+  type TaskCreateRelation,
+  type TaskMode,
+} from "@luke/features/task-wire";
 import { TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -36,6 +41,7 @@ import { useExperiment } from "../use-app-state.js";
 import { AgentComposer, type ComposerWords } from "./agent-composer.js";
 import type { MentionMenuSide } from "./mention-picker.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
+import { type NewTaskRelation, NewTaskRelationPill, treeKind } from "./new-task-relation.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { keptSkills } from "./repository-skills.js";
 import { NewTaskRunsOnChip, newTaskRunsOn, useNewTaskRunsOn } from "./runs-on.js";
@@ -44,7 +50,7 @@ import type { SkillWithFile } from "./skill-ref.js";
 import { TaskMentions, tasklessMentions, useMentionAgentsReader } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 import { MODELS_READ } from "./use-agents.js";
-import type { NewTaskAgent, NewTaskParent, NewTaskStart, TasksControl } from "./use-tasks-tab.js";
+import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.js";
 
 /**
  * new-task-composer.tsx -- New task's composer card: the words a coding agent starts on, and the chips that say where and how the task starts.
@@ -59,10 +65,12 @@ import type { NewTaskAgent, NewTaskParent, NewTaskStart, TasksControl } from "./
  * dialog and on a new account's welcome: the repository the task is about
  * (`repository-chip.tsx`), its title, "New task", named to a reader alone,
  * since the card says what it is, and an automation's drawn before it. The
- * Runs on chip stands after the box's "+", as an agent's box draws where its
+ * Relation pill stands after it on a task's card (`new-task-relation.tsx`),
+ * and on a phone the row wraps, each chip cut short rather than overflowing.
+ * The Runs on chip stands after the box's "+", as an agent's box draws where its
  * agent runs: Cloud, and while Bring your own host is on the member's
  * devices, which the task's agents run on (`runs-on.tsx`); an automation's
- * card and a child's draw none. While the experiment is off the chip offers
+ * card and a sub-task's draw none. While the experiment is off the chip offers
  * Cloud alone, the card reads no devices, and every task it makes runs in
  * the cloud, a device kept as the last pick among them. Note that while it
  * is on the card reads the member's devices as it opens and, where the last
@@ -133,12 +141,16 @@ import type { NewTaskAgent, NewTaskParent, NewTaskStart, TasksControl } from "./
  * mounts it afresh to start those over; the workspace it starts in is the
  * owner's.
  *
- * New child task, from a task's menu or ⌘K, opens this same card for a
- * child of that task (`parent`): its head row says "New sub-task" and
- * names the parent where the repository chip stands, and it draws no Runs
- * on, because a child works in its parent's workspace and repository and
- * runs where its parent runs, which the service holds it to. Its start names
- * the parent and leaves the repository and the place to run to the service.
+ * A task's card may start its task related to another of its workspace, by
+ * the Relation pill: the add menu's New task opens the card with it filled
+ * from the new task's side, and New sub-task, from a task's menu or ⌘K, as
+ * Sub-task of that task; the pill can be changed or removed as any chip.
+ * The start names the relation, which the service writes with the task in
+ * one transaction. As Sub-task of or Parent of the repository chip is held
+ * to the other task's, saying why, because a tree works in one repository,
+ * and the start leaves the repository to the service; as Sub-task of the
+ * card draws no Runs on either, because a sub-task runs where its parent
+ * runs, which the service holds it to.
  *
  * The Automations page's Create with an agent opens this same card for the
  * agent that makes an automation (`NEW_TASK_PURPOSE.AUTOMATION`), so making
@@ -194,14 +206,12 @@ const MODE_CHOICES: readonly ChoiceItem<TaskMode>[] = [
 /** Why an automation's agent did not start where the brief and the words pass an agent's first message's bound. */
 const TOO_LONG = "That request is too long.";
 
-/** Why Start is held without a repository, which a child's card cannot choose, since a child takes its parent's. */
+/** Why Start is held without a repository, which a tree's card cannot choose, since its tasks share the other's; and why the chip is held. */
 const COMPOSER_WORDS = {
   NEEDS_REPOSITORY: "Choose a repository",
-  PARENT_HAS_NO_REPOSITORY: "Its parent task has no repository",
+  RELATED_HAS_NO_REPOSITORY: "That task has no repository",
+  REPOSITORY_HELD: "A sub-task and its parent share one repository",
 } as const;
-
-/** A child's head row title, drawn before the parent it is made under. */
-const CHILD_HEADING = "New sub-task";
 
 /** What the card says where the member's devices could not be read, with Retry, rather than starting the task in the cloud. */
 const DEVICES_UNREAD: Failure = {
@@ -220,6 +230,8 @@ interface AgentAsk {
   readonly deviceId?: string | undefined;
   /** How the task is worked, where the card offered the choice; none while the Pilot experiment is off. */
   readonly mode?: TaskMode | undefined;
+  /** The relation the task starts in; none for a task related to none. */
+  readonly relation?: TaskCreateRelation | undefined;
   readonly agent: Omit<NewTaskAgent, "idempotencyKey">;
 }
 
@@ -229,13 +241,15 @@ export interface NewTaskPress {
   readonly key: string;
 }
 
-/** Whether two presses ask the same: the same task, device, mode, words, files in the same order, and model. */
+/** Whether two presses ask the same: the same task, device, mode, relation, words, files in the same order, and model. */
 function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
   return (
     a.repository === b.repository &&
     a.workspaceId === b.workspaceId &&
     a.deviceId === b.deviceId &&
     a.mode === b.mode &&
+    a.relation?.kind === b.relation?.kind &&
+    a.relation?.taskId === b.relation?.taskId &&
     a.agent.prompt === b.agent.prompt &&
     a.agent.attachments.length === b.agent.attachments.length &&
     a.agent.attachments.every((file, index) => file === b.agent.attachments[index]) &&
@@ -243,6 +257,11 @@ function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
     a.agent.choice?.effort === b.agent.choice?.effort &&
     a.agent.choice?.contextWindow === b.agent.choice?.contextWindow
   );
+}
+
+/** What a start names of the card's relation: its kind and the other task's id. */
+function relationAsked(relation: NewTaskRelation): TaskCreateRelation {
+  return { kind: relation.kind, taskId: relation.task.id };
 }
 
 /** A card's draft place: its purpose's, in its workspace, none before the workspaces are read. */
@@ -299,7 +318,6 @@ export function NewTaskComposer({
   titleId,
   listSide,
   purpose = NEW_TASK_PURPOSE.TASK,
-  parent,
 }: {
   newTask: TasksControl["newTask"];
   /** The workspace the task starts in, the owner's to choose; none before the workspaces are read. */
@@ -316,8 +334,6 @@ export function NewTaskComposer({
   listSide: MentionMenuSide;
   /** What the card starts; a task's agent where none is named. */
   purpose?: NewTaskPurpose | undefined;
-  /** The task the card makes its task a child of, whose workspace `workspaceId` names; none for a task at the top. */
-  parent?: NewTaskParent | undefined;
 }): React.JSX.Element {
   const forAutomation = purpose === NEW_TASK_PURPOSE.AUTOMATION;
   const draft = useDraft(newTaskPlace(workspaceId, purpose));
@@ -333,8 +349,14 @@ export function NewTaskComposer({
   }, [workspaceId, loose, writer, purpose]);
   // A card opened again on a start refused after it closed starts where it was left, saying why.
   const refused = newTask.preset?.refused;
+  // A card opened on a tree's relation starts on the other task's repository, which it keeps once the relation is removed.
+  const presetRelation = newTask.preset?.relation;
   const [chosen, setChosen] = useState<string | null | undefined>(
-    refused === undefined ? newTask.preset?.repository : refused.card.repository,
+    refused !== undefined
+      ? refused.card.repository
+      : presetRelation !== undefined && treeKind(presetRelation.kind)
+        ? presetRelation.task.repository
+        : newTask.preset?.repository,
   );
   const [choice, pickedModel, choose] = useDefaultChoice(newTask, refused?.card.choice);
   const [starting, setStarting] = useState(false);
@@ -343,6 +365,22 @@ export function NewTaskComposer({
   const offersPilot = useExperiment(EXPERIMENT.PILOT) && !forAutomation;
   const [mode, setMode] = useState<TaskMode>(refused?.card.press.ask.mode ?? TASK_MODE.PILOT);
   const asked = offersPilot ? mode : undefined;
+  // The relation the press that opened the card chose, or the refused card's, which the pill changes.
+  const [related, setRelated] = useState<NewTaskRelation | undefined>(
+    refused === undefined ? newTask.preset?.relation : refused.card.relation,
+  );
+  // Note that a relation names a task of the card's workspace, so a switch of workspace, as the welcome's, lets it go.
+  const relation =
+    !forAutomation && related !== undefined && related.task.workspaceId === workspaceId
+      ? related
+      : undefined;
+  const tree = relation !== undefined && treeKind(relation.kind);
+  // A tree's relation set takes the other task's repository as the card's own, so the card keeps it once the relation is removed.
+  const relate = (next: NewTaskRelation | undefined) => {
+    setRelated(next);
+    if (next !== undefined && treeKind(next.kind)) setChosen(next.task.repository);
+  };
+  const asSubTask = relation?.kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF;
   // A refused card opened again holds the words it was pressed with, where the box holds nothing since.
   useLayoutEffect(() => {
     if (refused === undefined) return;
@@ -357,8 +395,13 @@ export function NewTaskComposer({
   const pressed = useRef<NewTaskPress | undefined>(refused?.card.press);
   const repositories = newTask.repositoriesIn(workspaceId);
   const workspace = newTask.workspaces.find((each) => each.id === workspaceId);
-  // Runs on stands on every card but an automation's agent's or a child's, which runs where its parent runs.
-  const runsOnStands = !forAutomation && parent === undefined;
+  // The Relation pill offers the tasks of the card's workspace.
+  const relatable = useMemo(
+    () => newTask.tasks.filter((each) => each.workspaceId === workspaceId),
+    [newTask.tasks, workspaceId],
+  );
+  // Runs on stands on every card but an automation's agent's or a sub-task's, which runs where its parent runs.
+  const runsOnStands = !forAutomation && !asSubTask;
   // It offers the member's devices only while Bring your own host is on, and Cloud alone otherwise.
   const asksDevices = useExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST) && runsOnStands;
   // Note that the devices are read as the card opens rather than when the
@@ -416,8 +459,8 @@ export function NewTaskComposer({
       (listed === undefined && workspace !== undefined && !workspaceReaches(workspace, candidate)))
       ? null
       : candidate;
-  // A child works in its parent's repository, which no chip offers to change.
-  const repository = parent === undefined ? picked : parent.repository;
+  // A tree's two tasks work in one repository, the other task's, which the chip is held to.
+  const repository = relation !== undefined && tree ? relation.task.repository : picked;
   const said = words.trim();
   // Note that an automation's agent starts on words alone, since the brief fences them as the request.
   const filled = forAutomation ? said !== "" : hasWordsOrFiles(said, attachments);
@@ -472,12 +515,12 @@ export function NewTaskComposer({
     // opened again brings its own words back (`refused.card.words`).
     const agentStart = handing.handed !== undefined;
     if (agentStart) draft.update(() => EMPTY_DRAFT);
-    // Note that a child's start names its parent and no repository, because the service gives a child its parent's.
+    // Note that a tree's start names no repository, because the service gives it the other task's.
     newTask
-      .start("", parent === undefined ? repository : null, workspaceId, {
+      .start("", tree ? null : repository, workspaceId, {
         ...(runsOn === undefined ? undefined : { runsOn }),
         ...(device === undefined ? undefined : { device }),
-        ...(parent === undefined ? undefined : { parentTaskId: parent.taskId }),
+        ...(relation === undefined ? undefined : { relation: relationAsked(relation) }),
         ...handing,
       })
       .then((refused) => {
@@ -505,6 +548,7 @@ export function NewTaskComposer({
       workspaceId,
       deviceId: device?.deviceId,
       mode: asked,
+      relation: relation === undefined ? undefined : relationAsked(relation),
       agent: { prompt, attachments, choice: pickedModel },
     };
     const held = pressed.current;
@@ -516,7 +560,7 @@ export function NewTaskComposer({
       ...(asked === undefined ? undefined : { mode: asked }),
       card: {
         ...(forAutomation ? { purpose } : undefined),
-        ...(parent === undefined ? undefined : { parent }),
+        ...(relation === undefined ? undefined : { relation }),
         repository,
         choice: pickedModel,
         press,
@@ -546,6 +590,7 @@ export function NewTaskComposer({
       onChoose={setChosen}
       onUnreached={judged ? () => setChosen(null) : undefined}
       onListed={setListed}
+      held={tree ? COMPOSER_WORDS.REPOSITORY_HELD : undefined}
     />
   );
   const composer: AgentComposerControl = {
@@ -570,28 +615,32 @@ export function NewTaskComposer({
 
   const card = (
     <div className="new-task-composer flex min-w-0 flex-col gap-control-gap">
-      <div className="new-task-head flex min-w-0 items-center gap-block-gap">
-        <div className="new-task-title flex min-w-0 items-center gap-item-gap">
-          {forAutomation || parent !== undefined ? (
+      <div className="new-task-head flex min-w-0 flex-wrap items-center gap-item-gap">
+        <div className="new-task-title flex min-w-0 max-w-full items-center gap-item-gap">
+          {forAutomation ? (
             <Text
               variant={TEXT_VARIANT.DIALOG}
               as={TEXT_ELEMENT.H2}
               id={titleId}
               className="max-w-new-task-title shrink-0"
             >
-              {parent === undefined ? PURPOSE_HEADING[purpose] : CHILD_HEADING}
+              {PURPOSE_HEADING[purpose]}
             </Text>
           ) : (
             <VisuallyHidden id={titleId}>{PURPOSE_HEADING[purpose]}</VisuallyHidden>
           )}
-          {parent === undefined ? (
-            repositoryChip
-          ) : (
-            <Text tone={TEXT_TONE.MUTED} truncate>
-              {parent.name}
-            </Text>
-          )}
+          {repositoryChip}
         </div>
+        {forAutomation ? null : (
+          <NewTaskRelationPill
+            relation={relation}
+            tasks={relatable}
+            workspaceName={workspace?.name ?? ""}
+            repository={repository}
+            disabled={starting}
+            onChange={relate}
+          />
+        )}
         {offersPilot ? (
           <div className="new-task-mode ml-auto shrink-0">
             <ChoiceBar<TaskMode>
@@ -640,9 +689,7 @@ export function NewTaskComposer({
       />
       {blocked ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {parent === undefined
-            ? COMPOSER_WORDS.NEEDS_REPOSITORY
-            : COMPOSER_WORDS.PARENT_HAS_NO_REPOSITORY}
+          {tree ? COMPOSER_WORDS.RELATED_HAS_NO_REPOSITORY : COMPOSER_WORDS.NEEDS_REPOSITORY}
         </Text>
       ) : null}
     </div>

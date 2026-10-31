@@ -69,6 +69,7 @@ import { OPERATOR_NAME } from "@luke/features/model-label";
 import { formatCount } from "@luke/features/number-format";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
+  TASK_CREATE_RELATION_KIND,
   TASK_RELATION_KIND,
   TASK_TREE_BOUNDS,
   TASK_TREE_ENTRY,
@@ -1555,7 +1556,10 @@ function taskCommandRows(
   const commands: readonly { item: PanelCommand; run: () => void }[] = [
     ...(renamed === undefined ? [] : [{ item: PANEL_COMMAND.RENAME_TASK, run: renamed }]),
     { item: PANEL_COMMAND.VERSION_HISTORY, run: () => tasks.history.onOpen(task.id) },
-    { item: PANEL_COMMAND.NEW_CHILD_TASK, run: () => tasks.onNewChildTask(task.id) },
+    {
+      item: PANEL_COMMAND.NEW_CHILD_TASK,
+      run: () => tasks.onNewRelatedTask(task.id, TASK_CREATE_RELATION_KIND.SUB_TASK_OF),
+    },
     // Add relation opens the head's add menu on its first kind, whose pinned Relation row switches it.
     {
       item: PANEL_COMMAND.ADD_RELATION,

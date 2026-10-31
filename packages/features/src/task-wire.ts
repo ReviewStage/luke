@@ -259,6 +259,9 @@ export const TASK_CREATE_RELATION_KIND = {
   PARENT_OF: "parent-of",
 } as const;
 
+export type TaskCreateRelationKind =
+  (typeof TASK_CREATE_RELATION_KIND)[keyof typeof TASK_CREATE_RELATION_KIND];
+
 /** The relation a start makes its task in: the other task, which the starter reaches in the same workspace, and how the new task stands to it. */
 const taskCreateRelationSchema = EffectSchema.Struct({
   kind: EffectSchema.Literals(Object.values(TASK_CREATE_RELATION_KIND)),
