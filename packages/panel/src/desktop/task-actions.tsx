@@ -63,6 +63,7 @@ import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import {
   COMMAND_PLACE,
   commandAction,
+  commandHead,
   commandWords,
   PANEL_COMMAND,
   type PanelCommand,
@@ -395,9 +396,10 @@ export type TaskMenuSurface = (typeof TASK_MENU_SURFACE)[keyof typeof TASK_MENU_
  * One task's actions in the groups a rule divides, offering only those that
  * apply to it now, for the surface that offers them. A row's menu holds
  * Copy link; then Rename, Version history, and Mark as unread or read; then
- * Status, Priority, and Assignee; then New sub-task, the four relations
- * (Add sub-task, Set parent, Mark as blocked by, Mark as blocking), and
- * Remove parent where the task has one; then Pin, Move to section, and Move to
+ * Status, Priority, and Assignee; then Relations, a submenu of the four
+ * relations (Add sub-task, Set parent, Mark as blocked by, Mark as
+ * blocking) and Remove parent where the task has one, New sub-task being the
+ * add menu's and ⌘K's; then Pin, Move to section, and Move to
  * workspace where the task may be moved; then the repository changed from
  * any row and Open on GitHub where it has one. The Plan tab's document
  * menu leads with Copy plan, since Copy formats the document drawn, and
@@ -440,11 +442,6 @@ function taskActionGroups(
   const lettered = drawn || doors.rowKeys;
   const read: MenuAction[] = task === undefined ? [] : [markReadItem(doors.read, lettered)];
   const rename = renameTaskItem(doors.rename);
-  const child = commandAction(
-    PANEL_COMMAND.NEW_CHILD_TASK,
-    () => tasks.onNewChildTask(taskId),
-    drawn,
-  );
   // Each relation opens the add menu on its kind in the task's head; Remove parent only where the task has one.
   const relations: MenuAction[] = TASK_RELATION_ORDER.map((kind) =>
     commandAction(RELATION_COMMAND[kind], () => tasks.onAddRelation(taskId, kind), drawn),
@@ -453,7 +450,10 @@ function taskActionGroups(
     task?.parentTaskId === undefined
       ? []
       : [commandAction(PANEL_COMMAND.REMOVE_PARENT, () => tasks.onRemoveTaskParent(taskId), drawn)];
-  const relate = [child, ...relations, ...unparent];
+  const relate: MenuSubmenu = {
+    ...commandHead(PANEL_COMMAND.RELATIONS),
+    items: [...relations, ...unparent],
+  };
   const versions = versionHistoryItem(() => tasks.history.onOpen(taskId), drawn);
   const section: MenuEntry[] = doors.section === undefined ? [] : [doors.section];
   const change = commandAction(
@@ -478,7 +478,7 @@ function taskActionGroups(
       ? [
           [...copy, ...link],
           [rename, versions, ...read],
-          relate,
+          [relate],
           [...pinAction(tasks, task, lettered), ...section, ...move],
           open,
           [remove],
@@ -487,7 +487,7 @@ function taskActionGroups(
           link,
           [rename, versions, ...read],
           [...doors.standing],
-          relate,
+          [relate],
           [...pinAction(tasks, task, lettered), ...section, ...move],
           [change, ...open],
           [remove],
