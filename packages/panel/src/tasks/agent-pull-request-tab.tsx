@@ -510,13 +510,19 @@ function durationOf(check: PullRequestCheck): string | undefined {
 }
 
 /**
- * What the side panel's toolbar ⋯ offers on the pull request: it opened on
- * GitHub, which ⇧⌘O runs while the tab is chosen and the panel holds the
- * keys (`side-panel.tsx`), and the page read again, dimmed while a read is
- * out, which a refresh would only repeat.
+ * What the side panel's toolbar ⋯ offers on the pull request: its address
+ * on GitHub copied, it opened on GitHub, which ⇧⌘O runs while the tab is
+ * chosen and the panel holds the keys (`side-panel.tsx`), and the page read
+ * again, dimmed while a read is out, which a refresh would only repeat.
  */
-function pullRequestActions(url: string, reading: boolean, onRefresh: () => void): MenuAction[] {
+function pullRequestActions(
+  url: string,
+  reading: boolean,
+  copy: (words: string, label: string) => void,
+  onRefresh: () => void,
+): MenuAction[] {
   return [
+    commandAction(PANEL_COMMAND.COPY_GITHUB_LINK, () => copy(url, LINK_COPY.COPIED), false),
     commandAction(PANEL_COMMAND.OPEN_ON_GITHUB, () => appPlatform().openGitHub(url), true),
     {
       label: "Refresh",
@@ -1086,10 +1092,10 @@ type EntryThing = (typeof ENTRY_THING)[keyof typeof ENTRY_THING];
 /**
  * The ⋯ of a comment or a review: Copy GitHub link, its page's address on
  * GitHub, then Open on GitHub. The description wears none, because its
- * address is the pull request's own, which the tab's toolbar opens. Note
- * that it offers no Copy link, because no Luke link names one of them
- * (`link-grammar.ts`'s `PULL_REQUEST_THREAD` names a review thread alone),
- * and a GitHub address is never called a link of Luke's.
+ * address is the pull request's own, which the tab's toolbar copies and
+ * opens. Note that it offers no Copy link, because no Luke link names one
+ * of them (`link-grammar.ts`'s `PULL_REQUEST_THREAD` names a review thread
+ * alone), and a GitHub address is never called a link of Luke's.
  */
 function GitHubEntryMenu({ thing, url }: { thing: EntryThing; url: string }): React.JSX.Element {
   const menu = useMenu(true);
@@ -2829,7 +2835,7 @@ function PullRequestTabBody({
   const none = [parts.pullRequest, parts.checks, parts.conversation].some(
     (part) => part.kind === PART.NONE,
   );
-  // The toolbar's ⋯ opens the pull request on GitHub and reads it again while the header draws it,
+  // The toolbar's ⋯ copies and opens the pull request on GitHub and reads it again while the header draws it,
   // Refresh dimmed while a read is out; a read saying there is none takes them away with the header.
   const refreshNow = useRef(refresh);
   refreshNow.current = refresh;
@@ -2837,11 +2843,22 @@ function PullRequestTabBody({
   // on the screen, Files changed's ⋯ offering none of its own; a write reads back without it.
   const refreshAllNow = useRef(refresh);
   const url = none ? undefined : held?.url;
+  // Note that the copy is read through a ref, because `useCopyToast` answers a new function every draw.
+  const copy = useCopyToast();
+  const copyNow = useRef(copy);
+  copyNow.current = copy;
   const handed = useMemo(
     () =>
       url === undefined
         ? undefined
-        : [pullRequestActions(url, reading, () => refreshAllNow.current())],
+        : [
+            pullRequestActions(
+              url,
+              reading,
+              (words, label) => copyNow.current(words, label),
+              () => refreshAllNow.current(),
+            ),
+          ],
     [url, reading],
   );
   // The ⋯ offers Run after the pull request's own. A phone draws no actions beside the title, so

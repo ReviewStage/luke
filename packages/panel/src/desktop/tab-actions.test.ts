@@ -348,7 +348,7 @@ const PULL_REQUEST: AgentPullRequest = {
   changedFiles: 6,
 };
 
-test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub and Refresh, which no other tab's offers, and opens the pull request on GitHub", async () => {
+test("the Pull request tab's bar ⋯ offers Copy link first, then Copy GitHub link, Open on GitHub, and Refresh, which no other tab's offers, and opens the pull request on GitHub", async () => {
   const opened: string[] = [];
   fakeAppPlatform({
     ...QUIET_PANEL,
@@ -363,7 +363,12 @@ test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub
     published,
   );
   const { side } = bars(container);
-  assert.deepEqual(pressBarMore(side), ["Copy link", "Open on GitHub", "Refresh"]);
+  assert.deepEqual(pressBarMore(side), [
+    "Copy link",
+    "Copy GitHub link",
+    "Open on GitHub",
+    "Refresh",
+  ]);
   assert.ok(
     !rightClickChosen(side).some((item) => item === "Open on GitHub" || item === "Refresh"),
     "a right-click keeps to the tab's own and its link",
