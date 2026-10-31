@@ -11,13 +11,19 @@
  * stop line stops it, its process group killed, and neither a launch
  * claimed after the beat was sent nor one still starting is touched; a
  * launch kept from a run that ended is settled; and a runner's GitHub token is renewed by its age on the wall
- * clock. Synthetic ids and tokens throughout.
+ * clock. A host updating itself (`daemon/host-update.ts`) runs on the
+ * machine's own file system and processes in a releases folder of its own,
+ * its release's tarball answered in place of GitHub, and switches only
+ * once the device is idle. Synthetic ids and tokens throughout.
  */
 
 import assert from "node:assert/strict";
-import { NodePath } from "@effect/platform-node";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import type { DeviceAgentClaimedLine, DeviceAgentDevice } from "@luke/features";
+import type { DeviceAgentClaimedLine, DeviceAgentDevice, DeviceAgentUpdate } from "@luke/features";
 import { CHECKOUT_IDENTITY_SCRIPT } from "@luke/features/checkout-identity";
 import {
   DEVICE_AGENT_LINE_KIND,
@@ -27,15 +33,21 @@ import {
   DEVICE_PLATFORM,
   DEVICE_SETUP,
   type DeviceAgentLine,
+  type DeviceAgentRelease,
   type DeviceLaunchRefusal,
+  type DeviceSignedIn,
   deviceAgentLayout,
+  HOST_UPDATE,
 } from "@luke/features/device-agent-wire";
+import { HOST_TARGET, hostTarballUrl } from "@luke/features/host-release";
+import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Clock, ConfigProvider, Deferred, Duration, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { systemError } from "effect/PlatformError";
 import { TestClock } from "effect/testing";
-import { composeLocalAgents } from "./compose-local-agents.js";
+import { composeLocalAgents, type LocalAgentsUpdate } from "./compose-local-agents.js";
+import { hostUpdate } from "./daemon/host-update.js";
 import {
   Environment,
   type LocalAgentClis,
@@ -125,6 +137,8 @@ const followingDevice = (
     readonly listsNoLaunches?: boolean;
     /** The clock the follower reads, the test's own where none is named. */
     readonly clock?: Clock.Clock;
+    /** The host's update of itself, as a host's daemon hands it. */
+    readonly update?: LocalAgentsUpdate;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -157,19 +171,23 @@ const followingDevice = (
     const registered: DeviceAgentDevice[] = [];
     const asked: string[] = [];
     const beats: number[] = [];
+    /** What each beat said of the host's update, none where it named none. */
+    const said: (DeviceAgentUpdate | undefined)[] = [];
     const reported: string[] = [];
     const settled: { id: string; exitCode?: number; refusal?: DeviceLaunchRefusal }[] = [];
     /**
      * The service as the test steers it: the launches it holds the device
      * to, which a claim adds and a settle it takes removes; how many settles
-     * it refuses next, and the ids of those it refused; and how long a beat
-     * takes to answer, its answer read as it was asked.
+     * it refuses next, and the ids of those it refused; how long a beat
+     * takes to answer, its answer read as it was asked; and the release it
+     * names on each beat's answer, where it publishes one newer.
      */
     const service = {
       held: new Set<string>(),
       refusing: 0,
       refused: [] as string[],
       beatTakes: Duration.zero as Duration.Input,
+      release: undefined as DeviceAgentRelease | undefined,
     };
     let launched = false;
     const client = {
@@ -177,13 +195,15 @@ const followingDevice = (
         Effect.sync(() => registered.push(device)).pipe(
           Effect.as(options.refusesSetup !== true || device.setup === undefined),
         ),
-      beat: () =>
+      beat: (_deviceId: string, _signedIn: DeviceSignedIn, updating?: DeviceAgentUpdate) =>
         Effect.gen(function* () {
           beats.push(registered.length);
+          said.push(updating);
           const answer =
             options.listsNoLaunches === true ? {} : { openLaunches: [...service.held] };
+          const { release } = service;
           yield* Effect.sleep(service.beatTakes);
-          return answer;
+          return release === undefined ? answer : { ...answer, release };
         }),
       lines: () =>
         launched
@@ -303,11 +323,13 @@ const followingDevice = (
       accountId: () => USER_ID,
       switchedOn: Effect.succeed(true),
       client,
+      update: options.update,
     }).pipe(Effect.provide(services), Effect.provideService(Clock.Clock, clock));
     yield* composer.lifetime.pipe(Effect.provideService(Clock.Clock, clock));
     return {
       registered,
       beats,
+      said,
       spawned: spawner.spawned,
       asked,
       settled,
@@ -877,4 +899,174 @@ it.effect(
         assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
       }),
     ),
+);
+
+/** The machine's own file system and processes, which a host's update runs on. */
+const NODE = NodeChildProcessSpawner.layer.pipe(
+  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+);
+
+/** The version a host runs, and the newer one Luke names. */
+const RUNNING = "0.3.0";
+const NEWER = "0.4.0";
+
+/** The newer release's tarball, as CI packs one: its `luke-host` command, which answers its version, under one `luke-host/` folder. */
+const newerTarball = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const scratch = yield* temporaryDirectoryScoped("luke-host-tarball-");
+  yield* fileSystem.makeDirectory(`${scratch}/luke-host/bin`, { recursive: true });
+  yield* fileSystem.writeFileString(
+    `${scratch}/luke-host/bin/luke-host`,
+    `#!/bin/sh\necho ${NEWER}\n`,
+    { mode: 0o755 },
+  );
+  execFileSync("tar", ["-czf", `${scratch}/luke-host.tar.gz`, "-C", scratch, "luke-host"]);
+  const archive = readFileSync(`${scratch}/luke-host.tar.gz`);
+  const sha256 = createHash("sha256").update(archive).digest("hex");
+  const release: DeviceAgentRelease = {
+    version: NEWER,
+    sha256: { [HOST_TARGET.LINUX_X64]: sha256, [HOST_TARGET.LINUX_ARM64]: sha256 },
+  };
+  return { archive, release };
+});
+
+/**
+ * A Linux host's update of itself, in a releases folder of the test's own
+ * as the account install lays it out: `RUNNING` and an older release under
+ * `versions/`, `current` naming `RUNNING`, and GitHub answering the newer
+ * release's tarball with the bytes given. With every address it fetched.
+ */
+const updatingHost = (tarball: Uint8Array<ArrayBuffer>) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const folder = yield* temporaryDirectoryScoped("luke-host-releases-");
+    for (const version of ["0.2.0", RUNNING]) {
+      yield* fileSystem.makeDirectory(`${folder}/versions/${version}/bin`, { recursive: true });
+    }
+    yield* fileSystem.symlink(`versions/${RUNNING}`, `${folder}/current`);
+    const fetched: string[] = [];
+    const update = yield* hostUpdate({
+      releases: { folder, running: RUNNING },
+      version: RUNNING,
+      target: HOST_TARGET.LINUX_X64,
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          NODE,
+          fakeHttpClientLayer((url) => {
+            fetched.push(url);
+            return new Response(tarball);
+          }),
+          Layer.succeed(Reporter, { report: () => undefined }),
+        ),
+      ),
+    );
+    const current = fileSystem.readLink(`${folder}/current`);
+    const versions = Effect.map(fileSystem.readDirectory(`${folder}/versions`), (names) =>
+      [...names].sort(),
+    );
+    return { folder, update, fetched, current, versions };
+  });
+
+/** Waits until the condition holds, each round a read of the disk, so the update's own processes and file writes, which wait on no clock, finish meanwhile. */
+const untilOnDisk = <E, R>(holds: Effect.Effect<boolean, E, R>) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    for (let round = 0; round < 50_000; round += 1) {
+      if (yield* holds) return;
+      yield* Effect.ignore(fileSystem.exists("/"));
+    }
+    assert.fail("the update never got there");
+  });
+
+it.effect(
+  "a host holding a newer release waits while an agent runs, and switches once it ends: current names the new release, the running one is kept, and older ones go",
+  () =>
+    Effect.gen(function* () {
+      const { archive, release } = yield* newerTarball;
+      const { update, fetched, current, versions } = yield* updatingHost(archive);
+      const { service, spawned, said } = yield* followingDevice(() => Effect.void, {
+        runsUntilSignalled: true,
+        update: update.follower,
+      });
+      service.release = release;
+      yield* until(() => spawned.some((each) => each.program === RUNNER));
+      yield* untilOnDisk(update.follower.waiting);
+      yield* beatsOn(2);
+      // Note that a switch would hold up the beats it runs on, so the third is waited for on the disk.
+      yield* untilOnDisk(Effect.sync(() => said.length >= 3));
+
+      assert.deepEqual(fetched, [hostTarballUrl(NEWER, HOST_TARGET.LINUX_X64)]);
+      assert.deepEqual(said.at(-1), { update: HOST_UPDATE.WAITING });
+      assert.equal(yield* current, `versions/${RUNNING}`);
+
+      service.held.delete(LINE_ID);
+      yield* beatsOn(2);
+      yield* untilOnDisk(Effect.map(current, (link) => link === `versions/${NEWER}`));
+
+      assert.ok(said.some((each) => each?.update === HOST_UPDATE.UPDATING));
+      assert.deepEqual(yield* versions, [RUNNING, NEWER]);
+      yield* update.ended;
+    }).pipe(Effect.scoped, Effect.provide(NODE)),
+);
+
+it.effect(
+  "a launch claimed while a host holding a newer release looked idle keeps it on the release it runs, and the launch runs",
+  () =>
+    Effect.gen(function* () {
+      const { archive, release } = yield* newerTarball;
+      const { update, current } = yield* updatingHost(archive);
+      // Note that the launch's claim is under way from the fourteenth second to the seventeenth, across the beat at the fifteenth.
+      const { service, spawned, said, beats } = yield* followingDevice(() => Effect.void, {
+        runsUntilSignalled: true,
+        linesAfter: Duration.seconds(14),
+        claim: () => Effect.delay(Effect.succeed(LAUNCH), Duration.seconds(3)),
+        update: update.follower,
+      });
+      service.release = release;
+      yield* untilOnDisk(update.follower.waiting);
+      yield* TestClock.adjust(Duration.seconds(14));
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* TestClock.adjust(Duration.seconds(2));
+      yield* until(() => spawned.some((each) => each.program === RUNNER));
+      yield* beatsOn(1);
+      yield* until(() => beats.length >= 3);
+
+      assert.ok(said.every((each) => each?.update !== HOST_UPDATE.UPDATING));
+      assert.equal(yield* current, `versions/${RUNNING}`);
+      assert.equal(spawned.find((each) => each.program === RUNNER)?.ended, "running");
+    }).pipe(Effect.scoped, Effect.provide(NODE)),
+);
+
+it.effect(
+  "a newer release whose download does not match its SHA-256 has every beat say the update failed and why, leaves the releases as they were, and is fetched again about an hour later",
+  () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const { archive, release } = yield* newerTarball;
+      const tampered = Uint8Array.from(archive);
+      tampered[tampered.length - 1] = (tampered[tampered.length - 1] ?? 0) ^ 0xff;
+      const { folder, update, fetched, current, versions } = yield* updatingHost(tampered);
+      const { service, said } = yield* followingDevice(() => Effect.void, {
+        lines: [],
+        update: update.follower,
+      });
+      service.release = release;
+      yield* untilOnDisk(Effect.map(update.follower.beating, (now) => now !== undefined));
+      yield* beatsOn(1);
+
+      assert.deepEqual(said.at(-1), {
+        update: HOST_UPDATE.FAILED,
+        updateFailure: `the ${NEWER} download did not match its SHA-256`,
+      });
+      assert.equal(yield* current, `versions/${RUNNING}`);
+      assert.deepEqual(yield* versions, ["0.2.0", RUNNING]);
+      assert.deepEqual([...(yield* fileSystem.readDirectory(folder))].sort(), [
+        "current",
+        "versions",
+      ]);
+
+      yield* TestClock.adjust(Duration.minutes(75));
+      yield* untilOnDisk(Effect.sync(() => fetched.length === 2));
+    }).pipe(Effect.scoped, Effect.provide(NODE)),
 );
