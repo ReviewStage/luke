@@ -89,7 +89,7 @@ export function ProgressCount({
   readonly label: string;
 }): React.JSX.Element {
   return (
-    <span className="luke-progress-count inline-flex flex-none items-center gap-tight-gap text-caption-inline text-muted-foreground tabular-nums">
+    <span className="luke-progress-count inline-flex flex-none items-center gap-tight-gap me-tight-gap text-caption-inline text-muted-foreground tabular-nums">
       <ProgressRing share={total > 0 ? done / total : 0} />
       <span aria-hidden="true">
         {done}/{total}
