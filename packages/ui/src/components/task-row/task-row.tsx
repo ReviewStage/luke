@@ -15,7 +15,7 @@ import type { ListSelection } from "../selection/list-selection.js";
 import { SelectionRegion } from "../selection/selection-region.js";
 
 /**
- * task-row.tsx -- a task as one line of columns: its priority, key, and status before its name, what the list draws of it after, an end of its owner's, and its ⋯, each cell in its own column so the columns line up down every row.
+ * task-row.tsx -- a task as one line of columns: its priority, key, and status before its name, what the list draws of it after, and an end of its owner's, each cell in its own column so the columns line up down every row, and its ⋯ coming in over the row's end.
  *
  * A row is one line of a grid its list stands, a subgrid of the list's
  * columns, as Linear's list stands its rows, so each cell lines up down the
@@ -37,8 +37,12 @@ import { SelectionRegion } from "../selection/selection-region.js";
  * the task. Its box comes in
  * under the pointer in the gutter at its start (`SELECT_BOX_PLACE.GUTTER`),
  * where its list chooses rows, and stays while any is chosen. Its menu
- * (`menu`) is opened alike by its ⋯, shown while the row is in hand, a
- * right-click, and the menu key (`useRowMenu`). Renamed, its name gives way
+ * (`menu`) is opened alike by its ⋯, a right-click, and the menu key
+ * (`useRowMenu`). The ⋯ keeps no column, so a list's last column ends at
+ * the row's end inset: it comes in over the row's end while the row is in
+ * hand, holds the keyboard, or has its menu open, and stands there at rest
+ * on a screen with no hover, the cells after the name stepping aside for
+ * it rather than going under it (`task-row.css`). Renamed, its name gives way
  * to the field its owner hands (`editor`); what did not land stands under
  * it (`note`).
  *
@@ -148,8 +152,11 @@ const CELL_PLACE = {
   [TASK_ROW_CELL.END]: `${OVER_ITS_CONTROLS} order-13`,
 } as const satisfies Record<TaskRowCell, string>;
 
-/** The ⋯'s cell, at a row's end, standing over its press. */
-const MORE_CELL = `${CELL} pointer-events-auto relative z-1 order-14`;
+/** A cell after the name, which steps aside while the ⋯ stands at the row's end (`task-row.css`). */
+const AFTER = "luke-task-row-after";
+
+/** The ⋯'s place: out of the row's columns, at its end inset, over its press while it shows (`task-row.css`). */
+const MORE = "luke-task-row-more z-1 flex items-center";
 
 /**
  * A row: a subgrid of the list's columns a little taller than a control,
@@ -204,8 +211,9 @@ const FOLD_KEY_OPENS: Readonly<Record<string, boolean>> = { ArrowRight: true, Ar
 
 /** A cell of a row, in its column, holding what its owner stands there; empty where it holds nothing. */
 function cellOf(cell: TaskRowCell, content: ReactNode): React.JSX.Element {
+  const after = LEADING.includes(cell) ? "" : ` ${AFTER}`;
   return (
-    <span key={cell} className={`${CELL} ${CELL_PLACE[cell]}`} data-cell={cell}>
+    <span key={cell} className={`${CELL} ${CELL_PLACE[cell]}${after}`} data-cell={cell}>
       {content}
     </span>
   );
@@ -218,18 +226,18 @@ function inOrder(cells: readonly TaskRowCell[]): readonly TaskRowCell[] {
 
 /**
  * The grid's columns for the cells drawn, in the order a row draws them:
- * those before the name, the name, those after it, and the ⋯. The list
- * standing the rows lays them as its `--tasks-list-columns`.
+ * those before the name, the name, and those after it, the ⋯ keeping none.
+ * The list standing the rows lays them as its `--tasks-list-columns`.
  */
 export function taskRowColumns(cells: readonly TaskRowCell[]): string {
   const drawn = inOrder(cells);
   const width = (cell: TaskRowCell) => COLUMN_WIDTH[cell];
   const before = drawn.filter((cell) => LEADING.includes(cell)).map(width);
   const after = drawn.filter((cell) => !LEADING.includes(cell)).map(width);
-  return [...before, "minmax(0, 1fr)", ...after, "auto"].join(" ");
+  return [...before, "minmax(0, 1fr)", ...after].join(" ");
 }
 
-/** One task's row: its press, which opens it, its cells in their columns, and its ⋯. */
+/** One task's row: its press, which opens it, its cells in their columns, and its ⋯ over its end. */
 export function TaskRow({
   taskId,
   name,
@@ -359,7 +367,7 @@ export function TaskRow({
         )}
       </span>
       {inOrder(cells).map((cell) => cellOf(cell, content[cell]))}
-      <span className={MORE_CELL} data-cell="more">
+      <span className={MORE} data-cell="more">
         {rowMenu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
       </span>
       {rowMenu.popup}
@@ -414,7 +422,6 @@ export function TaskRowDraft({
         )}
       </span>
       {inOrder(cells).map((cell) => cellOf(cell, content[cell]))}
-      <span className={MORE_CELL} data-cell="more" />
     </Card>
   );
 }
