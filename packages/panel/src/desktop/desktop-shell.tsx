@@ -690,11 +690,13 @@ function KeptInbox({
  * window as one pane at a time (`shell-room.ts`): the sidebar is a drawer its
  * toggle opens, with no edge to peek it out, and the side panel stands only
  * full screen, and Settings and a version history each show their
- * list or the item chosen in it, one at a time. The installed app's wide
- * window stands one title bar over its panes, beside the sidebar's own top
- * row, which the page in the work column names its place in, every pane's
- * top row standing under it (`title-bar.tsx`); the web's tab and a narrow
- * room stand none, each page naming itself in its own top row. Back and forward ride the left column's title-bar row,
+ * list or the item chosen in it, one at a time. A wide window, the installed
+ * app's and the web's tab alike, stands one title bar over its panes, beside
+ * the sidebar's own top row, which the page in the work column names its
+ * place in, every pane's top row standing under it (`title-bar.tsx`); only
+ * the installed app's is the window's handle, and it alone clears the
+ * traffic lights. A narrow room stands none, each page naming itself in its
+ * own top row. Back and forward ride the left column's title-bar row,
  * the tasks' sidebar or Settings' page list alike, and leaving Settings is
  * going back to wherever it was opened from, or to the tasks when nothing
  * stands behind it. New task's dialog stands over the tasks or a version
@@ -746,8 +748,7 @@ export function DesktopShell({
   // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
   const summary = useSummaryPin(sidebar.staged);
   const offline = useOffline();
-  // The installed app's wide window stands one title bar over its panes, which the main column's page names its place in.
-  const desktopApp = useCapability(HOST_CAPABILITY.DESKTOP_APP);
+  // A wide window stands one title bar over its panes, which the main column's page names its place in.
   const [titleBar, setTitleBar] = useState<HTMLElement | null>(null);
   usePlaceCommands(!gated, tab, onTabChange, tasks, settings, history);
   // The Admin place is an admin's alone: an account known to be no admin, or no longer one, is given the task's place back,
@@ -943,8 +944,8 @@ export function DesktopShell({
   );
   // A phone goes between its places by a bar at the screen's foot, standing on their lists alone (`mobile-bar.tsx`).
   const barShown = mobileBarShown(room, tasks);
-  // The web's tab is the browser's window, and a phone's room heads each page with a row of its own, so only the installed app's wide window stands a title bar.
-  const titled = desktopApp && room === SHELL_ROOM.WIDE;
+  // A phone's room heads each page with a row of its own, so only a wide window stands a title bar: the installed app's and the web's tab alike, so the two draw one order.
+  const titled = room === SHELL_ROOM.WIDE;
   const placeBar = titled ? titleBar : null;
   return (
     <div
