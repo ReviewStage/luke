@@ -47,7 +47,7 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.BRING_YOUR_OWN_HOST,
     name: "Bring your own host",
     detail:
-      "Run agents on your own Macs and Linux machines, This Mac among them, set up in Settings › Hosts. " +
+      "Run agents on your own Macs and Linux machines. " +
       "Their transcripts and the files their tools read still reach Luke.",
     owner: "Charles",
     since: "2026-10-30",
@@ -56,7 +56,7 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.SKILLS,
     name: "Skills",
     detail:
-      "Install skills into Luke for your agents to use, managed in Settings › Skills, " +
+      "Install skills into Luke for your agents to use, " +
       "and name one with / in a message to an agent.",
     owner: "Charles",
     since: "2026-10-30",
