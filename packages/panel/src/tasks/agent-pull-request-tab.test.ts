@@ -2020,7 +2020,7 @@ test("where what the agent published is not read, the header still says where th
     null,
     "the header holds no ⋯",
   );
-  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh"]);
+  assert.deepEqual(toolbarItems(tab), ["Copy GitHub link", "Open on GitHub", "Refresh"]);
   await pressToolbar(tab, "Open on GitHub");
   await settle();
   assert.deepEqual(opened, [PAGE]);
@@ -2029,10 +2029,10 @@ test("where what the agent published is not read, the header still says where th
 test("the toolbar's ⋯ offers Refresh dimmed while a read is out, which a refresh would only repeat", async () => {
   const pullRequest = held<AgentOverviewPullRequestAnswerView>();
   const tab = await draw(controlAnswering({ pullRequest: pullRequest.read }));
-  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh (off)"]);
+  assert.deepEqual(toolbarItems(tab), ["Copy GitHub link", "Open on GitHub", "Refresh (off)"]);
   await act(async () => pullRequest.answer({ pullRequest: PULL_REQUEST }));
   await settle();
-  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh"]);
+  assert.deepEqual(toolbarItems(tab), ["Copy GitHub link", "Open on GitHub", "Refresh"]);
 });
 
 test("the toolbar's ⋯ offers nothing for the pull request before any of it is held", async () => {
@@ -2044,7 +2044,7 @@ test("the toolbar's ⋯ offers nothing for the pull request before any of it is 
   assert.deepEqual(toolbarItems(tab), []);
   await act(async () => pullRequest.answer({ pullRequest: PULL_REQUEST }));
   await settle();
-  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh"]);
+  assert.deepEqual(toolbarItems(tab), ["Copy GitHub link", "Open on GitHub", "Refresh"]);
 });
 
 test("a ⌘-click on the title opens the pull request on GitHub, and a plain one opens nothing", async () => {
@@ -6210,6 +6210,7 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
     "beside the title stands the merge alone",
   );
   assert.deepEqual(toolbarItems(tab), [
+    "Copy GitHub link",
     "Open on GitHub",
     "Refresh",
     "Preview – luke-web",
@@ -6223,6 +6224,7 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
   await choose(tab, "Files changed");
   assert.equal(tab.querySelector(".file-view-bar"), null, "Files changed draws no bar");
   assert.deepEqual(toolbarItems(tab), [
+    "Copy GitHub link",
     "Open on GitHub",
     "Refresh",
     "Preview – luke-web",
@@ -6237,7 +6239,7 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
 
   await choose(tab, "Conversation");
   assert.deepEqual(
-    toolbarItems(tab).slice(4),
+    toolbarItems(tab).slice(5),
     [],
     "Files changed's items go with it once another view is shown",
   );
