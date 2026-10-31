@@ -29,6 +29,7 @@ import {
 import {
   createTaskCommitted,
   type NewTask,
+  readTask,
   readTaskHeader,
   type StoredTask,
   setTaskParent,
@@ -166,7 +167,9 @@ function relationWritten(
  * relation asked beside it in one transaction, through the doors a relation
  * added later goes through (`setTaskParent`, `addTaskBlock`), so their rules
  * hold and the task and its relation land together or not at all; the task
- * alone where none is asked. Note that the row's transaction id is the
+ * alone where none is asked. The task is read again once the relation
+ * stands, since the window opens the answer without reading it again, so
+ * it must carry the relation. Note that the row's transaction id is the
  * outer transaction's, which a nested write only marks a savepoint in, so
  * the answer's `txid` still names the one commit a follower waits for.
  */
@@ -184,9 +187,16 @@ export function createTaskRelated(
     client.withTransaction(
       Effect.gen(function* () {
         const created = yield* createTaskCommitted(userId, started);
-        const related = yield* relationWritten(userId, created.task.task.id, asked);
+        const taskId = created.task.task.id;
+        const related = yield* relationWritten(userId, taskId, asked);
         if (Option.isNone(related)) return yield* new TaskRelationUnreached();
-        return created;
+        const read = yield* readTask(userId, taskId);
+        // The row was written under this transaction, so a read that misses it is the database breaking its own contract.
+        if (Option.isNone(read))
+          return yield* Effect.die(new Error("the task started did not read"));
+        return created.txid === undefined
+          ? { task: read.value }
+          : { task: read.value, txid: created.txid };
       }),
     ),
   );

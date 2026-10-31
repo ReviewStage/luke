@@ -150,6 +150,9 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
           [undefined, SIDE_REPOSITORY],
         );
         assert.equal(yield* parentOf(owner, below), parent.body.plan.id);
+        // The answer is the plan as it stands with its relation, since the window opens it without reading again.
+        assert.deepEqual([blocker.body.plan.blockedBy, blocker.body.plan.blocks], [[], [waiting]]);
+        assert.deepEqual([blocked.body.plan.blockedBy, blocked.body.plan.blocks], [[holding], []]);
         assert.deepEqual(
           yield* readTaskBlocks(owner, blocker.body.plan.id),
           Option.some({ blockedBy: [], blocks: [waiting] }),
