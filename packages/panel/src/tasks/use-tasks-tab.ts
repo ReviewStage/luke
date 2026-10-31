@@ -27,6 +27,7 @@ import {
   type TaskAgentPin,
   type TaskBlockRelation,
   type TaskBlockRequest,
+  type TaskCreateRelation,
   type TaskMode,
   type TaskRelationChangeRequest,
   type TaskRelationKind,
@@ -548,6 +549,8 @@ export interface NewTaskStart {
   readonly device?: MacOffer;
   /** The task the start makes its task a child of, whose repository and place to run the child takes; none for a task at the top. */
   readonly parentTaskId?: string;
+  /** The relation the start makes its task in, from the new task's side, written with it in one transaction; none for a task related to none. */
+  readonly relation?: TaskCreateRelation;
   readonly handed?: NewTaskAgent;
   /** How the task is worked, where the card's choice named it while the Pilot experiment is on; by its agents otherwise. */
   readonly mode?: TaskMode;
@@ -2664,6 +2667,7 @@ export function useTasksTab(input: {
       ...(from.runsOn === undefined ? undefined : { runsOn: from.runsOn }),
       ...(from.mode === undefined ? undefined : { mode: from.mode }),
       ...(from.parentTaskId === undefined ? undefined : { parentTaskId: from.parentTaskId }),
+      ...(from.relation === undefined ? undefined : { relation: from.relation }),
       planning: false,
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
       ...(stays ? { quiet: true } : undefined),

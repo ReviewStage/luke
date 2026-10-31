@@ -169,6 +169,8 @@ export const HOSTED_API_ERROR = {
   TASK_BLOCK_CYCLE: "task-block-cycle",
   /** A parent asked for is the task itself or one of its descendants, under which the task would descend from itself. Nothing was written. */
   TASK_PARENT_CYCLE: "task-parent-cycle",
+  /** A start asked to be the parent of a task that has a parent already, which a start never takes the place of. Nothing was written. */
+  TASK_PARENT_HELD: "task-parent-held",
   /** The account named too many pairing codes that no pending pairing has, so its reads, approves, and denies by code are refused until the time the refusal names; nothing was read or written. */
   HOST_PAIRING_HELD: "host-pairing-held",
 } as const;

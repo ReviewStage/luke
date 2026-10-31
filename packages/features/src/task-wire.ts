@@ -237,6 +237,44 @@ function agentStartsUnplanned(request: { agent?: TaskAgentStart; planning?: bool
   return request.agent === undefined || request.planning !== true;
 }
 
+/** Which side of a block the other task stands on, as the task a change names reads it: one it waits on, or one that waits on it. */
+export const TASK_BLOCK_RELATION = {
+  BLOCKED_BY: "blocked-by",
+  BLOCKS: "blocks",
+} as const;
+
+export type TaskBlockRelation = (typeof TASK_BLOCK_RELATION)[keyof typeof TASK_BLOCK_RELATION];
+
+/**
+ * How a task starts related to another, from the new task's side: blocked by
+ * the other or blocking it (`TASK_BLOCK_RELATION`, spelled the same), a
+ * sub-task of the other, or the other's parent. Note that the tree kinds are
+ * spelled from the new task's side, where `TASK_RELATION_KIND` spells a
+ * relation as the other task stands to the one named, so a sub-task of X
+ * here is what X's own relations list as its parent.
+ */
+export const TASK_CREATE_RELATION_KIND = {
+  ...TASK_BLOCK_RELATION,
+  SUB_TASK_OF: "sub-task-of",
+  PARENT_OF: "parent-of",
+} as const;
+
+/** The relation a start makes its task in: the other task, which the starter reaches in the same workspace, and how the new task stands to it. */
+const taskCreateRelationSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literals(Object.values(TASK_CREATE_RELATION_KIND)),
+  taskId: wireUuidSchema,
+});
+
+export type TaskCreateRelation = typeof taskCreateRelationSchema.Type;
+
+/** Whether a start names its parent one way at most: `parentTaskId`, or a `relation`, which says the same of a sub-task and more. */
+function relationNamedOnce(request: {
+  parentTaskId?: string;
+  relation?: TaskCreateRelation;
+}): boolean {
+  return request.parentTaskId === undefined || request.relation === undefined;
+}
+
 /**
  * Starting a plan (POST): its name where one is given, the repository it is
  * about where one is chosen, the workspace it starts in where one is named,
@@ -262,7 +300,16 @@ function agentStartsUnplanned(request: { agent?: TaskAgentStart; planning?: bool
  * where its agents run, so a start naming another repository is refused
  * (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), as one naming another place
  * to run is (`HOSTED_API_ERROR.RUNS_ON_LOCKED`), and a parent the starter
- * cannot reach is not found.
+ * cannot reach is not found. A `relation` starts the task related to another
+ * the starter reaches in the same workspace, written in the start's own
+ * transaction, so the task and its relation land together or not at all: a
+ * sub-task of it, which is `parentTaskId` by another name, so naming both is
+ * refused; its parent, which takes that task's repository as a sub-task
+ * takes its parent's (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), and is
+ * refused where that task has a parent already
+ * (`HOSTED_API_ERROR.TASK_PARENT_HELD`), since a start takes no parent's
+ * place; or a block on either side, under the blocks' own rules
+ * (`taskBlockRequestSchema`). The other task out of reach is not found.
  * A task is worked by its agents unless `mode` names a pilot, which the
  * service refuses from an account without the Pilot experiment, and which
  * stands as the task was started.
@@ -287,8 +334,9 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(taskAssigneeIdSchema),
   parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
+  relation: EffectSchema.optionalKey(taskCreateRelationSchema),
   mode: EffectSchema.optionalKey(taskModeSchema),
-}).check(EffectSchema.makeFilter(agentStartsUnplanned));
+}).check(EffectSchema.makeFilter(agentStartsUnplanned), EffectSchema.makeFilter(relationNamedOnce));
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
 
@@ -352,14 +400,6 @@ export type TaskUpdateRequest = typeof taskUpdateRequestSchema.Type;
 
 /** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), or any of them. */
 export type TaskStanding = Pick<TaskUpdateRequest, "status" | "priority" | "assigneeId">;
-
-/** Which side of a block the other task stands on, as the task a change names reads it: one it waits on, or one that waits on it. */
-export const TASK_BLOCK_RELATION = {
-  BLOCKED_BY: "blocked-by",
-  BLOCKS: "blocks",
-} as const;
-
-export type TaskBlockRelation = (typeof TASK_BLOCK_RELATION)[keyof typeof TASK_BLOCK_RELATION];
 
 /** Whether a block change adds the block or takes it away. */
 export const TASK_BLOCK_CHANGE = {
