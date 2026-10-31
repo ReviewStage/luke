@@ -14,9 +14,9 @@ import {
   CHIP_SIZE,
   Chip,
   ChipName,
-  ListRowCount,
   type MenuEntry,
   PencilIcon,
+  ProgressCount,
   PULL_REQUEST_GLYPH,
   RELATED_TASK_CELLS,
   STATUS_TONE,
@@ -175,8 +175,8 @@ function CatalogTaskRow({
         )),
         [TASK_ROW_CELL.SUB_TASKS]:
           task.subTasks === undefined ? null : (
-            <ListRowCount
-              settled={task.subTasks.finished}
+            <ProgressCount
+              done={task.subTasks.finished}
               total={task.subTasks.total}
               label={`${task.subTasks.finished} of ${task.subTasks.total} sub-tasks finished`}
             />

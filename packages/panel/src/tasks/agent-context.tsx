@@ -8,6 +8,9 @@ import {
   LAYOUT_ELEMENT,
   POPOVER_ALIGN,
   PopoverPanel,
+  PROGRESS_RING_TONE,
+  ProgressRing,
+  type ProgressRingTone,
   Stack,
   Tooltip,
   useMinute,
@@ -49,20 +52,15 @@ import {
  * leaving it.
  */
 
-/** The ring's radius and stroke in its 16-unit box, and the length of its circle. */
-const RING_RADIUS = 6;
-const RING_STROKE = 2;
-const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
-
 /** What the ring and its popover are called. */
 const CONTEXT_LABEL = "Context usage";
 
 /** The ring's fill: muted with room to spare, amber within a tenth of the window of eve's compaction, and red at or past it. */
-const LEVEL_STROKE = {
-  [CONTEXT_LEVEL.ROOM]: "stroke-muted-foreground",
-  [CONTEXT_LEVEL.NEAR]: "stroke-attention",
-  [CONTEXT_LEVEL.OVER]: "stroke-destructive",
-} as const satisfies Record<ContextLevel, string>;
+const LEVEL_TONE = {
+  [CONTEXT_LEVEL.ROOM]: PROGRESS_RING_TONE.MUTED,
+  [CONTEXT_LEVEL.NEAR]: PROGRESS_RING_TONE.ATTENTION,
+  [CONTEXT_LEVEL.OVER]: PROGRESS_RING_TONE.DANGER,
+} as const satisfies Record<ContextLevel, ProgressRingTone>;
 
 /** Each part of the context's one colour, on the bar and on its legend row's square. */
 const PART_GROUND = {
@@ -71,31 +69,6 @@ const PART_GROUND = {
   [CONTEXT_PART.BRIEF]: "bg-chart-3",
   [CONTEXT_PART.CONVERSATION]: "bg-muted-foreground",
 } as const satisfies Record<ContextPart, string>;
-
-/** The ring itself: a faint track and the share filled over it, from twelve o'clock. */
-function ContextRing({ share, level }: { share: number; level: ContextLevel }): React.JSX.Element {
-  const filled = Math.min(1, Math.max(0, share)) * RING_LENGTH;
-  return (
-    <svg className="-rotate-90 fill-none" viewBox="0 0 16 16" aria-hidden="true">
-      <circle
-        className="stroke-border-strong"
-        cx="8"
-        cy="8"
-        r={RING_RADIUS}
-        strokeWidth={RING_STROKE}
-      />
-      <circle
-        className={`transition-[stroke-dasharray] ${LEVEL_STROKE[level]}`}
-        strokeLinecap="round"
-        cx="8"
-        cy="8"
-        r={RING_RADIUS}
-        strokeWidth={RING_STROKE}
-        strokeDasharray={`${filled} ${RING_LENGTH}`}
-      />
-    </svg>
-  );
-}
 
 /** What the popover holds: the summary, the bar, each part's row and the stats, which tick on for as long as it is drawn. */
 function ContextBody({
@@ -220,7 +193,12 @@ export function AgentContextRing({
         <Tooltip label={contextHint(context)}>
           <IconButton
             ref={trigger}
-            icon={<ContextRing share={contextShare(context)} level={contextLevel(context)} />}
+            icon={
+              <ProgressRing
+                share={contextShare(context)}
+                tone={LEVEL_TONE[contextLevel(context)]}
+              />
+            }
             label={CONTEXT_LABEL}
             aria-haspopup="dialog"
             aria-expanded={open}

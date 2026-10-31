@@ -20,8 +20,8 @@ import {
   HoverCardScroll,
   HoverCardSkeleton,
   Inline,
-  ListRowCount,
   PinIcon,
+  ProgressCount,
   TaskStatusMark,
   Tooltip,
   TooltipCard,
@@ -263,7 +263,7 @@ function HoverCards(): React.JSX.Element {
                 <HoverCardRow
                   glyph={<GLYPH.TASK />}
                   label="Sub-tasks"
-                  end={<ListRowCount settled={1} total={5} label="1 of 5 sub-tasks finished" />}
+                  end={<ProgressCount done={1} total={5} label="1 of 5 sub-tasks finished" />}
                 />
                 <HoverCardList label="Sub-tasks">
                   {CATALOG_SUB_TASKS.map((subTask) => (

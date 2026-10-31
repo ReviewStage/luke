@@ -12,10 +12,10 @@ import {
   List,
   type ListDensity,
   ListRow,
-  ListRowCount,
   type MenuEntry,
   MoreButton,
   PencilIcon,
+  ProgressCount,
   Switch,
   TrashIcon,
   UserIcon,
@@ -152,8 +152,8 @@ function NestedRows(): React.JSX.Element {
             meta={
               <>
                 {folds ? (
-                  <ListRowCount
-                    settled={task.id === "launch" ? 1 : 0}
+                  <ProgressCount
+                    done={task.id === "launch" ? 1 : 0}
                     total={NESTED.filter((child) => child.parent === task.id).length}
                     label={`Child tasks of ${task.name}, partly finished`}
                   />

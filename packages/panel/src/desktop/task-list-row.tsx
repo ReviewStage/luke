@@ -12,8 +12,8 @@ import {
   BlockedMark,
   CHIP_LOOK,
   InlineEdit,
-  ListRowCount,
   type ListRowFold,
+  ProgressCount,
   TASK_ROW_CELL,
   TaskRow,
   type TaskRowCell,
@@ -221,8 +221,8 @@ export function TaskListRow({
               ) : null,
               [TASK_ROW_CELL.SUB_TASKS]:
                 subTasks === undefined ? null : (
-                  <ListRowCount
-                    settled={subTasks.finished}
+                  <ProgressCount
+                    done={subTasks.finished}
                     total={subTasks.total}
                     label={`${subTasks.finished} of ${subTasks.total} sub-tasks finished`}
                   />
