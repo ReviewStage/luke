@@ -234,6 +234,11 @@ const FOLD_WIDTH = {
   MODEL: 300,
 } as const;
 
+type FoldWidth = (typeof FOLD_WIDTH)[keyof typeof FOLD_WIDTH];
+
+/** The fold widths, narrowest first. */
+const FOLD_LINES = Object.values(FOLD_WIDTH).toSorted((a, b) => a - b);
+
 /** The presses a narrow card's ⋯ takes in, by the class each wears on the foot. */
 const OVERFLOW_PRESS = {
   ATTACH: "agent-composer-attach",
@@ -260,12 +265,15 @@ function hiddenPresses(card: HTMLElement | null): readonly OverflowPress[] {
 }
 
 /**
- * The width the card's form lays its foot out in, the box the stylesheet's
- * `composer` queries read, followed as it resizes; nothing before it was
- * laid out, which draws every chip whole.
+ * The narrowest fold width the card's form lays its foot out under, in the
+ * box the stylesheet's `composer` queries read, followed as it resizes;
+ * nothing before it was laid out, or where it is wider than every fold, which
+ * draws every chip whole. Note that it holds the fold rather than the width,
+ * because the form resizes as every pane beside it lands, and a width held
+ * would draw the whole box again mid-glide for the chips it already draws.
  */
-function useFootWidth(card: RefObject<HTMLDivElement | null>): number | undefined {
-  const [width, setWidth] = useState<number | undefined>(undefined);
+function useFootFold(card: RefObject<HTMLDivElement | null>): FoldWidth | undefined {
+  const [under, setUnder] = useState<FoldWidth | undefined>(undefined);
   useEffect(() => {
     const form = card.current?.querySelector("form");
     if (form === null || form === undefined) return undefined;
@@ -275,14 +283,14 @@ function useFootWidth(card: RefObject<HTMLDivElement | null>): number | undefine
         form.clientWidth -
         Number.parseFloat(style.paddingLeft) -
         Number.parseFloat(style.paddingRight);
-      setWidth(inner > 0 ? inner : undefined);
+      setUnder(inner > 0 ? FOLD_LINES.find((line) => inner < line) : undefined);
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(form);
     return () => observer.disconnect();
   }, [card]);
-  return width;
+  return under;
 }
 
 /**
@@ -522,8 +530,8 @@ export function AgentComposer({
   const card = useRef<HTMLDivElement>(null);
   const room = useRef<HTMLDivElement>(null);
   const picker = useRef<AttachPicker>(null);
-  const footWidth = useFootWidth(card);
-  const folds = (below: number) => footWidth !== undefined && footWidth < below;
+  const footFold = useFootFold(card);
+  const folds = (below: FoldWidth) => footFold !== undefined && footFold <= below;
   // The popovers the ⋯ may open in place of their hidden presses.
   const [serversOpen, setServersOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
