@@ -23,11 +23,11 @@ import {
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
-  ListRowCount,
   type ListRowFold,
   type MenuRow,
   nextRowOrHead,
   OneLine,
+  ProgressCount,
   RowHint,
   RowHintOptions,
   TIME_LOOK,
@@ -913,8 +913,8 @@ export function SidebarTask({
                 {task.blocked === true ? <BlockedMark aria-hidden="true" /> : null}
                 <TaskRowStatus task={task} />
                 {childCount === undefined ? null : (
-                  <ListRowCount
-                    settled={childCount.finished}
+                  <ProgressCount
+                    done={childCount.finished}
                     total={childCount.total}
                     label={`${childCount.finished} of ${childCount.total} sub-tasks finished`}
                   />

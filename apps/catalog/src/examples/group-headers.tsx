@@ -14,10 +14,11 @@ import {
   PinIcon,
   PlusIcon,
   PopoverIconButton,
+  ProgressCount,
   STATUS_TONE,
   Text,
 } from "@luke/ui";
-import { ListFilterIcon, SlidersHorizontalIcon } from "@luke/ui/icons";
+import { ListFilterIcon, ListTreeIcon, SlidersHorizontalIcon } from "@luke/ui/icons";
 import { useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -72,6 +73,14 @@ function Folding(): React.JSX.Element {
         fold={{ defaultOpen: false }}
       >
         <Rows names={["Review the nightly run", "Answer the flaky test"]} />
+      </GroupHeader>
+      <GroupHeader
+        label="Sub-tasks"
+        glyph={<ListTreeIcon />}
+        mark={<ProgressCount done={4} total={6} label="4 of 6 sub-tasks finished" />}
+        fold={{ defaultOpen: true }}
+      >
+        <Rows names={["Draft the invite email", "Wire the invite link"]} />
       </GroupHeader>
       <GroupHeader label="Someday" fold={{ defaultOpen: true }}>
         <Rows names={["Write the onboarding guide"]} />

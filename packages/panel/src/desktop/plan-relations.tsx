@@ -15,9 +15,9 @@ import {
   GroupAction,
   GroupHeader,
   IconButton,
-  ListRowCount,
   type MenuRow,
   POPOVER_ALIGN,
+  ProgressCount,
   SearchableMenu,
   STATUS_TONE,
   Tooltip,
@@ -430,8 +430,8 @@ export function PlanRelations({
           label={GROUP_WORDS.SUB_TASKS}
           glyph={<ListTreeIcon />}
           mark={
-            <ListRowCount
-              settled={count.finished}
+            <ProgressCount
+              done={count.finished}
               total={count.total}
               label={`${count.finished} of ${count.total} sub-tasks finished`}
             />

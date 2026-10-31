@@ -13,8 +13,8 @@ import {
   HoverCardList,
   HoverCardRow,
   HoverCardRule,
-  ListRowCount,
   linesCount,
+  ProgressCount,
   TaskAgentsMark,
   TaskPriorityMark,
   TaskStatusMark,
@@ -310,8 +310,8 @@ function TaskRelations({
             glyph={<GLYPH.TASK />}
             label="Sub-tasks"
             end={
-              <ListRowCount
-                settled={count.finished}
+              <ProgressCount
+                done={count.finished}
                 total={count.total}
                 label={`${count.finished} of ${count.total} sub-tasks finished`}
               />
