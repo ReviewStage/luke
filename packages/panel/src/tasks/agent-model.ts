@@ -2165,9 +2165,6 @@ export function agentRows(
     running: (part) =>
       AGENT_READING.running(part) ||
       (part.kind === AGENT_PART.TOOL && workers.get(part.callId) === TOOL_STATE.INPUT_AVAILABLE),
-    failed: (part) =>
-      part.kind === AGENT_PART.TOOL &&
-      (workers.get(part.callId) ?? part.state) === TOOL_STATE.OUTPUT_ERROR,
     kept: (part) =>
       (part.kind === AGENT_PART.TOOL && part.callId === newestTodos) ||
       isShownSet(part) ||

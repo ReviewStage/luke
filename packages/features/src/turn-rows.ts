@@ -12,10 +12,7 @@
  * on, its line counting the calls and subagents and never the thoughts;
  * and a finished turn folds everything ahead of its last words into one
  * line saying how much it holds, its subagents and the coding agents it
- * started named apart from its other calls, so it reads as its answer. A
- * group or a fold
- * holding a call that failed says so on its line, so a failure is not
- * folded out of sight. That
+ * started named apart from its other calls, so it reads as its answer. That
  * fold is the one grouping its calls get: a run of calls is folded once,
  * never a group inside the fold that already holds it. A lead with no call
  * is not folded: its reasoning and words stand as they did while it moved.
@@ -416,8 +413,6 @@ export interface RowReading<B> {
   readonly part: (block: B) => RowPart;
   /** Whether the block still moves, which a group of calls shimmers for. */
   readonly running: (block: B) => boolean;
-  /** Whether the block is a call that failed, which the line of a group or a fold holding it marks; none fails where unsaid. */
-  readonly failed?: (block: B) => boolean;
   /** Whether the block stays out of a finished turn's fold, drawn after it, because it is still worth reading unasked; none stays out where unsaid. */
   readonly kept?: (block: B) => boolean;
 }
@@ -440,16 +435,12 @@ export type TurnRow<B> =
       /** Open while it is the turn's latest work and the turn still moves. */
       readonly open: boolean;
       readonly running: boolean;
-      /** How many of the calls it holds failed. */
-      readonly failed: number;
     }
   | {
       readonly kind: typeof TURN_ROW.FOLDED;
       readonly key: string;
       readonly summary: string;
       readonly rows: readonly TurnRow<B>[];
-      /** How many of the calls it holds failed. */
-      readonly failed: number;
     };
 
 /** Whether a value is a record of its own keys, rather than an array or a primitive. */
@@ -556,11 +547,6 @@ function runsWithCalls(part: RowPart): boolean {
   return isWork(part) || part === ROW_PART.NOTE;
 }
 
-/** How many calls among the blocks failed. */
-function failedCount<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): number {
-  return blocks.filter((each) => read.failed?.(each.block) === true).length;
-}
-
 /** A block with the key its row is drawn under. */
 interface Keyed<B> {
   readonly key: string;
@@ -599,7 +585,6 @@ function groupedRows<B>(
         summary: groupSummary(held),
         open,
         running: group.some((each) => read.running(each.block)),
-        failed: failedCount(group, read),
       });
     } else {
       rows.push(
@@ -718,7 +703,6 @@ function foldedLead<B>(
       key: folds === 0 ? `${turnKey}-folded` : first.key,
       summary: foldedSummary(held),
       rows: groupedRows(run.blocks, read, false, false),
-      failed: failedCount(run.blocks, read),
     });
     folds += 1;
   }
