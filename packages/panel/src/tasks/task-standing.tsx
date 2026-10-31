@@ -56,7 +56,7 @@ import { TaskRelationAsked, type TaskRelationsDoor } from "./task-relation-menu.
 /**
  * task-standing.tsx -- a task's head over its plan: the path to it, then the chips that say and change where it stands, how much it matters, and who is on it.
  *
- * Over the title stands the task's path (`TaskPath`), a caption-size
+ * Over the title stands the task's path (`TaskPath`), where the window's title bar does not name the task already (a phone), a caption-size
  * `Breadcrumbs`: its repository, the owner's picture and `owner/name`, or
  * Choose a repository while the task has none, which drops the search over
  * every repository the workspace reaches (`repository-chip.tsx`), and which
@@ -359,6 +359,21 @@ function keyCrumb(task: Task, workspaceName: string): Crumb | undefined {
   return { label: taskKey(workspaceName, task.number), current: true, fixed: true };
 }
 
+/** The refusal of the last repository pick, said under the path, or alone where the path is not drawn. */
+function RepositoryRefusal({ note }: { note: string }): React.JSX.Element {
+  return (
+    <FailureNote
+      failure={failureShown({
+        surface: FAILURE_SURFACE.REPOSITORY_PIN,
+        cause: FAILURE_CONDITION.REFUSED,
+        refused: true,
+      })}
+    >
+      {note}
+    </FailureNote>
+  );
+}
+
 /** The path's line: its crumbs, the menu a crumb drops hung from the line's own box, and the refusal of the last pick under it. */
 function PathLine({
   crumbs,
@@ -381,17 +396,7 @@ function PathLine({
         <Breadcrumbs label={PATH_LABEL} crumbs={drawn} />
         {menu}
       </div>
-      {note === undefined ? null : (
-        <FailureNote
-          failure={failureShown({
-            surface: FAILURE_SURFACE.REPOSITORY_PIN,
-            cause: FAILURE_CONDITION.REFUSED,
-            refused: true,
-          })}
-        >
-          {note}
-        </FailureNote>
-      )}
+      {note === undefined ? null : <RepositoryRefusal note={note} />}
     </div>
   );
 }
@@ -459,6 +464,21 @@ export function TaskPath({
   );
 }
 
+/**
+ * What stands over the title where the path does not, because the window's
+ * title bar names the task (`TaskFrameHead`): the refusal of the last
+ * repository pick, which that bar's crumb has no line to say, and nothing
+ * otherwise.
+ */
+export function TaskPathRefusal({ door }: { door: TaskStandingDoor }): React.JSX.Element | null {
+  const note = door.repository?.note;
+  return note === undefined ? null : (
+    <div className="mb-luke-4">
+      <RepositoryRefusal note={note} />
+    </div>
+  );
+}
+
 /** A task as the window's title bar names it: its mark, name, and key, its press, and its card. */
 function frameTask(
   task: {
@@ -484,8 +504,9 @@ function frameTask(
  * crumb where the page hands the repository's doors, dropping the menu the
  * plan's path drops; the tasks it is a child of, eldest first, each opening
  * its own task, the parent hanging its card; then the task, whose press is
- * `onOpen`, its Overview. Note that ⌘K's Change repository stays the plan's path's to
- * answer, so one ask never opens two menus.
+ * `onOpen`, its Overview. Note that ⌘K's Change repository opens the crumb
+ * here, because the plan draws no path of its own beside this head
+ * (`PlanBody`'s `path`), so one ask never opens two menus.
  */
 export function TaskFrameHead({
   task,
@@ -537,6 +558,8 @@ function RepositoryFrameHead({
     value: task.repository,
     chooser: door.chooser,
     onChoose: door.onChoose,
+    openRequest: door.openRequest,
+    onAsked: door.onAsked,
     align: POPOVER_ALIGN.START,
   });
   const repository = repositoryCrumb(menu, task.repository);
