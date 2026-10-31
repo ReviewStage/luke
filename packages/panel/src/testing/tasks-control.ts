@@ -418,7 +418,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onRemoveTaskParent: () => undefined,
     onRemoveTaskBlock: () => undefined,
     onChangeTaskRelation: () => undefined,
-    onOpenOnGitHub: ignore,
     onRetryList: ignore,
     onRetryDocument: ignore,
     onNewTask: ignore,

@@ -1271,7 +1271,7 @@ function PanelTabs({
   };
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
-  // ⌥⌘W, ⌥⌘C, ⇧⌥⌘C, and ⇧⌘O act on the chosen tab while the panel holds the keys, the copies and Open on GitHub over the open task's own.
+  // ⌥⌘W, ⌥⌘C, ⇧⌥⌘C, and ⇧⌘O act on the chosen tab while the panel holds the keys, the copies over the open task's own.
   const closeOthers =
     chosen === undefined ? undefined : closeOthersOf(chosen, strip.indexOf(chosen));
   useAppCommand(APP_COMMAND.CLOSE_OTHER_TABS, keys ? closeOthers : undefined);

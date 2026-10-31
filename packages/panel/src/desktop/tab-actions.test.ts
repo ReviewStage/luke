@@ -40,8 +40,7 @@ import { DesktopTasks } from "./desktop-tasks.js";
  * document menu the Plan tab's ⋯ and right-click offer instead, pinning
  * the task rather than the tab. A tab with no content action shows no ⋯,
  * and no tab wears one of its own. A Pull request tab's ⋯ also offers what
- * its body hands up, Open on GitHub and Refresh, which no other tab's offers
- * but the Plan tab's, the task's own.
+ * its body hands up, Open on GitHub and Refresh, which no other tab's offers.
  */
 
 const TASK: Task = {
@@ -296,7 +295,6 @@ test("the Plan tab's ⋯ and its right-click offer the task's own document menu,
     "Relations",
     "Pin",
     "Move to section",
-    "Open on GitHub",
     "Permanently delete",
   ]);
   // The right-click leads with the tab's keeping, which holds no Pin tab: the one Pin is the task's, among its own.
@@ -346,7 +344,7 @@ const PULL_REQUEST: AgentPullRequest = {
   changedFiles: 6,
 };
 
-test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub and Refresh, which no other tab's offers but the Plan tab's, the task's own, and opens the pull request on GitHub", async () => {
+test("the Pull request tab's bar ⋯ offers Copy link first, then Copy GitHub link, Open on GitHub, and Refresh, which no other tab's offers, and opens the pull request on GitHub", async () => {
   const opened: string[] = [];
   fakeAppPlatform({
     ...QUIET_PANEL,
@@ -361,7 +359,12 @@ test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub
     published,
   );
   const { side } = bars(container);
-  assert.deepEqual(pressBarMore(side), ["Copy link", "Open on GitHub", "Refresh"]);
+  assert.deepEqual(pressBarMore(side), [
+    "Copy link",
+    "Copy GitHub link",
+    "Open on GitHub",
+    "Refresh",
+  ]);
   assert.ok(
     !rightClickChosen(side).some((item) => item === "Open on GitHub" || item === "Refresh"),
     "a right-click keeps to the tab's own and its link",
@@ -380,11 +383,9 @@ test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub
   for (const other of [SUBAGENT, { page: PAGE_ID }, SIDE_PANEL_TAB.PLAN] as const) {
     const each = await mountEveryTab({ main: { draft: "draft-1" }, side: other }, published);
     const items = pressBarMore(bars(each).side);
-    // The Plan tab's Open on GitHub is the task's repository's, not the pull request's.
     assert.ok(
-      (other === SIDE_PANEL_TAB.PLAN || !items.includes("Open on GitHub")) &&
-        !items.includes("Refresh"),
-      `the ${JSON.stringify(other)} tab offers no Refresh`,
+      !items.includes("Open on GitHub") && !items.includes("Refresh"),
+      `the ${JSON.stringify(other)} tab offers neither Open on GitHub nor Refresh`,
     );
     act(() => roots.pop()?.unmount());
     each.remove();
