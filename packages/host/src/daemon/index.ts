@@ -3,7 +3,7 @@
  */
 
 export { readHostDevice } from "../host-device-record.js";
-export { hostDaemon } from "./host-daemon.js";
+export { HOST_DAEMON_END, hostDaemon } from "./host-daemon.js";
 export {
   DARWIN_HOST,
   type HostRuntime,
@@ -17,3 +17,4 @@ export {
   type HostPairingCode,
 } from "./host-pairing.js";
 export { hostPlatform } from "./host-platform.js";
+export type { HostReleases } from "./host-update.js";

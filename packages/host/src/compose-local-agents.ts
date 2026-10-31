@@ -2,6 +2,7 @@ import type {
   DeviceAgentBeat,
   DeviceAgentClaimedLine,
   DeviceAgentDevice,
+  DeviceAgentUpdate,
   HostedDeviceAgentClient,
 } from "@luke/features";
 import { DEVICE_BEAT } from "@luke/features/agent-wire";
@@ -19,6 +20,7 @@ import {
   type DeviceAgentLaunchSecrets,
   type DeviceAgentLayout,
   type DeviceAgentLine,
+  type DeviceAgentRelease,
   type DeviceAgentRequest,
   type DeviceIsolation,
   type DeviceLaunchRefusal,
@@ -220,6 +222,18 @@ import type { RunMode } from "./run-mode.js";
  * found work in until its agent is used since; the agent stays this
  * machine's, and its next launch starts afresh.
  *
+ * A host that updates itself (`LocalAgentsDependencies.update`,
+ * `daemon/host-update.ts`) says on every beat where its update stands, and
+ * is handed each answered beat's newer release. Once it holds one checked,
+ * the device switches to it as soon as it is idle: no runner runs, no
+ * line it claimed waits to be delivered or is being delivered, no request
+ * is being answered, and no claim's answer was lost. Its claims of lines
+ * and requests stop first, under the lock every line's claim holds, and
+ * idle is read again there, so a line claimed meanwhile keeps the device
+ * on the release it runs and the switch waits for a later beat; once it
+ * switches, the lines and requests it did not claim wait in the service
+ * for the daemon started on the new release.
+ *
  * Requests are each answered on a fiber of their own, inside the agent's
  * folder alone (`local-agent-requests.ts`). Turning the experiment off,
  * signing out, or a run that sends nothing shuts the gate:
@@ -324,6 +338,22 @@ type LocalAgentClient = Pick<
   | "liveAgents"
 >;
 
+/**
+ * A host's update of itself as the follower carries it (`daemon/host-update.ts`):
+ * where it stands, which every beat says, each answered beat's release, and
+ * the switch the follower runs once the device is idle.
+ */
+export interface LocalAgentsUpdate {
+  /** Where the update stands, as the next beat says it; none while none is under way. */
+  readonly beating: Effect.Effect<DeviceAgentUpdate | undefined>;
+  /** An answered beat's release, none where it named none. */
+  readonly heard: (release: DeviceAgentRelease | undefined) => Effect.Effect<void>;
+  /** Whether a release is checked and waits for the device to be idle. */
+  readonly waiting: Effect.Effect<boolean>;
+  /** The switch to the release that waits, run while the device is idle and claims nothing, the beat given sent once it says it updates; whether it switched, after which the daemon ends. */
+  readonly switched: (beat: Effect.Effect<unknown>) => Effect.Effect<boolean>;
+}
+
 export interface LocalAgentsDependencies {
   kernel: Pick<HostKernel, "stateRoot" | "createId"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
@@ -334,6 +364,8 @@ export interface LocalAgentsDependencies {
   /** Whether the device may ask Luke now, shut while Luke refuses it, read every `IDLE` while the gate is open. */
   switchedOn: Effect.Effect<boolean>;
   client: LocalAgentClient;
+  /** The host's update of itself, where it updates itself; none on This Mac and wherever else the device does not. */
+  update?: LocalAgentsUpdate | undefined;
 }
 
 /** How a launch ended, which its settle carries until the service takes it: its runner's exit code where it exited with one, and why it never started where the device says. */
@@ -605,6 +637,12 @@ export function composeLocalAgents(
         on && Option.isSome(home) && kernel.runMode.sendsNetwork && account.capabilitiesActive(),
     );
 
+    /** A beat, saying where the host's update stands while one is under way. */
+    const beatOf = (deviceId: string) =>
+      Effect.flatMap(dependencies.update?.beating ?? Effect.succeed(undefined), (updating) =>
+        asked(client.beat(deviceId, NOT_SIGNED_IN, updating)),
+      );
+
     /**
      * The beats, each `beaten` (a beat alone, or a follow's beat and what it
      * converges to its answer), for as long as the gate stands and the
@@ -614,7 +652,7 @@ export function composeLocalAgents(
     const presence = (
       userId: string,
       deviceId: string,
-      beaten: Effect.Effect<unknown> = asked(client.beat(deviceId, NOT_SIGNED_IN)),
+      beaten: Effect.Effect<unknown> = beatOf(deviceId),
     ) =>
       Effect.gen(function* () {
         let sinceBeat = Duration.toMillis(BEAT_EVERY);
@@ -752,6 +790,10 @@ export function composeLocalAgents(
         const deliveryLocks = new Map<string, Semaphore.Semaphore>();
         /** Done once a beat of this follow is answered, after which the device passes over its agents (`swept`). */
         const beaten = yield* Deferred.make<void>();
+        /** Whether no line or request is claimed, set under `claiming` once the device switches to a newer release, so they wait in the service for the daemon started on it. */
+        let paused = false;
+        /** How many lines were handed to their agents' workers and are not yet delivered, each counted from its hand-over until its worker is done with it. */
+        let undelivered = 0;
 
         const answering = yield* FiberSet.make();
 
@@ -1241,6 +1283,7 @@ export function composeLocalAgents(
         const handedOver = (claimed: DeviceAgentClaimedLine) =>
           Effect.gen(function* () {
             if (claimed.line.kind === DEVICE_AGENT_LINE_KIND.LAUNCH) starting.add(claimed.line.id);
+            undelivered += 1;
             yield* Queue.offer(yield* mailboxOf(claimed.line.agentId), claimed);
           });
 
@@ -1265,9 +1308,15 @@ export function composeLocalAgents(
                 const agentScope = yield* Effect.scope;
                 for (;;) {
                   const claimed = yield* Queue.take(mailbox);
-                  yield* deliveryLockOf(agentId).withPermit(
-                    delivered(agentId, claimed, agentScope),
-                  );
+                  yield* deliveryLockOf(agentId)
+                    .withPermit(delivered(agentId, claimed, agentScope))
+                    .pipe(
+                      Effect.ensuring(
+                        Effect.sync(() => {
+                          undelivered -= 1;
+                        }),
+                      ),
+                    );
                 }
               }),
             );
@@ -1305,12 +1354,14 @@ export function composeLocalAgents(
          * hand-over are uninterruptible, because a line the service granted
          * is this Mac's alone to deliver, and its token is let go of in the
          * same step, so no line is handed over twice. Both hold `claiming`,
-         * so a beat never settles a launch whose claim is unanswered.
+         * so a beat never settles a launch whose claim is unanswered; none is
+         * asked once the device has paused its claims to switch releases.
          */
         const lineTaken = (id: string) =>
           Effect.uninterruptible(
             claiming.withPermit(
               Effect.gen(function* () {
+                if (paused) return false;
                 const answer = yield* claimedLine(id);
                 if (answer === undefined) return false;
                 if ("line" in answer) yield* handedOver(answer);
@@ -1328,6 +1379,7 @@ export function composeLocalAgents(
          */
         const linesFollowed = Effect.forever(
           Effect.gen(function* () {
+            if (paused) return yield* Effect.sleep(REREAD);
             for (const id of [...claimTokens.keys()]) {
               if (!(yield* lineTaken(id))) return yield* Effect.sleep(REREAD);
             }
@@ -1342,6 +1394,7 @@ export function composeLocalAgents(
         /** One request claimed and answered on a fiber of its own. */
         const answered = (request: DeviceAgentRequest) =>
           Effect.gen(function* () {
+            if (paused) return;
             const claimed = yield* asked(client.claimRequest(deviceId, request.id)).pipe(
               Effect.repeat({
                 schedule: Schedule.spaced(CLAIM_RETRY.every),
@@ -1360,6 +1413,7 @@ export function composeLocalAgents(
         /** The requests read, each answered on its own fiber, so a slow read holds up neither the reads nor the others. */
         const requestsFollowed = Effect.forever(
           Effect.gen(function* () {
+            if (paused) return yield* Effect.sleep(REREAD);
             const requests = yield* asked(client.requests(deviceId));
             if (requests === undefined) return yield* Effect.sleep(REREAD);
             for (const request of requests) yield* FiberSet.run(answering, answered(request));
@@ -1418,7 +1472,7 @@ export function composeLocalAgents(
          * the answer is read after it: a launch claimed later is never judged
          * against an answer that could not have named it. An answer naming no
          * launches, from a service before the list, converges nothing but
-         * the kept launches' settles.
+         * the kept launches' settles. The beat's answer, where one came.
          */
         const reconciledBeat = Effect.gen(function* () {
           const ran = new Map(runners);
@@ -1427,13 +1481,11 @@ export function composeLocalAgents(
             ...runningLaunches(),
             ...(yield* Ref.get(state)).launches.map((launch) => launch.id),
           ]);
-          const beat: DeviceAgentBeat | undefined = yield* asked(
-            client.beat(deviceId, NOT_SIGNED_IN),
-          );
+          const beat: DeviceAgentBeat | undefined = yield* beatOf(deviceId);
           if (beat !== undefined) yield* Deferred.succeed(beaten, undefined);
           const open = beat?.openLaunches === undefined ? undefined : new Set(beat.openLaunches);
           yield* pendingSettled(open);
-          if (open === undefined) return;
+          if (open === undefined) return beat;
           for (const [agentId, runner] of ran) {
             if (open.has(runner.lineId) || runners.get(agentId) !== runner) continue;
             report("a local agent's runner was stopped, since the service no longer holds it here");
@@ -1441,7 +1493,7 @@ export function composeLocalAgents(
           }
           const kept = new Set((yield* Ref.get(state)).launches.map((launch) => launch.id));
           const unknown = [...open].filter((id) => !knew.has(id) && !kept.has(id));
-          if (unknown.length === 0) return;
+          if (unknown.length === 0) return beat;
           // Note that these are settled holding `claiming`, so none is one whose claim is under way, and each is read again first.
           yield* claiming.withPermit(
             Effect.forEach(
@@ -1450,6 +1502,49 @@ export function composeLocalAgents(
               { discard: true },
             ),
           );
+          return beat;
+        });
+
+        /** Whether the device runs nothing and has nothing under way: no runner, no launch starting, no line it claimed waiting or being delivered, and no request being answered. */
+        const idle = Effect.map(
+          FiberSet.size(answering),
+          (requests) =>
+            runners.size === 0 && starting.size === 0 && undelivered === 0 && requests === 0,
+        );
+
+        /**
+         * The switch to the release the host's update holds, once the device
+         * is idle: its claims of lines and requests paused under `claiming`,
+         * so no line's claim is under way, where it is idle still there and
+         * no claim's answer was lost, since that claim may have been handed a
+         * launch only this process could ask for again. A line claimed since
+         * the first look keeps the claims going and the switch waits for a
+         * later beat, as does a switch that did not go through; one that did
+         * leaves them paused, since the daemon ends, and since a line it
+         * claimed and a request it is answering are idle's to wait out, the
+         * daemon's end cuts off neither.
+         */
+        const switchedWhileIdle = (update: LocalAgentsUpdate) =>
+          Effect.gen(function* () {
+            if (!(yield* idle)) return;
+            const stopped = yield* claiming.withPermit(
+              Effect.gen(function* () {
+                if (claimTokens.size > 0 || !(yield* idle)) return false;
+                paused = true;
+                return true;
+              }),
+            );
+            if (!stopped) return;
+            if (!(yield* update.switched(beatOf(deviceId)))) paused = false;
+          });
+
+        /** A beat converged to (`reconciledBeat`), its release handed to the host's update, and the switch to one it holds where the device is idle. */
+        const followedBeat = Effect.gen(function* () {
+          const beat = yield* reconciledBeat;
+          const { update } = dependencies;
+          if (update === undefined || beat === undefined) return;
+          yield* update.heard(beat.release);
+          if (yield* update.waiting) yield* switchedWhileIdle(update);
         });
 
         /** The successful reads in a row each agent this machine made was left out of, by its id. */
@@ -1652,7 +1747,7 @@ export function composeLocalAgents(
             Effect.repeat(sweepPass, Schedule.spaced(PASS_EVERY)),
           ),
         );
-        yield* presence(userId, deviceId, Effect.provideContext(reconciledBeat, services));
+        yield* presence(userId, deviceId, Effect.provideContext(followedBeat, services));
       });
 
     /** The id this follower holds the machine's lease under (`follower-lock.ts`), minted once. */

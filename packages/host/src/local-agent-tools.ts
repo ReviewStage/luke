@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import type { AgentToolPin } from "@luke/agent-runner/pins";
 import { Duration, Effect, Option, Path, Schema, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
-import * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
+import { stagedFolder, streamedArchive, unpackedArchive } from "./staged-fetch.js";
 
 /**
  * local-agent-tools.ts -- a binary a device's local agents run on, as its pin names it (`@luke/agent-runner/pins`' `AgentToolPin`): the pinned release fetched once, checked, and kept in the device's own folder.
@@ -16,10 +17,10 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/process";
  * A fetch keeps nothing unless the whole archive arrived at the pin's size
  * and its SHA-256 is the pin's. The archive, up to about 160 megabytes, is
  * streamed to a folder of its own beside the kept one and hashed as it
- * arrives, never held whole: an answer past the size is refused as it
- * arrives, and one whose digest differs is never extracted, its folder
- * removed with it. Only the pinned members are extracted, into that same
- * folder, and moved into place whole. Where the pin names the Developer ID
+ * arrives (`staged-fetch.ts`), never held whole: an answer past the size is
+ * refused as it arrives, and one whose digest differs is never extracted,
+ * its folder removed with it. Only the pinned members are extracted, into
+ * that same folder, and moved into place whole. Where the pin names the Developer ID
  * team its binary is signed by, macOS's own `codesign` must verify the
  * binary strictly and name that team, and where it names the digests of the
  * files that run, each must match them, before the build is marked. The
@@ -39,14 +40,6 @@ const TOOL_FETCH = {
   /** The mark written once the build is checked and in place. */
   MARK: ".verified",
 } as const;
-
-const HTTP_OK = 200;
-
-/**
- * The folders the system keeps its own `tar` and `gzip` in, on a Mac and on
- * every Linux, searched in order, never a folder a PATH would put first.
- */
-const SYSTEM_FOLDERS = ["/usr/bin", "/bin"] as const;
 
 /** macOS's own `codesign`. */
 const CODESIGN = "/usr/bin/codesign";
@@ -165,72 +158,6 @@ const signedAsPinned = (binary: string, team: string) =>
   );
 
 /**
- * The pin's archive streamed to `saved` as it arrives, and its SHA-256:
- * refused past the pin's size as it arrives, short of it, where a minute
- * passes without a byte, or where the whole answer takes longer than
- * `TIMEOUT`.
- */
-const downloaded = (pin: AgentToolPin, saved: string) =>
-  Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const client = yield* HttpClient.HttpClient;
-    const response = yield* client.get(pin.ARCHIVE);
-    if (response.status !== HTTP_OK) return yield* Effect.fail("fetch refused");
-    const hash = createHash("sha256");
-    let received = 0;
-    yield* response.stream.pipe(
-      Stream.timeout(TOOL_FETCH.STALL),
-      Stream.mapEffect((chunk: Uint8Array) =>
-        received + chunk.length > pin.BYTES
-          ? Effect.fail("too large")
-          : Effect.sync(() => {
-              received += chunk.length;
-              hash.update(chunk);
-              return chunk;
-            }),
-      ),
-      Stream.run(fileSystem.sink(saved)),
-    );
-    if (received !== pin.BYTES) return yield* Effect.fail("short");
-    return hash.digest("hex");
-  }).pipe(Effect.timeout(TOOL_FETCH.TIMEOUT));
-
-/** The system's own `tar`, from the first of its folders that keeps one. */
-const systemTar = Effect.gen(function* () {
-  const fileSystem = yield* FileSystem.FileSystem;
-  for (const folder of SYSTEM_FOLDERS) {
-    const tar = `${folder}/tar`;
-    if (yield* fileSystem.exists(tar).pipe(Effect.orElseSucceed(() => false))) {
-      return Option.some(tar);
-    }
-  }
-  return Option.none<string>();
-});
-
-/** The pin's members of the archive at `saved` extracted under `staging`, their layout kept. */
-const extracted = (pin: AgentToolPin, saved: string, staging: string) =>
-  Effect.gen(function* () {
-    const tar = yield* systemTar;
-    if (Option.isNone(tar)) return yield* Effect.fail("no tar");
-    const members = pin.MEMBERS.map((member) => `${pin.ROOT}/${member}`);
-    // Note that no compression is named, since GNU tar and macOS's bsdtar both read it off the archive, a gzipped
-    // tar or on a Mac a zip, and GNU tar runs `gzip` for it from the PATH handed here, the system's folders alone.
-    const code = yield* Effect.scoped(
-      Effect.flatMap(
-        ChildProcess.make(tar.value, ["-xf", saved, "-C", staging, ...members], {
-          stdin: "ignore",
-          stdout: "ignore",
-          stderr: "ignore",
-          env: { PATH: SYSTEM_FOLDERS.join(":") },
-          extendEnv: false,
-        }),
-        (handle) => handle.exitCode,
-      ),
-    );
-    if (Number(code) !== 0) return yield* Effect.fail("extract");
-  });
-
-/**
  * The pin's archive fetched, checked against its size and digest, and its
  * members kept under `folder`, moved into place whole, checked against its
  * signature and its files' digests where the pin names them, and marked;
@@ -239,28 +166,26 @@ const extracted = (pin: AgentToolPin, saved: string, staging: string) =>
 const fetchTool = Effect.fnUntraced(function* (pin: AgentToolPin, folder: string) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const parent = path.dirname(folder);
-  yield* fileSystem.makeDirectory(parent, { recursive: true });
-  // Note that a staging folder an earlier fetch was cut off in (a quit mid-download) is removed as this one begins,
-  // since a tool is fetched once at a time, so none stands for good holding a part of an archive.
-  for (const entry of yield* fileSystem.readDirectory(parent)) {
-    if (entry.startsWith(".")) {
-      yield* fileSystem.remove(path.join(parent, entry), { recursive: true, force: true });
-    }
-  }
-  yield* Effect.scoped(
-    Effect.gen(function* () {
-      const staging = yield* fileSystem.makeTempDirectoryScoped({
-        directory: parent,
-        prefix: `.${pin.NAME}-`,
-      });
-      const saved = path.join(staging, "archive");
-      // Note that nothing of an archive whose digest is not the pin's is extracted, and the staging folder holding it goes with this scope.
-      if ((yield* downloaded(pin, saved)) !== pin.SHA256) return yield* Effect.fail("checksum");
-      yield* extracted(pin, saved, staging);
-      yield* fileSystem.remove(folder, { recursive: true, force: true });
-      yield* fileSystem.rename(path.join(staging, pin.ROOT), folder);
-    }),
+  yield* stagedFolder(
+    { parent: path.dirname(folder), prefix: `.${pin.NAME}-`, target: folder },
+    (staging) =>
+      Effect.gen(function* () {
+        const saved = path.join(staging, "archive");
+        const archive = yield* streamedArchive(pin.ARCHIVE, saved, {
+          maxBytes: pin.BYTES,
+          stall: TOOL_FETCH.STALL,
+          timeout: TOOL_FETCH.TIMEOUT,
+        });
+        // Note that nothing of an archive short of the pin's size, or whose digest is not the pin's, is extracted.
+        if (archive.bytes !== pin.BYTES) return yield* Effect.fail("short");
+        if (archive.sha256 !== pin.SHA256) return yield* Effect.fail("checksum");
+        yield* unpackedArchive(
+          saved,
+          staging,
+          pin.MEMBERS.map((member) => `${pin.ROOT}/${member}`),
+        );
+        return path.join(staging, pin.ROOT);
+      }),
   );
   if (pin.TEAM !== undefined && !(yield* signedAsPinned(path.join(folder, pin.BINARY), pin.TEAM))) {
     yield* fileSystem.remove(folder, { recursive: true, force: true });

@@ -5,22 +5,33 @@
  * host's release carries at `lib/luke-host.mjs`, beside the runner's bundle
  * at `lib/agent-runner.mjs` (`host-platform.ts`), and runs on the release's
  * own Node. The same bundle runs on every OS, as `process.platform` says
- * (`hostRuntime`). On Linux every command runs as the `luke-host` user,
- * whose home holds the daemon's state, `state/` under it, and the box's
- * systemd service runs `run`. On a Mac the release is a folder inside the
- * desktop app (`Contents/Resources/luke-host`), every command runs as the
- * member, whose app's own state folder is the daemon's, and the app's login
- * item runs `run` (`apps/desktop/native/macos/HostLoginItem.swift`).
+ * (`hostRuntime`). The account install (`apps/web/install/install.sh`)
+ * runs it as the account it is installed in, on Linux and on a Mac alike:
+ * each release unpacked under `~/.local/share/luke-host/versions/<version>`,
+ * `current` beside them linking to the one that runs, its state under
+ * `~/.local/state/luke-host`, which the release's `luke-host` names
+ * (`luke-host.sh`), and a systemd user unit or a LaunchAgent running `run`
+ * through `current`, and again a minute after any exit. This Mac's copy is
+ * a folder inside the desktop app (`Contents/Resources/luke-host`), run as
+ * the member on the app's own state folder by the app's login item
+ * (`apps/desktop/native/macos/HostLoginItem.swift`).
  *
- * `run` is the command the box's system service runs. A box
- * that never connected says so and reads its record again every
- * `UNENROLLED_REST`, rather than exiting for systemd to start it over; one
- * that did runs the daemon (`@luke/host/daemon`) until the service is
- * stopped, which stops every runner it started with it, or until Luke
- * refuses the box's secret, the host removed, when it stops them and exits 0,
- * which the service's `Restart=on-failure` leaves stopped. Every agent runs
- * straight on the box (`hostPlatform`), as a child of this process, on its
- * Node, and as its user.
+ * `run` is the command the service runs. A box that never connected says
+ * so and reads its record again every `UNENROLLED_REST`, rather than
+ * exiting for its service to start it over; one that did runs the daemon
+ * (`@luke/host/daemon`) until the service is stopped, which stops every
+ * runner it started with it, or until Luke refuses the box's secret, the
+ * host removed, when it stops them and exits 0, and its service, starting
+ * it again a minute later, finds its record refused and rests, until the
+ * box is connected again by hand. A daemon the account install runs, its
+ * own real path in a version folder of the install's releases
+ * (`accountReleases`), updates itself to the newer release Luke names
+ * (`host-update.ts`): once it switched `current` to it, every runner
+ * stopped, it asks a systemd user unit to start it again at once, since
+ * the unit's own restart waits a minute, or on a Mac just exits, since
+ * launchd's minute counts from the last start. Every agent runs straight
+ * on the box (`hostPlatform`), as a child of this process, on its Node,
+ * and as its user.
  *
  * `connect` is run as the box is set up or by hand: it prints the link and
  * the code a member approves in Luke, waits for them to, and exits by how
@@ -30,6 +41,7 @@
  * box was not connected.
  */
 
+import { realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -44,18 +56,22 @@ import { buildCarriesDeveloperIdSigning } from "@luke/host/app-identity";
 import {
   connectHostDevice,
   HOST_CONNECT_OUTCOME,
+  HOST_DAEMON_END,
   type HostPairingCode,
+  type HostReleases,
   type HostRuntime,
   hostArch,
   hostDaemon,
   hostPlatform,
   hostRuntime,
+  LINUX_HOST,
   readHostDevice,
 } from "@luke/host/daemon";
 import { Environment, reporterLayer } from "@luke/host/effect";
 import { reportToStderr } from "@luke/host/node";
 import { ConfigProvider, Duration, Effect, Exit, Layer, Option } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import { ChildProcess } from "effect/process";
 
 /** The daemon's version, which the release's build writes in; a development run is below every floor. */
 const VERSION = process.env.LUKE_HOST_VERSION ?? "0.0.0";
@@ -70,6 +86,15 @@ const DEFAULT_INSTALL_COMMAND = hostInstallCommand(
 
 /** How long a box that never connected rests before it reads its record again. */
 const UNENROLLED_REST = Duration.minutes(1);
+
+/** Where the account install keeps its releases, under the home it is installed in, each in a folder of its own under `versions/` (`luke-host.sh`'s `ACCOUNT_RELEASES`). */
+const ACCOUNT_RELEASES = { FOLDER: ".local/share/luke-host", VERSIONS: "versions" } as const;
+
+/** The systemd user unit the account install runs the daemon as on Linux. */
+const ACCOUNT_UNIT = "luke-host.service";
+
+/** How long systemd may take to take the ask to start the daemon again. */
+const RESTART_ASK = Duration.seconds(10);
 
 /** The exit codes of `connect`, which the install script reads: a box already connected exits as connected. */
 const CONNECT_EXIT = {
@@ -88,6 +113,30 @@ const COMMAND = { RUN: "run", CONNECT: "connect", VERSION: "version" } as const;
 
 /** The release's own folder: this bundle stands in its `lib/`. */
 const installFolder = path.resolve(path.dirname(process.argv[1] ?? "."), "..");
+
+/**
+ * The account install's releases, where this release's own real path
+ * stands in a version folder of them, as `luke-host.sh`'s `account_home`
+ * reads it; none for This Mac's copy inside the app, a development run, and
+ * an install that came before, none of which updates itself.
+ */
+function accountReleases(): HostReleases | undefined {
+  let real: string;
+  try {
+    real = realpathSync(installFolder);
+  } catch {
+    return undefined;
+  }
+  const versions = path.dirname(real);
+  const folder = path.dirname(versions);
+  if (
+    path.basename(versions) !== ACCOUNT_RELEASES.VERSIONS ||
+    !folder.endsWith(`/${ACCOUNT_RELEASES.FOLDER}`)
+  ) {
+    return undefined;
+  }
+  return { folder, running: path.basename(real) };
+}
 
 /**
  * The OS this bundle runs on, what the daemon does differently there, and
@@ -131,7 +180,7 @@ const arch = ({ os: hostOs }: HostRuntime) =>
       : Effect.succeed(read);
   });
 
-/** The daemon on the box's record, or a rest until there is one; it ends once Luke refuses the box's secret. */
+/** The daemon on the box's record, or a rest until there is one; it ends once Luke refuses the box's secret, or the daemon switched to a newer release. */
 const follow = (runtime: HostRuntime) =>
   Effect.gen(function* () {
     const { stateRoot } = runtime;
@@ -141,14 +190,14 @@ const follow = (runtime: HostRuntime) =>
         `Luke host: this box is not connected. Run luke-host connect, or the install command from Settings › Hosts › Add hosts (${DEFAULT_INSTALL_COMMAND}), and approve the code it shows in Luke.`,
       );
       yield* Effect.sleep(UNENROLLED_REST);
-      return false;
+      return undefined;
     }
     // Note that a box Luke refused before is not asked again on the dead secret: it rests removed until it is connected again.
     if (device.value.refused === true) {
       reportToStderr(
         "Luke host: Luke refused this box's secret before, so it was removed. Connect it again to follow its agents.",
       );
-      return true;
+      return HOST_DAEMON_END.REMOVED;
     }
     const boxArch = yield* arch(runtime);
     const platform = hostPlatform({
@@ -164,15 +213,62 @@ const follow = (runtime: HostRuntime) =>
     reportToStderr(
       `Luke host ${VERSION}: following ${device.value.serviceOrigin} as ${platform.deviceName}.`,
     );
-    yield* hostDaemon({ stateRoot, device: device.value, version: VERSION, platform });
-    reportToStderr(
-      "Luke host: every agent it ran is stopped. It exits until this box is connected again.",
-    );
-    return true;
-  }).pipe(Effect.repeat({ until: (removed) => removed }));
+    const ended = yield* hostDaemon({
+      stateRoot,
+      device: device.value,
+      version: VERSION,
+      platform,
+      releases: accountReleases(),
+    });
+    if (ended === HOST_DAEMON_END.REMOVED) {
+      reportToStderr(
+        "Luke host: every agent it ran is stopped. It exits until this box is connected again.",
+      );
+    }
+    return ended;
+  }).pipe(Effect.repeat({ until: (ended) => ended !== undefined }));
 
-/** `luke-host run`: the daemon, until Luke refuses the box's secret. */
-const run = (runtime: HostRuntime) => Effect.as(follow(runtime), 0);
+/**
+ * The daemon's service asked to start it again at once on the release
+ * `current` now names: a systemd user unit restarted without waiting out
+ * the minute its own restart waits, while a Mac's LaunchAgent needs no ask,
+ * since launchd's minute counts from the daemon's last start. An ask that
+ * fails is said, and the exit leaves the start to the unit's own restart.
+ */
+const restartAsked = (runtime: HostRuntime) =>
+  runtime.os.platform !== LINUX_HOST.platform
+    ? Effect.void
+    : Effect.scoped(
+        Effect.flatMap(
+          ChildProcess.make("systemctl", ["--user", "restart", "--no-block", ACCOUNT_UNIT], {
+            stdin: "ignore",
+            stdout: "ignore",
+            stderr: "ignore",
+          }),
+          (handle) => handle.exitCode,
+        ),
+      ).pipe(
+        Effect.timeoutOption(RESTART_ASK),
+        Effect.map(Option.exists((code) => Number(code) === 0)),
+        Effect.orElseSucceed(() => false),
+        Effect.flatMap((asked) =>
+          asked
+            ? Effect.void
+            : Effect.sync(() =>
+                reportToStderr(
+                  `Luke host: systemd did not take the ask to restart ${ACCOUNT_UNIT}, so it starts on the new release within a minute.`,
+                ),
+              ),
+        ),
+      );
+
+/** `luke-host run`: the daemon, until Luke refuses the box's secret, or until it switched to a newer release, which its service is asked to start at once. */
+const run = (runtime: HostRuntime) =>
+  Effect.gen(function* () {
+    const ended = yield* follow(runtime);
+    if (ended === HOST_DAEMON_END.UPDATED) yield* restartAsked(runtime);
+    return 0;
+  });
 
 /** The command that connects this box to the service given: its origin named where it is not the one `connect` takes by default. */
 function connectCommand(origin: string): string {

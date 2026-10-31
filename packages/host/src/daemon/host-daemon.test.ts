@@ -2,6 +2,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { DEVICE_AGENT_LINE_KIND, DEVICE_ARCH } from "@luke/features/device-agent-wire";
+import { HOST_TARGET } from "@luke/features/host-release";
 import {
   HOST_PAIRING_POLL_STATUS,
   HOST_WIRE,
@@ -44,6 +45,15 @@ const PAIRING_CODE: Omit<HostPairingStartAnswer, "pollSecret"> = {
 type HostPairingPollStatus =
   (typeof HOST_PAIRING_POLL_STATUS)[keyof typeof HOST_PAIRING_POLL_STATUS];
 const RUNNER_TOKEN = "sk-ant-oat01-fixture-not-a-real-token";
+/** A release newer than the daemon's, as a beat's answer names one. */
+const NEWER_RELEASE = {
+  version: "0.2.0",
+  sha256: {
+    [HOST_TARGET.LINUX_X64]: "a".repeat(64),
+    [HOST_TARGET.LINUX_ARM64]: "b".repeat(64),
+    [HOST_TARGET.DARWIN_ARM64]: "c".repeat(64),
+  },
+};
 /** The Node the daemon runs on, which its runners run on too. */
 const NODE = "/opt/luke-host/node/bin/node";
 /** The runner's bundle each OS runs: a Linux release's own, and on a Mac the app's. */
@@ -132,7 +142,7 @@ describe("a host's daemon", () => {
       runnerBundle: RUNNER_BUNDLE.DARWIN,
     },
   ])(
-    "registers as its OS ($platform) on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets, and stops its runner's group and ends once Luke refuses its secret",
+    "registers as its OS ($platform) on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group and ends once Luke refuses its secret",
     ({ os, name, platform: devicePlatform, uid, sandboxed, runnerBundle }) =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
@@ -176,6 +186,8 @@ describe("a host's daemon", () => {
               });
             case `GET ${HOSTED_SERVICE_PATH.DEVICE_AGENT_REQUESTS}`:
               return jsonResponse({}, HTTP.SERVER_ERROR);
+            case `POST ${HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE}`:
+              return jsonResponse({ done: true, release: NEWER_RELEASE });
             default:
               return jsonResponse({ done: true });
           }
@@ -189,6 +201,9 @@ describe("a host's daemon", () => {
           platform,
         }).pipe(Effect.provide(Layer.merge(layer, http.layer)), Effect.forkScoped);
         yield* settled(() => spawner.spawned.some(isRunner));
+        yield* settled(
+          () => at(http.requests, "POST", HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE).length > 0,
+        );
 
         const [register] = at(http.requests, "POST", HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES);
         expect(JSON.parse(register?.body ?? "{}")).toMatchObject({
@@ -230,6 +245,15 @@ describe("a host's daemon", () => {
         removed = true;
         yield* TestClock.adjust(Duration.seconds(20));
         yield* Fiber.join(daemon);
+        // Note that a daemon handed no releases, as This Mac's copy inside the app, neither fetches the release named nor says it updates.
+        expect(http.requests.filter((request) => new URL(request.url).origin !== SERVICE)).toEqual(
+          [],
+        );
+        expect(
+          at(http.requests, "POST", HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE).some(
+            (request) => "update" in JSON.parse(request.body ?? "{}"),
+          ),
+        ).toBe(false);
         // Note that the runner, which never exits here, has its group ended under the grace it was started with.
         expect(runner?.ended).toEqual({ killSignal: "SIGTERM", forceKillAfterMillis: 3_000 });
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
