@@ -147,7 +147,6 @@ const WORDS = {
   INSTALL_NEXT: "Then open the link it prints, and approve its code.",
   MAC_SESSION: "A Mac host runs your agents only while its user is logged in.",
   WAITING: "Waiting for approval",
-  WAITING_HOW: "Once you approve a code, its host shows here.",
   CONNECTING: "Connecting…",
   READY: "Ready",
   CLOSE: "Close",
@@ -408,11 +407,7 @@ function AddHostsDialog({
       </Stack>
       <SettingsSection>
         {joined.length === 0 ? (
-          <SettingsRow
-            leading={<SpinnerRing size={SPINNER_SIZE.INLINE} />}
-            label={WORDS.WAITING}
-            description={WORDS.WAITING_HOW}
-          />
+          <SettingsRow leading={<SpinnerRing size={SPINNER_SIZE.INLINE} />} label={WORDS.WAITING} />
         ) : (
           joined.map((host) => (
             <SettingsRow
