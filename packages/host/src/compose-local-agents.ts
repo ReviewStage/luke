@@ -1310,7 +1310,13 @@ export function composeLocalAgents(
                   const claimed = yield* Queue.take(mailbox);
                   yield* deliveryLockOf(agentId)
                     .withPermit(delivered(agentId, claimed, agentScope))
-                    .pipe(Effect.ensuring(Effect.sync(() => void (undelivered -= 1))));
+                    .pipe(
+                      Effect.ensuring(
+                        Effect.sync(() => {
+                          undelivered -= 1;
+                        }),
+                      ),
+                    );
                 }
               }),
             );
