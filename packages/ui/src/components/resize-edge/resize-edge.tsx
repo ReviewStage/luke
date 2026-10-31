@@ -104,14 +104,17 @@ export interface ResizeEdgeOptions {
 
 /** What the edge is drawn with, which `ResizeEdge` spreads on its element. */
 export interface ResizeEdgeHandle {
-  ref: React.RefCallback<HTMLElement>;
+  /** The pane's width as its owner keeps it. */
+  kept: number;
+  /** The pane's own greatest width, which the edge announces where the container leaves it more. */
+  greatest: number | undefined;
+  /** The greatest width the container around `edge` allows the pane now; none where it allows any. */
+  roomOf: (edge: HTMLElement) => number | undefined;
   "data-side": ResizeEdgeSide;
   role: "separator";
   "aria-orientation": "vertical";
   "aria-label": string;
   "aria-valuemin": number;
-  "aria-valuemax": number | undefined;
-  "aria-valuenow": number;
   tabIndex: 0;
   onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
   onDoubleClick: () => void;
@@ -220,27 +223,17 @@ export function useResizeEdge(options: ResizeEdgeOptions): ResizeEdgeHandle {
   const latest = useRef(options);
   const drag = useRef<Drag | undefined>(undefined);
   const release = useRef<(() => void) | undefined>(undefined);
-  const [room, setRoom] = useState<number | undefined>(undefined);
 
   useLayoutEffect(() => {
     latest.current = options;
   });
   useEffect(() => () => release.current?.(), []);
 
-  // The greatest width the container allows, measured again whenever it
-  // resizes, so the separator announces a range its value stands within even
-  // where the pane has no greatest width of its own.
-  const measure = useCallback((edge: HTMLElement | null) => {
-    const container = edge?.parentElement?.parentElement;
-    if (edge == null || container == null) return undefined;
-    const observer = new ResizeObserver(() => {
-      const max = roomFor(edge, latest.current);
-      setRoom(Number.isFinite(max) ? max : undefined);
-    });
-    observer.observe(container);
-    return () => observer.disconnect();
+  // The greatest width the container allows, by the options as they stand, which the edge reads as its container resizes.
+  const roomOf = useCallback((edge: HTMLElement) => {
+    const max = roomFor(edge, latest.current);
+    return Number.isFinite(max) ? max : undefined;
   }, []);
-  const valueMax = room ?? bounds.MAX;
 
   const begin = (event: React.PointerEvent<HTMLElement>, max: number) => {
     const { pointerId } = event;
@@ -280,15 +273,14 @@ export function useResizeEdge(options: ResizeEdgeOptions): ResizeEdgeHandle {
   };
 
   return {
-    ref: measure,
+    kept: width,
+    greatest: bounds.MAX,
+    roomOf,
     "data-side": options.side,
     role: "separator",
     "aria-orientation": "vertical",
     "aria-label": options.label,
     "aria-valuemin": bounds.MIN,
-    "aria-valuemax": valueMax,
-    // The width drawn, which the window may hold narrower than the one kept.
-    "aria-valuenow": Math.min(width, valueMax ?? width),
     tabIndex: 0,
     onPointerDown: (event) => {
       if (event.button !== 0 || drag.current !== undefined) return;
@@ -313,8 +305,31 @@ export function useResizeEdge(options: ResizeEdgeOptions): ResizeEdgeHandle {
  * The edge itself, drawn as the pane's own child from what `useResizeEdge`
  * handed its owner: a strip wider than it looks straddling the pane's
  * border on its side, filled in the accent under the pointer, mid-drag, or
- * on the keyboard (resize-edge.css).
+ * on the keyboard (resize-edge.css). It announces a range its value stands
+ * within even where the pane has no greatest width of its own: the room the
+ * container allows, measured again whenever it resizes. Note that the edge
+ * holds that room rather than its owner, because the container resizes as
+ * every pane beside it lands, and an owner drawn again for the range it
+ * announces draws its whole pane again mid-glide.
  */
 export function ResizeEdge({ edge }: { edge: ResizeEdgeHandle }): React.JSX.Element {
-  return <div className="luke-resize-edge" {...edge} />;
+  const { kept, greatest, roomOf, ...drawn } = edge;
+  const [room, setRoom] = useState<number | undefined>(undefined);
+  const measure = useCallback(
+    (element: HTMLElement | null) => {
+      const container = element?.parentElement?.parentElement;
+      if (element == null || container == null) return undefined;
+      const observer = new ResizeObserver(() => setRoom(roomOf(element)));
+      observer.observe(container);
+      return () => observer.disconnect();
+    },
+    [roomOf],
+  );
+  const valueMax = room ?? greatest;
+  const range = {
+    "aria-valuemax": valueMax,
+    // The width drawn, which the window may hold narrower than the one kept.
+    "aria-valuenow": Math.min(kept, valueMax ?? kept),
+  };
+  return <div ref={measure} className="luke-resize-edge" {...drawn} {...range} />;
 }
