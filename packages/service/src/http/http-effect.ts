@@ -70,6 +70,7 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.TASK_PARENT_CYCLE]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.TASK_PARENT_HELD]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.HOST_PAIRING_HELD]: HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS,
 } as const;
 
@@ -183,6 +184,8 @@ export const HOSTED_REFUSAL = {
   TASK_BLOCK_CYCLE: { error: HOSTED_API_ERROR.TASK_BLOCK_CYCLE },
   /** A parent asked for is the task itself or one of its descendants; nothing was written. */
   TASK_PARENT_CYCLE: { error: HOSTED_API_ERROR.TASK_PARENT_CYCLE },
+  /** A start asked to be the parent of a task that has a parent already, which it never takes the place of; nothing was written. */
+  TASK_PARENT_HELD: { error: HOSTED_API_ERROR.TASK_PARENT_HELD },
   /** The account named too many pairing codes no pending pairing has (`hostPairingHeld`, which names until when); nothing was read or written. */
   HOST_PAIRING_HELD: { error: HOSTED_API_ERROR.HOST_PAIRING_HELD },
 } as const satisfies Record<string, HostedRefusal>;

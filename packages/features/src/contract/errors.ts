@@ -143,5 +143,6 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: {},
   [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: {},
   [HOSTED_API_ERROR.TASK_PARENT_CYCLE]: {},
+  [HOSTED_API_ERROR.TASK_PARENT_HELD]: {},
   [HOSTED_API_ERROR.HOST_PAIRING_HELD]: { data: hostPairingHeldData },
 } as const satisfies Record<HostedApiError, ErrorMapItem>;

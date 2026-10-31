@@ -387,11 +387,20 @@ export type RepositoryCallFailure = (typeof REPOSITORY_CALL_FAILURES)[number];
 
 const repositoryCallFailureSchema = EffectSchema.Literals(REPOSITORY_CALL_FAILURES);
 
-/** Why a start answered no plan: a repository call's reasons, the workspace it was to start in is none of the account's, or the device it named would not take its agents. */
+/** Why a parent write wrote nothing a call's other reasons do not say: the task would descend from itself, the parent works in another repository, or, for a start as a task's parent, that task has a parent already. */
+export const TASK_PARENT_FAILURE = {
+  CYCLE: "parent-cycle",
+  REPOSITORY_DIFFERS: "parent-repository-differs",
+  HELD: "parent-held",
+} as const;
+
+/** Why a start answered no plan: a repository call's reasons, the workspace it was to start in or the task it was to relate to is none of the account's, the device it named would not take its agents, or the relation it named was refused by the tree's rules (`TASK_PARENT_FAILURE`). */
 const START_CALL_FAILURES = [
   ...REPOSITORY_CALL_FAILURES,
   TASK_CALL_FAILURE.NOT_FOUND,
   TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED,
+  TASK_PARENT_FAILURE.REPOSITORY_DIFFERS,
+  TASK_PARENT_FAILURE.HELD,
 ] as const;
 
 export type StartCallFailure = (typeof START_CALL_FAILURES)[number];
@@ -467,12 +476,6 @@ export const tasksBlockAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksBlockAnswer = typeof tasksBlockAnswerSchema.Type;
-
-/** Why a parent write wrote nothing a call's other reasons do not say: the task would descend from itself, or the parent works in another repository. */
-export const TASK_PARENT_FAILURE = {
-  CYCLE: "parent-cycle",
-  REPOSITORY_DIFFERS: "parent-repository-differs",
-} as const;
 
 /** Why a parent write wrote nothing: the service did not answer, a task is not the account's or not of the workspace, or the parent's own reasons. */
 const PARENT_CALL_FAILURES = [
