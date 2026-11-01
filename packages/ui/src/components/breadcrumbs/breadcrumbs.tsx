@@ -5,7 +5,6 @@ import {
   type ReactNode,
   useState,
 } from "react";
-import { cn } from "../../cn.js";
 import { pulseOnPress } from "../../press-pulse.js";
 import {
   Breadcrumb,
@@ -18,7 +17,7 @@ import {
 import { useDisclosure } from "../../use-disclosure.js";
 import { BUTTON_VARIANT } from "../button/button.js";
 import { FoldingButton, type FoldingButtonHint } from "../folding-button/folding-button.js";
-import { dropBelowStart, MENU_DETAIL, Menu, type MenuAction, useMenu } from "../menu/menu.js";
+import { dropBelowStart, Menu, type MenuAction, useMenu } from "../menu/menu.js";
 import {
   ClippedLine,
   ONE_LINE_ELEMENT,
@@ -47,8 +46,7 @@ import { useCrumbFold } from "./crumb-fold.js";
  * Two looks: a bar's path in the caption type, every crumb a quiet pill
  * that narrows by its share, fading out at its end, the current one last of
  * all; and a toolbar's heading, a way back then the page's name in the
- * dialog heading type. A crumb's detail (a task's key) stands whole while its
- * words give way.
+ * dialog heading type.
  *
  * A path gives way on a narrow bar first by folding: one that does not
  * fit whole folds the crumbs at its start into one "…" (`crumb-fold.ts`),
@@ -124,8 +122,6 @@ interface PathCrumb extends CrumbBase {
   readonly icon?: undefined;
   /** A glyph before its words, as a tab names its kind; decoration, since the words say what it is. */
   readonly glyph?: ReactNode;
-  /** Quiet words after its words, kept whole while its words give way (a task's key). */
-  readonly detail?: string | undefined;
   /** The card its hint hangs in the words' place. */
   readonly card?: ReactNode;
   /** Its name for a reader, where its words alone do not say it ("…"). */
@@ -157,7 +153,6 @@ interface WayBackCrumb extends CrumbBase {
   readonly icon: ReactNode;
   readonly onPress: (crumb: HTMLElement) => void;
   readonly glyph?: undefined;
-  readonly detail?: undefined;
   readonly card?: undefined;
   readonly name?: undefined;
   readonly hint?: undefined;
@@ -203,7 +198,6 @@ const LOOK = {
     wordsItem: "",
     separator: "flex-none items-center text-muted-foreground [&>svg]:size-breadcrumb-chevron",
     words: "",
-    link: "",
   },
   [BREADCRUMBS_VARIANT.TITLE]: {
     nav: "text-muted-foreground",
@@ -212,7 +206,6 @@ const LOOK = {
     wordsItem: "min-w-0 flex-initial gap-breadcrumb-gap",
     separator: "flex-none items-center [&>svg]:size-breadcrumb-title-chevron",
     words: "text-dialog font-dialog",
-    link: "",
   },
 } as const;
 
@@ -270,16 +263,14 @@ function CrumbChevron({
   return at === undefined ? null : <Chevron at={at} variant={variant} />;
 }
 
-/** A crumb's face: its glyph, where it wears one, then its words, then its detail. */
+/** A crumb's face: its glyph, where it wears one, then its words. */
 function CrumbFace({
   glyph,
   label,
-  detail,
   end = ONE_LINE_END.FADE,
 }: {
   glyph: ReactNode;
   label: string;
-  detail?: string | undefined;
   end?: OneLineEnd | undefined;
 }): React.JSX.Element {
   return (
@@ -297,11 +288,6 @@ function CrumbFace({
       >
         {label}
       </ClippedLine>
-      {detail === undefined ? null : (
-        <span className="luke-breadcrumb-detail flex-none text-caption font-text text-muted-foreground tabular-nums">
-          {detail}
-        </span>
-      )}
     </>
   );
 }
@@ -332,14 +318,13 @@ function CrumbControl({
   const control =
     onPress === undefined ? (
       <BreadcrumbPage
-        className={cn("flex min-w-0 items-center gap-breadcrumb-gap", LOOK[variant].words)}
+        className={`flex min-w-0 items-center gap-breadcrumb-gap ${LOOK[variant].words}`}
         aria-current={current}
       >
-        <CrumbFace glyph={crumb.glyph} label={label} detail={crumb.detail} end={crumb.end} />
+        <CrumbFace glyph={crumb.glyph} label={label} end={crumb.end} />
       </BreadcrumbPage>
     ) : (
       <BreadcrumbLink
-        className={LOOK[variant].link}
         render={<button type="button" />}
         aria-label={crumb.name}
         aria-current={current}
@@ -347,7 +332,7 @@ function CrumbControl({
         aria-expanded={crumb.popup === undefined ? undefined : crumb.expanded === true}
         onClick={pulseOnPress((event) => onPress(event.currentTarget))}
       >
-        <CrumbFace glyph={crumb.glyph} label={label} detail={crumb.detail} end={crumb.end} />
+        <CrumbFace glyph={crumb.glyph} label={label} end={crumb.end} />
       </BreadcrumbLink>
     );
   return crumb.hint === undefined && crumb.card === undefined ? (
@@ -464,8 +449,6 @@ export function Breadcrumbs({
   const opener = menu.open?.opener;
   const hiddenRows: MenuAction[] = hidden.map((crumb) => ({
     label: crumb.label,
-    detail: crumb.detail,
-    detailPlace: MENU_DETAIL.BESIDE,
     ...(isValidElement(crumb.glyph) ? { icon: crumb.glyph as React.JSX.Element } : {}),
     disabled: crumb.onPress === undefined,
     onSelect: () => {
@@ -474,7 +457,7 @@ export function Breadcrumbs({
   }));
   return (
     <Breadcrumb
-      ref={variant === BREADCRUMBS_VARIANT.TITLE ? undefined : measured}
+      ref={variant === BREADCRUMBS_VARIANT.CAPTION ? measured : undefined}
       className={`luke-breadcrumbs relative min-w-0 flex-initial overflow-clip ${LOOK[variant].nav}`}
       data-variant={variant}
       aria-label={label}

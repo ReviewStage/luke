@@ -49,7 +49,7 @@ import { TaskRelationAsked, type TaskRelationsDoor } from "./task-relation-menu.
 /**
  * task-standing.tsx -- a task's head over its plan: the path to it, then the chips that say and change where it stands, how much it matters, and who is on it.
  *
- * Over the title stands the task's path (`TaskPath`), where the task's head over its column does not name the task already (a phone), a caption-size
+ * Over the title stands the task's path (`TaskPath`), a caption-size
  * `Breadcrumbs`: its repository, the owner's picture and `owner/name`, or
  * Choose a repository while the task has none, which drops the search over
  * every repository the workspace reaches (`repository-chip.tsx`), and which
@@ -335,21 +335,6 @@ function keyCrumb(task: Task, workspaceName: string): Crumb | undefined {
   return { label: taskKey(workspaceName, task.number), current: true, fixed: true };
 }
 
-/** The refusal of the last repository pick, said under the path, or alone where the path is not drawn. */
-function RepositoryRefusal({ note }: { note: string }): React.JSX.Element {
-  return (
-    <FailureNote
-      failure={failureShown({
-        surface: FAILURE_SURFACE.REPOSITORY_PIN,
-        cause: FAILURE_CONDITION.REFUSED,
-        refused: true,
-      })}
-    >
-      {note}
-    </FailureNote>
-  );
-}
-
 /** The path's line: its crumbs, the menu a crumb drops hung from the line's own box, and the refusal of the last pick under it. */
 function PathLine({
   crumbs,
@@ -372,7 +357,17 @@ function PathLine({
         <Breadcrumbs label={PATH_LABEL} crumbs={drawn} />
         {menu}
       </div>
-      {note === undefined ? null : <RepositoryRefusal note={note} />}
+      {note === undefined ? null : (
+        <FailureNote
+          failure={failureShown({
+            surface: FAILURE_SURFACE.REPOSITORY_PIN,
+            cause: FAILURE_CONDITION.REFUSED,
+            refused: true,
+          })}
+        >
+          {note}
+        </FailureNote>
+      )}
     </div>
   );
 }

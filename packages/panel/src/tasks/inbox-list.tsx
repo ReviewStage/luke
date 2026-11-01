@@ -1038,7 +1038,12 @@ function ListHead({
       {head.tab === true ? (
         <PaneBar title={title} actions={options} />
       ) : channel?.archivedAt === undefined ? (
-        <InboxBar title={title} detail={channel?.detail} actions={options} />
+        <Toolbar
+          title={title}
+          detail={channel?.detail}
+          actions={options}
+          end={TOOLBAR_INSET.COLUMN}
+        />
       ) : (
         <ArchivedChannelBar title={title} archivedAt={channel.archivedAt} actions={options} />
       )}
@@ -1052,19 +1057,6 @@ function ListHead({
       )}
     </>
   );
-}
-
-/** The window's Inbox's bar: its name at the bar's head, quiet words after it, and its actions at its end. */
-function InboxBar({
-  title,
-  detail,
-  actions,
-}: {
-  title: string;
-  detail: string | undefined;
-  actions: React.ReactNode;
-}): React.JSX.Element {
-  return <Toolbar title={title} detail={detail} actions={actions} end={TOOLBAR_INSET.COLUMN} />;
 }
 
 /**
@@ -1082,10 +1074,11 @@ function ArchivedChannelBar({
   actions: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <InboxBar
+    <Toolbar
       title={title}
       detail={`Archived ${agoText(archivedAt, useMinute())}`}
       actions={actions}
+      end={TOOLBAR_INSET.COLUMN}
     />
   );
 }

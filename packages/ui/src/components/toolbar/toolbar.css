@@ -24,9 +24,7 @@
      for the window's buttons.
    - `--luke-toolbar-wrap-start` and `--luke-toolbar-wrap-end`, where a tab
      strip's bar stands its edges in a narrow room, which wraps the strip
-     to a row of its own.
-   - `--luke-toolbar-app-region: no-drag`, a bar that is not the window's
-     drag handle, as one standing under a title bar of the window's own. */
+     to a row of its own. */
 
 @layer components {
   /* A bar's height, a row and its hairline, where nothing names the
@@ -59,11 +57,10 @@
     background: var(--luke-toolbar-ground, transparent);
   }
 
-  /* Only the desktop's window is dragged by its bar, unless the window says
-     the bar is not its handle, and what stands on the bar keeps its
-     presses: the actions, and the buttons of a lead. */
+  /* Only the desktop's window is dragged by its bar, and what stands on the
+     bar keeps its presses: the actions, and the buttons of a lead. */
   [data-luke-profile="desktop"] .luke-toolbar {
-    -webkit-app-region: var(--luke-toolbar-app-region, drag);
+    -webkit-app-region: drag;
   }
 
   [data-luke-profile="desktop"] .luke-toolbar-actions {
