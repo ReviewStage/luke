@@ -1283,6 +1283,8 @@ export function useTasksTab(input: {
   const [threadReveal, setThreadReveal] = useState<ThreadReveal | undefined>(undefined);
   /** The asks to show a section made so far, so each is its own even after the last was let go. */
   const sectionAsks = useRef(0);
+  /** The asks to open a comment thread made so far, so each is its own even after the last was let go. */
+  const commentAsks = useRef(0);
   /** The tabs closed in the window, the latest last, which ⇧⌘T opens again (`closed-tabs.ts`). */
   const [closedTabs, setClosedTabs, latestClosedTabs] =
     useStateWithRef<readonly ClosedTab[]>(NO_CLOSED_TABS);
@@ -3076,11 +3078,12 @@ export function useTasksTab(input: {
         return;
       case LINK_PLACE.COMMENT:
         showOverview(place);
-        setCommentReveal((last) => ({
+        commentAsks.current += 1;
+        setCommentReveal({
           planId: place.planId,
           thread: place.threadId,
-          ask: (last?.ask ?? 0) + 1,
-        }));
+          ask: commentAsks.current,
+        });
         return;
       case LINK_PLACE.VERSION:
         openHistory({

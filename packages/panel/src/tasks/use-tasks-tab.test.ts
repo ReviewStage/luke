@@ -1139,10 +1139,13 @@ test("a Luke link to a comment thread asks its task's page for the thread, each 
   act(() => tab.control().onCommentRevealed(1));
   const stale = tab.control().commentReveal;
   act(() => tab.control().onCommentRevealed(2));
+  const taken = tab.control().commentReveal;
+  act(() => tab.control().onOpenLink(link("thread-3")));
 
   assert.deepEqual(first, { planId: TASK.id, thread: "thread-1", ask: 1 });
   assert.equal(stale?.ask, 2, "letting go an older ask leaves the newer one standing");
-  assert.equal(tab.control().commentReveal, undefined);
+  assert.equal(taken, undefined);
+  assert.equal(tab.control().commentReveal?.ask, 3, "an ask after one let go is still its own");
 });
 
 test("a Luke link to a review thread opens its agent's Pull request tab on the view it names and asks the tab to bring the thread into view, each ask its own, let go once taken", async () => {
