@@ -378,6 +378,40 @@ What the barrel holds (`src/index.ts`):
 Each component's design comment, at the top of its `.tsx`, says what it owns
 and what it leaves to its caller.
 
+### Rows on the frame and bars in a sheet
+
+A window's controls stand at two levels, one family drawn two ways. Both
+are `IconButton`s and tabs at a control's height (`--luke-control-height`),
+their glyphs at a control's glyph size (`--luke-control-icon`), lit on hover
+by the same translucent fill (`--luke-color-fill-hover`), so each lights on
+whatever ground it stands on. What tells the levels apart is where they
+stand and how they space, never their size:
+
+| | A row on the frame (pane level) | A bar in a sheet (content level) |
+| --- | --- | --- |
+| What | The window's top row: a pane's tabs (`Tabs` on `TABS_GROUND.FRAME`), the first naming the task, its `+`, ⋯, expand, the side panel's toggle ending the rightmost row, the Inbox's search and item path | What the sheet shows: a file's Back, Forward, path, and acts, an item's own acts (`PaneBar`) |
+| Component | `Toolbar`, `Tabs`, `SearchField` with `SEARCH_FIELD_LOOK.FRAME` | `PaneBar` |
+| Row | A top row's height (`--desktop-bar-height`), no fill, on the frame, the window's handle where nothing is pressed | `--luke-pane-bar-height`, the hover fill, a hairline under it |
+| Spacing | A control's gap (`--luke-control-gap`) between controls; a pair that is one control (Previous and Next) stands touching | The glyphs close (`--luke-space-2`), the bar's groups a control's gap apart |
+| Chosen | Lifted in the sheet's ground beneath it (`--luke-color-ground`), by a hairline and a soft shadow, as the sidebar draws the place standing open | — |
+
+Every row of a pane, on the frame or in its sheet, stands its last control
+on one line: a column's inset (`--column-inset`) in from the sheet's right
+edge. So in each pane the top row's last glyph stands over the sheet's
+bars' last glyph, and the side panel's toggle, ending the rightmost row,
+stands on that line too. A tab row's first tab stands flush with its
+sheet's left edge, or past the traffic lights and the sidebar's toggle
+while the sidebar is folded; a bar in the sheet starts its first control a
+column's inset in. Every control stands on its row's centre line.
+
+A field on the frame takes `SEARCH_FIELD_LOOK.FRAME`, the sheet's own ground,
+because the hover fill a well wears in a sheet all but vanishes on the
+frame's. Editors that split the window into panes draw it the same way: VS
+Code's editor tabs and actions head each group on the workbench's ground
+while the breadcrumbs inside the editor are its content's; Linear's view
+header stands over the view while an issue's own actions stand in its
+pane.
+
 ### Skeletons
 
 A skeleton is a component named `*Skeleton` that draws the surface it stands

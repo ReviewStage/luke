@@ -74,9 +74,11 @@
 import { type ReactNode, useRef } from "react";
 import { NotFoundIcon } from "../../icons/lucide-glyphs.js";
 import { type TitleSeat, useWrapWhenCut } from "../../use-wrap-when-cut.js";
+import { BREADCRUMBS_VARIANT, Breadcrumbs, type Crumb } from "../breadcrumbs/breadcrumbs.js";
 import { EmptyState, type EmptyStateAction } from "../empty-state/empty-state.js";
 import { FILL_ELEMENT, Fill } from "../layout/layout.js";
-import { OneLine } from "../one-line/one-line.js";
+import { ONE_LINE_ELEMENT, OneLine } from "../one-line/one-line.js";
+import { wholeWordsHint } from "../tooltip/hint.js";
 import {
   TOOLBAR_INSET,
   TOOLBAR_LOOK,
@@ -84,7 +86,6 @@ import {
   type ToolbarInset,
   type ToolbarLook,
 } from "./toolbar-frame.js";
-import { said, ToolbarName } from "./toolbar-name.js";
 
 export { TOOLBAR_INSET, TOOLBAR_LOOK, type ToolbarInset, type ToolbarLook };
 
@@ -103,6 +104,9 @@ export type NotFoundThing = (typeof NOT_FOUND_THING)[keyof typeof NOT_FOUND_THIN
 /** The not-found state's title, the same for every thing. */
 const NOT_FOUND_TITLE = "Not found";
 
+/** The name of a trail's landmark. */
+const TRAIL_LABEL = "Path";
+
 /**
  * The bar's parts. Its own row stays in `toolbar.css`, which the window's
  * custom properties, its style query, and a narrow room's wrap restyle, and
@@ -117,6 +121,10 @@ const ACTIONS = "luke-toolbar-actions relative flex flex-none items-center gap-c
 const TAG = "luke-toolbar-tag flex-none";
 /** Quiet words after the title, in the body's type, on one line cut short, fading, before the title is. */
 const DETAIL = "luke-toolbar-detail min-w-0 flex-[0_1000_auto] text-body text-muted-foreground";
+/** The title, in the dialog's type with a title's tracking; its room reaches 6px left of the words, so its own hover fill and field ring, which start there, are not clipped. */
+const TITLE =
+  "luke-toolbar-title m-0 -ml-luke-6 pl-luke-6 text-dialog-size font-dialog tracking-title";
+
 /** Where a bar's heading stands its title on one row: the page's own name, its last words. */
 const HEADING_SEAT: TitleSeat = {
   room: ":scope > .luke-toolbar-heading",
@@ -171,6 +179,70 @@ export interface ToolbarProps {
   readonly wrapHeading?: boolean | undefined;
 }
 
+/** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
+function said(node: ReactNode): boolean {
+  return node !== undefined && node !== null && node !== false && node !== "";
+}
+
+/** The page's name as the bar's heading: words on one line, fading where cut and read whole by the hint; anything else as given. */
+function ToolbarTitle({ title }: { title: ReactNode }): React.JSX.Element {
+  if (typeof title !== "string") return <>{title}</>;
+  return (
+    <OneLine as={ONE_LINE_ELEMENT.H1} hint={wholeWordsHint(title)} className={TITLE}>
+      {title}
+    </OneLine>
+  );
+}
+
+/** A place of the trail as a crumb: the folding way back where it wears a glyph, a quiet pill where it does not. */
+function placeCrumb(place: ToolbarPlace): Crumb {
+  const onPress = () => place.onPress();
+  return place.icon === undefined
+    ? { label: place.label, onPress }
+    : { label: place.label, icon: place.icon, onPress };
+}
+
+/**
+ * The page's trail: the places above it, then its own name last, words that
+ * are no press, said to be the current page. A name that comes and goes
+ * (`shown`, as a document's does once its header has scrolled away) joins
+ * the trail fading in, and is out of it, and a reader's, while it is gone.
+ */
+function ToolbarTrail({
+  trail,
+  title,
+  shown,
+}: {
+  trail: readonly ToolbarPlace[];
+  title: string;
+  shown?: boolean | undefined;
+}): React.JSX.Element {
+  // Note that a name not yet read leaves the places alone, so the way back stands while it loads.
+  const own: Crumb[] = title === "" ? [] : [{ label: title, current: true, shown }];
+  return (
+    <Breadcrumbs
+      label={TRAIL_LABEL}
+      variant={BREADCRUMBS_VARIANT.TITLE}
+      crumbs={[...trail.map(placeCrumb), ...own]}
+    />
+  );
+}
+
+/** The name the bar picks up from a document's header: words on one line, there to fade in and out, hidden from a reader until shown. */
+function ToolbarPickedUp({ pickUp }: { pickUp: ToolbarPickUp }): React.JSX.Element {
+  return (
+    <span
+      className="luke-toolbar-pick-up"
+      data-shown={pickUp.shown ? "true" : "false"}
+      aria-hidden={pickUp.shown ? undefined : "true"}
+    >
+      <OneLine hint={pickUp.shown ? wholeWordsHint(pickUp.name) : undefined} className={TITLE}>
+        {pickUp.name}
+      </OneLine>
+    </span>
+  );
+}
+
 /** A workspace's bar: its lead, its heading (the title and its tag), and its actions, in that order. */
 export function Toolbar({
   lead,
@@ -204,7 +276,15 @@ export function Toolbar({
     >
       {said(lead) ? <div className={LEAD}>{lead}</div> : null}
       <div className="luke-toolbar-heading">
-        <ToolbarName title={title} trail={trail} pickUp={pickUp} />
+        {trail !== undefined && trail.length > 0 && typeof title === "string" && title !== "" ? (
+          <ToolbarTrail trail={trail} title={title} />
+        ) : trail !== undefined && trail.length > 0 && !said(title) && pickUp !== undefined ? (
+          <ToolbarTrail trail={trail} title={pickUp.name} shown={pickUp.shown} />
+        ) : said(title) ? (
+          <ToolbarTitle title={title} />
+        ) : pickUp !== undefined && pickUp.name !== "" ? (
+          <ToolbarPickedUp pickUp={pickUp} />
+        ) : null}
         {said(detail) ? <OneLine className={DETAIL}>{detail}</OneLine> : null}
         {said(tag) ? <span className={TAG}>{tag}</span> : null}
       </div>

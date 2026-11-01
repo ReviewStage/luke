@@ -35,7 +35,6 @@ import {
   confirmClose,
   EXPIRY,
   EXPIRY_ASK,
-  headTitle,
   heardOf,
   hoveredCard,
   INVITES,
@@ -110,9 +109,9 @@ function rowStatus(page: HTMLElement, title: string): string | undefined {
 }
 
 /**
- * The list's head as a reader meets it: the Inbox's name, then each scope
- * its View options offers, the one shown in brackets; the menu is closed
- * again on the scope shown.
+ * The list's head as a reader meets it: each scope its View options
+ * offers, the one shown in brackets; the menu is closed again on the scope
+ * shown.
  */
 function scopes(page: HTMLElement): string[] {
   openViewOptions(page);
@@ -124,7 +123,7 @@ function scopes(page: HTMLElement): string[] {
     each === shown ? `[${each.textContent}]` : (each.textContent ?? ""),
   );
   act(() => shown?.click());
-  return [headTitle(page) ?? "", ...words];
+  return words;
 }
 
 test("the list holds every task's items in one run, the latest changed first, each wearing the attention mark while it needs you, none chosen", async () => {
@@ -331,18 +330,18 @@ test("a plan main says changed is read again, so an item answered on another Mac
   assert.deepEqual(listed(page), everything, "the pointer gone, the list sorts anew");
 
   showScope(page, "Open");
-  assert.deepEqual(scopes(page), ["Inbox", "[Open]", "All"]);
+  assert.deepEqual(scopes(page), ["[Open]", "All"]);
   assert.deepEqual(listed(page), ["▸ *Alert at 80%?"]);
 
   act(() => world.root?.unmount());
   world.root = undefined;
   ({ page } = mount([], { chosen: ON_THRESHOLD }));
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "[Open]", "All"]);
+  assert.deepEqual(scopes(page), ["[Open]", "All"]);
   assert.deepEqual(listed(page), ["▸ *Alert at 80%?"]);
 
   showScope(page, "All");
-  assert.deepEqual(scopes(page), ["Inbox", "Open", "[All]"]);
+  assert.deepEqual(scopes(page), ["Open", "[All]"]);
   assert.deepEqual(listed(page), everything);
 });
 
@@ -415,14 +414,13 @@ test("a fresh profile opens the Inbox on Open addressed to Me, which is Needs yo
   window.localStorage.clear();
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "[Open]", "All"]);
+  assert.deepEqual(scopes(page), ["[Open]", "All"]);
   assert.deepEqual(listed(page), ["▸ Expire after 7 days?", "Alert at 80%?"]);
   openViewOptions(page);
   act(() => viewItem("Addressed to").click());
   assert.equal(viewItem("Me").getAttribute("aria-checked"), "true");
   act(() => viewItem("Me").click());
   showScope(page, "All");
-  assert.equal(headTitle(page), "Inbox");
   assert.deepEqual(listed(page), [
     "How is a failed email retried?",
     "▸ *Expire after 7 days?",
@@ -456,7 +454,7 @@ test("a task done or canceled keeps its items listed and counted as any other's,
     },
   );
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "[Open]", "All"]);
+  assert.deepEqual(scopes(page), ["[Open]", "All"]);
   const rows = listed(page);
   for (const row of ["Alert at 80%?", "Expire after 7 days?", "Quarantine the flaky test?"]) {
     assert.ok(
@@ -509,7 +507,7 @@ test("a tab kept before the scopes opens the Inbox on the scope that lists what 
   world.root = undefined;
   ({ page } = mount());
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "[Open]", "All"]);
+  assert.deepEqual(scopes(page), ["[Open]", "All"]);
 }, 10_000);
 
 test("each row names its task on its first line with its time at that line's end, then its title on a line of its own, then its preview", async () => {
@@ -717,7 +715,6 @@ test("with only settled items, read, Needs you lists no row, the item read still
   assert.deepEqual(listed(page), ["▸ How is a failed email retried?", "Expire after 7 days?"]);
 
   showScope(page, "Open");
-  assert.equal(headTitle(page), "Inbox");
   assert.deepEqual(listed(page), [], "the item read is not listed under a filter leaving it out");
   assert.deepEqual(listEmpty(page), [undefined, "Nothing needs you", "Show all"]);
   assert.equal(emptyStateIn(page, ".inbox-view-items"), null, "the pane says nothing twice");
@@ -734,7 +731,6 @@ test("with only settled items, read, Needs you lists no row, the item read still
   const showAll = page.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button");
   assert.ok(showAll, "the empty state offers Show all");
   act(() => showAll.click());
-  assert.equal(headTitle(page), "Inbox");
   assert.deepEqual(
     columnsShown(page),
     ["list"],
@@ -1574,14 +1570,14 @@ function paneTitle(page: HTMLElement): string | null | undefined {
   return page.querySelector(".inbox-view-items .inbox-subject-title")?.textContent;
 }
 
-test("the list's search stands under the Inbox's head, its name and buttons never giving way, and narrows the list to the items saying every word typed, the item open leaving the list but not the pane; Escape empties it", async () => {
+test("the list's search heads the Inbox's list, its view options ending it and never giving way, and narrows the list to the items saying every word typed, the item open leaving the list but not the pane; Escape empties it", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
-  const title = headTitle(page);
+  // The list's acts end its search row, after the field, whose own clear is the field's.
   const buttons = () =>
-    [...(page.querySelector(".inbox-tasks > .luke-toolbar")?.querySelectorAll("button") ?? [])].map(
-      (each) => each.getAttribute("aria-label"),
-    );
+    [...(page.querySelector(".inbox-tasks .inbox-search")?.querySelectorAll("button") ?? [])]
+      .filter((each) => each.closest(".luke-search-field") === null)
+      .map((each) => each.getAttribute("aria-label"));
   assert.deepEqual(buttons(), ["View options"]);
   const input = page.querySelector<HTMLInputElement>(
     '.inbox-tasks input[aria-label="Search inbox"]',
@@ -1592,8 +1588,7 @@ test("the list's search stands under the Inbox's head, its name and buttons neve
   searchList(page, "on-call");
   assert.deepEqual(listed(page), ["How is a failed email retried?"]);
   assert.equal(paneTitle(page), "Alert at 80%?", "the pane keeps the item open");
-  assert.equal(headTitle(page), title, "the name stands while the search is used");
-  assert.deepEqual(buttons(), ["View options"], "and so do the buttons");
+  assert.deepEqual(buttons(), ["View options"], "the buttons stand while the search is used");
 
   searchList(page, "zzz");
   assert.deepEqual(listed(page), []);

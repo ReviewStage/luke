@@ -218,12 +218,17 @@ body,
   --title-bar-ground: transparent;
 }
 
-/* Where the side panel's toggle stands in from the window's right edge: at
-   the sheets' own edge, so it ends on one line with the panel's sheet below
-   it, or the page's while the panel is shut. Only a page with tabs draws
-   the toggle. */
+/* Where the side panel's toggle stands in from the window's right edge: a
+   column's inset in from the sheets' own edge, so it ends on one line with
+   the last control of the rows of the sheet below it, the panel's while it
+   stands and the page's while it is shut (@luke/ui's README, "Rows on the
+   frame and bars in a sheet"). Only a page with tabs draws the toggle. */
 .desktop-shell {
   --panel-toggle-right: var(--sheet-gap);
+}
+
+:where(:root):not([data-luke-room="narrow"]) .desktop-shell {
+  --panel-toggle-right: calc(var(--sheet-gap) + var(--column-inset));
 }
 
 .title-bar-controls[data-edge="end"] {
@@ -492,14 +497,10 @@ body,
 }
 
 /* With the panel beside it, the toolbar ends at the panel's edge rather than
-   the window's, and the panel's own row leaves the toggle its room. On the
-   frame its last control ends on one line with its sheet's edge below. */
+   the window's, a column's inset in from its sheet's edge, where the
+   sheet's own bars end, and the panel's own row leaves the toggle its room. */
 .desktop-shell .desktop-task[data-panel-open="true"] {
   --luke-toolbar-end-at: var(--column-inset);
-}
-
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell .desktop-task[data-panel-open="true"] {
-  --luke-toolbar-end-at: 0px;
 }
 
 /* On the frame the plan's first tab starts on one line with its sheet's
