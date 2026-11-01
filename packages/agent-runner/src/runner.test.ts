@@ -1268,8 +1268,27 @@ it.effect(
     }),
 );
 
-/** The sandbox's processes while the agent waits: the sandbox's init, the runner, the CLI it spawned, and the CLI's own command-sandbox bridge (a `socat`), nothing of the agent's beside them. */
+/** Luke's browser, which the agent opened earlier in the turn: Xvfb and Chromium each leading a session of their own, a renderer in Chromium's. */
+const LUKE_BROWSER: readonly FakeProcess[] = [
+  { pid: 300, parent: 1, emptied: true, argv: ["Xvfb", ":77", "-screen", "0", "1280x800x24"] },
+  {
+    pid: 310,
+    parent: 1,
+    emptied: true,
+    argv: ["/usr/local/chromium/chrome", "--remote-debugging-port=9333", "about:blank"],
+  },
+  {
+    pid: 311,
+    parent: 310,
+    emptied: true,
+    session: 310,
+    argv: ["/usr/local/chromium/chrome", "--type=renderer"],
+  },
+];
+
+/** The sandbox's processes while the agent waits: the sandbox's init, the runner, the CLI it spawned, the CLI's own command-sandbox bridge (a `socat`), and Luke's browser, nothing of the agent's beside them. */
 const WAITING_PROCESSES: readonly FakeProcess[] = [
+  ...LUKE_BROWSER,
   { pid: 1, parent: 0, emptied: false },
   { pid: RUNNER_PID, parent: 1, emptied: true },
   { pid: RUNNER_PID + 1, parent: RUNNER_PID, emptied: true },
@@ -1292,6 +1311,14 @@ const AGENT_SOCAT: FakeProcess = {
   parent: RUNNER_PID + 1,
   emptied: true,
   argv: ["socat", "TCP-LISTEN:5432,fork", "UNIX-CONNECT:/tmp/db.sock"],
+};
+
+/** A Chromium of the agent's own, leading its session on another port. */
+const AGENT_CHROMIUM: FakeProcess = {
+  pid: 4444,
+  parent: 1,
+  emptied: true,
+  argv: ["/usr/local/chromium/chrome", "--remote-debugging-port=9222", "--headless"],
 };
 
 /** When the recorded wakeup's one-shot schedule, `17 12 21 10 *`, next comes due from the test clock's start, in local time. */
@@ -1324,6 +1351,7 @@ it.effect(
 it.effect.each([
   ["a dev server", DEV_SERVER],
   ["a socat of its own", AGENT_SOCAT],
+  ["a Chromium of its own", AGENT_CHROMIUM],
 ] as const)(
   "holds a wait while %s the agent started runs, and releases it once that process ends",
   ([, process]) =>

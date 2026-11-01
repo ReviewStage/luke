@@ -51,7 +51,9 @@
  * shown, and a viewport moves it on only where it resizes the view, since
  * an older panel sends the same size again whether shown or not. The
  * socket closes as idle once the panel has sent nothing that counts for the
- * idle bound, and the sweep stops the sandbox once the lease lapses. While
+ * idle bound, or nothing but that it is watching for `INPUT_IDLE`, since a
+ * pane left shown on a window nobody uses says it is watching for good;
+ * the sweep stops the sandbox once the lease lapses. While
  * the browser is reached, the connection also keeps the sandbox alive past
  * its short timeout every keep-alive interval
  * (`CODER.SANDBOX_KEEP_ALIVE_EVERY`, `agents/sandbox-keep-alive.ts`), so a
@@ -344,11 +346,16 @@ function commandOf(
   return { command: { method: CDP_METHOD.MOUSE, params }, move };
 }
 
-/** Ends once the panel has sent nothing that counts as watching for the idle bound. */
-function idleWatch(lastActive: Ref.Ref<number>): Effect.Effect<LiveEnd> {
+/** Ends once the panel has sent nothing that counts as watching for the idle bound, or no input for the input bound. */
+function idleWatch(view: LiveView): Effect.Effect<LiveEnd> {
   const activeLately = Effect.gen(function* () {
-    const since = (yield* Clock.currentTimeMillis) - (yield* Ref.get(lastActive));
-    return since < Duration.toMillis(BROWSER_LIVE_BOUNDS.IDLE);
+    const now = yield* Clock.currentTimeMillis;
+    const watched = now - (yield* Ref.get(view.lastActive));
+    const touched = now - (yield* Ref.get(view.lastInput));
+    return (
+      watched < Duration.toMillis(BROWSER_LIVE_BOUNDS.IDLE) &&
+      touched < Duration.toMillis(BROWSER_LIVE_BOUNDS.INPUT_IDLE)
+    );
   });
   return Effect.as(
     Effect.repeat(activeLately, {
@@ -383,6 +390,8 @@ interface LiveView {
   /** The browser's target for the tab, read again once the browser is reached, since a fresh start reopens the tab on a new one. */
   readonly targetId: Ref.Ref<string>;
   readonly lastActive: Ref.Ref<number>;
+  /** The instant the member last acted on the view: anything that counts as watching but the panel saying it is. */
+  readonly lastInput: Ref.Ref<number>;
   readonly lastHeld: Ref.Ref<number>;
   readonly lastFrame: Ref.Ref<number | undefined>;
   readonly inputs: Queue.Queue<QueuedInput, Cause.Done>;
@@ -431,6 +440,7 @@ function openView(
       live: yield* Ref.make<LiveTarget | undefined>(undefined),
       targetId: yield* Ref.make(tab.targetId),
       lastActive: yield* Ref.make(startedAt.getTime()),
+      lastInput: yield* Ref.make(startedAt.getTime()),
       lastHeld: yield* Ref.make(startedAt.getTime()),
       lastFrame: yield* Ref.make<number | undefined>(undefined),
       inputs: yield* Queue.make<QueuedInput, Cause.Done>(),
@@ -659,7 +669,9 @@ function resizes(view: LiveView, size: PixelSize): Effect.Effect<boolean> {
  * Note that a viewport counts as someone watching only where it resizes the
  * view, because an older panel sends the same size again every minute to keep
  * the socket open, shown or not, and a pane nobody looks at would hold its
- * sandbox for good; a panel that is shown says so with its own message.
+ * sandbox for good; a panel that is shown says so with its own message,
+ * which alone is no input, since a shown pane says it whether or not anyone
+ * is at the window.
  */
 function onMessage(view: LiveView, message: BrowserLiveClientMessage): Effect.Effect<void> {
   return Effect.gen(function* () {
@@ -667,6 +679,8 @@ function onMessage(view: LiveView, message: BrowserLiveClientMessage): Effect.Ef
     const watching =
       message.type !== BROWSER_LIVE_CLIENT.VIEWPORT || (yield* resizes(view, message));
     if (watching) yield* noteActive(view, at);
+    if (watching && message.type !== BROWSER_LIVE_CLIENT.WATCHING)
+      yield* Ref.set(view.lastInput, at.getTime());
     switch (message.type) {
       case BROWSER_LIVE_CLIENT.TAKE_OVER:
         return yield* takeOver(view, at);
@@ -947,7 +961,7 @@ export function relayBrowserTab(
       readViewer(view),
       watchBrowser(view),
       watchTab(view),
-      idleWatch(view.lastActive),
+      idleWatch(view),
     ]);
     yield* Queue.end(view.inputs);
     if (end === VIEWER_LEFT) return;

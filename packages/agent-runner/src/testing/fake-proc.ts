@@ -15,21 +15,23 @@ const FULL_SET = "000001ffffffffff";
 /** The emptied set the runner and everything under it run with. */
 const EMPTIED = "0000000000000000";
 
-/** One process: its pid, its parent's, whether its bounding set is emptied, and its command line, where one is written. */
+/** One process: its pid, its parent's, whether its bounding set is emptied, its session, its own where none is given, and its command line, where one is written. */
 export interface FakeProcess {
   readonly pid: number;
   readonly parent: number;
   readonly emptied: boolean;
+  readonly session?: number;
   readonly argv?: readonly string[];
 }
 
-function statusFile({ pid, parent, emptied }: FakeProcess): string {
+function statusFile({ pid, parent, emptied, session = pid }: FakeProcess): string {
   return [
     "Name:\tprocess",
     "State:\tS (sleeping)",
     `Pid:\t${pid}`,
     `PPid:\t${parent}`,
     "Uid:\t0\t0\t0\t0",
+    `NSsid:\t${session}`,
     "CapInh:\t0000000000000000",
     "CapPrm:\t0000000000000000",
     "CapEff:\t0000000000000000",

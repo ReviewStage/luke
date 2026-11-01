@@ -18,19 +18,22 @@
  * started detached in a session of its own, so it outlives the command, and
  * waited for until its DevTools answers. Everything it starts runs with
  * every capability dropped (`sandbox-capabilities.ts`), since the pages the
- * browser loads are no one's Luke vouches for. Every value the script reads
+ * browser loads are no one's Luke vouches for, which would make it read as
+ * the agent's own work; it is told apart by its sessions' leaders instead
+ * (`@luke/agent-runner/pins`'s `LUKE_BROWSER_PIN`), so it never holds a
+ * sandbox up through a pause. Every value the script reads
  * is a constant of this module, handed to it as a positional argument.
  */
 
-import { PLAYWRIGHT_PIN } from "@luke/agent-runner/pins";
+import { LUKE_BROWSER_PIN, PLAYWRIGHT_PIN } from "@luke/agent-runner/pins";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 
 export const SANDBOX_BROWSER = {
   /** The browser's DevTools port on the sandbox's loopback: apart from the 9222 an agent's own Chromium would take, and Node's inspector's 9229. */
-  DEVTOOLS_PORT: 9333,
+  DEVTOOLS_PORT: LUKE_BROWSER_PIN.DEVTOOLS_PORT,
   /** The X display the browser draws on: apart from the `:99` an agent's own `xvfb-run -a` takes first. */
-  DISPLAY: 77,
+  DISPLAY: LUKE_BROWSER_PIN.DISPLAY,
   /** The display's and the browser window's size. */
   WIDTH: 1280,
   HEIGHT: 800,
@@ -93,9 +96,9 @@ const START_SCRIPT = [
   `[ -x "$chrome" ] || { echo 'no Chromium in the image' >&2; exit ${BROWSER_START_EXIT.NO_CHROMIUM}; }`,
   // Xvfb by the pid its own lock file names, checked by name, since a resumed sandbox may have handed that pid to another process.
   'xvfb_pid=$(cat "/tmp/.X$display-lock" 2>/dev/null | tr -d " ")',
-  'if [ -z "$xvfb_pid" ] || [ "$(cat "/proc/$xvfb_pid/comm" 2>/dev/null)" != Xvfb ]; then',
+  `if [ -z "$xvfb_pid" ] || [ "$(cat "/proc/$xvfb_pid/comm" 2>/dev/null)" != ${LUKE_BROWSER_PIN.XVFB} ]; then`,
   '  rm -f "/tmp/.X$display-lock" "/tmp/.X11-unix/X$display"',
-  '  setsid Xvfb ":$display" -screen 0 "$width"x"$height"x24 -nolisten tcp >"$state/xvfb.log" 2>&1 </dev/null 9>&- &',
+  `  setsid ${LUKE_BROWSER_PIN.XVFB} ":$display" -screen 0 "$width"x"$height"x24 -nolisten tcp >"$state/xvfb.log" 2>&1 </dev/null 9>&- &`,
   "fi",
   "tries=0",
   `until [ -S "/tmp/.X11-unix/X$display" ]; do`,
