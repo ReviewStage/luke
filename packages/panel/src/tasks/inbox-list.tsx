@@ -1093,8 +1093,8 @@ function ArchivedChannelBar({
   );
 }
 
-/** What a list its search left empty says, under its rows, on the window's Inbox and a task's own alike. */
-export function SearchEmpty({ searched }: { searched: string }): React.JSX.Element {
+/** What a list its search left empty says, under its rows, on the window's Inbox. */
+function SearchEmpty({ searched }: { searched: string }): React.JSX.Element {
   return <NoteLine look={NOTE_LINE_LOOK.ROWS}>{`No items match “${searched.trim()}”.`}</NoteLine>;
 }
 

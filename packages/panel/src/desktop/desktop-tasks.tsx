@@ -44,7 +44,7 @@ import { agentActor, agentName, type SentLine, startsOwnAgents } from "../tasks/
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
-import { taskHolder } from "../tasks/inbox-model.js";
+import { keyedItem } from "../tasks/inbox-model.js";
 import { PlanBody, type SectionLinks, type TitleRename } from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
@@ -79,7 +79,6 @@ import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./m
 import { PhoneBack, PhoneHead, PlaceMore, phoneBar } from "./phone-head.js";
 import { PlanAgents } from "./plan-agents.js";
 import { PlanRelations } from "./plan-relations.js";
-import { type InboxItemAsk, SideInboxTab } from "./side-inbox-tab.js";
 import {
   COLUMN,
   changesTabOf,
@@ -412,9 +411,6 @@ function PlanDocument({
     tab: SidePanelTab | undefined;
     opening: boolean;
   }>();
-  // The Inbox item a call's row asked for, which the task's Inbox opens once it holds it.
-  const [inboxAsk, setInboxAsk] = useState<InboxItemAsk | undefined>(undefined);
-  const inboxAsked = useCallback(() => setInboxAsk(undefined), []);
   const { open: panelOpen, tab: panelTab } = tasks.sidePanel;
   const phone = room === SHELL_ROOM.NARROW;
   useEffect(() => {
@@ -442,13 +438,6 @@ function PlanDocument({
     actOnComment: (params) => act(ACT_KIND.TASKS_COMMENT_ACT, params),
   });
   const openComments = comments?.threads.filter(openThread).length;
-  // A link to one of the task's Inbox items asks its Inbox tab for the item, once per ask.
-  const { inboxItemReveal, onInboxItemRevealed } = tasks;
-  useEffect(() => {
-    if (inboxItemReveal === undefined || inboxItemReveal.planId !== inboxTaskId) return;
-    setInboxAsk({ taskId: inboxItemReveal.planId, itemId: inboxItemReveal.itemId });
-    onInboxItemRevealed(inboxItemReveal.ask);
-  }, [inboxItemReveal, inboxTaskId, onInboxItemRevealed]);
   // A link to a resolved thread opens the task's Comments tab, where it is listed, once per ask.
   const resolvedLinked =
     tasks.commentReveal?.planId === inboxTaskId &&
@@ -488,15 +477,6 @@ function PlanDocument({
     [onOpenAutomations],
   );
   const taskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
-  // What waits in the task's inbox opens its Inbox tab in the side panel
-  // where an item did not wait at the last read (`use-side-panel.ts`). Note
-  // that only a read that answered counts, because a task just opened holds
-  // nothing yet, and nothing would forget what waited there.
-  const waiting = useMemo(() => inbox.board.open.map((item) => item.id), [inbox.board.open]);
-  const { onInboxRead } = tasks.sidePanel;
-  useEffect(() => {
-    if (taskId !== undefined && inbox.read) onInboxRead(taskId, waiting);
-  }, [taskId, inbox.read, waiting, onInboxRead]);
   const rename = useInlineRename(taskId, tasks.onRenameTask);
   // The open task's one rename door, which its toolbar's ⋯, its title's ⋯,
   // and ⌘K all ask. On a phone it opens the head's field; wider, it puts the
@@ -586,9 +566,9 @@ function PlanDocument({
   };
   // The plan's document stands in the column's Overview, so a row that opens it chooses that tab.
   const openOverview = () => openColumnTab(MAIN_TAB.OVERVIEW);
-  // A row that opens the Inbox or the comments, which stand in the side panel,
-  // shows the panel on it and hands it the keys, as a terminal shown does; one
-  // that names the plan's tab of old, as a summary row may, opens Overview.
+  // A row that opens the comments, which stand in the side panel, shows the
+  // panel on them and hands it the keys, as a terminal shown does; one that
+  // names the plan's tab of old, as a summary row may, opens Overview.
   const openPanelTab = (opened: SidePanelTab) => {
     if (opened === SIDE_PANEL_TAB.PLAN) {
       openOverview();
@@ -599,9 +579,9 @@ function PlanDocument({
   };
   // A call's row in a transcript opens what the call is about where the
   // window already draws it: an agent or the plan in this column, the
-  // Inbox in the side panel, the Inbox on the item a call names, posted by
-  // the agent whose row it was (`from`), another task as a link to it opens
-  // (`route.ts`), the rest in the side panel.
+  // window's Inbox narrowed to the task, on the thread a call names where
+  // the task's items hold it, posted by the agent whose row it was (`from`),
+  // another task as a link to it opens (`route.ts`), the rest in the side panel.
   const openPlace = useOpenPlace();
   const openTarget = (target: ToolTarget, from?: string) => {
     switch (target.kind) {
@@ -609,11 +589,17 @@ function PlanDocument({
         return openColumnTab({ agent: target.agent });
       case TOOL_TARGET.PLAN:
         return openOverview();
-      case TOOL_TARGET.INBOX:
-        if (target.key !== undefined && taskId !== undefined) {
-          setInboxAsk({ taskId, key: target.key, agentId: from });
-        }
-        return openPanelTab(SIDE_PANEL_TAB.INBOX);
+      case TOOL_TARGET.INBOX: {
+        if (taskId === undefined) return;
+        const itemId =
+          target.item ??
+          (target.key === undefined ? undefined : keyedItem(inbox.board, target.key, from)?.id);
+        return openPlace?.(
+          itemId === undefined
+            ? { kind: LINK_PLACE.INBOX, planId: taskId }
+            : { kind: LINK_PLACE.INBOX_ITEM, planId: taskId, itemId },
+        );
+      }
       case TOOL_TARGET.PAGE:
         return sidePanel.onPreview({ page: target.page });
       case TOOL_TARGET.TASK:
@@ -1115,31 +1101,6 @@ function PlanDocument({
       />
     </Fill>
   );
-  const inboxBody = (
-    // The pane's plan crumb chooses the plan's tab and its agent crumb the agent's.
-    <SideInboxTab
-      holder={taskHolder(listed)}
-      workspaceId={listed.workspaceId}
-      inbox={inbox}
-      agents={tasks.agents}
-      readerId={tasks.me}
-      // Note that the tab stands in the side panel, so it is on screen while the panel is.
-      shown={tasks.shown && sidePanel.open}
-      ask={inboxAsk?.taskId === listed.id ? inboxAsk : undefined}
-      onAsked={inboxAsked}
-      doors={{
-        onOpenHolder: openOverview,
-        taskCard: taskCardOf(tasks, listed, now),
-        onOpenAgent: (agent) => openColumnTab({ agent }),
-        code: {
-          repository: task.repository,
-          readFile: (window) => act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),
-          // A code card is a link, which opens its file as the panel's preview, as the window's Inbox opens one.
-          onOpenFile: sidePanel.onPreviewFile,
-        },
-      }}
-    />
-  );
   const onListed = (asked: boolean) =>
     setActivityAsked(
       asked ? { taskId: task.id, tab: sidePanel.tab, opening: !sidePanel.open } : undefined,
@@ -1368,11 +1329,6 @@ function PlanDocument({
                         onOpenTarget={openTarget}
                         banner={stranded.banner}
                         task={{ name: task.name, status: listed.status }}
-                        inbox={{
-                          body: inboxBody,
-                          board: inbox.board,
-                          drafted: inbox.drafted,
-                        }}
                         activity={
                           switched
                             ? { listed: activityListed, onListed, onShown: setShownTab }

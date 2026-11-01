@@ -219,13 +219,7 @@ import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, inboxEntries } from "./main-tabs.js";
-import {
-  ADD_SECTION,
-  inboxOffered,
-  offeredPanelKinds,
-  panelOffers,
-  SIDE_PANEL_HOLDER,
-} from "./side-panel.js";
+import { ADD_SECTION, offeredPanelKinds, panelOffers, SIDE_PANEL_HOLDER } from "./side-panel.js";
 import type { AddEntry } from "./strip-tabs.js";
 import { taskOf } from "./task-actions.js";
 import { homeTaskCardOf, TaskRowStatus } from "./task-card.js";
@@ -988,7 +982,7 @@ function agentRows(
   const taskId = tasks.activeTaskId;
   if (taskId === undefined) return [];
   const taskName = tasks.tasks.find((task) => task.id === taskId)?.name;
-  const inbox = inboxEntries(tasks.agents, () => tasks.onShowInboxTab(taskId));
+  const inbox = inboxEntries(tasks.agents, () => tasks.onShowInbox({ taskId }));
   const agents = agentEntries(tasks.mainTabs, tasks.agents).map((entry) => ({
     ...entry,
     onPick: () => tasks.onShowAgent(taskId, entry.row.id),
@@ -1399,12 +1393,7 @@ function panelTabRows(
 ): readonly PaletteRow[] {
   if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsTaskPanel(tasks)) return [];
   const plan = openPlanStanding(tasks);
-  const kinds = offeredPanelKinds(SIDE_PANEL_HOLDER.TASK, {
-    // Note that an item main says waits on the task holds its Inbox with no agent read yet (`use-tasks-tab.ts`'s `inboxHeld`).
-    inbox:
-      inboxOffered(tasks.agents, tasks.sidePanel) ||
-      tasks.listed.inbox.some((waiting) => waiting.taskId === tasks.activeTaskId),
-  });
+  const kinds = offeredPanelKinds(SIDE_PANEL_HOLDER.TASK);
   return kinds.map((tab) => {
     // Note that the row says the kind, Show plan, while its glyph is the Plan tab's, the task's status.
     const { icon } = tabLook({ kind: TAB_KIND.PANEL, tab, plan });

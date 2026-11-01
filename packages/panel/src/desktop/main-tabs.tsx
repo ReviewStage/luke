@@ -402,7 +402,7 @@ export function agentEntries(
  * The task's Inbox as a row: its tray and its name, then what waits on the
  * developer counted at its end in the attention tone the rows it counts
  * wear, and nothing at none. It names no section, so the summary lists it under Tabs, beside the
- * panel's other kinds; picking it opens the side panel's Inbox.
+ * panel's other kinds; picking it opens the window's Inbox narrowed to the task.
  */
 export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
   const row = { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) };
@@ -422,8 +422,7 @@ export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
 /**
  * The task's Inbox as ⌘K offers it, by itself rather than among the task's
  * agents, though only they post to it; none on a task with no agent.
- * Picking it opens the side panel's tab where it was closed and chooses it,
- * through `onPick`.
+ * Picking it opens the window's Inbox narrowed to the task, through `onPick`.
  */
 export function inboxEntries(agents: AgentsControl, onPick: () => void): AddEntry[] {
   // An archived agent's items still stand, so the row stands while the task holds any agent.

@@ -127,6 +127,7 @@ function mount(
   const opened: string[] = [];
   const base = tasksControl();
   const tasks = tasksControl({
+    activeTaskId: AGENT.planId ?? undefined,
     agents: agentsControl({
       agents: [AGENT],
       agentIds: [AGENT.id],

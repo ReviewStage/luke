@@ -83,7 +83,6 @@ import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
-import { DraftMark } from "../draft-mark.js";
 import { confirmFailure } from "../failure-report.js";
 import { FindScope } from "../find-in-tab.js";
 import { drawnVisibly, focusSeek } from "../focus-seek.js";
@@ -120,7 +119,6 @@ import {
   useCloudBrowserTabs,
 } from "../tasks/cloud-browser-tabs.js";
 import { FileView, type TreeShown } from "../tasks/file-view.js";
-import type { InboxBoardView } from "../tasks/inbox-model.js";
 import {
   MAC_TERMINAL_CLOSE_QUESTION,
   MacTerminalTab,
@@ -318,34 +316,21 @@ const NO_KINDS: readonly FixedSidePanelTab[] = [];
 /** No Terminal tab, as the Inbox's panel draws. */
 const NO_TERMINALS: readonly TerminalStripTab[] = [];
 
-/** An agent's page's one fixed kind: its own Inbox, the plan's and its comments' being a task's alone. */
-const AGENT_KINDS: readonly FixedSidePanelTab[] = [SIDE_PANEL_TAB.INBOX];
-
-/** The fixed kinds each holder's panel offers: a task's every one it draws, never the plan's, which the column's Overview holds. */
+/**
+ * The fixed kinds each holder's panel offers: a task's every one it draws,
+ * never the plan's, which the column's Overview holds, nor the Inbox's,
+ * whose threads open in the window's Inbox; an agent's page none, the
+ * plan's comments being a task's alone.
+ */
 const HOLDER_KINDS = {
   [SIDE_PANEL_HOLDER.TASK]: DRAWN_KINDS,
-  [SIDE_PANEL_HOLDER.AGENT]: AGENT_KINDS,
+  [SIDE_PANEL_HOLDER.AGENT]: NO_KINDS,
   [SIDE_PANEL_HOLDER.INBOX]: NO_KINDS,
 } as const satisfies Record<SidePanelHolder, readonly FixedSidePanelTab[]>;
 
-/**
- * The fixed kinds a holder's panel offers: the Inbox only on a task holding an
- * agent. The panel's "+" and ⌘K both ask here, so neither offers a tab that
- * would open blank.
- */
-export function offeredPanelKinds(
-  holder: SidePanelHolder,
-  drawn: { readonly inbox: boolean },
-): readonly FixedSidePanelTab[] {
-  return HOLDER_KINDS[holder].filter((kind) => kind !== SIDE_PANEL_TAB.INBOX || drawn.inbox);
-}
-
-/** Whether a task's panel offers its Inbox: it holds an agent, an archived one among them, or already holds the tab, since only an agent posts. */
-export function inboxOffered(
-  agents: Pick<AgentsControl, "heldIds">,
-  panel: Pick<SidePanelControl, "tabs">,
-): boolean {
-  return (agents.heldIds?.length ?? 0) > 0 || panel.tabs.includes(SIDE_PANEL_TAB.INBOX);
+/** The fixed kinds a holder's panel offers. The panel's "+" and ⌘K both ask here, so neither offers what the other does not. */
+export function offeredPanelKinds(holder: SidePanelHolder): readonly FixedSidePanelTab[] {
+  return HOLDER_KINDS[holder];
 }
 
 /** Which of a page's two columns holds the window's focus, which ⌘T, ⌘W, and ⌘F answer to: its own, or the side panel beside it. */
@@ -805,7 +790,7 @@ export function panelOffers(input: {
           .map((agent) => ({ agentId: agent.id, agent, owner: ownerOf(agent.id) }));
   return panelEntries({
     panel,
-    kinds: offeredPanelKinds(holder, { inbox: inboxOffered(agents, panel) }),
+    kinds: offeredPanelKinds(holder),
     changes: changesOffers(agents, changes),
     pages: input.pages,
     // Note that a panel that draws no Terminal, the Inbox's among them, offers none.
@@ -916,14 +901,8 @@ function stripTabs(input: {
   plan: PlanStanding | undefined;
   /** The task's id, whose card its Plan tab hangs; none beside an agent's own page. */
   planId: string | undefined;
-  /** How many of the task's inbox items wait on the developer, which its Inbox tab counts. */
-  inboxWaiting: number;
-  /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
-  inboxDrafted: boolean;
   /** Whether the Inbox kind holds a channel's thread, as it does beside the window's Inbox, and is named Thread. */
   thread: boolean;
-  /** The task's Inbox as its board reads, which its tab's card says; none beside anything but a task's page. */
-  inbox: InboxBoardView | undefined;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, held } = input;
   const { copied, onOpenAgent, shownAgent, pagePlace } = input;
@@ -938,20 +917,11 @@ function stripTabs(input: {
     onSelect: () => panel.onChoose(tab),
     onKeep: () => panel.onKeep(tab),
   });
-  // The Inbox counts what waits on the developer after its name, dimmed as a
-  // model's effort is after the model's, so an item posted while the
-  // developer reads elsewhere is seen from any tab, and wears the Draft
-  // pencil at its end while a card's answer waits unsent and another tab is
-  // chosen (`draft-mark.tsx`).
-  const { inboxWaiting, inboxDrafted } = input;
   const fixed = panel.tabs.map((tab) => ({
     tab,
     look: look(tab, {
       ...tabLook({ kind: TAB_KIND.PANEL, tab, plan: input.plan, thread: input.thread }),
-      detail: tab === SIDE_PANEL_TAB.INBOX && inboxWaiting > 0 ? String(inboxWaiting) : undefined,
-      endMark:
-        tab === SIDE_PANEL_TAB.INBOX && inboxDrafted && !chosen(tab) ? <DraftMark /> : undefined,
-      card: hungCard({ kind: TAB_KIND.PANEL, tab, plan: planOf(input), inbox: input.inbox }),
+      card: hungCard({ kind: TAB_KIND.PANEL, tab, plan: planOf(input) }),
     }),
     close: () => panel.onClose(tab),
   }));
@@ -1170,8 +1140,6 @@ function PanelTabs({
   onOpenAgent,
   onCloseMacTerminal,
   shownAgent,
-  inbox,
-  inboxDrafted,
   activity,
   wiring,
   shown,
@@ -1220,10 +1188,6 @@ function PanelTabs({
   onCloseMacTerminal: (tab: MacTerminalStripTab) => void;
   /** The agent whose tab the plan's column shows, whose Changes card follows its run. */
   shownAgent: string | undefined;
-  /** The task's Inbox as its board reads, whose items waiting on the developer its tab counts and its card says; none beside anything but a task's page. */
-  inbox: InboxBoardView | undefined;
-  /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
-  inboxDrafted: boolean;
   /** Where a phone's Activity lists the tabs in the strip's place, how a row's press leaves the list, and where the tab shown is handed on; none where the strip is the way between them. */
   activity?: StripActivity | undefined;
   /** The ids the chosen tab and the panel it shows stand under, so each names the other; none while no panel stands for the tab. */
@@ -1252,11 +1216,8 @@ function PanelTabs({
     pagePlace,
     plan: task,
     planId: holder === SIDE_PANEL_HOLDER.TASK ? taskId : undefined,
-    inboxWaiting: inbox?.waiting.length ?? 0,
-    inboxDrafted,
     // Note that beside the window's Inbox the one Inbox tab is a channel's thread, never a task's Inbox (`use-side-panel.ts`'s `thread`).
     thread: holder === SIDE_PANEL_HOLDER.INBOX,
-    inbox,
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);
   // Note that only a task's panel hands its looks over, since an agent's page holds its panel under the agent's id.
@@ -1814,7 +1775,6 @@ function TabContent({
   cloudBrowsers,
   cloudDrafts,
   plan,
-  inbox,
   transcript,
   onTabActions,
   onRunOnMac,
@@ -1870,15 +1830,13 @@ function TabContent({
   };
   /** The plan's document, drawn by the task's page that holds what it reads (`desktop-tasks.tsx`). */
   plan: React.ReactNode;
-  /** The task's Inbox, drawn by the task's page on the same terms. */
-  inbox: React.ReactNode;
   /** An agent's transcript and composer, drawn by the panel's holder: the Inbox's, beside an item. */
   transcript: ((agentId: string) => React.ReactNode) | undefined;
   /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
   onTabActions: (tab: SidePanelTab, actions: TabActionGroups | undefined) => void;
   /** Runs a branch in an agent's terminal of this Mac in this panel, which every Pull request tab's Run offers: the agent's own, or the head of the pull request `number` names; none where no repository is known or the platform has no Mac terminal. */
   onRunOnMac: ((agentId: string, number?: number) => void) | undefined;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const { act } = useAct();
   const directory = useMemberDirectory();
   if (isTranscriptTab(tab)) return <>{transcript?.(tab.transcript)}</>;
@@ -2050,7 +2008,8 @@ function TabContent({
       // The plan is drawn by the panel itself, mounted across tab switches (`SidePanel`).
       return <>{plan}</>;
     case SIDE_PANEL_TAB.INBOX:
-      return <>{inbox}</>;
+      // The task's Inbox of old stands nowhere, its threads opening in the window's Inbox.
+      return null;
     case SIDE_PANEL_TAB.COMMENTS:
       return (
         <PlanCommentsTab
@@ -2301,7 +2260,6 @@ export function SidePanel({
   plan,
   planMenu,
   task,
-  inbox,
   transcript,
   transcriptDoors,
   activity: taskActivity,
@@ -2349,14 +2307,6 @@ export function SidePanel({
   planMenu?: DocumentMenu | undefined;
   /** The task whose plan that is, whose name and status its Plan tab wears; none beside anything but a task's page. */
   task?: PlanStanding | undefined;
-  /** The task's Inbox, which its Inbox tab shows, its board, whose items waiting on the developer the tab counts and its card says, and whether a card holds a draft, which the tab marks; none elsewhere. */
-  inbox?:
-    | {
-        readonly body: React.ReactNode;
-        readonly board: InboxBoardView | undefined;
-        readonly drafted: boolean;
-      }
-    | undefined;
   /** An agent's transcript and composer, which its transcript tab shows beside the Inbox; none elsewhere, where the agent's column shows them. */
   transcript?: ((agentId: string) => React.ReactNode) | undefined;
   /** What the agent of a transcript's tab opens on its task, which its menu offers; none where no transcript's tab stands. */
@@ -2637,8 +2587,6 @@ export function SidePanel({
           onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
           onCloseMacTerminal={macTerminalClose.close}
           shownAgent={shownAgent}
-          inbox={inbox?.board}
-          inboxDrafted={inbox?.drafted ?? false}
           task={task}
           shown={shown}
           transcriptDoors={transcriptDoors}
@@ -2736,7 +2684,6 @@ export function SidePanel({
                 cloudBrowsers={cloudBrowsers}
                 cloudDrafts={cloudDrafts}
                 plan={plan}
-                inbox={inbox?.body}
                 transcript={transcript}
                 onTabActions={handTabActions}
                 onRunOnMac={macTerminalDoors.onOpenOnMac}

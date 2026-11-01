@@ -1016,17 +1016,22 @@ test("Back's list names a person's page by the name the workspace's members give
 
 test("a tab chosen in the task's column or its side panel by a press is a step of its own, which Back goes back to on that tab", () => {
   const shown: string[] = [];
-  const window = mount(onTabs({ column: AGENT_A, side: SIDE_PANEL_TAB.INBOX, shown }));
+  const notes = { file: "docs/notes.md" };
+  const beside = (column: typeof AGENT_A, side: SidePanelTab) => {
+    const tasks = onTabs({ column, side, shown });
+    return { ...tasks, sidePanel: { ...tasks.sidePanel, strip: [SIDE_PANEL_TAB.COMMENTS, notes] } };
+  };
+  const window = mount(beside(AGENT_A, SIDE_PANEL_TAB.COMMENTS));
   press();
-  window.stand(onTabs({ column: AGENT_B, side: SIDE_PANEL_TAB.INBOX, shown }));
+  window.stand(beside(AGENT_B, SIDE_PANEL_TAB.COMMENTS));
   press();
-  window.stand(onTabs({ column: AGENT_B, side: SIDE_PANEL_TAB.COMMENTS, shown }));
+  window.stand(beside(AGENT_B, notes));
   assert.equal(window.addresses().length, 3, "each tab chosen is a step");
 
   act(() => window.history().onBack());
-  assert.deepEqual(shown, ["column:agent-b", "side:inbox"], "Back shows the panel's tab before");
+  assert.deepEqual(shown, ["column:agent-b", "side:comments"], "Back shows the panel's tab before");
   act(() => window.history().onBack());
-  assert.deepEqual(shown.slice(2), ["column:agent-a", "side:inbox"], "and then the column's");
+  assert.deepEqual(shown.slice(2), ["column:agent-a", "side:comments"], "and then the column's");
   assert.equal(window.history().canGoBack, false);
   assert.equal(window.history().canGoForward, true);
 });

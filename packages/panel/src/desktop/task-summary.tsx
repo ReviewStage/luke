@@ -413,16 +413,16 @@ function withCards(
 /**
  * The rows the summary lists, before their cards: the plan's Inbox leads,
  * counting what waits on the developer, while it holds an item, waiting or
- * settled, or its tab is open, as a panel's kind stands once the plan has
- * used it; then the panel's kinds and what they hold, then the agents.
+ * settled, and opens the window's Inbox narrowed to the plan; then the
+ * panel's kinds and what they hold, then the agents.
  */
 function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: number) {
   const { sidePanel, mainTabs, agents } = tasks;
   const changes = changesOffers(agents, sidePanel.changes);
-  const inboxHolds = inbox.open.length + inbox.settled.length > 0;
+  const taskId = tasks.activeTaskId;
   const inboxRow =
-    inboxHolds || sidePanel.tabs.includes(SIDE_PANEL_TAB.INBOX)
-      ? [inboxEntry(() => sidePanel.onChoose(SIDE_PANEL_TAB.INBOX), inbox.waiting.length)]
+    taskId !== undefined && inbox.open.length + inbox.settled.length > 0
+      ? [inboxEntry(() => tasks.onShowInbox({ taskId }), inbox.waiting.length)]
       : [];
   // The task's comments stand in Tabs while any thread is open, counting them, or while their tab was used.
   const commented = openComments !== undefined && openComments > 0;
@@ -441,10 +441,8 @@ function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: 
     ...commentsRow,
     ...panelEntries({
       panel: sidePanel,
-      // The Inbox and Comments stand above, each with its count.
-      kinds: sidePanel.used.filter(
-        (kind) => kind !== SIDE_PANEL_TAB.COMMENTS && kind !== SIDE_PANEL_TAB.INBOX,
-      ),
+      // Comments stand above with their count.
+      kinds: sidePanel.used.filter((kind) => kind !== SIDE_PANEL_TAB.COMMENTS),
       changes,
       pages: tasks.pages ?? [],
       plan: openPlanStanding(tasks),

@@ -13,7 +13,6 @@ import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ellipsized } from "../testing/action-label.js";
-import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
@@ -312,16 +311,6 @@ function onTab(
   };
 }
 
-/** Lays the task's Inbox tab out this wide, as the window would report it resized. */
-function layOutInbox(page: HTMLElement, width: number): void {
-  const inbox =
-    page.querySelector<HTMLElement>("section.inbox-view") ?? assert.fail("the Inbox tab is drawn");
-  vi.spyOn(inbox, "getBoundingClientRect").mockReturnValue(
-    DOMRect.fromRect({ width, height: 800 }),
-  );
-  act(() => relayout());
-}
-
 test("a plan whose repository its workspace cannot reach and another of the account's can names that workspace by its tile and name, and its press moves it there through the move's dialog", async () => {
   const moves: [string, string][] = [];
   const page = openTask(
@@ -356,24 +345,15 @@ test("a plan whose repository its workspace cannot reach and another of the acco
   assert.deepEqual(moves, [[TASK.id, ACME.id]]);
 });
 
-test("a stranded plan's banner stands over every tab of the plan: its Call beside its Inbox too narrow for its list and item side by side, an agent's beside the plan, and over the side panel filling the window", () => {
+test("a stranded plan's banner stands over every tab of the plan: an agent's beside the plan, and over the side panel filling the window", () => {
   const tasks = openTab(TASK, [STUDIO, ACME]);
-  const inboxShown = {
-    open: true,
-    tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
-    strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
-    tab: SIDE_PANEL_TAB.INBOX,
-  };
-  const inbox = openTask(onTab(tasks, undefined, inboxShown));
-  layOutInbox(inbox, 700);
   const agent = openTask(onTab(tasks, AGENT_TAB, { open: true, tab: SIDE_PANEL_TAB.PLAN }));
   const full = openTask(
     onTab(tasks, undefined, { open: true, fullScreen: true, tab: SIDE_PANEL_TAB.PLAN }),
   );
 
-  assert.equal(inbox.querySelector(".inbox-view")?.getAttribute("data-columns"), "list");
   assert.deepEqual(
-    [inbox, agent, full].map((page) => {
+    [agent, full].map((page) => {
       const banner = strandedBanner(page);
       const region = banner?.closest(".desktop-task-main, .side-panel");
       return [
@@ -382,7 +362,6 @@ test("a stranded plan's banner stands over every tab of the plan: its Call besid
       ];
     }),
     [
-      ["This task's repository belongs to AcmeMove to Acme", "desktop-task-main"],
       ["This task's repository belongs to AcmeMove to Acme", "desktop-task-main"],
       ["This task's repository belongs to AcmeMove to Acme", "side-panel"],
     ],

@@ -284,19 +284,6 @@ test("the column's strip leads with the task's Overview, under the document's gl
   assert.ok(!rowLooks(panel).has(TASK.name) && !rowLooks(panel).has("Plan"), "nor a Plan row");
 });
 
-test("the side panel's Inbox tab hangs what waits on the developer, as the plan's summary row does", async () => {
-  const panel = (await mount()).querySelector(".side-panel-tabs");
-  const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
-    (each) => each.querySelector(".luke-tab-label")?.firstChild?.textContent === "Inbox",
-  );
-  assert.ok(tab, "the strip has the Inbox tab");
-  restOn(tab);
-  const card = document.querySelector(".luke-tooltip-card [data-inbox-card]");
-  assert.ok(card, "the Inbox's card is hung");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Inbox");
-  assert.ok(card.querySelector(".luke-hover-card-corner")?.textContent, "it says how many wait");
-});
-
 test("a link to an agent's pull request in the plan hangs the card its Pull request tab hangs, whatever it is called", async () => {
   const url = "https://github.com/acme/relay/pull/42";
   const container = await mount({
