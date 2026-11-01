@@ -149,7 +149,6 @@ export type SummaryMode = (typeof SUMMARY_MODE)[keyof typeof SUMMARY_MODE];
 /** What hung the card, which takes the focus back when Escape or its chevron takes the card down. */
 const CARD_FROM = {
   TOOLBAR: "toolbar",
-  RAIL: "rail",
 } as const;
 
 type CardFrom = (typeof CARD_FROM)[keyof typeof CARD_FROM];
@@ -226,8 +225,6 @@ export interface SummaryLayout {
   card: CardFrom | undefined;
   /** The toolbar's button: the card while it hangs, else the pin where the summary fits, else the card. */
   onToggle: () => void;
-  /** The rail's chevron, which does what the toolbar's button does. */
-  onExpand: () => void;
   onDismiss: () => void;
 }
 
@@ -287,7 +284,6 @@ export function useSummaryLayout(
     wide,
     card,
     onToggle: () => expand(CARD_FROM.TOOLBAR),
-    onExpand: () => expand(CARD_FROM.RAIL),
     onDismiss,
   };
 }
@@ -795,43 +791,6 @@ function SummaryCard({
   );
 }
 
-/**
- * The summary's own chevron at its top right, the one control of the column
- * and the rail, so a press on it keeps the focus as the summary turns. On
- * the rail it expands the summary as the toolbar's button does; pinned it
- * collapses the summary to the rail as that button does, kept as its press
- * is, drawn while the pointer or the keys are on the summary, on the very
- * spot of the rail's own, so the pointer that pinned it collapses it again
- * without moving.
- */
-function SummaryChevron({
-  layout,
-  cardId,
-}: {
-  layout: SummaryLayout;
-  cardId: string;
-}): React.JSX.Element {
-  const pinned = layout.mode === SUMMARY_MODE.COLUMN;
-  const label = pinned ? "Collapse summary" : "Expand summary";
-  const hangs = !pinned && !(layout.wide && layout.card === undefined);
-  // Note that the box carries the opener's mark, which the shared button takes no attribute for.
-  return (
-    <span
-      className="task-summary-chevron"
-      data-summary-opener={pinned ? undefined : CARD_FROM.RAIL}
-    >
-      <Tooltip label={label}>
-        <IconButton
-          icon={pinned ? <ChevronsRightIcon /> : <ChevronsLeftIcon />}
-          label={label}
-          {...(hangs ? cardControl(layout, cardId) : {})}
-          onClick={pinned ? layout.onToggle : layout.onExpand}
-        />
-      </Tooltip>
-    </span>
-  );
-}
-
 /** The summary's room beside the column, as wide as its mode stands it; its words left out where it only keeps that room. */
 function SummaryRoom({
   mode,
@@ -907,8 +866,6 @@ export function TaskSummary({
     <>
       {layout.mode === SUMMARY_MODE.NONE ? null : (
         <SummaryRoom mode={layout.mode}>
-          {/* Note that the chevron stands outside what scrolls, at one place in both modes, so its press keeps the focus as the summary turns and the fade never reaches it. */}
-          <SummaryChevron layout={layout} cardId={cardId} />
           <ScrollArea fade={SCROLL_FADE.BOTH}>
             <div
               className={cn(
