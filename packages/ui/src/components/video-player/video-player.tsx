@@ -118,10 +118,11 @@ export function isVideoDataUrl(dataUrl: string): boolean {
 
 /**
  * The `blob:` address a video's `data:` URL plays from, made from its bytes
- * here and let go of as the player goes: neither window's policy lets media
- * load from a `data:` address, nor fetch one, where both allow `blob:`.
+ * here and let go of as what draws it goes, the player or a thumb's still:
+ * neither window's policy lets media load from a `data:` address, nor fetch
+ * one, where both allow `blob:`.
  */
-function useBlobUrl(dataUrl: string): string | undefined {
+export function useBlobUrl(dataUrl: string): string | undefined {
   const [url, setUrl] = useState<string>();
   useEffect(() => {
     const binary = atob(dataUrl.slice(dataUrl.indexOf(",") + 1));

@@ -2335,9 +2335,10 @@ svg.lucide {
 /* Pictures standing alone in a paragraph of words drawn as a document
    (transcript-blocks.tsx's `PictureRowElement`, as an Inbox item's are): side
    by side, sharing the column's width, so a before and an after read as a
-   pair; each still hugs its own picture, and none grows past its own size. */
+   pair, and wrapping where more would leave each too narrow for a video's
+   bar (`grid-cols-picture-row`); each still hugs its own picture, and none
+   grows past its own size. */
 .transcript-pictures > .picture-block {
-  flex: 1 1 0;
   min-width: 0;
   margin: 0;
 }

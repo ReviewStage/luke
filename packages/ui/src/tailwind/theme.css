@@ -1190,6 +1190,13 @@
   --text-picture-caption--line-height: 1.45;
   --spacing-picture-describe: min(360px, 100%); /* off-scale: a description's field */
   --spacing-picture-glyph: 0.95em;
+  /* Pictures written side by side (`@luke/panel`'s `transcript-pictures`):
+     as many to a row as keep each wide enough for a video's bar, the rest
+     wrapping under them, a row of few sharing the column's width. */
+  --grid-template-columns-picture-row: repeat(
+    auto-fit,
+    minmax(min(220px, 100%), 1fr)
+  ); /* off-scale: a video's bar, its play, time, scrubber, Expand, and Full screen */
   /* The plan's comments (`plan-comments.tsx`): the margin past the column
      its cards stand in at their own width, a reply's line set in under the
      name past the writer's mark, and the quote's edge, struck where its

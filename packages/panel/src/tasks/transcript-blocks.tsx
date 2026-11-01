@@ -678,9 +678,11 @@ function LoneLinkElement({
 
 /** A document's paragraph of pictures alone: the pictures side by side, sharing its width. */
 function PictureRowElement({ children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
-  // Side by side, sharing the column's width, so a before and an after read as a pair; each still hugs its own picture, and none grows past its own size (tasks.css).
+  // Side by side, sharing the column's width, so a before and an after read as a pair, and wrapping where more would leave each too narrow; each still hugs its own picture, and none grows past its own size (tasks.css).
   return (
-    <div className={`${PICTURE_ROW_ELEMENT.CLASS} my-block-gap flex items-start gap-block-gap`}>
+    <div
+      className={`${PICTURE_ROW_ELEMENT.CLASS} my-block-gap grid grid-cols-picture-row items-start gap-block-gap`}
+    >
       {children}
     </div>
   );

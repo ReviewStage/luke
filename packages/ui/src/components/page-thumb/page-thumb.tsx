@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from "react";
 import { AspectRatio } from "../../shadcn/aspect-ratio.js";
+import { useBlobUrl } from "../video-player/video-player.js";
 
 /**
  * page-thumb.tsx -- a small, inert preview of a page or a picture in a frame of a page's shape.
@@ -9,9 +10,11 @@ import { AspectRatio } from "../../shadcn/aspect-ratio.js";
  * has landed. A page (`frame`) is laid out four times the thumb's width, a
  * desktop window's, and scaled down by as much, fading in once loaded; the
  * frame takes no pointer, no focus, and no part in what is read aloud, and is
- * left out of the screen recording. A picture (`image`) fills it, and a
- * `glyph` stands in the middle where what it showed is gone. A thumb with
- * none of the three is the ground alone. What loaded is kept by its address,
+ * left out of the screen recording. A picture (`image`) fills it, as a
+ * video's first frame does (`video`), still, from a `blob:` address made of
+ * its bytes as the player plays it (`../video-player/video-player.tsx`), and
+ * a `glyph` stands in the middle where what it showed is gone. A thumb with
+ * none of them is the ground alone. What loaded is kept by its address,
  * so a newer version's frame holds its place again until it loads.
  *
  * It comes as a card's preview, as wide as its container, or as a row's
@@ -46,11 +49,29 @@ export interface PageThumbFrame {
   lazy?: boolean | undefined;
 }
 
-/** A page or a picture, small and inert. */
+/** A video's first frame, still, filling the thumb once its bytes are made an address it may load. */
+function VideoStill({ dataUrl }: { dataUrl: string }): React.JSX.Element | null {
+  const url = useBlobUrl(dataUrl);
+  if (url === undefined) return null;
+  return (
+    <video
+      className="luke-page-thumb-image pointer-events-none size-full object-cover"
+      src={url}
+      muted
+      playsInline
+      preload="metadata"
+      tabIndex={-1}
+      aria-hidden="true"
+    />
+  );
+}
+
+/** A page, a picture, or a video's first frame, small and inert. */
 export function PageThumb({
   size = PAGE_THUMB_SIZE.CARD,
   frame,
   image,
+  video,
   glyph,
 }: {
   size?: PageThumbSize;
@@ -58,6 +79,8 @@ export function PageThumb({
   frame?: PageThumbFrame | undefined;
   /** A picture's address, to fill the thumb. */
   image?: string | undefined;
+  /** A video's `data:` URL, whose first frame fills the thumb. */
+  video?: string | undefined;
   /** A glyph standing in the middle where what the thumb showed is gone. */
   glyph?: ReactNode;
 }): React.JSX.Element {
@@ -86,6 +109,7 @@ export function PageThumb({
           draggable={false}
         />
       )}
+      {video === undefined ? null : <VideoStill dataUrl={video} />}
       {frame === undefined ? null : (
         <iframe
           className="luke-page-thumb-frame pointer-events-none absolute top-0 left-0 h-[400%] w-[400%] origin-top-left scale-25 border-0 opacity-0 transition-opacity duration-(--luke-duration-hover) ease-motion-exit group-data-[loaded=true]/page-thumb:opacity-100"

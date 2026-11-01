@@ -2,11 +2,13 @@ import { CheckIcon, ThumbStrip } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
+import { useStandIn } from "./video-player";
 
 /**
  * thumb-strips.tsx -- the strip of previews along a viewer's foot: a
- * message's pictures and a file with none, the one shown ringed, a press on
- * another showing it.
+ * message's pictures, a recording by its first frame once the page has
+ * recorded its stand-in (`video-player.tsx`), and a file with none, the one
+ * shown ringed, a press on another showing it.
  */
 
 /** A picture of one colour, told apart from its neighbours by it. */
@@ -25,9 +27,14 @@ const ITEMS = [
 
 function ThumbStrips(): React.JSX.Element {
   const [at, setAt] = useState(1);
+  const standIn = useStandIn();
+  const items =
+    typeof standIn === "string"
+      ? ITEMS
+      : [...ITEMS, { name: "recording.webm", video: standIn.url }];
   return (
     <CatalogSection id="thumb-strip" title="A viewer's files">
-      <ThumbStrip label="Files" items={ITEMS} at={at} onPick={setAt} />
+      <ThumbStrip label="Files" items={items} at={at} onPick={setAt} />
     </CatalogSection>
   );
 }
