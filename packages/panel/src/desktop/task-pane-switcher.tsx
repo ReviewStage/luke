@@ -16,7 +16,7 @@ import {
   type ToolbarPickUp,
   useMenu,
 } from "@luke/ui";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { AwayStep } from "../navigation-history.js";
 import { isOverviewTab, type MainTab } from "../tasks/use-main-tabs.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
@@ -45,7 +45,10 @@ import { PhoneHead } from "./phone-head.js";
  * and the tab's on one chosen from Activity, as its own ⋯ offers it where a
  * bar stands. The views are the segmented row's alone, a finger's size: the
  * middle one is named for the task's one agent, or counts its agents where
- * it holds several, a press then dropping the list of them to choose from.
+ * it holds several. A press on it drops the list of them, with New agent
+ * after them, as the column's hidden "+" offers it, wherever the press does
+ * not go straight to the one agent: on a task with none or several, or on
+ * the one agent's view pressed again; ⌘T drops the same list.
  */
 
 /** The three views of a task on a phone. */
@@ -98,15 +101,17 @@ function agentsItem(agents: readonly PaneAgent[]): ChoiceItem<TaskPane> {
 
 /**
  * The row of a task's three views under a phone's header; see the module's
- * head. A press on the middle view where the task holds several agents, or
- * on it again while it stands, drops the list of them, the one shown
- * checked, rather than choosing one of them blind.
+ * head. The list the middle view drops checks the agent shown and offers
+ * `starts` after the agents, rather than choosing one of them blind.
  */
 export function TaskPaneBar({
   pane,
   agents,
   shownAgent,
+  starts,
   shown,
+  asked,
+  onAnswered,
   onChoose,
   onChooseAgent,
 }: {
@@ -115,25 +120,38 @@ export function TaskPaneBar({
   agents: readonly PaneAgent[];
   /** The agent whose tab the column shows, which the list checks; none on Overview, a draft, or Activity. */
   shownAgent: string | undefined;
+  /** What the list offers after the agents: New agent, or the agents' read again (`phoneAgentStarts`). */
+  starts: readonly MenuAction[];
   /** Whether the task is on screen, for the list not to outlive it. */
   shown: boolean;
+  /** Whether ⌘T asks for the list, which the column's "+" answers where it stands. */
+  asked: boolean;
+  onAnswered: () => void;
   onChoose: (pane: TaskPane) => void;
   onChooseAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const row = useRef<HTMLDivElement>(null);
   const menu = useMenu(shown);
-  const several = agents.length > 1;
+  const { show } = menu;
   const listAgents = () => {
     const opener = row.current;
-    if (opener !== null) menu.show(dropBelow(opener), opener);
+    if (opener !== null) show(dropBelow(opener), opener);
   };
+  // ⌘T's ask, taken once, drops the list.
+  useEffect(() => {
+    if (!asked) return;
+    onAnswered();
+    const opener = row.current;
+    if (opener !== null) show(dropBelow(opener), opener);
+  }, [asked, onAnswered, show]);
   const choose = (pressed: TaskPane | undefined) => {
     // Note that the view standing pressed again is undefined, as a clearable bar answers it, and chosen again, as Activity's list asks.
     const chosen = pressed ?? pane;
-    const [only] = agents;
-    if (chosen === TASK_PANE.AGENTS && several) listAgents();
-    else if (chosen === TASK_PANE.AGENTS && only !== undefined) onChooseAgent(only.id);
-    else onChoose(chosen);
+    const [only, ...more] = agents;
+    if (chosen !== TASK_PANE.AGENTS) onChoose(chosen);
+    else if (only !== undefined && more.length === 0 && pressed !== undefined) {
+      onChooseAgent(only.id);
+    } else listAgents();
   };
   const agentRows: MenuAction[] = agents.map((agent) => ({
     label: agent.name,
@@ -158,7 +176,12 @@ export function TaskPaneBar({
         stretch
       />
       {menu.drawn === undefined ? null : (
-        <ActionMenu label="Agents" menu={menu.drawn} groups={[agentRows]} onClose={menu.close} />
+        <ActionMenu
+          label="Agents"
+          menu={menu.drawn}
+          groups={[agentRows, starts].filter((group) => group.length > 0)}
+          onClose={menu.close}
+        />
       )}
     </div>
   );

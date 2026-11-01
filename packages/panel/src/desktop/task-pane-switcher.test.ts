@@ -353,14 +353,30 @@ test("on a phone the middle view counts a task's several agents, and a press dro
   const listed = [...document.querySelectorAll<HTMLElement>('[role="menu"] button')];
   assert.deepEqual(
     listed.map((each) => itemWords(each)),
-    [AGENT.title, other.title],
-    "the agents, to pick from",
+    [AGENT.title, other.title, "New agent"],
+    "the agents, to pick from, and New agent after them",
   );
   assert.deepEqual(page.told, [], "nothing is chosen blind");
   const picked = listed[1];
   assert.ok(picked);
   act(() => picked.click());
   assert.deepEqual(page.told, [`column ${JSON.stringify({ agent: other.id })}`]);
+});
+
+test("on a phone a task with no agent offers New agent from its middle view, as the column's hidden + does", () => {
+  const page = mount(SHELL_ROOM.NARROW, false, undefined, false, false, []);
+  assert.deepEqual(page.views(), ["*Overview", "Agents", "Activity"]);
+
+  page.choose("Agents");
+  const offered = [...document.querySelectorAll<HTMLElement>('[role="menu"] button')];
+  assert.deepEqual(
+    offered.map((each) => itemWords(each)),
+    ["New agent"],
+  );
+  const start = offered[0];
+  assert.ok(start);
+  act(() => start.click());
+  assert.deepEqual(page.told, [`column ${JSON.stringify({ draft: "draft" })}`]);
 });
 
 test("on a phone ⌘K's Change repository shows Overview from under the panel, and opens the repository's menu under the plan's path only once the plan is in sight", async () => {
