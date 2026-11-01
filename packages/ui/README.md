@@ -392,9 +392,17 @@ stand and how they space, never their size:
 | What | The window's top row: a pane's tabs (`Tabs` on `TABS_GROUND.FRAME`), the first naming the task, its `+`, ⋯, expand, the side panel's toggle ending the rightmost row, the Inbox's search and item path | What the sheet shows: a file's Back, Forward, path, and acts, an item's own acts (`PaneBar`) |
 | Component | `Toolbar`, `Tabs`, `SearchField` with `SEARCH_FIELD_LOOK.FRAME` | `PaneBar` |
 | Row | A top row's height (`--desktop-bar-height`), no fill, on the frame, the window's handle where nothing is pressed | `--luke-pane-bar-height`, the hover fill, a hairline under it |
-| Edges | The first control on its sheet's left edge, or past the traffic lights and the sidebar's toggle while the sidebar is folded, and the last on its right, the side panel's toggle after it where the row is the rightmost | A column's inset (`--column-inset`) in from the sheet's edges, where the sheet's words start |
 | Spacing | A control's gap (`--luke-control-gap`) between controls; a pair that is one control (Previous and Next) stands touching | The glyphs close (`--luke-space-2`), the bar's groups a control's gap apart |
 | Chosen | The soft fill (`--luke-color-fill-strong`), no outline or shadow | — |
+
+Every row of a pane, on the frame or in its sheet, stands its first and
+last control on the same two lines: a column's inset (`--column-inset`) in
+from the sheet's left and right edges. So in each pane the top row's last
+glyph stands over the sheet's bars' last glyph, and its first control over
+theirs; the side panel's toggle, ending the rightmost row, stands on that
+line too; and a row past the traffic lights and the sidebar's toggle, while
+the sidebar is folded, starts past them instead. Every control stands on
+its row's centre line.
 
 A field on the frame takes `SEARCH_FIELD_LOOK.FRAME`, the sheet's own ground,
 because the hover fill a well wears in a sheet all but vanishes on the

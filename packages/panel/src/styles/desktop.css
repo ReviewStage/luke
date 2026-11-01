@@ -218,12 +218,18 @@ body,
   --title-bar-ground: transparent;
 }
 
-/* Where the side panel's toggle stands in from the window's right edge: at
-   the sheets' own edge, so it ends on one line with the panel's sheet below
-   it, or the page's while the panel is shut. Only a page with tabs draws
-   the toggle. */
+/* Where the side panel's toggle stands in from the window's right edge: a
+   column's inset in from the sheets' own edge, so it ends on one line with
+   the last control of every row of the sheet below it, the panel's while
+   it stands and the page's while it is shut (one inset, `--column-inset`,
+   for every row of a pane: @luke/ui's README, "Rows on the frame and bars
+   in a sheet"). Only a page with tabs draws the toggle. */
 .desktop-shell {
   --panel-toggle-right: var(--sheet-gap);
+}
+
+:where(:root):not([data-luke-room="narrow"]) .desktop-shell {
+  --panel-toggle-right: calc(var(--sheet-gap) + var(--column-inset));
 }
 
 .title-bar-controls[data-edge="end"] {
@@ -492,23 +498,20 @@ body,
 }
 
 /* With the panel beside it, the toolbar ends at the panel's edge rather than
-   the window's, and the panel's own row leaves the toggle its room. On the
-   frame its last control ends on one line with its sheet's edge below. */
+   the window's, a column's inset in from its sheet's edge as every row of
+   the sheet does, and the panel's own row leaves the toggle its room. */
 .desktop-shell .desktop-task[data-panel-open="true"] {
   --luke-toolbar-end-at: var(--column-inset);
 }
 
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell .desktop-task[data-panel-open="true"] {
-  --luke-toolbar-end-at: 0px;
-}
-
-/* On the frame the plan's first tab starts on one line with its sheet's
-   edge below it, as the side panel's does (`.side-panel-bar`); with the
-   sidebar folded it starts past the title bar's buttons, measured from the
-   sheet's edge, a gap in from the window's. A bar further in the column, a
-   task's Inbox tab's, sets its own start. */
+/* On the frame the plan's first tab starts a column's inset in from its
+   sheet's edge below it, where the sheet's own bars start their first
+   control, as the side panel's does (`.side-panel-bar`); with the sidebar
+   folded it starts past the title bar's buttons, measured from the sheet's
+   edge, a gap in from the window's. A bar further in the column, a task's
+   Inbox tab's, sets its own start. */
 :where(:root):not([data-luke-room="narrow"]) .desktop-shell > .desktop-main .desktop-task-main {
-  --luke-toolbar-start-at: 0px;
+  --luke-toolbar-start-at: var(--column-inset);
 }
 
 :where(:root):not([data-luke-room="narrow"])
@@ -1147,25 +1150,14 @@ body,
   --summary-rail-width: calc(var(--luke-control-height) + 2 * var(--column-inset));
 }
 
-.task-summary[data-mode="rail"] > .task-summary-chevron {
-  align-self: center;
-  margin-bottom: calc(var(--luke-list-gap) - var(--luke-focus-ring-reach));
-}
-
 .task-summary[data-mode="rail"] .task-summary-rows {
   align-items: center;
   gap: var(--luke-list-gap);
 }
 
-/* The pinned summary's chevron and the card's stand on the rail's own, and
-   show while the pointer is on the summary, and the pinned one while the keys
-   are in it too. The pinned one stands where the rail's does, over the
-   area's corner as far in as the body's padding, and stays there as the
-   summary scrolls: it takes no room of its own, so the first heading stands
-   level with it, and stands on the summary's ground, so a row scrolled under
-   it never shows through. The card's is in from the card's outer edges as
-   far as the rail's padding, less the card's border. */
-.task-summary[data-mode="column"] > .task-summary-chevron,
+/* The card's chevron shows while the pointer or the keys are on the card,
+   in from the card's outer edges as far as the rail's padding, less the
+   card's border. */
 .task-summary-collapse {
   opacity: 0;
   transition:
@@ -1174,18 +1166,7 @@ body,
     color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
-.task-summary[data-mode="column"] > .task-summary-chevron {
-  --luke-button-ground: var(--luke-color-ground);
-  position: absolute;
-  z-index: 1;
-  top: var(--column-inset);
-  right: var(--column-inset);
-  border-radius: var(--luke-control-radius);
-  background-color: var(--luke-button-ground);
-}
-
-/* Each chevron's box is its button alone, which carries its look. */
-.task-summary-chevron,
+/* The chevron's box is its button alone, which carries its look. */
 .task-summary-collapse {
   display: flex;
 }
@@ -1197,33 +1178,26 @@ body,
   right: calc(var(--column-inset) - 1px);
 }
 
-.task-summary[data-mode="column"]:has(:focus-visible) > .task-summary-chevron,
 .task-summary-collapse:has(:focus-visible) {
   opacity: 1;
 }
 
 @media (hover: hover) {
-  .task-summary[data-mode="column"]:hover > .task-summary-chevron,
   .task-summary-card:hover .task-summary-collapse {
     opacity: 1;
   }
 }
 
-/* A screen with no hover shows both chevrons at rest, since no pointer rests
-   on the summary to bring them and each still takes a press. */
+/* A screen with no hover shows the chevron at rest, since no pointer rests
+   on the card to bring it and it still takes a press. */
 @media (hover: none) {
-  .task-summary[data-mode="column"] > .task-summary-chevron,
   .task-summary-collapse {
     opacity: 1;
   }
 }
 
-/* The first heading stands level with the chevron, so its fold's hover ends
-   short of the chevron rather than running under it. */
-.task-summary[data-mode="column"]
-  .task-summary-body
-  > .task-summary-section:first-of-type
-  .luke-group-header-head,
+/* The card's first heading stands level with its chevron, so its fold's
+   hover ends short of the chevron rather than running under it. */
 .task-summary-card-body > .task-summary-section:first-of-type .luke-group-header-head {
   margin-right: calc(var(--luke-control-height) + var(--luke-tight-gap));
 }
@@ -1349,12 +1323,6 @@ body,
   min-height: var(--desktop-bar-height);
   padding: var(--luke-row-inset) var(--panel-toggle-clearance) var(--luke-row-inset)
     var(--column-inset);
-}
-
-/* On the frame its first tab starts on one line with its sheet's edge
-   below, as the plan's does. */
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell .side-panel-bar {
-  padding-left: 0;
 }
 
 [data-luke-profile="desktop"] .side-panel-bar {

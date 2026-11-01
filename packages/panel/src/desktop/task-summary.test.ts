@@ -104,7 +104,6 @@ const PINNED: SummaryLayout = {
   wide: true,
   card: undefined,
   onToggle: () => undefined,
-  onExpand: () => undefined,
   onDismiss: () => undefined,
 };
 
