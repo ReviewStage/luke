@@ -9,6 +9,7 @@ import {
   issueAddressOf,
   LINK_PLACE,
   type LinkPlace,
+  MENTION_SIGIL,
   pullRequestAddressOf,
   readLink,
 } from "@luke/features/link-grammar";
@@ -1073,7 +1074,7 @@ function datePicked(
   else if (keyed) node.focusAfter();
 }
 
-/** A mention an editor holds, as its node names it: its chip where its target names a mention, and its words where it names none; a date's opens its picker where the editor hands what changes it. */
+/** A mention an editor holds, as its node names it: its chip where its target names a mention, a place's in Luke where it names a place no mention does (an Inbox thread, `linkChip`), and its words where it names neither; a date's opens its picker where the editor hands what changes it. */
 export function MentionNodeChip({
   mention,
   doors,
@@ -1085,7 +1086,10 @@ export function MentionNodeChip({
   edit?: MentionNodeEdit | undefined;
 }): React.JSX.Element {
   const named = decodeMention(mention.target, doors.place.repository);
-  if (named === undefined) return <>{`@${mention.name}`}</>;
+  if (named === undefined) {
+    const written = `${MENTION_SIGIL}${mention.name}`;
+    return linkChip(mention.target, written, doors) ?? <>{written}</>;
+  }
   if (named.kind === MENTION_KIND.DATE) {
     return (
       <DateChip

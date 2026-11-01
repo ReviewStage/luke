@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@luke/features/inbox-wire";
+import { LINK_PLACE, readLink } from "@luke/features/link-grammar";
+import { LIVE_READ } from "@luke/features/live-wire";
 import { decodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
@@ -12,10 +16,11 @@ import { afterEach, test } from "vitest";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { MentionNodeChip } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, type MentionPicker, useMentionPicker } from "./mention-picker.js";
 
 /**
- * mention-picker.test.ts -- the `@` list as the editor's reports drive it: a list closed with Escape, which fades out before it goes; and on a plan, the workspace's other tasks found by their keys.
+ * mention-picker.test.ts -- the `@` list as the editor's reports drive it: a list closed with Escape, which fades out before it goes; and on a plan, the workspace's other tasks found by their keys and its Inbox threads by their titles.
  */
 
 let root: Root | undefined;
@@ -157,23 +162,27 @@ const detailedRows = (page: HTMLElement) =>
       .join(" · "),
   );
 
+/** A workspace the reader owns, as the window lists it. */
+const workspace = (id: string, name: string, slug: string) => ({
+  id,
+  name,
+  slug,
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
+});
+
+/** A task of a workspace, as the window lists it. */
+const task = (id: string, workspaceId: string, number: number, name: string) => ({
+  id,
+  workspaceId,
+  number,
+  name,
+  createdAt: 1,
+  updatedAt: 1,
+  repository: null,
+});
+
 test("on a plan, a task's key typed whole leads the @ list with that task, its key beside it, a pick written as its mention; the plan's own key leads with the plan, and another workspace's tasks are not offered", async () => {
-  const workspace = (id: string, name: string, slug: string) => ({
-    id,
-    name,
-    slug,
-    role: WORKSPACE_ROLE.OWNER,
-    github: null,
-  });
-  const task = (id: string, workspaceId: string, number: number, name: string) => ({
-    id,
-    workspaceId,
-    number,
-    name,
-    createdAt: 1,
-    updatedAt: 1,
-    repository: null,
-  });
   handState(
     {},
     {
@@ -220,4 +229,113 @@ test("on a plan, a task's key typed whole leads the @ list with that task, its k
     kind: MENTION_KIND.TASK,
     taskId: "plan-421",
   });
+});
+
+/** An open Inbox thread an agent posted, changed last at `updatedAt`. */
+const thread = (id: string, title: string, updatedAt: number): InboxItem => ({
+  id,
+  agentId: "agent-1",
+  key: id,
+  revision: 1,
+  version: INBOX_WIRE_VERSION,
+  title,
+  needsReply: false,
+  status: INBOX_STATUS.OPEN,
+  postedAt: 1,
+  updatedAt,
+});
+
+test("on a plan, the workspace's Inbox threads are found by their title, the plan's own first, a pick written as the thread's link and drawn as its chip; another workspace's are not offered", async () => {
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        workspaces: [
+          workspace("workspace-stage", "Stage", "stage"),
+          workspace("workspace-acme", "Acme", "acme"),
+        ],
+        tasks: [
+          task("plan-1", "workspace-stage", 1, "Ship the palette"),
+          task("plan-42", "workspace-stage", 42, "Billing usage alerts"),
+          task("plan-acme", "workspace-acme", 7, "Acme's own task"),
+        ],
+      },
+      [LIVE_READ.INBOX_ITEMS]: {
+        rows: {
+          [INBOX_SCOPE_KIND.PLAN]: {
+            "plan-42": [thread("item-billing", "Keep the meter's old alerts?", 30)],
+            "plan-1": [thread("item-palette", "Keep the palette's margins?", 10)],
+            "plan-acme": [thread("item-acme", "Keep Acme's links?", 50)],
+          },
+          [INBOX_SCOPE_KIND.AGENT]: {},
+        },
+      },
+    },
+  );
+  const chosen: MentionNode[] = [];
+  const { picker, page } = await mountedOnPlan(chosen);
+
+  act(() => picker().onTrigger(word("threads:keep")));
+  assert.deepEqual(detailedRows(page), [
+    "Keep the palette's margins? · Ship the palette",
+    "Keep the meter's old alerts? · Billing usage alerts",
+  ]);
+
+  act(() => {
+    picker().onKey(new KeyboardEvent("keydown", { key: "ArrowDown", cancelable: true }));
+  });
+  act(() => {
+    picker().onKey(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
+  });
+  const [picked] = chosen;
+  assert.ok(picked, "the highlighted thread is written");
+  assert.equal(picked.name, "Keep the meter's old alerts?");
+  assert.deepEqual(readLink(picked.target), {
+    workspace: "stage",
+    place: { kind: LINK_PLACE.INBOX_ITEM, planId: "plan-42", itemId: "item-billing" },
+  });
+
+  // The box draws the thread's link as the thread's chip, not as its words.
+  const box = document.body.appendChild(document.createElement("div"));
+  const boxRoot = createRoot(box);
+  act(() =>
+    boxRoot.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(MentionNodeChip, {
+          mention: picked,
+          doors: {
+            holder: { taskId: "plan-1" },
+            place: { workspace: "stage", repository: null },
+            anchors: new Set<string>(),
+            onOpenTask: () => undefined,
+            onOpenFile: undefined,
+          },
+        }),
+      ),
+    ),
+  );
+  const chip = box.querySelector("[data-mention-ref]");
+  act(() => boxRoot.unmount());
+  assert.ok(chip, "the thread is drawn as a chip");
+  assert.match(chip.textContent ?? "", /Keep the meter's old alerts\?/u);
+});
+
+test("on a plan, an Inbox feed that could not be read is said with Retry, never that no thread matches", async () => {
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        workspaces: [workspace("workspace-stage", "Stage", "stage")],
+        tasks: [task("plan-1", "workspace-stage", 1, "Ship the palette")],
+      },
+      [LIVE_READ.INBOX_ITEMS]: { failed: true },
+    },
+  );
+  const { picker, page } = await mountedOnPlan([]);
+
+  act(() => picker().onTrigger(word("keep")));
+  assert.match(page.textContent ?? "", /Inbox threads could not be read\./u);
 });
