@@ -386,15 +386,23 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
   assert.deepEqual(panel().strip, [{ changes: AGENT }, { file: "src/invites.ts" }]);
 });
 
-test("a panel kept open with no tab to show launches shut, and one kept open on a tab launches open", () => {
-  const kept = { open: true, tabs: ["comments"], width: 400, tasks: {}, pins: [] };
-  window.localStorage.setItem("luke.sidePanel", JSON.stringify(kept));
-  const bare = launch({ task: TASK, taskAgents: [] });
-  assert.equal(bare.control().open, false, "never restored with nothing in it");
+test("a panel kept open launches shown only where the task's strip holds a tab, whatever tab was chosen, and never empty", () => {
+  // Note that the tab chosen as the window quit is kept nowhere here, as a Terminal's is not.
+  const kept = { open: true, tabs: ["comments"], width: 400, pins: [] };
+  const opened = { opened: ["comments"], closed: [], recent: ["comments"], order: ["comments"] };
+  window.localStorage.setItem("luke.sidePanel", JSON.stringify({ ...kept, tasks: {} }));
+  const bare = launch({ task: TASK, taskAgents: [], bare: true });
+  assert.deepEqual(bare.control().strip, []);
+  assert.equal(bare.control().open, false, "with nothing to draw it stands hidden, not empty");
   bare.quit();
 
-  window.localStorage.setItem("luke.sidePanel", JSON.stringify({ ...kept, tab: "comments" }));
-  assert.equal(launch({ task: TASK, taskAgents: [] }).control().open, true);
+  window.localStorage.setItem(
+    "luke.sidePanel",
+    JSON.stringify({ ...kept, tasks: { [TASK]: opened } }),
+  );
+  const held = launch({ task: TASK, taskAgents: [] });
+  assert.equal(held.control().open, true, "a tab the strip holds shows it");
+  assert.equal(held.control().tab, SIDE_PANEL_TAB.COMMENTS);
 });
 
 test("a record kept while the Call and Code stood in the panel reads with their tabs let go from the strip, and the Call's pin let go too", () => {
