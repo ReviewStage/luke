@@ -2226,6 +2226,25 @@ test("Cancelling an invitation asks first, in the accent rather than red, and se
   assert.deepEqual(invitationRows(page), []);
 });
 
+test("each pending invitation's Cancel invitation stands in a group named by its address, so a reader hears which one it cancels", async () => {
+  invitations = ["sam", "ada"].map((name) => ({
+    id: `inv-${name}`,
+    email: `${name}@example.com`,
+    role: WORKSPACE_ROLE.MEMBER,
+    expiresAt: "2026-10-16T12:00:00.000Z",
+    acceptUrl: `https://tryluke.dev/accept-invitation.html?id=inv-${name}`,
+  }));
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+
+  const named = [
+    ...page.querySelectorAll<HTMLButtonElement>('button[aria-label="Cancel invitation"]'),
+  ].map((cancel) => {
+    const group = cancel.closest('[role="group"]');
+    return document.getElementById(group?.getAttribute("aria-labelledby") ?? "")?.textContent;
+  });
+  assert.deepEqual(named, ["sam@example.com", "ada@example.com"]);
+});
+
 test("Cancel invitation, drawn red, sends nothing while an invitation is on its way", async () => {
   invitations = [
     {
