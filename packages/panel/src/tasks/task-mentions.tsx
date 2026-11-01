@@ -1,6 +1,8 @@
 import type { AgentSummary } from "@luke/features/agent-wire";
-import type { MentionPlace } from "@luke/features/mention-link";
+import { type MentionPlace, sectionAnchors } from "@luke/features/mention-link";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { planSections } from "@luke/features/plan-document";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   createContext,
@@ -15,6 +17,7 @@ import {
 import { useAct } from "../act.js";
 import type { LinkDrawer } from "../markdown-message.js";
 import type { MentionNode } from "../plan-editor/contract.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { agentActor, agentName } from "./agent-model.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
 import type { MentionHolder } from "./mention-holder.js";
@@ -45,6 +48,11 @@ import { useOpenTask } from "./use-open-link.js";
  * once one is chosen on its chip (`new-task-composer.tsx`). Each
  * hands the workspace's coding agents too, read as an `@` list opens
  * through `useMentionAgentsReader`, each named by its task.
+ *
+ * The Inbox's box on a thread of a task hands what the task's page does
+ * (`heldTaskMentions`), off that page: the plan's sections as last saved
+ * (`useSavedPlanText`), and the pages, agents, and pull requests the
+ * Inbox holds of the task.
  *
  * The page also carries a mention made elsewhere on it into the agent's
  * message box drawn there: the box drawn now takes it in (`useMentionBox`),
@@ -182,6 +190,109 @@ export function tasklessMentions(
 
 /** The agents of no read. */
 const NO_AGENTS: readonly MentionableAgent[] = [];
+
+/** The agents of a task not read yet. */
+const NO_AGENTS_HELD: readonly AgentSummary[] = [];
+
+/** What a place holds of a task beside its plan's words: the pages agents showed on it, its agents as read, and the reader of the workspace's. */
+interface TaskHolding {
+  readonly pages: readonly MentionablePage[] | undefined;
+  readonly agents: Pick<AgentsControl, "agents" | "archived" | "models" | "pullRequests">;
+  readonly readAgents: MentionAgentsReader | undefined;
+}
+
+/**
+ * The mentions of a task, as its page hands them and the Inbox's box on a
+ * thread of the task does: the plan and its sections, read off `text`, its
+ * saved words; the pages agents showed on it; its standing agents, offered
+ * first; the workspace's, through `readAgents`; and the pull requests its
+ * agents published. Note that while `text` is unread no chip of the
+ * thread is judged against the plan's sections, since none would be found
+ * and each would be drawn gone.
+ */
+export function heldTaskMentions(
+  task: Pick<TaskSummary, "id" | "name" | "repository">,
+  workspace: string,
+  text: string | undefined,
+  { pages, agents, readAgents }: TaskHolding,
+  doors: Pick<MentionDoors, "onOpenTask" | "onOpenFile" | "agentOf" | "pullRequestOf">,
+): TaskMentionsValue {
+  const holder = { taskId: task.id };
+  const { repository } = task;
+  return {
+    holder,
+    taskName: task.name,
+    workspace,
+    repository,
+    text: () => text ?? "",
+    pages,
+    agents: (agents.agents ?? NO_AGENTS_HELD).map((agent) => {
+      const name = agentName(agent, agents.models);
+      return { id: agent.id, name, actor: agentActor(agent, name), summary: agent };
+    }),
+    readAgents,
+    pullRequests: mentionablePullRequests(agents),
+    doors: {
+      ...doors,
+      holder: text === undefined ? undefined : holder,
+      place: { workspace, repository },
+      anchors:
+        text === undefined
+          ? NO_ANCHORS
+          : new Set(sectionAnchors(planSections(text).map((section) => section.heading))),
+    },
+  };
+}
+
+/** The words of a task's plan as last read. */
+interface SavedPlanRead {
+  readonly taskId: string;
+  readonly text: string;
+}
+
+/**
+ * The saved words of a task's plan for a place off its page, as the
+ * Inbox's box on a thread of the task offers its sections: the open plan's
+ * as the window holds them, else its newest revision's, read through the
+ * version history's acts and again once a save moves the task's stamp,
+ * the words last read standing meanwhile; none until first read, or where
+ * the read failed. A plan with no revision yet has no words to offer.
+ */
+export function useSavedPlanText(
+  task: Pick<TaskSummary, "id" | "updatedAt"> | undefined,
+): string | undefined {
+  const { act } = useAct();
+  const opened = useAppSlice(APP_SLICE.TASKS)?.document.task;
+  const openText = task !== undefined && opened?.id === task.id ? opened.document.body : undefined;
+  const [read, setRead] = useState<SavedPlanRead>();
+  const reading = openText === undefined ? task?.id : undefined;
+  const savedAt = task?.updatedAt;
+  useEffect(() => {
+    if (reading === undefined || savedAt === undefined) return;
+    let live = true;
+    act(ACT_KIND.TASKS_REVISIONS, { taskId: reading })
+      .then((page) => {
+        if (!("revisions" in page)) return undefined;
+        const newest = page.revisions[0];
+        if (newest === undefined) return "";
+        return act(ACT_KIND.TASKS_REVISION, { taskId: reading, seq: newest.seq }).then((answer) =>
+          "revision" in answer ? answer.revision.document.body : undefined,
+        );
+      })
+      .then(
+        (text) => {
+          if (live && text !== undefined) setRead({ taskId: reading, text });
+        },
+        // Note that a read refused leaves the words unread, so no chip is judged against sections never read.
+        () => undefined,
+      );
+    return () => {
+      live = false;
+    };
+  }, [act, reading, savedAt]);
+  if (openText !== undefined) return openText;
+  return read !== undefined && read.taskId === task?.id ? read.text : undefined;
+}
 
 /**
  * The task's pull requests as an `@` list offers them: each its agents

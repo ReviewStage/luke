@@ -52,11 +52,13 @@ import { type InboxNewThread, InboxPane, type InboxPaneDoors } from "../tasks/in
 import { useMoveThreadDialog } from "../tasks/move-thread-dialog.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import {
+  heldTaskMentions,
   type TasklessPlace,
   TaskMentions,
   type TaskMentionsValue,
   tasklessMentions,
   useMentionAgentsReader,
+  useSavedPlanText,
 } from "../tasks/task-mentions.js";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
@@ -136,7 +138,10 @@ import { taskCardOf } from "./task-card.js";
  * item stands alone, step through the list (`inbox-pager.tsx`). Everything in it that names a
  * person, an answer and an agent's starter, reads them against the listed
  * workspace's members (`member-directory.tsx`). The chosen item's box
- * mentions what its repository and workspace hold (`answerPlace`), and
+ * mentions what its repository and workspace hold (`answerPlace`), and,
+ * for an item of a task, what the task's page offers besides: its plan
+ * and sections as saved, its pages, its agents, and their pull requests
+ * (`heldTaskMentions`); and
  * its skills are read through its holder and drawn as chips that open
  * their `SKILL.md` in the panel beside it, as a file the item names opens,
  * or on GitHub where the item has no plan whose panel could open it.
@@ -425,12 +430,23 @@ export const DesktopInbox = memo(function DesktopInbox({
   // A file the item's words or box name opens as its code does, in the panel beside the Inbox.
   const openMentionedFile = (path: string, lines: MentionLines | undefined) =>
     openFile(fileRef(path, lines), lines?.commit);
+  // An item of a task offers what the task's page does: its plan and sections as saved, its pages, its agents, and their pull requests.
+  const heldTask = chosen?.holder.kind === INBOX_HOLDER.TASK ? chosen.holder.task : undefined;
+  const planText = useSavedPlanText(heldTask);
   const mentions =
     place === undefined
       ? undefined
-      : tasklessMentions(place, tasks.onShowMention, readMentionAgents, {
-          onOpenFile: openMentionedFile,
-        });
+      : heldTask === undefined
+        ? tasklessMentions(place, tasks.onShowMention, readMentionAgents, {
+            onOpenFile: openMentionedFile,
+          })
+        : heldTaskMentions(
+            heldTask,
+            place.workspace,
+            planText,
+            { pages: view.pages, agents: named, readAgents: readMentionAgents },
+            { onOpenTask: tasks.onShowMention, onOpenFile: openMentionedFile },
+          );
   const drawing = useSidePanelDrawing(sidePanel);
   const views = useTabViews();
   const { onArea, focus } = useColumnFocus();
@@ -779,8 +795,9 @@ function fileRef(path: string, lines: MentionLines | undefined): CodeRef {
  * group's, which agents of other repositories share and which an agent a
  * link reached stands under with none. Its box
  * mentions what that repository and workspace hold, as the page of an
- * agent no plan holds does (`tasklessMentions`), and its skills' files
- * open there. None until both are known.
+ * agent no plan holds does (`tasklessMentions`), or, for an item of a
+ * plan, as the plan's page does (`heldTaskMentions`), and its skills'
+ * files open there. None until both are known.
  */
 function answerPlace(
   chosen: InboxListed,

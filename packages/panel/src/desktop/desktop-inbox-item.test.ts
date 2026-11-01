@@ -26,7 +26,7 @@ import {
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { formatCount } from "@luke/features/number-format";
-import { TASK_STATUS } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_STATUS } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { pasteCutWords } from "@luke/features/words";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
@@ -1133,6 +1133,41 @@ test("in the window's Inbox an @ in an item's box offers its plan's repository's
     sent.map(({ text }) => text),
     [`See ${file}`],
   );
+});
+
+test("in the window's Inbox an @ in the box of a task's item offers that plan's sections, read as last saved", async () => {
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.TASKS_REVISIONS) {
+        const lastEdit = { actor: PLAN_ACTOR.AGENT, at: 2, duringCall: false };
+        const newest = { seq: 2, lastEdit, startedAt: 2, changes: 1 };
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { revisions: [newest] } });
+      }
+      if (request.kind === ACT_KIND.TASKS_REVISION) {
+        const body = "## Thresholds\nAlert at 80%.\n\n## Delivery\nEmail the owner.";
+        return Promise.resolve({
+          status: FAKE_ANSWER.DONE,
+          value: {
+            revision: { seq: 2, document: { body, assumptions: [] }, previous: null },
+          },
+        });
+      }
+      return previous(request);
+    },
+  });
+  const { page } = mount([], { chosen: ON_THRESHOLD });
+  await settle();
+  const pane = itemPane(page);
+
+  typeInComposer(pane, "See @thresh");
+  await settle();
+
+  const offered = [
+    ...pane.querySelectorAll('.mention-menu [aria-label="Plan"] .luke-combobox-option-label'),
+  ].map((name) => name.textContent);
+  assert.deepEqual(offered, ["Thresholds"]);
 });
 
 test("what an item's box said of a dictation that failed stays with that item, and the next item's box opens without it", async () => {
