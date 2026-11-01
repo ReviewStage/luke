@@ -183,7 +183,6 @@ const PANEL_WINDOW = {
     "section-icon-scroll",
     "sidebar-row-age",
     "sidebar-row-repository",
-    "sidebar-row-time",
     "sidebar-slot-start",
     "workspace-ref-lift",
     "workspace-shared-glyph",

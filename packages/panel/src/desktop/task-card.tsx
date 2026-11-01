@@ -90,12 +90,15 @@ import { WorkspaceRef } from "./workspace-ref.js";
  * row whatever the time says and whatever stands before it;
  * each mark at the glyph's size a step before the next, and the sub-tasks'
  * figures a glyph's gap before what follows them, so they never run into
- * it, so they step out with the time while the row is hovered. A long repository is cut
+ * it, so they step out with the time while the row is hovered. The end
+ * keeps no room at rest for the acts that come in on hover, so the row's
+ * name runs to its marks and fades only where they begin, and is cut anew
+ * before the acts as they come (`list-row.css`). A long repository is cut
  * short, so the row's own name keeps its room at the sidebar's least width;
  * the row's card names it whole.
  */
 export const SIDEBAR_ROW_TIME =
-  "sidebar-task-time flex flex-none items-center justify-end min-w-sidebar-row-time text-right text-caption-inline text-muted-foreground tabular-nums [&_.state-glyph]:mr-tight-gap [&_.state-glyph]:[--state-glyph-size:var(--spacing-luke-12)] [&>.actor-mark]:mr-tight-gap [&_.task-agents-mark]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-luke-12 [&_.blocked-mark]:mr-tight-gap [&_.blocked-mark]:size-luke-12 [&_.luke-progress-count]:mr-icon-gap [&>.luke-time]:min-w-sidebar-row-age";
+  "sidebar-task-time flex flex-none items-center justify-end text-right text-caption-inline text-muted-foreground tabular-nums [&_.state-glyph]:mr-tight-gap [&_.state-glyph]:[--state-glyph-size:var(--spacing-luke-12)] [&>.actor-mark]:mr-tight-gap [&_.task-agents-mark]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-luke-12 [&_.blocked-mark]:mr-tight-gap [&_.blocked-mark]:size-luke-12 [&_.luke-progress-count]:mr-icon-gap [&>.luke-time]:min-w-sidebar-row-age";
 
 /** The repository a sidebar row names before its marks (`SIDEBAR_ROW_TIME`). */
 export const SIDEBAR_ROW_REPOSITORY =
