@@ -12,6 +12,15 @@ import { Duration } from "effect";
 export const BROWSER_LIVE_BOUNDS = {
   /** How long a socket stays open past the panel's last message. */
   IDLE: Duration.minutes(5),
+  /**
+   * How long a socket stays open past the member's last input, however
+   * often its panel says it is watching: a window left open on a Browser
+   * tab nobody touches would otherwise hold its agent's sandbox, and the
+   * provisioned memory it bills, until the platform's 24-hour lifetime.
+   * Fifteen minutes, so someone reading a page is rarely cut off, and Watch
+   * again opens a new view, resuming the sandbox, for one who was.
+   */
+  INPUT_IDLE: Duration.minutes(15),
   /** How often the panel's messages move the lease on, so a mouse move is not a write. */
   LEASE_WRITE_EVERY: Duration.minutes(1),
   /** How often a socket asks whether the panel has gone the idle bound silent. */
