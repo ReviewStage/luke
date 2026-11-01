@@ -48,6 +48,9 @@
      drawn, which the app stage carries once the developer has dragged it. */
   --sidebar-width-default: 264px;
   --sidebar-width: var(--sidebar-width-default);
+  /* The widest a narrow room's drawer stands, a phone's drawer's usual
+     width, so a task's name keeps its room beside its time and its ⋯. */
+  --drawer-width-max: 360px;
   /* The title bar's row, where its own buttons stand: the height its middle
      sits at, which every top row is twice as tall as, and where its first
      button starts. With no window chrome beside it (the web profile) the row
@@ -504,8 +507,9 @@
 }
 
 /* A narrow room's sidebar is a drawer: the same float, standing on the
-   window's left edge over the work, never so wide that the work stops showing
-   past it, where a press puts it away (`shell-room.ts`). It stands out of the
+   window's left edge over the work, as wide as a phone's drawer stands
+   rather than the sidebar's dragged width, which a drawer has no edge to
+   drag, but never so wide that the work stops showing past it, where a press puts it away (`shell-room.ts`). It stands out of the
    shell's columns, so the work is the one column left. It clips what runs
    past its top and bottom: standing out of the shell, it is no longer inside
    the shell's clip, and a box it holds that its scroller does not, such as a
@@ -522,9 +526,19 @@
   top: 0;
   bottom: 0;
   left: 0;
-  width: min(var(--sidebar-width), calc(100% - var(--luke-space-48)));
+  width: min(var(--drawer-width-max), calc(100% - var(--luke-space-48)));
   overflow-x: visible;
   overflow-y: clip;
+}
+
+/* A drawer is no window to drag and stands under no title bar's buttons, so
+   it keeps no strip for them: its workspace row stands at its top, level
+   with the work's own bar beside it. */
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell[data-sidebar-collapsed]
+  .desktop-sidebar
+  > .desktop-drag-strip {
+  display: none;
 }
 
 /* A finger swiping the drawer in or out (`@luke/ui`'s `use-drawer-swipe.ts`)
