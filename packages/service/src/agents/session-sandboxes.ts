@@ -52,10 +52,9 @@ import {
 } from "@luke/database/models/session-sandbox-cleanup";
 import { Clock, Context, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
-import { CODER } from "./coder-host/bounds.js";
 import { discardedOrLogged } from "./device-discard.js";
 import { capSandboxTimeout, keepAliveExtension } from "./sandbox-keep-alive.js";
-import { boundSnapshotRetention } from "./sandbox-retention.js";
+import { boundSnapshotRetention, shortenSnapshotRetention } from "./sandbox-retention.js";
 import {
   deploymentOidcToken,
   OPEN_INTERNET_POLICY,
@@ -99,7 +98,8 @@ export interface SessionSandboxesService {
    * Stops every running sandbox tagged with the session, keeping its
    * filesystem for a later resume; answers how many were stopped. Where an
    * expiry is named, the snapshot each stop writes is kept that long after
-   * its last use rather than the bound's, set on the sandbox just before.
+   * its last use rather than the bound's, set on the sandbox just before
+   * where the snapshot it resumes from survives that (`sandbox-retention.ts`).
    */
   readonly stopFor: (
     sessionId: string,
@@ -110,27 +110,6 @@ export interface SessionSandboxesService {
 export class SessionSandboxes extends Context.Service<SessionSandboxes, SessionSandboxesService>()(
   "SessionSandboxes",
 ) {}
-
-/**
- * The sandbox's retention set to keep the snapshot its next stop writes for
- * the expiry given, the bound's count and eviction otherwise. One Vercel did
- * not confirm is logged by its status and the stop goes on, since the stop
- * is what an archive must not miss.
- */
-const expiringSoon = (api: VercelSandboxApi, name: string, expiry: Duration.Duration) =>
-  api
-    .updateRetention(name, {
-      count: CODER.SANDBOX_SNAPSHOTS.count,
-      expiration: Duration.toMillis(expiry),
-      deleteEvicted: CODER.SANDBOX_SNAPSHOTS.deleteEvicted,
-    })
-    .pipe(
-      Effect.catch((failure) =>
-        Effect.logWarning(
-          `a stopped sandbox's snapshot expiry was not shortened: ${failure.message}`,
-        ),
-      ),
-    );
 
 /** A session's sandboxes, deleted or stopped, over the REST calls `vercel-sandbox-api.ts` makes. */
 function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
@@ -170,7 +149,9 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
           if (sandbox.status === undefined || !UP_STATUSES.has(sandbox.status)) continue;
           // One up with no session named cannot be stopped from here, and is no sandbox stopped either.
           if (running === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
-          if (snapshotExpiry !== undefined) yield* expiringSoon(api, sandbox.name, snapshotExpiry);
+          // The stop goes on however the retention ended, since the stop is what an archive must not miss.
+          if (snapshotExpiry !== undefined)
+            yield* shortenSnapshotRetention(api, sandbox, snapshotExpiry);
           // The credential comes off first, as at a launch's end and in the sweeps, because a stopped
           // sandbox keeps its policy and a later resume (a Terminal's among them) would wear it again.
           yield* api.updateNetworkPolicy(running, OPEN_INTERNET_POLICY);
