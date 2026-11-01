@@ -762,13 +762,11 @@
   --spacing-actor-badge: 13px; /* off-scale: a pile face's badge */
   --spacing-actor-badge-glyph: 8px; /* off-scale: the badge's glyph */
   --spacing-actor-overlap: 5px; /* off-scale: how far each face overlaps the one before */
-  /* A sidebar row's end (`task-card.tsx`'s `SIDEBAR_ROW_TIME`): room for
-     two of a row's small acts and a hair, so times line up; its time's own
-     slot, as wide as its longest count, so the marks before it line up; the repository
+  /* A sidebar row's end (`task-card.tsx`'s `SIDEBAR_ROW_TIME`): its time's
+     own slot, as wide as its longest count, so the marks before it line up; the repository
      it names before its marks, cut short past a few words; the attention
      mark's glyph a size under the row's; the empty group's slot past its header's glyph; and the
      offline pill, its height, glyph, tint, and arrival. */
-  --spacing-sidebar-row-time: calc(2 * var(--luke-space-24) + var(--luke-space-2));
   --spacing-sidebar-row-age: 3.5ch; /* off-scale: a time's longest count, "59m", in its tabular figures */
   --spacing-sidebar-row-repository: 7em; /* off-scale: a few words of a repository's name */
   --spacing-sidebar-slot-start: calc(
