@@ -1,3 +1,4 @@
+import { currentShot } from "../shots/shot-profiles";
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
@@ -1837,10 +1838,16 @@ function SidebarColumn({
     shared,
     readerId: tasks.me,
   });
-  const unread = useUnreadTasks(tasks.tasks, {
+  const unreadTasks = useUnreadTasks(tasks.tasks, {
     listRead: tasks.listRead,
     staged: sidebar.staged,
   });
+  // Throwaway: a changelog shot names the tasks it draws unread, which a staged run never marks (`shots/`).
+  const shotUnread = currentShot()?.unreadPlanIds;
+  const unread =
+    shotUnread === undefined
+      ? unreadTasks
+      : (task: TaskSummary) => shotUnread.includes(task.id);
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (taskId: string) => onTasks && !standingIn && taskId === tasks.activeTaskId;

@@ -1,0 +1,7 @@
+/* shots.css -- throwaway: the changelog shots' only styling (`shots/README.md`). */
+
+/* Shot B draws every section's "Edited by" line, which otherwise shows only
+   while the pointer or the keyboard is on its section. */
+html[data-shot-bylines="true"] .plan-unit-byline {
+  opacity: 1;
+}

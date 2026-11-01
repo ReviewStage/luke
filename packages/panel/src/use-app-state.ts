@@ -1,3 +1,4 @@
+import { shotSnapshot } from "./shots/shot-state";
 import { useAtomValue } from "@effect/atom-react/Hooks";
 import {
   type AppStateDelivery,
@@ -171,7 +172,8 @@ function staged(state: AppStateSnapshot): Effect.Effect<AppStateSnapshot> {
 const appStateAtom: Atom.Atom<AsyncResult.AsyncResult<AppStateSnapshot, AppStateUnavailable>> =
   Atom.keepAlive(
     rendererRuntime.atom((get) =>
-      Stream.mapEffect(adopted(readings(get(appStateSourceAtom))), staged),
+      // Throwaway: a changelog shot stages what main would hold (`shots/shot-state.ts`).
+      Stream.map(Stream.mapEffect(adopted(readings(get(appStateSourceAtom))), staged), shotSnapshot),
     ),
   );
 

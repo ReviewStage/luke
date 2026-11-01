@@ -7,6 +7,7 @@
  * window, and the tasks it holds, as they were.
  */
 
+import { shotUpdateFor } from "./shots/shot-state";
 import { ACT_KIND } from "@luke/host/acts";
 import type {
   MicrophoneControl,
@@ -38,7 +39,8 @@ export interface SettingsDoors {
 const SHOWN_UPDATE = Atom.make((get) => {
   const run = get(APP_SLICE.RUN);
   const update = get(APP_SLICE.UPDATE);
-  return run === undefined || update === undefined ? undefined : fixtureUpdate(run, update);
+  // Throwaway: a changelog shot draws no Update pill (`shots/`).
+  return run === undefined || update === undefined ? undefined : shotUpdateFor(run, fixtureUpdate(run, update));
 });
 
 /** The update the window shows, redrawn only as the update or the run moves. */

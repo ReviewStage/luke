@@ -1,3 +1,4 @@
+import { currentShot } from "../shots/shot-profiles";
 import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 import {
   type Chapter,
@@ -706,7 +707,8 @@ function ChaptersReading({
   threads: ChangesThreads;
   lineComments: LineComments | undefined;
 }): React.JSX.Element {
-  const [chosen, setChosen] = useState(0);
+  // Throwaway: a changelog shot opens on the chapter it shows (`shots/`).
+  const [chosen, setChosen] = useState(() => currentShot()?.chapter ?? 0);
   const at = Math.min(chosen, chapters.length - 1);
   const [beside, setBeside] = useState(true);
   const [over, setOver] = useState(false);

@@ -388,7 +388,8 @@ const FIXTURE_TASK_LIST: TasksView = {
 };
 
 /** The open task, its document read. */
-const FIXTURE_OPEN_TASK: TasksView = {
+/** Throwaway: exported for the changelog shots (`shots/`). */
+export const FIXTURE_OPEN_TASK: TasksView = {
   ...FIXTURE_TASK_LIST,
   activeTaskId: FIXTURE_TASK.id,
   document: { status: TASKS_READ.READY, task: FIXTURE_TASK },
@@ -571,7 +572,10 @@ const FIXTURE_DOCUMENT_PANEL: SidePanelState = {
   tab: SIDE_PANEL_TAB.PLAN,
   width: SIDE_PANEL_WIDTH.DEFAULT,
 };
-const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_DOCUMENT_PANEL, open: false };
+/** Throwaway: exported for the changelog shots (`shots/`). */
+export const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_DOCUMENT_PANEL, open: false };
+/** Throwaway: the open panel the changelog shots start from (`shots/`). */
+export const FIXTURE_CODE_PANEL: SidePanelState = FIXTURE_DOCUMENT_PANEL;
 
 /**
  * The tasks a fixture run draws: the list with its first task open under the

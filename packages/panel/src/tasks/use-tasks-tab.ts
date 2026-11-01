@@ -1,3 +1,4 @@
+import { shotSpec } from "../shots/shot-profiles";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
@@ -1124,7 +1125,9 @@ export function useTasksTab(input: {
 
   // A fixture run draws its synthetic tasks in place of the account's,
   // signed out as every fixture run is.
-  const fixture = tasksFixture?.fixtureTasksView(input.run);
+  // Throwaway: a changelog shot draws its own tasks, agents, and history (`shots/`).
+  const shot = shotSpec(input.run);
+  const fixture = shot?.planning ?? tasksFixture?.fixtureTasksView(input.run);
   const viewed = fixture ?? input.tasks;
   const accountSignedIn = input.signedIn;
   // A name, pin, status, priority, or assignee given here, a task's or an
@@ -1390,7 +1393,7 @@ export function useTasksTab(input: {
   );
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const sidePanel = useSidePanel(
-    tasksFixture?.fixtureSidePanel(input.run),
+    shot?.sidePanel ?? tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined
       ? {
           id: inboxTask ?? inboxAgent,
@@ -2079,7 +2082,7 @@ export function useTasksTab(input: {
                 workspaceId === undefined ? {} : { workspaceId },
               ).catch(() => ({ failure: TASK_CALL_FAILURE.UNANSWERED })),
         openGitHub,
-        pictures: fixture === undefined,
+        pictures: fixture === undefined || shot !== undefined,
         scope: workspaceId,
         manages: workspace === undefined || managesWorkspace(workspace),
         ...(workspace === undefined ? undefined : { workspaceName: workspace.name }),
@@ -2883,7 +2886,7 @@ export function useTasksTab(input: {
     isPinnable(tab) &&
     sidePanel.pins.some((pin) => pin.task === viewed.activeTaskId && sameTab(pin.tab, tab));
   useIdleTabs({
-    taskId: fixture === undefined ? viewed.activeTaskId : undefined,
+    taskId: fixture === undefined || shot !== undefined ? viewed.activeTaskId : undefined,
     column:
       agents.agentIds === undefined
         ? undefined
@@ -3025,8 +3028,8 @@ export function useTasksTab(input: {
     resting,
     shown,
     signedIn,
-    // Note that a fixture's invented tasks are nobody's, but those of a profile that signs in its own reader.
-    me: fixture === undefined ? input.accountId : tasksFixture?.fixtureReader(input.run),
+    // Throwaway: a changelog shot may read its task as a member of its own (`shots/`).
+    me: fixture === undefined ? input.accountId : (shot?.readerId ?? tasksFixture?.fixtureReader(input.run)),
     tasks: sidebar,
     listed: {
       tasks: listedSidebar,

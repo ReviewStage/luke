@@ -1,3 +1,4 @@
+import { useShotStaging } from "./shots/use-shot-staging";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
@@ -439,6 +440,18 @@ function AppWindow(): React.JSX.Element {
   // and the sign-in gate draws no sidebar at all. It folds by the room the
   // stage has, which on the desktop is the window's.
   const sidebar = useSidebarCollapse(run?.fixtureMode === true, stage.compact);
+  // Throwaway: lays a changelog shot's window out, once (`shots/use-shot-staging.ts`).
+  useShotStaging(
+    {
+      plans: tasks,
+      sidebar,
+      openSettings: (view) => {
+        changeTab(PANEL_TAB.SETTINGS);
+        chooseSettingsView(view);
+      },
+    },
+    run !== undefined && !accountGated,
+  );
 
   // Rings and keyboard-only hints follow focus the keyboard actually moved.
   useKeyboardModality();
