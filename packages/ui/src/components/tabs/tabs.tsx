@@ -23,6 +23,7 @@ import { cssCustomProperties } from "../../css.js";
 import { CloseIcon } from "../../face/glyphs.js";
 import { joinRefs } from "../../join-refs.js";
 import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
+import type { StatusTone } from "../../status-tone.js";
 import { useClipped } from "../../use-clipped.js";
 import { ANNOUNCE, announce } from "../announcer/announcer.js";
 import { BUTTON_SIZE, IconButton } from "../button/button.js";
@@ -429,7 +430,9 @@ export function Tabs({
  * One tab. `onClose` gives it its × and its Delete key; a tab without it is
  * one that always stands. `detail`, while given, follows the label in the
  * muted secondary colour, parted from it by a space and no mark, as a
- * model's effort follows its name. `endMark`, while given, stands at the
+ * model's effort follows its name, or in the needs-you tone
+ * (`STATUS_TONE.ATTENTION`, `detailTone`) where it counts what waits on the
+ * reader, as a NavItem's count does. `endMark`, while given, stands at the
  * tab's end in its ×'s place, with room kept for it, and gives way to the ×
  * under the pointer, as an editor's tab trades its unsaved dot for its ×.
  * `editor`, while given, is drawn in the label's place as a field of its
@@ -454,6 +457,7 @@ export function Tab({
   icon,
   label,
   detail,
+  detailTone,
   endMark,
   selected,
   unread = false,
@@ -477,6 +481,8 @@ export function Tab({
   label: string;
   /** Words after the label, dimmed: a count, as an Inbox tab's. */
   detail?: string | undefined;
+  /** The detail's status tone, muted where absent: attention for a count of what waits on the reader, as an Inbox tab's. */
+  detailTone?: StatusTone | undefined;
   /** A mark at the tab's end, in its ×'s place until the pointer comes over it: a failed run's. */
   endMark?: React.JSX.Element | undefined;
   selected: boolean;
@@ -552,7 +558,12 @@ export function Tab({
         {detail === undefined ? null : (
           <>
             {" "}
-            <span className="luke-tab-detail text-muted-foreground">{detail}</span>
+            <span
+              className="luke-tab-detail text-muted-foreground data-tone:text-tone-ink"
+              data-tone={detailTone}
+            >
+              {detail}
+            </span>
           </>
         )}
       </span>

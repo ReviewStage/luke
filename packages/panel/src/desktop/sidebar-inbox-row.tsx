@@ -4,10 +4,10 @@ import {
   commandKeyshortcuts,
   MoreButton,
   moreLabel,
-  NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
   Shortcut,
+  STATUS_TONE,
   useMenu,
 } from "@luke/ui";
 import { InboxIcon } from "@luke/ui/icons";
@@ -27,7 +27,8 @@ const INBOX_THING = "Inbox";
 /**
  * The Inbox's row, last of the rows heading the list and drawn as they are:
  * the tray, its name, and how many threads Needs you lists at its end
- * (`useInboxWaiting`), in even figures and the unread dot's blue, and
+ * (`useInboxWaiting`), in even figures and the needs-you tone the phone's
+ * bar fills its badge with (`mobile-bar.tsx`), and
  * nothing at none. Its chord takes the count's place
  * while the row is hovered or reached from the keyboard, as New task's and
  * Search's show theirs. A press opens the window's Inbox
@@ -66,7 +67,7 @@ export function SidebarInboxRow({
         current={current ? NAV_CURRENT.PAGE : undefined}
         count={{
           ...groupCount(waiting, NEEDS_YOU.COUNT),
-          tone: NAV_COUNT_TONE.UNREAD,
+          tone: STATUS_TONE.ATTENTION,
         }}
         aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
         shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}

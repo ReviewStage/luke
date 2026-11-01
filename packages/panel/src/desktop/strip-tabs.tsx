@@ -13,6 +13,7 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   STATUS_TONE,
+  type StatusTone,
   Tooltip,
   useMenu,
 } from "@luke/ui";
@@ -438,6 +439,8 @@ export interface TabLook {
   label: string;
   /** Words after the label, dimmed (`Tab`'s). */
   detail?: string | undefined;
+  /** The detail's status tone (`Tab`'s): attention for the Inbox's count. */
+  detailTone?: StatusTone | undefined;
   /** A mark at the tab's end, in its ×'s place: a failed agent's (`Tab`'s). */
   endMark?: React.JSX.Element | undefined;
   selected: boolean;

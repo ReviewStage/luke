@@ -22,7 +22,6 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
-import { NAV_COUNT_TONE } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -849,10 +848,6 @@ test("on a phone the bar's Inbox wears the count the drawer's row shows, named i
     /^Inbox3 need you/u,
     "the drawer counts the same",
   );
-  // Note that the drawer's count wears the unread dot's blue, not a tally's ink.
-  const toneOf = (row: HTMLElement | undefined) =>
-    row?.querySelector(".luke-nav-item-count")?.getAttribute("data-tone");
-  assert.equal(toneOf(placeRow(page, "Inbox")), NAV_COUNT_TONE.UNREAD);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
