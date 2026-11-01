@@ -21,11 +21,12 @@ import {
   TOOLBAR_INSET,
   TOOLBAR_LOOK,
   Toolbar,
+  useHeadingAway,
   useMinute,
 } from "@luke/ui";
 import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
-import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
+import { agentOfTab, followedAgent, isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -70,7 +71,13 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { DesktopWelcome } from "./desktop-welcome.js";
-import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
+import {
+  AgentPane,
+  MainTabStrip,
+  MainTabStripSkeleton,
+  mainTabLabel,
+  phoneAgentStarts,
+} from "./main-tabs.js";
 import { PhoneBack, PhoneHead, PlaceMore, phoneBar } from "./phone-head.js";
 import { PlanAgents } from "./plan-agents.js";
 import { PlanRelations } from "./plan-relations.js";
@@ -98,7 +105,7 @@ import {
   TaskHead,
   type TaskHeadBack,
   type TaskPane,
-  taskPaneItems,
+  TaskPaneBar,
   taskPaneOf,
 } from "./task-pane-switcher.js";
 import { useStandingDoor } from "./task-row-parts.js";
@@ -439,6 +446,16 @@ function PlanDocument({
   }, [commentAsk, inboxTaskId, commentsRead, showSideTab, onCommentRevealed]);
   const { onArea: setArea, focus, setFocus } = useColumnFocus();
   const [column, setColumn] = useState<HTMLElement | null>(null);
+  // The plan's document in the column, whose heading a phone's row picks up once it scrolls away under the row (`useHeadingAway`).
+  // Note that each box is handed afresh as it mounts, and the document's for each task, because the document stands only once the task is read, and the heading watched is that task's.
+  const [documentBox, setDocumentBox] = useState<HTMLElement | null>(null);
+  const headingTask = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
+  const columnHeld = useMemo(() => ({ current: column }), [column]);
+  const documentHeld = useMemo(
+    () => ({ current: headingTask === undefined ? null : documentBox }),
+    [documentBox, headingTask],
+  );
+  const planHeading = useHeadingAway(columnHeld, documentHeld);
   // The summary lists the task's agents once they are read, so where the
   // task's row says it has some, the summary's room is kept from the open on
   // and the list landing moves nothing in the column.
@@ -1059,6 +1076,7 @@ function PlanDocument({
   const overviewShown = isOverviewTab(tab);
   const documentBody = (
     <Fill
+      ref={setDocumentBox}
       as={FILL_ELEMENT.SECTION}
       className="desktop-document @container/plan-document [&[hidden]]:hidden"
       role="tabpanel"
@@ -1113,9 +1131,17 @@ function PlanDocument({
     <TaskHead
       back={onTab === undefined ? away : { label: ACTIVITY_BACK, onPress: () => onListed(true) }}
       // Note that the task's Rename opens the task's name in the title's place on a tab too, since the tab hides the plan's own title.
+      // Note that Overview's plan names the task in its own heading, so the row names it only once that heading scrolls away.
       title={
-        rename.editing ? (rename.asked ?? task.name) : onTab === undefined ? task.name : onTab.label
+        rename.editing
+          ? (rename.asked ?? task.name)
+          : onTab !== undefined
+            ? onTab.label
+            : pane === TASK_PANE.OVERVIEW
+              ? undefined
+              : task.name
       }
+      pickUp={{ name: planHeading.name, shown: planHeading.away }}
       rename={{
         editing: rename.editing,
         onEnd: (end) => {
@@ -1126,10 +1152,38 @@ function PlanDocument({
         <PlaceMore
           thing="Task"
           shown={tasks.shown}
-          groups={(opener) => [taskPaneItems(pane, choosePane), ...shownGroups(opener)]}
+          groups={(opener) => shownGroups(opener)}
           ends={() => (pane === TASK_PANE.OVERVIEW ? planMenu : undefined)}
         />
       }
+    />
+  ) : null;
+  // The task's agents as the phone's row of views names them, the one the column shows checked in its list.
+  const paneAgents = (agents.agentIds ?? []).flatMap((agentId) => {
+    const agent = agents.agents?.find((each) => each.id === agentId);
+    return agent === undefined ? [] : [{ id: agentId, name: agentName(agent, agents.models) }];
+  });
+  const chooseAgent = (agentId: string) => {
+    onListed(false);
+    if (sidePanel.open) sidePanel.onToggle();
+    mainTabs.onChoose({ agent: agentId });
+  };
+  const paneBar = switched ? (
+    <TaskPaneBar
+      pane={pane}
+      agents={paneAgents}
+      starts={phoneAgentStarts(mainTabs, agents, () => {
+        onListed(false);
+        if (sidePanel.open) sidePanel.onToggle();
+      })}
+      asked={mainTabs.newTabAsked}
+      onAnswered={mainTabs.onNewTabAnswered}
+      shownAgent={
+        pane === TASK_PANE.AGENTS && tab !== undefined && isAgentTab(tab) ? tab.agent : undefined
+      }
+      shown={tasks.shown}
+      onChoose={choosePane}
+      onChooseAgent={chooseAgent}
     />
   ) : null;
   return (
@@ -1158,6 +1212,7 @@ function PlanDocument({
                     hand={taskMenuHand}
                   />
                   {head}
+                  {paneBar}
                   {/* Note that the column is hidden rather than left out while the
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
@@ -1168,67 +1223,70 @@ function PlanDocument({
                     fullScreen={sidePanel.fullScreen}
                     column={
                       <>
-                        <Toolbar
-                          start={TOOLBAR_INSET.COLUMN}
-                          look={TOOLBAR_LOOK.TABS}
-                          measure
-                          title={
-                            <MainTabStrip
-                              task={listed}
-                              main={mainTabs}
-                              agents={agents}
-                              unread={tasks.unreadTabs}
-                              views={views}
-                              pins={{
-                                pinned: (agentId) =>
-                                  tasks.taskAgentPins.some((pin) => pin.agentId === agentId),
-                                onPin: tasks.onPinAgent,
-                              }}
-                              keys={tasks.shown && !sideFocused}
-                              shown={tasks.shown}
-                              onOpenTerminal={terminalDoors.onOpenTerminal}
-                              slot={switched ? null : actionsSlot}
-                              onShown={switched ? setShownAgentTab : undefined}
-                              planMenu={planMenu}
-                            />
-                          }
-                          actions={
-                            <>
-                              {rename.refused ? (
-                                <FailureNote
-                                  failure={failureShown({
-                                    surface: FAILURE_SURFACE.TASK_RENAME,
-                                    cause: FAILURE_CONDITION.REFUSED,
-                                    refused: true,
-                                  })}
-                                >
-                                  {RENAME_FAILED_NOTE}
-                                </FailureNote>
-                              ) : null}
-                              <CopyChord copy={tasks.copy} />
-                              {terminalDoors.terminals ? (
-                                <TerminalCommands
-                                  here={terminalHere}
-                                  agents={agents}
-                                  sidePanel={sidePanel}
-                                  onShown={showSide}
-                                />
-                              ) : null}
-                              {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
-                              {tasks.history.viewing === undefined ? (
-                                <NewTabChord
-                                  onNewTab={sideFocused ? sidePanel.onNewTab : mainTabs.onNewTab}
-                                />
-                              ) : null}
-                              {/* The chosen agent's ⋯, portalled in from its tab (`strip-tabs.tsx`'s `DoorsTab`), so it acts on what is under the bar. */}
-                              <span
-                                ref={setActionsSlot}
-                                className="toolbar-tab-actions flex min-w-control flex-none items-center"
+                        {/* On a phone the row of views stands in the strip's place, the strip drawn hidden so its shown agent's tab still hands the header's ⋯ its menu (`onShown`). */}
+                        <div className={switched ? undefined : "contents"} hidden={switched}>
+                          <Toolbar
+                            start={TOOLBAR_INSET.COLUMN}
+                            look={TOOLBAR_LOOK.TABS}
+                            measure
+                            title={
+                              <MainTabStrip
+                                task={listed}
+                                main={mainTabs}
+                                agents={agents}
+                                unread={tasks.unreadTabs}
+                                views={views}
+                                pins={{
+                                  pinned: (agentId) =>
+                                    tasks.taskAgentPins.some((pin) => pin.agentId === agentId),
+                                  onPin: tasks.onPinAgent,
+                                }}
+                                keys={!switched && tasks.shown && !sideFocused}
+                                shown={tasks.shown}
+                                onOpenTerminal={terminalDoors.onOpenTerminal}
+                                slot={switched ? null : actionsSlot}
+                                onShown={switched ? setShownAgentTab : undefined}
+                                planMenu={planMenu}
                               />
-                              <SummaryButton layout={summaryLayout} cardId={summaryCard} />
-                            </>
-                          }
-                        />
+                            }
+                            actions={
+                              <>
+                                {rename.refused ? (
+                                  <FailureNote
+                                    failure={failureShown({
+                                      surface: FAILURE_SURFACE.TASK_RENAME,
+                                      cause: FAILURE_CONDITION.REFUSED,
+                                      refused: true,
+                                    })}
+                                  >
+                                    {RENAME_FAILED_NOTE}
+                                  </FailureNote>
+                                ) : null}
+                                <CopyChord copy={tasks.copy} />
+                                {terminalDoors.terminals ? (
+                                  <TerminalCommands
+                                    here={terminalHere}
+                                    agents={agents}
+                                    sidePanel={sidePanel}
+                                    onShown={showSide}
+                                  />
+                                ) : null}
+                                {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
+                                {tasks.history.viewing === undefined ? (
+                                  <NewTabChord
+                                    onNewTab={sideFocused ? sidePanel.onNewTab : mainTabs.onNewTab}
+                                  />
+                                ) : null}
+                                {/* The chosen agent's ⋯, portalled in from its tab (`strip-tabs.tsx`'s `DoorsTab`), so it acts on what is under the bar. */}
+                                <span
+                                  ref={setActionsSlot}
+                                  className="toolbar-tab-actions flex min-w-control flex-none items-center"
+                                />
+                                <SummaryButton layout={summaryLayout} cardId={summaryCard} />
+                              </>
+                            }
+                          />
+                        </div>
                         {/* The plan's banner is the whole plan's, so it stands over every
             tab of the column, and over the panel's while that fills the window. */}
                         {sidePanel.fullScreen ? null : stranded.banner}

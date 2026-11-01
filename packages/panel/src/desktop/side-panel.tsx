@@ -1429,7 +1429,8 @@ function useMacTerminalClose(panel: SidePanelControl) {
  * its glyph, its name, and what its tab says after it, newest arrivals in
  * the strip's own order, a press showing it across the panel; under them,
  * what the "+" offers, as the empty panel offers it, since a phone draws no
- * "+". With nothing open past the plan it says so over the offers.
+ * "+", each section's label close over its rows as the menu draws them.
+ * With nothing open beside Overview it says so over the offers.
  */
 export function ActivityList({
   strip,
@@ -1453,7 +1454,7 @@ export function ActivityList({
         {open.length === 0 ? (
           <div className="side-panel-no-tabs-line mb-control-gap px-row-inset">
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              Nothing open past the plan
+              Nothing open beside Overview
             </Text>
           </div>
         ) : (
@@ -1490,22 +1491,23 @@ export function ActivityList({
             ))}
           </List>
         )}
+        {/* Note that the offers stand in one block, so the column's gap between sections never stands between a section's label and its rows. */}
         {more.length === 0 ? null : (
-          <div className="side-panel-no-tabs-line mb-control-gap px-row-inset">
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              Open more
-            </Text>
+          <div className="side-panel-activity-more flex flex-col">
+            <div className="side-panel-no-tabs-line pb-luke-4 px-row-inset">
+              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                Open more
+              </Text>
+            </div>
+            <MenuRowList
+              label="Open a tab"
+              rows={more.map(entryRow)}
+              onPick={(id) => {
+                onListed(false);
+                more.find((entry) => entry.row.id === id)?.onPick();
+              }}
+            />
           </div>
-        )}
-        {more.length === 0 ? null : (
-          <MenuRowList
-            label="Open a tab"
-            rows={more.map(entryRow)}
-            onPick={(id) => {
-              onListed(false);
-              more.find((entry) => entry.row.id === id)?.onPick();
-            }}
-          />
         )}
       </div>
     </ScrollArea>

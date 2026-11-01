@@ -83,6 +83,7 @@ import {
 import { cn } from "../../cn.js";
 import { joinRefs } from "../../join-refs.js";
 import { pulseOnPress } from "../../press-pulse.js";
+import { useClipped } from "../../use-clipped.js";
 import { type CountPart, CountParts } from "../choice/count-part.js";
 import {
   ROVING_ORIENTATION,
@@ -110,10 +111,16 @@ export const CHOICE_BAR_LOOK = {
 
 export type ChoiceBarLook = (typeof CHOICE_BAR_LOOK)[keyof typeof CHOICE_BAR_LOOK];
 
-/** How much room the bar keeps around its options: a page's, or a step smaller in the caption's type. */
+/**
+ * How much room the bar keeps around its options: a page's, a step smaller
+ * in the caption's type, or a finger's (`touch`), each option the touch
+ * target's height and its name cut short where its share of a stretched row
+ * runs out, as a phone's pane switcher's.
+ */
 export const CHOICE_BAR_SIZE = {
   REGULAR: "regular",
   COMPACT: "compact",
+  TOUCH: "touch",
 } as const;
 
 export type ChoiceBarSize = (typeof CHOICE_BAR_SIZE)[keyof typeof CHOICE_BAR_SIZE];
@@ -201,6 +208,7 @@ const BAR_LOOK = {
 const FILL_GAP = {
   regular: "gap-0.5",
   compact: "gap-0",
+  touch: "gap-0.5",
 } as const satisfies Record<ChoiceBarSize, string>;
 
 /** A segmented bar's width: hugging its options, or filling its row. */
@@ -246,10 +254,12 @@ const OPTION_LOOK = {
   fill: {
     regular: "h-control py-0 px-2 gap-1.5 text-label",
     compact: "h-choice-fill-compact py-0 px-1.5 gap-1 text-caption",
+    touch: "h-touch min-w-0 py-0 px-3 gap-1.5 text-label",
   },
   segmented: {
     regular: "h-choice-segment py-0 px-3 gap-1.5 text-label",
     compact: "h-choice-segment-compact py-0 px-2 gap-1 text-caption",
+    touch: "h-touch min-w-0 py-0 px-3 gap-1.5 text-label",
   },
 } as const satisfies Record<ChoiceBarLook, Record<ChoiceBarSize, string>>;
 
@@ -257,6 +267,27 @@ const OPTION_LOOK_STATE = {
   fill: "rounded-control [&:hover:not(:disabled):not([aria-selected=true],[aria-checked=true])]:bg-muted",
   segmented: "rounded-choice-segment [[data-luke-profile=web]_&]:text-foreground",
 } as const satisfies Record<ChoiceBarLook, string>;
+
+/**
+ * An option's name. A finger's may be cut short where its option runs out
+ * of room, which only a stretched row's share ever does, and then fades out
+ * over its last few pixels (`choice-bar.css`), as a chip's words do, rather
+ * than ending in "…".
+ */
+function OptionLabel({ size, label }: { size: ChoiceBarSize; label: string }): React.JSX.Element {
+  const [measured, clipped] = useClipped(label);
+  return size === CHOICE_BAR_SIZE.TOUCH ? (
+    <span
+      ref={measured}
+      className="luke-choice-bar-label min-w-0 overflow-hidden whitespace-nowrap"
+      data-overflow={String(clipped)}
+    >
+      {label}
+    </span>
+  ) : (
+    <span className="luke-choice-bar-label">{label}</span>
+  );
+}
 
 /** A stretched segment shares its row alike with the others; any other option keeps its own width. */
 const OPTION_FLEX = {
@@ -824,7 +855,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
                 {item.icon}
               </span>
             )}
-            <span className="luke-choice-bar-label">{item.label}</span>
+            <OptionLabel size={size} label={item.label} />
             {count === undefined ? null : <span className={COUNT}>{count}</span>}
           </TogglePrimitive>
         );
