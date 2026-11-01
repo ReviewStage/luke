@@ -768,13 +768,11 @@ function IntegrationRow({
         confirm={disconnect}
         question={{
           title: `Disconnect ${name}?`,
-          ...(bySignIn
-            ? { body: "Agents lose GitHub until you connect it again." }
+          body: bySignIn
+            ? "Agents lose GitHub until you connect it again."
             : several
-              ? {
-                  body: `Agents lose this account. Your other ${INTEGRATION_NAME[provider]} accounts stay connected.`,
-                }
-              : undefined),
+              ? `Agents lose this account. Your other ${INTEGRATION_NAME[provider]} accounts stay connected.`
+              : `Agents lose ${INTEGRATION_NAME[provider]} until you connect it again.`,
           verb: "Disconnect",
           running: "Disconnecting",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,

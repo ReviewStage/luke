@@ -564,6 +564,20 @@ test("a connection that works stands quiet, with Reconnect in its ⋯ beside Dis
   );
 });
 
+test("Disconnect on a lone account says what goes before it disconnects", async () => {
+  withheld = INTEGRATION_PROVIDER_LIST.filter(
+    (provider) => provider !== INTEGRATION_PROVIDER.LINEAR,
+  );
+  standing.set(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_STATUS.CONNECTED);
+  const page = await mount();
+  await choose(rowNamed(page, "Linear"), "Disconnect");
+
+  assert.match(
+    document.querySelector('[role="alertdialog"]')?.textContent ?? "",
+    /Agents lose Linear until you connect it again\./u,
+  );
+});
+
 test("a sign-in that expired, and a connection its server refused, each show Reconnect on the row", async () => {
   withheld = INTEGRATION_PROVIDER_LIST.filter(
     (provider) =>
