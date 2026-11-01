@@ -13,8 +13,8 @@ import { CatalogSection } from "../section";
 /**
  * search-fields.tsx -- a SearchField empty with its chord, holding a query
  * with its clear, with a tally of its results and of none, its tally folded
- * as a narrow bar folds it, in a narrow column with a long query, and as a
- * menu's head row.
+ * as a narrow bar folds it, in a narrow column with a long query, on the
+ * window's frame as a pane's head row holds it, and as a menu's head row.
  */
 
 /** A search the example holds the query of, as a caller would. */
@@ -93,6 +93,16 @@ function SearchFields(): React.JSX.Element {
             label="Search"
             placeholder="Search"
             clears
+          />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="search-frame" title="On the window's frame">
+        <div className="catalog-frame-row">
+          <Held
+            start=""
+            label="Search inbox"
+            placeholder="Search inbox"
+            look={SEARCH_FIELD_LOOK.FRAME}
           />
         </div>
       </CatalogSection>

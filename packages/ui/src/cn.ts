@@ -87,7 +87,6 @@ const FEEDBACK_DISPLAY = {
     "banner-strip-start",
     "banner-words-gap",
     "breadcrumb-chevron",
-    "breadcrumb-control-inline",
     "breadcrumb-gap",
     "breadcrumb-pill-block",
     "breadcrumb-pill-inline",

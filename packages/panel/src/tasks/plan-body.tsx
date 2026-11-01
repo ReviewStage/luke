@@ -73,12 +73,7 @@ import {
 } from "./plan-document-editor.js";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";
 import { UNIT_ATTRIBUTED_CLASS, UNIT_BYLINE_CLASS, UNIT_MORE_CLASS } from "./plan-unit-look.js";
-import {
-  TaskPath,
-  TaskPathRefusal,
-  TaskStandingChips,
-  type TaskStandingDoor,
-} from "./task-standing.js";
+import { TaskPath, TaskStandingChips, type TaskStandingDoor } from "./task-standing.js";
 import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing.js";
@@ -982,7 +977,6 @@ export const PlanBody = memo(function PlanBody({
   agents,
   standing: taskStanding,
   head,
-  path = true,
   titleActions = true,
 }: {
   task: Task;
@@ -1005,8 +999,6 @@ export const PlanBody = memo(function PlanBody({
   standing?: TaskStandingDoor;
   /** What the task's own page draws at the head of its text, under its byline, as its agents; nothing elsewhere. */
   head?: React.ReactNode;
-  /** Whether the task's path stands over its title; a page whose title bar names the task already leaves it out, and the document starts with the title. */
-  path?: boolean;
   /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
   titleActions?: boolean;
 }): React.JSX.Element {
@@ -1299,11 +1291,7 @@ export const PlanBody = memo(function PlanBody({
       <DocumentScroll ref={scroller}>
         <PlanBodyColumn ref={bodyHost}>
           <WordsDatePickerRoom>
-            {taskStanding === undefined ? null : path ? (
-              <TaskPath task={task} door={taskStanding} />
-            ) : (
-              <TaskPathRefusal door={taskStanding} />
-            )}
+            {taskStanding === undefined ? null : <TaskPath task={task} door={taskStanding} />}
             {titled ? (
               // Keyed by the plan, so words typed for one are saved to it as another opens.
               <EditableTitle

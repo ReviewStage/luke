@@ -76,8 +76,9 @@ import { TabStrip } from "./tab-strip.js";
  * keeping, and the chosen agent's in the toolbar's ⋯, drawn into the slot
  * the toolbar keeps for it (`slot`), so the ⋯ acts on what is under the bar.
  *
- * Overview leads the strip on every task, wearing the plan's document glyph:
- * it shows the task's plan document, which the task's page draws and hands
+ * Overview leads the strip on every task, named by the task itself, its
+ * status mark and name, since no bar over the column names the task: it
+ * shows the task's plan document, which the task's page draws and hands
  * in (`desktop-tasks.tsx`), and offers the task's own menu on its
  * right-click and in the toolbar's ⋯, as the task's plan did where it stood
  * in the side panel. It never closes, and the agents' tabs move after it.
@@ -268,7 +269,7 @@ interface DrawnTab {
 }
 
 /**
- * Overview's tab, then the agents' tabs and the draft's, in the order
+ * Overview's tab, named by the task's status mark and name, then the agents' tabs and the draft's, in the order
  * started, each but Overview closing through `main`. An agent's card previews its
  * latest step from what its tab last held (`heldLatest`). An agent's tab,
  * and the draft's, wears the Draft pencil at its end while its box holds
@@ -276,6 +277,7 @@ interface DrawnTab {
  * says more, so it keeps its failed mark in the pencil's place.
  */
 function agentTabs(input: {
+  task: Pick<TaskSummary, "name" | "status">;
   main: MainTabsControl;
   agents: AgentsControl;
   unread: readonly StripTab[];
@@ -283,7 +285,7 @@ function agentTabs(input: {
   /** The started agents whose boxes hold a draft (`useDraftedAgents`). */
   drafted: readonly string[];
 }): DrawnTab[] {
-  const { main, agents, unread, views, drafted } = input;
+  const { task, main, agents, unread, views, drafted } = input;
   const chosen = (tab: MainTab) => main.tab !== undefined && sameTab(tab, main.tab);
   const models = agents.models ?? [];
   const look = (tab: MainTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -294,7 +296,14 @@ function agentTabs(input: {
   });
   const overview = {
     tab: MAIN_TAB.OVERVIEW,
-    look: { ...look(MAIN_TAB.OVERVIEW, tabLook({ kind: TAB_KIND.OVERVIEW })), anchored: true },
+    // Note that the first tab names the task by its status mark and name, since no bar over the column names it.
+    look: {
+      ...look(
+        MAIN_TAB.OVERVIEW,
+        tabLook({ kind: TAB_KIND.PLAN, status: task.status, name: task.name }),
+      ),
+      anchored: true,
+    },
     close: undefined,
   };
   const open = (agents.agents ?? []).filter((agent) => main.openAgents?.includes(agent.id));
@@ -523,7 +532,7 @@ export function MainTabStrip({
   // Overview, then the agents' and the draft's tabs in the column's order,
   // which the developer's moves and their opening set (`use-main-tabs.ts`).
   const own = inTaskOrder(
-    agentTabs({ main, agents, unread, views, drafted }),
+    agentTabs({ task, main, agents, unread, views, drafted }),
     main.tabs,
     (entry) => entry.tab,
   );

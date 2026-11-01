@@ -314,7 +314,7 @@ test("a question asked of one task does not outlive it: the delete the Plan tab'
   assert.equal(asking(), false, "the question went with the task it was asked of");
 });
 
-test("⌘K's Change repository shows Overview where an agent's tab hides the plan, and the title bar's repository, plain words, has its menu opened under it for the ask once, not again on a later draw", () => {
+test("⌘K's Change repository shows Overview where an agent's tab hides the plan, and the plan's path, its repository plain words, has its menu opened under it for the ask once, not again on a later draw", () => {
   const told: string[] = [];
   const { tasks } = openTab({ [TASK.id]: "acme/app" });
   const asked = (overview: boolean): TasksControl => ({
@@ -340,9 +340,9 @@ test("⌘K's Change repository shows Overview where an agent's tab hides the pla
   assert.deepEqual(told, [`choose "${MAIN_TAB.OVERVIEW}"`], "the ask shows the plan first");
 
   draw(asked(true));
-  const head = () => container.querySelector(".luke-frame-head");
+  const head = () => container.querySelector(".plan-task-path");
   const menu = () => head()?.querySelector('[role="dialog"][aria-label="Repository"]') ?? null;
-  assert.ok(menu(), "the ask opens the repository's menu under the title bar's crumb");
+  assert.ok(menu(), "the ask opens the repository's menu under the plan's path");
   assert.equal(
     [...(head()?.querySelectorAll("button") ?? [])].some((each) =>
       each.textContent?.includes("acme/app"),

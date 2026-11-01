@@ -361,6 +361,35 @@
   padding-top: var(--luke-row-inset);
 }
 
+/* The window's Inbox listing every channel heads its list with its search
+   on the window's top row, as a task's tabs stand, the view's menu ending
+   it (`inbox-list.tsx`): the row as tall as a top row, its field starting on
+   the sheet's edge as a first tab does, or clear of the traffic lights and
+   the sidebar's toggle while the sidebar is folded, and its sheet starting
+   under it, level with the item's beside it. The field stands on the
+   frame's own look (`SEARCH_FIELD_LOOK.FRAME`). */
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  .inbox-search[data-top] {
+  box-sizing: border-box;
+  height: var(--desktop-bar-height);
+  padding-block: 0;
+  padding-left: var(--luke-toolbar-start-at, 0px);
+}
+
+/* The row is the window's handle where nothing in it is pressed, as a top
+   row is; its field and its menu's button claim their presses back, coming
+   after it in document order. */
+[data-luke-profile="desktop"] .inbox-search[data-top] {
+  -webkit-app-region: drag;
+}
+
+[data-luke-profile="desktop"] .inbox-search[data-top] > * {
+  -webkit-app-region: no-drag;
+}
+
 /* The sheet's top -----------------------------------------------------------
 
    The sheet clips nothing (above), so a bar's fill standing in its top

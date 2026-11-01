@@ -44,17 +44,11 @@ import { useCrumbFold } from "./crumb-fold.js";
  * scrolled away: it fades in with a short rise as it comes, and fades out
  * before it goes (`use-disclosure.ts`).
  *
- * Three looks: a bar's path in the caption type, every crumb a quiet pill
+ * Two looks: a bar's path in the caption type, every crumb a quiet pill
  * that narrows by its share, fading out at its end, the current one last of
- * all; a toolbar's heading, a way back then the page's name in the dialog
- * heading type; and a window's title bar, every crumb a quiet press as a
- * quiet `Button` is drawn, at a control's height in the label type, its
- * glyph before its words and its detail (a task's key) muted after them,
- * lit under the pointer and outlined never. A crumb's detail stands whole
- * while its words give way. In that look a crumb of words stands where a
- * press would, its glyph, inset, and gap the same, in the quiet ink of the
- * presses beside it (the current page's is the text ink), and lights under
- * nothing: a place the reader is told of and cannot change from there.
+ * all; and a toolbar's heading, a way back then the page's name in the
+ * dialog heading type. A crumb's detail (a task's key) stands whole while its
+ * words give way.
  *
  * A path gives way on a narrow bar first by folding: one that does not
  * fit whole folds the crumbs at its start into one "…" (`crumb-fold.ts`),
@@ -71,14 +65,12 @@ import { useCrumbFold } from "./crumb-fold.js";
  * `:has()`, or on a keyframe stays in `breadcrumbs.css`.
  */
 
-/** The three looks a path is drawn in. */
+/** The two looks a path is drawn in. */
 export const BREADCRUMBS_VARIANT = {
   /** A bar's path in the caption type, every crumb a quiet pill. */
   CAPTION: "caption",
   /** A toolbar's heading: the way back, then the page's name in the dialog heading type. */
   TITLE: "title",
-  /** A window's title bar: every crumb a quiet press at a control's height in the label type, as a quiet button is. */
-  CONTROL: "control",
 } as const;
 
 export type BreadcrumbsVariant = (typeof BREADCRUMBS_VARIANT)[keyof typeof BREADCRUMBS_VARIANT];
@@ -221,15 +213,6 @@ const LOOK = {
     separator: "flex-none items-center [&>svg]:size-breadcrumb-title-chevron",
     words: "text-dialog font-dialog",
     link: "",
-  },
-  [BREADCRUMBS_VARIANT.CONTROL]: {
-    nav: "text-label font-label [&_[data-slot=breadcrumb-page]:not([aria-current])]:text-muted-foreground",
-    list: "",
-    item: "",
-    wordsItem: "",
-    separator: "flex-none items-center text-muted-foreground [&>svg]:size-breadcrumb-chevron",
-    words: "h-control px-breadcrumb-control-inline gap-icon-gap",
-    link: "h-control rounded-control px-breadcrumb-control-inline py-0 gap-icon-gap",
   },
 } as const;
 

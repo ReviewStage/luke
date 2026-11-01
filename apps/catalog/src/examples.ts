@@ -52,7 +52,6 @@ import { FILE_TEXT_EXAMPLE } from "./examples/file-text";
 import { FOLDING_BUTTONS_EXAMPLE } from "./examples/folding-buttons";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { FORMAT_TOOLBAR_EXAMPLE } from "./examples/format-toolbar";
-import { FRAME_HEAD_EXAMPLE } from "./examples/frame-head";
 import { GLYPH_SLOTS_EXAMPLE } from "./examples/glyph-slots";
 import { GROUP_HEADERS_EXAMPLE } from "./examples/group-headers";
 import { HOVER_CARDS_EXAMPLE } from "./examples/hover-cards";
@@ -210,7 +209,6 @@ export const EXAMPLES: readonly Example[] = [
   FILE_TEXT_EXAMPLE,
   FOLDING_BUTTONS_EXAMPLE,
   FORM_FIELD_EXAMPLE,
-  FRAME_HEAD_EXAMPLE,
   GROUP_HEADERS_EXAMPLE,
   HOVER_CARDS_EXAMPLE,
   INLINE_EDITS_EXAMPLE,
