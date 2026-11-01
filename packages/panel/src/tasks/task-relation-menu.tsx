@@ -15,13 +15,7 @@ import {
   SearchableMenu,
   TaskStatusMark,
 } from "@luke/ui";
-import {
-  CornerDownRightIcon,
-  CornerLeftUpIcon,
-  GLYPH,
-  HandIcon,
-  OctagonMinusIcon,
-} from "@luke/ui/icons";
+import { CornerLeftUpIcon, GLYPH, HandIcon, OctagonMinusIcon } from "@luke/ui/icons";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 
@@ -69,7 +63,7 @@ export function TaskRelationIcon({ kind }: { kind: TaskRelationKind }): React.JS
     case TASK_RELATION_KIND.BLOCKS:
       return <HandIcon aria-hidden="true" />;
     case TASK_RELATION_KIND.SUB_TASK:
-      return <CornerDownRightIcon aria-hidden="true" />;
+      return <GLYPH.SUB_TASK />;
     case TASK_RELATION_KIND.PARENT:
       return <CornerLeftUpIcon aria-hidden="true" />;
   }

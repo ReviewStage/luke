@@ -22,7 +22,7 @@ import {
   STATUS_TONE,
   Tooltip,
 } from "@luke/ui";
-import { GLYPH, ListTreeIcon, NetworkIcon, PlusIcon } from "@luke/ui/icons";
+import { GLYPH, NetworkIcon, PlusIcon } from "@luke/ui/icons";
 import { subTaskCount, subTasksOf, taskFinished } from "@luke/ui/task-list-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useId, useRef, useState } from "react";
@@ -428,7 +428,7 @@ export function PlanRelations({
         <GroupHeader
           heading={GROUP_HEADING.NONE}
           label={GROUP_WORDS.SUB_TASKS}
-          glyph={<ListTreeIcon />}
+          glyph={<GLYPH.SUB_TASK />}
           mark={
             <ProgressCount
               done={count.finished}

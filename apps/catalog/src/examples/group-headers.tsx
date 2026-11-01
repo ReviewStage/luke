@@ -18,7 +18,7 @@ import {
   STATUS_TONE,
   Text,
 } from "@luke/ui";
-import { ListFilterIcon, ListTreeIcon, SlidersHorizontalIcon } from "@luke/ui/icons";
+import { GLYPH, ListFilterIcon, SlidersHorizontalIcon } from "@luke/ui/icons";
 import { useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -76,7 +76,7 @@ function Folding(): React.JSX.Element {
       </GroupHeader>
       <GroupHeader
         label="Sub-tasks"
-        glyph={<ListTreeIcon />}
+        glyph={<GLYPH.SUB_TASK />}
         mark={<ProgressCount done={4} total={6} label="4 of 6 sub-tasks finished" />}
         fold={{ defaultOpen: true }}
       >
