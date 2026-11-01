@@ -1802,9 +1802,7 @@ function readStored(): HeldState {
       onSome: (earlier): SidePanelState => ({ ...earlier, tabs: SIDE_PANEL_TABS }),
     }),
   );
-  const held = settled(stored);
-  // Note that a panel kept open with no tab to show restores shut, since it is never shown with nothing in it.
-  return held.open && held.tab === undefined ? { ...held, open: false } : held;
+  return settled(stored);
 }
 
 /**
