@@ -49,6 +49,12 @@ function shot(name: string): FileChip {
 }
 
 const FIRST = shot("first.png");
+/** A recording, drawn by the video player under its bar. */
+const VIDEO: FileChip = {
+  name: "recording.webm",
+  mediaType: "video/webm",
+  url: "data:video/webm;base64,GkXfow==",
+};
 const SECOND = shot("second.png");
 
 const roots: Root[] = [];
@@ -295,6 +301,65 @@ test("a zoomed picture is moved by a drag, and the press the drag ends on leaves
   assert.equal(after.scale, before.scale, "the drag is no press");
   assert.equal(after.x, before.x - 50);
   assert.equal(after.y, before.y - 20);
+});
+
+test("on a phone a finger swiped sideways walks the files, one let go slowly short of a quarter of the way stays and is no press, and one on a zoomed picture or a video's scrubber moves that instead", () => {
+  const viewer = opened(IMAGE_OPENING.FITTED, SHELL_ROOM.NARROW);
+  const surface =
+    document.querySelector<HTMLElement>(".attachment-viewer") ?? assert.fail("the viewer");
+  laidOut(surface, { getBoundingClientRect: () => DOMRect.fromRect({ width: 400, height: 800 }) });
+  /** A finger going down on `target` at `from` and lifted at `to`, `ms` milliseconds later, in four even moves. */
+  const swipe = (from: number, to: number, ms: number, target: Element = viewer.picture()) => {
+    const touch = (type: string, x: number, at: number) => {
+      const event = new PointerEvent(type, {
+        bubbles: true,
+        clientX: x,
+        clientY: 250,
+        pointerId: 9,
+        pointerType: "touch",
+        isPrimary: true,
+        buttons: type === "pointerup" ? 0 : 1,
+      });
+      Object.defineProperty(event, "timeStamp", { value: at });
+      viewer.fire(target, event);
+    };
+    touch("pointerdown", from, 0);
+    for (let each = 1; each <= 4; each += 1) {
+      touch("pointermove", from + ((to - from) * each) / 4, (ms * each) / 4);
+    }
+    touch("pointerup", to, ms);
+  };
+  swipe(300, 100, 120);
+  assert.equal(viewer.state.at, 1, "a swipe left shows the next file");
+  swipe(100, 300, 120);
+  assert.equal(viewer.state.at, 0, "a swipe right shows the one before");
+  swipe(300, 250, 1000);
+  assert.equal(viewer.state.at, 0, "a short slow swipe stays");
+  // A tap's click counts one press (`detail`), as a key's counts none.
+  viewer.fire(
+    viewer.picture(),
+    new MouseEvent("click", { bubbles: true, clientX: 250, clientY: 250, detail: 1 }),
+  );
+  assert.equal(
+    drawn(viewer.picture()).scale,
+    1,
+    "and the click the browser sends after it zooms nothing",
+  );
+  viewer.key("=");
+  const before = drawn(viewer.picture());
+  swipe(300, 100, 120);
+  assert.equal(viewer.state.at, 0, "a zoomed picture stays");
+  assert.equal(drawn(viewer.picture()).x, before.x - 200, "and moves under the finger");
+  viewer.show([VIDEO, FIRST], 0);
+  const scrubber =
+    document.querySelector('[data-slot="slider-thumb"]') ?? assert.fail("the video's scrubber");
+  laidOut(scrubber.parentElement ?? assert.fail("the scrubber's control"), {
+    setPointerCapture: () => undefined,
+    releasePointerCapture: () => undefined,
+    hasPointerCapture: () => false,
+  });
+  swipe(300, 100, 120, scrubber);
+  assert.equal(viewer.state.at, 0, "a drag on a video's scrubber stays on the video");
 });
 
 test("a two-finger scroll moves a zoomed picture and leaves a fitted one where it is", () => {

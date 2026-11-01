@@ -2081,6 +2081,20 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   container-type: size;
 }
 
+/* A finger swiping the viewer sideways (`@luke/ui`'s `use-page-swipe.ts`)
+   holds the file shown where the finger has taken it, with its transition
+   off, so it stays under the finger; let go short of the next file, the
+   mark comes off and it travels back on its transition, and the file walked
+   to stands in its place at once. */
+.attachment-viewer-body {
+  transition: translate var(--luke-duration-pane) var(--luke-motion-pane);
+}
+
+.attachment-viewer[data-luke-page-swipe] .attachment-viewer-body {
+  translate: var(--luke-page-swipe-offset, 0) 0;
+  transition: none;
+}
+
 .attachment-viewer[data-hug="true"] .attachment-viewer-body > .luke-zoom-image {
   width: min(
     100cqw -
