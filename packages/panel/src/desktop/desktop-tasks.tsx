@@ -14,7 +14,6 @@ import {
   FailureNote,
   FILL_ELEMENT,
   Fill,
-  FrameHeadSkeleton,
   NOT_FOUND_THING,
   NotFound,
   SKELETON_SHAPE,
@@ -58,11 +57,7 @@ import {
 } from "../tasks/task-mentions.js";
 import { taskLinkPlace, useOfferTaskRename } from "../tasks/task-menu-items.js";
 import type { TaskRelationsDoor } from "../tasks/task-relation-menu.js";
-import {
-  TaskFrameHead,
-  type TaskRepositoryDoor,
-  type TaskStandingDoor,
-} from "../tasks/task-standing.js";
+import type { TaskRepositoryDoor, TaskStandingDoor } from "../tasks/task-standing.js";
 import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { placeOfTaskTarget, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { isOverviewTab, MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
@@ -132,11 +127,10 @@ import {
  * the repository chip only while the task has none, and otherwise only the
  * chip's menu, which Change repository opens.
  *
- * The task's head names the task whichever tab is chosen (`TaskFrameHead`):
- * its path, its repository, the tasks it is a child of, and the task by its
- * status mark, name, and key, which opens its Overview. It stands under the
- * toolbar over every tab of the column. A phone heads the task with its own
- * row instead (`TaskHead`).
+ * The strip's first tab names the task whichever tab is chosen, by its
+ * status mark and name, and opens its Overview, whose head draws the task's
+ * path over its title: its repository, the task it is a child of, and its
+ * key. A phone heads the task with its own row instead (`TaskHead`).
  *
  * The column's summary stands at its right, under the toolbar, listing what
  * both "+" menus open, with its button last in the
@@ -243,7 +237,6 @@ function TaskPageSkeleton({
   onColumn,
   starting,
   head,
-  framed,
 }: {
   /** The line New task's agent start under way opens its agent on, which the column draws as the agent's tab will; none while a task is read. */
   starting?: SentLine | undefined;
@@ -255,8 +248,6 @@ function TaskPageSkeleton({
   onColumn: (column: HTMLElement | null) => void;
   /** A phone's head over the page, as the page will be headed once it lands (`TaskWaitHead`); none elsewhere. */
   head?: React.ReactNode;
-  /** Whether the task's head stands over its column, as on a wide window, where the page will draw it (`FrameHead`). */
-  framed: boolean;
 }): React.JSX.Element {
   const { panel, ...frame } = drawing;
   return (
@@ -275,7 +266,6 @@ function TaskPageSkeleton({
               title={<MainTabStripSkeleton />}
               actions={<TaskActionsSkeleton summary={summary.holds} />}
             />
-            {framed ? <FrameHeadSkeleton /> : null}
             <TaskBody>
               <Fill className="desktop-task-column">
                 <AgentColumn>
@@ -985,7 +975,6 @@ function PlanDocument({
         summary={summaryLayout}
         onColumn={setColumn}
         head={phone ? <TaskWaitHead away={away} reading /> : undefined}
-        framed={!phone}
       />
     );
   }
@@ -1090,8 +1079,6 @@ function PlanDocument({
         sectionLinks={sectionLinks}
         standing={standing}
         head={planHead}
-        // Note that the task's head over the column names the task (`TaskFrameHead`) wherever the task has one, so only a phone's plan draws the path.
-        path={switched}
         titleActions={!switched}
       />
     </Fill>
@@ -1242,16 +1229,6 @@ function PlanDocument({
                             </>
                           }
                         />
-                        {/* The task's head names the task over every tab of the column, whichever is chosen;
-            a phone heads the task with its own row (`TaskHead`). */}
-                        {switched ? null : (
-                          <TaskFrameHead
-                            task={task}
-                            shown={listed}
-                            door={standing}
-                            onOpen={openOverview}
-                          />
-                        )}
                         {/* The plan's banner is the whole plan's, so it stands over every
             tab of the column, and over the panel's while that fills the window. */}
                         {sidePanel.fullScreen ? null : stranded.banner}
@@ -1372,7 +1349,6 @@ function StartingTaskPage({
       onColumn={setColumn}
       starting={line}
       head={phoneAway === undefined ? undefined : <TaskWaitHead away={phoneAway} reading />}
-      framed={phoneAway === undefined}
     />
   );
 }

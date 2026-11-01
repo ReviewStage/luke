@@ -42,6 +42,7 @@ import {
   RowHintOptions,
   SCROLL_FADE,
   ScrollArea,
+  SEARCH_FIELD_LOOK,
   SearchField,
   SelectionRegion,
   Shortcut,
@@ -875,7 +876,14 @@ const SEARCH_INBOX = "Search inbox";
  * field at once and the list is ranked for it a render behind, in a render
  * the next key may cut short, as ⌘K ranks its rows.
  */
-function ListSearch({ search }: { search: InboxSearchHead }): React.JSX.Element {
+function ListSearch({
+  search,
+  end,
+}: {
+  search: InboxSearchHead;
+  /** The list's acts after the field, where the row is the Inbox's top row: the view's menu; none where a bar over the list holds them. */
+  end?: React.ReactNode;
+}): React.JSX.Element {
   const [words, setWords] = useState(search.query);
   const { onQuery } = search;
   const type = (next: string) => {
@@ -883,27 +891,34 @@ function ListSearch({ search }: { search: InboxSearchHead }): React.JSX.Element 
     startTransition(() => onQuery(next));
   };
   return (
-    <search className="inbox-search block px-column-inset pb-row-inset">
-      <SearchField
-        label={SEARCH_INBOX}
-        placeholder={SEARCH_INBOX}
-        value={words}
-        onChange={type}
-        onClear={() => type("")}
-        onEscape={words === "" ? undefined : () => type("")}
-      />
+    <search
+      className="inbox-search flex items-center gap-control-gap px-column-inset pb-row-inset"
+      data-top={end === undefined ? undefined : ""}
+    >
+      <div className="min-w-0 flex-1">
+        <SearchField
+          label={SEARCH_INBOX}
+          placeholder={SEARCH_INBOX}
+          value={words}
+          onChange={type}
+          onClear={() => type("")}
+          onEscape={words === "" ? undefined : () => type("")}
+          look={end === undefined ? SEARCH_FIELD_LOOK.WELL : SEARCH_FIELD_LOOK.FRAME}
+        />
+      </div>
+      {end}
     </search>
   );
 }
 
 /**
- * The list's head: the Inbox's name, whatever it lists, or a channel's, and
- * on the window's Inbox the view's menu at the list's top right, which
- * chooses the scope and whom the items are addressed to; a channel and a
- * task's own Inbox list everything they hold, and offer no menu. On the window's Inbox its heading and its button glide as the
- * sidebar folds, the name moving to the list's middle, clear of the
- * sidebar's toggle, and the button keeping to the list's edge. Where the
- * list offers a search, its field stands under the head (`ListSearch`).
+ * The list's head. The window's Inbox listing every channel heads its list
+ * with its search, on the window's top row as a task's tabs stand, ended by
+ * the view's menu, which chooses the scope and whom the items are addressed
+ * to; the sidebar's row names the Inbox. A channel names itself in a bar
+ * over the list, its purpose or when it was archived after its name, and a
+ * task's own Inbox in its tab's bar; each lists everything it holds, and
+ * offers no menu, its search under its bar (`ListSearch`).
  */
 function ListHead({
   head,
@@ -1006,6 +1021,17 @@ function ListHead({
       {view === undefined ? null : <ViewOptions shown={shown} choices={view} readerId={readerId} />}
     </>
   );
+  // Note that the window's Inbox listing every channel heads its list with its search on the window's top row, the view's menu ending it, so no row stands over the list but that one; a channel names itself in a bar over it.
+  if (head.tab !== true && channel === undefined && head.search !== undefined) {
+    return (
+      <>
+        <ListSearch search={head.search} end={options} />
+        {view === undefined ? null : (
+          <FilterChips whose={view} task={head.task} readerId={readerId} />
+        )}
+      </>
+    );
+  }
   return (
     <>
       {/* Note that a task's own Inbox is a tab, whose bar is every tab's; the window's Inbox is a page, whose head glides with the sidebar. */}

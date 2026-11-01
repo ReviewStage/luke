@@ -398,7 +398,7 @@ function _heldAnswer(): HeldAnswer {
   };
 }
 
-test("a plan's document opens on its title, with who created it and when it was last edited under the title, the task's path standing in the title bar alone", () => {
+test("a plan's document opens on its path, its repository as plain words, then its title, with who created it and when it was last edited under the title", () => {
   const home = {
     id: TASK.workspaceId,
     name: "Personal",
@@ -438,18 +438,21 @@ test("a plan's document opens on its title, with who created it and when it was 
   );
   const body = container.querySelector(".desktop-document .plan-document-body .plan-body");
   // A task from before statuses draws no standing chip.
-  const first = body?.firstElementChild;
+  const path = body?.firstElementChild;
+  const first = path?.nextElementSibling;
   const byline = first?.nextElementSibling;
 
-  assert.equal(container.querySelector('nav[aria-label="Where this task is"]'), null);
-  assert.equal(body?.previousElementSibling, null, "nothing stands over the document");
-  assert.equal(container.querySelector(".plan-task-path"), null, "the document draws no path");
-  assert.match(
-    container.querySelector(".luke-frame-head")?.textContent ?? "",
-    /acme\/web/u,
-    "the title bar names the repository",
+  assert.equal(body?.previousElementSibling === null, true, "nothing stands over the document");
+  assert.equal(path?.classList.contains("plan-task-path"), true, "the path leads the document");
+  assert.match(path?.textContent ?? "", /acme\/web/u, "the path names the repository");
+  assert.equal(
+    [...(path?.querySelectorAll("button") ?? [])].some((each) =>
+      each.textContent?.includes("acme/web"),
+    ),
+    false,
+    "the repository is words, not a press",
   );
-  assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title leads the document");
+  assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title stands under it");
   assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
   assert.match(byline?.textContent ?? "", /^Created by .*Edited /u);
   act(() => root.unmount());

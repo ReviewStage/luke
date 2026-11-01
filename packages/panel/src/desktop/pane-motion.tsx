@@ -34,10 +34,6 @@ const GLIDERS = [
   ".desktop-agent > *",
   ".desktop-empty-region > *",
   ".automation-editor",
-  // Note that a place's head glides by its parts, its name and its row's end, rather than as one row, because
-  // the row spans its column and its end stands still while its name moves: a fold moves only the name, and
-  // the side panel only the end of a head standing under the tabs.
-  ".luke-frame-head > *",
 ].join(", ");
 
 /** The pane, read before a change whether or not it is leaving, so one brought back mid-exit carries on from where it was. */

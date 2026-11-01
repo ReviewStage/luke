@@ -144,7 +144,7 @@ export const TABS_GROUND = {
   WELL: "well",
   /** A column's own ground. */
   GROUND: "ground",
-  /** The window's frame, above the sheet it heads: the chosen tab is lifted in the sheet's ground, as a browser's is. */
+  /** The window's frame, above the sheet it heads: the chosen tab in the same soft fill as on any ground, so no tab stands as a card of its own over the card it heads. */
   FRAME: "frame",
 } as const;
 
