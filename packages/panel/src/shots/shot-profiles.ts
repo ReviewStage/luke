@@ -8,10 +8,12 @@
  * kept, so every reader is handed the same objects render after render.
  */
 
+import type { TasksView } from "@luke/features/tasks-view";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
 import { appStateNow } from "../use-app-state";
 import type { ShotSpec } from "./shot-spec";
+import { shotAgents, shotPullRequest } from "./coding-agent";
 import { pullRequestTabShot } from "./pull-request-tab";
 import { chaptersShot } from "./chapters";
 import { boardShot } from "./board";
@@ -24,6 +26,11 @@ import { automationRunsShot } from "./automation-runs";
 import { frameTabsShot } from "./frame-tabs";
 import { rowMenuShot } from "./row-menu";
 import { rowSheetShot } from "./row-sheet";
+import { subTasksShot } from "./sub-tasks";
+import { chapterBarShot } from "./chapter-bar";
+import { prCardShot } from "./pr-card";
+import { toolCallsShot } from "./tool-calls";
+import { queueShot } from "./queue";
 
 /** Each shot's builder, by its profile. */
 const BUILDERS: ReadonlyMap<string, () => ShotSpec> = new Map([
@@ -39,7 +46,30 @@ const BUILDERS: ReadonlyMap<string, () => ShotSpec> = new Map([
   [RUN_PROFILE.SHOT_FRAME_TABS, frameTabsShot],
   [RUN_PROFILE.SHOT_ROW_MENU, rowMenuShot],
   [RUN_PROFILE.SHOT_ROW_SHEET, rowSheetShot],
+  [RUN_PROFILE.SHOT_SUB_TASKS, subTasksShot],
+  [RUN_PROFILE.SHOT_CHAPTER_BAR, chapterBarShot],
+  [RUN_PROFILE.SHOT_PR_CARD, prCardShot],
+  [RUN_PROFILE.SHOT_TOOL_CALLS, toolCallsShot],
+  [RUN_PROFILE.SHOT_QUEUE, queueShot],
 ]);
+
+/**
+ * The tasks view with the plan's two agents and their pull requests listed,
+ * where the shot names none of its own: 0.24.0 lists an agent and its pull
+ * request from the view alone, no longer from an agents read.
+ */
+function withAgents(view: TasksView): TasksView {
+  const taskAgents = view.taskAgents ?? shotAgents();
+  const agentPullRequests =
+    view.agentPullRequests ??
+    taskAgents.flatMap((agent) => {
+      const answer = shotPullRequest(agent.id);
+      return !("pullRequest" in answer) || answer.pullRequest === null
+        ? []
+        : [{ agentId: agent.id, taskId: agent.planId ?? null, pullRequest: answer.pullRequest }];
+    });
+  return { ...view, taskAgents, agentPullRequests };
+}
 
 /** Each shot as built, by its profile. */
 const built = new Map<string, ShotSpec>();
@@ -53,7 +83,8 @@ export function shotSpec(
   if (build === undefined) return undefined;
   const held = built.get(run.profile);
   if (held !== undefined) return held;
-  const spec = build();
+  const made = build();
+  const spec = { ...made, planning: withAgents(made.planning) };
   built.set(run.profile, spec);
   return spec;
 }

@@ -19,6 +19,7 @@ import type {
   AgentPullRequestAnswerView,
   AgentTranscriptPage,
 } from "@luke/features/agent-view";
+import type { AgentQueue } from "@luke/features/agent-queue-wire";
 import type { AgentTranscriptMessage, AgentSummary } from "@luke/features/agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { WireRecord, WireValue } from "@luke/wire";
@@ -119,6 +120,8 @@ export function shotAgents(): AgentSummary[] {
       effort: "high",
       title: AGENT_2_TITLE,
       createdAt: ago(6),
+      // A GPT model runs on Codex, which queues a follow-up behind its turn (0.24.0).
+      runtime: "codex",
       status: "running",
       turnId: TURN_ID.AGENT_2,
       runStartedAt: ago(6),
@@ -324,7 +327,7 @@ function shotWorkerMessages(): AgentTranscriptMessage[] {
 }
 
 /** The agent still at work: its task, and the first steps of its turn. */
-function shotRunningMessages(): AgentTranscriptMessage[] {
+export function shotRunningMessages(): AgentTranscriptMessage[] {
   return [
     {
       id: "r-task",
@@ -352,12 +355,23 @@ function shotRunningMessages(): AgentTranscriptMessage[] {
   ];
 }
 
+/** The running agent's turn as a shot stages it: its messages, when the turn started, and what waits queued behind it. */
+export interface RunningTurn {
+  readonly messages: () => AgentTranscriptMessage[];
+  readonly startedAt: number;
+  readonly queue?: AgentQueue;
+}
+
+/** The running agent's turn as every shot before 0.24.0's queue stages it. */
+const RUNNING: RunningTurn = { messages: shotRunningMessages, startedAt: ago(6) };
+
 /** One page of a transcript read past `after`: everything at the start, then nothing more. */
 function transcriptPage(
   agentId: string,
   after: string,
   callId: string | undefined,
   messages: () => AgentTranscriptMessage[] = shotAgentMessages,
+  running: RunningTurn = RUNNING,
 ): AgentMessagesAnswerView | typeof NEVER | undefined {
   const first = after === START;
   if (agentId === SHOT_ID.AGENT && callId === DELEGATE_CALL_ID) {
@@ -403,11 +417,12 @@ function transcriptPage(
     // The running agent's hold never lets go once its page is read.
     if (!first) return NEVER;
     return {
-      messages: shotRunningMessages(),
+      messages: running.messages(),
       cursor: READ_THROUGH,
       status: "running",
-      runStartedAt: ago(6),
+      runStartedAt: running.startedAt,
       title: AGENT_2_TITLE,
+      ...(running.queue === undefined ? undefined : { queue: running.queue }),
     };
   }
   return undefined;
@@ -507,6 +522,7 @@ async function* followed(page: AgentTranscriptPage): AsyncGenerator<AgentTranscr
 /** The finished agent and its sibling as one plan's answers: list, transcripts, pull requests, changes, models, and the default; `messages` replaces the finished agent's transcript. */
 export function codingAgentAnswers(
   messages: () => AgentTranscriptMessage[] = shotAgentMessages,
+  running: RunningTurn = RUNNING,
 ): ShotAnswers {
   const list: AgentListAnswer = { agents: shotAgents() };
   const models: AgentModelsAnswer = { models: shotModels() };
@@ -515,9 +531,9 @@ export function codingAgentAnswers(
     [ACT_KIND.AGENTS_LIST]: (payload) =>
       payload.taskId === SHOT_ID.PLAN ? list : { agents: [] },
     [ACT_KIND.AGENTS_MESSAGES]: (payload) =>
-      transcriptPage(payload.agentId, payload.after, payload.callId, messages),
+      transcriptPage(payload.agentId, payload.after, payload.callId, messages, running),
     [ACT_KIND.AGENTS_TRANSCRIPT]: (payload) => {
-      const page = transcriptPage(payload.agentId, START, payload.callId, messages);
+      const page = transcriptPage(payload.agentId, START, payload.callId, messages, running);
       if (page === undefined || page === NEVER || "failure" in page) return undefined;
       // SAFETY: the follow is read with `for await`; oRPC's iterator class adds nothing it calls.
       return followed({ ...page, newest: true, caughtUp: true }) as never;

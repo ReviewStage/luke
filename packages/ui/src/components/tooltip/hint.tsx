@@ -598,6 +598,8 @@ export function Tooltip({
   // lingers as the pointer moves on, leaves it as it was, and a hint still
   // waiting is only called off.
   const hide = useCallback(() => {
+    // Throwaway: a changelog shot holds its card up through the capture (`packages/panel/src/shots/`).
+    if (carded && document.documentElement.dataset.shotHoldCard === "true") return;
     if (latest() === undefined) {
       stopRest();
       return;

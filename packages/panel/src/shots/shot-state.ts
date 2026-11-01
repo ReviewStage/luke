@@ -17,6 +17,8 @@ export function shotSnapshot(state: AppStateSnapshot): AppStateSnapshot {
   return {
     ...state,
     account: shotAccount(),
+    // A shot is never offline, whatever the machine taking it answers.
+    network: { ...state.network, online: true },
     tasks: shot.planning,
     inbox:
       shot.inbox === undefined
