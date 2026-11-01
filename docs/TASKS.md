@@ -391,7 +391,9 @@ subagent's tab stays in the side panel.
   transcript yet, the composer focused, and the model chip on the account's
   default. Nothing reaches the service until the first message, which
   starts the agent with those words as its prompt; the agent's own tab then
-  takes the draft's place. Closing the draft lets it go.
+  takes the draft's place. Closing the draft lets it go, and so does leaving
+  it with nothing in its composer, for another tab, task, or place; a task
+  never opens a draft by itself.
 
 - **The head.** The model · the effort · the status, which the tab's glyph
   wears (`state-glyph.tsx`): the mark of the harness the model runs in

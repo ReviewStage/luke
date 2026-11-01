@@ -521,7 +521,7 @@ function holdsNoWords(draft: AgentDraft): boolean {
 }
 
 /** Whether a draft holds nothing at all: no words or files, no fork, and its chips as they open. */
-function holdsNothing(draft: AgentDraft): boolean {
+export function holdsNothing(draft: AgentDraft): boolean {
   return (
     holdsNoWords(draft) &&
     draft.fork === undefined &&

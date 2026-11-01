@@ -29,9 +29,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * and never closes nor moves; the agents' tabs stand one per agent in the
  * order started, and a draft agent's, opened from the column's "+", after
  * them while the open task holds the draft. A task none of whose tabs viewed
- * still stands shows its Overview, and one with no agent's tab standing
- * opens a draft beside it (`use-tasks-tab.ts`), so a new agent's composer is
- * one tab away.
+ * still stands shows its Overview, and never opens a draft by itself: a
+ * draft stands only once the "+" asks for one, and one left holding nothing
+ * closes (`use-tasks-tab.ts`).
  *
  * An agent's tab closes as an editor's does, which closes the view and
  * leaves the agent running, and the "+" opens it again; the agents whose
