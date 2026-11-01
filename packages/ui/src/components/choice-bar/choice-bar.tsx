@@ -81,6 +81,7 @@ import {
   useState,
 } from "react";
 import { cn } from "../../cn.js";
+import { ChevronRightIcon } from "../../face/glyphs.js";
 import { joinRefs } from "../../join-refs.js";
 import { pulseOnPress } from "../../press-pulse.js";
 import { type CountPart, CountParts } from "../choice/count-part.js";
@@ -191,6 +192,19 @@ const BAR =
 
 /** The scroll area's sideways fade, which eases in only while the row has options past an edge. */
 const BAR_FADE = scrollFadeMarks(SCROLL_FADE.BOTH, SCROLL_AXIS.HORIZONTAL);
+
+/**
+ * A bar a finger works (`words`) stands in a frame of its own, which takes
+ * the bar's place in its row, the bar filling it but for a glyph's room at
+ * its end, where a mark stands outside the bar's fade: a chevron saying
+ * more options wait past the end, which `choice-bar.css` shows only while
+ * they do. It is a mark, not a press: a finger swipes the row.
+ */
+const WORDS_FRAME =
+  "luke-choice-bar-frame relative flex min-w-0 max-w-full self-stretch items-center pe-control-icon [.luke-pane-bar-middle>&]:flex-1";
+const WORDS_BAR = "[.luke-choice-bar-frame>&]:flex-1";
+const WORDS_MORE =
+  "luke-choice-bar-more absolute inset-y-0 end-0 flex items-center pointer-events-none text-muted-foreground [&>svg]:size-control-icon";
 
 const BAR_LOOK = {
   fill: "flex flex-none [.luke-pane-bar-middle>&]:flex-1 self-stretch @container/luke-choice-bar",
@@ -776,7 +790,8 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
     segmented && stretch ? OPTION_FLEX.shared : OPTION_FLEX.own,
     tight && FILL_TIGHT_OPTION,
   );
-  return (
+  const words = fold === CHOICE_BAR_FOLD.WORDS;
+  const bar = (
     <ToggleGroupPrimitive<Value>
       ref={barRef}
       value={value === undefined ? [] : [value]}
@@ -794,6 +809,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
         segmented
           ? SEGMENTED_WIDTH[stretch ? "stretch" : "hug"]
           : [FILL_GAP[size], tight && FILL_TIGHT_BAR],
+        words && WORDS_BAR,
       )}
       data-look={look}
       data-size={size}
@@ -819,7 +835,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
             onMouseDown={roving ? undefined : keepFocus}
             onClick={pulseOnPress()}
           >
-            {item.icon === undefined || fold === CHOICE_BAR_FOLD.WORDS ? null : (
+            {item.icon === undefined || words ? null : (
               <span className={ICON} aria-hidden="true">
                 {item.icon}
               </span>
@@ -840,5 +856,15 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
         );
       })}
     </ToggleGroupPrimitive>
+  );
+  return words ? (
+    <span className={WORDS_FRAME}>
+      {bar}
+      <span className={WORDS_MORE} aria-hidden="true">
+        <ChevronRightIcon />
+      </span>
+    </span>
+  ) : (
+    bar
   );
 }

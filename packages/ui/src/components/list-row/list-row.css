@@ -531,6 +531,16 @@
     }
   }
 
+  /* Under a finger a compact ⋯ is as wide as a finger's target, its glyph
+     centred in it, rather than taking its press past its own 24px box
+     (`button.css`): it stands at the row's end, whose edge would cut that
+     press short. */
+  @media (pointer: coarse) {
+    .luke-list-row-more > .luke-button[data-size="compact"][data-icon-only="true"] {
+      min-width: var(--luke-touch-target);
+    }
+  }
+
   /* A row that goes deeper wears its chevron at its end, shown while the
      row is reached for or open, its room kept so nothing moves as it shows. */
   .luke-list-row-chevron {

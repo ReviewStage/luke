@@ -232,6 +232,22 @@ test("a patch drawn alone draws each note in the view's own element under its li
   assert.equal(kept.get("t1")?.parentElement?.getAttribute("slot"), "annotation-additions-11");
 });
 
+test("a whole file and a patch drawn alone mark each indented line with its indent, which a wrapped line hangs by", async () => {
+  const { host: fileHost } = mountFile(props({ text: "function f() {\n    return 1;\n}\n" }));
+  const patchHost = document.createElement("div");
+  document.body.append(patchHost);
+  const patch =
+    "--- a/seats.ts\n+++ b/seats.ts\n@@ -1,2 +1,2 @@\n function f() {\n-  return 1;\n+  return 2;\n";
+  mounted.push(diffView.mount(patchHost, { patch, look: LOOK, excerpt: true }));
+  await nextFrame();
+  const indents = (host: HTMLElement) =>
+    [...drawnRoot(host).querySelectorAll<HTMLElement>("[data-line]")].map((row) =>
+      row.style.getPropertyValue("--luke-line-indent"),
+    );
+  assert.deepEqual(indents(fileHost), ["", "4ch", ""]);
+  assert.deepEqual(indents(patchHost), ["", "2ch", "2ch"]);
+});
+
 test("a list draws each file's notes in the view's own element for that file and note", async () => {
   const host = document.createElement("div");
   document.body.append(host);
