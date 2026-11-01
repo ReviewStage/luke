@@ -92,8 +92,8 @@ import {
  * (`hostUpdateWords`), on every row but This Mac's, whose line is its own
  * app's reading, for a Mac that it runs while its user is logged in,
  * since its host runs in their login session, and, where its host program
- * is below the service's floor, Upgrade needed with how to upgrade it: the
- * install command's upgrade, this Mac's app updated, or, for another Mac,
+ * is below the service's floor, Update needed with how to update it: the
+ * install command's update, this Mac's app updated, or, for another Mac,
  * either, since the service lists no word of how a Mac joined. Remove,
  * behind the row's ⋯, refuses that machine at once, after asking with the
  * command that takes Luke off the machine itself where the install command
@@ -146,9 +146,9 @@ const WORDS = {
   ONLINE: "Online",
   UNKNOWN: "Can't check status",
   CHECKING: "Checking",
-  UPGRADE_NEEDED: "Upgrade needed",
-  UPGRADE_TITLE: "Run this on the host to upgrade it",
-  MAC_UPGRADE: "Update the Luke app on this Mac to upgrade it.",
+  UPGRADE_NEEDED: "Update needed",
+  UPGRADE_TITLE: "Run this on the host to update it",
+  MAC_UPGRADE: "Update the Luke app on this Mac.",
   OTHER_MAC_UPGRADE: "If you added it from the Luke app on it, update the app there.",
   OTHER_MAC_UPGRADE_TITLE: "If you used the install command, run this on it",
   INSTALL_TITLE: "Run this on each host",
@@ -253,7 +253,7 @@ function updateLine(host: Host, standing: DeviceStanding): HostLine | null {
   };
 }
 
-/** How a host is upgraded, under its Upgrade needed: this Mac's app updated, the install command's upgrade run on a server, and either for another Mac. */
+/** How a host is updated by hand, under its Update needed: this Mac's app updated, the install command's update run on a server, and either for another Mac. */
 function UpgradeHow({
   platform,
   thisMac,
@@ -304,7 +304,7 @@ const REMOVE_WORDS = {
   },
 } as const;
 
-/** One machine's row: its name, whether it is online, what it is, and its version, where its setup stands while it is not ready and its update while one is under way, for a Mac whose login it runs in, Upgrade needed with how to upgrade it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
+/** One machine's row: its name, whether it is online, what it is, and its version, where its setup stands while it is not ready and its update while one is under way, for a Mac whose login it runs in, Update needed with how to update it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
 function HostRow({
   host,
   book,

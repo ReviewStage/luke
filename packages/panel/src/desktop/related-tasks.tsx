@@ -26,7 +26,9 @@ import { useTasksSelection } from "./tasks-selection.js";
  * stands at its end, a relation's kind, say, before its ⋯, each of those
  * last three drawn only where a row fills it, and the List's columns
  * folding away by the list's own width as the List folds them
- * (`fitted-columns.ts`), key and sub-tasks first, before a name is squeezed. Its chips change the task where it stands, a press
+ * (`fitted-columns.ts`), key first, before a name is squeezed, but the
+ * sub-tasks' badge, which a sub-task with sub-tasks of its own always
+ * wears, as the pull requests and the end always stand. Its chips change the task where it stands, a press
  * opens it, and its ⋯, a right-click, and the menu key open its menu. Its
  * rows are one Tab stop that ↑↓ walk, and are chosen together as the List's
  * are, a row chosen among several offering the List's bar's acts on every
@@ -51,32 +53,28 @@ export interface RelatedTaskRow {
   readonly unlisted?: boolean;
 }
 
-/** The room, in CSS pixels, each cell of a related task's that is none of the List's columns takes at its widest, the gap before it included. */
-const OWN_CELL_ROOM = {
+/** The room, in CSS pixels, each cell of a related task's that never folds away takes at its widest, the gap before it included: the sub-tasks' badge's as the List counts it. */
+const OWN_CELL_ROOM: Partial<Record<TaskRowCell, number>> = {
   [TASK_ROW_CELL.PULL_REQUESTS]: 72,
+  [TASK_ROW_CELL.SUB_TASKS]: 76,
   [TASK_ROW_CELL.END]: 56,
-} as const;
+};
 
-/** The List's columns, which fold away by a list's width as the List folds them. */
-const LIST_COLUMNS: ReadonlySet<string> = new Set([
-  ...Object.values(TASK_PROPERTY),
-  ...Object.values(LIST_COLUMN),
-]);
+/** The List's columns that fold away by a list's width as the List folds them; the sub-tasks' count stands whatever the width. */
+const LIST_COLUMNS: ReadonlySet<string> = new Set(
+  [...Object.values(TASK_PROPERTY), ...Object.values(LIST_COLUMN)].filter(
+    (column) => column !== LIST_COLUMN.SUB_TASKS,
+  ),
+);
 
 /** Whether a cell is one of the List's columns. */
 function isListColumn(cell: TaskRowCell): cell is TaskRowCell & ListColumn {
   return LIST_COLUMNS.has(cell);
 }
 
-/** The room the cells drawn that are none of the List's columns take, which a list counts out of its width before it folds. */
+/** The room the cells drawn that never fold away take, which a list counts out of its width before it folds. */
 function ownRoom(cells: readonly TaskRowCell[]): number {
-  return cells.reduce(
-    (room, cell) =>
-      cell === TASK_ROW_CELL.PULL_REQUESTS || cell === TASK_ROW_CELL.END
-        ? room + OWN_CELL_ROOM[cell]
-        : room,
-    0,
-  );
+  return cells.reduce((room, cell) => room + (OWN_CELL_ROOM[cell] ?? 0), 0);
 }
 
 /**

@@ -23,7 +23,8 @@ import { RelatedTasks } from "./related-tasks.js";
  * related-tasks.test.ts -- a task's related tasks, drawn on their own as the
  * Tasks page's List draws a task: each row ends with a chip for each of its
  * open pull requests, a draft among them and a merged one left out, then
- * what its owner stands at its end; a press on a row opens its task.
+ * what its owner stands at its end, and its sub-tasks' count stands however
+ * narrow the list; a press on a row opens its task.
  * Synthetic tasks.
  */
 
@@ -132,7 +133,7 @@ test("a related task's row ends with its open pull requests and its owner's end,
   assert.deepEqual(opened, ["t-42"]);
 });
 
-test("a related task's row says it is blocked beside its name and how many of its sub-tasks are finished", () => {
+test("a related task's row says it is blocked beside its name and how many of its sub-tasks are finished, even in a list too narrow for its key", () => {
   const blocked: TaskSummary = { ...TASK, blocked: true };
   const child = (id: string, status: NonNullable<TaskSummary["status"]>): TaskSummary => ({
     ...TASK,
@@ -140,6 +141,10 @@ test("a related task's row says it is blocked beside its name and how many of it
     status,
     parentTaskId: TASK.id,
   });
+  // Note that the list is measured as a plan's narrow pane stands it, which folds the key away.
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, 360, 400),
+  );
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -165,5 +170,6 @@ test("a related task's row says it is blocked beside its name and how many of it
     row.querySelector("[data-cell='name'] .blocked-mark"),
     "the stop sign stands beside the name",
   );
+  assert.equal(row.querySelector("[data-cell='key']"), null, "the key folds away");
   assert.match(row.querySelector("[data-cell='subTasks']")?.textContent ?? "", /^1\/2/u);
 });
