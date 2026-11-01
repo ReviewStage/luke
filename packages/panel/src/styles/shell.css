@@ -87,15 +87,33 @@
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
 }
 
+/* How far a sheet's card reaches past its box, set on the sheet for one pane
+   motion (`pane-motion.tsx`) and taken by its card alone: registered as not
+   inherited, so setting it draws nothing else the sheet holds again. */
+@property --sheet-reach-left {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --sheet-reach-right {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 /* Sidebar ----------------------------------------------------------------- */
 
 /* Folding the sidebar away moves it rather than narrowing it: the work column
-   takes the window at once and the sidebar slides off the left edge over it,
-   on transform and opacity alone, so neither column re-wraps a line on the
-   way, while what the column holds glides to its new place on the same beat
-   (pane-motion.tsx). Unfolding is the same slide back in beside a column
-   already narrowed. Only the plans' shell folds, so Settings always keeps its
-   page list. The shell clips what slides past its edges with `clip` rather
+   takes the window at once and the sidebar slides off the left edge, on
+   transform and opacity alone, so neither column re-wraps a line on the
+   way, while the work's sheet uncovers itself from the sidebar's edge as it
+   goes and what it holds glides to its new place, on the same beat
+   (pane-motion.tsx), so neither draws over the other. Unfolding is the same
+   slide back in, the sheet covered back from where it stood to the column
+   already narrowed. The transition below is the floating sidebar's alone: a
+   fold plays its own motion and stops this one. Only the plans' shell
+   folds, so Settings always keeps its page list. The shell clips what slides past its edges with `clip` rather
    than `hidden`, because `hidden` makes it a scroll container: a panel sliding
    in from past the right edge is room that focus or scrollIntoView would
    scroll the whole window sideways into and leave it there. Every shell
@@ -281,7 +299,13 @@
   > .side-panel::before {
   position: absolute;
   z-index: -1;
-  inset: var(--desktop-bar-height) 0 0;
+  /* A sheet a pane change narrowed draws its card out to where its edge
+     stood, under the frame that follows the pane in (`pane-motion.tsx`). */
+  --sheet-reach-left: inherit;
+  --sheet-reach-right: inherit;
+
+  inset: var(--desktop-bar-height) calc(-1 * var(--sheet-reach-right)) 0
+    calc(-1 * var(--sheet-reach-left));
   content: "";
   pointer-events: none;
 }

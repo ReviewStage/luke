@@ -173,7 +173,7 @@ import { useAgentTerminalDoors } from "./agent-actions.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { AgentMenuTab } from "./main-tabs.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
-import { paneTiming } from "./pane-motion.js";
+import { paneTiming, pastRightEdge } from "./pane-motion.js";
 import { PhoneBack, PhoneHead, PlaceMore } from "./phone-head.js";
 import {
   type AddEntry,
@@ -2234,7 +2234,8 @@ export function useSidePanelDrawing(panel: SidePanelControl): SidePanelDrawing {
 
 /**
  * Plays the drawn panel's exit at `aside` and answers `onLeft` once it has:
- * out past the window's right, or, leaving full screen, covered from its left
+ * out past the window's right, keeping its gap from the document's edge as
+ * that follows it (`pastRightEdge`), or, leaving full screen, covered from its left
  * edge to where it will stand beside the document, which `room` already
  * marks. Each starts from wherever an arrival under way had brought it. With
  * no motion to play it answers at once, before the frame is drawn.
@@ -2255,7 +2256,7 @@ function playExit(
     room === null ? 0 : room.getBoundingClientRect().left - aside.getBoundingClientRect().left;
   const keyframes =
     leaving === PANEL_LEAVING.CLOSE
-      ? [{ transform: drawn.transform }, { transform: "translateX(100%)" }]
+      ? [{ transform: drawn.transform }, { transform: pastRightEdge(aside) }]
       : [
           { clipPath: drawn.clipPath === "none" ? "inset(0)" : drawn.clipPath },
           { clipPath: `inset(0 0 0 ${beside}px)` },
