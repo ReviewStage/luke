@@ -71,7 +71,13 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { DesktopWelcome } from "./desktop-welcome.js";
-import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
+import {
+  AgentPane,
+  MainTabStrip,
+  MainTabStripSkeleton,
+  mainTabLabel,
+  phoneAgentStarts,
+} from "./main-tabs.js";
 import { PhoneBack, PhoneHead, PlaceMore, phoneBar } from "./phone-head.js";
 import { PlanAgents } from "./plan-agents.js";
 import { PlanRelations } from "./plan-relations.js";
@@ -440,10 +446,16 @@ function PlanDocument({
   }, [commentAsk, inboxTaskId, commentsRead, showSideTab, onCommentRevealed]);
   const { onArea: setArea, focus, setFocus } = useColumnFocus();
   const [column, setColumn] = useState<HTMLElement | null>(null);
-  // The column and the plan's document in it, whose heading a phone's row picks up once it scrolls away under the row (`useHeadingAway`).
-  const columnBox = useRef<HTMLElement | null>(null);
-  const documentBox = useRef<HTMLElement | null>(null);
-  const planHeading = useHeadingAway(columnBox, documentBox);
+  // The plan's document in the column, whose heading a phone's row picks up once it scrolls away under the row (`useHeadingAway`).
+  // Note that each box is handed afresh as it mounts, and the document's for each task, because the document stands only once the task is read, and the heading watched is that task's.
+  const [documentBox, setDocumentBox] = useState<HTMLElement | null>(null);
+  const headingTask = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
+  const columnHeld = useMemo(() => ({ current: column }), [column]);
+  const documentHeld = useMemo(
+    () => ({ current: headingTask === undefined ? null : documentBox }),
+    [documentBox, headingTask],
+  );
+  const planHeading = useHeadingAway(columnHeld, documentHeld);
   // The summary lists the task's agents once they are read, so where the
   // task's row says it has some, the summary's room is kept from the open on
   // and the list landing moves nothing in the column.
@@ -1064,7 +1076,7 @@ function PlanDocument({
   const overviewShown = isOverviewTab(tab);
   const documentBody = (
     <Fill
-      ref={documentBox}
+      ref={setDocumentBox}
       as={FILL_ELEMENT.SECTION}
       className="desktop-document @container/plan-document [&[hidden]]:hidden"
       role="tabpanel"
@@ -1160,6 +1172,12 @@ function PlanDocument({
     <TaskPaneBar
       pane={pane}
       agents={paneAgents}
+      starts={phoneAgentStarts(mainTabs, agents, () => {
+        onListed(false);
+        if (sidePanel.open) sidePanel.onToggle();
+      })}
+      asked={mainTabs.newTabAsked}
+      onAnswered={mainTabs.onNewTabAnswered}
       shownAgent={
         pane === TASK_PANE.AGENTS && tab !== undefined && isAgentTab(tab) ? tab.agent : undefined
       }
@@ -1200,10 +1218,7 @@ function PlanDocument({
           leaving full screen uncovers it as it was. */}
                   <TaskPage
                     areaRef={setArea}
-                    columnRef={(element) => {
-                      columnBox.current = element;
-                      setColumn(element);
-                    }}
+                    columnRef={setColumn}
                     panelOpen={sidePanel.open}
                     fullScreen={sidePanel.fullScreen}
                     column={
@@ -1226,7 +1241,7 @@ function PlanDocument({
                                     tasks.taskAgentPins.some((pin) => pin.agentId === agentId),
                                   onPin: tasks.onPinAgent,
                                 }}
-                                keys={tasks.shown && !sideFocused}
+                                keys={!switched && tasks.shown && !sideFocused}
                                 shown={tasks.shown}
                                 onOpenTerminal={terminalDoors.onOpenTerminal}
                                 slot={switched ? null : actionsSlot}

@@ -45,6 +45,7 @@ import {
   type MainTabsControl,
 } from "../tasks/use-main-tabs.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
+import type { MenuAction } from "./action-menu.js";
 import { type AgentTerminalDoors, useAgentActions } from "./agent-actions.js";
 import type { TaskCards } from "./side-panel.js";
 import {
@@ -463,6 +464,40 @@ function addEntries(
   // A pilot task's agents are its pilot's to start, so its menu offers no New agent.
   const starts = agents.onUnarchive === undefined && startsOwnAgents(agents.mode) ? [newAgent] : [];
   return [...starts, ...agentRows];
+}
+
+/**
+ * What a phone's row of views offers past the task's agents in place of the
+ * column's hidden "+" (`task-pane-switcher.tsx`): New agent on the "+"'s own
+ * terms, unavailable with Start's reason under it, `before` run ahead of
+ * the draft it opens; and the agents' read again where it never landed, as
+ * the strip's Retry offers it.
+ */
+export function phoneAgentStarts(
+  main: MainTabsControl,
+  agents: AgentsControl,
+  before: () => void,
+): MenuAction[] {
+  const reason = agents.start.busy ? NEW_AGENT_STARTING : agents.start.reason;
+  const starts: MenuAction[] =
+    agents.onUnarchive === undefined && startsOwnAgents(agents.mode)
+      ? [
+          {
+            label: tabLook({ kind: TAB_KIND.DRAFT }).label,
+            detail: reason,
+            disabled: reason !== undefined,
+            onSelect: () => {
+              before();
+              main.onChoose({ draft: agents.onNewDraft() });
+            },
+          },
+        ]
+      : [];
+  const retry: MenuAction[] =
+    agents.listFailed && agents.agents === undefined
+      ? [{ label: RETRY_AGENTS, onSelect: agents.onRetryList }]
+      : [];
+  return [...starts, ...retry];
 }
 
 /** The row the column's tabs stand in, which is its toolbar's title: the strip, what follows it, and the "+" last. */
