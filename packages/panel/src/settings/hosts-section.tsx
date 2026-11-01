@@ -337,11 +337,11 @@ function HostRow({
   // Note that this Mac's own line is its app's reading of its `luke-host`, which says its setup and more, with Retry, and its update is its app's.
   const line = thisMac !== undefined ? thisMac.line : setupLine(host, standing);
   const update = thisMac !== undefined ? null : updateLine(host, standing);
+  const label = thisMac === undefined ? host.name : `${host.name} (this Mac)`;
   return (
     <>
       <MenuRow
-        thing="Host"
-        alone
+        thing={label}
         actions={[
           {
             label: "Remove",
@@ -352,7 +352,7 @@ function HostRow({
           },
         ]}
         row={{
-          label: thisMac === undefined ? host.name : `${host.name} (this Mac)`,
+          label,
           adornment: host.upgradeNeeded ? (
             <Badge tone={STATUS_TONE.ATTENTION}>{WORDS.UPGRADE_NEEDED}</Badge>
           ) : undefined,

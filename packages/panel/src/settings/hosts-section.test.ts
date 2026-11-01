@@ -22,6 +22,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { chooseMenuItem } from "../testing/phone-head.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { useOpenHostConnect } from "./host-connect-dialog.js";
 import { HostsSection } from "./hosts-section.js";
@@ -380,6 +381,23 @@ test("a host's row says its version and where its update stands, and This Mac's 
   assert.ok(text.includes("Updating…"));
   assert.ok(text.includes("Couldn't update: the download did not match its checksum"));
   assert.ok(!text.includes("this Mac's disk is full"), "This Mac's row draws no update line");
+});
+
+test("each host's ⋯ is named by its host, and its Remove asks about that host first", async () => {
+  const hosts: readonly Host[] = [
+    { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-01" },
+    { id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "sfo-02" },
+  ].map((host) => ({ seenAt: 0, version: "0.2.1", upgradeNeeded: false, ...host }));
+  await machinesWithThisMac(hosts, { standing: THIS_MAC_HOST_STANDING.OFF });
+  const more =
+    document.querySelector<HTMLButtonElement>('button[aria-label="sfo-02 actions"]') ??
+    assert.fail("sfo-02's ⋯ is drawn");
+
+  act(() => more.click());
+  chooseMenuItem("Remove");
+
+  const asked = document.querySelector('[role="alertdialog"]')?.textContent ?? "";
+  assert.ok(asked.includes("Remove sfo-02?"), asked);
 });
 
 test.each([
