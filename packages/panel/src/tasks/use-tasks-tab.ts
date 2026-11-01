@@ -140,7 +140,6 @@ import {
   localAgentRefusalWords,
   openingLineOf,
   type SentLine,
-  startsOwnAgents,
 } from "./agent-model.js";
 import {
   CLOSED_TAB_STRIP,
@@ -160,7 +159,13 @@ import { freshAccount, RESTING_PAGE, restingPage } from "./resting-page.js";
 import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
-import { type AgentsControl, type ModelsRead, readAgentById, useAgents } from "./use-agents.js";
+import {
+  type AgentsControl,
+  holdsNothing,
+  type ModelsRead,
+  readAgentById,
+  useAgents,
+} from "./use-agents.js";
 import {
   chooseChannel,
   chooseInboxTask,
@@ -1485,29 +1490,35 @@ export function useTasksTab(input: {
     (agents.heldIds?.length ?? 0) > 0 ||
     input.inboxWaiting.some((task) => task.taskId === viewed.activeTaskId);
   mainRef.current = mainTabs;
-  // A task whose column holds no tab past its Overview once its agents are
-  // read opens a new agent's draft beside it (`use-main-tabs.ts`), so a task
-  // with no agent, or whose last agent's tab closed, has a composer one tab
-  // away. Note that nothing reaches the service until the draft is sent or
-  // called.
-  const openDraftNow = useRef(agents.onNewDraft);
-  openDraftNow.current = agents.onNewDraft;
-  // Note that an archive still out wants none, since the agent it took comes back if refused, nor
-  // does a pilot task, whose agents its pilot starts (`startsOwnAgents`), and
-  // neither does New task's start of an agent, since main opens its task before the start answers,
-  // whose agent no list holds yet, and its answer opens the agent's tab, or its draft if refused.
-  const draftWanted =
-    mainTabs.tab !== undefined &&
-    mainTabs.tabs.every(isOverviewTab) &&
-    startingTask === undefined &&
-    agents.agentIds !== undefined &&
-    agents.onUnarchive === undefined &&
-    !agents.archiving &&
-    startsOwnAgents(agents.mode);
-  const draftTask = viewed.activeTaskId;
+  // A new agent's draft opens only from the column's "+" (`main-tabs.tsx`), and one holding
+  // nothing (`holdsNothing`) stands only while its tab is in view: left for another tab, another
+  // task, or another place, it closes, and one standing out of view, as a launch reads back a draft
+  // whose files it kept nowhere, closes once the column settles its tab. Note that the draft left
+  // is remembered as it last stood in view, because by the render that leaves it the open task's
+  // draft may be another task's.
+  const shownTab = mainTabs.tab;
+  const draftInView =
+    standIn === undefined &&
+    historyFor === undefined &&
+    shownTab !== undefined &&
+    isDraftTab(shownTab)
+      ? shownTab.draft
+      : undefined;
+  const blankDraft =
+    agents.draft !== undefined && holdsNothing(agents.draft) ? agents.draft.id : undefined;
+  const columnSettled = shownTab !== undefined;
+  const discardDraftNow = useRef(agents.onDiscardDraft);
+  discardDraftNow.current = agents.onDiscardDraft;
+  const blankInView = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (draftWanted && draftTask !== undefined) openDraftNow.current();
-  }, [draftWanted, draftTask]);
+    const left = blankInView.current;
+    blankInView.current =
+      draftInView !== undefined && draftInView === blankDraft ? blankDraft : undefined;
+    if (left !== undefined && left !== draftInView) discardDraftNow.current(left);
+    if (blankDraft !== undefined && blankDraft !== draftInView && columnSettled) {
+      discardDraftNow.current(blankDraft);
+    }
+  }, [draftInView, blankDraft, columnSettled]);
   // A page's tab is held to the pages agents wrote for the task.
   const pages = useMemo(() => (viewed.pages ?? []).map((page) => page.id), [viewed.pages]);
   // While an agent's page stands, the panel is that agent's: its workers', its Changes', and its

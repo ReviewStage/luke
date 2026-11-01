@@ -608,9 +608,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   act(() => column().onClose({ agent: AGENT_ID }));
   act(() => panel().onClose(file));
   assert.deepEqual(panel().strip, []);
-  // The column with no agent's tab left opens a new agent's draft beside its Overview.
-  const draft = { draft: tab.control().agents.draft?.id ?? assert.fail("no draft opened") };
-  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, draft]);
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW], "no draft opens in the agent's place");
 
   act(() => tab.control().onReopenClosedTab?.());
   assert.deepEqual(panel().strip, [file]);
@@ -622,7 +620,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   );
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, { agent: AGENT_ID }, draft]);
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, { agent: AGENT_ID }]);
   assert.deepEqual(column().tab, { agent: AGENT_ID });
 
   act(() => tab.control().onReopenClosedTab?.());
@@ -631,7 +629,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
-test("a task none of whose tabs was viewed shows its Overview, keeps the tab chosen across a launch, and opens a new agent's draft beside Overview once its last agent's tab closes", async () => {
+test("a task none of whose tabs was viewed shows its Overview, keeps the tab chosen across a launch, and shows Overview alone once its last agent's tab closes", async () => {
   const listed = withAgents([RUNNING_AGENT]);
   const tab = mount({ shown: true, tasks: listed });
   await settle();
@@ -655,8 +653,7 @@ test("a task none of whose tabs was viewed shows its Overview, keeps the tab cho
 
   act(() => again().onClose(agent));
   await settle();
-  const draft = { draft: launched.control().agents.draft?.id ?? assert.fail("no draft opened") };
-  assert.deepEqual(again().tabs, [MAIN_TAB.OVERVIEW, draft]);
+  assert.deepEqual(again().tabs, [MAIN_TAB.OVERVIEW]);
   assert.equal(again().tab, MAIN_TAB.OVERVIEW, "the tab viewed before it is shown");
 });
 
@@ -773,7 +770,7 @@ test("a column kept while the plan, the Inbox, and the Call stood in it, and a s
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
 });
 
-test("a column whose last agent is archived shows its Overview, a new agent's draft beside it", async () => {
+test("a column whose last agent is archived shows its Overview alone", async () => {
   const archived = { ...RUNNING_AGENT, archivedAt: 5 };
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
@@ -788,8 +785,7 @@ test("a column whose last agent is archived shows its Overview, a new agent's dr
   tab.stand({ tasks: withAgents([archived]) });
   await act(() => tab.control().agents.onArchive(AGENT_ID, true));
   await settle();
-  const draft = { draft: tab.control().agents.draft?.id ?? assert.fail("no draft opened") };
-  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, draft]);
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW]);
   assert.equal(column().tab, MAIN_TAB.OVERVIEW);
 });
 
@@ -2963,7 +2959,7 @@ test("New task's Agent mode sends one start carrying the agent, its words and mo
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID }, "the task opens on its tab");
 });
 
-test("archiving a task's last agent opens no draft while the archive is out, so a refused one brings the agent back alone", async () => {
+test("archiving a task's last agent takes its tab at once, and a refused archive brings it back", async () => {
   const archived = Promise.withResolvers<PortActResult<typeof ACT_KIND.AGENTS_ARCHIVE>>();
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
@@ -2982,13 +2978,11 @@ test("archiving a task's last agent opens no draft while the archive is out, so 
   tab.stand({ tasks: withAgents([{ ...RUNNING_AGENT, archivedAt: 5 }]) });
   await settle();
   assert.deepEqual(tab.control().mainTabs.tabs, [MAIN_TAB.OVERVIEW], "the agent leaves at once");
-  assert.equal(tab.control().agents.draft, undefined, "no draft opens while the archive is out");
 
   tab.stand({ tasks: withAgents([RUNNING_AGENT]) });
   await act(async () => archived.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND }));
   await settle();
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
-  assert.equal(tab.control().agents.draft, undefined);
 });
 
 test("a task started, with an agent or without, leaves a hidden side panel hidden", async () => {
@@ -3116,39 +3110,6 @@ test("what the developer opened while New task's agent start was out, a page and
   assert.equal(tab.control().automationsView.open, true, "the page stands");
   assert.equal(tab.control().newTask.open, true, "New task stands");
   assert.equal(tab.control().starting, undefined);
-});
-
-test("New task's agent start opens no draft beside its agent while the task stands open before the start answers", async () => {
-  const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
-  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    {
-      [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)),
-    },
-  );
-  act(() => tab.control().onNewTask());
-  let note: Promise<Failure | undefined> = Promise.resolve(undefined);
-  act(() => {
-    note = tab.control().newTask.start("", "acme/web", undefined, {
-      handed: { idempotencyKey: AGENT_KEY, prompt: "Fix it.", attachments: [], choice: undefined },
-    });
-  });
-  // Main opens the task before the start answers, its row listed and its agent not yet.
-  tab.stand({ tasks: { ...AGENT_TASK, tasks: [row(OTHER_TASK_ID, 1)], taskAgents: [] } });
-  await settle();
-  assert.equal(tab.control().agents.draft, undefined, "no draft opens while the start is out");
-
-  await act(async () => {
-    answers[0]?.({ planId: OTHER_TASK_ID, agentStart: { agent: started } });
-    await note;
-  });
-  await settle();
-  assert.deepEqual(
-    tab.control().mainTabs.tabs,
-    [MAIN_TAB.OVERVIEW, { agent: AGENT_ID }],
-    "the agent's tab alone beside Overview",
-  );
 });
 
 test("New task's agent start refused after its page opened opens the card again on the repository, model, and press it held, saying why, over the version history it was asked from", async () => {
@@ -3338,38 +3299,51 @@ function payloadsOf(tab: ReturnType<typeof mount>, kind: PortActKind): unknown[]
   return tab.payloads.filter((asked) => asked.kind === kind).map((asked) => asked.payload);
 }
 
-test("a task with no agent opens on its Overview, a new agent's draft beside it once its agents are read, asking the service nothing, and closing it opens a fresh one", async () => {
-  const tab = mount({ shown: true, tasks: withAgents([]) });
-  await vi.waitFor(async () => {
-    await settle();
-    assert.ok(tab.control().agents.draft, "the task holds a draft");
-  });
-  const draft = tab.control().agents.draft;
-  assert.ok(draft);
-  assert.deepEqual(tab.control().mainTabs.tabs, [MAIN_TAB.OVERVIEW, { draft: draft.id }]);
-  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW, "and its column shows Overview");
-  assert.deepEqual(payloadsOf(tab, ACT_KIND.AGENTS_START), [], "nothing is started");
-
+/** Opens a new agent's draft on the open task as the column's "+" does, and answers it. */
+function openDraft(tab: ReturnType<typeof mount>) {
   act(() => {
-    tab.control().mainTabs.onClose({ draft: draft.id });
-    tab.control().agents.onDiscardDraft(draft.id);
+    const control = tab.control();
+    control.mainTabs.onChoose({ draft: control.agents.onNewDraft() });
   });
+  return tab.control().agents.draft ?? assert.fail("no draft opened");
+}
+
+test('a task with no agent shows its Overview alone, and a draft the "+" opens closes once left holding nothing, while one holding words stays', async () => {
+  const tab = mount({ shown: true, tasks: withAgents([]) });
   await settle();
-  const fresh = tab.control().agents.draft;
-  assert.ok(fresh);
-  assert.notEqual(fresh.id, draft.id, "the draft closed is let go");
-  assert.deepEqual(tab.control().mainTabs.tabs, [MAIN_TAB.OVERVIEW, { draft: fresh.id }]);
-  assert.deepEqual(payloadsOf(tab, ACT_KIND.AGENTS_START), []);
+  const column = () => tab.control().mainTabs;
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW], "no draft opens by itself");
+  assert.equal(column().tab, MAIN_TAB.OVERVIEW);
+
+  const empty = openDraft(tab);
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, { draft: empty.id }]);
+  assert.deepEqual(column().tab, { draft: empty.id });
+  act(() => column().onChoose(MAIN_TAB.OVERVIEW));
+  await settle();
+  assert.equal(tab.control().agents.draft, undefined, "the empty draft left is let go");
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW]);
+
+  // One left for another task is let go too, so coming back finds Overview alone.
+  openDraft(tab);
+  tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
+  await settle();
+  tab.stand({ tasks: withAgents([]) });
+  await settle();
+  assert.equal(tab.control().agents.draft, undefined, "the draft left with its task is let go");
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW]);
+
+  const written = openDraft(tab);
+  act(() => tab.control().agents.onDraftChange({ prompt: "Fix login." }));
+  act(() => column().onChoose(MAIN_TAB.OVERVIEW));
+  await settle();
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, { draft: written.id }], "words keep it");
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.AGENTS_START), [], "nothing is started");
 });
 
 test("closing a draft holding words lets it go at once, and its toast's Undo opens its tab again with the same words, files, and chips", async () => {
   const tab = mount({ shown: true, tasks: withAgents([]) });
-  await vi.waitFor(async () => {
-    await settle();
-    assert.ok(tab.control().agents.draft, "the task holds a draft");
-  });
-  const draft = tab.control().agents.draft;
-  assert.ok(draft);
+  await settle();
+  const draft = openDraft(tab);
   const prompt = "Rename the invite email's subject.";
   const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
   const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" } as const;
@@ -3399,12 +3373,8 @@ test("closing a draft holding words lets it go at once, and its toast's Undo ope
 
 test("a draft closed with words whose place a fork has taken since is laid into that fork by Undo, the fork kept", async () => {
   const tab = mount({ shown: true, tasks: withAgents([]) });
-  await vi.waitFor(async () => {
-    await settle();
-    assert.ok(tab.control().agents.draft, "the task holds a draft");
-  });
-  const closed = tab.control().agents.draft;
-  assert.ok(closed);
+  await settle();
+  const closed = openDraft(tab);
   act(() => tab.control().agents.onDraftChange({ prompt: "Fix login." }));
   act(() => {
     tab.control().mainTabs.onClose({ draft: closed.id });
@@ -3427,12 +3397,8 @@ test("a draft closed with words whose place a fork has taken since is laid into 
 
 test("a closed draft's Undo is withdrawn as its task is left", async () => {
   const tab = mount({ shown: true, tasks: withAgents([]) });
-  await vi.waitFor(async () => {
-    await settle();
-    assert.ok(tab.control().agents.draft, "the task holds a draft");
-  });
-  const closed = tab.control().agents.draft;
-  assert.ok(closed);
+  await settle();
+  const closed = openDraft(tab);
   act(() => tab.control().agents.onDraftChange({ prompt: "Fix login." }));
   act(() => tab.control().agents.onDiscardDraft(closed.id));
   await settle();
@@ -3441,16 +3407,6 @@ test("a closed draft's Undo is withdrawn as its task is left", async () => {
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
   await settle();
   assert.notEqual(newestToastSays(), "Draft closedUndo");
-});
-
-test("a task with no agent opens its new agent's draft with a hidden side panel left hidden", async () => {
-  const tab = mount({ shown: true, tasks: withAgents([]) });
-  if (tab.control().sidePanel.open) act(() => tab.control().sidePanel.onToggle());
-  await vi.waitFor(async () => {
-    await settle();
-    assert.ok(tab.control().agents.draft, "the task holds a draft");
-  });
-  assert.equal(tab.control().sidePanel.open, false, "the plan does not open beside the draft");
 });
 
 test("a task opened is timed from the press to its document drawn ready, and one refused is timed by no span", async () => {
