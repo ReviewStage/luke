@@ -1366,6 +1366,53 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a quiet start draws its task's row as the service answered it, blocked where a blocker is open, and holds it until the list carries the start",
+  () =>
+    Effect.gen(function* () {
+      const billing = task(BILLING, "Billing export", "# Billing", 20);
+      const service = fakeService([billing]);
+      const { call, last, settled, listed } = yield* subject(service);
+      const listedIds = () => last()?.tasks.map((row) => row.id);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      // An answer Luke Sync woke hands the follow its wait for a write's transaction.
+      service.live.list.set({ plans: [rowOfTask(billing)] }, ["tx-earlier"]);
+      yield* nextPoll(settled);
+      const made: Task = {
+        ...task(INVITES, "Invitation expiry", "", 30),
+        createdAt: 3_000,
+        ownerId: "user-dana",
+        createdBy: { userId: "user-dana", name: "Dana" },
+        status: TASK_STATUS.TODO,
+        priority: TASK_PRIORITY.NONE,
+        number: 2,
+        // Started blocked by a task still open, which the answer names rather than marks.
+        blockedBy: [BILLING],
+      };
+      service.createAnswer = { ok: true, answer: { task: made, txid: "tx-start" } };
+
+      const start = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_START, { name: "Invitation expiry", quiet: true }),
+      );
+      yield* settled;
+      const drawn = listedIds();
+      const drawnBlocked = last()?.tasks.find((row) => row.id === INVITES)?.blocked;
+      // A list read from before the start answers without it.
+      service.live.list.set({ plans: [rowOfTask(billing)] }, ["tx-other"]);
+      yield* nextPoll(settled);
+      const throughStale = listedIds();
+      service.live.list.set({ plans: [rowOfTask(made), rowOfTask(billing)] }, ["tx-start"]);
+      yield* nextPoll(settled);
+
+      assert.deepEqual(yield* Fiber.join(start), { planId: INVITES });
+      assert.deepEqual(drawn, [INVITES, BILLING], "the row is drawn before the list carries it");
+      assert.equal(drawnBlocked, true, "a task started blocked by an open one is drawn blocked");
+      assert.deepEqual(throughStale, [INVITES, BILLING]);
+      assert.deepEqual(listedIds(), [INVITES, BILLING]);
+    }),
+);
+
 it.effect("a start answered after another task was opened answers its task and opens nothing", () =>
   Effect.gen(function* () {
     const billing = task(BILLING, "Billing export", "# Billing", 20);

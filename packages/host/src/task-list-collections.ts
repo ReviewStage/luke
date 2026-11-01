@@ -16,6 +16,8 @@
  * taken in the read's place. Either lands with the drop of what was drawn,
  * so nothing flickers back between the two. Writes to one row go to the
  * service in the order asked, since each was drawn over the ones before.
+ * A task the service started is drawn the same way from its answer, so it
+ * stands in the list before the follow carries it.
  */
 
 import type { AgentSummary } from "@luke/features/agent-wire";
@@ -38,11 +40,12 @@ import { Effect, type Scope } from "effect";
 import {
   answeredCollection,
   drawnAtEdges,
+  optimistically,
   type RowWrite,
   rowsOf,
   rowWrites,
 } from "./live-collection.js";
-import type { TxWait } from "./live-follow.js";
+import { confirmWrite, type TxWait } from "./live-follow.js";
 
 /** A plan's row as the list's statement answers it. */
 export type PlanRow = TaskListLiveRows["plans"][number];
@@ -75,6 +78,8 @@ export interface TaskListCollections {
   readonly writePlan: RowWrite<PlanRow>;
   /** A change to an agent's row, as a plan's is. */
   readonly writeAgent: RowWrite<AgentRow>;
+  /** A plan the service started, drawn at once as it answered it and held until the list carries its transaction. */
+  readonly made: (row: PlanRow, txid: string | undefined) => Effect.Effect<void>;
 }
 
 /** The account's task list, empty until its follow first answers. */
@@ -118,6 +123,22 @@ export function taskListCollections(
         }),
       writePlan: rowWrites(plans, { drawn, txWait: dependencies.txWait }),
       writeAgent: rowWrites(agents, { drawn, txWait: dependencies.txWait }),
+      // Note that where the list hands no wait, the answer is taken in its place, as a write's is.
+      made: (row, txid) =>
+        optimistically(
+          () => {
+            if (!plans.collection.has(row.id)) plans.collection.insert(row);
+          },
+          Effect.andThen(
+            drawn,
+            Effect.suspend(() => {
+              const wait = dependencies.txWait();
+              return wait === undefined || txid === undefined
+                ? Effect.sync(() => plans.confirmNew(row))
+                : confirmWrite(wait, txid);
+            }),
+          ),
+        ).pipe(Effect.ensuring(drawn)),
     };
   });
 }
