@@ -1,18 +1,11 @@
 import { TASK_STATUS } from "@luke/features/task-wire";
-import {
-  BREADCRUMB_POPUP,
-  type Crumb,
-  FolderIcon,
-  FrameHead,
-  FrameHeadSkeleton,
-  FramePlace,
-} from "@luke/ui";
+import { type Crumb, FolderIcon, FrameHead, FrameHeadSkeleton, FramePlace } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * frame-head.tsx -- a task's head over its column: the task by its path,
- * its repository then the task by status mark, name, and key; a child task,
+ * its repository as plain words, then the task by status mark, name, and key; a child task,
  * its parent before it; a task from before keys, named alone; a deep path
  * in a narrow column, folding its eldest tasks; and the head while its task
  * is read. Then a place that is no task, named by its words: the Inbox, a
@@ -40,8 +33,6 @@ const PARENT = {
 const REPOSITORY: Crumb = {
   label: "stage/luke",
   glyph: <FolderIcon />,
-  popup: BREADCRUMB_POPUP.DIALOG,
-  onPress: stay,
 };
 
 function FrameHeads(): React.JSX.Element {

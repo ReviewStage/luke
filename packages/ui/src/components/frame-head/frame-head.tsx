@@ -13,11 +13,11 @@ import { ToolbarName } from "../toolbar/toolbar-name.js";
  * A task frames its column the way a workspace frames a window in an editor:
  * whichever of its views is chosen under it, this head names the task, so
  * the reader always knows which task they are in. It is one path of quiet
- * presses (`Breadcrumbs`' `CONTROL` look), each lit only under the pointer
- * and outlined never:
+ * presses (`Breadcrumbs`' `CONTROL` look), each press lit only under the
+ * pointer and outlined never:
  *
- * - the task's repository, where the page hands its crumb, which drops the
- *   repository's menu the plan's own path drops;
+ * - the task's repository, where the page hands its crumb: plain words with
+ *   its mark, never a press, since the head only names where the task is;
  * - the tasks it is a child of, eldest first, each a press that opens it,
  *   the path folding the eldest into one "…" before it cuts a name short;
  * - the task itself, last and current, a press that opens it.
@@ -112,8 +112,9 @@ function taskCrumb(task: FrameHeadTask, current: boolean): Crumb {
 /**
  * A task's head: its path, its repository's crumb where the page hands one,
  * the tasks it is a child of, and the task itself, each task a press that
- * opens it. A crumb that drops a menu, the repository's, hangs it from the
- * head's own box (`room`, `menu`), since the path clips what stands inside it.
+ * opens it. Something the page opens beside the head, the repository's menu
+ * where ⌘K asks for it, hangs from the head's own box (`room`, `menu`),
+ * since the path clips what stands inside it.
  */
 export function FrameHead({
   repository,
@@ -122,14 +123,14 @@ export function FrameHead({
   room,
   menu,
 }: {
-  /** The repository's crumb, which drops its menu; none where the page hands none. */
+  /** The repository's crumb, words with no press; none where the page hands none. */
   repository?: Crumb | undefined;
   /** The tasks the task is a child of, eldest first. */
   ancestors?: readonly FrameHeadTask[];
   task: FrameHeadTask;
-  /** The box a crumb's menu hangs from. */
+  /** The box a menu the page opens beside the path hangs from. */
   room?: RefObject<HTMLDivElement | null> | undefined;
-  /** What a crumb drops, drawn in `room`. */
+  /** What the page opens beside the path, drawn in `room`. */
   menu?: ReactNode;
 }): React.JSX.Element {
   const crumbs = [

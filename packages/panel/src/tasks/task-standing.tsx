@@ -501,12 +501,14 @@ function frameTask(
 
 /**
  * The task's head in the window's title bar (`FrameHead`): its repository's
- * crumb where the page hands the repository's doors, dropping the menu the
- * plan's path drops; the tasks it is a child of, eldest first, each opening
- * its own task, the parent hanging its card; then the task, whose press is
- * `onOpen`, its Overview. Note that ⌘K's Change repository opens the crumb
- * here, because the plan draws no path of its own beside this head
- * (`PlanBody`'s `path`), so one ask never opens two menus.
+ * crumb where the page hands the repository's doors, plain words with the
+ * repository's mark and no press; the tasks it is a child of, eldest first,
+ * each opening its own task, the parent hanging its card; then the task,
+ * whose press is `onOpen`, its Overview. Note that ⌘K's and a task row's
+ * Change repository open the repository's menu from this head's box, under
+ * the crumb, because the plan draws no path of its own beside this head
+ * (`PlanBody`'s `path`), so one ask never opens two menus, and the crumb
+ * itself opens nothing.
  */
 export function TaskFrameHead({
   task,
@@ -542,7 +544,7 @@ export function TaskFrameHead({
   );
 }
 
-/** The title bar's head led by the task's repository, whose crumb drops the repository's menu (`useRepositoryMenu`). */
+/** The title bar's head led by the task's repository as plain words, whose menu (`useRepositoryMenu`) opens only where the page asks, under it. */
 function RepositoryFrameHead({
   task,
   door,
@@ -562,7 +564,7 @@ function RepositoryFrameHead({
     onAsked: door.onAsked,
     align: POPOVER_ALIGN.START,
   });
-  const repository = repositoryCrumb(menu, task.repository);
+  const repository: Crumb = { label: menu.label, glyph: menu.glyph };
   return (
     <FrameHead
       repository={repository}

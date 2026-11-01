@@ -5,6 +5,7 @@ import {
   type ReactNode,
   useState,
 } from "react";
+import { cn } from "../../cn.js";
 import { pulseOnPress } from "../../press-pulse.js";
 import {
   Breadcrumb,
@@ -50,7 +51,10 @@ import { useCrumbFold } from "./crumb-fold.js";
  * quiet `Button` is drawn, at a control's height in the label type, its
  * glyph before its words and its detail (a task's key) muted after them,
  * lit under the pointer and outlined never. A crumb's detail stands whole
- * while its words give way.
+ * while its words give way. In that look a crumb of words stands where a
+ * press would, its glyph, inset, and gap the same, in the quiet ink of the
+ * presses beside it (the current page's is the text ink), and lights under
+ * nothing: a place the reader is told of and cannot change from there.
  *
  * A path gives way on a narrow bar first by folding: one that does not
  * fit whole folds the crumbs at its start into one "…" (`crumb-fold.ts`),
@@ -216,12 +220,12 @@ const LOOK = {
     link: "",
   },
   [BREADCRUMBS_VARIANT.CONTROL]: {
-    nav: "text-label font-label",
+    nav: "text-label font-label [&_[data-slot=breadcrumb-page]:not([aria-current])]:text-muted-foreground",
     list: "",
     item: "",
     wordsItem: "",
     separator: "flex-none items-center text-muted-foreground [&>svg]:size-breadcrumb-chevron",
-    words: "h-control px-breadcrumb-control-inline",
+    words: "h-control px-breadcrumb-control-inline gap-icon-gap",
     link: "h-control rounded-control px-breadcrumb-control-inline py-0 gap-icon-gap",
   },
 } as const;
@@ -342,7 +346,7 @@ function CrumbControl({
   const control =
     onPress === undefined ? (
       <BreadcrumbPage
-        className={`flex min-w-0 items-center gap-breadcrumb-gap ${LOOK[variant].words}`}
+        className={cn("flex min-w-0 items-center gap-breadcrumb-gap", LOOK[variant].words)}
         aria-current={current}
       >
         <CrumbFace glyph={crumb.glyph} label={label} detail={crumb.detail} end={crumb.end} />
