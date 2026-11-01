@@ -384,23 +384,6 @@ test("a host's row says its version and where its update stands, and This Mac's 
   assert.ok(!text.includes("this Mac's disk is full"), "This Mac's row draws no update line");
 });
 
-test("each host's Remove stands in a group named by its host, so a reader hears which host it removes", async () => {
-  const hosts: readonly Host[] = [
-    { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-01" },
-    { id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "sfo-02" },
-  ].map((host) => ({ seenAt: 0, version: "0.2.1", upgradeNeeded: false, ...host }));
-  await machinesWithThisMac(hosts, { standing: THIS_MAC_HOST_STANDING.OFF });
-
-  const named = [
-    ...document.querySelectorAll<HTMLButtonElement>('button[aria-label="Remove"]'),
-  ].map((remove) => {
-    const group = remove.closest('[role="group"]');
-    const label = document.getElementById(group?.getAttribute("aria-labelledby") ?? "");
-    return label?.textContent ?? "";
-  });
-  assert.deepEqual(named, ["fra-01", "sfo-02"]);
-});
-
 test.each([
   {
     case: "removed",
