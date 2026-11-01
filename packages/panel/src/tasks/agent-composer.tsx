@@ -53,7 +53,7 @@ import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
 import { useAttachedFiles } from "../use-attached-files.js";
-import { AgentContextRing } from "./agent-context.js";
+import { AgentContextRing, ContextRingIcon } from "./agent-context.js";
 import { contextHint } from "./agent-context-model.js";
 import { AgentModelChip } from "./agent-model-chip.js";
 import { BranchChip, type PublishedDoors } from "./agent-published.js";
@@ -820,7 +820,11 @@ export function AgentComposer({
       : [
           {
             press: OVERFLOW_PRESS.CONTEXT,
-            action: { label: contextHint(context), onSelect: () => setContextOpen(true) },
+            action: {
+              label: contextHint(context),
+              icon: <ContextRingIcon context={context} />,
+              onSelect: () => setContextOpen(true),
+            },
           },
         ]),
     {
