@@ -211,6 +211,14 @@
     opacity: 0;
   }
 
+  /* Under a finger a compact ⋯ is as wide as a finger's target, its glyph
+     centred in it, as a list row's is (`list-row.css`). */
+  @media (pointer: coarse) {
+    .luke-nav-item-actions .luke-button[data-size="compact"][data-icon-only="true"] {
+      min-width: var(--luke-touch-target);
+    }
+  }
+
   @media (hover: hover) {
     .luke-nav-item-frame:hover > .luke-nav-item-actions {
       opacity: 1;

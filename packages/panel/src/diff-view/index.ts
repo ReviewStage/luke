@@ -58,6 +58,7 @@ import { drawnAmong, drawnTeller } from "./drawn-lines.js";
 import { watchGapControls } from "./gap-controls.js";
 import { type Highlighting, preferredHighlighter, startHighlighting } from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
+import { markLineIndents } from "./line-indents.js";
 import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
 import { wholeOf } from "./whole-diff.js";
 
@@ -343,6 +344,17 @@ const LOOK_CSS = `
      rows and its gaps stopping short of the file's header. */
   [data-code] {
     scrollbar-gutter: auto;
+  }
+  /* A wrapped line's later rows hang under its code by its own indent
+     (\`./line-indents.ts\`), as an editor wraps them, its first row standing
+     where it did: an edge as wide as the indent moves the line's words in,
+     and the first row is drawn back by as much. Note that the edge is a
+     transparent border rather than more padding, so Pierre's own padding
+     stands whatever its indicators, and the line's ground, which a border
+     lets show through, still runs to the column's start. */
+  [data-overflow="wrap"] [data-line] {
+    border-inline-start: var(--luke-line-indent, 0ch) solid transparent;
+    text-indent: calc(-1 * var(--luke-line-indent, 0ch));
   }
   /* A file drawn as its notes alone, laid out as blocks: its one empty line, the old side, the numbers, and the hatching beside a side's missing lines are hidden, so its notes run across its whole width, as tall as Pierre measured them. */
   :host([${LEAD_ATTRIBUTE}]) pre,
@@ -892,8 +904,11 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   };
   const dress = (element: HTMLElement, path: string, phase: PostRenderPhase) => {
     watchGaps(element, phase);
-    // Each note drawn anew is marked with the band of the line it stands under, as Pierre draws its rows again.
-    if (phase !== "unmount" && element.shadowRoot !== null) markAnnotationBands(element.shadowRoot);
+    // Each note drawn anew is marked with the band of the line it stands under, and each line with its indent, as Pierre draws its rows again.
+    if (phase !== "unmount" && element.shadowRoot !== null) {
+      markAnnotationBands(element.shadowRoot);
+      markLineIndents(element.shadowRoot);
+    }
     element.toggleAttribute(LEAD_ATTRIBUTE, drawnFiles.get(path)?.file.lead === true);
     elementPaths.set(element, path);
     markFlash(element);
@@ -1268,6 +1283,8 @@ function mountFile(host: HTMLElement, props: FileViewProps): FileViewHandle {
     }
     drawnElement = element;
     quietGutter(element);
+    // Each line drawn anew is marked with its indent, which a wrapped line's later rows hang by.
+    if (element.shadowRoot !== null) markLineIndents(element.shadowRoot);
     if (!dressed.has(element) && element.shadowRoot !== null) {
       dressed.add(element);
       element.setAttribute(FIND_SHADOW_ATTRIBUTE, FIND_SKIPPED);
