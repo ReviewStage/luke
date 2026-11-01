@@ -1,24 +1,32 @@
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import {
   BackButton,
-  DocumentIcon,
+  CHOICE_BAR_FOLD,
+  CHOICE_BAR_LOOK,
+  CHOICE_BAR_SIZE,
+  ChoiceBar,
+  type ChoiceItem,
+  dropBelow,
   InlineEdit,
   type InlineEditEnd,
   NO_BACK_KEY,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
+  type ToolbarPickUp,
+  useMenu,
 } from "@luke/ui";
-import { BotIcon, ListIcon } from "lucide-react";
+import { useRef } from "react";
 import type { AwayStep } from "../navigation-history.js";
 import { isOverviewTab, type MainTab } from "../tasks/use-main-tabs.js";
-import type { MenuAction } from "./action-menu.js";
+import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { PhoneHead } from "./phone-head.js";
 
 /**
  * task-pane-switcher.tsx -- how a phone heads a task: one row of the way
- * back, the title of what is on screen, and one ⋯, whose menu leads with the
- * task's three views, its Overview, its Agents, and its Activity.
+ * back, the title of what is on screen, and one ⋯, and under it one
+ * segmented row of the task's three views, its Overview, its agent, and its
+ * Activity (`TaskPaneBar`), which stands in the desktop's tab strip's place.
  *
  * Nothing here is held apart from the column and the side panel: the views
  * read what they already hold. Overview is the panel shut over the column on
@@ -32,10 +40,12 @@ import { PhoneHead } from "./phone-head.js";
  * its glyph alone, is named for where it goes, the list the task was opened
  * from on the task's own views, or Activity on a tab chosen there; the
  * title, centred between the two corners, names the task, or the tab shown;
- * and the ⋯ holds the views as a checked group, then the menu of what is on
- * screen: the task's own on Overview (`task-actions.tsx`), the chosen
- * agent's on Agents (`agent-actions.tsx`), and the tab's on one chosen from
- * Activity, as its own ⋯ offers it where a bar stands.
+ * and the ⋯ holds the menu of what is on screen: the task's own on Overview
+ * (`task-actions.tsx`), the chosen agent's on Agents (`agent-actions.tsx`),
+ * and the tab's on one chosen from Activity, as its own ⋯ offers it where a
+ * bar stands. The views are the segmented row's alone, a finger's size: the
+ * middle one is named for the task's one agent, or counts its agents where
+ * it holds several, a press then dropping the list of them to choose from.
  */
 
 /** The three views of a task on a phone. */
@@ -69,19 +79,89 @@ export function taskPaneOf(input: {
   return isOverviewTab(input.column) ? TASK_PANE.OVERVIEW : TASK_PANE.AGENTS;
 }
 
-/** The ⋯'s first group: the three views, the one standing checked, each choosing itself. */
-export function taskPaneItems(pane: TaskPane, onChoose: (pane: TaskPane) => void): MenuAction[] {
-  const item = (value: TaskPane, label: string, icon: React.JSX.Element): MenuAction => ({
-    label,
-    icon,
-    checked: pane === value,
-    onSelect: () => onChoose(value),
-  });
-  return [
-    item(TASK_PANE.OVERVIEW, "Overview", <DocumentIcon />),
-    item(TASK_PANE.AGENTS, "Agents", <BotIcon />),
-    item(TASK_PANE.ACTIVITY, "Activity", <ListIcon />),
-  ];
+/** One of the task's agents as the row names it. */
+export interface PaneAgent {
+  readonly id: string;
+  readonly name: string;
+}
+
+/** What the middle view is called: the task's one agent by its name, else Agents, counting them where it holds several. */
+function agentsItem(agents: readonly PaneAgent[]): ChoiceItem<TaskPane> {
+  const [only, ...more] = agents;
+  if (only !== undefined && more.length === 0) return { value: TASK_PANE.AGENTS, label: only.name };
+  return {
+    value: TASK_PANE.AGENTS,
+    label: "Agents",
+    count: more.length > 0 ? String(agents.length) : undefined,
+  };
+}
+
+/**
+ * The row of a task's three views under a phone's header; see the module's
+ * head. A press on the middle view where the task holds several agents, or
+ * on it again while it stands, drops the list of them, the one shown
+ * checked, rather than choosing one of them blind.
+ */
+export function TaskPaneBar({
+  pane,
+  agents,
+  shownAgent,
+  shown,
+  onChoose,
+  onChooseAgent,
+}: {
+  pane: TaskPane;
+  /** The task's agents, archived ones left out, in the order the column lists them. */
+  agents: readonly PaneAgent[];
+  /** The agent whose tab the column shows, which the list checks; none on Overview, a draft, or Activity. */
+  shownAgent: string | undefined;
+  /** Whether the task is on screen, for the list not to outlive it. */
+  shown: boolean;
+  onChoose: (pane: TaskPane) => void;
+  onChooseAgent: (agentId: string) => void;
+}): React.JSX.Element {
+  const row = useRef<HTMLDivElement>(null);
+  const menu = useMenu(shown);
+  const several = agents.length > 1;
+  const listAgents = () => {
+    const opener = row.current;
+    if (opener !== null) menu.show(dropBelow(opener), opener);
+  };
+  const choose = (pressed: TaskPane | undefined) => {
+    // Note that the view standing pressed again is undefined, as a clearable bar answers it, and chosen again, as Activity's list asks.
+    const chosen = pressed ?? pane;
+    const [only] = agents;
+    if (chosen === TASK_PANE.AGENTS && several) listAgents();
+    else if (chosen === TASK_PANE.AGENTS && only !== undefined) onChooseAgent(only.id);
+    else onChoose(chosen);
+  };
+  const agentRows: MenuAction[] = agents.map((agent) => ({
+    label: agent.name,
+    checked: agent.id === shownAgent,
+    onSelect: () => onChooseAgent(agent.id),
+  }));
+  return (
+    <div ref={row} className="task-pane-bar flex flex-none px-luke-12 pb-luke-8">
+      <ChoiceBar<TaskPane>
+        label="Task views"
+        items={[
+          { value: TASK_PANE.OVERVIEW, label: "Overview" },
+          agentsItem(agents),
+          { value: TASK_PANE.ACTIVITY, label: "Activity" },
+        ]}
+        value={pane}
+        clearable
+        onChange={choose}
+        look={CHOICE_BAR_LOOK.SEGMENTED}
+        size={CHOICE_BAR_SIZE.TOUCH}
+        fold={CHOICE_BAR_FOLD.WORDS}
+        stretch
+      />
+      {menu.drawn === undefined ? null : (
+        <ActionMenu label="Agents" menu={menu.drawn} groups={[agentRows]} onClose={menu.close} />
+      )}
+    </div>
+  );
 }
 
 /** Where the way back goes, and what it is called there. */
@@ -115,12 +195,15 @@ interface TaskHeadRename {
 export function TaskHead({
   back,
   title,
+  pickUp,
   rename,
   actions,
 }: {
   back: TaskHeadBack;
-  /** What is on screen: the task's name, or the tab shown. */
-  title: string;
+  /** What is on screen: the task's name, or the tab shown; none on Overview, whose plan names the task in its own heading, which the row then picks up once it scrolls away (`pickUp`). */
+  title: string | undefined;
+  /** The plan's heading as the row picks it up where it draws no title. */
+  pickUp?: ToolbarPickUp | undefined;
   /** The task's name as a field in the title's place while it is renamed, `title` then being the task's name. */
   rename?: TaskHeadRename | undefined;
   /** The row's one ⋯ (`PlaceMore`). */
@@ -138,20 +221,23 @@ export function TaskHead({
           onBack={back.onPress}
         />
       }
+      pickUp={pickUp}
       title={
-        <Text
-          as={TEXT_ELEMENT.H1}
-          variant={TEXT_VARIANT.TOOLBAR_TITLE}
-          className="luke-toolbar-title"
-        >
-          <InlineEdit
-            value={title}
-            label="Task name"
-            maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
-            editing={rename?.editing === true}
-            onEnd={(end) => rename?.onEnd(end)}
-          />
-        </Text>
+        title === undefined ? undefined : (
+          <Text
+            as={TEXT_ELEMENT.H1}
+            variant={TEXT_VARIANT.TOOLBAR_TITLE}
+            className="luke-toolbar-title"
+          >
+            <InlineEdit
+              value={title}
+              label="Task name"
+              maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
+              editing={rename?.editing === true}
+              onEnd={(end) => rename?.onEnd(end)}
+            />
+          </Text>
+        )
       }
       end={actions}
     />

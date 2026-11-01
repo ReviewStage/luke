@@ -289,14 +289,14 @@ for (const { zoom, width } of ZOOMED_LEAST_WINDOW) {
   });
 }
 
-/** The phone's view of the task named `name`, from the ⋯ heading it in the panel's toggle's place, its menu opened to find it. */
-function paneView(page: HTMLElement, name: string): HTMLElement {
-  const more = page.querySelector<HTMLButtonElement>('.task-head [aria-label="Task actions"]');
-  assert.ok(more, "the task's header holds its ⋯");
-  if (more.getAttribute("aria-expanded") !== "true") act(() => more.click());
-  const view = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find(
-    (each) => each.textContent === name,
-  );
+/** Where each of the phone's task views stands in the row under its header, its middle one named for the task's agent. */
+const PANE_AT = { Overview: 0, Agents: 1, Activity: 2 } as const;
+
+/** The phone's view of the task named `name`, in the row of views under its header. */
+function paneView(page: HTMLElement, name: keyof typeof PANE_AT): HTMLElement {
+  const view = page.querySelectorAll<HTMLElement>('[aria-label="Task views"] [role="radio"]')[
+    PANE_AT[name]
+  ];
   assert.ok(view, `the task's ${name} view stands`);
   return view;
 }

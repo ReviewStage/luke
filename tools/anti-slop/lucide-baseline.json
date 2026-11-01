@@ -16,7 +16,6 @@
   "packages/panel/src/desktop/sidebar-sections.test.ts": 1,
   "packages/panel/src/desktop/sidebar-task-view.tsx": 1,
   "packages/panel/src/desktop/tab-switcher.tsx": 1,
-  "packages/panel/src/desktop/task-pane-switcher.tsx": 1,
   "packages/panel/src/desktop/task-summary.tsx": 1,
   "packages/panel/src/desktop/tasks-board.tsx": 1,
   "packages/panel/src/desktop/tasks-page.tsx": 1,
