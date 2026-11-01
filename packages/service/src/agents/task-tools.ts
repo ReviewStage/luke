@@ -7,10 +7,12 @@ import { MENTION_KIND } from "@luke/features/mention-link";
 import {
   PLAN_ACTOR,
   TASK_BOUNDS,
+  TASK_CREATE_RELATION_KIND,
   TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
+  type TaskCreateRelation,
   type TaskOrigin,
   taskModeSchema,
   taskPrioritySchema,
@@ -26,6 +28,7 @@ import {
   wireUuidSchema,
 } from "../core.js";
 import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
+import { relationAsked, relationWritten } from "../tasks/task-create-relation.js";
 import { taskParentOf } from "../tasks/task-parent.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
@@ -76,7 +79,11 @@ import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
  * the caller's workspace that the member reaches, it is made that task's
  * child, to any depth, and takes the parent's repository and machine
  * rather than its own, refused where the call names another repository
- * (`tasks/task-parent.ts`). Only a pilot may make a task in pilot mode, and
+ * (`tasks/task-parent.ts`). Given a relation instead, it is made a sub-task
+ * of the other task, as with a parent, its parent, taking its repository,
+ * or blocked by or blocking it, the relation written in the make's own
+ * transaction so the task and its relation land together or not at all
+ * (`tasks/task-create-relation.ts`). Only a pilot may make a task in pilot mode, and
  * only as a child, which is how it gives a part too big for one pull request
  * a pilot of its own; every other task is worked by its agents. It is made
  * under an id drawn from eve's key for the call (`called-id.ts`), so a call
@@ -171,7 +178,8 @@ export const CREATE_TASK_REFUSAL = {
     `(${Object.values(TASK_STATUS).join(", ")}) or none, a priority ` +
     `(${Object.values(TASK_PRIORITY).join(", ")}) or none, an assignee as a member's ` +
     `mention link or none, a parent task by the id ${AGENT_TOOL.LIST_TASKS} answered or none, ` +
-    `and a mode (${Object.values(TASK_MODE).join(", ")}) or none.`,
+    `a relation (${Object.values(TASK_CREATE_RELATION_KIND).join(", ")}) to a task by that id ` +
+    `or none, and a mode (${Object.values(TASK_MODE).join(", ")}) or none.`,
   NOT_MEMBER:
     "Not made: that assignee is no member of the workspace, or names no person; name a member by " +
     `the mention link ${AGENT_TOOL.LIST_TASKS} hands you, or leave it out for no one.`,
@@ -183,6 +191,19 @@ export const CREATE_TASK_REFUSAL = {
   PARENT_REPOSITORY:
     "Not made: a child task always works in its parent's repository; leave repository out to " +
     "take the parent's, or make it with no parent to work in another.",
+  PARENT_AND_RELATION:
+    "Not made: name its parent once, by parentTaskId or by a relation, not both; a relation of " +
+    `${TASK_CREATE_RELATION_KIND.SUB_TASK_OF} says what parentTaskId says.`,
+  NO_RELATED: `Not made: no task of your workspace has that id to relate it to; ${AGENT_TOOL.LIST_TASKS} names them.`,
+  CHILD_REPOSITORY:
+    "Not made: a parent task always works in its child's repository; leave repository out to " +
+    "take that task's, or relate it another way to work in another.",
+  PARENT_HELD:
+    "Not made: that task has a parent already, which a new task never takes the place of; make " +
+    `it a ${TASK_CREATE_RELATION_KIND.SUB_TASK_OF} of that parent, or relate it another way.`,
+  RELATION_CYCLE:
+    "Not made: that relation would close a cycle among the workspace's tasks; read_task names " +
+    "how they stand, and relate it another way.",
   NOT_PILOT:
     "Not made: only a pilot makes a task in pilot mode; leave mode out to make one its agents " +
     "work, or tell your pilot the task is too big for one pull request.",
@@ -235,12 +256,33 @@ const CREATE_TASK_INPUT = Schema.Struct({
         "stands at the top.",
     ),
   ),
+  relation: Schema.optionalKey(
+    describeWire(
+      Schema.Struct({
+        kind: describeWire(
+          Schema.Literals(Object.values(TASK_CREATE_RELATION_KIND)),
+          "How the new task stands to the other, from the new task's side: blocked-by, it waits " +
+            "on the other's work; blocks, the other waits on its work; sub-task-of, a child of " +
+            "the other, as parentTaskId makes one; parent-of, the other's parent, refused where " +
+            "the other has a parent already.",
+        ),
+        taskId: describeWire(
+          wireUuidSchema,
+          `The other task, of your workspace, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
+        ),
+      }),
+      "Another task of your workspace the new task starts related to, written with it so both " +
+        "land together. A sub-task-of or parent-of takes the other task's repository, so leave " +
+        "repository out, and another is refused; a block takes nothing of it. Not beside " +
+        "parentTaskId; left out, it starts related to none.",
+    ),
+  ),
   mode: Schema.optionalKey(
     describeWire(
       taskModeSchema,
       "How it is worked: agent, by the agents started on it, or pilot, by a pilot of its own " +
         "that breaks it into child tasks, for a child too big for one pull request. Only a " +
-        "pilot may ask for pilot, and only with a parentTaskId; left out, agent.",
+        "pilot may ask for pilot, and only as a child; left out, agent.",
     ),
   ),
 });
@@ -257,7 +299,9 @@ export const CREATE_TASK_TOOL = {
     `work on no task; then start an agent on it with ${AGENT_TOOL.START_AGENT}'s taskId. ` +
     "Give it a status, a priority, and an assignee where the developer said them. Give it a " +
     "parentTaskId to make it a child task of another, to any depth: a child always works in " +
-    "its parent's repository and on its machine, so leave repository out for one. Answers " +
+    "its parent's repository and on its machine, so leave repository out for one. Give it a " +
+    "relation instead to make it blocked by, blocking, a sub-task of, or the parent of another " +
+    "task of your workspace in the same call. Answers " +
     "`accepted` with the task's id, key, name, status, priority, assignee, repository, and " +
     "mention, or `rejected` and why.",
   inputSchema: CREATE_TASK_INPUT,
@@ -298,6 +342,34 @@ const parentOf = (
     ),
   );
 
+/** The relation a make names other than a sub-task's, confirmed (`relationAsked`), or why it makes nothing, in words the model can act on. */
+const besideOf = (
+  userId: string,
+  workspaceId: string,
+  relation: TaskCreateRelation,
+  repository: string | null | undefined,
+) =>
+  relationAsked(userId, workspaceId, relation, repository).pipe(
+    Effect.catchTag("TaskRelationUnreached", () => Effect.succeed(CREATE_TASK_REFUSAL.NO_RELATED)),
+    Effect.catchTag("TaskParentRepositoryDiffers", () =>
+      Effect.succeed(CREATE_TASK_REFUSAL.CHILD_REPOSITORY),
+    ),
+  );
+
+/** Why a make took itself back, nothing written, in words the model can act on: an assignee who is no member, or a relation its rules refused (`relationWritten`). */
+const MADE_REFUSAL_OF = {
+  TaskAssigneeNotMember: () => Effect.succeed(CREATE_TASK_REFUSAL.NOT_MEMBER),
+  TaskParentHeld: () => Effect.succeed(CREATE_TASK_REFUSAL.PARENT_HELD),
+  TaskParentRepositoryDiffers: () => Effect.succeed(CREATE_TASK_REFUSAL.CHILD_REPOSITORY),
+  TaskParentCycle: () => Effect.succeed(CREATE_TASK_REFUSAL.RELATION_CYCLE),
+  TaskBlockCycle: () => Effect.succeed(CREATE_TASK_REFUSAL.RELATION_CYCLE),
+  // The other task gone out of reach since it was read, and the store's own holds, read as none to relate to.
+  TaskRelationUnreached: () => Effect.succeed(CREATE_TASK_REFUSAL.NO_RELATED),
+  TaskParentUnreached: () => Effect.succeed(CREATE_TASK_REFUSAL.NO_RELATED),
+  TaskBlockSelf: () => Effect.succeed(CREATE_TASK_REFUSAL.NO_RELATED),
+  TaskBlockAcrossWorkspaces: () => Effect.succeed(CREATE_TASK_REFUSAL.NO_RELATED),
+} as const;
+
 /** One call of `create_task`: a task made in the caller's workspace for its member, once under the call's key. */
 export function runCreateTask(
   call: AgentCall,
@@ -307,7 +379,15 @@ export function runCreateTask(
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.UNREADABLE));
   }
-  const { name, brief, plan, status, priority, assignee, parentTaskId, mode } = asked.success;
+  const { name, brief, plan, status, priority, assignee, relation, mode } = asked.success;
+  if (asked.success.parentTaskId !== undefined && relation !== undefined) {
+    return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.PARENT_AND_RELATION));
+  }
+  // A sub-task of another is a child of it, which parentTaskId names as well.
+  const parentTaskId =
+    relation?.kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF
+      ? relation.taskId
+      : asked.success.parentTaskId;
   // Note that a pilot task is only a pilot's to make, as a child, since its first agent is a pilot of its own.
   if (mode === TASK_MODE.PILOT && call.caller.agent.kind !== AGENT_KIND.PILOT) {
     return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.NOT_PILOT));
@@ -351,11 +431,22 @@ export function runCreateTask(
           ? undefined
           : yield* parentOf(userId, workspace.value, parentTaskId, asked.success.repository);
       if (typeof parent === "string") return agentToolRejected(parent);
+      const beside =
+        relation === undefined
+          ? undefined
+          : yield* besideOf(userId, workspace.value, relation, asked.success.repository);
+      if (typeof beside === "string") return agentToolRejected(beside);
       const repositoryAsked =
         asked.success.repository === undefined
           ? yield* workedRepository(call.caller)
           : asked.success.repository;
-      const named = parent === undefined ? repositoryAsked : parent.repository;
+      // A task in a tree works in the tree's repository: its parent's as a child, and its child's as a parent.
+      const named =
+        parent !== undefined
+          ? parent.repository
+          : beside?.kind === TASK_CREATE_RELATION_KIND.PARENT_OF
+            ? beside.repository
+            : repositoryAsked;
       const reached = yield* reachedRepository(workspace.value, named, userId);
       if (Result.isFailure(reached)) return agentToolRejected(reached.failure);
       // A child runs where its parent runs; any other task where the member last ran one, and a device since removed makes none.
@@ -370,7 +461,7 @@ export function runCreateTask(
       // A child takes its parent's assignee where the call names none; a null names no one.
       const assignedId = assignee === undefined ? (parent?.assigneeId ?? undefined) : assigneeId;
       const text = planTextOf(plan ?? "");
-      // The make and its plan's first revision are one write, so a call run again at once makes one task.
+      // The make, its plan's first revision, and its relation are one write, so a call run again at once makes one task.
       const made = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
         client.withTransaction(
           Effect.gen(function* () {
@@ -401,14 +492,17 @@ export function runCreateTask(
                 savedBefore: Option.none(),
               });
             }
+            if (Option.isSome(once) && beside !== undefined) {
+              yield* relationWritten(userId, id, beside);
+            }
             return once;
           }),
         ),
       ).pipe(
-        // An assignee who is no member of the workspace makes no task, nothing written.
-        Effect.catchTag("TaskAssigneeNotMember", () => Effect.succeed(undefined)),
+        // An assignee who is no member of the workspace, or a relation refused, makes no task, nothing written.
+        Effect.catchTags(MADE_REFUSAL_OF),
       );
-      if (made === undefined) return agentToolRejected(CREATE_TASK_REFUSAL.NOT_MEMBER);
+      if (typeof made === "string") return agentToolRejected(made);
       if (Option.isNone(made)) {
         // A run of the same call made it meanwhile, which this one answers.
         const raced = yield* readTask(userId, id);

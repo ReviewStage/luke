@@ -2,9 +2,9 @@
  * task-create-relation.ts -- the relation a start makes its task in, confirmed before the start writes and written beside it in the start's own transaction.
  *
  * A task may start related to another (`taskCreateRequestSchema`'s
- * `relation`, from the new task's side): a sub-task of it, which the start
- * makes as it makes a child of `parentTaskId` (`task-parent.ts`); its
- * parent; or a block on either side. The other task is read as its maker
+ * `relation`, or an agent's `create_task`'s, from the new task's side): a
+ * sub-task of it, which the start makes as it makes a child of
+ * `parentTaskId` (`task-parent.ts`); its parent; or a block on either side. The other task is read as its maker
  * reaches it before anything is written (`relationAsked`), so one out of
  * reach, of another workspace, or named by nothing all read alike as
  * unreached, and a start as a task's parent takes that task's repository,
@@ -144,22 +144,25 @@ const parentTaken = (
     return Option.map(yield* setTaskParent(userId, otherId, taskId), () => undefined);
   });
 
-/** The relation written for the task just started: the other task made its child, or a block on the side the kind names. Nothing where the other task is out of reach by now. */
-function relationWritten(
+/** The relation written for the task just started, under its maker's transaction: the other task made its child, or a block on the side the kind names; refused as unreached where the other task is out of reach by now. */
+export function relationWritten(
   userId: string,
   taskId: string,
   asked: TaskCreateRelationAsked,
-): Effect.Effect<Option.Option<void>, StoreFailure | TaskCreateRelationRefused, DatabaseServices> {
-  switch (asked.kind) {
-    case TASK_CREATE_RELATION_KIND.PARENT_OF:
-      return parentTaken(userId, taskId, asked.taskId);
-    case TASK_CREATE_RELATION_KIND.BLOCKED_BY:
-    case TASK_CREATE_RELATION_KIND.BLOCKS:
-      return Effect.map(
+): Effect.Effect<void, StoreFailure | TaskCreateRelationRefused, DatabaseServices> {
+  const written: Effect.Effect<
+    Option.Option<void>,
+    StoreFailure | TaskCreateRelationRefused,
+    DatabaseServices
+  > = asked.kind === TASK_CREATE_RELATION_KIND.PARENT_OF
+    ? parentTaken(userId, taskId, asked.taskId)
+    : Effect.map(
         addTaskBlock(userId, blockPairOf(taskId, asked.taskId, asked.kind)),
         Option.map(() => undefined),
       );
-  }
+  return Effect.flatMap(written, (related) =>
+    Option.isNone(related) ? Effect.fail(new TaskRelationUnreached()) : Effect.void,
+  );
 }
 
 /**
@@ -188,8 +191,7 @@ export function createTaskRelated(
       Effect.gen(function* () {
         const created = yield* createTaskCommitted(userId, started);
         const taskId = created.task.task.id;
-        const related = yield* relationWritten(userId, taskId, asked);
-        if (Option.isNone(related)) return yield* new TaskRelationUnreached();
+        yield* relationWritten(userId, taskId, asked);
         const read = yield* readTask(userId, taskId);
         // The row was written under this transaction, so a read that misses it is the database breaking its own contract.
         if (Option.isNone(read))
