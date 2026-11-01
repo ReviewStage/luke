@@ -40,9 +40,10 @@ import { SelectionRegion } from "../selection/selection-region.js";
  * (`menu`) is opened alike by its ⋯, a right-click, and the menu key
  * (`useRowMenu`). The ⋯ keeps no column, so a list's last column ends at
  * the row's end inset: it comes in over the row's end while the row is in
- * hand, holds the keyboard, or has its menu open, and stands there at rest
- * on a screen with no hover, the cells after the name stepping aside for
- * it rather than going under it (`task-row.css`). Renamed, its name gives way
+ * hand, holds the keyboard, or has its menu open, the last cell giving way
+ * under it and nothing else moving, as the sidebar's and the inbox's rows
+ * do; on a screen with no hover it stands there at rest, the cells after the
+ * name stepping aside for it (`task-row.css`). Renamed, its name gives way
  * to the field its owner hands (`editor`); what did not land stands under
  * it (`note`).
  *
@@ -152,7 +153,7 @@ const CELL_PLACE = {
   [TASK_ROW_CELL.END]: `${OVER_ITS_CONTROLS} order-13`,
 } as const satisfies Record<TaskRowCell, string>;
 
-/** A cell after the name, which steps aside while the ⋯ stands at the row's end (`task-row.css`). */
+/** A cell after the name, which steps aside while the ⋯ stands at rest on a screen with no hover (`task-row.css`). */
 const AFTER = "luke-task-row-after";
 
 /** The ⋯'s place: out of the row's columns, at its end inset, over its press while it shows (`task-row.css`). */
