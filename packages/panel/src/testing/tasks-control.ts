@@ -321,6 +321,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onNewTab: ignore,
       onNewTabAnswered: ignore,
       onToggleAskedAnswered: () => undefined,
+      onShowList: () => undefined,
       onChoose: ignore,
       onShow: ignore,
       onClose: ignore,

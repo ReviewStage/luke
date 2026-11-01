@@ -702,6 +702,8 @@ export interface SidePanelControl {
   onNewTab: () => void;
   /** Says the "+" menu asked at the toggle was drawn, or is let go. */
   onToggleAskedAnswered: () => void;
+  /** Shows the panel on a phone's Activity, its list of every tab and what its "+" offers, which stands with no tab too. */
+  onShowList: () => void;
   /** Says the "+" opened its menu on the ask. */
   onNewTabAnswered: () => void;
   /** Shows the panel on the tab, opening it at the strip's end where the strip does not draw it, and choosing it where it does; a fixed tab stays open on that task. */
@@ -1895,6 +1897,8 @@ export function useSidePanel(
   const [newTabAsked, setNewTabAsked] = useState(false);
   // The plan, or the agent's page, whose toggle or ⌘T asked for the "+" menu with nothing to show, which hangs from the toggle.
   const [toggleAskedOn, setToggleAskedOn] = useState<string | undefined>(undefined);
+  // The plan a phone's Activity showed the panel on, its list of every tab and what its "+" offers, which stands whether or not the strip holds a tab.
+  const [listedOn, setListedOn] = useState<string | undefined>(undefined);
   const [seen, setSeen] = useState<OpenTask>(task);
   // The tab a pin or a notification asked for, while it is still the one chosen.
   const [asked, setAsked] = useState<{ task: string; tab: SidePanelTab } | undefined>(undefined);
@@ -1992,8 +1996,9 @@ export function useSidePanel(
   // Open is the window's, so a plan whose strip is empty hides the panel
   // without forgetting it was open while the plan stands, and shows it
   // again once a tab lands there, as a task's reads do. The panel is never
-  // shown with nothing in it.
-  const shown = state.open && strip.length > 0;
+  // shown with nothing in it: a phone's Activity, which lists what the "+"
+  // offers, is the one view it stands on with no tab.
+  const shown = state.open && (strip.length > 0 || (taskId !== undefined && listedOn === taskId));
   // Note that a plan left while the panel stood hidden by its empty strip
   // shuts it, so the next plan with a tab does not show it unasked: it opens
   // again only when something is opened into it or its toggle is pressed.
@@ -2022,6 +2027,9 @@ export function useSidePanel(
   }
   if (toggleAskedOn !== undefined && (shown || toggleAskedOn !== taskId)) {
     setToggleAskedOn(undefined);
+  }
+  if (listedOn !== undefined && (!state.open || listedOn !== taskId)) {
+    setListedOn(undefined);
   }
 
   // Note that the toggle with nothing to show asks for the "+" menu at the
@@ -2067,6 +2075,10 @@ export function useSidePanel(
   }, [update, strip.length, taskId]);
   const onNewTabAnswered = useCallback(() => setNewTabAsked(false), []);
   const onToggleAskedAnswered = useCallback(() => setToggleAskedOn(undefined), []);
+  const onShowList = useCallback(() => {
+    setListedOn(taskId);
+    update((held) => (held.open ? held : { ...held, open: true }));
+  }, [update, taskId]);
   const onChoose = useCallback(
     (tab: SidePanelTab) => {
       if (tab === SIDE_PANEL_TAB.INBOX) return;
@@ -2290,6 +2302,7 @@ export function useSidePanel(
     onToggle,
     toggleAsked: toggleAskedOn !== undefined && toggleAskedOn === taskId && !shown,
     onToggleAskedAnswered,
+    onShowList,
     onSetOpen,
     onToggleFullScreen,
     onNewTab,
