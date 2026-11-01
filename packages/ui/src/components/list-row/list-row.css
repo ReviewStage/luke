@@ -176,20 +176,8 @@
     min-width: 0;
   }
 
-  /* A dense row's description is a label beside its title, so it fades as
-     the title does (below) rather than ending in an ellipsis. */
-  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
-  .luke-list-row-description[data-overflow] {
-    text-overflow: clip;
-  }
-
-  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
-    .luke-list-row-description[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
-  }
-
   /* A dense row's description that alerts, a refusal, takes a line of its
-     own under the title and keeps its words whole, rather than giving way. */
+     own under the title, its words whole (below), rather than giving way. */
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
   .luke-list-row-text:has(> .luke-list-row-description [role="alert"]) {
     flex-wrap: wrap;
@@ -199,7 +187,6 @@
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
     .luke-list-row-description:has([role="alert"]) {
     flex-basis: 100%;
-    white-space: normal;
   }
 
   /* A dense row's attachments take a line of their own over its title, as
@@ -283,8 +270,13 @@
   .luke-list-row-title,
   .luke-list-row-description {
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* A description that alerts, a refusal, keeps its words whole, wrapping
+     rather than being cut short. */
+  .luke-list-row-description:has([role="alert"]) {
+    white-space: normal;
   }
 
   .luke-list-row-title {
@@ -306,16 +298,13 @@
     font-weight: var(--luke-type-body-weight);
   }
 
-  /* A title fades rather than ending in an ellipsis, as a browser's tab
-     does, out over its last few pixels only while it is measured cut short,
-     so a short one ends on its last letter; a row whose acts come in on
-     hover reads the cut sliding as they come and go. The mask fades the
-     words themselves, so it reads alike over every fill the row wears. */
-  .luke-list-row-title[data-overflow] {
-    text-overflow: clip;
-  }
-
-  .luke-list-row-title[data-overflow="true"] {
+  /* A title and its description fade rather than ending in an ellipsis,
+     as a browser's tab does, out over their last few pixels only while they
+     are measured cut short, so a short one ends on its last letter; a row
+     whose acts come in on hover reads the cut sliding as they come and go.
+     The mask fades the words themselves, so it reads alike over every fill
+     the row wears. */
+  :is(.luke-list-row-title, .luke-list-row-description)[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
   }
 
