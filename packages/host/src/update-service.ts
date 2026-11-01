@@ -1,3 +1,4 @@
+import { LINK_ORIGIN } from "@luke/features/link-home";
 import { scheduleOnce } from "@luke/runtime/effect";
 import {
   UPDATE_STATUS,
@@ -22,7 +23,7 @@ export const UPDATE_ENDPOINT = {
   // literal should not need that reading.
   UPDATE_FEED_URL: "https://github.com/ReviewStage/luke/releases/latest/download/",
   LATEST_RELEASE_PAGE_URL: "https://github.com/ReviewStage/luke/releases/latest",
-  CHANGELOG_PAGE_URL: "https://tryluke.dev/changelog",
+  CHANGELOG_PAGE_URL: `${LINK_ORIGIN}/changelog`,
 } as const;
 
 const UPDATE_CHECK_DEFAULTS = {

@@ -1,4 +1,4 @@
-import { isLinkHome, LINK_HOME } from "./link-home.js";
+import { isLinkHome, LINK_HOME_PATTERN } from "./link-home.js";
 import { encodeMention, insideCode, MENTION_KIND } from "./mention-link.js";
 import { parsedUrl } from "./parsed-url.js";
 
@@ -27,7 +27,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
  * address, so a broken one that only begins with an id names nothing.
  */
 const ADDRESS_IN_TEXT = new RegExp(
-  `(?:https|${LINK_HOME.APP_SCHEME}):\\/\\/${LINK_HOME.HOST.replaceAll(".", "\\.")}\\/[^\\s/()]{1,200}\\/plan\\/([0-9a-f-]{36})\\/files\\/([0-9a-f-]{36})(?![\\w-])`,
+  `${LINK_HOME_PATTERN}\\/[^\\s/()]{1,200}\\/plan\\/([0-9a-f-]{36})\\/files\\/([0-9a-f-]{36})(?![\\w-])`,
   "gu",
 );
 
