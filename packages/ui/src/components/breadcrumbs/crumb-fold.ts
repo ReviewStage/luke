@@ -11,11 +11,11 @@ import { BREADCRUMB_SHOWN, type Crumb } from "./breadcrumbs.js";
  * fits whole, rather than cut any of them; the last crumb, the page the
  * reader stands on, always stands. A path led by crumbs that may not be
  * folded, as a task's is by its repository's, which names where the task
- * is and keeps its size, keeps them and folds the run of crumbs after them
+ * is and is `kept`, keeps them and folds the run of crumbs after them
  * instead. Only once nothing is left to fold does a
  * crumb give way, by its share, down to a floor the stylesheet keeps
  * legible, the last crumb last of all. Only a crumb of words or a plain press may be folded: one that
- * keeps its size (`fixed`), one that opens something, a glyph that is the toolbar's way back, and one a bar's
+ * is `kept`, one that opens something, a glyph that is the toolbar's way back, and one a bar's
  * widths already stand in for (`shownAt`) are the caller's own folds, and
  * the fold stops short of them.
  *
@@ -44,12 +44,12 @@ interface DrawnCrumb {
   readonly folded: boolean;
 }
 
-/** Whether a crumb may be left out of a narrow path: words or a plain press, always drawn, that does not keep its size. */
+/** Whether a crumb may be left out of a narrow path: words or a plain press, always drawn, that is not `kept`. */
 function foldable(crumb: Crumb): boolean {
   return (
     crumb.icon === undefined &&
     crumb.popup === undefined &&
-    crumb.fixed !== true &&
+    crumb.kept !== true &&
     crumb.shown !== false &&
     (crumb.shownAt ?? BREADCRUMB_SHOWN.ALWAYS) === BREADCRUMB_SHOWN.ALWAYS
   );
