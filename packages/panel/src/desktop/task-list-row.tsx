@@ -13,6 +13,7 @@ import {
   CHIP_LOOK,
   InlineEdit,
   type ListRowFold,
+  PROGRESS_COUNT_LOOK,
   ProgressCount,
   TASK_ROW_CELL,
   TaskRow,
@@ -53,7 +54,7 @@ import { type ChosenTasks, chosenRowMenu } from "./tasks-selection.js";
  * Each cell stands only where the row's list draws it (`cells`). Beside its
  * name stands the stop sign of a task blocked by another (`BlockedMark`),
  * which the press says after the status, and in its own cell how many of
- * its sub-tasks are finished, "1/3", as the sidebar's row says it.
+ * its sub-tasks are finished, "1/3", as a badge, as a Board card says it.
  *
  * Its menu is the task's own, after any groups its list leads it with (a
  * related task's Change relation), whose Rename makes its name its field until
@@ -225,6 +226,7 @@ export function TaskListRow({
                     done={subTasks.finished}
                     total={subTasks.total}
                     label={`${subTasks.finished} of ${subTasks.total} sub-tasks finished`}
+                    look={PROGRESS_COUNT_LOOK.BADGE}
                   />
                 ),
               ...content,

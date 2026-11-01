@@ -17,6 +17,7 @@ import {
   IconButton,
   type MenuRow,
   POPOVER_ALIGN,
+  PROGRESS_COUNT_LOOK,
   ProgressCount,
   SearchableMenu,
   STATUS_TONE,
@@ -46,7 +47,8 @@ import { chipSubmenu } from "./standing-submenus.js";
  * (`related-tasks.tsx`), and each drawn only while it holds a row, so a
  * task with neither draws no empty heads. Sub-tasks, by the list-tree
  * glyph, counts how many of the task's own sub-tasks are finished of all of
- * them, and nests theirs under each to any depth, folded until opened, as
+ * them in a badge, as a sub-task row with sub-tasks of its own and a Board
+ * card count theirs, and nests theirs under each to any depth, folded until opened, as
  * the sidebar nests and folds them; it reads the task list's
  * `parentTaskId` and nothing more. Relations, by the network glyph, holds a
  * row for each task the task waits on and each that waits on it, its kind
@@ -434,6 +436,7 @@ export function PlanRelations({
               done={count.finished}
               total={count.total}
               label={`${count.finished} of ${count.total} sub-tasks finished`}
+              look={PROGRESS_COUNT_LOOK.BADGE}
             />
           }
           fold={{ defaultOpen: true }}
