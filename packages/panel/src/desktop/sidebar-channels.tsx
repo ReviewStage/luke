@@ -6,13 +6,13 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   MoreButton,
-  NAV_COUNT_TONE,
   NAV_CURRENT,
   type NavFold,
   NavItem,
   NavItemSkeleton,
   SidebarFilters,
   SkeletonRegion,
+  STATUS_TONE,
   Tooltip,
   useDisclosureFold,
   useMenu,
@@ -37,8 +37,8 @@ import { ReadAllMenu, type SidebarReadAll } from "./sidebar-read-all.js";
  * The rows stand in under the Inbox's name (`SidebarFilters`), the
  * workspace's standing channels first and its project channels after them,
  * as `channelSections` orders them. A row is the channel's glyph and name,
- * and at its end how many of its threads Needs you lists, in the unread dot's
- * blue; its name stands in the unread weight while something
+ * and at its end how many of its threads Needs you lists, in the needs-you
+ * tone the Inbox's own count wears; its name stands in the unread weight while something
  * was posted in it since the reader last looked (`channelUnread`). Resting
  * on a row hangs the channel's card beside it after the hint's wait, as
  * every other sidebar row's card hangs (`channel-card.tsx`). A press
@@ -114,7 +114,7 @@ function ChannelRow({
           unread={channelUnread(channel)}
           count={{
             ...groupCount(waiting, NEEDS_YOU.COUNT),
-            tone: NAV_COUNT_TONE.UNREAD,
+            tone: STATUS_TONE.ATTENTION,
           }}
           contextMenu={menu.contextMenu(ellipsis)}
           actions={

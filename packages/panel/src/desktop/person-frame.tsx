@@ -11,6 +11,7 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  type StatusTone,
 } from "@luke/ui";
 import { type ReactNode, useRef } from "react";
 
@@ -124,11 +125,14 @@ export function PersonSectionFrame({
   label,
   title,
   count,
+  tone,
   children,
 }: {
   label?: string | undefined;
   title: ReactNode;
   count?: number | undefined;
+  /** The count's status tone, muted where absent: attention for what waits on the reader. */
+  tone?: StatusTone | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
@@ -139,7 +143,7 @@ export function PersonSectionFrame({
       <GroupHeader
         heading={label === undefined ? GROUP_HEADING.NONE : GROUP_HEADING.H2}
         label={title}
-        count={count === undefined ? undefined : { value: count }}
+        count={count === undefined ? undefined : { value: count, tone }}
       >
         {children}
       </GroupHeader>

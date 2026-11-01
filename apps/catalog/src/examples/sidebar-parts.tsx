@@ -8,7 +8,6 @@ import {
   IconButton,
   InboxIcon,
   MoreButton,
-  NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
   SearchIcon,
@@ -42,7 +41,7 @@ function FoldingFilters(): React.JSX.Element {
     <SidebarPlaces label="Places">
       <NavItem
         icon={<InboxIcon />}
-        count={{ value: 3, noun: "for you", tone: NAV_COUNT_TONE.UNREAD }}
+        count={{ value: 3, noun: "need you", tone: STATUS_TONE.ATTENTION }}
         shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
         fold={{ state: fold.state, label: "Channels" }}
         actions={<MoreButton thing="Inbox" size={BUTTON_SIZE.COMPACT} />}

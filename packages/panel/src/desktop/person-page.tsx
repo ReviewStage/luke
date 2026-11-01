@@ -34,7 +34,9 @@ import {
   RowHint,
   RowHintOptions,
   ShowMoreRow,
+  STATUS_TONE,
   Stack,
+  type StatusTone,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -163,14 +165,16 @@ function headName(person: Actor): string {
 function PersonSection({
   title,
   count,
+  tone,
   children,
 }: {
   title: string;
   count: number;
+  tone?: StatusTone | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <PersonSectionFrame label={title} title={title} count={count}>
+    <PersonSectionFrame label={title} title={title} count={count} tone={tone}>
       <List label={title} moves>
         {children}
       </List>
@@ -789,6 +793,7 @@ function PersonColumn({
           <PersonSection
             title={you ? NEEDS_YOU.LABEL : "Waiting on their answer"}
             count={waiting.length}
+            tone={you ? STATUS_TONE.ATTENTION : undefined}
           >
             {waiting.map((listed) => (
               <InboxItemRow

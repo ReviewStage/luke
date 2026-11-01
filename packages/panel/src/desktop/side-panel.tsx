@@ -35,6 +35,7 @@ import {
   ScrollArea,
   SidePanelIcon,
   SpinnerRegion,
+  STATUS_TONE,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -173,7 +174,7 @@ import {
 import { useCapability } from "../use-app-state.js";
 import { useAgentTerminalDoors } from "./agent-actions.js";
 import { useFileTreeWidth } from "./folded-groups.js";
-import { AgentMenuTab } from "./main-tabs.js";
+import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
 import { paneTiming } from "./pane-motion.js";
 import { PhoneBack, PhoneHead, PlaceMore } from "./phone-head.js";
@@ -937,8 +938,8 @@ function stripTabs(input: {
     onSelect: () => panel.onChoose(tab),
     onKeep: () => panel.onKeep(tab),
   });
-  // The Inbox counts what waits on the developer after its name, dimmed as a
-  // model's effort is after the model's, so an item posted while the
+  // The Inbox counts what waits on the developer after its name, in the
+  // needs-you tone the sidebar's and the phone bar's Inbox counts wear, so an item posted while the
   // developer reads elsewhere is seen from any tab, and wears the Draft
   // pencil at its end while a card's answer waits unsent and another tab is
   // chosen (`draft-mark.tsx`).
@@ -947,7 +948,9 @@ function stripTabs(input: {
     tab,
     look: look(tab, {
       ...tabLook({ kind: TAB_KIND.PANEL, tab, plan: input.plan, thread: input.thread }),
-      detail: tab === SIDE_PANEL_TAB.INBOX && inboxWaiting > 0 ? String(inboxWaiting) : undefined,
+      ...(tab === SIDE_PANEL_TAB.INBOX && inboxWaiting > 0
+        ? { detail: String(inboxWaiting), detailTone: STATUS_TONE.ATTENTION }
+        : {}),
       endMark:
         tab === SIDE_PANEL_TAB.INBOX && inboxDrafted && !chosen(tab) ? <DraftMark /> : undefined,
       card: hungCard({ kind: TAB_KIND.PANEL, tab, plan: planOf(input), inbox: input.inbox }),
@@ -1464,7 +1467,15 @@ export function ActivityList({
                 <ListRow
                   leading={entry.look.icon}
                   title={entry.look.label}
-                  meta={entry.look.detail}
+                  meta={
+                    entry.look.detailTone === undefined ? (
+                      entry.look.detail
+                    ) : (
+                      <span className={ROW_COUNT} data-tone={entry.look.detailTone}>
+                        {entry.look.detail}
+                      </span>
+                    )
+                  }
                   unread={entry.look.unread}
                   hint={
                     entry.look.card === undefined
