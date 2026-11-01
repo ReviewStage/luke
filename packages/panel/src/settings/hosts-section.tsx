@@ -35,6 +35,8 @@ import {
   SettingsLine,
   SettingsRow,
   type SettingsRowSkeletonShape,
+  type SettingsRowState,
+  SettingsRowStateLine,
   SettingsRowsSkeleton,
   SettingsSection,
   SPINNER_SIZE,
@@ -178,7 +180,43 @@ function hostStanding(host: Host, book: PresenceBook): DeviceStanding {
   return presenceStanding(book, host.id) ?? DEVICE_STANDING.OFFLINE;
 }
 
-/** A host's line under its name: online, or when it was last seen. */
+/** How a host's standing leads its line: online with the finished session's dot, what needs a look tinted, and a first read still out plain. */
+const STANDING_STATE = {
+  [DEVICE_STANDING.ONLINE]: SETTINGS_ROW_STATE.CONNECTED,
+  [DEVICE_STANDING.OFFLINE]: SETTINGS_ROW_STATE.ATTENTION,
+  [DEVICE_STANDING.UNKNOWN]: SETTINGS_ROW_STATE.ATTENTION,
+  [DEVICE_STANDING.CHECKING]: SETTINGS_ROW_STATE.PLAIN,
+} as const satisfies Record<DeviceStanding, SettingsRowState>;
+
+/**
+ * A host's line under its name, its standing first, as Integrations leads with
+ * Connected: online after the dot, offline or unknown in the attention tint,
+ * and then what it is. Note that an online line draws its words inside the
+ * dot's line, because words after it sit off the dot's baseline, and a tinted
+ * one tints its standing alone.
+ */
+function StandingLine({
+  standing,
+  seen,
+  rest,
+}: {
+  standing: DeviceStanding;
+  seen: string;
+  rest: string;
+}): React.JSX.Element {
+  const state = STANDING_STATE[standing];
+  if (state === SETTINGS_ROW_STATE.CONNECTED) {
+    return <SettingsRowStateLine state={state}>{`${seen} · ${rest}`}</SettingsRowStateLine>;
+  }
+  return (
+    <>
+      <SettingsRowStateLine state={state}>{seen}</SettingsRowStateLine>
+      {` · ${rest}`}
+    </>
+  );
+}
+
+/** A host's standing under its name: online, or when it was last seen. */
 function seenWords(host: Host, book: PresenceBook, now: number): string {
   const standing = hostStanding(host, book);
   if (standing === DEVICE_STANDING.ONLINE) return WORDS.ONLINE;
@@ -266,7 +304,7 @@ const REMOVE_WORDS = {
   },
 } as const;
 
-/** One machine's row: its name, what it is, whether it is online, and its version, where its setup stands while it is not ready and its update while one is under way, for a Mac whose login it runs in, Update needed with how to update it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
+/** One machine's row: its name, whether it is online, what it is, and its version, where its setup stands while it is not ready and its update while one is under way, for a Mac whose login it runs in, Update needed with how to update it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
 function HostRow({
   host,
   book,
@@ -290,8 +328,8 @@ function HostRow({
   );
   // Note that a service older than platforms listed only Linux servers.
   const platform = host.platform ?? DEVICE_PLATFORM.LINUX;
-  const seen = `${DEVICE_PLATFORM_NAME[platform]} · ${seenWords(host, book, now)}`;
-  const versioned = host.version === null ? seen : `${seen} · ${host.version}`;
+  const kind = DEVICE_PLATFORM_NAME[platform];
+  const versioned = host.version === null ? kind : `${kind} · ${host.version}`;
   const removeWords =
     thisMac !== undefined
       ? REMOVE_WORDS.THIS_MAC
@@ -327,7 +365,11 @@ function HostRow({
           ) : undefined,
           description: (
             <>
-              {versioned}
+              <StandingLine
+                standing={standing}
+                seen={seenWords(host, book, now)}
+                rest={versioned}
+              />
               {session === null ? null : <HostStateLine line={session} />}
               {line === null ? null : <HostStateLine line={line} />}
               {update === null ? null : <HostStateLine line={update} />}
