@@ -773,10 +773,11 @@ export function DesktopAgentPage({
                           />
                         </FindScope>
                       </Fill>
-                      {drawing.panel ? (
+                      {/* Note that the panel stands while its toggle asks for its "+" with nothing to show, drawing the menu alone. */}
+                      {drawing.panel !== undefined || sidePanel.toggleAsked ? (
                         <SidePanel
                           {...drawing}
-                          panel={drawing.panel}
+                          panel={drawing.panel ?? sidePanel}
                           unread={NO_UNREAD}
                           holder={SIDE_PANEL_HOLDER.AGENT}
                           taskId={agentId}
