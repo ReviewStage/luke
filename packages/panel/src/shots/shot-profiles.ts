@@ -26,6 +26,9 @@ import { automationRunsShot } from "./automation-runs";
 import { frameTabsShot } from "./frame-tabs";
 import { rowMenuShot } from "./row-menu";
 import { rowSheetShot } from "./row-sheet";
+import { taskMarksShot } from "./task-marks";
+import { browserTabShot } from "./browser-tab";
+import { agentMenuShot } from "./agent-menu";
 
 /** Each shot's builder, by its profile. */
 const BUILDERS: ReadonlyMap<string, () => ShotSpec> = new Map([
@@ -41,6 +44,9 @@ const BUILDERS: ReadonlyMap<string, () => ShotSpec> = new Map([
   [RUN_PROFILE.SHOT_FRAME_TABS, frameTabsShot],
   [RUN_PROFILE.SHOT_ROW_MENU, rowMenuShot],
   [RUN_PROFILE.SHOT_ROW_SHEET, rowSheetShot],
+  [RUN_PROFILE.SHOT_TASK_MARKS, taskMarksShot],
+  [RUN_PROFILE.SHOT_BROWSER_TAB, browserTabShot],
+  [RUN_PROFILE.SHOT_AGENT_MENU, agentMenuShot],
 ]);
 
 /**

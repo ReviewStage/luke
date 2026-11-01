@@ -105,6 +105,9 @@ export const RUN_PROFILE = {
   SHOT_FRAME_TABS: "shot-frame-tabs",
   SHOT_ROW_MENU: "shot-row-menu",
   SHOT_ROW_SHEET: "shot-row-sheet",
+  SHOT_BROWSER_TAB: "shot-browser-tab",
+  SHOT_TASK_MARKS: "shot-task-marks",
+  SHOT_AGENT_MENU: "shot-agent-menu",
 } as const;
 
 export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];
