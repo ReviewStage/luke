@@ -137,7 +137,15 @@ const COLUMN_WIDTH = {
 
 /** A row's cell: a line in the caption's type, in its column, letting the pointer through to the row's press. */
 const CELL =
-  "luke-task-row-cell flex min-w-0 items-center gap-item-gap text-caption text-muted-foreground tabular-nums whitespace-nowrap";
+  "luke-task-row-cell flex items-center gap-item-gap text-caption text-muted-foreground tabular-nums whitespace-nowrap";
+
+/**
+ * How narrow a cell may stand: as narrow as its column, but the one the ⋯
+ * comes in over, which is at least the ⋯'s width, so its column is too, and
+ * the ⋯ never reaches past it onto a control in the cell before where every
+ * row leaves the last one empty.
+ */
+const CELL_LEAST = { REST: "min-w-0", UNDER_MORE: "min-w-luke-24" } as const;
 
 /** A cell over the row's press where it holds anything, and the press's own where it stands empty. */
 const OVER_WHERE_FILLED =
@@ -251,7 +259,7 @@ function cellOf(
   return (
     <span
       key={cell}
-      className={`${CELL} ${CELL_PLACE[cell]}${after}`}
+      className={`${CELL} ${cell === underMore ? CELL_LEAST.UNDER_MORE : CELL_LEAST.REST} ${CELL_PLACE[cell]}${after}`}
       data-cell={cell}
       data-under-more={cell === underMore ? "true" : undefined}
     >
@@ -263,8 +271,9 @@ function cellOf(
 /**
  * The grid's columns for the cells drawn, in the order a row draws them:
  * those before the name, the name, and those after it, then the ⋯'s own
- * where it comes in over no cell (`cellUnderMore`). The list standing the
- * rows lays them as its `--tasks-list-columns`.
+ * where it comes in over no cell (`cellUnderMore`); the cell it comes in
+ * over is held to the ⋯'s width at least (`CELL_LEAST`). The list standing
+ * the rows lays them as its `--tasks-list-columns`.
  */
 export function taskRowColumns(cells: readonly TaskRowCell[]): string {
   const drawn = inOrder(cells);
