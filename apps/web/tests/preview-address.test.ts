@@ -25,7 +25,7 @@ const BRANCH = "luke/rebased";
 const EXIT_NOT_AFFECTED = 3;
 /** The script's own exit for a read of GitHub that failed. */
 const EXIT_UNREADABLE = 7;
-/** The script's own exit for an agent's branch whose pull request asks for no preview. */
+/** The script's own exit for an agent's branch no preview was asked for. */
 const EXIT_NOT_REQUESTED = 8;
 
 /**
@@ -282,12 +282,7 @@ test("an earlier head redeployed and failed still resolves to its first build, w
   });
 });
 
-test("an agent's branch whose pull request has no preview label stops at once rather than waiting on a build that never starts", async (t) => {
+test("an agent's branch no preview was asked for stops at once rather than waiting on a build that never starts", async (t) => {
   const fixture = await rebasedBranch(t, "web v1\n");
-  answer(
-    fixture.answers,
-    `repos/${REPOSITORY}/pulls?head=ReviewStage:${BRANCH}&state=open&per_page=1`,
-    [{ labels: [{ name: "enhancement" }] }],
-  );
   assert.equal(previewAddress(fixture).status, EXIT_NOT_REQUESTED);
 });
