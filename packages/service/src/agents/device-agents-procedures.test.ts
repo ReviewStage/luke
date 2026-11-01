@@ -567,25 +567,15 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
               readonly id: string;
               readonly name: string;
               readonly platform: string;
-              readonly loginName: string;
               readonly setup: string;
               readonly setupFailure: string;
-            }) => [
-              each.id,
-              each.name,
-              each.platform,
-              each.loginName,
-              each.setup,
-              each.setupFailure,
-            ],
+            }) => [each.id, each.name, each.platform, each.setup, each.setupFailure],
           ),
-          // Note that the fixture's home is /Users/fixture, so the Mac runs as fixture.
           [
             [
               deviceId,
               "Studio",
               DEVICE_PLATFORM.DARWIN,
-              "fixture",
               DEVICE_SETUP.FAILED,
               "Claude Code could not be installed",
             ],

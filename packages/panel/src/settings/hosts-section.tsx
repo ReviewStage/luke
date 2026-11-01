@@ -55,7 +55,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
-import { DEVICE_PLATFORM_NAME, macSessionWords } from "../device-platform.js";
+import { DEVICE_PLATFORM_NAME } from "../device-platform.js";
 import {
   type PresenceBook,
   presenceAgeMs,
@@ -90,8 +90,7 @@ import {
  * update to a newer release stands while one is under way, waiting for its
  * agents to finish, updating, or couldn't update and why
  * (`hostUpdateWords`), on every row but This Mac's, whose line is its own
- * app's reading, for a Mac that it runs while its user is logged in,
- * since its host runs in their login session, and, where its host program
+ * app's reading, and, where its host program
  * is below the service's floor, Update needed with how to update it: the
  * install command's update, this Mac's app updated, or, for another Mac,
  * either, since the service lists no word of how a Mac joined. Remove,
@@ -304,7 +303,7 @@ const REMOVE_WORDS = {
   },
 } as const;
 
-/** One machine's row: its name, whether it is online, what it is, and its version, where its setup stands while it is not ready and its update while one is under way, for a Mac whose login it runs in, Update needed with how to update it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
+/** One machine's row: its name, whether it is online, what it is, and its version, where its setup stands while it is not ready and its update while one is under way, Update needed with how to update it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
 function HostRow({
   host,
   book,
@@ -340,10 +339,6 @@ function HostRow({
   // Note that this Mac's own line is its app's reading of its `luke-host`, which says its setup and more, with Retry, and its update is its app's.
   const line = thisMac !== undefined ? thisMac.line : setupLine(host, standing);
   const update = thisMac !== undefined ? null : updateLine(host, standing);
-  const session: HostLine | null =
-    platform === DEVICE_PLATFORM.DARWIN
-      ? { words: macSessionWords(host.loginName), state: SETTINGS_ROW_STATE.PLAIN }
-      : null;
   return (
     <>
       <MenuRow
@@ -370,7 +365,6 @@ function HostRow({
                 seen={seenWords(host, book, now)}
                 rest={versioned}
               />
-              {session === null ? null : <HostStateLine line={session} />}
               {line === null ? null : <HostStateLine line={line} />}
               {update === null ? null : <HostStateLine line={update} />}
             </>

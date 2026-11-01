@@ -325,7 +325,7 @@ test("this Mac stands first on its own machine's row, with why its setup failed 
   assert.equal(turnOns(), 1);
 });
 
-test("another Mac's row says why its setup failed and whose login it runs in, and nothing of This Mac", async () => {
+test("another Mac's row says why its setup failed, and nothing of This Mac", async () => {
   const mini = "5c2e8a1f-3b7d-4e9a-8c6f-1d3b5e7a9c20";
   await machinesWithThisMac(
     [
@@ -338,7 +338,6 @@ test("another Mac's row says why its setup failed and whose login it runs in, an
         upgradeNeeded: true,
         setup: DEVICE_SETUP.FAILED,
         setupFailure: "Claude Code could not be installed",
-        loginName: "charles",
       },
     ],
     { standing: THIS_MAC_HOST_STANDING.OFF },
@@ -347,7 +346,6 @@ test("another Mac's row says why its setup failed and whose login it runs in, an
   const text = document.body.textContent ?? "";
 
   assert.ok(text.includes("Couldn't set up: Claude Code could not be installed"));
-  assert.ok(text.includes("Runs while charles is logged in."));
   assert.ok(!/this Mac/iu.test(text), "nothing on its row speaks of this Mac");
 });
 
