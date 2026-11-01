@@ -33,6 +33,7 @@ const PARENT = {
 const REPOSITORY: Crumb = {
   label: "stage/luke",
   glyph: <FolderIcon />,
+  fixed: true,
 };
 
 function FrameHeads(): React.JSX.Element {

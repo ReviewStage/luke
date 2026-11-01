@@ -246,6 +246,16 @@ test("a path led by a crumb that drops a menu keeps it and folds the crumbs afte
   expect(items).toEqual(["acme/relay", "…", "What the expired invite page says"]);
 });
 
+test("a path led by a fixed crumb of words keeps it and folds the crumbs after it", () => {
+  layOut(250);
+  const container = draw({
+    label: "Path",
+    crumbs: [{ label: "acme/relay", fixed: true }, ...THREE_CRUMBS],
+  });
+  const items = [...container.querySelectorAll("ol > li")].map((item) => item.textContent);
+  expect(items).toEqual(["acme/relay", "…", "What the expired invite page says"]);
+});
+
 test("a path that fits its bar folds nothing", () => {
   layOut(1000);
   const container = draw({ label: "Path", crumbs: THREE_CRUMBS });

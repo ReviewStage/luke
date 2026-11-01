@@ -150,7 +150,7 @@ interface PathCrumb extends CrumbBase {
   readonly shown?: boolean | undefined;
   /** How its words end where they are cut short: fading out where none is said, or in an ellipsis. */
   readonly end?: OneLineEnd | undefined;
-  /** Whether it keeps its size in a narrow bar, so the crumbs after it are cut short first; it gives way with the rest where none is said. */
+  /** Whether it keeps its size in a narrow bar, so the crumbs after it are cut short first, and is never folded into the "…"; it gives way with the rest where none is said. */
   readonly fixed?: boolean | undefined;
 }
 

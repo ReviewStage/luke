@@ -564,7 +564,8 @@ function RepositoryFrameHead({
     onAsked: door.onAsked,
     align: POPOVER_ALIGN.START,
   });
-  const repository: Crumb = { label: menu.label, glyph: menu.glyph };
+  // Note that the crumb is fixed, because a press that drops a menu was never folded away and words that name the repository must not be.
+  const repository: Crumb = { label: menu.label, glyph: menu.glyph, fixed: true };
   return (
     <FrameHead
       repository={repository}
