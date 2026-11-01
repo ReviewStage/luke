@@ -4,18 +4,33 @@
  * Nothing here animates a width. A pane opening, closing, or filling the
  * window lands in the layout at once, on the frame it was asked for, and
  * what that moved replays the journey on `transform` and `clip-path`
- * (docs/DESIGN.md, "Whatever its room displaced replays the journey"): the
- * task's tabs, its document or an agent's tab, and its toolbar's buttons
- * glide from where they were drawn to where they now stand, and so does the
- * task's summary as it is pinned or collapses to its rail, the side panel
- * slides in from the window's right, and a panel that grew over the
- * document is uncovered from its old edge to its new one. A pane leaving holds itself drawn
- * through its own exit (side-panel.tsx), so only arrivals and displacement
- * are played here. A smaller pane docked at the right of what it stands
- * beside, a File tab's tree, a Terminal tab's shells, or an automation's
- * Runs, slides in and out on the same tokens (`usePaneSlide`), and an
- * automation's form glides as its Runs come and go, as the document does
- * beside the side panel.
+ * (docs/DESIGN.md, "Whatever its room displaced replays the journey"), as
+ * one motion: every part of it starts in the same task on the same timing,
+ * and every part runs on the compositor, so a frame the page is late to
+ * draw holds none of them back from the rest. The seam a toggle moves, the
+ * sidebar's edge or the side panel's, moves the panes either side of it
+ * together. The sidebar slides off past the window's left edge or back on,
+ * and the side panel in past its right edge, each keeping its gap from the
+ * sheet beside it all the way, and that sheet's frame follows them: a sheet
+ * the change widened is uncovered from its old edge, and one it narrowed
+ * draws its card out to its old edge and is covered back to its new one,
+ * its rounded corners riding the moving edge and nothing it holds drawn past
+ * it (`playSheet`). What a sheet holds keeps the width it has landed at;
+ * the task's tabs, its document or an agent's tab, its toolbar's buttons,
+ * and the place's head glide from where they were drawn to where they now
+ * stand, and so does the task's summary as it is pinned or collapses to its
+ * rail, and a panel that grew over the document is uncovered from its old
+ * edge to its new one. A pane leaving holds itself drawn through its own
+ * exit (side-panel.tsx), on the same travel (`pastRightEdge`), so only
+ * arrivals and displacement are played here. A second press part way
+ * through starts every part again from where it had got to; a window
+ * resized part way through lands every part where it is going, since the
+ * frames were measured for the window as it stood.
+ *
+ * A smaller pane docked at the right of what it stands beside, a File tab's
+ * tree, a Terminal tab's shells, or an automation's Runs, slides in and out
+ * on the same tokens (`usePaneSlide`), and an automation's form glides as
+ * its Runs come and go, as the document does beside the side panel.
  *
  * Only a change to the panes plays anything. A drag between a pane's bounds
  * changes its width alone, so the edge stays under the pointer frame for
@@ -44,6 +59,36 @@ const ARRIVING_PANE = ".side-panel:not([data-leaving])";
 /** The plan's summary, drawn while the plan is wherever its column spares a rail, so it only ever moves, or arrives with the plan or the room. */
 const SUMMARY = ".task-summary";
 
+/**
+ * The sheets whose edges a pane change can move: each column drawn on a card
+ * of its own under its row (shell.css), as its `::before`. A sheet whose
+ * page draws no card is skipped where it is played. The side panel is a
+ * sheet too, but moves whole (`playPane`).
+ */
+const SHEETS =
+  ".desktop-shell > .desktop-main, .desktop-task > :is(.desktop-task-main, .agent-page, .page-find)";
+
+/** The window's sidebar, folded by sliding it off past the window's left edge. */
+const SIDEBAR = ".desktop-shell > .desktop-sidebar";
+
+/** Everything a pane change may move. */
+const MOVED = `${GLIDERS}, ${ARRIVING_PANE}, ${SUMMARY}, ${SHEETS}, ${SIDEBAR}`;
+
+/** How far a sheet's card reaches past its box while it is drawn out to an edge it no longer stands at (shell.css). */
+const REACH = {
+  LEFT: "--sheet-reach-left",
+  RIGHT: "--sheet-reach-right",
+} as const;
+
+/** How far a sheet's frame stands out past its card: the card's hairline. */
+const HAIRLINE = 1;
+
+/** How far a sheet's frame reaches above its row and below its card, so its row and the shadow under it are drawn whole. */
+const BLEED = 48;
+
+/** The name every pane motion plays under, so the window can find them all. */
+const PANE_MOTION = "pane";
+
 /** Less than this, in CSS pixels, is not a move worth playing. */
 const STILL = 0.5;
 
@@ -54,14 +99,32 @@ const STILL = 0.5;
  */
 type PaneLayout = Readonly<Record<string, boolean>>;
 
-/** Where an element was drawn, and how much of it its clip showed. */
+/** A sheet's left and right edges in the window, in CSS pixels. */
+interface Edges {
+  left: number;
+  right: number;
+}
+
+/** Where an element was drawn, how much of it its clip showed, how it was moved, and, for a sheet, where its frame stood. */
 interface Drawn {
   rect: DOMRect;
   clip: string;
+  transform: string;
+  frame: Edges;
 }
 
 /** Where each glider and the pane stood before a change. */
 type Snapshot = Map<Element, Drawn>;
+
+/** A sheet's frame on its way from one pair of edges to another. */
+interface SheetMotion {
+  from: Edges;
+  to: Edges;
+  motion: Animation;
+}
+
+/** The sheets whose frames are moving, each by its own motion. */
+type SheetMotions = WeakMap<Element, SheetMotion>;
 
 interface PaneGlideProps {
   root: RefObject<HTMLElement | null>;
@@ -78,7 +141,8 @@ type PaneGlideState = Record<never, never>;
  * here as everywhere else, without a check of their own.
  */
 export function paneTiming(element: Element): KeyframeAnimationOptions | undefined {
-  return tokenTiming(element, MOTION_TOKEN.DURATION_PANE, MOTION_TOKEN.EASE_PANE);
+  const timing = tokenTiming(element, MOTION_TOKEN.DURATION_PANE, MOTION_TOKEN.EASE_PANE);
+  return timing === undefined ? undefined : { ...timing, id: PANE_MOTION };
 }
 
 function sameLayout(a: PaneLayout, b: PaneLayout): boolean {
@@ -95,13 +159,36 @@ function isDrawn(element: Element): boolean {
   return !("checkVisibility" in element) || element.checkVisibility();
 }
 
-/** Where each glider and the pane are drawn now, motion under way included. */
-function measure(root: HTMLElement): Snapshot {
+/**
+ * Where a sheet's frame stands: where its box does, or, part way through a
+ * motion, where that motion has brought it. Note that the progress read is
+ * the eased one, the share of the way the frame has gone.
+ */
+function frameOf(rect: DOMRect, moving: SheetMotion | undefined): Edges {
+  const progress = moving?.motion.effect?.getComputedTiming().progress;
+  if (moving === undefined || progress === undefined || progress === null) {
+    return { left: rect.left, right: rect.right };
+  }
+  const { from, to } = moving;
+  return {
+    left: from.left + (to.left - from.left) * progress,
+    right: from.right + (to.right - from.right) * progress,
+  };
+}
+
+/** Where each glider, pane, and sheet is drawn now, motion under way included. */
+function measure(root: HTMLElement, sheets: SheetMotions): Snapshot {
   const drawn: Snapshot = new Map();
-  for (const element of root.querySelectorAll(`${GLIDERS}, ${PANE}, ${SUMMARY}`)) {
+  for (const element of root.querySelectorAll(`${MOVED}, ${PANE}`)) {
     if (!isDrawn(element)) continue;
-    const clip = element.matches(PANE) ? getComputedStyle(element).clipPath : "none";
-    drawn.set(element, { rect: element.getBoundingClientRect(), clip });
+    const rect = element.getBoundingClientRect();
+    const style = element.matches(`${PANE}, ${SIDEBAR}`) ? getComputedStyle(element) : undefined;
+    drawn.set(element, {
+      rect,
+      clip: style?.clipPath ?? "none",
+      transform: style?.transform ?? "none",
+      frame: frameOf(rect, sheets.get(element)),
+    });
   }
   return drawn;
 }
@@ -109,6 +196,30 @@ function measure(root: HTMLElement): Snapshot {
 /** The motions an element runs. Note that a DOM with no animation engine, a test's, runs none. */
 function running(element: Element): Animation[] {
   return "getAnimations" in element ? element.getAnimations() : [];
+}
+
+/**
+ * Stops what moves an element, a sheet's drawn-out card included, so it
+ * stands where the layout puts it. Note that this also stops a transition
+ * its stylesheet started for the change, the sidebar's, because asking for
+ * its motions brings its style up to date first.
+ */
+function stop(element: Element, sheets: SheetMotions): void {
+  for (const motion of running(element)) motion.cancel();
+  if (!sheets.has(element) || !(element instanceof HTMLElement)) return;
+  sheets.delete(element);
+  element.style.removeProperty(REACH.LEFT);
+  element.style.removeProperty(REACH.RIGHT);
+}
+
+/**
+ * Where a pane at the window's right edge stands once slid out past it: past
+ * its own width and the gap it keeps from the sheet beside it, so that as the
+ * sheet's edge follows it the two keep that gap all the way.
+ */
+export function pastRightEdge(pane: Element): string {
+  const gap = Number.parseFloat(getComputedStyle(pane).getPropertyValue("--sheet-gap"));
+  return gap > 0 ? `translateX(calc(100% + ${gap}px))` : "translateX(100%)";
 }
 
 /** Plays a translation from `dx` back to where the element stands. */
@@ -132,7 +243,7 @@ function playPane(
   timing: KeyframeAnimationOptions,
 ): void {
   if (was === undefined) {
-    pane.animate([{ transform: "translateX(100%)" }, { transform: "none" }], timing);
+    pane.animate([{ transform: pastRightEdge(pane) }, { transform: "none" }], timing);
     return;
   }
   const grown = was.rect.left - now.left;
@@ -147,24 +258,107 @@ function playPane(
   }
 }
 
+/**
+ * The clip a sheet's frame draws, as a path over its box of `width` and
+ * `height`: its left side `left` in from the box's, and its right side
+ * `right` in, each out past it where negative, with its card's top at `top`
+ * rounded by `radius` at each side, and its row above the card whole. Note
+ * that the corners are cut by a notch rather than drawn as the card's top
+ * edge, because the row above stands in the same frame, and that the frame
+ * is a `path()` rather than an `inset()`, which rounds only the box's own
+ * corners, or a `shape()`, whose arcs Chromium does not play on the
+ * compositor, which would let the frame fall behind what it holds.
+ */
+function framePath(
+  width: number,
+  height: number,
+  left: number,
+  right: number,
+  top: number,
+  radius: number,
+): string {
+  const corner = radius + HAIRLINE;
+  const cardTop = top - HAIRLINE;
+  const notch = cardTop - 2 * HAIRLINE;
+  const bottom = height + HAIRLINE;
+  const start = left;
+  const end = width - right;
+  const arc = `A ${corner} ${corner} 0 0 1`;
+  return `path("M ${start} ${-BLEED} H ${end} V ${notch} H ${end - corner} V ${cardTop} ${arc} ${end} ${cardTop + corner} V ${bottom - corner} ${arc} ${end - corner} ${bottom} V ${height + BLEED} H ${start + corner} V ${bottom} ${arc} ${start} ${bottom - corner} V ${cardTop + corner} ${arc} ${start + corner} ${cardTop} V ${notch} H ${start} Z")`;
+}
+
+/**
+ * A sheet's part: its frame from the edges it stood at to its box, each
+ * side riding from its old place to its new one. Note that a side that does
+ * not move is held at its card's hairline too, rather than clear of its
+ * shadow, because what glides inside the sheet would otherwise be drawn past
+ * its edge into the gap beside it. A sheet the change narrowed
+ * draws its card out to its old edges first (`REACH`), and lets them go
+ * with the clip once the motion ends, in the one task, so no frame shows
+ * the card past its frame.
+ */
+function playSheet(
+  sheet: Element,
+  was: Edges,
+  now: DOMRect,
+  timing: KeyframeAnimationOptions,
+  sheets: SheetMotions,
+): void {
+  const left = was.left - now.left;
+  const right = now.right - was.right;
+  if (Math.abs(left) < STILL && Math.abs(right) < STILL) return;
+  if (!(sheet instanceof HTMLElement)) return;
+  const card = getComputedStyle(sheet, "::before");
+  const top = Number.parseFloat(card.top);
+  const radius = Number.parseFloat(card.borderTopLeftRadius);
+  if (card.content === "none" || !Number.isFinite(top) || !Number.isFinite(radius)) return;
+  const frame = (from: number, to: number) =>
+    framePath(now.width, now.height, from - HAIRLINE, to - HAIRLINE, top, radius);
+  if (left < 0) sheet.style.setProperty(REACH.LEFT, `${-left}px`);
+  if (right < 0) sheet.style.setProperty(REACH.RIGHT, `${-right}px`);
+  const motion = sheet.animate([{ clipPath: frame(left, right) }, { clipPath: frame(0, 0) }], {
+    ...timing,
+    fill: "forwards",
+  });
+  sheets.set(sheet, { from: was, to: { left: now.left, right: now.right }, motion });
+  motion.onfinish = () => stop(sheet, sheets);
+}
+
+/**
+ * The sidebar's part: from wherever it stood, a slide under way included, to
+ * where its fold now puts it, drawn whole all the way, since its stylesheet
+ * hides it once it is folded away.
+ */
+function playSidebar(sidebar: Element, was: Drawn, timing: KeyframeAnimationOptions): void {
+  const now = getComputedStyle(sidebar).transform;
+  if (now === was.transform) return;
+  sidebar.animate(
+    [
+      { transform: was.transform, opacity: 1 },
+      { transform: now, opacity: 1 },
+    ],
+    timing,
+  );
+}
+
 /** Replays, from `before`, what the layout change just committed under `root` moved. */
-function play(root: HTMLElement, before: Snapshot): void {
+function play(root: HTMLElement, before: Snapshot, sheets: SheetMotions): void {
   const timing = paneTiming(root);
   if (timing === undefined) return;
-  const moved = [...root.querySelectorAll(`${GLIDERS}, ${ARRIVING_PANE}, ${SUMMARY}`)].filter(
-    isDrawn,
-  );
+  const moved = [...root.querySelectorAll(MOVED)].filter(isDrawn);
   // Note that a motion still under way is stopped before anything is
   // measured, so each element is read where the new layout stands it, and
   // read all at once, so the layout is worked out once rather than per element.
-  for (const element of moved) {
-    for (const motion of running(element)) motion.cancel();
-  }
+  for (const element of moved) stop(element, sheets);
   const after = moved.map((element) => ({ element, now: element.getBoundingClientRect() }));
   for (const { element, now } of after) {
     const was = before.get(element);
     if (element.matches(PANE)) playPane(element, was, now, timing);
-    else if (was !== undefined) glide(element, was.rect.left - now.left, timing);
+    else if (element.matches(SIDEBAR)) {
+      if (was !== undefined) playSidebar(element, was, timing);
+    } else if (element.matches(SHEETS)) {
+      if (was !== undefined) playSheet(element, was.frame, now, timing, sheets);
+    } else if (was !== undefined) glide(element, was.rect.left - now.left, timing);
     // The summary arrives from the window's right, as the side panel does.
     else if (element.matches(SUMMARY)) {
       element.animate([{ transform: "translateX(100%)" }, { transform: "none" }], timing);
@@ -180,10 +374,47 @@ function play(root: HTMLElement, before: Snapshot): void {
  * there; it draws nothing of its own.
  */
 export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapshot | null> {
+  readonly #sheets: SheetMotions = new WeakMap();
+
+  /** The frame waited on before the window's panes play anything, while it stands. */
+  #opening: number | undefined;
+
+  /**
+   * Lands every pane motion under way where it is going, as the window is
+   * resized under it, since what each plays was measured for the window as
+   * it stood.
+   */
+  readonly #land = (): void => {
+    for (const motion of document.getAnimations()) {
+      if (motion.id === PANE_MOTION) motion.finish();
+    }
+  };
+
+  /**
+   * Note that the window plays nothing until it has drawn twice, because
+   * what it opens with settles over its first frames, a summary's pin
+   * waiting on its column's width among it, and none of that is a change
+   * anyone asked for: the window opens as it stands.
+   */
+  override componentDidMount(): void {
+    window.addEventListener("resize", this.#land);
+    this.#opening = requestAnimationFrame(() => {
+      this.#opening = requestAnimationFrame(() => {
+        this.#opening = undefined;
+      });
+    });
+  }
+
+  override componentWillUnmount(): void {
+    window.removeEventListener("resize", this.#land);
+    if (this.#opening !== undefined) cancelAnimationFrame(this.#opening);
+  }
+
   override getSnapshotBeforeUpdate(previous: PaneGlideProps): Snapshot | null {
     const root = this.props.root.current;
-    if (root === null || sameLayout(previous.layout, this.props.layout)) return null;
-    return measure(root);
+    if (root === null || this.#opening !== undefined) return null;
+    if (sameLayout(previous.layout, this.props.layout)) return null;
+    return measure(root, this.#sheets);
   }
 
   override componentDidUpdate(
@@ -192,7 +423,7 @@ export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapsho
     before: Snapshot | null,
   ): void {
     const root = this.props.root.current;
-    if (root !== null && before !== null) play(root, before);
+    if (root !== null && before !== null) play(root, before, this.#sheets);
   }
 
   override render(): null {
