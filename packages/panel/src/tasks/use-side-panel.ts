@@ -1997,8 +1997,11 @@ export function useSidePanel(
   // without forgetting it was open while the plan stands, and shows it
   // again once a tab lands there, as a task's reads do. The panel is never
   // shown with nothing in it: a phone's Activity, which lists what the "+"
-  // offers, is the one view it stands on with no tab.
-  const shown = state.open && (strip.length > 0 || (taskId !== undefined && listedOn === taskId));
+  // offers, is the one view it stands on with no tab, and only in a narrow
+  // room, the one that draws the list.
+  const narrow = room === SHELL_ROOM.NARROW;
+  const shown =
+    state.open && (strip.length > 0 || (narrow && taskId !== undefined && listedOn === taskId));
   // Note that a plan left while the panel stood hidden by its empty strip
   // shuts it, so the next plan with a tab does not show it unasked: it opens
   // again only when something is opened into it or its toggle is pressed.
@@ -2028,7 +2031,7 @@ export function useSidePanel(
   if (toggleAskedOn !== undefined && (shown || toggleAskedOn !== taskId)) {
     setToggleAskedOn(undefined);
   }
-  if (listedOn !== undefined && (!state.open || listedOn !== taskId)) {
+  if (listedOn !== undefined && (!state.open || listedOn !== taskId || !narrow)) {
     setListedOn(undefined);
   }
 
@@ -2060,7 +2063,6 @@ export function useSidePanel(
     [update],
   );
   // Note that a narrow room holds the panel full screen alone, so leaving full screen there shuts it.
-  const narrow = room === SHELL_ROOM.NARROW;
   const onToggleFullScreen = useCallback(() => {
     if (narrow) onSetOpen(false);
     else setFullScreen((was) => !was);

@@ -453,6 +453,27 @@ test("a narrow room holds the open panel full screen alone, so the window's ways
   assert.deepEqual([now().open, now().fullScreen, now().fullScreenOnly], [true, false, false]);
 });
 
+test("a phone's Activity shows the panel on its list with no tab open, which a room widened again, where no list is drawn, does not hold empty", () => {
+  let control: SidePanelControl | undefined;
+  function Probe({ at }: { at: ShellRoom }) {
+    control = useSidePanel(undefined, { id: TASK, holds: {} }, [], [], [], [], at);
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const now = () => control ?? assert.fail("the panel is held");
+  const render = (at: ShellRoom) => act(() => root.render(createElement(Probe, { at })));
+  render(SHELL_ROOM.NARROW);
+  assert.deepEqual(now().strip, []);
+  act(() => now().onShowList());
+  assert.equal(now().open, true, "the list stands with no tab");
+
+  render(SHELL_ROOM.WIDE);
+  assert.equal(now().open, false, "widened, nothing stands empty");
+  render(SHELL_ROOM.NARROW);
+  assert.equal(now().open, false, "and narrowed again, the list is asked for afresh");
+});
+
 test("the Inbox with nothing chosen has no task, so the panel left open shows over it in no room, neither full screen on a phone nor empty beside it", () => {
   let control: SidePanelControl | undefined;
   function Probe({ at, task }: { at: ShellRoom; task: OpenTask }) {
