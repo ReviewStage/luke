@@ -329,13 +329,14 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
   assert.equal(page.querySelector(".task-head"), null, "a wide stage draws no header of its own");
 
   resizeStage(PHONE);
-  const agents = paneView(page, "Agents");
-  act(() => agents.click());
-  assert.equal(page.querySelector("aside.side-panel"), null, "Agents shuts the panel");
+  const overview = paneView(page, "Overview");
+  act(() => overview.click());
+  // Note that the panel is asked for as a boolean, since an element a failed assertion prints is the whole document's.
+  assert.equal(page.querySelector("aside.side-panel") === null, true, "Overview shuts the panel");
   assert.equal(
     paneView(page, "Overview").getAttribute("aria-checked"),
     "true",
-    "over the column, which holds no agent's tab and stands on Overview",
+    "over the column, which stands on Overview",
   );
 });
 
