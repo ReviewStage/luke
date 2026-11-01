@@ -92,7 +92,7 @@ function canRecord(): boolean {
 }
 
 /** The stand-in recording once made, that it is being made, or that this browser cannot make one. */
-function useStandIn(): StandIn {
+export function useStandIn(): StandIn {
   const [standIn, setStandIn] = useState<StandIn>(() =>
     canRecord() ? STAND_IN.RECORDING : STAND_IN.UNSUPPORTED,
   );

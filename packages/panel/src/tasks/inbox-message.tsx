@@ -129,7 +129,7 @@ function CommentFiles({
     <>
       {pictures.length === 0 ? null : (
         <div
-          className="transcript-pictures flex items-start gap-block-gap"
+          className="transcript-pictures grid grid-cols-picture-row items-start gap-block-gap"
           data-inbox-file-pictures=""
         >
           {pictures.map((file) => (

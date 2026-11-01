@@ -713,14 +713,16 @@ export function AttachmentViewer({
           <div className="attachment-viewer-strip flex flex-none justify-center" {...DIALOG_VEIL}>
             <ThumbStrip
               label={STRIP_LABEL}
-              items={files.map((each) => ({
-                name: each.name,
-                image: attachmentView(each) === ATTACHMENT_VIEW.IMAGE ? each.url : undefined,
-                glyph:
-                  attachmentView(each) === ATTACHMENT_VIEW.IMAGE ? undefined : (
-                    <FileTypeIcon name={each.name} />
-                  ),
-              }))}
+              items={files.map((each) => {
+                const view = attachmentView(each);
+                const drawn = view === ATTACHMENT_VIEW.IMAGE || view === ATTACHMENT_VIEW.VIDEO;
+                return {
+                  name: each.name,
+                  image: view === ATTACHMENT_VIEW.IMAGE ? each.url : undefined,
+                  video: view === ATTACHMENT_VIEW.VIDEO ? each.url : undefined,
+                  glyph: drawn ? undefined : <FileTypeIcon name={each.name} />,
+                };
+              })}
               at={at}
               onPick={onAt}
             />

@@ -506,7 +506,12 @@ test("a recording an agent's words draw plays where it stands, left out of the r
     assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member.webm");
     assert.equal(player.getAttribute("src"), "blob:video-2");
     assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
-    assert.deepEqual(created, [INBOX_FILE_TYPE.WEBM, INBOX_FILE_TYPE.WEBM]);
+    assert.equal(
+      card?.querySelector('[aria-label="Inviting a member.webm"] video')?.getAttribute("src"),
+      "blob:video-3",
+      "the viewer's strip shows the recording by its first frame",
+    );
+    assert.deepEqual(created, [INBOX_FILE_TYPE.WEBM, INBOX_FILE_TYPE.WEBM, INBOX_FILE_TYPE.WEBM]);
     assert.equal(viewerPlace(card ?? document), "2 of 2");
     act(() =>
       card?.dispatchEvent(
