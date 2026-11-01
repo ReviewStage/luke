@@ -84,9 +84,10 @@ import { WorkspaceRef } from "./workspace-ref.js";
 /**
  * A sidebar row's end: its repository where its group does not say it, its
  * face, its draft's pencil, how many of its sub-tasks are finished, its one
- * icon, and its time, in the caption's muted figures, ending on the time's
- * last letter so times of any length line up, and the icon, a pull
- * request's say, standing next to it on every row whatever stands before;
+ * icon, and its time, in the caption's muted figures, the time ending on
+ * its last letter in a slot as wide as its longest count ("59m"), so the
+ * icon before it, a pull request's say, stands at the same place on every
+ * row whatever the time says and whatever stands before it;
  * each mark at the glyph's size a step before the next, and the sub-tasks'
  * figures a glyph's gap before what follows them, so they never run into
  * it, so they step out with the time while the row is hovered. A long repository is cut
@@ -94,7 +95,7 @@ import { WorkspaceRef } from "./workspace-ref.js";
  * the row's card names it whole.
  */
 export const SIDEBAR_ROW_TIME =
-  "sidebar-task-time flex flex-none items-center justify-end min-w-sidebar-row-time text-right text-caption-inline text-muted-foreground tabular-nums [&_.state-glyph]:mr-tight-gap [&_.state-glyph]:[--state-glyph-size:var(--spacing-luke-12)] [&>.actor-mark]:mr-tight-gap [&_.task-agents-mark]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-luke-12 [&_.blocked-mark]:mr-tight-gap [&_.blocked-mark]:size-luke-12 [&_.luke-progress-count]:mr-icon-gap";
+  "sidebar-task-time flex flex-none items-center justify-end min-w-sidebar-row-time text-right text-caption-inline text-muted-foreground tabular-nums [&_.state-glyph]:mr-tight-gap [&_.state-glyph]:[--state-glyph-size:var(--spacing-luke-12)] [&>.actor-mark]:mr-tight-gap [&_.task-agents-mark]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-luke-12 [&_.blocked-mark]:mr-tight-gap [&_.blocked-mark]:size-luke-12 [&_.luke-progress-count]:mr-icon-gap [&>.luke-time]:min-w-sidebar-row-age";
 
 /** The repository a sidebar row names before its marks (`SIDEBAR_ROW_TIME`). */
 export const SIDEBAR_ROW_REPOSITORY =
