@@ -3332,6 +3332,14 @@ test('a task with no agent shows its Overview alone, and a draft the "+" opens c
   assert.equal(tab.control().agents.draft, undefined, "the draft left with its task is let go");
   assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW]);
 
+  // And one left for another place, as Settings hides the tasks.
+  openDraft(tab);
+  tab.stand({ shown: false });
+  await settle();
+  tab.stand({ shown: true });
+  await settle();
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW], "the draft left for Settings is let go");
+
   const written = openDraft(tab);
   act(() => tab.control().agents.onDraftChange({ prompt: "Fix login." }));
   act(() => column().onChoose(MAIN_TAB.OVERVIEW));

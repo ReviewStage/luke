@@ -1490,35 +1490,6 @@ export function useTasksTab(input: {
     (agents.heldIds?.length ?? 0) > 0 ||
     input.inboxWaiting.some((task) => task.taskId === viewed.activeTaskId);
   mainRef.current = mainTabs;
-  // A new agent's draft opens only from the column's "+" (`main-tabs.tsx`), and one holding
-  // nothing (`holdsNothing`) stands only while its tab is in view: left for another tab, another
-  // task, or another place, it closes, and one standing out of view, as a launch reads back a draft
-  // whose files it kept nowhere, closes once the column settles its tab. Note that the draft left
-  // is remembered as it last stood in view, because by the render that leaves it the open task's
-  // draft may be another task's.
-  const shownTab = mainTabs.tab;
-  const draftInView =
-    standIn === undefined &&
-    historyFor === undefined &&
-    shownTab !== undefined &&
-    isDraftTab(shownTab)
-      ? shownTab.draft
-      : undefined;
-  const blankDraft =
-    agents.draft !== undefined && holdsNothing(agents.draft) ? agents.draft.id : undefined;
-  const columnSettled = shownTab !== undefined;
-  const discardDraftNow = useRef(agents.onDiscardDraft);
-  discardDraftNow.current = agents.onDiscardDraft;
-  const blankInView = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    const left = blankInView.current;
-    blankInView.current =
-      draftInView !== undefined && draftInView === blankDraft ? blankDraft : undefined;
-    if (left !== undefined && left !== draftInView) discardDraftNow.current(left);
-    if (blankDraft !== undefined && blankDraft !== draftInView && columnSettled) {
-      discardDraftNow.current(blankDraft);
-    }
-  }, [draftInView, blankDraft, columnSettled]);
   // A page's tab is held to the pages agents wrote for the task.
   const pages = useMemo(() => (viewed.pages ?? []).map((page) => page.id), [viewed.pages]);
   // While an agent's page stands, the panel is that agent's: its workers', its Changes', and its
@@ -1687,12 +1658,34 @@ export function useTasksTab(input: {
   // place, the side panel fills the window over the column, or the column
   // shows something else; a fixture's staged agents are no one's to announce.
   // The window's Inbox stands in the column's place, showing the task whose item is chosen there.
-  const columnShown =
-    shown &&
-    historyFor === undefined &&
-    standIn === undefined &&
-    fixture === undefined &&
-    !sidePanel.fullScreen;
+  // Whether the column stands on screen, a fixture's among them.
+  const columnInView =
+    shown && historyFor === undefined && standIn === undefined && !sidePanel.fullScreen;
+  const columnShown = columnInView && fixture === undefined;
+  // A new agent's draft opens only from the column's "+" (`main-tabs.tsx`), and one holding
+  // nothing (`holdsNothing`) stands only while its tab is in view: left for another tab, another
+  // task, or another place, Settings and the side panel filling the window among them, it closes,
+  // and one standing out of view, as a launch reads back a draft whose files it kept nowhere,
+  // closes once the column settles its tab. Note that the draft left is remembered as it last
+  // stood in view, because by the render that leaves it the open task's draft may be another's.
+  const shownTab = mainTabs.tab;
+  const draftInView =
+    columnInView && shownTab !== undefined && isDraftTab(shownTab) ? shownTab.draft : undefined;
+  const blankDraft =
+    agents.draft !== undefined && holdsNothing(agents.draft) ? agents.draft.id : undefined;
+  const columnSettled = shownTab !== undefined;
+  const discardDraftNow = useRef(agents.onDiscardDraft);
+  discardDraftNow.current = agents.onDiscardDraft;
+  const blankInView = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const left = blankInView.current;
+    blankInView.current =
+      draftInView !== undefined && draftInView === blankDraft ? blankDraft : undefined;
+    if (left !== undefined && left !== draftInView) discardDraftNow.current(left);
+    if (blankDraft !== undefined && blankDraft !== draftInView && columnSettled) {
+      discardDraftNow.current(blankDraft);
+    }
+  }, [draftInView, blankDraft, columnSettled]);
   // An agent's page stands in the task's place, showing its agent as its tab would.
   // An agent's transcript beside the Inbox shows its agent the same way, while the panel stands open on it.
   const inboxTranscript =

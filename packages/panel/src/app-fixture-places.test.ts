@@ -186,9 +186,9 @@ it.effect(
       assert.equal(column.querySelector('[class*="skeleton"]'), null);
       assert.ok(
         [...document.querySelectorAll('[role="tab"]')].some((tab) =>
-          tab.textContent?.includes("New agent"),
+          tab.textContent?.includes("Overview"),
         ),
-        "the column opens on its New agent tab",
+        "the column opens on its Overview tab",
       );
     }),
 );
