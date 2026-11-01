@@ -181,6 +181,7 @@ const PANEL_WINDOW = {
     "offline-glyph",
     "offline-mark",
     "section-icon-scroll",
+    "sidebar-row-age",
     "sidebar-row-repository",
     "sidebar-row-time",
     "sidebar-slot-start",
