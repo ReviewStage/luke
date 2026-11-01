@@ -25,7 +25,8 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
  * is on it, because a ⋯ shown only on hover leaves an empty gap at the end of
  * the row. A row with no act that applies now draws no ⋯ and opens nothing, and
  * a row given `alone` that holds exactly one act draws it as an icon button
- * of its own (named and tipped by the act's words) rather than a ⋯ over one item. An
+ * of its own (named and tipped by the act's words, in a group named by the
+ * row's label, as a `ListRow`'s acts are) rather than a ⋯ over one item. An
  * act that cannot be taken back asks first through the confirm dialog, which
  * hands focus back to the ⋯ the menu returned it to.
  *
@@ -155,7 +156,15 @@ export function MenuRow({
               <>
                 {row.control}
                 {row.describedControl?.(control)}
-                {more}
+                {only === undefined ? (
+                  more
+                ) : (
+                  // Note that a lone act is a group named by the row's label, so a reader hears which host's "Remove" or which invitation's "Cancel invitation" it is.
+                  // biome-ignore lint/a11y/useSemanticElements: a row's act is a press on its thing, not a form's field, so it is no `<fieldset>`.
+                  <div role="group" aria-labelledby={control.labelId} className="contents">
+                    {more}
+                  </div>
+                )}
               </>
             )}
           </SettingsRow>
