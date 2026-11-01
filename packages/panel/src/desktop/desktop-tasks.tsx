@@ -1,7 +1,11 @@
 import type { AgentStatus } from "@luke/features/agent-wire";
 import type { MentionLines } from "@luke/features/mention-link";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
-import type { TaskBlockRequest, TaskStanding } from "@luke/features/task-wire";
+import type {
+  TaskBlockRequest,
+  TaskCreateRelationKind,
+  TaskStanding,
+} from "@luke/features/task-wire";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -758,7 +762,7 @@ function PlanDocument({
     onSelect: selectTask,
     onSetTaskBlock,
     onSetTaskParent,
-    onNewChildTask,
+    onNewRelatedTask,
     relationMenu,
   } = tasks;
   const blockTasks = useMemo(
@@ -771,8 +775,10 @@ function PlanDocument({
       : (change: TaskBlockRequest) => onSetTaskBlock(openedId, change),
   );
   const setParent = useSteadyDoor(openedId === undefined ? undefined : onSetTaskParent);
-  const newSubTask = useSteadyDoor(
-    openedId === undefined ? undefined : () => onNewChildTask(openedId),
+  const newRelatedTask = useSteadyDoor(
+    openedId === undefined
+      ? undefined
+      : (kind: TaskCreateRelationKind) => onNewRelatedTask(openedId, kind),
   );
   // The task's menus and ⌘K ask the head to open the add menu, each ask counted and answered as the repository chip's is, once the plan is in sight.
   const [answeredRelation, setAnsweredRelation] = useState(0);
@@ -794,11 +800,11 @@ function PlanDocument({
       tasks: blockTasks,
       onChange: changeBlock,
       onSetParent: setParent,
-      onNewSubTask: newSubTask,
+      onNewTask: newRelatedTask,
       ask: relationAsk,
       onAsked: setAnsweredRelation,
     }),
-    [workspaceName, blockTasks, changeBlock, setParent, newSubTask, relationAsk],
+    [workspaceName, blockTasks, changeBlock, setParent, newRelatedTask, relationAsk],
   );
   // Note that S opens the status chip only while the plan is in sight, never behind an agent's tab or Activity's list.
   const standing = useMemo<TaskStandingDoor>(

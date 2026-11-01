@@ -18,7 +18,13 @@ import {
 } from "@luke/features/link-grammar";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
-import { PLAN_ACTOR, TASK_PRIORITY, TASK_STATUS, type Task } from "@luke/features/task-wire";
+import {
+  PLAN_ACTOR,
+  TASK_CREATE_RELATION_KIND,
+  TASK_PRIORITY,
+  TASK_STATUS,
+  type Task,
+} from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
@@ -2821,20 +2827,16 @@ async function startAgentTask(tab: ReturnType<typeof mount>) {
   return { choice, prompt, note, starts };
 }
 
-test("New sub-task on the open task the list has not read opens New task under that task", () => {
+test("New sub-task on the open task the list has not read opens New task as a sub-task of that task", () => {
   const tab = mount({ shown: true, tasks: OPEN });
 
-  act(() => tab.control().onNewChildTask(TASK.id));
+  act(() => tab.control().onNewRelatedTask(TASK.id, TASK_CREATE_RELATION_KIND.SUB_TASK_OF));
 
   assert.equal(tab.control().newTask.open, true);
-  assert.deepEqual(tab.control().newTask.preset, {
-    parent: {
-      taskId: TASK.id,
-      name: "Teammate invitations",
-      workspaceId: "workspace-personal",
-      repository: null,
-    },
-  });
+  const relation = tab.control().newTask.preset?.relation;
+  assert.equal(relation?.kind, "sub-task-of");
+  assert.equal(relation?.task.id, TASK.id);
+  assert.equal(relation?.task.workspaceId, "workspace-personal");
 });
 
 test("a group's quick add sends one quiet start with the group's standing and no agent, asking no one assigned as nothing", async () => {

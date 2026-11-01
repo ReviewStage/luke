@@ -4,7 +4,11 @@ import assert from "node:assert/strict";
 import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { DEVICE_KIND, DEVICE_SETUP } from "@luke/features/device-agent-wire";
 import { type MacOffer, MODEL_PROVIDER } from "@luke/features/models-wire";
-import type { TaskRunsOnRequest } from "@luke/features/task-wire";
+import {
+  TASK_CREATE_RELATION_KIND,
+  type TaskCreateRelation,
+  type TaskRunsOnRequest,
+} from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -23,8 +27,9 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NewTaskComposer } from "./new-task-composer.js";
+import type { NewTaskRelation } from "./new-task-relation.js";
 import { MODELS_READ, type ModelsRead } from "./use-agents.js";
-import type { NewTaskParent, NewTaskStart } from "./use-tasks-tab.js";
+import type { NewTaskStart } from "./use-tasks-tab.js";
 
 /**
  * new-task-composer-runs-on.test.ts -- New task's Runs on, with Bring your own
@@ -37,9 +42,10 @@ import type { NewTaskParent, NewTaskStart } from "./use-tasks-tab.js";
  * saying so with a Retry that reads them again, while a member whose last pick
  * is the cloud is not held, the chip standing on Cloud alone. With the
  * experiment off the card reads no devices, offers Cloud alone, and starts in
- * the cloud at once, a last pick of a device unheld. A child's card starts under its parent alone,
- * naming neither a repository nor a device, which the service would refuse,
- * since a child takes its parent's. Synthetic throughout.
+ * the cloud at once, a last pick of a device unheld. A card opened as a sub-task
+ * of another starts in that relation alone, naming neither a repository nor a
+ * device, which the service would refuse, since a sub-task takes its parent's.
+ * Synthetic throughout.
  */
 
 const ACME: Workspace = {
@@ -56,12 +62,17 @@ const BUILDER = "0b8e4c1a-2f6d-4f53-8a2e-9d1c7e5b3a40";
 
 const roots: Root[] = [];
 
-/** The task a child's card is opened under, in Acme. */
-const PARENT: NewTaskParent = {
-  taskId: "3c9f1e2a-5b7d-4e8f-9a0b-1c2d3e4f5a6b",
-  name: "Child tasks",
-  workspaceId: ACME.id,
-  repository: "acme/web",
+/** A card opened as a sub-task of a task in Acme, as New sub-task opens it. */
+const SUB_TASK: NewTaskRelation = {
+  kind: TASK_CREATE_RELATION_KIND.SUB_TASK_OF,
+  task: {
+    id: "3c9f1e2a-5b7d-4e8f-9a0b-1c2d3e4f5a6b",
+    workspaceId: ACME.id,
+    name: "Child tasks",
+    createdAt: 1,
+    updatedAt: 1,
+    repository: "acme/web",
+  },
 };
 
 /** The devices the service holds for the card now, which the presence read answers the beats of. */
@@ -141,7 +152,7 @@ interface Offered {
  * doors, as the tasks tab hands it, so a read listing the same devices
  * hands back the list already standing.
  */
-async function mount(offered: Offered = { devices: devicesWith() }, parent?: NewTaskParent) {
+async function mount(offered: Offered = { devices: devicesWith() }, relation?: NewTaskRelation) {
   offeredNow = offered.devices ?? [];
   const control = tasksControl();
   let reads = offered.reads ?? READS.LAND;
@@ -151,7 +162,7 @@ async function mount(offered: Offered = { devices: devicesWith() }, parent?: New
       ? { state: MODELS_READ.UNREAD, generation: 0 }
       : { state: MODELS_READ.READ, generation: 1 };
   const starts: (TaskRunsOnRequest | undefined)[] = [];
-  const named: { repository: string | null; parentTaskId: string | undefined }[] = [];
+  const named: { repository: string | null; relation: TaskCreateRelation | undefined }[] = [];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -177,6 +188,7 @@ async function mount(offered: Offered = { devices: devicesWith() }, parent?: New
       ...control.newTask,
       workspaces: [ACME],
       workspaceId: ACME.id,
+      preset: relation === undefined ? undefined : { relation },
       devices,
       modelsFailed: modelsRead.state === MODELS_READ.FAILED,
       modelsRead,
@@ -188,7 +200,7 @@ async function mount(offered: Offered = { devices: devicesWith() }, parent?: New
         from?: NewTaskStart,
       ) => {
         starts.push(from?.runsOn);
-        named.push({ repository, parentTaskId: from?.parentTaskId });
+        named.push({ repository, relation: from?.relation });
         return Promise.resolve(undefined);
       },
     });
@@ -197,7 +209,6 @@ async function mount(offered: Offered = { devices: devicesWith() }, parent?: New
       workspaceId: ACME.id,
       onLeave: () => undefined,
       listSide: MENTION_MENU_SIDE.ABOVE,
-      parent,
     });
   }
   const draw = () => root.render(onRegistry(registry, createElement(Card)));
@@ -376,12 +387,15 @@ test("while Bring your own host is off the card reads no devices, offers Cloud a
   assert.equal(beats, 0);
 });
 
-test("a child's card starts under its parent alone, naming no repository and no device", async () => {
-  const { container, starts, named } = await mount({ devices: devicesWith() }, PARENT);
-  // ⌘Return on the empty box: a bare child, which carries what any child's start does.
+test("a sub-task's card starts in its relation alone, naming no repository and no device", async () => {
+  const { container, starts, named } = await mount({ devices: devicesWith() }, SUB_TASK);
+  assert.equal(container.querySelector('button[aria-label^="Runs on"]'), null);
+  // ⌘Return on the empty box: a bare sub-task, which carries what any sub-task's start does.
   pressInComposer(container, "Enter", { metaKey: true });
   await settle();
 
   assert.deepEqual(starts, [undefined]);
-  assert.deepEqual(named, [{ repository: null, parentTaskId: PARENT.taskId }]);
+  assert.deepEqual(named, [
+    { repository: null, relation: { kind: "sub-task-of", taskId: SUB_TASK.task.id } },
+  ]);
 });
