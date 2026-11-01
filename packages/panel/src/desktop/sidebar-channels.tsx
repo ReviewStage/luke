@@ -1,6 +1,6 @@
 import type { Channel } from "@luke/features/channel-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
-import { readingWords } from "@luke/features/words";
+import { readFailedWords, readingWords } from "@luke/features/words";
 import {
   BUTTON_SIZE,
   ERROR_STATE_PLACEMENT,
@@ -69,7 +69,7 @@ import { ReadAllMenu, type SidebarReadAll } from "./sidebar-read-all.js";
 const READING_CHANNELS = readingWords("channels");
 
 /** What the rows say where the channels could not be read. */
-const CHANNELS_NOT_READ = "Could not read this workspace's channels.";
+const CHANNELS_NOT_READ = readFailedWords("this workspace's channels");
 
 /** The group's name, which a reader hears for the rows under the Inbox. */
 const CHANNELS_LABEL = "Channels";

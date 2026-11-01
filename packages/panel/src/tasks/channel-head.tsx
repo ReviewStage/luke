@@ -1,5 +1,6 @@
 import type { Channel } from "@luke/features/channel-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { readFailedWords } from "@luke/features/words";
 import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -25,7 +26,7 @@ import type { InboxChannelHead } from "./inbox-list.js";
  */
 
 /** What the Inbox says in its list's place where the workspace's channels could not be read. */
-const CHANNELS_NOT_READ = "Could not read this workspace's channels.";
+const CHANNELS_NOT_READ = readFailedWords("this workspace's channels");
 
 /** The channel the Inbox is narrowed to, open or archived, as its head names it. */
 export type HeadedChannel = Pick<Channel, "id" | "name" | "purpose">;

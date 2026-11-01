@@ -13,7 +13,7 @@ import {
 } from "@luke/features/host-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { agoText } from "@luke/features/time-format";
-import { readingWords } from "@luke/features/words";
+import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
@@ -138,9 +138,7 @@ const COMMAND = "contain-inline-size";
 
 const WORDS = {
   ADD: "Add hosts",
-  READ_FAILED: "Could not read your hosts.",
   NONE: "No hosts yet. A host is a Mac or Linux server of yours that runs your agents instead of the cloud.",
-  SIGNED_OUT: "Sign in to see your hosts.",
   ONLINE: "Online",
   UNKNOWN: "Can't check status",
   CHECKING: "Checking",
@@ -562,7 +560,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
       {/* Note that signed out the section holds the search anchor, since Add hosts is drawn only for a signed-in member. */}
       <SettingsSection anchor={signedIn ? undefined : SETTINGS_SEARCH_ROW.ADD_HOSTS}>
         {!signedIn ? (
-          <SettingsLine>{WORDS.SIGNED_OUT}</SettingsLine>
+          <SettingsLine>{SIGNED_OUT_WORDS}</SettingsLine>
         ) : loaded && ordered.length === 0 && !thisMacAlone ? (
           <SettingsLine>{WORDS.NONE}</SettingsLine>
         ) : loaded ? (
@@ -588,7 +586,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
               failure={unreadShown(FAILURE_SURFACE.HOSTS_READ)}
               onRetry={() => setAttempt((count) => count + 1)}
             >
-              {WORDS.READ_FAILED}
+              {readFailedWords("your hosts")}
             </ErrorState>
           </SettingsLine>
         ) : (
