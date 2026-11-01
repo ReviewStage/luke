@@ -658,14 +658,15 @@ export const DesktopInbox = memo(function DesktopInbox({
   // Note that it follows the window's choice, so it stands as last drawn while a choice made here settles (`useChoiceFirst`).
   const heldPanel = useHeldWhile(
     settling,
-    drawing.panel ? (
+    // Note that the panel stands while its toggle asks for its "+" with nothing to show, drawing the menu alone.
+    drawing.panel !== undefined || sidePanel.toggleAsked ? (
       // Note that the item's opener stands over the panel as over its pane, but not over the list, whose cards are other tasks'.
       <OpenAddressesHere value={openHere}>
         <LinkWorkspaceProvider value={chosenLinkWorkspace}>
           <InboxSidePanel
             tasks={tasks}
             openPlace={openPlaceHere}
-            drawing={{ ...drawing, panel: drawing.panel }}
+            drawing={{ ...drawing, panel: drawing.panel ?? sidePanel }}
             focused={sideFocused}
             taskId={taskId}
             panelFor={panelFor}

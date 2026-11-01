@@ -26,7 +26,7 @@ import {
   useDrawerSwipe,
 } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { Activity, Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Activity, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
 import { AdminCollectionPage, AdminPlaceFrameProvider } from "../admin/chrome/page-header.js";
 import type { AdminView } from "../admin/routing.js";
@@ -73,7 +73,7 @@ import { PaneGlide } from "./pane-motion.js";
 import { PersonPageSkeleton } from "./person-frame.js";
 import { PhoneHead } from "./phone-head.js";
 import { PLACE_LIST, PLACE_PAGE, PLACE_SPLIT } from "./place-columns.js";
-import { SidePanelChord, SidePanelToggle } from "./side-panel.js";
+import { PanelToggleRoom, SidePanelChord, SidePanelToggle } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 import { homeTaskCardOf } from "./task-card.js";
 import { awayBack } from "./task-pane-switcher.js";
@@ -736,6 +736,8 @@ export function DesktopShell({
   // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
   const summary = useSummaryPin(sidebar.staged);
   const offline = useOffline();
+  // The box the side panel's toggle stands in, which the panel's "+" menu hangs from where the toggle asks for it with nothing to show.
+  const [toggleRoom, setToggleRoom] = useState<HTMLElement | null>(null);
   usePlaceCommands(!gated, tab, onTabChange, tasks, settings, history);
   // The Admin place is an admin's alone: an account known to be no admin, or no longer one, is given the task's place back,
   // while one whose access is still being read, as a reloaded Admin address's is, has the place wait on it.
@@ -955,87 +957,98 @@ export function DesktopShell({
       />
       {room === SHELL_ROOM.NARROW ? <DrawerScrim open={drawerOver} /> : null}
       <main className="desktop-main" inert={drawerOver} data-inbox-shown={String(inboxOpen)}>
-        {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
-        <MentionedAgents value={mentionedAgents}>
-          <ChipCards value={chipCards}>
-            {inboxOpen ? null : pageAgent !== undefined ? (
-              // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
-              <DesktopAgentPage
-                key={pageAgent}
-                tasks={tasks}
-                agentId={pageAgent}
-                away={room === SHELL_ROOM.NARROW ? away : undefined}
-              />
-            ) : pagePerson !== undefined ? (
-              // Keyed by the person, so another person's page holds nothing of the last, its find among it.
-              <PageFind
-                key={pagePerson}
-                page={FIND_PAGE.PERSON}
-                at={pagePerson}
-                active={tasks.shown}
-              >
-                <Suspense
-                  fallback={
-                    <PersonLoading name={tasks.personView.name} onExit={tasks.personView.onClose} />
-                  }
+        <PanelToggleRoom value={toggleRoom}>
+          {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
+          <MentionedAgents value={mentionedAgents}>
+            <ChipCards value={chipCards}>
+              {inboxOpen ? null : pageAgent !== undefined ? (
+                // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
+                <DesktopAgentPage
+                  key={pageAgent}
+                  tasks={tasks}
+                  agentId={pageAgent}
+                  away={room === SHELL_ROOM.NARROW ? away : undefined}
+                />
+              ) : pagePerson !== undefined ? (
+                // Keyed by the person, so another person's page holds nothing of the last, its find among it.
+                <PageFind
+                  key={pagePerson}
+                  page={FIND_PAGE.PERSON}
+                  at={pagePerson}
+                  active={tasks.shown}
                 >
-                  <PERSON_PAGE.Route
-                    tasks={tasks}
-                    userId={pagePerson}
-                    name={tasks.personView.name}
-                    staged={sidebar.staged}
-                    away={room === SHELL_ROOM.NARROW ? away : undefined}
-                  />
+                  <Suspense
+                    fallback={
+                      <PersonLoading
+                        name={tasks.personView.name}
+                        onExit={tasks.personView.onClose}
+                      />
+                    }
+                  >
+                    <PERSON_PAGE.Route
+                      tasks={tasks}
+                      userId={pagePerson}
+                      name={tasks.personView.name}
+                      staged={sidebar.staged}
+                      away={room === SHELL_ROOM.NARROW ? away : undefined}
+                    />
+                  </Suspense>
+                </PageFind>
+              ) : boardOpen ? (
+                // The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board.
+                <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
+                  <TASKS_ROUTE.Route tasks={tasks} room={room} />
                 </Suspense>
-              </PageFind>
-            ) : boardOpen ? (
-              // The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board.
-              <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
-                <TASKS_ROUTE.Route tasks={tasks} room={room} />
-              </Suspense>
-            ) : adminOpen ? (
-              <Suspense fallback={adminLoading}>
-                {adminAccess ? (
-                  <ADMIN_PLACE.Route
-                    room={room}
-                    view={tasks.adminView.view}
-                    shown={tasks.shown}
-                    onOpen={tasks.adminView.onOpen}
-                    onExit={tasks.adminView.onClose}
-                  />
-                ) : (
-                  adminLoading
-                )}
-              </Suspense>
-            ) : automationsOpen ? (
-              <PageFind
-                page={FIND_PAGE.AUTOMATIONS}
-                at={automationsPlaceKey(tasks.automationsView.place)}
-                active={tasks.shown}
-              >
-                <Suspense
-                  fallback={
-                    <AutomationsLoading onExit={tasks.automationsView.onClose} room={room} />
-                  }
+              ) : adminOpen ? (
+                <Suspense fallback={adminLoading}>
+                  {adminAccess ? (
+                    <ADMIN_PLACE.Route
+                      room={room}
+                      view={tasks.adminView.view}
+                      shown={tasks.shown}
+                      onOpen={tasks.adminView.onOpen}
+                      onExit={tasks.adminView.onClose}
+                    />
+                  ) : (
+                    adminLoading
+                  )}
+                </Suspense>
+              ) : automationsOpen ? (
+                <PageFind
+                  page={FIND_PAGE.AUTOMATIONS}
+                  at={automationsPlaceKey(tasks.automationsView.place)}
+                  active={tasks.shown}
                 >
-                  <AUTOMATIONS_ROUTE.Route tasks={tasks} room={room} />
-                </Suspense>
-              </PageFind>
-            ) : (
-              <DesktopTasks tasks={tasks} looks={looks} summary={summary} room={room} away={away} />
-            )}
-            {/* Note that the Inbox kept stands after the page shown in its place, so a lookup of the page's first box finds the page's. */}
-            {inboxOpen || inboxKept ? (
-              <KeptInbox
-                shown={inboxOpen}
-                tasks={tasks}
-                room={room}
-                chipCards={chipCards}
-                mentionedAgents={mentionedAgents}
-              />
-            ) : null}
-          </ChipCards>
-        </MentionedAgents>
+                  <Suspense
+                    fallback={
+                      <AutomationsLoading onExit={tasks.automationsView.onClose} room={room} />
+                    }
+                  >
+                    <AUTOMATIONS_ROUTE.Route tasks={tasks} room={room} />
+                  </Suspense>
+                </PageFind>
+              ) : (
+                <DesktopTasks
+                  tasks={tasks}
+                  looks={looks}
+                  summary={summary}
+                  room={room}
+                  away={away}
+                />
+              )}
+              {/* Note that the Inbox kept stands after the page shown in its place, so a lookup of the page's first box finds the page's. */}
+              {inboxOpen || inboxKept ? (
+                <KeptInbox
+                  shown={inboxOpen}
+                  tasks={tasks}
+                  room={room}
+                  chipCards={chipCards}
+                  mentionedAgents={mentionedAgents}
+                />
+              ) : null}
+            </ChipCards>
+          </MentionedAgents>
+        </PanelToggleRoom>
       </main>
       {barShown ? <MobileBar tasks={tasks} sidebar={sidebar} onPressMore={keepOverlay} /> : null}
       {/* The folded sidebar peeks out while the pointer rests at the window's left edge, as Linear's does;
@@ -1069,7 +1082,7 @@ export function DesktopShell({
           disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
         />
       ) : panelToggle ? (
-        <div className="title-bar-controls" data-edge="end" inert={drawerOver}>
+        <div ref={setToggleRoom} className="title-bar-controls" data-edge="end" inert={drawerOver}>
           <SidePanelToggle
             panel={tasks.sidePanel}
             disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}

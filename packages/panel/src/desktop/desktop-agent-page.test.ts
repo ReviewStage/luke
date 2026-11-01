@@ -746,7 +746,7 @@ function PagesPage(): React.JSX.Element {
   });
 }
 
-test("the panel beside an agent's page offers the pages the agent showed on itself under its +, and one picked opens in a page tab drawn from the agent's own address, as a task's opens beside its plan", async () => {
+test("the panel beside an agent's page offers the pages the agent showed on itself under its +, asked at the toggle with nothing to show, and one picked opens in a page tab drawn from the agent's own address, as a task's opens beside its plan", async () => {
   localStorage.clear();
   installScrollIntoView();
   transcript = {
@@ -769,19 +769,21 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
   act(() => drawnPanel?.onToggle());
   await settle();
 
-  const panel = container.querySelector("aside.side-panel") ?? assert.fail("the panel shows");
-  const well = panel.querySelector(".side-panel-no-tabs") ?? assert.fail("the empty panel offers");
+  assert.equal(container.querySelector("aside.side-panel"), null, "never shown with nothing in it");
   assert.deepEqual(
-    [...well.querySelectorAll("ul")].map((each) => each.getAttribute("aria-label")),
+    [...document.querySelectorAll(".luke-searchable-menu [role='group']")].map((each) =>
+      each.getAttribute("aria-label"),
+    ),
     ["Pages", "Terminal", "Browser"],
   );
   const row =
-    [...well.querySelectorAll<HTMLButtonElement>("button")].find((each) =>
-      (each.textContent ?? "").includes(FUNNEL.title),
-    ) ?? assert.fail("the empty panel offers the agent's page");
+    [...document.querySelectorAll<HTMLElement>(".luke-searchable-menu [role='option']")].find(
+      (each) => (each.textContent ?? "").includes(FUNNEL.title),
+    ) ?? assert.fail("the + offers the agent's page");
   act(() => row.click());
   await settle();
 
+  const panel = container.querySelector("aside.side-panel") ?? assert.fail("the pick shows it");
   assert.ok(
     [...panel.querySelectorAll("[role='tab']")].some((tab) =>
       (tab.textContent ?? "").includes(FUNNEL.title),
@@ -847,7 +849,7 @@ async function mountPanelPage(): Promise<HTMLElement> {
   return container;
 }
 
-test("its last tab closed shuts the panel, and shown again it offers in place every row its + offers, under the + menu's headings, each opening what it names", async () => {
+test("its last tab closed shuts the panel, and its toggle then asks for its + at the toggle, every row and heading as the panel's own +, each opening what it names", async () => {
   published = {
     repository: "acme/relay",
     branch: "luke/flaky-sweep",
@@ -909,23 +911,25 @@ test("its last tab closed shuts the panel, and shown again it offers in place ev
 
   act(() => drawnPanel?.onToggle());
   await settle();
-  const shown = container.querySelector("aside.side-panel") ?? assert.fail("the toggle shows it");
-  const well = shown.querySelector(".side-panel-no-tabs") ?? assert.fail("the empty panel offers");
-  const rows = [...well.querySelectorAll<HTMLButtonElement>("button")];
+  assert.equal(container.querySelector("aside.side-panel"), null, "never shown with nothing in it");
+  const rows = [...document.querySelectorAll<HTMLElement>(".luke-searchable-menu [role='option']")];
   assert.deepEqual(
     rows.map((each) => each.textContent),
     offered,
   );
-  // Note that an agent's page offers no fixed kind, so the empty panel heads only the + menu's own sections.
+  // Note that an agent's page offers no fixed kind, so the menu heads only its own sections.
   assert.deepEqual(
-    [...well.querySelectorAll("ul")].map((each) => each.getAttribute("aria-label")),
+    [...document.querySelectorAll(".luke-searchable-menu [role='group']")].map((each) =>
+      each.getAttribute("aria-label"),
+    ),
     headings,
   );
   assert.deepEqual(headings, ["Pull requests", "Terminal", "Browser"]);
   const changes = rows.find((each) => (each.textContent ?? "").includes("#2911"));
-  assert.ok(changes, "the empty panel offers the agent's pull request");
+  assert.ok(changes, "the + offers the agent's pull request");
   act(() => changes.click());
   await settle();
+  const shown = container.querySelector("aside.side-panel") ?? assert.fail("the pick shows it");
   assert.ok(
     [...shown.querySelectorAll("[role='tab']")].some((tab) =>
       (tab.textContent ?? "").includes("#2911 Await the payment mock"),
@@ -972,7 +976,7 @@ test("an archived agent's pull request, picked from the panel's +, opens in a Pu
   );
 });
 
-test("⌘T on an agent's page opens the panel beside it on its +, the page's one", async () => {
+test("⌘T on an agent's page with nothing in its panel asks for its + at the toggle, the page's one, rather than showing the panel empty", async () => {
   const container = await mountPanelPage();
 
   act(() => {
@@ -980,7 +984,7 @@ test("⌘T on an agent's page opens the panel beside it on its +, the page's one
   });
   await settle();
 
-  assert.ok(container.querySelector("aside.side-panel"), "the panel opens");
+  assert.equal(container.querySelector("aside.side-panel"), null, "never shown with nothing in it");
   assert.ok(
     document.querySelector("input[placeholder='Search tabs']"),
     "its + opens on the tabs it offers",

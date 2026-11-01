@@ -872,7 +872,7 @@ test("in a narrow room a Luke link to another task's panel item opens that item,
   assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
 });
 
-test("Show panel on a plan whose strip holds no tab opens the tab last closed there, else the kind last closed on it, else shows the panel empty, as a first launch does with no tab standing", () => {
+test('Show panel on a plan whose strip holds no tab opens the tab last closed there, else the kind last closed on it, else asks for the "+" at the toggle, as a first launch does with no tab standing', () => {
   const tab = mount({ shown: true, tasks: OPEN });
   const panel = () => tab.control().sidePanel;
   act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
@@ -896,17 +896,19 @@ test("Show panel on a plan whose strip holds no tab opens the tab last closed th
   assert.deepEqual(fresh.control().sidePanel.strip, [], "the plan stands in the column");
   assert.equal(fresh.control().sidePanel.open, false);
   act(() => fresh.control().sidePanel.onToggle());
-  assert.deepEqual(panelOf(fresh), { open: true, tab: undefined });
+  assert.deepEqual(panelOf(fresh), { open: false, tab: undefined }, "never shown empty");
+  assert.equal(fresh.control().sidePanel.toggleAsked, true, 'the "+" is asked at the toggle');
 });
 
-test("Show panel beside the Inbox, its item's plan's strip holding no tab, shows the panel empty, though another plan stands open behind it", () => {
+test("Show panel beside the Inbox, its item's plan's strip holding no tab, asks for the \"+\" at the toggle rather than showing the panel empty, though another plan stands open behind it", () => {
   const tab = mount({ shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
   act(() => tab.control().inboxView.onOpen());
   act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
   assert.deepEqual(tab.control().sidePanel.strip, []);
 
   act(() => tab.control().sidePanel.onToggle());
-  assert.deepEqual(panelOf(tab), { open: true, tab: undefined });
+  assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
+  assert.equal(tab.control().sidePanel.toggleAsked, true);
 });
 
 test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
