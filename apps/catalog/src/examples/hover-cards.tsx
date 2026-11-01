@@ -261,7 +261,7 @@ function HoverCards(): React.JSX.Element {
                   onPress={() => undefined}
                 />
                 <HoverCardRow
-                  glyph={<GLYPH.TASK />}
+                  glyph={<GLYPH.SUB_TASK />}
                   label="Sub-tasks"
                   end={<ProgressCount done={1} total={5} label="1 of 5 sub-tasks finished" />}
                 />

@@ -307,7 +307,7 @@ function TaskRelations({
       {subTasks.length === 0 ? null : (
         <>
           <HoverCardRow
-            glyph={<GLYPH.TASK />}
+            glyph={<GLYPH.SUB_TASK />}
             label="Sub-tasks"
             end={
               <ProgressCount

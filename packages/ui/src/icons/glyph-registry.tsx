@@ -27,6 +27,7 @@ import {
   ListChecks,
   ListEnd,
   ListTodo,
+  ListTree,
   MessageSquareHeart,
   MessagesSquare,
   PhoneOff,
@@ -106,6 +107,8 @@ function GitHubMarkGlyph(): React.JSX.Element {
 export const GLYPH = {
   // Things the app has.
   TASK: lucideGlyph(ListTodo),
+  // A task under another, its parent, wherever sub-tasks are named, counted, or added.
+  SUB_TASK: lucideGlyph(ListTree),
   AGENT: lucideGlyph(Bot),
   PULL_REQUEST: lucideGlyph(GitPullRequest),
   BRANCH: lucideGlyph(GitBranch),
