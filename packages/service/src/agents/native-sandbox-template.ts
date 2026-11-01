@@ -80,6 +80,15 @@ export const NATIVE_TEMPLATE = {
   WAIT: Duration.minutes(3),
   /** How old another key's template must be before the sweep deletes it, so a Preview's lasts its testing. */
   SWEEP_AFTER: Duration.days(1),
+  /**
+   * How long after its last use the template's snapshot is kept. Vercel
+   * restarts the wait each time a sandbox is created from it, so only an
+   * image no native agent opened in that long lets it lapse, and its loss is
+   * found as any other: by a launch Vercel answers that it is gone, or by the
+   * sweep's `SNAPSHOT_CHECK`, either of which builds it again
+   * (`forgetSnapshot`).
+   */
+  SNAPSHOT_EXPIRY: Duration.days(14),
   /** How often the sweep asks Vercel whether a ready template's snapshot still stands. */
   SNAPSHOT_CHECK: Duration.minutes(10),
   /** How often the sweep runs (`MAINTENANCE_SWEEP.CRONTAB`): the window of each `SNAPSHOT_CHECK` one sweep falls in. */
@@ -326,7 +335,7 @@ export const advanceTemplate = (api: VercelSandboxApi, build: ImageBuild): Templ
     // and one Vercel took of a sandbox it stopped mid-build never is. Of readers racing here,
     // Vercel snapshots for the first and refuses the rest, which read on and find it ready.
     yield* api.updateTags(build.name, { ...tags, [TEMPLATE_TAG.BUILT]: String(now) });
-    const taken = yield* Effect.result(api.snapshot(session, Duration.infinity));
+    const taken = yield* Effect.result(api.snapshot(session, NATIVE_TEMPLATE.SNAPSHOT_EXPIRY));
     if (Result.isFailure(taken)) return PREPARING;
     yield* Effect.logInfo(`the native agents' image ${build.key} is ready`);
     return { state: TEMPLATE_STATE.READY, snapshotId: taken.success } as const;

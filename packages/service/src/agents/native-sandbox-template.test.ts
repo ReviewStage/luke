@@ -188,7 +188,7 @@ function vercel() {
       return Response.json({ session: { id: sessionId } });
     }
     if (rest === "snapshot") {
-      assert.deepEqual(await body(), { expiration: 0 });
+      assert.deepEqual(await body(), { expiration: 1_209_600_000 });
       // A snapshot stops the session at once, so a second one asked of it is refused.
       const taking = sandboxes.find(
         (each) => !each.deleted && each.currentSessionId === sessionId && each.status === "running",

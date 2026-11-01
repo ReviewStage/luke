@@ -2,7 +2,7 @@
  * sandbox-retention.ts -- a sandbox opened before its snapshot retention was bounded brought onto the bound, without losing the snapshot it resumes from.
  *
  * A coding agent's sandbox opens with `CODER.SANDBOX_SNAPSHOTS` as its
- * retention, the newest snapshot alone, kept a week. A sandbox opened before
+ * retention, the newest snapshot alone, kept three days. A sandbox opened before
  * that kept every snapshot each stop wrote, for thirty days, and one opened
  * between kept the newest for thirty; Vercel keeps a sandbox's retention as
  * it was opened with, so each such sandbox goes on adding to the bill at
@@ -17,7 +17,7 @@
  * throwaway sandbox of Luke's own on 2026-10-22: the update evicts at once,
  * keeping the newest snapshots by when they were made and deleting the rest,
  * whichever one the sandbox resumes from (`currentSnapshotId`); and it leaves
- * the expiry of each snapshot it keeps as it was, so the week applies from
+ * the expiry of each snapshot it keeps as it was, so the bound applies from
  * the sandbox's next stop on. So the update is made only where the snapshot
  * the sandbox resumes from is its newest, and still usable, and that
  * snapshot is looked up again after it. One found gone is logged: the
@@ -84,9 +84,9 @@ const resumesFromNewest = (api: RetentionApi, sandbox: ListedSandbox) =>
       );
 
 /** The update made and its snapshot looked up again; a lookup Vercel did not answer is logged and counted as applied, since the update went through. */
-const appliedKeeping = (api: RetentionApi, sandbox: ListedSandbox) =>
+const appliedKeeping = (api: RetentionApi, sandbox: ListedSandbox, retention: SnapshotRetention) =>
   Effect.gen(function* () {
-    yield* api.updateRetention(sandbox.name, SANDBOX_RETENTION);
+    yield* api.updateRetention(sandbox.name, retention);
     const current = sandbox.currentSnapshotId;
     if (current === undefined) return RETENTION_ENDING.APPLIED;
     const stands = yield* api
@@ -108,6 +108,29 @@ const appliedKeeping = (api: RetentionApi, sandbox: ListedSandbox) =>
     return RETENTION_ENDING.LOST;
   });
 
+/** The retention given set where the snapshot the sandbox resumes from survives it, as the file's header says; answers how that ended, and never fails. */
+const retentionSet = (
+  api: RetentionApi,
+  sandbox: ListedSandbox,
+  retention: SnapshotRetention,
+): Effect.Effect<RetentionEnding> =>
+  Effect.gen(function* () {
+    if (!(yield* resumesFromNewest(api, sandbox))) {
+      yield* Effect.logInfo(
+        "a sandbox's retention was left as it is: the snapshot it resumes from is not its newest",
+      );
+      return RETENTION_ENDING.SKIPPED;
+    }
+    return yield* appliedKeeping(api, sandbox, retention);
+  }).pipe(
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning(`a sandbox's snapshot retention was not set: ${failure.message}`),
+        RETENTION_ENDING.FAILED,
+      ),
+    ),
+  );
+
 /**
  * The sandbox brought onto the bound where it does not stand at it, as the
  * file's header says; answers how that ended, and never fails.
@@ -117,20 +140,22 @@ export function boundSnapshotRetention(
   sandbox: ListedSandbox,
 ): Effect.Effect<RetentionEnding> {
   if (retentionStands(sandbox)) return Effect.succeed(RETENTION_ENDING.STOOD);
-  return Effect.gen(function* () {
-    if (!(yield* resumesFromNewest(api, sandbox))) {
-      yield* Effect.logInfo(
-        "a sandbox's retention was left unbounded: the snapshot it resumes from is not its newest",
-      );
-      return RETENTION_ENDING.SKIPPED;
-    }
-    return yield* appliedKeeping(api, sandbox);
-  }).pipe(
-    Effect.catch((failure) =>
-      Effect.as(
-        Effect.logWarning(`a sandbox's snapshot retention was not set: ${failure.message}`),
-        RETENTION_ENDING.FAILED,
-      ),
-    ),
-  );
+  return retentionSet(api, sandbox, SANDBOX_RETENTION);
+}
+
+/**
+ * The sandbox set to keep the snapshot its next stop writes for the expiry
+ * given rather than the bound's, the bound's count and eviction otherwise,
+ * on the same terms as the bound: only where the snapshot it resumes from
+ * is its newest; answers how that ended, and never fails.
+ */
+export function shortenSnapshotRetention(
+  api: RetentionApi,
+  sandbox: ListedSandbox,
+  expiry: Duration.Duration,
+): Effect.Effect<RetentionEnding> {
+  return retentionSet(api, sandbox, {
+    ...SANDBOX_RETENTION,
+    expiration: Duration.toMillis(expiry),
+  });
 }

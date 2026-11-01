@@ -24,7 +24,15 @@
  * the rest. An agent's archive stops its sandbox rather than deleting it, in
  * the background (`stoppedInBackground`), so an unarchive still resumes from
  * the snapshot; a local agent's archive queues its device a discard line
- * there too (`device-discard.ts`). Nothing here reads a sandbox's files or a word of any account:
+ * there too (`device-discard.ts`). A sandbox the archive stops has its
+ * retention set first to keep the snapshot that stop writes for
+ * `ARCHIVE_STOP.SNAPSHOT_EXPIRY` alone, since Vercel bills it by the day
+ * kept and an archived agent is seldom brought back. Note that this reaches
+ * no sandbox already stopped, which most are, a turn's end stopping its own:
+ * Vercel sets no expiry on a snapshot already written, by the update or any
+ * other call (`sandbox-retention.ts`), so its snapshot lapses on the bound
+ * it was written under. An unarchived agent's next keep-alive, or the
+ * scheduled sweep, brings its sandbox back onto the bound. Nothing here reads a sandbox's files or a word of any account:
  * what is asked of Vercel is a tag and a name, and what is logged of a
  * failure is its status.
  *
@@ -46,7 +54,7 @@ import { Clock, Context, Duration, Effect, Layer, Option, Result, type Schema } 
 import type { HttpClient } from "effect/http";
 import { discardedOrLogged } from "./device-discard.js";
 import { capSandboxTimeout, keepAliveExtension } from "./sandbox-keep-alive.js";
-import { boundSnapshotRetention } from "./sandbox-retention.js";
+import { boundSnapshotRetention, shortenSnapshotRetention } from "./sandbox-retention.js";
 import {
   deploymentOidcToken,
   OPEN_INTERNET_POLICY,
@@ -72,6 +80,8 @@ const ARCHIVE_STOP = {
   TIMEOUT: Duration.seconds(15),
   /** How many agents of an archived task are stopped at once. */
   CONCURRENCY: 5,
+  /** How long after its last use the snapshot an archive's stop writes is kept: a day, for an unarchive soon after. */
+  SNAPSHOT_EXPIRY: Duration.days(1),
 } as const;
 
 export interface SessionSandboxesService {
@@ -84,8 +94,17 @@ export interface SessionSandboxesService {
   readonly keepAliveFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
   /** Deletes every sandbox tagged with the session, with the snapshots no other sandbox uses; answers how many went. */
   readonly deleteFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
-  /** Stops every running sandbox tagged with the session, keeping its filesystem for a later resume; answers how many were stopped. */
-  readonly stopFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
+  /**
+   * Stops every running sandbox tagged with the session, keeping its
+   * filesystem for a later resume; answers how many were stopped. Where an
+   * expiry is named, the snapshot each stop writes is kept that long after
+   * its last use rather than the bound's, set on the sandbox just before
+   * where the snapshot it resumes from survives that (`sandbox-retention.ts`).
+   */
+  readonly stopFor: (
+    sessionId: string,
+    snapshotExpiry?: Duration.Duration,
+  ) => Effect.Effect<number, SandboxUnavailable>;
 }
 
 export class SessionSandboxes extends Context.Service<SessionSandboxes, SessionSandboxesService>()(
@@ -120,7 +139,7 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
         for (const { name } of sandboxes) yield* api.deleteSandbox(name);
         return sandboxes.length;
       }),
-    stopFor: (sessionId) =>
+    stopFor: (sessionId, snapshotExpiry) =>
       Effect.gen(function* () {
         const sandboxes = yield* api.listTagged(sessionId);
         let stopped = 0;
@@ -130,6 +149,9 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
           if (sandbox.status === undefined || !UP_STATUSES.has(sandbox.status)) continue;
           // One up with no session named cannot be stopped from here, and is no sandbox stopped either.
           if (running === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
+          // The stop goes on however the retention ended, since the stop is what an archive must not miss.
+          if (snapshotExpiry !== undefined)
+            yield* shortenSnapshotRetention(api, sandbox, snapshotExpiry);
           // The credential comes off first, as at a launch's end and in the sweeps, because a stopped
           // sandbox keeps its policy and a later resume (a Terminal's among them) would wear it again.
           yield* api.updateNetworkPolicy(running, OPEN_INTERNET_POLICY);
@@ -199,7 +221,7 @@ const stoppedWhileArchived = /* @__PURE__ */ Effect.fnUntraced(function* (
 ) {
   const current = yield* readAgent(agent.userId, agent.id);
   if (Option.isNone(current) || current.value.archivedAt === null) return;
-  yield* (yield* SessionSandboxes).stopFor(sessionId);
+  yield* (yield* SessionSandboxes).stopFor(sessionId, ARCHIVE_STOP.SNAPSHOT_EXPIRY);
 });
 
 /**
