@@ -38,7 +38,8 @@ import {
  * takes the focus it is handed; one unavailable refuses its press; one a
  * field drives is found by its id; a chevron says nothing to a reader; acts
  * shown on hover are still a Tab stop after the row; and an app hears
- * whether the title is cut short. Synthetic members.
+ * whether the title is cut short, and a regular row's description says
+ * whether it is. Synthetic members.
  */
 
 declare global {
@@ -846,4 +847,23 @@ test("an app hears whether a row's title is cut short, whenever its box resizes"
   width = 320;
   act(() => resized());
   expect(heard).toEqual([false, true]);
+});
+
+test("a regular row's description says it is cut short once its words run past its box", () => {
+  const resized = standInResizeObserver();
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(320);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
+  const container = draw(
+    createElement(List, {
+      label: "Inbox",
+      children: createElement(ListRow, {
+        title: "Run the memberships migration on preview",
+        description: "The member who sent it / Any admin / Billing",
+        onPress: () => undefined,
+      }),
+    }),
+  );
+  act(() => resized());
+  const description = container.querySelector(".luke-list-row-description");
+  expect(description?.getAttribute("data-overflow")).toBe("true");
 });

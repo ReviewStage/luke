@@ -674,7 +674,7 @@ test("a List narrowing folds its columns away one by one, creator, agents, sub-t
   const { SUB_TASKS } = LIST_COLUMN;
 
   expect(drawn(1100)).toEqual(every);
-  expect(drawn(900)).toEqual([
+  expect(drawn(910)).toEqual([
     PRIORITY,
     KEY,
     STATUS,
@@ -685,7 +685,7 @@ test("a List narrowing folds its columns away one by one, creator, agents, sub-t
     SUB_TASKS,
     UPDATED,
   ]);
-  expect(drawn(800)).toEqual([
+  expect(drawn(810)).toEqual([
     PRIORITY,
     KEY,
     STATUS,

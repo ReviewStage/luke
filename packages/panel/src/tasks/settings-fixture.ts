@@ -619,7 +619,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
         version: "0.1.0",
         upgradeNeeded: false,
         setup: DEVICE_SETUP.PREPARING,
-        loginName: "charles",
       },
       {
         id: FIXTURE_HOST.SETUP_FAILED,

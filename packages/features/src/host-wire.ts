@@ -302,13 +302,11 @@ export const hostUpgradeNeededDataSchema = EffectSchema.Struct({
  * first call that carried one, and whether that version is below the
  * service's floor. A machine still setting itself up says where that
  * stands (`DEVICE_SETUP`), and why for one that failed, as Start's offer of
- * it does (`macOfferSchema`); both are absent for a ready one. A Mac names
- * the user it runs as (`loginName`), by its home folder's name under
- * `/Users`, since a Mac's host runs only while that user is logged in;
- * absent for a Linux machine. A machine whose host program has not
- * called in since it joined says so (`calledIn`): a host an approve made,
- * or one whose box collected its secret, until its program first
- * registers. All four are absent from a service older than them. A
+ * it does (`macOfferSchema`); both are absent for a ready one. A machine
+ * whose host program has not called in since it joined says so
+ * (`calledIn`): a host an approve made, or one whose box collected its
+ * secret, until its program first registers. All three are absent from a
+ * service older than them. A
  * machine updating itself to a newer release says where that stands
  * (`HOST_UPDATE`), and why for one that failed, as its last beat said; both
  * are absent while no update is under way, and from a service older than
@@ -325,7 +323,6 @@ const hostSchema = EffectSchema.Struct({
   setupFailure: EffectSchema.optionalKey(
     EffectSchema.String.check(EffectSchema.isMaxLength(DEVICE_SETUP_FAILURE_MAX_CHARS)),
   ),
-  loginName: EffectSchema.optionalKey(EffectSchema.String),
   calledIn: EffectSchema.optionalKey(EffectSchema.Boolean),
   update: EffectSchema.optionalKey(hostUpdateSchema),
   updateFailure: EffectSchema.optionalKey(

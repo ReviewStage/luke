@@ -175,10 +175,10 @@ export type { ListSelection } from "../selection/list-selection.js";
  *
  * A title cut short, there or anywhere, fades out over its last few pixels
  * instead of ending in an ellipsis, as a browser's tab does; one drawn
- * whole ends on its last letter. A dense
- * row's description, a label beside its title, fades the same way, and so
- * does the name of what a row belongs to (`lead`), while a fuller row's
- * description, a preview's prose, and its metadata end in an ellipsis.
+ * whole ends on its last letter. A row's description, a dense row's label
+ * beside its title or a fuller row's preview under it, fades the same way,
+ * unless it alerts, which keeps its words whole, and so does the name of
+ * what a row belongs to (`lead`), while its metadata ends in an ellipsis.
  *
  * A row may lead its description with what it belongs to (`lead`), a
  * thread's task, say, in a list grouped by something else: a small chip
@@ -667,24 +667,12 @@ export function ListRow({
     onTitleClipped?.(titleClipped);
   }, [onTitleClipped, titleClipped]);
   const [descriptionMeasured, descriptionClipped] = useClipped(plainWords(description));
-  // Note that only a dense row's description fades, so a fuller row's prose
-  // is never measured; the row is dense by its own density, else its list's,
-  // as the stylesheet reads it, so a list made dense or regular again
-  // measures its rows' descriptions or lets them go.
   const listDensity = useContext(ListDensityContext);
   const pressPulse =
     useContext(ListVariantContext) === LIST_VARIANT.CARD ? PRESS_PULSE.FLUSH : PRESS_PULSE.QUIET;
-  const describedDense = (density ?? listDensity) === LIST_DENSITY.DENSE;
   const selecting = useContext(ListSelectionContext);
   const choosable = selecting !== undefined && selectKey !== undefined;
   const chosen = choosable && selecting.selected.has(selectKey);
-  const described = useCallback(
-    (element: HTMLElement | null) => {
-      if (element === null || !describedDense) return undefined;
-      return descriptionMeasured(element);
-    },
-    [descriptionMeasured, describedDense],
-  );
   const [leadMeasured, leadClipped] = useClipped(plainWords(lead?.label));
   const heading = (
     <span
@@ -778,9 +766,9 @@ export function ListRow({
         {above ? heading : null}
         {said(description) || (!above && lead !== undefined) ? (
           <span
-            ref={described}
+            ref={descriptionMeasured}
             className="luke-list-row-description"
-            data-overflow={describedDense ? String(descriptionClipped) : undefined}
+            data-overflow={String(descriptionClipped)}
           >
             {above ? null : leadMark}
             {leadAt === LIST_ROW_LEAD.INLINE && lead !== undefined && said(description)

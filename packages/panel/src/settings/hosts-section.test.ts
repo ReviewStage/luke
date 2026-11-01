@@ -255,7 +255,7 @@ it.effect(
       yield* Effect.promise(settle);
       assert.ok(document.body.textContent?.includes("fra-03"), "the server that joined is listed");
       assert.ok(
-        document.body.textContent?.includes("Mac · Offline"),
+        document.body.textContent?.includes("Offline · Mac · 0.1.0"),
         "a Mac its desktop enrolled is listed as a Mac",
       );
     }),
@@ -326,7 +326,7 @@ test("this Mac stands first on its own machine's row, with why its setup failed 
   assert.equal(turnOns(), 1);
 });
 
-test("another Mac's row says why its setup failed and whose login it runs in, and nothing of This Mac", async () => {
+test("another Mac's row says why its setup failed, and nothing of This Mac", async () => {
   const mini = "5c2e8a1f-3b7d-4e9a-8c6f-1d3b5e7a9c20";
   await machinesWithThisMac(
     [
@@ -339,7 +339,6 @@ test("another Mac's row says why its setup failed and whose login it runs in, an
         upgradeNeeded: true,
         setup: DEVICE_SETUP.FAILED,
         setupFailure: "Claude Code could not be installed",
-        loginName: "charles",
       },
     ],
     { standing: THIS_MAC_HOST_STANDING.OFF },
@@ -348,7 +347,6 @@ test("another Mac's row says why its setup failed and whose login it runs in, an
   const text = document.body.textContent ?? "";
 
   assert.ok(text.includes("Couldn't set up: Claude Code could not be installed"));
-  assert.ok(text.includes("Runs while charles is logged in."));
   assert.ok(!/this Mac/iu.test(text), "nothing on its row speaks of this Mac");
 });
 
@@ -378,7 +376,7 @@ test("a host's row says its version and where its update stands, and This Mac's 
   );
   const text = document.body.textContent ?? "";
 
-  assert.ok(text.includes("Linux server · Online · 0.2.1"), text);
+  assert.ok(text.includes("Online · Linux server · 0.2.1"), text);
   assert.ok(text.includes("Update ready, waiting for agents to finish"));
   assert.ok(text.includes("Updating…"));
   assert.ok(text.includes("Couldn't update: the download did not match its checksum"));

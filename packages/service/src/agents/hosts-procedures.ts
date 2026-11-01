@@ -43,7 +43,6 @@ import {
 } from "@luke/database/models/host-pairing-store";
 import { hostAgentConversations, hostsOf, removeHost } from "@luke/database/models/host-store";
 import { storeWriter } from "@luke/database/models/writer";
-import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
 import { HOST_WIRE, hostUserCodeOf, hostVersionMeets } from "@luke/features/host-wire";
 import { Clock, Effect } from "effect";
 import { HOST_VERSION } from "../auth/device-secret.js";
@@ -63,21 +62,9 @@ export interface HostsProcedureSeams {
 
 const DONE = { done: true } as const;
 
-/** Where a Mac keeps its users' home folders, each named for its user. */
-const MAC_HOMES = "/Users/";
-
 /** The install script's address on the origin the request reached, so a Preview's command names its own. */
 function installScriptUrlOf(request: Request): string {
   return new URL(HOST_WIRE.INSTALL_SCRIPT_PATH, new URL(request.url).origin).href;
-}
-
-/** The user a Mac's host runs as, by its home folder's name under `/Users`; none for a Linux machine, or a home that names no one there. */
-function loginNameOf(platform: DevicePlatform, home: string | null): string | undefined {
-  if (platform !== DEVICE_PLATFORM.DARWIN || home === null || !home.startsWith(MAC_HOMES)) {
-    return undefined;
-  }
-  const name = home.slice(MAC_HOMES.length).replace(/\/+$/u, "");
-  return name === "" || name.includes("/") ? undefined : name;
 }
 
 /** Why a removed host's agents' turns read as failed. */
@@ -143,25 +130,20 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
     list: hosts.list.effect(function* ({ context }) {
       const rows = yield* hostedStoreOrUnavailable(hostsOf(context.userId));
       return {
-        hosts: rows.map((row) => {
-          const loginName = loginNameOf(row.platform, row.home);
-          return {
-            id: row.id,
-            name: row.name,
-            platform: row.platform,
-            seenAt: row.lastSeenAt.getTime(),
-            version: row.version,
-            upgradeNeeded:
-              row.version === null || !hostVersionMeets(row.version, HOST_VERSION.FLOOR),
-            ...(row.setup === null ? undefined : { setup: row.setup }),
-            ...(row.setupFailure === null ? undefined : { setupFailure: row.setupFailure }),
-            ...(row.update === null ? undefined : { update: row.update }),
-            ...(row.updateFailure === null ? undefined : { updateFailure: row.updateFailure }),
-            ...(loginName === undefined ? undefined : { loginName }),
-            // Note that a register always writes the home folder and nothing else does, so a host with none has not called in since it joined.
-            calledIn: row.home !== null,
-          };
-        }),
+        hosts: rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          platform: row.platform,
+          seenAt: row.lastSeenAt.getTime(),
+          version: row.version,
+          upgradeNeeded: row.version === null || !hostVersionMeets(row.version, HOST_VERSION.FLOOR),
+          ...(row.setup === null ? undefined : { setup: row.setup }),
+          ...(row.setupFailure === null ? undefined : { setupFailure: row.setupFailure }),
+          ...(row.update === null ? undefined : { update: row.update }),
+          ...(row.updateFailure === null ? undefined : { updateFailure: row.updateFailure }),
+          // Note that a register always writes the home folder and nothing else does, so a host with none has not called in since it joined.
+          calledIn: row.home !== null,
+        })),
         installScriptUrl: installScriptUrlOf(context.request),
       };
     }),
