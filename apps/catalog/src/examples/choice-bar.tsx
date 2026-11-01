@@ -73,6 +73,20 @@ const PLAIN: readonly ChoiceItem<View>[] = [
   { value: VIEW.FILES, label: "Settings" },
 ];
 
+/** A phone's task views: its Overview, an agent named at length, and its Activity. */
+const PANES: readonly ChoiceItem<View>[] = [
+  { value: VIEW.CONVERSATION, label: "Overview" },
+  { value: VIEW.CHECKS, label: "Add teammate invitations with an expiry" },
+  { value: VIEW.FILES, label: "Activity" },
+];
+
+/** The same views with several agents, the middle one counting them. */
+const PANES_SEVERAL: readonly ChoiceItem<View>[] = [
+  { value: VIEW.CONVERSATION, label: "Overview" },
+  { value: VIEW.CHECKS, label: "Agents", count: "3" },
+  { value: VIEW.FILES, label: "Activity" },
+];
+
 const SHOW = {
   NEEDS_YOU: "needs-you",
   UNREAD: "unread",
@@ -262,6 +276,33 @@ function ChoiceBarExample(): React.JSX.Element {
           look={CHOICE_BAR_LOOK.SEGMENTED}
           stretch
         />
+      </CatalogSection>
+      <CatalogSection
+        id="choice-bar-touch"
+        title="Segmented at a finger's size, stretched, as a phone's pane switcher"
+      >
+        <div className="catalog-narrow">
+          <Stack gap={GAP.SECTION}>
+            <HeldTabs
+              label="Task view"
+              items={PANES}
+              start={VIEW.CHECKS}
+              look={CHOICE_BAR_LOOK.SEGMENTED}
+              size={CHOICE_BAR_SIZE.TOUCH}
+              fold={CHOICE_BAR_FOLD.WORDS}
+              stretch
+            />
+            <HeldTabs
+              label="Task view"
+              items={PANES_SEVERAL}
+              start={VIEW.CONVERSATION}
+              look={CHOICE_BAR_LOOK.SEGMENTED}
+              size={CHOICE_BAR_SIZE.TOUCH}
+              fold={CHOICE_BAR_FOLD.WORDS}
+              stretch
+            />
+          </Stack>
+        </div>
       </CatalogSection>
       <CatalogSection id="choice-bar-words" title="Fill, named in words alone, for a finger">
         <div className="catalog-narrow">

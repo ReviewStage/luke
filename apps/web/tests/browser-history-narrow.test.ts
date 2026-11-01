@@ -31,34 +31,24 @@ const FIXTURE_TASK_PATH = "/personal/plan/0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
 /** A phone's width, narrower than the panel stands two panes side by side at. */
 const PHONE_WIDTH = 390;
 
-/** The ⋯ heading the phone's task, whose menu leads with its views. */
-function more(): HTMLButtonElement {
-  const found = document.querySelector<HTMLButtonElement>('.task-head [aria-label="Task actions"]');
-  assert.ok(found, "the task's header holds its ⋯");
-  return found;
+/** The phone's task views under its header: Overview, its agent, and Activity, in that order. */
+function views(): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>('[aria-label="Task views"] [role="radio"]')];
 }
 
-/** The ⋯'s menu, opened. */
-async function openMenu(): Promise<void> {
-  if (more().getAttribute("aria-expanded") !== "true") await act(async () => more().click());
-}
+/** Where each view the tests name stands in the row, its middle one named for the task's agent. */
+const VIEW_AT = { Overview: 0, Agents: 1, Activity: 2 } as const;
 
-/** The phone's task view standing, Overview, Agents, or Activity, as the ⋯'s menu checks it, the menu closed again. */
+/** The phone's task view standing, Overview, Agents, or Activity, as the row of views checks it. */
 async function standingView(): Promise<string | undefined> {
-  await openMenu();
-  const standing = [...document.querySelectorAll('[role="menuitemcheckbox"]')].find(
-    (each) => each.getAttribute("aria-checked") === "true",
-  )?.textContent;
-  await act(async () => more().click());
-  return standing ?? undefined;
+  await act(async () => undefined);
+  const at = views().findIndex((each) => each.getAttribute("aria-checked") === "true");
+  return Object.entries(VIEW_AT).find(([, index]) => index === at)?.[0];
 }
 
-/** The phone's task view named `name` in the ⋯'s menu, opened to press it. */
-async function view(name: string): Promise<HTMLElement> {
-  await openMenu();
-  const found = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find(
-    (each) => each.textContent === name,
-  );
+/** The phone's task view named `name` in the row of views, to press it. */
+async function view(name: keyof typeof VIEW_AT): Promise<HTMLElement> {
+  const found = views()[VIEW_AT[name]];
   assert.ok(found, `the task's ${name} view stands`);
   return found;
 }

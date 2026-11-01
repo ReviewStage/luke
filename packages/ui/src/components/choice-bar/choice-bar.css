@@ -11,6 +11,14 @@
    fold from this sheet with markup of their own. */
 
 @layer components {
+  /* A finger's option's name cut short by its share of a stretched row
+     fades out over its last few pixels while it is measured cut, as a
+     chip's words do (`chip.css`), so a name that fits ends on its last
+     letter. */
+  .luke-choice-bar-label[data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
+  }
+
   /* The thumb stands where the row last measured its chosen option; it
      slides on its transform alone, its box landing at once. */
   .luke-choice-bar-thumb {
