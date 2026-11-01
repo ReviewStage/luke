@@ -2,7 +2,7 @@
  * sandbox-retention.ts -- a sandbox opened before its snapshot retention was bounded brought onto the bound, without losing the snapshot it resumes from.
  *
  * A coding agent's sandbox opens with `CODER.SANDBOX_SNAPSHOTS` as its
- * retention, the newest snapshot alone, kept a week. A sandbox opened before
+ * retention, the newest snapshot alone, kept three days. A sandbox opened before
  * that kept every snapshot each stop wrote, for thirty days, and one opened
  * between kept the newest for thirty; Vercel keeps a sandbox's retention as
  * it was opened with, so each such sandbox goes on adding to the bill at
@@ -17,7 +17,7 @@
  * throwaway sandbox of Luke's own on 2026-10-22: the update evicts at once,
  * keeping the newest snapshots by when they were made and deleting the rest,
  * whichever one the sandbox resumes from (`currentSnapshotId`); and it leaves
- * the expiry of each snapshot it keeps as it was, so the week applies from
+ * the expiry of each snapshot it keeps as it was, so the bound applies from
  * the sandbox's next stop on. So the update is made only where the snapshot
  * the sandbox resumes from is its newest, and still usable, and that
  * snapshot is looked up again after it. One found gone is logged: the

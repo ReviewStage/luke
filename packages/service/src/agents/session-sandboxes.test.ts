@@ -43,6 +43,7 @@ interface Asked {
 /** Vercel answering the list with the sandboxes given and every stop with the status given, keeping what it was asked. */
 function vercel(sandboxes: readonly object[], stopStatus = 200) {
   const asked: Asked[] = [];
+  const updates: unknown[] = [];
   const layer = Layer.provide(
     sessionSandboxesLayer,
     fakeHttpClientLayer((url, init) => {
@@ -50,16 +51,20 @@ function vercel(sandboxes: readonly object[], stopStatus = 200) {
       const contentType = new Headers(init.headers).get("content-type");
       asked.push({ method: init.method ?? "GET", url: parsed, contentType });
       if (parsed.pathname.endsWith("/network-policy")) return Response.json({});
+      if (init.method === "PATCH") {
+        updates.push(JSON.parse(String(init.body)));
+        return Response.json({ sandbox: {} });
+      }
       return parsed.pathname.endsWith("/stop")
         ? (sandboxStopRefusal(init) ?? new Response("{}", { status: stopStatus }))
         : (sandboxListRefusal(parsed) ?? Response.json({ sandboxes }));
     }),
   );
-  return { layer, asked };
+  return { layer, asked, updates };
 }
 
-const stopFor = (sessionId: string) =>
-  Effect.flatMap(SessionSandboxes, (sandboxes) => sandboxes.stopFor(sessionId));
+const stopFor = (sessionId: string, snapshotExpiry?: Duration.Duration) =>
+  Effect.flatMap(SessionSandboxes, (sandboxes) => sandboxes.stopFor(sessionId, snapshotExpiry));
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -90,6 +95,34 @@ it.effect(
       assert.equal(stop.contentType, "application/json");
       assert.equal(stop.url.pathname, "/api/v2/sandboxes/sessions/sbs_up/stop");
       assert.equal(stop.url.searchParams.get("teamId"), TEAM);
+    }),
+);
+
+it.effect(
+  "a stop that names an expiry sets the sandbox up to keep the snapshot its stop writes that long before it stops it, and leaves one already stopped alone",
+  () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = vercel([
+        { name: "eve-sbx-vercel-up", status: "running", currentSessionId: "sbs_up" },
+        { name: "eve-sbx-vercel-down", status: "stopped", currentSessionId: "sbs_down" },
+      ]);
+
+      const stopped = yield* stopFor(SESSION, Duration.days(1)).pipe(Effect.provide(api.layer));
+
+      assert.equal(stopped, 1);
+      assert.deepEqual(api.updates, [
+        { keepLastSnapshots: { count: 1, expiration: 86_400_000, deleteEvicted: true } },
+      ]);
+      assert.deepEqual(
+        api.asked.map((asked) => `${asked.method} ${asked.url.pathname}`),
+        [
+          "GET /api/v2/sandboxes",
+          "PATCH /api/v2/sandboxes/eve-sbx-vercel-up",
+          "POST /api/v2/sandboxes/sessions/sbs_up/network-policy",
+          "POST /api/v2/sandboxes/sessions/sbs_up/stop",
+        ],
+      );
     }),
 );
 
