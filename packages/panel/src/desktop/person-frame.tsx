@@ -1,6 +1,5 @@
 import {
   DetailPage,
-  FramePlace,
   GAP,
   GROUP_HEADING,
   GroupHeader,
@@ -14,7 +13,6 @@ import {
   SkeletonRegion,
 } from "@luke/ui";
 import { type ReactNode, useRef } from "react";
-import { TitleBarPlace } from "./title-bar.js";
 
 /**
  * person-frame.tsx -- a person's page's boxes, which the page and its placeholders both draw.
@@ -180,28 +178,19 @@ export function RowsSkeleton({ label }: { label: string }): React.JSX.Element {
 
 /**
  * A person's page while its chunk loads: its header, their name where the
- * place that opened it knew it, in the window's title bar too where one
- * stands, and their face and who they are as blocks, as the page stands it
- * until the members are read.
+ * place that opened it knew it, and their face and who they are as blocks,
+ * as the page stands it until the members are read.
  */
 export function PersonPageSkeleton({ name }: { name: string | undefined }): React.JSX.Element {
   return (
-    <>
-      {/* The window's title bar names them as the page will, where the place that opened it knew their name. */}
-      {name === undefined ? null : (
-        <TitleBarPlace>
-          <FramePlace pickUp={{ name, shown: true }} />
-        </TitleBarPlace>
-      )}
-      <DetailPage
-        frame={PAGE_FRAME.PAGE}
-        title={<PersonTitleSkeleton name={name} />}
-        description={<PersonLineSkeleton />}
-      >
-        <PersonTop>
-          <PersonReadingSkeleton />
-        </PersonTop>
-      </DetailPage>
-    </>
+    <DetailPage
+      frame={PAGE_FRAME.PAGE}
+      title={<PersonTitleSkeleton name={name} />}
+      description={<PersonLineSkeleton />}
+    >
+      <PersonTop>
+        <PersonReadingSkeleton />
+      </PersonTop>
+    </DetailPage>
   );
 }

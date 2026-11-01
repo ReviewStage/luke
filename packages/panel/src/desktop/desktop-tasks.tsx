@@ -116,7 +116,6 @@ import {
   TaskSummary,
   useSummaryLayout,
 } from "./task-summary.js";
-import { TitleBarPlace } from "./title-bar.js";
 
 /**
  * The work column while Tasks is chosen: the open task's column, its
@@ -135,10 +134,9 @@ import { TitleBarPlace } from "./title-bar.js";
  *
  * The task's head names the task whichever tab is chosen (`TaskFrameHead`):
  * its path, its repository, the tasks it is a child of, and the task by its
- * status mark, name, and key, which opens its Overview. It stands in the
- * window's title bar, over the toolbar, where one stands (`title-bar.tsx`),
- * and under the toolbar over every tab of the column where none does. A
- * phone heads the task with its own row instead (`TaskHead`).
+ * status mark, name, and key, which opens its Overview. It stands under the
+ * toolbar over every tab of the column. A phone heads the task with its own
+ * row instead (`TaskHead`).
  *
  * The column's summary stands at its right, under the toolbar, listing what
  * both "+" menus open, with its button last in the
@@ -277,11 +275,7 @@ function TaskPageSkeleton({
               title={<MainTabStripSkeleton />}
               actions={<TaskActionsSkeleton summary={summary.holds} />}
             />
-            {framed ? (
-              <TitleBarPlace inline>
-                <FrameHeadSkeleton />
-              </TitleBarPlace>
-            ) : null}
+            {framed ? <FrameHeadSkeleton /> : null}
             <TaskBody>
               <Fill className="desktop-task-column">
                 <AgentColumn>
@@ -1096,7 +1090,7 @@ function PlanDocument({
         sectionLinks={sectionLinks}
         standing={standing}
         head={planHead}
-        // Note that the title bar names the task (`TaskFrameHead`) wherever the task has one, so only a phone's plan draws the path.
+        // Note that the task's head over the column names the task (`TaskFrameHead`) wherever the task has one, so only a phone's plan draws the path.
         path={switched}
         titleActions={!switched}
       />
@@ -1248,17 +1242,15 @@ function PlanDocument({
                             </>
                           }
                         />
-                        {/* The task's head names the task whichever tab is chosen: in the window's title bar,
-            or over every tab of the column where none stands; a phone heads the task with its own row (`TaskHead`). */}
+                        {/* The task's head names the task over every tab of the column, whichever is chosen;
+            a phone heads the task with its own row (`TaskHead`). */}
                         {switched ? null : (
-                          <TitleBarPlace inline>
-                            <TaskFrameHead
-                              task={task}
-                              shown={listed}
-                              door={standing}
-                              onOpen={openOverview}
-                            />
-                          </TitleBarPlace>
+                          <TaskFrameHead
+                            task={task}
+                            shown={listed}
+                            door={standing}
+                            onOpen={openOverview}
+                          />
                         )}
                         {/* The plan's banner is the whole plan's, so it stands over every
             tab of the column, and over the panel's while that fills the window. */}

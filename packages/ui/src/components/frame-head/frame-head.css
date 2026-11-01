@@ -1,6 +1,5 @@
-/* frame-head.css -- the head of a place's frame: one row across its column,
-   the task's path on its frame's edge or the place's name at the column's
-   inset. */
+/* frame-head.css -- the head of a task's frame: one row across its column,
+   the task's path on its frame's edge, where the first tab over it stands. */
 
 @layer components {
   .luke-frame-head {
@@ -9,19 +8,7 @@
     align-items: center;
     gap: var(--luke-control-gap);
     min-width: 0;
-    padding: var(--luke-space-8) var(--luke-space-12);
-  }
-
-  /* A head that starts on a place's words stands them where its column's
-     words start, as a bar does; one that starts on a control, a crumb,
-     stands it at the column's inset; and a task's path stands on its
-     frame's edge, where the first tab under it stands. */
-  .luke-frame-head[data-start="words"] {
-    padding-left: calc(var(--luke-space-12) + var(--luke-row-inset));
-  }
-
-  .luke-frame-head[data-start="edge"] {
-    padding-left: 0;
+    padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-8) 0;
   }
 
   /* Note that it is placed, because a crumb's menu hangs from it. */
@@ -29,17 +16,6 @@
     position: relative;
     display: flex;
     flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  /* A place's quiet words stand on its name's last baseline, as a bar's
-     detail does beside its title, and either may be cut short. */
-  .luke-frame-head[data-detail] > .luke-frame-head-named {
-    align-items: last baseline;
-    gap: var(--luke-space-8);
-  }
-
-  .luke-frame-head[data-detail] > .luke-frame-head-named > * {
     min-width: 0;
   }
 }
