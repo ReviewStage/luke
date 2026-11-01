@@ -75,6 +75,15 @@ function launch(stood: Stood) {
   };
 }
 
+test("a first launch leaves the panel shut though its plan holds a tab, and its toggle shows it", () => {
+  const panel = launch({ task: TASK, taskAgents: [] });
+  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.COMMENTS]);
+  assert.equal(panel.control().open, false);
+
+  act(() => panel.control().onToggle());
+  assert.equal(panel.control().open, true);
+});
+
 test("an agent's Changes tab opens on its plan, stands chosen across a launch, and stands on no other plan", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));
@@ -310,7 +319,7 @@ test("closing the last tab shuts the panel and leaves full screen, and the toggl
   assert.deepEqual(panel.control().closedTabs, DRAWN_KINDS);
 });
 
-test("a plan whose strip holds no tab draws no panel, and the next plan with a tab draws it again, still open", () => {
+test("a plan whose strip holds no tab draws no panel, and leaving it shuts the panel, so the next plan with a tab draws none until asked", () => {
   const panel = launch({ task: TASK, taskAgents: [] });
   act(() => panel.control().onChoose(SIDE_PANEL_TAB.COMMENTS));
   assert.equal(panel.control().open, true);
@@ -320,6 +329,8 @@ test("a plan whose strip holds no tab draws no panel, and the next plan with a t
   assert.equal(panel.control().open, false);
 
   panel.render({ task: TASK, taskAgents: [] });
+  assert.equal(panel.control().open, false, "a tab standing in the strip does not open it");
+  act(() => panel.control().onToggle());
   assert.equal(panel.control().open, true);
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.COMMENTS);
 
@@ -406,8 +417,9 @@ test("a narrow room holds the open panel full screen alone, so the window's ways
   roots.push(root);
   const render = () => act(() => root.render(createElement(Probe, { at: room })));
   const now = () => control ?? assert.fail("the panel is held");
-  // The panel opens shown on the plan, which the narrow room holds full screen.
+  // The panel opens shown on the plan once toggled, a first launch leaving it shut, which the narrow room holds full screen.
   render();
+  act(() => now().onToggle());
   assert.deepEqual([now().open, now().fullScreen, now().fullScreenOnly], [true, true, true]);
 
   // Back, a column's tab shown, and a pin opened step out of full screen this way.
@@ -431,8 +443,9 @@ test("the Inbox with nothing chosen has no task, so the panel left open shows ov
   const now = () => control ?? assert.fail("the panel is held");
   const render = (at: ShellRoom, task: OpenTask) =>
     act(() => root.render(createElement(Probe, { at, task })));
-  // The panel stands open on a plan, and is kept open for the next launch.
+  // The panel stands open on a plan once toggled, and is kept open for the next launch.
   render(SHELL_ROOM.NARROW, usedTask(TASK));
+  act(() => now().onToggle());
   assert.equal(now().open, true);
   assert.equal(JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}").open, true);
 

@@ -91,6 +91,11 @@ let stageWidth = 0;
 
 beforeEach(() => {
   window.localStorage.clear();
+  // The panel left open on an earlier launch, since a first launch leaves it shut.
+  window.localStorage.setItem(
+    "luke.sidePanel",
+    JSON.stringify({ open: true, tabs: ["plan", "inbox", "comments"], width: 400 }),
+  );
   fakeAppPlatform(QUIET_PANEL);
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -299,7 +304,7 @@ function paneView(page: HTMLElement, name: string): HTMLElement {
 test("an open side panel on a narrow stage fills the window, with no edge to drag and no full-screen button, the task's header standing for its toggle and the sidebar's", () => {
   const page = mount(PHONE);
   assert.equal(roomOf(page), "narrow");
-  // A first launch opens the panel, which the narrow stage holds full screen.
+  // The panel left open, which the narrow stage holds full screen.
   assert.deepEqual(panelOf(page), { fullScreen: true, resizable: false, fullScreenButton: false });
   assert.equal(
     page.querySelector('.title-bar-controls[data-edge="end"]'),

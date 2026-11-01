@@ -124,7 +124,7 @@ import {
  * tab drawn before it, and a tab closed and opened again stands at the end
  * rather than where it stood. A tab the order holds nothing of, such as
  * one on a task no tab was opened or moved on, or one whose kind's first
- * read landed since (`firstHeld`), stands after those it holds, in its
+ * read landed since, stands after those it holds, in its
  * kind's place (`inTaskOrder`), so a strip kept before stands as it stood.
  * A tab opened on another task, as a pin does, goes to the end of that
  * task's strip where it is sure to stand in none of it, a fixed tab closed
@@ -576,8 +576,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "tasks" | "pin
   readonly pages: readonly PageStripTab[];
   /** The open Terminal tabs, by agent, in the order opened. */
   readonly terminals: readonly TerminalStripTab[];
-  /** The agents' cloud Browser tabs closed in this window, by the id the service keeps each under, which the strip no longer draws. */
-  readonly closedCloudBrowsers: readonly string[];
+  /** The agents' cloud Browser tabs opened in this window, by the id the service keeps each under, in the order opened: the only ones the strip draws. */
+  readonly openedCloudBrowsers: readonly string[];
   /** The agent whose Terminal tab was shown last on each task, by task. */
   readonly lastTerminals: Readonly<Record<string, string>>;
   /** What each Pull request tab shows, by agent and then by the number it names (`pull-request-number.ts`), of those whose view was chosen; the overview otherwise. */
@@ -635,9 +635,9 @@ const decodeStored = (text: string | null) =>
 const decodeEarlier = Schema.decodeUnknownOption(Schema.fromJsonString(earlierSidePanelSchema));
 const encodeStored = Schema.encodeSync(storedSidePanel);
 
-/** A first launch: open, so the plan shows, the kinds in their own order and none chosen, at the default width. */
+/** A first launch: shut, since the panel opens only when something is opened into it or its toggle is pressed, the kinds in their own order and none chosen, at the default width. */
 const FIRST_LAUNCH: SidePanelState = {
-  open: true,
+  open: false,
   tabs: SIDE_PANEL_TABS,
   width: SIDE_PANEL_WIDTH.DEFAULT,
 };
@@ -1069,9 +1069,14 @@ function withTab(
   const macTerminals = isMacTerminalTab(tab)
     ? [...held.macTerminals.filter((each) => !sameTab(each, tab)), tab]
     : held.macTerminals;
+  const openedCloudBrowsers =
+    isCloudBrowserTab(tab) && !held.openedCloudBrowsers.includes(tab.cloudBrowser)
+      ? [...held.openedCloudBrowsers, tab.cloudBrowser]
+      : held.openedCloudBrowsers;
   const chosen = isMacTerminalTab(tab) ? tab : (open ?? tab);
   return opened === held &&
     macTerminals === held.macTerminals &&
+    openedCloudBrowsers === held.openedCloudBrowsers &&
     subagents === held.subagents &&
     files === held.files &&
     pages === held.pages &&
@@ -1089,6 +1094,7 @@ function withTab(
         terminals,
         lastTerminals,
         macTerminals,
+        openedCloudBrowsers,
         tab: chosen,
       };
 }
@@ -1313,10 +1319,15 @@ function cloudBrowserTabOf(id: string): CloudBrowserStripTab {
   return made;
 }
 
-/** The task's agents' cloud Browser tabs the strip draws: each the service lists, but those closed in this window, the oldest first. */
+/**
+ * The task's agents' cloud Browser tabs the strip draws: each the service
+ * lists that was opened in this window, the oldest first. Note that a tab an
+ * agent's browser opens by itself stands in no strip until the developer
+ * opens it from the "+", so nothing arrives in the panel unasked.
+ */
 function drawnCloudBrowsers(held: HeldState, drawn: DrawnTabs): readonly CloudBrowserStripTab[] {
   return (drawn.cloudBrowsers ?? [])
-    .filter((id) => !held.closedCloudBrowsers.includes(id))
+    .filter((id) => held.openedCloudBrowsers.includes(id))
     .map(cloudBrowserTabOf);
 }
 
@@ -1412,7 +1423,9 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
                 : isCloudBrowserTab(tab)
                   ? {
                       ...held,
-                      closedCloudBrowsers: [...held.closedCloudBrowsers, tab.cloudBrowser],
+                      openedCloudBrowsers: held.openedCloudBrowsers.filter(
+                        (each) => each !== tab.cloudBrowser,
+                      ),
                     }
                   : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
@@ -1564,23 +1577,6 @@ function withTabLastOn(held: HeldState, taskId: string, tab: SidePanelTab): Held
 }
 
 /**
- * The state with each kind that arrived on the task, its tab not closed
- * there, standing at the strip's end in the kinds' order, as `withTabLast`
- * stands a tab opened. `drawn` is the task as it was before they arrived.
- */
-function withArrived(
-  held: HeldState,
-  arrivals: readonly FixedSidePanelTab[],
-  drawn: DrawnTabs,
-): HeldState {
-  const { closed } = taskTabs(held, drawn.task.id);
-  return arrivals.reduce(
-    (was, tab) => (closed.includes(tab) ? was : withTabLast(was, tab, drawn)),
-    held,
-  );
-}
-
-/**
  * The state with the file `to` standing in the task's order where the file
  * `from` stood, as a File tab showing another file in its place does, and
  * nowhere else: a `to` the order held from a tab closed earlier is taken
@@ -1704,7 +1700,7 @@ function settled(state: SidePanelState): HeldState {
     files: [],
     pages: [],
     terminals: [],
-    closedCloudBrowsers: [],
+    openedCloudBrowsers: [],
     lastTerminals: {},
     pullRequestViews: new Map(),
     macTerminals: [],
@@ -1840,7 +1836,7 @@ function shownTab(
   return drawsSubagent(kept, drawn) ? kept : tabs[0];
 }
 
-/** The kinds whose first hold opens the panel on them, which every kind but the retired Inbox does. */
+/** The kinds whose first hold keeps the tab shown as it stood (`arrived`): every kind but the retired Inbox. */
 const HELD_KINDS = SIDE_PANEL_TABS.filter((tab) => tab !== SIDE_PANEL_TAB.INBOX);
 
 /** Whether two reads of what a task holds say the same of every kind. */
@@ -1858,16 +1854,6 @@ function sameHolds(a: TaskHolds, b: TaskHolds): boolean {
  */
 function arrived(was: TaskHolds, now: TaskHolds): boolean {
   return HELD_KINDS.some((tab) => was[tab] !== true && now[tab] === true);
-}
-
-/**
- * The kinds read as holding nothing that hold something now, in the kinds'
- * order. Note that a kind not yet read is left out, unlike in `arrived`,
- * because its read landing may be the task opening, whose strip stands as
- * it stood rather than in the order its reads happened to land.
- */
-function firstHeld(was: TaskHolds, now: TaskHolds): readonly FixedSidePanelTab[] {
-  return HELD_KINDS.filter((tab) => was[tab] === false && now[tab] === true);
 }
 
 /**
@@ -1951,8 +1937,7 @@ export function useSidePanel(
   // otherwise become the first, and a chosen tab the task lacked would come
   // back over the one standing in for it: the tab shown is kept as chosen.
   // A tab a pin or a notification asked for is the exception, since it was
-  // chosen on this very task and stands in for nothing. A kind that
-  // arrived stands at the strip's end, as a tab opened does (`firstHeld`).
+  // chosen on this very task and stands in for nothing.
   if (seen.id !== taskId || seen.bare !== task.bare || !sameHolds(seen.holds, task.holds)) {
     setSeen(task);
     const before =
@@ -1965,20 +1950,6 @@ export function useSidePanel(
       sameTab(asked.tab, state.tab);
     if (!awaited && before !== undefined && (after === undefined || !sameTab(before, after))) {
       update((held) => ({ ...held, tab: before }));
-    }
-    const arrivals = seen.id === taskId ? firstHeld(seen.holds, task.holds) : [];
-    if (arrivals.length > 0) {
-      const was = {
-        task: seen,
-        agents,
-        subagents,
-        files: taskFiles,
-        pages,
-        taskAgents,
-        heldAgents,
-        cloudBrowsers,
-      };
-      update((held) => withArrived(held, arrivals, was));
     }
   }
   // Past the check above, `seen` is the task as it is, and a new object
@@ -2015,10 +1986,28 @@ export function useSidePanel(
 
   const strip = useMemo(() => stripOf(state, drawn), [state, drawn]);
   // Open is the window's, so a plan whose strip is empty hides the panel
-  // without forgetting it was open, and the next plan with a tab shows it.
-  // The Inbox with nothing chosen has no task, so it is never shown empty there.
+  // without forgetting it was open while the plan stands. The Inbox with
+  // nothing chosen has no task, so it is never shown empty there.
   const shown =
     state.open && (strip.length > 0 || (taskId !== undefined && emptyShownOn === taskId));
+  // Note that a plan left while the panel stood hidden by its empty strip
+  // shuts it, so the next plan with a tab does not show it unasked: it opens
+  // again only when something is opened into it or its toggle is pressed.
+  // The Inbox's bare panel, which draws only what its item names, leaves it
+  // as it stood.
+  const [standing, setStanding] = useState({ taskId, shown, bare: task.bare === true });
+  if (standing.taskId !== taskId) {
+    const hidden =
+      standing.taskId !== undefined && !standing.shown && !standing.bare && task.bare !== true;
+    // A tab shown on the plan arrived on, as a link or a pin opens one there, was asked for, so it stands.
+    const shownHere = asked !== undefined && asked.task === taskId;
+    if (hidden && !shownHere && state.open) {
+      update((held) => (held.open ? { ...held, open: false } : held));
+    }
+    setStanding({ taskId, shown: false, bare: task.bare === true });
+  } else if (standing.shown !== shown) {
+    setStanding({ taskId, shown, bare: task.bare === true });
+  }
   // A panel shut, by its toggle or by its last tab closing, or hidden by a
   // plan with no tab, shows again beside the document and with no ask of
   // its "+" standing; one shut, or whose plan was left, is shown empty only

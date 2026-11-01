@@ -807,7 +807,7 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
   assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.COMMENTS]);
 });
 
-test("in a narrow room a task opened from a list lands on its plan, its Overview with the side panel shut over it whichever tab it last showed, and on the desktop's width it opens as it was left", () => {
+test("in a narrow room a task opened from a list lands on its plan, its Overview with the side panel shut over it whichever tab it last showed, and on the desktop's width it stands shut once a plan with no tab was passed through", () => {
   for (const room of [SHELL_ROOM.NARROW, SHELL_ROOM.WIDE]) {
     window.localStorage.clear();
     const tab = mount(
@@ -823,7 +823,11 @@ test("in a narrow room a task opened from a list lands on its plan, its Overview
       assert.equal(tab.control().sidePanel.open, false, "narrow shuts the panel");
       assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW, "over the task's Overview");
     } else {
-      assert.equal(tab.control().sidePanel.open, true, "wide leaves the panel as it was");
+      assert.equal(
+        tab.control().sidePanel.open,
+        false,
+        "a plan with no tab passed through shuts it",
+      );
     }
   }
 });
@@ -1119,6 +1123,29 @@ test("a Luke link to an agent's message opens the agent and asks its tab to brin
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
   assert.deepEqual(first, { agentId: AGENT_ID, messageId: "msg-7", ask: 1 });
   assert.equal(tab.control().messageReveal, undefined);
+});
+
+test("a Luke link to a comment thread asks its task's page for the thread, each ask its own, let go once taken, so a later visit opens nothing", () => {
+  const tab = mount({ shown: true, tasks: OPEN });
+  const link = (threadId: string) =>
+    ({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.COMMENT, planId: TASK.id, threadId },
+    }) as const;
+
+  act(() => tab.control().onOpenLink(link("thread-1")));
+  const first = tab.control().commentReveal;
+  act(() => tab.control().onOpenLink(link("thread-2")));
+  act(() => tab.control().onCommentRevealed(1));
+  const stale = tab.control().commentReveal;
+  act(() => tab.control().onCommentRevealed(2));
+  const taken = tab.control().commentReveal;
+  act(() => tab.control().onOpenLink(link("thread-3")));
+
+  assert.deepEqual(first, { planId: TASK.id, thread: "thread-1", ask: 1 });
+  assert.equal(stale?.ask, 2, "letting go an older ask leaves the newer one standing");
+  assert.equal(taken, undefined);
+  assert.equal(tab.control().commentReveal?.ask, 3, "an ask after one let go is still its own");
 });
 
 test("a Luke link to a review thread opens its agent's Pull request tab on the view it names and asks the tab to bring the thread into view, each ask its own, let go once taken", async () => {
@@ -3015,7 +3042,7 @@ test("a task started, with an agent or without, leaves a hidden side panel hidde
   assert.equal(tab.control().sidePanel.open, false, "the plan does not open beside the agent");
 });
 
-test("New task's agent opens alone, no plan beside it, and the side panel stands open as it was on the task left", async () => {
+test("New task's agent opens alone, no plan beside it, and the task left draws no panel until asked, since a tab standing opens none", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
     { shown: true, tasks: withAgents([started]) },
@@ -3035,8 +3062,8 @@ test("New task's agent opens alone, no plan beside it, and the side panel stands
   await settle();
   assert.deepEqual(
     panelOf(tab),
-    { open: true, tab: SIDE_PANEL_TAB.COMMENTS },
-    "the task left keeps it",
+    { open: false, tab: SIDE_PANEL_TAB.COMMENTS },
+    "the task left keeps its tab, shut",
   );
 });
 

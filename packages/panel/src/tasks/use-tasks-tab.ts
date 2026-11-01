@@ -708,6 +708,8 @@ export interface TasksControl {
   commentReveal:
     | { readonly planId: string; readonly thread: string; readonly ask: number }
     | undefined;
+  /** The task's page took the ask, so a later visit to the task neither opens the thread nor its Comments tab again. */
+  onCommentRevealed: (ask: number) => void;
   /** Opens the window's Inbox narrowed to one task's items, on nothing chosen: what a task's "needs you" count asks. */
   onShowInbox: (narrowed: { readonly taskId: string }) => void;
   /** What waits on the developer across the account's tasks, as main's read last answered: each task with an open inbox item, and its items. */
@@ -1281,6 +1283,8 @@ export function useTasksTab(input: {
   const [threadReveal, setThreadReveal] = useState<ThreadReveal | undefined>(undefined);
   /** The asks to show a section made so far, so each is its own even after the last was let go. */
   const sectionAsks = useRef(0);
+  /** The asks to open a comment thread made so far, so each is its own even after the last was let go. */
+  const commentAsks = useRef(0);
   /** The tabs closed in the window, the latest last, which ⇧⌘T opens again (`closed-tabs.ts`). */
   const [closedTabs, setClosedTabs, latestClosedTabs] =
     useStateWithRef<readonly ClosedTab[]>(NO_CLOSED_TABS);
@@ -3074,11 +3078,12 @@ export function useTasksTab(input: {
         return;
       case LINK_PLACE.COMMENT:
         showOverview(place);
-        setCommentReveal((last) => ({
+        commentAsks.current += 1;
+        setCommentReveal({
           planId: place.planId,
           thread: place.threadId,
-          ask: (last?.ask ?? 0) + 1,
-        }));
+          ask: commentAsks.current,
+        });
         return;
       case LINK_PLACE.VERSION:
         openHistory({
@@ -3267,7 +3272,7 @@ export function useTasksTab(input: {
   // A tab not viewed for a day closes itself onto the same stack (`use-idle-tabs.ts`), unless it is
   // pinned, its agent works, waits on the developer, or ended unseen, or nothing could open it again:
   // a draft's, which lets the draft go, a Browser tab's or a terminal of this Mac's, which take their
-  // page or shell with them, and a cloud Browser tab's, which the strip draws again on no open. The
+  // page or shell with them, and a cloud Browser tab's, which only the "+" opens again. The
   // side panel's fixed kinds, the only tabs it names by a word, are its own and close only by hand.
   const workingAgents = useMemo(
     () =>
@@ -3651,6 +3656,8 @@ export function useTasksTab(input: {
     onRevealThread: revealThread,
     sectionReveal,
     commentReveal,
+    // Only the ask taken is let go; a newer one stands until its own task takes it.
+    onCommentRevealed: (ask) => setCommentReveal((last) => (last?.ask === ask ? undefined : last)),
     // Only the ask shown is let go; a newer one stands until its own task shows it.
     onSectionRevealed: (ask) =>
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),

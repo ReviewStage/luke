@@ -26,7 +26,9 @@ import { NO_LOOKS } from "./use-task-looks.js";
  * at once, and with several, a submenu of whose, the one viewed first. A
  * pick lands on a draft, which opens nothing until its bar's Enter
  * (`cloud-browser-tab.test.ts`). With no agent, or only one on a Mac, which
- * runs no browser, the "+" offers none. A synthetic plan and agents throughout.
+ * runs no browser, the "+" offers none. A tab an agent's browser already
+ * holds is offered there too, since the strip draws only the tabs opened in
+ * this window. A synthetic plan and agents throughout.
  */
 
 const TASK: Task = {
@@ -220,17 +222,20 @@ test("on a task with several coding agents, the panel's + New browser tab opens 
   assert.deepEqual(asked, [], "nothing opens in the agent's sandbox until the draft's Enter");
 });
 
-test("a cloud Browser tab wears its agent's glyph in the strip and hangs a card naming the agent's browser and the page's address", async () => {
-  const tab = {
-    id: "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b",
-    agentId: OTHER_AGENT.id,
-    address: "https://accounts.test/sign-in",
-    title: "Sign in",
-    openedBy: { kind: "member", userId: "user-ada" },
-    driver: null,
-    createdAt: 5,
-    lastActedAt: 5,
-  } as const;
+/** A tab Invite emails' cloud browser holds, on a sign-in page. */
+const SIGN_IN = {
+  id: "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b",
+  agentId: OTHER_AGENT.id,
+  address: "https://accounts.test/sign-in",
+  title: "Sign in",
+  openedBy: { kind: "member", userId: "user-ada" },
+  driver: null,
+  createdAt: 5,
+  lastActedAt: 5,
+} as const;
+
+/** The service listing the agents' cloud browsers as holding `SIGN_IN`, its follow pushing nothing more. */
+function listSignIn(): void {
   const held = {
     next: () => new Promise<never>(() => undefined),
     return: async () => ({ done: true, value: undefined }) as const,
@@ -240,10 +245,25 @@ test("a cloud Browser tab wears its agent's glyph in the strip and hangs a card 
     [Symbol.asyncDispose]: async () => undefined,
   };
   fakeActPort({
-    [ACT_KIND.TASKS_BROWSER_TABS]: () => Promise.resolve({ tabs: [tab] }),
+    [ACT_KIND.TASKS_BROWSER_TABS]: () => Promise.resolve({ tabs: [SIGN_IN] }),
     // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
     [ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: () => Promise.resolve(held as never),
   });
+}
+
+test("a tab an agent's cloud browser holds is offered under the panel's + Browser, before New browser tab, and its pick opens it", async () => {
+  listSignIn();
+  const task = await mount([AGENT, OTHER_AGENT]);
+  const rows = await browserRows();
+  assert.deepEqual(rowWords(rows), ["Sign in", "New browser tab"]);
+  await act(async () => rows[0]?.click());
+  await settle();
+  assert.deepEqual(task.chosen, [{ cloudBrowser: SIGN_IN.id }]);
+});
+
+test("a cloud Browser tab wears its agent's glyph in the strip and hangs a card naming the agent's browser and the page's address", async () => {
+  listSignIn();
+  const tab = SIGN_IN;
   await mount([AGENT, OTHER_AGENT], undefined, [SIDE_PANEL_TAB.COMMENTS, { cloudBrowser: tab.id }]);
 
   const drawn = [...document.querySelectorAll<HTMLElement>('.side-panel-tabs [role="tab"]')].find(
