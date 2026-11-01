@@ -10,16 +10,16 @@
  * draw holds none of them back from the rest. The seam a toggle moves, the
  * sidebar's edge or the side panel's, moves the panes either side of it
  * together. The sidebar slides off past the window's left edge or back on,
+ * fading as it goes,
  * and the side panel in past its right edge, each keeping its gap from the
  * sheet beside it all the way, and that sheet's frame follows them: a sheet
  * the change widened is uncovered from its old edge, and one it narrowed
  * draws its card out to its old edge and is covered back to its new one,
  * its rounded corners riding the moving edge and nothing it holds drawn past
  * it (`playSheet`). What a sheet holds keeps the width it has landed at;
- * the task's tabs, its document or an agent's tab, its toolbar's buttons,
- * and the place's head glide from where they were drawn to where they now
- * stand, and so does the task's summary as it is pinned or collapses to its
- * rail, and a panel that grew over the document is uncovered from its old
+ * the task's tabs, its document or an agent's tab, and its toolbar's buttons
+ * glide from where they were drawn to where they now stand, and so does the
+ * task's summary as it is pinned or collapses to its rail, and a panel that grew over the document is uncovered from its old
  * edge to its new one. A pane leaving holds itself drawn through its own
  * exit (side-panel.tsx), on the same travel (`pastRightEdge`), so only
  * arrivals and displacement are played here. A second press part way
@@ -105,11 +105,12 @@ interface Edges {
   right: number;
 }
 
-/** Where an element was drawn, how much of it its clip showed, how it was moved, and, for a sheet, where its frame stood. */
+/** Where an element was drawn, how much of it its clip showed, how it was moved and faded, and, for a sheet, where its frame stood. */
 interface Drawn {
   rect: DOMRect;
   clip: string;
   transform: string;
+  opacity: string;
   frame: Edges;
 }
 
@@ -187,6 +188,7 @@ function measure(root: HTMLElement, sheets: SheetMotions): Snapshot {
       rect,
       clip: style?.clipPath ?? "none",
       transform: style?.transform ?? "none",
+      opacity: style?.opacity ?? "1",
       frame: frameOf(rect, sheets.get(element)),
     });
   }
@@ -325,17 +327,17 @@ function playSheet(
 }
 
 /**
- * The sidebar's part: from wherever it stood, a slide under way included, to
- * where its fold now puts it, drawn whole all the way, since its stylesheet
- * hides it once it is folded away.
+ * The sidebar's part: from wherever it stood, a slide and fade under way
+ * included, to where its fold now puts it and how it shows there, out of
+ * sight once folded away.
  */
 function playSidebar(sidebar: Element, was: Drawn, timing: KeyframeAnimationOptions): void {
-  const now = getComputedStyle(sidebar).transform;
-  if (now === was.transform) return;
+  const now = getComputedStyle(sidebar);
+  if (now.transform === was.transform && now.opacity === was.opacity) return;
   sidebar.animate(
     [
-      { transform: was.transform, opacity: 1 },
-      { transform: now, opacity: 1 },
+      { transform: was.transform, opacity: was.opacity },
+      { transform: now.transform, opacity: now.opacity },
     ],
     timing,
   );
