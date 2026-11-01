@@ -289,10 +289,6 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
   await settle();
 
   const body = container.querySelector("[data-replay-card] .luke-disclosure-body");
-  assert.match(
-    body?.textContent ?? "",
-    /What this agent was handed of Wire the start from field's work/u,
-  );
   assert.match(body?.textContent ?? "", /Builds on luke\/start-from/u);
   assert.doesNotMatch(body?.textContent ?? "", /left out/u);
   const steps = [...container.querySelectorAll("[data-replay-step]")];

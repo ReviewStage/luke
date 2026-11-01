@@ -305,12 +305,11 @@ const SENTRY_EVENTS: readonly { value: SentryTriggerEvent; label: string }[] = [
   { value: SENTRY_TRIGGER_EVENT.ISSUE_CREATED, label: "New issue" },
 ];
 
-/** What each Sentry event's row says under its name: how it reaches Luke. */
-const SENTRY_EVENT_DETAIL = {
+/** What a Sentry event's row says under its name where its name alone cannot: how an alert reaches Luke. */
+const SENTRY_EVENT_DETAIL: Partial<Record<SentryTriggerEvent, string>> = {
   [SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED]:
     "Set the alert rule's action to send a notification to the Luke integration.",
-  [SENTRY_TRIGGER_EVENT.ISSUE_CREATED]: "Every new issue in the installed organization's projects.",
-} as const satisfies Record<SentryTriggerEvent, string>;
+};
 
 /** Sentry's levels as the level pills name them, least severe first. */
 const SENTRY_LEVELS: readonly { value: SentryLevel; label: string }[] = [
@@ -1530,7 +1529,7 @@ function SentryRows({
       />
       <FilterRow
         label="Projects"
-        detail="Project slugs, comma-separated. Empty for every project."
+        detail="Project slugs, comma-separated."
         values={trigger.filters?.project ?? []}
         problem={
           filterAdmitted(trigger.filters?.project) ? undefined : problems[DRAFT_FIELD.FILTERS]
@@ -1539,7 +1538,7 @@ function SentryRows({
       />
       <FilterRow
         label="Environments"
-        detail="Comma-separated. Empty for every environment."
+        detail="Comma-separated."
         values={trigger.filters?.environment ?? []}
         problem={
           filterAdmitted(trigger.filters?.environment) ? undefined : problems[DRAFT_FIELD.FILTERS]
@@ -1562,7 +1561,7 @@ function SentryRows({
       />
       <SettingsRow
         label="Same issue again after"
-        description={`Hours before one Sentry issue can start another run, from 1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}.`}
+        description={`Hours, from 1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}.`}
         error={inputProblem(problems[DRAFT_FIELD.COOLDOWN])}
       >
         {(control) => (

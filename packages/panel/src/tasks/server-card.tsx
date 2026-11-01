@@ -32,11 +32,10 @@ import { useServerRows } from "./agent-servers.js";
  * words behind a problem in a note of their own; where the words are an
  * agent's, its corner says whether that agent has it on or off, a word
  * rather than the popover's switch, which only the popover presses. A note under it says what
- * the mention does (`serverMentionNote`): an agent with the server on is
- * handed it anyway; one with it off is handed it by the developer's words
- * for one turn alone, the one they open, or, where they reached a turn
- * already under way, the next, and the switch stays off; a server not
- * connected is handed to no agent. Under a rule stand the server's tools
+ * the mention does where the corner cannot (`serverMentionNote`): an agent
+ * with it off is handed it by the developer's words for one turn alone, the
+ * one they open, or, where they reached a turn already under way, the next,
+ * and the switch stays off; a server not connected is handed to no agent. Under a rule stand the server's tools
  * in the popover's order, each a row of its title and its badge's words
  * that hangs what the tool does, every one, scrolling past a few, and a tool's mention its one tool's
  * row, of those the server answered with. Where the words are no agent's,

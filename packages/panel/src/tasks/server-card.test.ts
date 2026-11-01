@@ -268,7 +268,7 @@ function chipIn(container: HTMLElement, messageId: string): Element | null {
   return container.querySelector(`[data-message-id="${messageId}"] [data-mention-ref]`);
 }
 
-test("in an agent's tab with Linear off, a line that opened a turn hands it that turn alone, one that reached a turn under way the next, and the agent's own words say it is off", async () => {
+test("in an agent's tab with Linear off, a line that opened a turn hands it that turn alone, one that reached a turn under way the next, and the agent's own words say only that it is off", async () => {
   const container = await agentTab(TRANSCRIPT, agentOf(AGENT_STATUS.COMPLETED, ["linear"]));
 
   assert.deepEqual(await cardOf(chipIn(container, "opened")), {
@@ -297,16 +297,16 @@ test("in an agent's tab with Linear off, a line that opened a turn hands it that
   });
   const reply = await cardOf(chipIn(container, "first"));
   assert.equal(reply.on, "Off");
-  assert.equal(reply.note, SERVER_MENTION_NOTE.OFF);
+  assert.equal(reply.note, undefined);
 });
 
-test("in an agent's tab with Linear on, the line's card says it is on and the message names it", async () => {
+test("in an agent's tab with Linear on, the line's card says only that it is on", async () => {
   const container = await agentTab(TRANSCRIPT, agentOf(AGENT_STATUS.COMPLETED, []));
 
   const opened = await cardOf(chipIn(container, "opened"));
 
   assert.equal(opened.on, "On");
-  assert.equal(opened.note, SERVER_MENTION_NOTE.ON_NAMED);
+  assert.equal(opened.note, undefined);
 });
 
 test("a line sent while a turn runs, not yet read back, hands Linear to the next turn, as the box says a send now would", async () => {

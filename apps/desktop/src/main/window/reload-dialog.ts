@@ -11,7 +11,7 @@ const RELOAD_ANSWER = 0;
 const RELOAD_OR_QUIT: MessageBoxOptions = {
   type: "error",
   message: "Luke's window stopped working",
-  detail: `It reloaded ${MAXIMUM_REVIVALS_PER_LOAD} times and still couldn't load. Reload to try again, or quit Luke.`,
+  detail: `It reloaded ${MAXIMUM_REVIVALS_PER_LOAD} times and still couldn't load.`,
   buttons: ["Reload", "Quit Luke"],
   defaultId: RELOAD_ANSWER,
   cancelId: RELOAD_ANSWER,
