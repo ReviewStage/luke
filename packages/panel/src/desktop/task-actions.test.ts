@@ -314,7 +314,7 @@ test("a question asked of one task does not outlive it: the delete the Plan tab'
   assert.equal(asking(), false, "the question went with the task it was asked of");
 });
 
-test("⌘K's Change repository shows Overview where an agent's tab hides the plan, and the title bar's repository crumb opens its menu for the ask once, not again on a later draw", () => {
+test("⌘K's Change repository shows Overview where an agent's tab hides the plan, and the title bar's repository, plain words, has its menu opened under it for the ask once, not again on a later draw", () => {
   const told: string[] = [];
   const { tasks } = openTab({ [TASK.id]: "acme/app" });
   const asked = (overview: boolean): TasksControl => ({
@@ -340,25 +340,21 @@ test("⌘K's Change repository shows Overview where an agent's tab hides the pla
   assert.deepEqual(told, [`choose "${MAIN_TAB.OVERVIEW}"`], "the ask shows the plan first");
 
   draw(asked(true));
-  const chip = () =>
-    [...container.querySelectorAll<HTMLButtonElement>(".luke-frame-head button")].find((each) =>
-      each.textContent?.includes("acme/app"),
-    );
+  const head = () => container.querySelector(".luke-frame-head");
+  const menu = () => head()?.querySelector('[role="dialog"][aria-label="Repository"]') ?? null;
+  assert.ok(menu(), "the ask opens the repository's menu under the title bar's crumb");
   assert.equal(
-    chip()?.getAttribute("aria-expanded"),
-    "true",
-    "the crumb opens its menu for the ask",
+    [...(head()?.querySelectorAll("button") ?? [])].some((each) =>
+      each.textContent?.includes("acme/app"),
+    ),
+    false,
+    "the crumb itself is words, not a press",
   );
 
-  // The crumb drawn afresh, as another tab and back would, opens nothing for the ask already answered.
-  draw(asked(true));
-  act(() => {
-    chip()?.click();
-  });
-  assert.equal(chip()?.getAttribute("aria-expanded"), "false");
+  // The head drawn afresh, as another tab and back would, opens nothing for the ask already answered.
   draw({ ...asked(true), region: { kind: DOCUMENT_REGION.READING } });
   draw(asked(true));
-  assert.equal(chip()?.getAttribute("aria-expanded"), "false", "no second opening");
+  assert.equal(menu(), null, "no second opening");
 });
 
 test("the plan's name reaches the recording only as masked text, never in an attribute", () => {

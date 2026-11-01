@@ -46,7 +46,9 @@ import { useWorkspaceMembers } from "./use-workspace-members.js";
  * menu drops from the first crumb of the task's path over its title
  * (`task-standing.tsx`, through `useRepositoryMenu`), reading `Choose a
  * repository` while the task has none and the repository once the task
- * names one; ⌘K's Change repository opens its menu from there. Its menu is the shared searchable one: a search over every
+ * names one; ⌘K's Change repository opens its menu from there. The window's
+ * title bar names the repository as plain words and opens the same menu under
+ * them only for that ask, never from a press. Its menu is the shared searchable one: a search over every
  * repository the GitHub connected to the workspace reaches, the
  * repositories the account's tasks were about lately first and the rest as
  * GitHub last saw them change, each under its owner's picture, one the
