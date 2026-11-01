@@ -254,7 +254,7 @@ it.effect(
       yield* Effect.promise(settle);
       assert.ok(document.body.textContent?.includes("fra-03"), "the server that joined is listed");
       assert.ok(
-        document.body.textContent?.includes("Mac · Offline"),
+        document.body.textContent?.includes("Offline · Mac · 0.1.0"),
         "a Mac its desktop enrolled is listed as a Mac",
       );
     }),
@@ -377,7 +377,7 @@ test("a host's row says its version and where its update stands, and This Mac's 
   );
   const text = document.body.textContent ?? "";
 
-  assert.ok(text.includes("Linux server · Online · 0.2.1"), text);
+  assert.ok(text.includes("Online · Linux server · 0.2.1"), text);
   assert.ok(text.includes("Update ready, waiting for agents to finish"));
   assert.ok(text.includes("Updating…"));
   assert.ok(text.includes("Couldn't update: the download did not match its checksum"));
