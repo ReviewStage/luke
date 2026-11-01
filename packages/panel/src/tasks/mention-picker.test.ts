@@ -321,3 +321,21 @@ test("on a plan, the workspace's Inbox threads are found by their title, the pla
   assert.ok(chip, "the thread is drawn as a chip");
   assert.match(chip.textContent ?? "", /Keep the meter's old alerts\?/u);
 });
+
+test("on a plan, an Inbox feed that could not be read is said with Retry, never that no thread matches", async () => {
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        workspaces: [workspace("workspace-stage", "Stage", "stage")],
+        tasks: [task("plan-1", "workspace-stage", 1, "Ship the palette")],
+      },
+      [LIVE_READ.INBOX_ITEMS]: { failed: true },
+    },
+  );
+  const { picker, page } = await mountedOnPlan([]);
+
+  act(() => picker().onTrigger(word("keep")));
+  assert.match(page.textContent ?? "", /Inbox threads could not be read\./u);
+});

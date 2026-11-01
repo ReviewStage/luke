@@ -103,7 +103,7 @@ import {
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
 import { appStateDerivedAtom, useAppSlice, useExperiment } from "../use-app-state.js";
-import { useHostRead } from "../use-host-read.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { SERVER_PAGE_HEAD_CLASS } from "./agent-servers.js";
 import { ChannelCard } from "./channel-card.js";
@@ -1282,6 +1282,8 @@ const MENTION_READ = {
   AGENTS: "agents",
   FILES: "the repository's files",
   SKILLS: "skills",
+  THREADS: "Inbox threads",
+  CHANNELS: "channels",
 } as const;
 
 type MentionRead = (typeof MENTION_READ)[keyof typeof MENTION_READ];
@@ -1756,18 +1758,18 @@ export function useMentionPicker({
   const tasksWorkspace = listed.workspaces.find((each) => each.id === tasksWorkspaceId);
   const taskRowsOffered = open ? workspaceTaskRows(taskId, tasksWorkspace, listed.tasks) : [];
   // The threads offered are the workspace's as the account's feed holds them, which the host holds for the session.
-  const feed = useHostRead(LIVE_READ.INBOX_ITEMS).rows;
-  const threadRowsOffered = open
-    ? threadRows(feed, taskId, tasksWorkspace, listed.tasks, listed.tasklessAgents)
+  const feed = useHostRead(LIVE_READ.INBOX_ITEMS);
+  const threadsAsked = open && tasksWorkspace !== undefined;
+  const threadRowsOffered = threadsAsked
+    ? threadRows(feed.rows, taskId, tasksWorkspace, listed.tasks, listed.tasklessAgents)
     : [];
   // The channels offered are the workspace's open ones, held while the list stands open and Channels is on.
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
-  const channels = useHostRead(
-    LIVE_READ.CHANNELS,
-    open && channelsOn ? tasksWorkspaceId : undefined,
-  ).rows;
-  const channelRowsOffered =
-    open && channelsOn ? channelRows(channels?.open ?? [], tasksWorkspaceId) : [];
+  const channelsAsked = open && channelsOn && tasksWorkspaceId !== undefined;
+  const channels = useHostRead(LIVE_READ.CHANNELS, channelsAsked ? tasksWorkspaceId : undefined);
+  const channelRowsOffered = channelsAsked
+    ? channelRows(channels.rows?.open ?? [], tasksWorkspaceId)
+    : [];
   // The plan's own key, which finds the plan's row as another task's finds its.
   const planNumber = listed.tasks.find((task) => task.id === taskId)?.number;
   const planKey =
@@ -1872,7 +1874,9 @@ export function useMentionPicker({
       (read === undefined &&
         !pathsFailed &&
         treeKey(taskId, workspaceId, repository) !== undefined) ||
-      (skills !== undefined && skills.known === undefined && !skills.unread));
+      (skills !== undefined && skills.known === undefined && !skills.unread) ||
+      (threadsAsked && feed.status === HOST_READ_STATUS.LOADING) ||
+      (channelsAsked && channels.status === HOST_READ_STATUS.LOADING));
   // The list says a read could not be read, never that nothing matches, and Retry reads it again.
   const failures: readonly MentionReadFailure[] = open
     ? [
@@ -1884,6 +1888,12 @@ export function useMentionPicker({
           : []),
         ...(pathsFailed ? [{ read: MENTION_READ.FILES, retry: () => setPaths(undefined) }] : []),
         ...(skills?.unread === true ? [{ read: MENTION_READ.SKILLS, retry: skills.ask }] : []),
+        ...(threadsAsked && feed.status === HOST_READ_STATUS.FAILED
+          ? [{ read: MENTION_READ.THREADS, retry: feed.retry }]
+          : []),
+        ...(channelsAsked && channels.status === HOST_READ_STATUS.FAILED
+          ? [{ read: MENTION_READ.CHANNELS, retry: channels.retry }]
+          : []),
       ]
     : [];
   // Words typed past a space that match nothing are prose, not a mention: the list stands aside, and comes back only if they match again.
