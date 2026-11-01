@@ -1498,6 +1498,41 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
+   * A started task's row of the list as the service answered it; none from
+   * a service that leaves out a field the row needs, whose task is drawn
+   * once the list carries it.
+   */
+  function planRowOf(task: Task): PlanRow | undefined {
+    const { ownerId, status, priority, number, origin } = task;
+    if (ownerId === undefined || status === undefined || priority === undefined) return undefined;
+    if (number === undefined) return undefined;
+    return {
+      id: task.id,
+      workspaceId: task.workspaceId,
+      name: task.name,
+      repository: task.repository,
+      ownerId,
+      ownerName: task.createdBy?.name ?? null,
+      assigneeId: task.assignee?.userId ?? null,
+      assigneeName: task.assignee?.name ?? null,
+      pinnedAt: task.pinnedAt ?? null,
+      pinPosition: task.pinPosition ?? null,
+      completedAt: task.completedAt ?? null,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      status,
+      priority,
+      number,
+      ...(origin === undefined
+        ? undefined
+        : { creatorActor: origin.actor, creatorAgentId: origin.agentId ?? null }),
+      parentTaskId: task.parentTaskId ?? null,
+      ...(task.mode === undefined ? undefined : { mode: task.mode }),
+      ...(task.blocked === true ? { blocked: true } : undefined),
+    };
+  }
+
+  /**
    * Holds what a write's answer says of a task's row, or that it is gone,
    * over the list until the list carries its transaction
    * (`task-list-collections.ts`), so no draw meanwhile puts back the row as
@@ -2122,30 +2157,24 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return carried<TasksStartAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         const { quiet, ...request } = read;
-        // A quiet start, a group's quick add or New task set to stay, opens nothing, and answers
-        // once the list carries the task, with its agent's start where it asked for one.
+        // A quiet start, a group's quick add or New task set to stay, opens nothing: its row is
+        // drawn from the service's answer at once, and it answers once the list carries the
+        // task, with its agent's start where it asked for one.
         if (quiet === true) {
-          return yield* writtenThenListed(
-            Effect.map(served(client.create(request)), (started) => {
-              if (!started.ok) {
-                const { failure, localAgentRefusal } = started;
-                return [
-                  carried<TasksStartAnswer>(
-                    localAgentRefusal === undefined ? { failure } : { failure, localAgentRefusal },
-                  ),
-                  undefined,
-                ] as const;
-              }
-              const { task, agent, txid } = started.answer;
-              return [
-                carried<TasksStartAnswer>({
-                  planId: task.id,
-                  ...(agent === undefined ? undefined : { agentStart: agent }),
-                }),
-                txid,
-              ] as const;
-            }),
-          );
+          const started = yield* serial(served(client.create(request)));
+          if (!started.ok) {
+            const { failure, localAgentRefusal } = started;
+            return carried<TasksStartAnswer>(
+              localAgentRefusal === undefined ? { failure } : { failure, localAgentRefusal },
+            );
+          }
+          const { task, agent, txid } = started.answer;
+          const row = planRowOf(task);
+          yield* row === undefined ? listed(txid) : taskList.collections.made(row, txid);
+          return carried<TasksStartAnswer>({
+            planId: task.id,
+            ...(agent === undefined ? undefined : { agentStart: agent }),
+          });
         }
         // Note that a start answers once the task is drawn open rather than once the list carries
         // it, because nothing draws its row from the answer, so a list from before the write only
