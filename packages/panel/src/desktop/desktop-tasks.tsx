@@ -1,6 +1,5 @@
 import type { AgentStatus } from "@luke/features/agent-wire";
-import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
-import { planSections } from "@luke/features/plan-document";
+import type { MentionLines } from "@luke/features/mention-link";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskBlockRequest, TaskStanding } from "@luke/features/task-wire";
 import { readingWords } from "@luke/features/words";
@@ -37,7 +36,7 @@ import { FindScope } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { agentActor, agentName, type SentLine, startsOwnAgents } from "../tasks/agent-model.js";
+import { type SentLine, startsOwnAgents } from "../tasks/agent-model.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
@@ -48,7 +47,7 @@ import { peopleOf } from "../tasks/pull-request-card.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
 import {
-  mentionablePullRequests,
+  heldTaskMentions,
   TaskMentions,
   type TaskMentionsValue,
   useMentionAgentsReader,
@@ -901,31 +900,18 @@ function PlanDocument({
   const { pages } = tasks;
   const mentions = useMemo<TaskMentionsValue | undefined>(() => {
     if (opened === undefined || workspace === undefined) return undefined;
-    return {
-      holder: { taskId: opened.id },
-      taskName: opened.name,
+    return heldTaskMentions(
+      opened,
       workspace,
-      repository: opened.repository,
-      text: () => opened.document.body,
-      pages,
-      agents: (agents.agents ?? []).map((agent) => {
-        const name = agentName(agent, agents.models);
-        return { id: agent.id, name, actor: agentActor(agent, name), summary: agent };
-      }),
-      readAgents: readMentionAgents,
-      pullRequests: mentionablePullRequests(agents),
-      doors: {
-        holder: { taskId: opened.id },
-        place: { workspace, repository: opened.repository },
-        anchors: new Set(
-          sectionAnchors(planSections(opened.document.body).map((section) => section.heading)),
-        ),
+      opened.document.body,
+      { pages, agents, readAgents: readMentionAgents },
+      {
         onOpenTask: openMention,
         onOpenFile: openMentionedFileDoor,
         agentOf: agentLookDoor,
         pullRequestOf: pullRequestCardDoor,
       },
-    };
+    );
   }, [
     opened,
     workspace,
