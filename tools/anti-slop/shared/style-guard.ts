@@ -661,6 +661,9 @@ const ITEMS_PLACEMENT = /^(?:place|justify)-items$/u;
 /** What names a grid's columns. */
 const COLUMNS_NAMED = /^grid(?:-template(?:-columns)?)?$/u;
 
+/** A column no wider than its box: one that may shrink to nothing, never `auto` or `none`. */
+const BOUNDED_COLUMN = /minmax\(\s*0\s*,/u;
+
 /**
  * The `display: grid` of a block that places its items and names no
  * columns, whose one `auto` column grows to its widest item; none elsewhere.
@@ -673,7 +676,10 @@ function autoColumnGrid(block: CssBlock): CssDeclaration | undefined {
   const places = block.declarations.some((declaration) =>
     ITEMS_PLACEMENT.test(declaration.property),
   );
-  const named = block.declarations.some((declaration) => COLUMNS_NAMED.test(declaration.property));
+  const named = block.declarations.some(
+    (declaration) =>
+      COLUMNS_NAMED.test(declaration.property) && BOUNDED_COLUMN.test(declaration.value),
+  );
   return places && !named ? display : undefined;
 }
 
@@ -812,6 +818,14 @@ export function isClassList(text: string): boolean {
 /** A utility placing a grid's items along its columns. */
 const ITEMS_UTILITY = /^(?:place|justify)-items-/u;
 
+/** A column utility no wider than its box: Tailwind's counts are `minmax(0, 1fr)` each, never `none` or `[auto]`. */
+const BOUNDED_COLUMNS = /^grid-cols-(?:\d+|\[minmax\(0,.*\])$/u;
+
+/** The variants a class is drawn under, `sm:` or `[&:fullscreen]:`, as its own spelling leads with them. */
+function variantsOf(token: string, utility: string): string {
+  return token.slice(0, token.lastIndexOf(utility)).replace(/!$/u, "");
+}
+
 /**
  * The grid's own classes where a class list lays a block grid that places
  * its items and names no columns; none elsewhere. Note that a grid drawn
@@ -824,7 +838,15 @@ function autoColumnClasses(tokens: readonly string[]): string | undefined {
   if (!utilities.includes("grid") || !utilities.some((utility) => ITEMS_UTILITY.test(utility))) {
     return undefined;
   }
-  if (utilities.some((utility) => utility.startsWith("grid-cols-"))) return undefined;
+  // Note that the columns count only under the grid's own variants, so `sm:grid-cols-1` leaves a phone's grid unnamed.
+  const at = utilities.indexOf("grid");
+  const scope = variantsOf(tokens[at] ?? "", "grid");
+  const bounded = tokens.some(
+    (token, index) =>
+      BOUNDED_COLUMNS.test(utilities[index] ?? "") &&
+      variantsOf(token, utilities[index] ?? "") === scope,
+  );
+  if (bounded) return undefined;
   return tokens.filter((_, index) => grid(utilities[index] ?? "")).join(" ");
 }
 
