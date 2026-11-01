@@ -1,12 +1,14 @@
 /**
  * progress-rings.tsx -- the progress ring at its start, part way, and full
  * in the working blue, the tones the agent's context ring takes, and the ring
- * beside its count as a sub-task's row and card say it.
+ * beside its count as a sub-task's row and card say it, bare and as the badge
+ * a Board card's pills draw.
  */
 
 import {
   GAP,
   Inline,
+  PROGRESS_COUNT_LOOK,
   PROGRESS_RING_TONE,
   ProgressCount,
   ProgressRing,
@@ -48,18 +50,25 @@ function ProgressRings(): React.JSX.Element {
           ))}
         </Inline>
       </CatalogSection>
-      <CatalogSection id="progress-count" title="Beside its count">
-        <Inline gap={GAP.SECTION}>
-          {COUNTS.map(({ done, total }) => (
-            <ProgressCount
-              key={done}
-              done={done}
-              total={total}
-              label={`${done} of ${total} sub-tasks finished`}
-            />
-          ))}
-        </Inline>
-      </CatalogSection>
+      {Object.values(PROGRESS_COUNT_LOOK).map((look) => (
+        <CatalogSection
+          key={look}
+          id={`progress-count-${look}`}
+          title={`Beside its count, ${look}`}
+        >
+          <Inline gap={GAP.SECTION}>
+            {COUNTS.map(({ done, total }) => (
+              <ProgressCount
+                key={done}
+                done={done}
+                total={total}
+                label={`${done} of ${total} sub-tasks finished`}
+                look={look}
+              />
+            ))}
+          </Inline>
+        </CatalogSection>
+      ))}
     </>
   );
 }
