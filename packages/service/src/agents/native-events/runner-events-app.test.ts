@@ -42,7 +42,7 @@ import { sentLineId } from "@luke/wire/host-ids";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
 import { MockLanguageModelV4 } from "ai/test";
 import { asc, eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option } from "effect";
+import { Clock, Effect, ErrorReporter, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -1764,6 +1764,59 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
             [PROVIDER_KEY_STATUS.UNVERIFIED, null],
             [PROVIDER_KEY_STATUS.UNVERIFIED, null],
           ],
+        );
+      }),
+  );
+
+  it.effect(
+    "an API key of the starter's that OpenAI refused as expired is marked invalid and opens no issue, where Luke's own key refused so opens one",
+    () =>
+      Effect.gen(function* () {
+        const reported: Readonly<Record<string, unknown>>[] = [];
+        const reporting = ErrorReporter.layer([
+          ErrorReporter.make(({ attributes }) => {
+            reported.push(attributes);
+          }),
+        ]);
+        const post = yield* standingWith(
+          {},
+          Layer.merge(Layer.empty as Layer.Layer<AfterResponse>, reporting),
+        );
+        // As Codex said the expired key of LUKE-WEB-2R: a connection failed, its 401 in its info.
+        const expired = {
+          message:
+            "unexpected status 401 Unauthorized: Your API key has expired. Create a new API key to continue.",
+          codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 401 } },
+          additionalDetails: null,
+        };
+
+        const onKey = yield* agentOn({ ...HARNESS.CODEX, payer: AGENT_PAYER.API_KEY }, [
+          "Fix the test.",
+        ]);
+        yield* saveProviderKey(
+          onKey.userId,
+          PROVIDER_KEY_PROVIDER.OPENAI,
+          PROVIDER_KEY_KIND.API_KEY,
+          { keyVersion: 1, sealedDataKey: "sealed-data-key", sealedKey: "sealed-api-key" },
+          "sk-proj…fake",
+          null,
+          new Date(0),
+        );
+        yield* post(onKey.bearer, refusedLaunch(onKey.lineId, 0, expired));
+
+        const onLuke = yield* agentOn({ ...HARNESS.CODEX, payer: AGENT_PAYER.LUKE }, [
+          "Fix the test.",
+        ]);
+        yield* post(onLuke.bearer, refusedLaunch(onLuke.lineId, 0, expired));
+
+        const keyRows = yield* listProviderKeyRows(onKey.userId, PROVIDER_KEY_KIND.API_KEY);
+        assert.deepEqual(
+          keyRows.map((row) => row.status),
+          [PROVIDER_KEY_STATUS.INVALID],
+        );
+        assert.deepEqual(
+          reported.map((attributes) => attributes.agentId),
+          [onLuke.agentId],
         );
       }),
   );
