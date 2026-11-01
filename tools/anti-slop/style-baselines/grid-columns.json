@@ -6,7 +6,6 @@
   "packages/panel/src/picture-block.tsx": 1,
   "packages/panel/src/tasks/attachment-viewer.tsx": 3,
   "packages/ui/src/components/auth-page/auth-mark.tsx": 1,
-  "packages/ui/src/components/auth-page/auth-page.tsx": 1,
   "packages/ui/src/components/avatar/avatar.tsx": 1,
   "packages/ui/src/components/button/button.tsx": 1,
   "packages/ui/src/components/chip/chip.tsx": 1,

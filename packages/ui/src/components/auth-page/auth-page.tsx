@@ -70,7 +70,7 @@ export function AuthPage({
 }): React.JSX.Element {
   const titleId = `${useId()}title`;
   return (
-    <main className="luke-auth-page @container grid place-items-center min-h-dvh p-page-inset box-border">
+    <main className="luke-auth-page @container grid grid-cols-1 place-items-center min-h-dvh p-page-inset box-border">
       <section
         className="luke-auth-card flex flex-col items-center w-full max-w-auth-card box-border border border-border rounded-dialog bg-surface shadow-auth-card text-foreground font-ui text-body text-center wrap-anywhere"
         aria-labelledby={titleId}
