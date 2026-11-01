@@ -54,6 +54,12 @@ import {
 /** The harness's own tools a call of which the record leaves out without reporting it. */
 const UNRECORDED_TOOLS: ReadonlySet<string> = new Set(Object.values(CLAUDE_CODE_UNRECORDED_TOOL));
 
+/** How a turn may find the credential that paid refused: a key or sign-in not accepted, or a plan not eligible. */
+const REFUSED_STATUSES: ReadonlySet<PlanStatus> = new Set([
+  PLAN_STATUS.INVALID,
+  PLAN_STATUS.INELIGIBLE,
+]);
+
 /** A step's words: those it completed, those still forming, and how much of them the writer was told. */
 const DraftSchema = Schema.Struct({
   completed: Schema.String,
@@ -110,6 +116,8 @@ const TurnSchema = Schema.Struct({
   failure: Schema.optionalKey(Schema.String),
   /** Whether the plan's limit refused the turn, a failure its user expects. */
   limited: Schema.optionalKey(Schema.Boolean),
+  /** Whether the provider refused the credential that paid, such as a key expired or a plan signed out. */
+  refused: Schema.optionalKey(Schema.Boolean),
   /** The MCP servers mentioned to the agent that this turn took as it started, which its calls are handed whatever the switches say. */
   servers: Schema.optionalKey(Schema.Array(Schema.String)),
 });
@@ -199,6 +207,8 @@ export type NativeWrite =
       readonly detail: string;
       /** Whether the turn failed as its user expects, on the plan's limit, which opens no issue. */
       readonly expected: boolean;
+      /** Whether the provider refused the credential that paid, which opens no issue where the credential is the starter's own. */
+      readonly refused: boolean;
     }
   | {
       readonly kind: typeof NATIVE_WRITE.PLAN_STATUS;
@@ -476,6 +486,7 @@ class Fold {
         failure: TURN_FAILURE.MODEL,
         detail,
         expected: turn.limited === true || this.state.rateLimit !== undefined,
+        refused: turn.refused === true,
       });
     }
     this.#setTurn(undefined);
@@ -594,6 +605,8 @@ class Fold {
         const turn = this.state.turn;
         if (turn !== undefined && moment.status === PLAN_STATUS.LIMIT_REACHED) {
           this.#setTurn({ ...turn, limited: true });
+        } else if (turn !== undefined && REFUSED_STATUSES.has(moment.status)) {
+          this.#setTurn({ ...turn, refused: true });
         }
         this.writes.push({
           kind: NATIVE_WRITE.PLAN_STATUS,

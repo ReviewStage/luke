@@ -407,14 +407,21 @@ class NativeTurnFailed extends Data.TaggedError("NativeTurnFailed")<{
 /** A failed turn of the batch, which it says once its row is written. */
 type FailedTurn = Extract<NativeWrite, { kind: typeof NATIVE_WRITE.FAILED }>;
 
+/** Whether the payer is the starter's own credential, whose refusal is theirs to mend rather than Luke's. */
+function paysOwnCredential(payer: AgentPayer | undefined): boolean {
+  return payer === AGENT_PAYER.API_KEY || (payer !== undefined && PLAN_ROW[payer] !== undefined);
+}
+
 /**
  * Says a turn that failed in the log, and reports it as an issue unless its
- * user expected it. Note that the ids are the log's annotations, never its
- * words, so a line is found by them.
+ * user expected it: the plan's limit, or a refusal of their own key or plan,
+ * such as a key expired. Note that the ids are the log's annotations, never
+ * its words, so a line is found by them.
  */
 function sayTurnFailed(
   failed: FailedTurn,
   harness: ConversationRuntime,
+  payer: AgentPayer | undefined,
   ids: Readonly<Record<string, string>>,
 ) {
   const attributes = {
@@ -430,7 +437,9 @@ function sayTurnFailed(
   });
   return Effect.andThen(
     Effect.logError("runner-events: a native turn failed").pipe(Effect.annotateLogs(attributes)),
-    failed.expected ? Effect.void : ErrorReporter.report(Cause.fail(issue)),
+    failed.expected || (failed.refused && paysOwnCredential(payer))
+      ? Effect.void
+      : ErrorReporter.report(Cause.fail(issue)),
   );
 }
 
@@ -723,7 +732,7 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   const { runtimeSessionId } = admitted.value;
   for (const failed of applied.value.failed) {
     const harness = codex ? CONVERSATION_RUNTIME.CODEX : CONVERSATION_RUNTIME.CLAUDE_CODE;
-    yield* sayTurnFailed(failed, harness, {
+    yield* sayTurnFailed(failed, harness, applying.payer, {
       agentId: agent.value.id,
       conversationId: target.conversationId,
       ...(taskId === null ? undefined : { taskId }),

@@ -110,6 +110,9 @@ const PLAN_REASON_STATUS: ReadonlyMap<string, PlanStatus> = new Map([
   ["usage_limit_exceeded", PLAN_STATUS.LIMIT_REACHED],
 ]);
 
+/** The status OpenAI refuses a credential with, which a failed connection carries in its `codexErrorInfo`. */
+const HTTP_UNAUTHORIZED = 401;
+
 const readEnvelope = Schema.decodeUnknownOption(
   Schema.Struct({ method: Schema.String, params: Schema.Unknown }),
 );
@@ -569,10 +572,21 @@ function usageMoments(params: unknown): readonly NativeMoment[] {
   });
 }
 
+/** The HTTP status one kind of a `codexErrorInfo` object carries, such as `httpConnectionFailed`'s 401. */
+function httpStatusOf(value: unknown): number | undefined {
+  return Predicate.isObject(value) &&
+    "httpStatusCode" in value &&
+    Predicate.isNumber(value.httpStatusCode)
+    ? value.httpStatusCode
+    : undefined;
+}
+
 /**
  * How a turn's `codexErrorInfo` found the plan: a usage limit, or a sign-in
- * not accepted; every other kind says nothing of the plan. A kind this pin
- * does not name says nothing either.
+ * or key not accepted; every other kind says nothing of the plan. A kind this
+ * pin does not name says nothing either. Note that Codex says an API key
+ * OpenAI refused, an expired one among them, as a connection that failed
+ * with a 401 rather than as `unauthorized`.
  */
 function planStatusOfInfo(info: unknown): PlanStatus | undefined {
   const kind = codexErrorKind(info);
@@ -582,6 +596,11 @@ function planStatusOfInfo(info: unknown): PlanStatus | undefined {
       return PLAN_STATUS.LIMIT_REACHED;
     case CODEX_ERROR_INFO.UNAUTHORIZED:
       return PLAN_STATUS.INVALID;
+    case CODEX_ERROR_INFO.HTTP_CONNECTION_FAILED:
+    case CODEX_ERROR_INFO.RESPONSE_STREAM_CONNECTION_FAILED:
+      return Predicate.isObject(info) && httpStatusOf(Object.values(info)[0]) === HTTP_UNAUTHORIZED
+        ? PLAN_STATUS.INVALID
+        : undefined;
     case CODEX_ERROR_INFO.CONTEXT_WINDOW_EXCEEDED:
     case CODEX_ERROR_INFO.SESSION_BUDGET_EXCEEDED:
     case CODEX_ERROR_INFO.RATE_LIMIT_EXCEEDED:
@@ -590,8 +609,6 @@ function planStatusOfInfo(info: unknown): PlanStatus | undefined {
     case CODEX_ERROR_INFO.CYBER_POLICY:
     case CODEX_ERROR_INFO.MISALIGNMENT_POLICY_VIOLATION:
     case CODEX_ERROR_INFO.TOO_MANY_DENIALS:
-    case CODEX_ERROR_INFO.HTTP_CONNECTION_FAILED:
-    case CODEX_ERROR_INFO.RESPONSE_STREAM_CONNECTION_FAILED:
     case CODEX_ERROR_INFO.INTERNAL_SERVER_ERROR:
     case CODEX_ERROR_INFO.BAD_REQUEST:
     case CODEX_ERROR_INFO.THREAD_ROLLBACK_FAILED:
@@ -611,13 +628,8 @@ function errorInfoWords(info: unknown): readonly string[] {
   if (Predicate.isString(info)) return [info];
   if (!Predicate.isObject(info)) return [];
   return Object.entries(info).flatMap(([name, value]) => {
-    const status =
-      Predicate.isObject(value) &&
-      "httpStatusCode" in value &&
-      Predicate.isNumber(value.httpStatusCode)
-        ? [String(value.httpStatusCode)]
-        : [];
-    return [name, ...status];
+    const status = httpStatusOf(value);
+    return status === undefined ? [name] : [name, String(status)];
   });
 }
 
