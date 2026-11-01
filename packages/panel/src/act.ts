@@ -41,6 +41,7 @@ import type { ShownFailure } from "./failure-report.js";
 import { loadedTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import { showToast, TOAST_HOLD } from "./toast.js";
 import { appStateNow } from "./use-app-state.js";
+import { cannedResult } from "./shots/canned-acts.js";
 
 /**
  * What each kind takes and answers, keyed by the kind. Note that a kind's own
@@ -101,6 +102,9 @@ async function portAct(
   kind: PortActKind,
   payload: PortActPayload<PortActKind>,
 ): Promise<PortActResult<PortActKind>> {
+  // Throwaway: a changelog shot answers the acts it stages itself (`shots/canned-acts.ts`).
+  const canned = cannedResult(kind, payload);
+  if (canned !== undefined) return canned;
   const staged = stagedAnswer(kind, payload);
   if (staged !== undefined) return staged.answer;
   try {

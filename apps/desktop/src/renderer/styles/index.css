@@ -7,3 +7,5 @@
    layers the panel's sheets opened first, so coming after them changes no
    winner. */
 @import "./tailwind.css";
+/* Throwaway: the changelog shots (panel/src/shots/README.md), last so they win. */
+@import "../../../../../packages/panel/src/shots/shots.css";

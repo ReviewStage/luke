@@ -1,3 +1,4 @@
+import { currentShot } from "../shots/shot-profiles";
 import { AGENT_BOUNDS, type AgentSummary } from "@luke/features/agent-wire";
 import {
   CARD_CORNER,
@@ -204,7 +205,11 @@ export interface SummaryPin {
  */
 export function useSummaryPin(fixtureMode: boolean): SummaryPin {
   const [kept, , changeKept] = useKept(KEPT.PINNED, true);
-  const [staged, setStaged] = useState(true);
+  // Throwaway: a changelog shot keeps the summary folded to its rail unless it asks (`shots/`).
+  const [staged, setStaged] = useState(() => {
+    const shot = currentShot();
+    return shot === undefined ? true : (shot.layout?.summaryPinned ?? false);
+  });
   const [wide, setWide] = useState(true);
   const onToggle = useCallback(
     () => (fixtureMode ? setStaged : changeKept)((was) => !was),

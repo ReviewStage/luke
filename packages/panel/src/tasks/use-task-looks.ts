@@ -1,3 +1,4 @@
+import { currentShot } from "../shots/shot-profiles";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { TasklessAgent } from "@luke/features/agent-wire";
 import {
@@ -378,7 +379,8 @@ export function useTaskLooks(
       keep({ change: raised({ [taskId]: newest }, false), seeded: false });
   }, [taskId, newest, keep]);
   // The same looks across draws while neither moves, so the plan they are handed to is not drawn again for new ones.
-  const { changed } = current;
+  // Throwaway: a changelog shot never lights sections changed since a look (`shots/`).
+  const changed = currentShot() === undefined ? current.changed : NOTHING_CHANGED;
   return useMemo(() => ({ changed, dismiss }), [changed, dismiss]);
 }
 

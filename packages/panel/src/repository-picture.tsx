@@ -2,6 +2,8 @@ import { AVATAR_SHAPE, AVATAR_SIZE, Avatar, type AvatarSize } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { repositoryOwnerPictureUrl } from "@luke/ui/tasks-model";
 import { useState } from "react";
+import { shotOwnerPicture } from "./shots/owner-pictures";
+import { currentShot } from "./shots/shot-profiles";
 
 /**
  * repository-picture.tsx -- a repository drawn as its owner's picture on GitHub, wherever a repository is named or picked.
@@ -37,7 +39,12 @@ export function RepositoryPicture({
   size?: AvatarSize;
 }): React.ReactNode {
   const [failedUrl, setFailedUrl] = useState<string | undefined>(undefined);
-  const url = pictures ? repositoryOwnerPictureUrl(repository) : undefined;
+  // Throwaway: a changelog shot draws its owners' pictures rather than fetching them (`shots/`).
+  const url = !pictures
+    ? undefined
+    : currentShot() !== undefined
+      ? shotOwnerPicture(repository)
+      : repositoryOwnerPictureUrl(repository);
   if (url === undefined || url === failedUrl) return fallback;
   return (
     <Avatar

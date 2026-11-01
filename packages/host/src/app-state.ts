@@ -92,6 +92,24 @@ export const RUN_PROFILE = {
   AUTOMATIONS_EDITOR: "automations-editor",
   /** The same account on the automation whose run failed, that run marked among its runs. */
   AUTOMATIONS_RUNS: "automations-runs",
+  /** Throwaway: the changelog shots (`panel/src/shots/`), one profile per shot. */
+  SHOT_PULL_REQUEST_TAB: "shot-pull-request-tab",
+  SHOT_CONTINUE_FORK: "shot-continue-fork",
+  SHOT_REVIEW: "shot-review",
+  SHOT_INBOX_THREADS: "shot-inbox-threads",
+  SHOT_CHAPTERS: "shot-chapters",
+  SHOT_BOARD: "shot-board",
+  SHOT_INBOX_ASKS: "shot-inbox-asks",
+  SHOT_AGENTS_SETTINGS: "shot-agents-settings",
+  SHOT_SKILLS: "shot-skills",
+  SHOT_TASKS_LIST: "shot-tasks-list",
+  SHOT_CALL: "shot-call",
+  SHOT_FORMATTING: "shot-formatting",
+  SHOT_SELECT_SEVERAL: "shot-select-several",
+  SHOT_AUTOMATION_RUNS: "shot-automation-runs",
+  SHOT_FRAME_TABS: "shot-frame-tabs",
+  SHOT_ROW_MENU: "shot-row-menu",
+  SHOT_ROW_SHEET: "shot-row-sheet",
 } as const;
 
 export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];
