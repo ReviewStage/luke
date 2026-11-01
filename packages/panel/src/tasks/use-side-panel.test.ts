@@ -297,7 +297,7 @@ test("the agent whose Terminal tab was shown last on a plan is the plan's own, w
   assert.equal(panel.control().lastTerminal, undefined);
 });
 
-test("closing the last tab shuts the panel and leaves full screen, and the toggle shows it again empty, offering the tabs closed", () => {
+test('closing the last tab shuts the panel and leaves full screen, and the toggle with nothing to show asks for the "+" at the toggle, a pick opening the panel on it', () => {
   const panel = launch({ task: TASK, taskAgents: [AGENT] });
   act(() => panel.control().onChoose({ changes: AGENT }));
   act(() => panel.control().onToggleFullScreen());
@@ -312,11 +312,15 @@ test("closing the last tab shuts the panel and leaves full screen, and the toggl
   assert.equal(panel.control().fullScreen, false);
 
   act(() => panel.control().onToggle());
+  assert.equal(panel.control().open, false, "never shown with nothing in it");
+  assert.equal(panel.control().toggleAsked, true, 'the "+" is asked for at the toggle');
+  assert.deepEqual(panel.control().closedTabs, DRAWN_KINDS);
+
+  act(() => panel.control().onChoose(SIDE_PANEL_TAB.COMMENTS));
   assert.equal(panel.control().open, true);
   assert.equal(panel.control().fullScreen, false, "shown again beside the document");
-  assert.deepEqual(panel.control().strip, []);
-  assert.equal(panel.control().tab, undefined);
-  assert.deepEqual(panel.control().closedTabs, DRAWN_KINDS);
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.COMMENTS);
+  assert.equal(panel.control().toggleAsked, false);
 });
 
 test("a plan whose strip holds no tab draws no panel, and leaving it shuts the panel, so the next plan with a tab draws none until asked", () => {
@@ -336,16 +340,14 @@ test("a plan whose strip holds no tab draws no panel, and leaving it shuts the p
 
   panel.render({ task: OTHER_TASK, taskAgents: [], bare: true });
   act(() => panel.control().onToggle());
-  assert.equal(panel.control().open, true, "shown on purpose, it stands empty");
-  assert.deepEqual(panel.control().strip, []);
-  panel.render({ task: TASK, taskAgents: [] });
-  panel.render({ task: OTHER_TASK, taskAgents: [], bare: true });
-  assert.equal(panel.control().open, false, "left and come back to, it is asked for again");
+  assert.equal(panel.control().open, false, "with nothing to show it is never drawn");
+  assert.equal(panel.control().toggleAsked, true);
   act(() => panel.control().onToggle());
-  act(() => panel.control().onToggle());
-  assert.equal(panel.control().open, false);
+  assert.equal(panel.control().toggleAsked, false, "the toggle again takes the ask back");
+  act(() => panel.control().onNewTab());
+  assert.equal(panel.control().toggleAsked, true, "⌘T asks at the toggle too");
   panel.render({ task: TASK, taskAgents: [] });
-  assert.equal(panel.control().open, false, "hidden by the toggle, not by the empty strip");
+  assert.equal(panel.control().toggleAsked, false, "an ask stands only on its plan");
 });
 
 test("beside the window's Inbox the panel stands for the item's plan with none of its fixed tabs, holds what the item opens there, and the plan's page finds its strip as it left it, a fixed tab it closed still closed and one it opened still open", () => {
@@ -382,6 +384,17 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
 
   render(false);
   assert.deepEqual(panel().strip, [{ changes: AGENT }, { file: "src/invites.ts" }]);
+});
+
+test("a panel kept open with no tab to show launches shut, and one kept open on a tab launches open", () => {
+  const kept = { open: true, tabs: ["comments"], width: 400, tasks: {}, pins: [] };
+  window.localStorage.setItem("luke.sidePanel", JSON.stringify(kept));
+  const bare = launch({ task: TASK, taskAgents: [] });
+  assert.equal(bare.control().open, false, "never restored with nothing in it");
+  bare.quit();
+
+  window.localStorage.setItem("luke.sidePanel", JSON.stringify({ ...kept, tab: "comments" }));
+  assert.equal(launch({ task: TASK, taskAgents: [] }).control().open, true);
 });
 
 test("a record kept while the Call and Code stood in the panel reads with their tabs let go from the strip, and the Call's pin let go too", () => {

@@ -1368,7 +1368,20 @@ body,
   padding-left: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
-[data-luke-profile="desktop"] .tab-add-anchor .luke-anchored-popover {
+/* Where no toggle is drawn, the side panel's "+" menu asked for with
+   nothing to show hangs from the window's top right, where the toggle would
+   stand (`side-panel.tsx`'s `ToggleOffers`). */
+.panel-offers-corner {
+  position: fixed;
+  z-index: var(--luke-z-menu);
+  top: var(--desktop-bar-height);
+  right: var(--panel-toggle-right);
+  width: 0;
+  height: 0;
+}
+
+[data-luke-profile="desktop"] .tab-add-anchor .luke-anchored-popover,
+[data-luke-profile="desktop"] .title-bar-controls .luke-anchored-popover {
   -webkit-app-region: no-drag;
 }
 

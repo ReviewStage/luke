@@ -644,8 +644,10 @@ const FIRST_LAUNCH: SidePanelState = {
 
 /** What the panel and its toggle draw, and their presses. */
 export interface SidePanelControl {
-  /** Whether the panel is drawn: open, and its strip holding a tab or it asked for with none. */
+  /** Whether the panel is drawn: open, and its strip holding a tab; never with nothing in it. */
   open: boolean;
+  /** Whether the toggle or ⌘T asked, with nothing to show, for the "+" menu, which hangs from the toggle rather than an empty panel. */
+  toggleAsked: boolean;
   /** Whether the open panel fills the work column in the document's place: asked for, or the only way a narrow room holds it. */
   fullScreen: boolean;
   /** Whether the room holds the open panel only full screen, as a narrow one does: it has no edge to resize it and no full-screen button, and leaving full screen shuts it. */
@@ -696,8 +698,10 @@ export interface SidePanelControl {
   /** Shows or hides the panel as asked, as a task being started does; hiding it leaves full screen too. */
   onSetOpen: (open: boolean) => void;
   onToggleFullScreen: () => void;
-  /** Shows the panel, where it was hidden, and asks its "+" to open its menu, as ⌘T does. */
+  /** Shows the panel, where it was hidden, and asks its "+" to open its menu, as ⌘T does; with nothing to show, asks the menu at the toggle instead. */
   onNewTab: () => void;
+  /** Says the "+" menu asked at the toggle was drawn, or is let go. */
+  onToggleAskedAnswered: () => void;
   /** Says the "+" opened its menu on the ask. */
   onNewTabAnswered: () => void;
   /** Shows the panel on the tab, opening it at the strip's end where the strip does not draw it, and choosing it where it does; a fixed tab stays open on that task. */
@@ -1798,7 +1802,9 @@ function readStored(): HeldState {
       onSome: (earlier): SidePanelState => ({ ...earlier, tabs: SIDE_PANEL_TABS }),
     }),
   );
-  return settled(stored);
+  const held = settled(stored);
+  // Note that a panel kept open with no tab to show restores shut, since it is never shown with nothing in it.
+  return held.open && held.tab === undefined ? { ...held, open: false } : held;
 }
 
 /**
@@ -1889,8 +1895,8 @@ export function useSidePanel(
   const [moved, setMoved] = useState<HeldState | undefined>(undefined);
   const [fullScreen, setFullScreen] = useState(false);
   const [newTabAsked, setNewTabAsked] = useState(false);
-  // The plan, or the agent's page, the panel was shown on with no tab, by ⌘T or the toggle.
-  const [emptyShownOn, setEmptyShownOn] = useState<string | undefined>(undefined);
+  // The plan, or the agent's page, whose toggle or ⌘T asked for the "+" menu with nothing to show, which hangs from the toggle.
+  const [toggleAskedOn, setToggleAskedOn] = useState<string | undefined>(undefined);
   const [seen, setSeen] = useState<OpenTask>(task);
   // The tab a pin or a notification asked for, while it is still the one chosen.
   const [asked, setAsked] = useState<{ task: string; tab: SidePanelTab } | undefined>(undefined);
@@ -1986,10 +1992,10 @@ export function useSidePanel(
 
   const strip = useMemo(() => stripOf(state, drawn), [state, drawn]);
   // Open is the window's, so a plan whose strip is empty hides the panel
-  // without forgetting it was open while the plan stands. The Inbox with
-  // nothing chosen has no task, so it is never shown empty there.
-  const shown =
-    state.open && (strip.length > 0 || (taskId !== undefined && emptyShownOn === taskId));
+  // without forgetting it was open while the plan stands, and shows it
+  // again once a tab lands there, as a task's reads do. The panel is never
+  // shown with nothing in it.
+  const shown = state.open && strip.length > 0;
   // Note that a plan left while the panel stood hidden by its empty strip
   // shuts it, so the next plan with a tab does not show it unasked: it opens
   // again only when something is opened into it or its toggle is pressed.
@@ -2010,29 +2016,32 @@ export function useSidePanel(
   }
   // A panel shut, by its toggle or by its last tab closing, or hidden by a
   // plan with no tab, shows again beside the document and with no ask of
-  // its "+" standing; one shut, or whose plan was left, is shown empty only
-  // when asked again.
+  // its "+" standing; an ask at the toggle stands only on the plan it was
+  // made on, and only until something is shown.
   if (!shown && (fullScreen || newTabAsked)) {
     setFullScreen(false);
     setNewTabAsked(false);
   }
-  if (emptyShownOn !== undefined && (!state.open || emptyShownOn !== taskId)) {
-    setEmptyShownOn(undefined);
+  if (toggleAskedOn !== undefined && (shown || toggleAskedOn !== taskId)) {
+    setToggleAskedOn(undefined);
   }
 
-  // Note that showing a strip with no tab shows the panel empty, offering
-  // in place what its "+" does, since there is nothing of the plan's to
-  // show: the plan's page chooses a tab first (`useTasksTab`).
+  // Note that the toggle with nothing to show asks for the "+" menu at the
+  // toggle rather than showing the panel empty, and a pick from it opens the
+  // panel on what it names (`onChoose`): the plan's page reopens a tab first
+  // where one was closed (`useTasksTab`).
   const onToggle = useCallback(() => {
     setFullScreen(false);
     setNewTabAsked(false);
     if (shown) {
       update((held) => ({ ...held, open: false }));
-      setEmptyShownOn(undefined);
+      return;
+    }
+    if (strip.length === 0) {
+      setToggleAskedOn((was) => (was === taskId ? undefined : taskId));
       return;
     }
     update((held) => (held.open ? held : { ...held, open: true }));
-    if (strip.length === 0) setEmptyShownOn(taskId);
   }, [update, shown, strip.length, taskId]);
   const onSetOpen = useCallback(
     (open: boolean) => {
@@ -2040,7 +2049,7 @@ export function useSidePanel(
       if (open) return;
       setFullScreen(false);
       setNewTabAsked(false);
-      setEmptyShownOn(undefined);
+      setToggleAskedOn(undefined);
     },
     [update],
   );
@@ -2051,11 +2060,15 @@ export function useSidePanel(
     else setFullScreen((was) => !was);
   }, [narrow, onSetOpen]);
   const onNewTab = useCallback(() => {
+    if (strip.length === 0) {
+      setToggleAskedOn(taskId);
+      return;
+    }
     update((held) => (held.open ? held : { ...held, open: true }));
-    setEmptyShownOn(taskId);
     setNewTabAsked(true);
-  }, [update, taskId]);
+  }, [update, strip.length, taskId]);
   const onNewTabAnswered = useCallback(() => setNewTabAsked(false), []);
+  const onToggleAskedAnswered = useCallback(() => setToggleAskedOn(undefined), []);
   const onChoose = useCallback(
     (tab: SidePanelTab) => {
       if (tab === SIDE_PANEL_TAB.INBOX) return;
@@ -2277,6 +2290,8 @@ export function useSidePanel(
     fullScreenOnly: shown && narrow,
     newTabAsked: shown && newTabAsked,
     onToggle,
+    toggleAsked: toggleAskedOn !== undefined && toggleAskedOn === taskId && !shown,
+    onToggleAskedAnswered,
     onSetOpen,
     onToggleFullScreen,
     onNewTab,
