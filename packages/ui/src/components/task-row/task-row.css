@@ -7,17 +7,23 @@
    plan's line reaches its page's; an add still out stands muted until its
    row draws.
 
-   The ⋯ keeps no column, so the list's last column, the time on the Tasks
-   page, ends at the row's end inset. It stands out of the row's columns in
-   its end inset, centred on the row's middle, and comes in there while the
-   row is in hand, holds the keyboard, or has its menu open (`row-menu.css`
-   fades it), as a `ListRow`'s acts do. Note that the cells after the name
-   step aside by the ⋯'s room rather than going under it, on transform
-   alone, so a chip there, an assignee or a related task's kind, stays where
-   a press reaches it, and the name is cut that much sooner, so nothing runs
-   under the cells that moved. A screen with no hover never has a row in
-   hand, so there the ⋯ stands at rest and the cells stay aside. At rest
-   the ⋯ takes no press, so a press at the row's end opens the task. */
+   The ⋯ stands out of the row's columns in its end inset, centred on the
+   row's middle, and comes in there while the row is in hand, holds the
+   keyboard, or has its menu open (`row-menu.css` fades it), as a
+   `NavItem`'s and a `ListRow`'s acts do, nothing else in the row moving.
+   Where the row's last cell only says something, the time on the Tasks
+   page, the ⋯ keeps no column, so that cell ends at the row's end inset,
+   and gives way under the ⋯ by its opacity while it stands (`data-under-
+   more`); where the last cell holds a control, or the name is the last, the
+   list keeps the ⋯ a narrow column of its own (`taskRowColumns`), so
+   neither is ever covered. Note that the cell gives way by its opacity,
+   never its visibility, so a reader reaching the row still hears it, and
+   takes no press while it is gone, so a press there is the ⋯'s. A screen
+   with no hover never has a row in hand, so there the ⋯ stands at rest,
+   and, where it would stand over the last cell, the cells after the name
+   step aside for it on transform alone, rather than that cell standing
+   hidden for good. At rest the ⋯ takes no press, so a press at the row's
+   end opens the task. */
 
 @layer components {
   .luke-task-row:has(:focus-visible),
@@ -42,26 +48,12 @@
     pointer-events: none;
   }
 
-  .luke-task-row-after {
-    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
+  .luke-task-row-cell[data-under-more="true"] {
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-task-row:is(:has(:focus-visible), [data-menu-open="true"]) .luke-task-row-more {
     pointer-events: auto;
-  }
-
-  .luke-task-row:is(:has(:focus-visible), [data-menu-open="true"]):has(
-      .luke-task-row-more:not(:empty)
-    )
-    .luke-task-row-after {
-    transform: translateX(var(--luke-task-row-aside));
-  }
-
-  .luke-task-row:is(:has(:focus-visible), [data-menu-open="true"]):has(
-      .luke-task-row-more:not(:empty)
-    )
-    > [data-cell="name"] {
-    padding-inline-end: var(--luke-task-row-more-room);
   }
 
   @media (hover: hover) {
@@ -69,25 +61,35 @@
       pointer-events: auto;
     }
 
-    .luke-task-row:hover:has(.luke-task-row-more:not(:empty)) .luke-task-row-after {
-      transform: translateX(var(--luke-task-row-aside));
-    }
-
-    .luke-task-row:hover:has(.luke-task-row-more:not(:empty)) > [data-cell="name"] {
-      padding-inline-end: var(--luke-task-row-more-room);
+    .luke-task-row:is(:hover, :has(:focus-visible), [data-menu-open="true"]):has(
+        .luke-task-row-more:not(:empty)
+      )
+      > .luke-task-row-cell[data-under-more="true"] {
+      opacity: 0;
+      pointer-events: none;
     }
   }
 
   @media (hover: none) {
+    .luke-task-row-after {
+      transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
+    }
+
     .luke-task-row-more {
       pointer-events: auto;
     }
 
-    .luke-task-row:has(.luke-task-row-more:not(:empty)) .luke-task-row-after {
+    .luke-task-row:has(.luke-task-row-more:not(:empty)):has(
+        > .luke-task-row-cell[data-under-more="true"]
+      )
+      .luke-task-row-after {
       transform: translateX(var(--luke-task-row-aside));
     }
 
-    .luke-task-row:has(.luke-task-row-more:not(:empty)) > [data-cell="name"] {
+    .luke-task-row:has(.luke-task-row-more:not(:empty)):has(
+        > .luke-task-row-cell[data-under-more="true"]
+      )
+      > [data-cell="name"] {
       padding-inline-end: var(--luke-task-row-more-room);
     }
   }
