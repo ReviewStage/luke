@@ -30,7 +30,7 @@ import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { sameTab } from "@luke/ui/tab-strip-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { Schema } from "effect";
-import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
+import { ChevronsRightIcon, ListIcon } from "lucide-react";
 import {
   type ReactNode,
   useCallback,
