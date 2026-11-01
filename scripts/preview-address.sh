@@ -43,12 +43,14 @@ set -euo pipefail
 #   5  PROTECTED: the preview answers only to a Vercel session
 #   6  NOT_READY: no record settled within the wait
 #   7  UNREADABLE: gh, git, or curl would not answer
+#   8  NOT_REQUESTED: an agent's branch whose pull request asks for no preview
 
 EXIT_NOT_AFFECTED=3
 EXIT_NOT_BUILT=4
 EXIT_PROTECTED=5
 EXIT_NOT_READY=6
 EXIT_UNREADABLE=7
+EXIT_NOT_REQUESTED=8
 
 # Vercel's own words on a build its ignoreCommand skipped, compared whole.
 SKIPPED_DESCRIPTION="Skipped - Not affected"
@@ -58,6 +60,10 @@ IGNORED_STATUS="success: Canceled by Ignored Build Step"
 PREVIEW_ENVIRONMENT=Preview
 SSO_HOST=vercel.com
 SSO_PATH=/sso-api
+# An agent's branch builds a preview only while its pull request carries this
+# label (`vercel.json`'s `git.deploymentEnabled`, `.github/workflows/preview.yml`).
+AGENT_BRANCH_PREFIX=luke/
+PREVIEW_LABEL=preview
 # The deployed tree is whatever the deployment's ignoreCommand diffs, read
 # from its script so the two cannot drift apart.
 VERCEL_IGNORE="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/vercel-ignore.sh"
@@ -115,6 +121,18 @@ read_status() {
 
 field() {
     printf '%s' "$1" | jq -r ".$2"
+}
+
+# Whether a preview of the branch is built at all: any branch but an agent's
+# is built on every push, and an agent's only while its open pull request has
+# the label. Note that a read that fails counts as asked, so the wait goes on
+# as it did before agent branches stopped building.
+preview_requested() {
+    local labels
+    [[ $branch == "$AGENT_BRANCH_PREFIX"* ]] || return 0
+    labels=$(gh api "repos/$repo/pulls?head=${repo%%/*}:$branch&state=open&per_page=1" \
+        --jq '[.[0].labels[]?.name] | join(" ")' 2>/dev/null) || return 0
+    [[ " $labels " == *" $PREVIEW_LABEL "* ]]
 }
 
 # Whether the address redirects a stranger to Vercel's SSO.
@@ -187,6 +205,10 @@ read_preview() {
             if [[ $vercel_status == "$IGNORED_STATUS" ]]; then
                 printf 'preview: %s was skipped by the Ignored Build Step; nothing it deploys changed\n' "$sha" >&2
                 return
+            fi
+            if [[ -z $vercel_status ]] && ! preview_requested; then
+                printf 'NOT_REQUESTED: %s is an agent branch, which builds a preview only while its pull request has the %s label; add it, or pass --preview URL\n' "$branch" "$PREVIEW_LABEL" >&2
+                exit "$EXIT_NOT_REQUESTED"
             fi
             printf 'preview: waiting (no record yet for %s; Vercel says %s)\n' "$sha" "${vercel_status:-nothing}" >&2
         fi
