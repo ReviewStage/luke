@@ -9,6 +9,7 @@
 
 import { ConfigProvider, Effect, Layer, Logger } from "effect";
 import { FetchHttpClient } from "effect/http";
+import { settledTurnListener } from "./agents/coder-host/settled-turns.js";
 import { bearerCallersLayer } from "./auth/bearer-callers.js";
 import { webSqlClient } from "./db/sql-client.js";
 import { hostedEnvironment } from "./environment.js";
@@ -47,6 +48,14 @@ const webConfigProvider = ConfigProvider.layer(Effect.sync(() => ConfigProvider.
  */
 const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryLogger]);
 
+/** The one gated GitHub client of the instance, named once so every layer that reaches GitHub shares its gate. */
+const gatedGitHubClient = githubRateGate.pipe(
+  Layer.provide(Layer.merge(FetchHttpClient.layer, webSqlClient)),
+);
+
+/** The Luke GitHub App as the environment names it, named once so every layer that reaches it shares one. */
+const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment));
+
 /**
  * The services every web function's and every agent's effects run against. A
  * function reaches this layer only through its edge's runtime, so a service
@@ -62,6 +71,11 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  * `IntegrationConnect` is the one place each integration's connector UID and
  * allowlist are read, for the account routes that connect and disconnect an account and
  * the agents that read its tokens alike.
+ *
+ * `SettledTurnListener` is here because the store writer tells it of every
+ * coding agent turn it settles, on whichever function the settle ran: it
+ * counts the turn and hands the agent's final message to the agent that
+ * started it (`agents/coder-host/settled-turns.ts`).
  *
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's
  * public catalog is cached on the service, so one instance reads the catalog
@@ -95,10 +109,13 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  * that re-export a bundle stand, rather than out of the bundle itself.
  */
 export const webServices = Layer.mergeAll(
-  githubRateGate.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, webSqlClient))),
+  gatedGitHubClient,
   webSqlClient,
   hostedEnvironment,
-  githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)),
+  githubApp,
+  settledTurnListener.pipe(
+    Layer.provide(Layer.mergeAll(gatedGitHubClient, githubApp, hostedEnvironment)),
+  ),
   sentryAppFromEnvironment,
   integrationConnectFromEnvironment,
   webLogger,

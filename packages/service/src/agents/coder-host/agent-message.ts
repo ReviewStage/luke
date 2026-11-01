@@ -16,6 +16,7 @@ import { Effect, Option, Result, Schema } from "effect";
 import {
   ACTION_RESULT_STATUS,
   HOSTED_API_ERROR,
+  isRecord,
   MESSAGE_CHANNEL,
   type UnparsedWireValue,
   wireUuidSchema,
@@ -63,13 +64,23 @@ import { agentLineSender, steerAgent } from "./steer.js";
 const MESSAGE_FRAME_ROOM_CHARS = 1_000;
 
 /** The most characters a message's own words may spell. */
-const MAX_MESSAGE_WORDS_CHARS = AGENT_BOUNDS.MAX_MESSAGE_CHARS - MESSAGE_FRAME_ROOM_CHARS;
+export const MAX_MESSAGE_WORDS_CHARS = AGENT_BOUNDS.MAX_MESSAGE_CHARS - MESSAGE_FRAME_ROOM_CHARS;
 
-/** Why `message_agent` sent nothing, in words the model can act on. */
+/**
+ * Why `message_agent` sent nothing, in words the model can act on. Each
+ * refusal names one thing wrong and what to do about it: the id and the
+ * words are read apart, so a long report is never told to check its id.
+ */
 export const MESSAGE_AGENT_REFUSAL = {
-  UNREADABLE:
-    `Not sent: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered, and the message as text of at ` +
-    `most ${MAX_MESSAGE_WORDS_CHARS} characters.`,
+  UNREADABLE: "Not sent: pass an agentId and a text; nothing else is read.",
+  MALFORMED_ID:
+    `Not sent: agentId is not an agent's id; pass the id ${AGENT_TOOL.LIST_AGENTS} answered, ` +
+    "or the one a message from the agent closed with.",
+  EMPTY: "Not sent: the text is empty; say what to tell the agent.",
+  /** The message's own length, so the agent knows how much to cut. */
+  TOO_LONG: (length: number) =>
+    `Not sent: the text is ${length} characters, over the ${MAX_MESSAGE_WORDS_CHARS} one message ` +
+    "may spell; cut it to fit, or send it in parts.",
   SELF: "Not sent: that id is your own; message another agent.",
   NO_AGENT: `Not sent: no agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   ARCHIVED:
@@ -123,7 +134,28 @@ const MESSAGE_AGENT_INPUT = Schema.Struct({
   ),
 });
 
-const readMessage = Schema.decodeUnknownResult(MESSAGE_AGENT_INPUT);
+const readAgentId = Schema.decodeUnknownResult(wireUuidSchema);
+
+/**
+ * The call's id and words, each read apart so the refusal names the one
+ * that failed: a malformed id, empty words, or words over the bound, told
+ * with their length.
+ */
+function readMessage(
+  input: UnparsedWireValue,
+): Result.Result<{ readonly agentId: string; readonly text: string }, string> {
+  if (!isRecord(input) || typeof input.text !== "string") {
+    return Result.fail(MESSAGE_AGENT_REFUSAL.UNREADABLE);
+  }
+  const agentId = readAgentId(input.agentId);
+  if (Result.isFailure(agentId)) return Result.fail(MESSAGE_AGENT_REFUSAL.MALFORMED_ID);
+  const text = input.text.trim();
+  if (text.length === 0) return Result.fail(MESSAGE_AGENT_REFUSAL.EMPTY);
+  if (text.length > MAX_MESSAGE_WORDS_CHARS) {
+    return Result.fail(MESSAGE_AGENT_REFUSAL.TOO_LONG(text.length));
+  }
+  return Result.succeed({ agentId: agentId.success, text });
+}
 
 /** `message_agent` as a coding agent is offered it: its name, its words, and its input. */
 export const MESSAGE_AGENT_TOOL = {
@@ -176,9 +208,7 @@ export function runMessageAgent(
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AgentToolServices> {
   const asked = readMessage(input);
-  if (Result.isFailure(asked)) {
-    return Effect.succeed(agentToolRejected(MESSAGE_AGENT_REFUSAL.UNREADABLE));
-  }
+  if (Result.isFailure(asked)) return Effect.succeed(agentToolRejected(asked.failure));
   const { agentId, text } = asked.success;
   const { caller } = call;
   const sender = caller.agent;

@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@luke/database/core/query";
 import { settledTurnAgentKind } from "@luke/database/models/agent-store";
 import { type SettledAgentTurn, SettledTurnListener } from "@luke/database/models/writer";
 import { PULL_REQUEST_CHAPTERS_FAILURE } from "@luke/database/pull-request-chapters-vocabulary";
@@ -370,7 +371,7 @@ function turnDurationOf(ranMs: number): Values<typeof SERVER_TURN_DURATION> {
 }
 
 /**
- * Counts every agent turn the store writer settled, wherever it was settled:
+ * Counts an agent turn the store writer settled, wherever it was settled:
  * the relay's or a runner's own end, a lost runner's or ended session's, and
  * the sweep's abandon alike, since each is the one write that moved the turn
  * to its end and a repeat of it settles nothing. It is counted under the
@@ -378,29 +379,32 @@ function turnDurationOf(ranMs: number): Values<typeof SERVER_TURN_DURATION> {
  * automation's run counts under its owner. The agent's kind is read once the
  * request has answered, by then past any transaction the settle ran inside,
  * and only where the turn still stands ended, so a settle that transaction
- * rolled back is not counted.
+ * rolled back is not counted. The deployment's listener hears each turn
+ * here and hands it on to its starter beside
+ * (`../agents/coder-host/settled-turns.ts`).
  */
-const turnEndCounting = Layer.succeed(SettledTurnListener, {
-  heard: (turn) =>
-    recordServerEventOf(
-      SERVER_EVENT.TURN_END,
-      turn.userId,
-      Effect.map(
-        settledTurnAgentKind(turn.turnId),
-        Option.map((agentKind) => ({
-          outcome: turnOutcomeOf(turn),
-          duration: turnDurationOf(turn.ranMs),
-          agent_kind: agentKind,
-        })),
-      ),
+export function turnEndCounted(
+  turn: SettledAgentTurn,
+): Effect.Effect<void, never, DatabaseServices> {
+  return recordServerEventOf(
+    SERVER_EVENT.TURN_END,
+    turn.userId,
+    Effect.map(
+      settledTurnAgentKind(turn.turnId),
+      Option.map((agentKind) => ({
+        outcome: turnOutcomeOf(turn),
+        duration: turnDurationOf(turn.ranMs),
+        agent_kind: agentKind,
+      })),
     ),
-});
+  );
+}
 
-/** The deployment's analytics as `productAnalyticsOfEnvironment` posts them, with the store's settled turns counted through them. */
-export const productAnalyticsFromEnvironment = Layer.merge(
-  productAnalyticsOfEnvironment,
-  turnEndCounting,
-);
+/** A listener that counts the settled turns and nothing else, for a test over what an endpoint counted. */
+const turnEndCounting = Layer.succeed(SettledTurnListener, { heard: turnEndCounted });
+
+/** The deployment's analytics as `productAnalyticsOfEnvironment` posts them. */
+export const productAnalyticsFromEnvironment = productAnalyticsOfEnvironment;
 
 /**
  * Analytics that keeps what it was handed rather than posting it, for a test

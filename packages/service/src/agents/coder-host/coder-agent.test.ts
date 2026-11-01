@@ -884,7 +884,7 @@ test("an operator's instructions are the golden's, byte for byte: its own job an
     "Never address a thread to anyone but the developer: your threads are theirs alone",
     "Report each action you took unasked as a line of its own in your reply",
     "ask the developer in a thread",
-    `reports back to you with \`${CODER_TOOL.MESSAGE_AGENT}\``,
+    "reports back to you: once its turn ends, its final message reaches you by itself",
     `Your heartbeat is an automation of the developer's, Luke's heartbeat, that hands you a turn twice each weekday`,
     `you change it with \`${CODER_TOOL.UPDATE_AUTOMATION}\`, such as its hours, or run it with \`${CODER_TOOL.RUN_AUTOMATION}\`, only when the developer asks`,
     "## Your opening",
