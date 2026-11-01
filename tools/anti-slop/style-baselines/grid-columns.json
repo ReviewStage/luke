@@ -1,0 +1,22 @@
+{
+  "apps/catalog/src/catalog.css": 4,
+  "apps/web/src/admin/screens/animations.tsx": 1,
+  "packages/panel/src/actor-ref.tsx": 1,
+  "packages/panel/src/desktop/section-icon-picker.tsx": 1,
+  "packages/panel/src/picture-block.tsx": 1,
+  "packages/panel/src/tasks/attachment-viewer.tsx": 3,
+  "packages/ui/src/components/auth-page/auth-mark.tsx": 1,
+  "packages/ui/src/components/auth-page/auth-page.tsx": 1,
+  "packages/ui/src/components/avatar/avatar.tsx": 1,
+  "packages/ui/src/components/button/button.tsx": 1,
+  "packages/ui/src/components/chip/chip.tsx": 1,
+  "packages/ui/src/components/group-header/group-header.tsx": 4,
+  "packages/ui/src/components/list-row/list-row.tsx": 1,
+  "packages/ui/src/components/menu/menu.tsx": 1,
+  "packages/ui/src/components/nav-item/nav-item.tsx": 1,
+  "packages/ui/src/components/picture-set/picture-set.tsx": 2,
+  "packages/ui/src/components/settings-row/settings-row.tsx": 1,
+  "packages/ui/src/components/sidebar/sidebar.tsx": 1,
+  "packages/ui/src/components/task-row/task-row.tsx": 1,
+  "packages/ui/src/components/video-player/video-player.tsx": 1
+}

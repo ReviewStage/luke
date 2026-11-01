@@ -225,6 +225,13 @@ describe("a stylesheet", () => {
     ).toEqual([STYLE_RULE.BAR_CORNER]);
   });
 
+  it("refuses a grid placing its items with no columns named, and passes one naming them", () => {
+    const sheet = `.room { display: grid; place-items: center; }
+      .named { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; }
+      .inline { display: inline-grid; place-items: center; }`;
+    expect(sheetRules(sheet)).toEqual([STYLE_RULE.GRID_COLUMNS]);
+  });
+
   it("reads the spacing rule in the panel's sheets alone", () => {
     const css = ".a { padding: 8px; }";
     expect(sheetRules(css, "packages/panel/src/styles/desktop.css")).toEqual([STYLE_RULE.SPACING]);
@@ -319,6 +326,13 @@ describe("a module's class strings", () => {
   it("reads a class list whose arbitrary value holds a character no class name has", () => {
     const source = `const a = <nav className="flex rounded-md [&>*+*]:before:content-['·']" />;`;
     expect(classRules(source)).toEqual([STYLE_RULE.RADIUS]);
+  });
+
+  it("refuses a grid placing its items with no columns named, and passes one naming them or drawn inline", () => {
+    const source = `const ROOM = "fixed inset-0 grid items-end justify-items-center";
+      const NAMED = "grid grid-cols-1 place-items-center";
+      const GLYPH = "inline-grid place-items-center";`;
+    expect(classRules(source)).toEqual([STYLE_RULE.GRID_COLUMNS]);
   });
 
   it("refuses a radius beside a bar's own class", () => {

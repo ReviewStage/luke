@@ -24,6 +24,7 @@ export const STYLE_RULE = {
   CRUMB_WIDTH: "crumb-width",
   HAS_OVER_ANY: "has-over-any",
   BAR_CORNER: "bar-corner",
+  GRID_COLUMNS: "grid-columns",
 } as const;
 export type StyleRule = (typeof STYLE_RULE)[keyof typeof STYLE_RULE];
 
@@ -85,6 +86,11 @@ export const STYLE_RULES: Readonly<
     refuses:
       "a path's crumb drawn wider than its words: a `min-width` above zero, or a share of the room with no `max-width: max-content` on the sheet's crumbs, stands a gap before the next chevron",
     backlog: false,
+  },
+  [STYLE_RULE.GRID_COLUMNS]: {
+    refuses:
+      "a grid that places its items (`place-items-*`, `justify-items-*`) and names no columns: its one `auto` column grows to its item's widest line, so a card or a sheet centred in it stands off the screen's edge on a phone",
+    backlog: true,
   },
 };
 
@@ -649,6 +655,28 @@ function roundsBar(declaration: CssDeclaration, block: CssBlock, file: string): 
   return !(file === SHEET_CORNER_FILE && SHEET_CORNER_VALUE.test(declaration.value.trim()));
 }
 
+/** What places a grid's items along its columns, which an `auto` column grows under. */
+const ITEMS_PLACEMENT = /^(?:place|justify)-items$/u;
+
+/** What names a grid's columns. */
+const COLUMNS_NAMED = /^grid(?:-template(?:-columns)?)?$/u;
+
+/**
+ * The `display: grid` of a block that places its items and names no
+ * columns, whose one `auto` column grows to its widest item; none elsewhere.
+ */
+function autoColumnGrid(block: CssBlock): CssDeclaration | undefined {
+  const display = block.declarations.find(
+    (declaration) => declaration.property === "display" && declaration.value.trim() === "grid",
+  );
+  if (display === undefined) return undefined;
+  const places = block.declarations.some((declaration) =>
+    ITEMS_PLACEMENT.test(declaration.property),
+  );
+  const named = block.declarations.some((declaration) => COLUMNS_NAMED.test(declaration.property));
+  return places && !named ? display : undefined;
+}
+
 function cssRuleOf(declaration: CssDeclaration, block: CssBlock): StyleRule | undefined {
   const { property, value } = declaration;
   const bare = bareValue(value);
@@ -781,6 +809,25 @@ export function isClassList(text: string): boolean {
   );
 }
 
+/** A utility placing a grid's items along its columns. */
+const ITEMS_UTILITY = /^(?:place|justify)-items-/u;
+
+/**
+ * The grid's own classes where a class list lays a block grid that places
+ * its items and names no columns; none elsewhere. Note that a grid drawn
+ * inline is sized by what it holds, so only a block grid's column can
+ * outgrow its box.
+ */
+function autoColumnClasses(tokens: readonly string[]): string | undefined {
+  const utilities = tokens.map(utilityOf);
+  const grid = (utility: string) => utility === "grid" || ITEMS_UTILITY.test(utility);
+  if (!utilities.includes("grid") || !utilities.some((utility) => ITEMS_UTILITY.test(utility))) {
+    return undefined;
+  }
+  if (utilities.some((utility) => utility.startsWith("grid-cols-"))) return undefined;
+  return tokens.filter((_, index) => grid(utilities[index] ?? "")).join(" ");
+}
+
 function classViolations(
   classes: string,
   line: number,
@@ -790,6 +837,8 @@ function classViolations(
   const violations: StyleViolation[] = [];
   const tokens = classes.split(/\s+/u).filter((token) => token.length > 0);
   const bar = tokens.some((token) => BAR_CLASS.test(`.${token}`));
+  const grid = autoColumnClasses(tokens);
+  if (grid !== undefined) violations.push({ rule: STYLE_RULE.GRID_COLUMNS, line, excerpt: grid });
   for (const token of tokens) {
     const rule = classRuleOf(token, names);
     if (rule !== undefined) violations.push({ rule, line, excerpt: token });
@@ -884,6 +933,14 @@ export function styleViolations(
           rule: STYLE_RULE.HAS_OVER_ANY,
           line: block.line,
           excerpt: selectorOf(block),
+        });
+      }
+      const grid = autoColumnGrid(block);
+      if (grid !== undefined) {
+        violations.push({
+          rule: STYLE_RULE.GRID_COLUMNS,
+          line: grid.line,
+          excerpt: `${selectorOf(block)} { display: grid }`,
         });
       }
       for (const declaration of block.declarations) {
