@@ -23,6 +23,8 @@ const BRANCH = "luke/rebased";
 
 /** The script's own exit for a commit no build serves the deployed tree of. */
 const EXIT_NOT_AFFECTED = 3;
+/** The script's own exit for a commit whose record never settled within the wait. */
+const EXIT_NOT_READY = 6;
 /** The script's own exit for a read of GitHub that failed. */
 const EXIT_UNREADABLE = 7;
 /** The script's own exit for an agent's branch no preview was asked for. */
@@ -201,7 +203,10 @@ async function rebasedBranch(t: TestContext, webBeforeRebase: string): Promise<F
   return { checkout, answers, bin, earlier, between, head };
 }
 
-function previewAddress(fixture: Fixture): { status: number | null; address: string } {
+function previewAddress(
+  fixture: Fixture,
+  attempts = 1,
+): { status: number | null; address: string } {
   const ran = spawnSync("bash", ["scripts/preview-address.sh", "--repo", REPOSITORY], {
     cwd: fixture.checkout,
     encoding: "utf8",
@@ -211,7 +216,8 @@ function previewAddress(fixture: Fixture): { status: number | null; address: str
       GIT_CONFIG_NOSYSTEM: "1",
       FAKE_GH_ANSWERS: fixture.answers,
       PREVIEW_ADDRESS_INTERVAL_SECONDS: "0",
-      PREVIEW_ADDRESS_ATTEMPTS: "1",
+      PREVIEW_ADDRESS_ATTEMPTS: String(attempts),
+      PREVIEW_ADDRESS_QUIET_ATTEMPTS: "2",
     },
   });
   return { status: ran.status, address: ran.stdout.trim() };
@@ -282,7 +288,9 @@ test("an earlier head redeployed and failed still resolves to its first build, w
   });
 });
 
-test("an agent's branch no preview was asked for stops at once rather than waiting on a build that never starts", async (t) => {
+test("an agent's branch Vercel stays quiet on is taken as never asked for, after a grace that lets a just-asked preview show up", async (t) => {
   const fixture = await rebasedBranch(t, "web v1\n");
-  assert.equal(previewAddress(fixture).status, EXIT_NOT_REQUESTED);
+  answer(fixture.answers, `repos/${REPOSITORY}/commits/${fixture.head}/status`, { statuses: [] });
+  assert.equal(previewAddress(fixture, 1).status, EXIT_NOT_READY);
+  assert.equal(previewAddress(fixture, 2).status, EXIT_NOT_REQUESTED);
 });
