@@ -6,6 +6,7 @@ import {
   readVisibleAgent,
   taskNamesOf,
 } from "@luke/database/models/agent-store";
+import { AGENT_BOUNDS } from "@luke/features/agent-wire";
 import { describeWire } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { type UnparsedWireValue, wireUuidSchema } from "../core.js";
@@ -19,22 +20,31 @@ import type { StoreFailure } from "../http/store-failure.js";
  * agents too, each marked, since an agent may need to know one stands, and
  * names each agent's task by its name, read once
  * for the lot; it is narrowed to one task by the id a listed agent's task
- * answered, or to the caller's own. Every read is on the account's own
+ * answered, or to the caller's own, or searched by words of an agent's
+ * title or its task's name. The agents the caller works beside come first,
+ * the agent that started it and the agents it started, then those on its
+ * task, as the store orders them (`agent-store.ts`'s `around`), and the
+ * rest newest first, a page at a time: a list cut at its bound says so with
+ * the offset of the next page, so a caller is never left with a silent cut.
+ * Every read is on the account's own
  * standing: a workspace it is not in has no agents, and an agent of another
  * workspace, even one the account is also in, is none of these.
  */
 
-/** The most agents a list answers, the newest started first. */
+/** The most agents a list answers at once, the caller's own first and then the newest started first. */
 export const WORKSPACE_AGENTS_LIST_LIMIT = 50;
 
 /** Why a list's filter read as nothing to list by, in words the model can act on. */
 export const AGENT_LIST_FILTER_REFUSAL = {
+  UNREADABLE:
+    "Not run: narrow the list by a taskId, by thisTask, or by words of an agent's title or its " +
+    `task's name of at most ${AGENT_BOUNDS.MAX_SEARCH_CHARS} characters, and page it by an offset of 0 or more.`,
   BOTH: "Not run: narrow the list by taskId or by thisTask, not both.",
   NO_OWN_TASK:
     "Not run: you work on no task, so thisTask names none; leave it out to list the whole workspace.",
 } as const;
 
-/** The filters a list takes: one task by its id, or the caller's own task. */
+/** The filters a list takes: one task by its id, or the caller's own task, words to search by, and the page to read. */
 export const AGENT_LIST_INPUT = Schema.Struct({
   taskId: Schema.optionalKey(
     describeWire(
@@ -48,6 +58,20 @@ export const AGENT_LIST_INPUT = Schema.Struct({
       "true for only the agents on the task you work on; leave it out for the whole workspace.",
     ),
   ),
+  words: Schema.optionalKey(
+    describeWire(
+      Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(AGENT_BOUNDS.MAX_SEARCH_CHARS)),
+      "Only the agents whose title or task's name holds each of these words, whatever their " +
+        "case, to search the workspace by; leave it out for every agent.",
+    ),
+  ),
+  offset: Schema.optionalKey(
+    describeWire(
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      "How many of the matching agents to pass over: the nextOffset an earlier list answered, " +
+        "to read the next page; leave it out for the first.",
+    ),
+  ),
 });
 
 const readFilter = Schema.decodeUnknownResult(AGENT_LIST_INPUT);
@@ -58,48 +82,79 @@ export interface AgentTask {
   readonly name: string;
 }
 
-/** A list of a workspace's agents, and the task each stands on. */
+/** A page of a workspace's agents, the task each stands on, and the offset of the next page where the list was cut. */
 export interface WorkspaceAgents {
   readonly agents: readonly Agent[];
   readonly taskOf: (agent: Agent) => AgentTask | null;
+  readonly nextOffset: number | null;
+}
+
+/** What a list's input narrows it to: one task where it names one, words to search by, and the page to read. */
+export interface AgentListFilter {
+  readonly taskId: string | undefined;
+  readonly words: string | undefined;
+  readonly offset: number;
 }
 
 /**
- * The task a list's input narrows it to, given the task the caller works
- * on: none for the whole workspace, or a refusal where the input does not
- * read, names both, or asks for an own task the caller has not got.
+ * What a list's input narrows it to, given the task the caller works on:
+ * the whole workspace where it names nothing, or a refusal where the input
+ * does not read, names a task both ways, or asks for an own task the caller
+ * has not got.
  */
-export function listedTask(
+export function listedFilter(
   input: UnparsedWireValue,
   ownTask: string | null,
-): Result.Result<string | undefined, string | undefined> {
+): Result.Result<AgentListFilter, string> {
   const read = readFilter(input);
-  if (Result.isFailure(read)) return Result.fail(undefined);
-  const { taskId, thisTask } = read.success;
+  if (Result.isFailure(read)) return Result.fail(AGENT_LIST_FILTER_REFUSAL.UNREADABLE);
+  const { taskId, thisTask, words, offset } = read.success;
   if (taskId !== undefined && thisTask === true) {
     return Result.fail(AGENT_LIST_FILTER_REFUSAL.BOTH);
   }
-  if (thisTask !== true) return Result.succeed(taskId);
-  return ownTask === null
-    ? Result.fail(AGENT_LIST_FILTER_REFUSAL.NO_OWN_TASK)
-    : Result.succeed(ownTask);
+  if (thisTask === true && ownTask === null) {
+    return Result.fail(AGENT_LIST_FILTER_REFUSAL.NO_OWN_TASK);
+  }
+  return Result.succeed({
+    taskId: thisTask === true ? (ownTask ?? undefined) : taskId,
+    words,
+    offset: offset ?? 0,
+  });
 }
 
-/** The workspace's agents, archived ones among them, on the task named alone where one is, newest first and at most the list's bound, the one left out where `except` names one. */
+/**
+ * A page of the workspace's agents, archived ones among them, narrowed as
+ * the filter asks, the caller left out: the caller's starter and the agents
+ * it started first, then those on its task, then the rest, each newest
+ * first, at most the list's bound from the filter's offset, and the next
+ * page's offset where more stand.
+ */
 export const workspaceAgentsOf = (
   userId: string,
   workspaceId: string,
-  options: { readonly taskId?: string | undefined; readonly except?: string | undefined },
+  caller: Agent,
+  filter: AgentListFilter,
 ): Effect.Effect<WorkspaceAgents, StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
     const listed = yield* listWorkspaceAgents(userId, workspaceId, {
-      ...(options.taskId === undefined ? undefined : { taskId: options.taskId }),
+      ...(filter.taskId === undefined ? undefined : { taskId: filter.taskId }),
+      ...(filter.words === undefined ? undefined : { words: filter.words }),
       includeArchived: true,
+      except: caller.id,
+      around: {
+        agentId: caller.id,
+        taskId: caller.taskId,
+        startedByAgentId: caller.startedByAgentId,
+      },
+      offset: filter.offset,
+      // One past the bound tells whether a next page stands, without a count of its own.
       limit: WORKSPACE_AGENTS_LIST_LIMIT + 1,
     });
-    const agents = listed
-      .filter((agent) => agent.id !== options.except)
-      .slice(0, WORKSPACE_AGENTS_LIST_LIMIT);
+    const agents = listed.slice(0, WORKSPACE_AGENTS_LIST_LIMIT);
+    const nextOffset =
+      listed.length > WORKSPACE_AGENTS_LIST_LIMIT
+        ? filter.offset + WORKSPACE_AGENTS_LIST_LIMIT
+        : null;
     const names = yield* taskNamesOf(
       userId,
       agents.flatMap((agent) => agent.taskId ?? []),
@@ -108,7 +163,7 @@ export const workspaceAgentsOf = (
       const named = agent.taskId === null ? undefined : names.get(agent.taskId);
       return agent.taskId === null || named === undefined ? null : { id: agent.taskId, ...named };
     };
-    return { agents, taskOf };
+    return { agents, taskOf, nextOffset };
   });
 
 /**

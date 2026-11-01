@@ -174,7 +174,7 @@ import {
   type AgentTask,
   type AgentTaskReading,
   agentTaskOf,
-  listedTask,
+  listedFilter,
   taskReading,
   WORKSPACE_AGENTS_LIST_LIMIT,
   workspaceAgent,
@@ -221,8 +221,10 @@ import {
  * refusal lists and `list_models` answers from the same read, so a choice it
  * lists is one a start takes, with its checkout cloned at the branch named
  * where one is, which GitHub must hold. An agent a
- * coding agent starts is told in that note which agent started it and how
- * to report back, with `message_agent`, and its choice leaves the member's default as it stood.
+ * coding agent starts is told in that note which agent started it, that its
+ * final message reaches that agent by itself once its turn ends
+ * (`coder-host/starter-report.ts`), and how to reach it before then, with
+ * `message_agent`, and its choice leaves the member's default as it stood.
  * A start may name a new task instead, which is made as the member the
  * caller acts for would make it from the sidebar: in the caller's workspace,
  * owned by that member, with an empty plan, on the repository the caller
@@ -298,7 +300,6 @@ const AGENT_TOOL_BOUNDS = {
 /** Why a call ran nothing, or sent nothing, in words the model can act on. */
 export const AGENT_TOOL_REFUSAL = {
   UNREADABLE: `Not run: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered.`,
-  UNREADABLE_FILTER: "Not run: narrow the list by a taskId, by thisTask, or by neither.",
   UNREADABLE_TASKS:
     "Not run: narrow the tasks by words of their name, by a status " +
     `(${Object.values(TASK_STATUS).join(", ")}), and by an assignee as a member's mention link ` +
@@ -806,9 +807,13 @@ export const LIST_AGENTS_TOOL = {
     "sandbox is on if a turn " +
     "has ended, one line of what it last did, its task (id and name; null for " +
     "an agent on no task) and whether that is the task you work on, and whether the agent is " +
-    "archived, and its mention, the `[@title](link)` to name it by in your words, " +
-    `the newest started first and at most ${WORKSPACE_AGENTS_LIST_LIMIT}. Pass thisTask ` +
-    "for only your task's agents, or a taskId for another task's. Call it to find the agent you " +
+    "archived, and its mention, the `[@title](link)` to name it by in your words. The agents " +
+    "that matter to you come first: the agent that started you and the agents you started, " +
+    "then those on your task; then the rest of the workspace, the newest started first, at most " +
+    `${WORKSPACE_AGENTS_LIST_LIMIT} a page, with nextOffset where more stand, which offset ` +
+    "reads the next page by. Pass words to search the whole workspace by words of an agent's " +
+    "title or its task's name, thisTask for only your task's agents, or a taskId for another " +
+    "task's. Call it to find the agent you " +
     "or the developer mean. Failed covers a session that ended for good, which no message " +
     "reaches again: tell the developer, or start a new agent to go on from its work. An agent " +
     "still running long after its last activity may have lost its session; a message to it " +
@@ -1411,16 +1416,20 @@ function agentIntroduction(agent: Agent): string {
 
 /**
  * The note an agent a coding agent starts is handed: which agent started it,
- * that it reports back with `message_agent` by that agent's id, as every
- * word between two agents goes (`coder-host/agent-message.ts`), and that
- * the threads the developer reads are its starter's to post, so what it
- * would post in one goes to its starter, who relays what the developer must
- * see, then the note it was given.
+ * that its final message reaches that agent by itself once its turn ends
+ * (`coder-host/starter-report.ts`), that it messages it before then with
+ * `message_agent` by that agent's id, as every word between two agents goes
+ * (`coder-host/agent-message.ts`), and that the threads the developer reads
+ * are its starter's to post, so what it would post in one goes to its
+ * starter, who relays what the developer must see, then the note it was
+ * given.
  */
 function startedByNote(starter: Agent, note: string | undefined): string {
   const lead =
     `You were started by another agent of your workspace, ${agentIntroduction(starter)}, ` +
-    `not by the developer. To report back to it, call ${AGENT_TOOL.MESSAGE_AGENT} with its agentId, ${starter.id}. ` +
+    "not by the developer. Your final message reaches it by itself once your turn ends, so make " +
+    "that message your report: what you did, what you published, and what you need of it. To " +
+    `reach it before then, call ${AGENT_TOOL.MESSAGE_AGENT} with its agentId, ${starter.id}. ` +
     "Threads to the developer are that agent's to post: post none yourself, and send that agent what " +
     "you would have posted in one instead, a pull request ready for review, a decision, a question, " +
     "or something only the developer can do by hand.";
@@ -1497,27 +1506,25 @@ function readingRecord(reading: AgentReading): WireRecord {
   return { ...reading, task: reading.task === null ? null : { ...reading.task } };
 }
 
-/** One call of `list_agents`: every agent of the caller's workspace, or of one task of it, the calling agent left out, archived ones marked, newest first. */
+/** One call of `list_agents`: a page of the agents of the caller's workspace, or of one task of it, or those the words name, the calling agent left out, archived ones marked, the caller's own first and then the newest, and the next page's offset where more stand. */
 export function runListAgents(
   call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AgentToolServices> {
   const { caller } = call;
   const ownTask = callerTask(caller);
-  const narrowed = listedTask(input, ownTask);
-  if (Result.isFailure(narrowed)) {
-    return Effect.succeed(
-      agentToolRejected(narrowed.failure ?? AGENT_TOOL_REFUSAL.UNREADABLE_FILTER),
-    );
-  }
+  const narrowed = listedFilter(input, ownTask);
+  if (Result.isFailure(narrowed)) return Effect.succeed(agentToolRejected(narrowed.failure));
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(caller);
       if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
-      const { agents, taskOf } = yield* workspaceAgentsOf(callerUserId(caller), workspace.value, {
-        taskId: narrowed.success,
-        except: caller.agent.id,
-      });
+      const { agents, taskOf, nextOffset } = yield* workspaceAgentsOf(
+        callerUserId(caller),
+        workspace.value,
+        caller.agent,
+        narrowed.success,
+      );
       const standing = yield* standingsOf(agents);
       const offered = yield* offeredModels;
       const step = yield* workspaceStepOf(callerUserId(caller), workspace.value);
@@ -1530,7 +1537,11 @@ export function runListAgents(
           step,
         ),
       );
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, agents: readings.map(readingRecord) };
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        agents: readings.map(readingRecord),
+        nextOffset,
+      };
     }),
   );
 }

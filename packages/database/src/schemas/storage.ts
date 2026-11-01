@@ -340,11 +340,10 @@ export const turns = pgTable(
     cancelRequestKey: text("cancel_request_key"),
     /**
      * The coding agent whose `stop_agent`, or whose Start continuing this
-     * turn's agent, made the Stop, written with `cancel_requested_at`, so the
-     * agent's starter is not told of a Stop it made itself
-     * (`starter-notices.ts`). Null for a Stop the developer pressed or Luke
-     * made, and for none. Named by id and held to nothing, so the turn
-     * outlives that agent.
+     * turn's agent, made the Stop, written with `cancel_requested_at`, so a
+     * reader of the turn knows who stopped it. Null for a Stop the developer
+     * pressed or Luke made, and for none. Named by id and held to nothing,
+     * so the turn outlives that agent.
      */
     cancelRequestedBy: uuid("cancel_requested_by"),
     /** Whether Anthropic refused Fast for a step of the turn, which then ran at standard speed instead (`coder-host/model.ts`). */

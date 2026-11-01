@@ -1650,6 +1650,13 @@ function agentNamed(query: string): SQL | undefined {
   );
 }
 
+/** The agent a list is read around: the one asking, by its id, its task, and the agent that started it. */
+const AgentAroundSchema = Schema.Struct({
+  agentId: Schema.String,
+  taskId: Schema.NullOr(Schema.String),
+  startedByAgentId: Schema.NullOr(Schema.String),
+});
+
 const AgentsOfWorkspaceSchema = Schema.Struct({
   userId: Schema.String,
   organizationId: Schema.String,
@@ -1658,12 +1665,16 @@ const AgentsOfWorkspaceSchema = Schema.Struct({
   words: Schema.NullOr(Schema.String),
   includeArchived: Schema.Boolean,
   ownOnly: Schema.Boolean,
+  except: Schema.NullOr(Schema.String),
+  around: Schema.NullOr(AgentAroundSchema),
+  offset: Schema.Number,
   limit: Schema.Number,
 });
 
 /** The condition that an agent is one of the workspace's the account reaches, narrowed as the request asks. */
 function ofReachedWorkspace(request: typeof AgentsOfWorkspaceSchema.Type) {
-  const { userId, organizationId, repository, taskId, words, includeArchived, ownOnly } = request;
+  const { userId, organizationId, repository, taskId, words, includeArchived, ownOnly, except } =
+    request;
   return and(
     agentVisibleTo(userId),
     eq(AGENT_WORKSPACE, organizationId),
@@ -1671,11 +1682,36 @@ function ofReachedWorkspace(request: typeof AgentsOfWorkspaceSchema.Type) {
     includeArchived ? undefined : isNull(agentTable.archivedAt),
     taskId === null ? undefined : eq(agentTable.taskId, taskId),
     words === null ? undefined : agentNamed(words),
+    except === null ? undefined : ne(agentTable.id, except),
     // Note that a repository is matched as GitHub matches one, its case aside.
     repository === null
       ? undefined
       : eq(sql`lower(${agentTable.repository})`, repository.toLowerCase()),
   );
+}
+
+/** The condition that an agent is the asking agent's own: its starter, or one it started. */
+function ownOfAgent(around: typeof AgentAroundSchema.Type): SQL {
+  const started = eq(agentTable.startedByAgentId, around.agentId);
+  return around.startedByAgentId === null
+    ? started
+    : (or(started, eq(agentTable.id, around.startedByAgentId)) ?? started);
+}
+
+/**
+ * How a workspace's list is ordered: where the request names the agent
+ * asking, its starter and the agents it started first, then the agents on
+ * its task, and only then the rest of the workspace, each run newest
+ * started first; the newest first alone where it names none. So the agents
+ * an agent works beside are never pushed out of a list cut at its bound by
+ * every newer agent of the workspace, and its starter not even by its task.
+ */
+function workspaceListOrder(request: typeof AgentsOfWorkspaceSchema.Type): SQL[] {
+  const { around } = request;
+  if (around === null) return [desc(agentTable.createdAt), desc(agentTable.id)];
+  const onTask = around.taskId === null ? sql`false` : eq(agentTable.taskId, around.taskId);
+  const nearness = sql`case when ${ownOfAgent(around)} then 0 when ${onTask} then 1 else 2 end`;
+  return [nearness, desc(agentTable.createdAt), desc(agentTable.id)];
 }
 
 const findAgentsOfWorkspace = SqlSchema.findAll({
@@ -1687,7 +1723,8 @@ const findAgentsOfWorkspace = SqlSchema.findAll({
         .select(AGENT_COLUMNS)
         .from(agentTable)
         .where(ofReachedWorkspace(request))
-        .orderBy(desc(agentTable.createdAt), desc(agentTable.id))
+        .orderBy(...workspaceListOrder(request))
+        .offset(request.offset)
         .limit(request.limit),
     ),
 });
@@ -1701,7 +1738,8 @@ const findAgentLinesOfWorkspace = SqlSchema.findAll({
         .select(AGENT_LINE_COLUMNS)
         .from(agentTable)
         .where(ofReachedWorkspace(request))
-        .orderBy(desc(agentTable.createdAt), desc(agentTable.id))
+        .orderBy(...workspaceListOrder(request))
+        .offset(request.offset)
         .limit(request.limit),
     ),
 });
@@ -2333,6 +2371,9 @@ export function listAgentLines(
   });
 }
 
+/** The agent a list is read around, where one asks: its id, its task, and the agent that started it. */
+type AgentAround = typeof AgentAroundSchema.Type;
+
 /** What a list of a workspace's agents is narrowed to, and how many it answers at most. */
 interface WorkspaceAgentsAsked {
   readonly repository?: string;
@@ -2341,6 +2382,12 @@ interface WorkspaceAgentsAsked {
   readonly includeArchived?: boolean;
   /** Only the agents the account started, by hand or through any of its agents; every member's where unsaid. */
   readonly ownOnly?: boolean;
+  /** The one agent left out, the one asking. */
+  readonly except?: string;
+  /** The agent whose own come first: those on its task, its starter, and those it started. */
+  readonly around?: AgentAround;
+  /** How many of the list to pass over before the first answered; none where unsaid. */
+  readonly offset?: number;
   readonly limit: number;
 }
 
@@ -2354,17 +2401,21 @@ function workspaceRequest(userId: string, organizationId: string, options: Works
     words: options.words ?? null,
     includeArchived: options.includeArchived ?? false,
     ownOnly: options.ownOnly ?? false,
+    except: options.except ?? null,
+    around: options.around ?? null,
+    offset: options.offset ?? 0,
     limit: options.limit,
   };
 }
 
 /**
  * The workspace's agents, on a task or with none, by any member or only the
- * account's own where `ownOnly` asks, newest started first, an archived one
- * left out unless `includeArchived` asks,
+ * account's own where `ownOnly` asks, newest started first, the agents
+ * around the one `around` names before the rest, an archived one
+ * left out unless `includeArchived` asks, the one `except` names left out,
  * only those on the repository named where one is, on the plan named
  * where one is, and whose shown name (`agentName`) or task's name holds each of
- * the words where some are given, and at most `limit`; a workspace the account is not in has
+ * the words where some are given, the first `offset` passed over, and at most `limit`; a workspace the account is not in has
  * none.
  */
 export function listWorkspaceAgents(

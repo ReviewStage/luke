@@ -151,8 +151,12 @@ import { STEWARD_CONTINUED_REFUSAL, STEWARD_DELETE_REFUSAL } from "../steward.js
 import { TASK_BLOCK_REFUSAL } from "../task-block-changes.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
-import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
-import { MESSAGE_AGENT_REFUSAL, MESSAGE_AGENT_TOOL } from "./agent-message.js";
+import { AGENT_LIST_FILTER_REFUSAL, WORKSPACE_AGENTS_LIST_LIMIT } from "../workspace-agents.js";
+import {
+  MAX_MESSAGE_WORDS_CHARS,
+  MESSAGE_AGENT_REFUSAL,
+  MESSAGE_AGENT_TOOL,
+} from "./agent-message.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import { CODER_DEPLOYMENT_PRESENCE, CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
 import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
@@ -648,6 +652,50 @@ test("list_agents names every other agent of the caller's workspace, on any task
   assert.equal(eve.sent.length, 0, "a list sends nothing");
 });
 
+test("list_agents from an agent another started names its starter first, ahead of newer agents on its own task past the list's bound, pages the rest by nextOffset, and searches the workspace by words of a title or a task's name", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const worker = await claimed(agents.caller.userId, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId: tasks.billing,
+    planSnapshot: "# Billing",
+    prompt: null,
+    startedByAgentId: agents.caller.id,
+  });
+  const newer: string[] = [];
+  for (let each = 0; each < WORKSPACE_AGENTS_LIST_LIMIT; each += 1) {
+    const started = await database.run(
+      createAgent(agents.teammates.userId, {
+        ...AGENT_CHOICE,
+        idempotencyKey: randomUUID(),
+        taskId: tasks.billing,
+        planSnapshot: "# Billing",
+        prompt: null,
+      }),
+    );
+    newer.push(Option.getOrThrow(started).agent.id);
+  }
+  const call = await peerCaller(hostOf(true), worker, eve.services);
+  const ids = (listed: WireRecord) =>
+    (Array.isArray(listed.agents) ? listed.agents : []).map((agent) =>
+      isRecord(agent) ? agent.id : undefined,
+    );
+
+  const first = await call(CODER_TOOL.LIST_AGENTS, {});
+  assert.equal(first.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(first));
+  // The starter, older than every agent on the worker's task, still comes first; then the task's, newest first.
+  assert.deepEqual(ids(first), [agents.caller.id, ...newer.slice(1).reverse()]);
+  assert.equal(first.nextOffset, WORKSPACE_AGENTS_LIST_LIMIT);
+  const second = await call(CODER_TOOL.LIST_AGENTS, { offset: WORKSPACE_AGENTS_LIST_LIMIT });
+  assert.deepEqual(ids(second), [newer[0], agents.teammates.id, agents.archived.id]);
+  assert.equal(second.nextOffset, null);
+  const searched = await call(CODER_TOOL.LIST_AGENTS, { words: "invitations" });
+  assert.deepEqual(ids(searched), [agents.caller.id, agents.archived.id]);
+  assert.equal(searched.nextOffset, null);
+  assert.equal(eve.sent.length, 0, "a list sends nothing");
+});
+
 test("read_agent reads a teammate's agent on another task of the caller's workspace, with the tail of its transcript in entries kept longer than Luke's and as many as asked, older turns included, and reads no agent of another workspace", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
@@ -916,6 +964,33 @@ test("start_agent shows the model the recorded input, images among it", async ()
 
 test("message_agent shows the model the recorded input", async () => {
   await settleJsonSchemaGolden(GOLDEN_ROOT, "message-agent-input", MESSAGE_AGENT_TOOL.inputSchema);
+});
+
+test("message_agent refuses a malformed id, empty words, and words over the bound each in its own words, the last naming the length to cut", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const length = MAX_MESSAGE_WORDS_CHARS + 1;
+
+  assert.deepEqual(
+    await call(CODER_TOOL.MESSAGE_AGENT, {
+      agentId: agents.teammates.id,
+      text: "x".repeat(length),
+    }),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: MESSAGE_AGENT_REFUSAL.TOO_LONG(length) },
+  );
+  assert.deepEqual(await call(CODER_TOOL.MESSAGE_AGENT, { agentId: "the pilot", text: NOTE }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: MESSAGE_AGENT_REFUSAL.MALFORMED_ID,
+  });
+  assert.deepEqual(
+    await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: " " }),
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: MESSAGE_AGENT_REFUSAL.EMPTY,
+    },
+  );
+  assert.equal(eve.sent.length, 0, "a refusal sends nothing");
 });
 
 test("start_agent refuses, in words that say why and starting nothing, a picture of another agent's conversation, a video the caller recorded, one past an image's bound, pictures past a message's bound together, and more ids than a start takes", async () => {
