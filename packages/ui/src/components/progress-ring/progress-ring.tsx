@@ -1,3 +1,4 @@
+import { Badge } from "../badge/badge.js";
 import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 
 /**
@@ -10,7 +11,8 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  * spare, amber near compaction, and red past it, is the one that does.
  * `ProgressCount` draws its figures in the caption's size and tabular
  * figures itself, so no container it stands in can inflate them, and holds
- * the ring's size beside them whatever the room.
+ * the ring's size beside them whatever the room; or, where it stands among a
+ * card's pills, as a `Badge` of its own (`look`), the ring its glyph.
  */
 
 /** The ring's radius and stroke in its 16-unit box, and the length of its circle. */
@@ -27,6 +29,14 @@ export const PROGRESS_RING_TONE = {
 } as const;
 
 export type ProgressRingTone = (typeof PROGRESS_RING_TONE)[keyof typeof PROGRESS_RING_TONE];
+
+/** How a count stands: bare in a row's cell, or as a badge among a card's pills. */
+export const PROGRESS_COUNT_LOOK = {
+  BARE: "bare",
+  BADGE: "badge",
+} as const;
+
+export type ProgressCountLook = (typeof PROGRESS_COUNT_LOOK)[keyof typeof PROGRESS_COUNT_LOOK];
 
 const TONE_STROKE = {
   [PROGRESS_RING_TONE.WORKING]: "stroke-working",
@@ -82,19 +92,35 @@ export function ProgressCount({
   done,
   total,
   label,
+  look = PROGRESS_COUNT_LOOK.BARE,
 }: {
   readonly done: number;
   readonly total: number;
   /** What the figures count, said whole to a reader who hears no figures. */
   readonly label: string;
+  /** Bare in a row's cell, unless said; a badge among a card's pills. */
+  readonly look?: ProgressCountLook | undefined;
 }): React.JSX.Element {
-  return (
-    <span className="luke-progress-count inline-flex flex-none items-center gap-tight-gap text-caption-inline text-muted-foreground tabular-nums">
-      <ProgressRing share={total > 0 ? done / total : 0} />
+  const ring = <ProgressRing share={total > 0 ? done / total : 0} />;
+  const figures = (
+    <>
       <span aria-hidden="true">
         {done}/{total}
       </span>
       <VisuallyHidden>{label}</VisuallyHidden>
+    </>
+  );
+  if (look === PROGRESS_COUNT_LOOK.BADGE) {
+    return (
+      <span className="luke-progress-count inline-flex flex-none tabular-nums">
+        <Badge icon={ring}>{figures}</Badge>
+      </span>
+    );
+  }
+  return (
+    <span className="luke-progress-count inline-flex flex-none items-center gap-tight-gap text-caption-inline text-muted-foreground tabular-nums">
+      {ring}
+      {figures}
     </span>
   );
 }
