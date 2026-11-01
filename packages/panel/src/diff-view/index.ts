@@ -552,6 +552,10 @@ function optionsOf(props: DiffViewProps): FileDiffOptions<string, undefined> {
     ...sharedOptions(props.look),
     hunkSeparators: props.excerpt === true ? "simple" : "line-info-basic",
     disableFileHeader: true,
+    // Each line drawn anew is marked with its indent, which a wrapped line's later rows hang by.
+    onPostRender: (node: HTMLElement, _instance: unknown, phase: PostRenderPhase) => {
+      if (phase !== "unmount" && node.shadowRoot !== null) markLineIndents(node.shadowRoot);
+    },
     ...(renderAnnotation === undefined
       ? {}
       : { renderAnnotation: (note: { metadata: string }) => renderAnnotation(note.metadata) }),
