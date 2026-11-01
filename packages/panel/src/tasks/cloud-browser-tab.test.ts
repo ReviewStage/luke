@@ -245,7 +245,7 @@ test("a follow the host refused is read and followed again on the beat, so the t
   }
 });
 
-test("a listed cloud Browser tab stands in the strip, stays chosen while the list is on its way, and closes in this window alone", () => {
+test("a listed cloud Browser tab stands in the strip only once opened in this window, stays chosen while the list is on its way, and closes in this window alone", () => {
   let control: SidePanelControl | undefined;
   function Probe({ listed }: { listed: readonly string[] | undefined }) {
     control = useSidePanel(undefined, USED, [], [], [], [], undefined, listed);
@@ -255,25 +255,22 @@ test("a listed cloud Browser tab stands in the strip, stays chosen while the lis
     assert.ok(control);
     return control;
   };
+  const browsers = () =>
+    current().strip.filter((tab) => tab instanceof Object && "cloudBrowser" in tab);
   const panel = draw(createElement(Probe, { listed: [TAB, OTHER_TAB] }));
-  assert.deepEqual(
-    current().strip.filter((tab) => tab instanceof Object && "cloudBrowser" in tab),
-    [{ cloudBrowser: TAB }, { cloudBrowser: OTHER_TAB }],
-  );
+  assert.deepEqual(browsers(), [], "an agent's browser adds no tab by itself");
 
   act(() => current().onChoose({ cloudBrowser: TAB }));
+  assert.deepEqual(browsers(), [{ cloudBrowser: TAB }]);
   panel.rerender(createElement(Probe, { listed: undefined }));
   assert.deepEqual(current().tab, { cloudBrowser: TAB }, "kept while the list is read again");
 
   panel.rerender(createElement(Probe, { listed: [TAB, OTHER_TAB] }));
+  act(() => current().onChoose({ cloudBrowser: OTHER_TAB }));
   act(() => current().onClose({ cloudBrowser: TAB }));
-  assert.deepEqual(
-    current().strip.filter((tab) => tab instanceof Object && "cloudBrowser" in tab),
-    [{ cloudBrowser: OTHER_TAB }],
-  );
+  assert.deepEqual(browsers(), [{ cloudBrowser: OTHER_TAB }]);
   assert.notDeepEqual(current().tab, { cloudBrowser: TAB });
 
-  act(() => current().onChoose({ cloudBrowser: OTHER_TAB }));
   panel.rerender(createElement(Probe, { listed: [] }));
   assert.equal(
     current().tab,

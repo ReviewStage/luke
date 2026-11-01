@@ -360,6 +360,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onRevealThread: ignore,
     sectionReveal: undefined,
     commentReveal: undefined,
+    onCommentRevealed: ignore,
     onSectionRevealed: ignore,
     onShowInbox: ignore,
     inbox: [],

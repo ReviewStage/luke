@@ -361,10 +361,16 @@ sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
   read at the commit the agent named instead. File tabs are kept nowhere.
   The strip scrolls where the agents overflow it, and no tab closes.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
-  A closed panel opens on its own only for a page an agent shows on a call
-  (`tasks/use-panel-arrivals.ts`), and a subagent opened from an agent's
-  transcript, whose tab it opens on; an open panel keeps its tab, and an arrival on another tab
-  sets that tab's label in semibold until it is shown. Its left edge
+  It opens only when the developer opens something into it (a tab from its
+  "+", a file, a page, a worker, or a pull request pressed elsewhere) or
+  presses its toggle, and a first launch leaves it shut. A tab standing in
+  the strip never opens it: a task left while the panel stood hidden by its
+  empty strip shuts it, and an agent's cloud browser adds no Browser tab by
+  itself, its tabs offered under the "+" instead. Reloading the web app
+  stands it as the history step held it, and a link opened from outside
+  the window opens the tab it names. An open panel keeps its tab, and an
+  arrival on another tab sets that tab's label in semibold until it is
+  shown. Its left edge
   drags it between 280 and 720 pixels wide, and the arrow keys move it once
   it has the focus.
 - **Kept across launches.** Whether it is open, its tab, and its width are

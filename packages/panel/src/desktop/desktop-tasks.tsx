@@ -438,20 +438,21 @@ function PlanDocument({
     actOnComment: (params) => act(ACT_KIND.TASKS_COMMENT_ACT, params),
   });
   const openComments = comments?.threads.filter(openThread).length;
-  // A link to a resolved thread opens the task's Comments tab, where it is listed, once per ask.
-  const resolvedLinked =
-    tasks.commentReveal?.planId === inboxTaskId &&
-    comments?.threads.some(
-      (thread) => thread.id === tasks.commentReveal?.thread && !openThread(thread),
-    ) === true
-      ? tasks.commentReveal?.ask
-      : undefined;
+  // A link to a comment thread is taken once the task's comments are read:
+  // a resolved one opens the Comments tab, where it is listed, and the ask
+  // is then let go, so nothing opens it again. Note that the plan's margin
+  // has taken an open one by then, since a child's effects run before ours.
+  const commentAsk = tasks.commentReveal?.planId === inboxTaskId ? tasks.commentReveal : undefined;
+  const commentsRead = comments?.read === true ? comments.threads : undefined;
   const { onShow: showSideTab } = tasks.sidePanel;
+  const { onCommentRevealed } = tasks;
   useEffect(() => {
-    if (resolvedLinked !== undefined && inboxTaskId !== undefined) {
+    if (commentAsk === undefined || inboxTaskId === undefined || commentsRead === undefined) return;
+    if (commentsRead.some((thread) => thread.id === commentAsk.thread && !openThread(thread))) {
       showSideTab(inboxTaskId, SIDE_PANEL_TAB.COMMENTS);
     }
-  }, [resolvedLinked, inboxTaskId, showSideTab]);
+    onCommentRevealed(commentAsk.ask);
+  }, [commentAsk, inboxTaskId, commentsRead, showSideTab, onCommentRevealed]);
   const { onArea: setArea, focus, setFocus } = useColumnFocus();
   const [column, setColumn] = useState<HTMLElement | null>(null);
   // The summary lists the task's agents once they are read, so where the
