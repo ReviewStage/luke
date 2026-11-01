@@ -1500,7 +1500,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /**
    * A started task's row of the list as the service answered it; none from
    * a service that leaves out a field the row needs, whose task is drawn
-   * once the list carries it.
+   * once the list carries it. Note that the answer names its blockers
+   * rather than whether one is open, so the row is blocked where a blocker
+   * the list holds is unfinished, or the list holds it not at all.
    */
   function planRowOf(task: Task): PlanRow | undefined {
     const { ownerId, status, priority, number, origin } = task;
@@ -1528,7 +1530,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         : { creatorActor: origin.actor, creatorAgentId: origin.agentId ?? null }),
       parentTaskId: task.parentTaskId ?? null,
       ...(task.mode === undefined ? undefined : { mode: task.mode }),
-      ...(task.blocked === true ? { blocked: true } : undefined),
+      ...((task.blockedBy ?? []).some((blockerId) => {
+        const blocker = view.tasks.find((row) => row.id === blockerId);
+        return blocker?.status === undefined || !FINISHED.has(blocker.status);
+      })
+        ? { blocked: true }
+        : undefined),
     };
   }
 

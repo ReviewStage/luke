@@ -1367,7 +1367,7 @@ it.effect(
 );
 
 it.effect(
-  "a quiet start draws its task's row as the service answered it, and holds it until the list carries the start",
+  "a quiet start draws its task's row as the service answered it, blocked where a blocker is open, and holds it until the list carries the start",
   () =>
     Effect.gen(function* () {
       const billing = task(BILLING, "Billing export", "# Billing", 20);
@@ -1387,6 +1387,8 @@ it.effect(
         status: TASK_STATUS.TODO,
         priority: TASK_PRIORITY.NONE,
         number: 2,
+        // Started blocked by a task still open, which the answer names rather than marks.
+        blockedBy: [BILLING],
       };
       service.createAnswer = { ok: true, answer: { task: made, txid: "tx-start" } };
 
@@ -1395,6 +1397,7 @@ it.effect(
       );
       yield* settled;
       const drawn = listedIds();
+      const drawnBlocked = last()?.tasks.find((row) => row.id === INVITES)?.blocked;
       // A list read from before the start answers without it.
       service.live.list.set({ plans: [rowOfTask(billing)] }, ["tx-other"]);
       yield* nextPoll(settled);
@@ -1404,6 +1407,7 @@ it.effect(
 
       assert.deepEqual(yield* Fiber.join(start), { planId: INVITES });
       assert.deepEqual(drawn, [INVITES, BILLING], "the row is drawn before the list carries it");
+      assert.equal(drawnBlocked, true, "a task started blocked by an open one is drawn blocked");
       assert.deepEqual(throughStale, [INVITES, BILLING]);
       assert.deepEqual(listedIds(), [INVITES, BILLING]);
     }),
