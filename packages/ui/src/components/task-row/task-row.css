@@ -7,19 +7,23 @@
    plan's line reaches its page's; an add still out stands muted until its
    row draws.
 
-   The ⋯ keeps no column, so the list's last column, the time on the Tasks
-   page, ends at the row's end inset. It stands out of the row's columns in
-   its end inset, centred on the row's middle, and comes in there while the
-   row is in hand, holds the keyboard, or has its menu open (`row-menu.css`
-   fades it), as a `NavItem`'s and a `ListRow`'s acts do: over the row's
-   last cell, which gives way by its opacity while it stands, so nothing
-   else in the row moves. Note that the last cell gives way by its opacity,
+   The ⋯ stands out of the row's columns in its end inset, centred on the
+   row's middle, and comes in there while the row is in hand, holds the
+   keyboard, or has its menu open (`row-menu.css` fades it), as a
+   `NavItem`'s and a `ListRow`'s acts do, nothing else in the row moving.
+   Where the row's last cell only says something, the time on the Tasks
+   page, the ⋯ keeps no column, so that cell ends at the row's end inset,
+   and gives way under the ⋯ by its opacity while it stands (`data-under-
+   more`); where the last cell holds a control, or the name is the last, the
+   list keeps the ⋯ a narrow column of its own (`taskRowColumns`), so
+   neither is ever covered. Note that the cell gives way by its opacity,
    never its visibility, so a reader reaching the row still hears it, and
    takes no press while it is gone, so a press there is the ⋯'s. A screen
-   with no hover never has a row in hand, so there the ⋯ stands at rest and
-   the cells after the name step aside for it, on transform alone, rather
-   than the last one standing hidden for good. At rest the ⋯ takes no
-   press, so a press at the row's end opens the task. */
+   with no hover never has a row in hand, so there the ⋯ stands at rest,
+   and, where it would stand over the last cell, the cells after the name
+   step aside for it on transform alone, rather than that cell standing
+   hidden for good. At rest the ⋯ takes no press, so a press at the row's
+   end opens the task. */
 
 @layer components {
   .luke-task-row:has(:focus-visible),
@@ -44,7 +48,7 @@
     pointer-events: none;
   }
 
-  .luke-task-row-cell:has(+ .luke-task-row-more) {
+  .luke-task-row-cell[data-under-more="true"] {
     transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
@@ -60,7 +64,7 @@
     .luke-task-row:is(:hover, :has(:focus-visible), [data-menu-open="true"]):has(
         .luke-task-row-more:not(:empty)
       )
-      > .luke-task-row-cell:has(+ .luke-task-row-more) {
+      > .luke-task-row-cell[data-under-more="true"] {
       opacity: 0;
       pointer-events: none;
     }
@@ -75,11 +79,17 @@
       pointer-events: auto;
     }
 
-    .luke-task-row:has(.luke-task-row-more:not(:empty)) .luke-task-row-after {
+    .luke-task-row:has(.luke-task-row-more:not(:empty)):has(
+        > .luke-task-row-cell[data-under-more="true"]
+      )
+      .luke-task-row-after {
       transform: translateX(var(--luke-task-row-aside));
     }
 
-    .luke-task-row:has(.luke-task-row-more:not(:empty)) > [data-cell="name"] {
+    .luke-task-row:has(.luke-task-row-more:not(:empty)):has(
+        > .luke-task-row-cell[data-under-more="true"]
+      )
+      > [data-cell="name"] {
       padding-inline-end: var(--luke-task-row-more-room);
     }
   }

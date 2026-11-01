@@ -40,10 +40,14 @@ import { SelectionRegion } from "../selection/selection-region.js";
  * (`menu`) is opened alike by its ⋯, a right-click, and the menu key
  * (`useRowMenu`). The ⋯ keeps no column, so a list's last column ends at
  * the row's end inset: it comes in over the row's end while the row is in
- * hand, holds the keyboard, or has its menu open, the last cell giving way
- * under it and nothing else moving, as the sidebar's and the inbox's rows
- * do; on a screen with no hover it stands there at rest, the cells after the
- * name stepping aside for it (`task-row.css`). Renamed, its name gives way
+ * hand, holds the keyboard, or has its menu open, nothing in the row moving,
+ * as the sidebar's and the inbox's rows do: over the last cell, which gives
+ * way under it, where that cell only says something (the time on the Tasks
+ * page), and in a narrow column the list keeps for it where the last cell
+ * holds a control (a related task's kind) or the name is the last cell, so
+ * neither is ever covered; on a screen with no hover it stands there at
+ * rest, the cells after the name stepping aside for it where it would stand
+ * over the last (`task-row.css`). Renamed, its name gives way
  * to the field its owner hands (`editor`); what did not land stands under
  * it (`note`).
  *
@@ -87,6 +91,22 @@ const LEADING: readonly TaskRowCell[] = [
   TASK_ROW_CELL.KEY,
   TASK_ROW_CELL.STATUS,
 ];
+
+/**
+ * The cells after the name that only say something, holding no control, so
+ * the ⋯ may come in over one standing last: every cell but the assignee's
+ * chip, the creator's face, the pull requests' chips, and the owner's end.
+ */
+const QUIET_AFTER: readonly TaskRowCell[] = [
+  TASK_ROW_CELL.WAITING,
+  TASK_ROW_CELL.REPOSITORY,
+  TASK_ROW_CELL.AGENTS,
+  TASK_ROW_CELL.SUB_TASKS,
+  TASK_ROW_CELL.UPDATED,
+];
+
+/** The ⋯'s own column, where the list keeps one: a compact button's width. */
+const MORE_COLUMN = "var(--luke-space-24)";
 
 /** The cells a related task's row draws, in its own list: its chips, its key, its assignee, its pull requests, how many of its sub-tasks are finished, and its owner's end. */
 export const RELATED_TASK_CELLS: readonly TaskRowCell[] = [
@@ -153,7 +173,7 @@ const CELL_PLACE = {
   [TASK_ROW_CELL.END]: `${OVER_ITS_CONTROLS} order-13`,
 } as const satisfies Record<TaskRowCell, string>;
 
-/** A cell after the name, which steps aside while the ⋯ stands at rest on a screen with no hover (`task-row.css`). */
+/** A cell after the name, which steps aside while the ⋯ stands at rest over the last on a screen with no hover (`task-row.css`). */
 const AFTER = "luke-task-row-after";
 
 /** The ⋯'s place: out of the row's columns, at its end inset, over its press while it shows (`task-row.css`). */
@@ -210,32 +230,49 @@ const ROWS =
 /** Which way a key asks a row's fold to stand: → open, ← folded. */
 const FOLD_KEY_OPENS: Readonly<Record<string, boolean>> = { ArrowRight: true, ArrowLeft: false };
 
-/** A cell of a row, in its column, holding what its owner stands there; empty where it holds nothing. */
-function cellOf(cell: TaskRowCell, content: ReactNode): React.JSX.Element {
-  const after = LEADING.includes(cell) ? "" : ` ${AFTER}`;
-  return (
-    <span key={cell} className={`${CELL} ${CELL_PLACE[cell]}${after}`} data-cell={cell}>
-      {content}
-    </span>
-  );
-}
-
 /** The cells of a row in its list's order, whatever order its owner names them in. */
 function inOrder(cells: readonly TaskRowCell[]): readonly TaskRowCell[] {
   return TASK_ROW_CELL_ORDER.filter((cell) => cells.includes(cell));
 }
 
+/** The cell the ⋯ comes in over: the last drawn, where it stands after the name and only says something; none where the list keeps the ⋯ a column. */
+function cellUnderMore(cells: readonly TaskRowCell[]): TaskRowCell | undefined {
+  const last = inOrder(cells).at(-1);
+  return last !== undefined && QUIET_AFTER.includes(last) ? last : undefined;
+}
+
+/** A cell of a row, in its column, holding what its owner stands there; empty where it holds nothing. */
+function cellOf(
+  cell: TaskRowCell,
+  content: ReactNode,
+  underMore: TaskRowCell | undefined,
+): React.JSX.Element {
+  const after = LEADING.includes(cell) ? "" : ` ${AFTER}`;
+  return (
+    <span
+      key={cell}
+      className={`${CELL} ${CELL_PLACE[cell]}${after}`}
+      data-cell={cell}
+      data-under-more={cell === underMore ? "true" : undefined}
+    >
+      {content}
+    </span>
+  );
+}
+
 /**
  * The grid's columns for the cells drawn, in the order a row draws them:
- * those before the name, the name, and those after it, the ⋯ keeping none.
- * The list standing the rows lays them as its `--tasks-list-columns`.
+ * those before the name, the name, and those after it, then the ⋯'s own
+ * where it comes in over no cell (`cellUnderMore`). The list standing the
+ * rows lays them as its `--tasks-list-columns`.
  */
 export function taskRowColumns(cells: readonly TaskRowCell[]): string {
   const drawn = inOrder(cells);
   const width = (cell: TaskRowCell) => COLUMN_WIDTH[cell];
   const before = drawn.filter((cell) => LEADING.includes(cell)).map(width);
   const after = drawn.filter((cell) => !LEADING.includes(cell)).map(width);
-  return [...before, "minmax(0, 1fr)", ...after].join(" ");
+  const more = cellUnderMore(cells) === undefined ? [MORE_COLUMN] : [];
+  return [...before, "minmax(0, 1fr)", ...after, ...more].join(" ");
 }
 
 /** One task's row: its press, which opens it, its cells in their columns, and its ⋯ over its end. */
@@ -367,7 +404,7 @@ export function TaskRow({
           </span>
         )}
       </span>
-      {inOrder(cells).map((cell) => cellOf(cell, content[cell]))}
+      {inOrder(cells).map((cell) => cellOf(cell, content[cell], cellUnderMore(cells)))}
       <span className={MORE} data-cell="more">
         {rowMenu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
       </span>
@@ -422,7 +459,7 @@ export function TaskRowDraft({
           <span className={NOTE}>{note}</span>
         )}
       </span>
-      {inOrder(cells).map((cell) => cellOf(cell, content[cell]))}
+      {inOrder(cells).map((cell) => cellOf(cell, content[cell], undefined))}
     </Card>
   );
 }
