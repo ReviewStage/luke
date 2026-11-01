@@ -29,6 +29,7 @@ import {
   ThumbStrip,
   Tooltip,
   useImageZoom,
+  usePageSwipe,
   usePictureExpand,
   VIDEO_PLAYER_PLACE,
   VideoPlayer,
@@ -45,7 +46,7 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { DIAGRAM_REFUSED_LINE } from "../bundle-loader.js";
 import {
   copyImageThroughShell,
@@ -100,7 +101,10 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * On a phone the header is a phone's (`phone-head.tsx`): Close alone at its
  * start, the file's name centred over its size and note, and one ⋯ at its
  * end holding every other button of the header, the arrow keys still
- * walking the files.
+ * walking the files. On a touch screen a finger swiping sideways across the
+ * viewer walks the files too, the file shown following it until it is let
+ * go (`@luke/ui`'s `usePageSwipe`), unless the picture is zoomed, where the
+ * finger moves the picture instead.
  *
  * Note that a PDF is shown by its icon rather than drawn, because the
  * window's policy refuses the frames and objects Chromium draws one in.
@@ -475,6 +479,7 @@ export function AttachmentViewer({
   opening?: ImageOpening;
 }): React.JSX.Element | null {
   const titleId = useId();
+  const viewer = useRef<HTMLDivElement>(null);
   const phone = usePhoneRoom();
   const copyText = useCopyToast();
   const copyImage = useImageCopyToast();
@@ -503,12 +508,14 @@ export function AttachmentViewer({
   const [opened] = useState({ at, url: file?.url });
   const expand = usePictureExpand(at === opened.at && file?.url === opened.url);
   const close = () => expand.close(onClose);
-
-  if (file === undefined) return null;
   // Note that the walk goes round from either end rather than stopping,
   // because a button that went disabled under the pointer would drop the
   // keyboard's focus out of the card.
   const walk = (step: number) => onAt((at + step + files.length) % files.length);
+  // A zoomed picture takes a finger's drag to move it, so the swipe stands down while it is zoomed.
+  usePageSwipe({ enabled: files.length > 1 && !zoom.zoomed, surface: viewer, onStep: walk });
+
+  if (file === undefined) return null;
   const image = picture !== undefined;
   const video = view === ATTACHMENT_VIEW.VIDEO;
   // The place's own action takes the file itself, so it is offered for a picture or a video, never a diagram's code.
@@ -548,6 +555,7 @@ export function AttachmentViewer({
       expand={expand}
     >
       <div
+        ref={viewer}
         className="attachment-viewer ph-no-capture flex size-full min-h-0 flex-col gap-luke-16"
         data-view={view}
         data-opening={opening}
