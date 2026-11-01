@@ -84,6 +84,7 @@ import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import {
   PLAN_ACTOR,
   TASK_BOUNDS,
+  TASK_CREATE_RELATION_KIND,
   TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
@@ -1914,6 +1915,63 @@ test("only a pilot makes a task in pilot mode, as a child of another", async () 
     [stored.task.mode, stored.task.parentTaskId],
     [TASK_MODE.PILOT, tasks.invitations],
   );
+});
+
+test("create_task makes a task related to another in one write, refusing a parent named both ways and taking the task back with a relation refused", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const alice = agents.caller.userId;
+
+  const made = await call(
+    CODER_TOOL.CREATE_TASK,
+    {
+      name: "Invite expiry",
+      relation: { kind: TASK_CREATE_RELATION_KIND.BLOCKS, taskId: tasks.invitations },
+    },
+    "call-blocks",
+  );
+  assert.ok(isRecord(made.task) && isWireString(made.task.id), JSON.stringify(made));
+  const read = await call(CODER_TOOL.READ_TASK, { taskId: tasks.invitations });
+  assert.ok(isRecord(read.task) && Array.isArray(read.task.blockedBy), JSON.stringify(read));
+  assert.deepEqual(
+    read.task.blockedBy.map((each) => (isRecord(each) ? each.id : undefined)),
+    [made.task.id],
+  );
+
+  assert.deepEqual(
+    await call(
+      CODER_TOOL.CREATE_TASK,
+      {
+        name: "Twice named",
+        parentTaskId: tasks.invitations,
+        relation: { kind: TASK_CREATE_RELATION_KIND.SUB_TASK_OF, taskId: tasks.invitations },
+      },
+      "call-both",
+    ),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: CREATE_TASK_REFUSAL.PARENT_AND_RELATION },
+  );
+  assert.deepEqual(await tasksNamed(alice, workspaceId, "Twice named"), []);
+
+  // A task with a parent already takes no new one, and the task asked to be it is not left behind.
+  const child = await call(
+    CODER_TOOL.CREATE_TASK,
+    { name: "Child", parentTaskId: tasks.invitations },
+    "call-child",
+  );
+  assert.ok(isRecord(child.task) && isWireString(child.task.id), JSON.stringify(child));
+  assert.deepEqual(
+    await call(
+      CODER_TOOL.CREATE_TASK,
+      {
+        name: "Usurper",
+        relation: { kind: TASK_CREATE_RELATION_KIND.PARENT_OF, taskId: child.task.id },
+      },
+      "call-usurper",
+    ),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: CREATE_TASK_REFUSAL.PARENT_HELD },
+  );
+  assert.deepEqual(await tasksNamed(alice, workspaceId, "Usurper"), []);
 });
 
 test("a task an agent makes runs on the device its member last chose, away or not, one since removed makes none, and with no device left it runs in the cloud", async () => {
