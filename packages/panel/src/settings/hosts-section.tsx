@@ -306,11 +306,11 @@ function HostRow({
     platform === DEVICE_PLATFORM.DARWIN
       ? { words: macSessionWords(host.loginName), state: SETTINGS_ROW_STATE.PLAIN }
       : null;
+  const label = thisMac === undefined ? host.name : `${host.name} (this Mac)`;
   return (
     <>
       <MenuRow
-        thing="Host"
-        alone
+        thing={label}
         actions={[
           {
             label: "Remove",
@@ -321,7 +321,7 @@ function HostRow({
           },
         ]}
         row={{
-          label: thisMac === undefined ? host.name : `${host.name} (this Mac)`,
+          label,
           adornment: host.upgradeNeeded ? (
             <Badge tone={STATUS_TONE.ATTENTION}>{WORDS.UPGRADE_NEEDED}</Badge>
           ) : undefined,
