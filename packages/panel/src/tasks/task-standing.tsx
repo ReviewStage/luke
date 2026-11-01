@@ -56,7 +56,7 @@ import { TaskRelationAsked, type TaskRelationsDoor } from "./task-relation-menu.
 /**
  * task-standing.tsx -- a task's head over its plan: the path to it, then the chips that say and change where it stands, how much it matters, and who is on it.
  *
- * Over the title stands the task's path (`TaskPath`), where the window's title bar does not name the task already (a phone), a caption-size
+ * Over the title stands the task's path (`TaskPath`), where the task's head over its column does not name the task already (a phone), a caption-size
  * `Breadcrumbs`: its repository, the owner's picture and `owner/name`, or
  * Choose a repository while the task has none, which drops the search over
  * every repository the workspace reaches (`repository-chip.tsx`), and which
@@ -479,7 +479,7 @@ export function TaskPathRefusal({ door }: { door: TaskStandingDoor }): React.JSX
   );
 }
 
-/** A task as the window's title bar names it: its mark, name, and key, its press, and its card. */
+/** A task as its head over the column names it: its mark, name, and key, its press, and its card. */
 function frameTask(
   task: {
     readonly name: string;
@@ -500,7 +500,7 @@ function frameTask(
 }
 
 /**
- * The task's head in the window's title bar (`FrameHead`): its repository's
+ * The task's head over its column (`FrameHead`): its repository's
  * crumb where the page hands the repository's doors, plain words with the
  * repository's mark and no press; the tasks it is a child of, eldest first,
  * each opening its own task, the parent hanging its card; then the task,

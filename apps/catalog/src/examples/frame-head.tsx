@@ -1,5 +1,5 @@
 import { TASK_STATUS } from "@luke/features/task-wire";
-import { type Crumb, FolderIcon, FrameHead, FrameHeadSkeleton, FramePlace } from "@luke/ui";
+import { type Crumb, FolderIcon, FrameHead, FrameHeadSkeleton } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -8,9 +8,7 @@ import { CatalogSection } from "../section";
  * its repository as plain words, then the task by status mark, name, and key; a child task,
  * its parent before it; a task from before keys, named alone; a deep path
  * in a narrow column, folding its eldest tasks; and the head while its task
- * is read. Then a place that is no task, named by its words: the Inbox, a
- * channel with its purpose after it, and an automation's run under the
- * places above it.
+ * is read.
  */
 
 /** A press the catalog has nowhere to take. */
@@ -65,21 +63,6 @@ function FrameHeads(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="frame-head-skeleton" title="While the task is read">
         <FrameHeadSkeleton />
-      </CatalogSection>
-      <CatalogSection id="frame-head-place" title="A place named by its words">
-        <FramePlace title="Inbox" />
-      </CatalogSection>
-      <CatalogSection id="frame-head-place-detail" title="Quiet words after the name">
-        <FramePlace title="#launch · Needs you" detail="Where the launch is planned and called" />
-      </CatalogSection>
-      <CatalogSection id="frame-head-place-trail" title="The places above it, each a press back">
-        <FramePlace
-          title="Check the 2.14.0 deploy"
-          trail={[
-            { label: "Automations", onPress: stay },
-            { label: "Check each deploy", onPress: stay },
-          ]}
-        />
       </CatalogSection>
     </>
   );
