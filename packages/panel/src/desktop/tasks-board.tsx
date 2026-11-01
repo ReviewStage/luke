@@ -278,9 +278,9 @@ const BOARD_CARD_KEY =
 const BOARD_CARD_FOOT =
   "tasks-board-card-foot pointer-events-none relative z-1 flex min-w-0 items-end gap-tight-gap";
 
-/** A card's pills, wrapping onto as many lines as they take, each taking the pointer but its agents' icon, which is no press and lets one through to the card's. */
+/** A card's pills, wrapping onto as many lines as they take, each taking the pointer but its agents' icon and its sub-tasks' count, which are no presses and let one through to the card's. */
 const BOARD_CARD_PILLS =
-  "tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-luke-6 [&>:not(.task-agents-mark)]:pointer-events-auto";
+  "tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-luke-6 [&>:not(.task-agents-mark,.luke-progress-count)]:pointer-events-auto";
 
 /**
  * A card's repository as a pill: its owner's picture and its own name, its
