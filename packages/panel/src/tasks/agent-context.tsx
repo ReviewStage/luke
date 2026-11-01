@@ -70,6 +70,11 @@ const PART_GROUND = {
   [CONTEXT_PART.CONVERSATION]: "bg-muted-foreground",
 } as const satisfies Record<ContextPart, string>;
 
+/** The ring itself, filled with the share of the window and toned by its level: the ring's own face, and the composer's ⋯ row's icon. */
+export function ContextRingIcon({ context }: { context: AgentContext }): React.JSX.Element {
+  return <ProgressRing share={contextShare(context)} tone={LEVEL_TONE[contextLevel(context)]} />;
+}
+
 /** What the popover holds: the summary, the bar, each part's row and the stats, which tick on for as long as it is drawn. */
 function ContextBody({
   context,
@@ -193,12 +198,7 @@ export function AgentContextRing({
         <Tooltip label={contextHint(context)}>
           <IconButton
             ref={trigger}
-            icon={
-              <ProgressRing
-                share={contextShare(context)}
-                tone={LEVEL_TONE[contextLevel(context)]}
-              />
-            }
+            icon={<ContextRingIcon context={context} />}
             label={CONTEXT_LABEL}
             aria-haspopup="dialog"
             aria-expanded={open}
