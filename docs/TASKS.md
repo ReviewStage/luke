@@ -55,11 +55,12 @@ A reviewer can hold the build to these as easily as to the layout:
 - The task frames the work column, as a workspace frames an editor. Its
   Overview leads the column's tabs, holding the plan's document, its head,
   its agents, and its body; each agent started on the task stands in a tab
-  of its own after it. Everything else, the task's Inbox and the plan's
-  comments among it, stands in a side panel ("Side panel" below) that the
-  developer opens and closes. A task opens on the tab last viewed on it, and
-  on its Overview where none was; only an Inbox item not yet seen opens the
-  panel on its own, and there are no second documents.
+  of its own after it. Everything else, the plan's comments among it,
+  stands in a side panel ("Side panel" below) that the developer opens and
+  closes. The task's threads open in the window's Inbox narrowed to the
+  task, never in the side panel, and an arriving thread opens nothing. A
+  task opens on the tab last viewed on it, and on its Overview where none
+  was, and there are no second documents.
 - No window of its own. Tasks live in Luke's one window (LUKE-347): there
   is no separate task window, Dock tile, Cmd-Tab entry, or app menu for it.
 
@@ -339,22 +340,24 @@ The open task's supporting views stand in a panel at the window's right,
 beside the document and its microphone row, the way a devtool's secondary
 sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
 
-- **Tabs.** `Inbox`, what its agents need of the developer, and
-  `Comments`, the plan's threads. The plan's document is the column's
-  Overview ("Agent tabs" below), and a Plan tab an earlier version kept or
-  pinned opens it there. After them stand the workers
+- **Tabs.** `Comments`, the plan's threads. The plan's document is the
+  column's Overview ("Agent tabs" below), and a Plan tab an earlier version
+  kept or pinned opens it there. The task's Inbox tab of old is drawn and
+  offered nowhere: a thread, a call's row naming one, ⌘K's Inbox row, and
+  the summary's open the window's Inbox narrowed to the task
+  (`/inbox/plan/<taskId>`), the thread chosen where one is named. After them stand the workers
   opened from an agent's transcript, then files, pull requests, pages,
   terminals, and browsers, as the "+" lists them. The plan's versions open in
   the whole window ("History" below). The agents themselves have tabs
   in the task's column beside the task's own ("Agent tabs" below). A file
-  named in place, by a mention, a code block of the task's Inbox, or ⌘K,
+  named in place, by a mention, a code block of an Inbox thread, or ⌘K,
   opens whole in a File tab, one per file, the lines named lit; opening a
   file already open chooses its tab and moves the lit lines. The file is read
   (`GET /api/plans/{id}/file`, `packages/service/src/tasks/task-file.ts`) from GitHub at the
   head of the default branch through the Luke GitHub App, a `.env` file never
   read (`packages/service/src/tasks/shown-file.ts`); a file changed since is
   drawn as it is now, and one not on that branch, or not read at all, says so
-  in its place. A File tab opened from a code block of the task's Inbox is
+  in its place. A File tab opened from a code block of an Inbox thread is
   read at the commit the agent named instead. File tabs are kept nowhere.
   The strip scrolls where the agents overflow it, and no tab closes.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.

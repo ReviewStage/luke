@@ -225,6 +225,24 @@ export function inboxBoard(
   };
 }
 
+/**
+ * The thread a call's row names by its key among a board's items: the
+ * latest posted under it, of the agent whose row it was where the row names
+ * one, since more than one agent may post under the same key.
+ */
+export function keyedItem(
+  board: InboxBoardView,
+  key: string,
+  agentId: string | undefined,
+): InboxItem | undefined {
+  return [...board.open, ...board.settled]
+    .filter((item) => item.key === key && (agentId === undefined || item.agentId === agentId))
+    .reduce<InboxItem | undefined>(
+      (latest, item) => (latest === undefined || item.postedAt > latest.postedAt ? item : latest),
+      undefined,
+    );
+}
+
 /** What the draft holds for the field, or nothing where it is untouched. */
 export function fieldValueOf(draft: InboxDraft, label: string): InboxFieldValue | undefined {
   return draft.values.find((each) => each.label === label)?.value;

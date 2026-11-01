@@ -49,27 +49,19 @@ import {
  *
  * The task's column is the task's own: its Overview, holding the plan's
  * document, and its coding agents (`use-main-tabs.ts`); everything else
- * (the task's Inbox, the plan's comments, and what its agents made) stands
+ * (the plan's comments, and what its agents made) stands
  * in a panel at the window's right that the developer
- * opens and closes, as every devtool window's secondary sidebar does. What
- * opens it on its own is an Inbox item the developer has not seen
- * (`onInboxRead`); a subagent's tab opened from an
- * agent's transcript opens it too. Not to be confused
- * with "the panel", which in this renderer is Luke's whole surface.
+ * opens and closes, as every devtool window's secondary sidebar does. A
+ * subagent's tab opened from an agent's transcript opens it too. Not to be
+ * confused with "the panel", which in this renderer is Luke's whole surface.
  *
  * A fixed tab stands in the strip only once the open task has used it: a
  * comment was left on its plan. The plan's own tab once stood here on every
- * task; it is drawn and offered nowhere now, since the column's Overview
- * holds the plan, and what an earlier version kept of it reads and opens
- * nothing (`DRAWN_KINDS`). The Inbox stands only once it has something to show:
- * it is closed on a task until an item the developer has not seen waits
- * there, and then opens and is chosen as an arrival is (in a narrow room it
-opens without being chosen, since the panel there would stand over the
-plan); an item has not
- * been seen where it did not wait at the task's last read, and a task with
- * no agent has no Inbox, since only an agent posts, unless main's read of
- * what waits across the account says an item waits on it. So a new task
- * has no tab,
+ * task, and the task's Inbox on a task where an item waited; neither is
+ * drawn or offered now, since the column's Overview holds the plan and a
+ * task's threads open in the window's Inbox narrowed to the task, and what
+ * an earlier version kept of either reads and opens nothing
+ * (`DRAWN_KINDS`). So a new task has no tab,
  * and what arrives on it adds its tab at the strip's end as it arrives,
  * never taking the chosen one's place. Beside the window's Inbox the panel
  * draws none of them. The developer's own choices lie
@@ -188,7 +180,12 @@ export const SIDE_PANEL_TAB = {
    * names it, and a pin or a link naming it opens Overview instead.
    */
   PLAN: "plan",
-  /** Everything the task's agents need of the developer, answered in place (`inbox-pane.tsx`). */
+  /**
+   * The task's Inbox, whose threads open in the window's Inbox narrowed to
+   * the task now. Note that it is kept here, drawn and offered nowhere
+   * (`DRAWN_KINDS`), because what an earlier version kept and pinned names
+   * it, and a pin naming it opens the window's Inbox instead.
+   */
   INBOX: "inbox",
   /** The plan's comment threads, open and resolved (`plan-comments.tsx`). */
   COMMENTS: "comments",
@@ -294,9 +291,9 @@ export const SIDE_PANEL_TABS: readonly FixedSidePanelTab[] = Object.values(SIDE_
 
 const FIXED_TABS: ReadonlySet<StripTab> = new Set(SIDE_PANEL_TABS);
 
-/** The kinds the panel draws, every one but the plan's, which the column's Overview holds. */
+/** The kinds the panel draws, every one but the plan's, which the column's Overview holds, and the Inbox's, whose threads the window's Inbox holds. */
 export const DRAWN_KINDS: readonly FixedSidePanelTab[] = SIDE_PANEL_TABS.filter(
-  (kind) => kind !== SIDE_PANEL_TAB.PLAN,
+  (kind) => kind !== SIDE_PANEL_TAB.PLAN && kind !== SIDE_PANEL_TAB.INBOX,
 );
 
 /** Whether a tab is one of the fixed kinds. */
@@ -494,8 +491,7 @@ const stripPinSchema = Schema.Union([
  * opened or moved on it, and the agents' Changes tabs open on it, in the
  * order opened. A kind is in `opened` or `closed` or neither. The tabs
  * viewed and the order are kept as the chosen tab is, of fixed and Changes
- * tabs alone, since no other stands again across a launch. `inboxSeen` is the
- * items that waited in its inbox at its last read, by id. `viewedAt` is when
+ * tabs alone, since no other stands again across a launch. `viewedAt` is when
  * each tab was last viewed, kept of the kept kinds alone. `pinned` is what an
  * earlier version pinned in the strip, read once into the sidebar's pins and
  * written no more.
@@ -507,7 +503,6 @@ const taskTabsSchema = Schema.Struct({
   recent: Schema.optional(Schema.Array(anyTabSchema)),
   order: Schema.optional(Schema.Array(anyTabSchema)),
   changes: Schema.optional(Schema.Array(changesTabSchema)),
-  inboxSeen: Schema.optional(Schema.Array(Schema.String)),
   viewedAt: Schema.optional(Schema.Array(Schema.Struct({ tab: anyTabSchema, at: Schema.Number }))),
 });
 
@@ -519,8 +514,6 @@ interface TaskTabs {
   readonly order?: readonly SidePanelTab[] | undefined;
   /** The agents' Changes tabs open on the task, in the order opened. */
   readonly changes?: readonly ChangesStripTab[] | undefined;
-  /** The items that waited in the task's inbox at its last read, by id; none before its first. */
-  readonly inboxSeen?: readonly string[] | undefined;
   /** When each tab was last viewed on the task, the latest last (`use-idle-tabs.ts`). */
   readonly viewedAt?: readonly ViewedAt<SidePanelTab>[] | undefined;
 }
@@ -707,8 +700,6 @@ export interface SidePanelControl {
   onNewTab: () => void;
   /** Says the "+" opened its menu on the ask. */
   onNewTabAnswered: () => void;
-  /** Hears what a read of the task's inbox found waiting, by id, opening and choosing its Inbox, the panel shown, where an item did not wait at the last read. */
-  onInboxRead: (taskId: string, waiting: readonly string[]) => void;
   /** Shows the panel on the tab, opening it at the strip's end where the strip does not draw it, and choosing it where it does; a fixed tab stays open on that task. */
   onChoose: (tab: SidePanelTab) => void;
   /**
@@ -790,16 +781,10 @@ function clampWidth(width: number): number {
 
 /**
  * Whether the open task holds something of each fixed kind: its plan
- * always, its plan any comment. Of the Inbox it says whether the task may
- * draw one at all, an
- * agent held or an item waiting, since the Inbox stands only once opened
- * (`drawnFixed`). A kind not yet read on the task is absent, which draws no
- * tab, as nothing does.
+ * always, its plan any comment. A kind not yet read on the task is absent,
+ * which draws no tab, as nothing does.
  */
 export type TaskHolds = Partial<Record<FixedSidePanelTab, boolean | undefined>>;
-
-/** What an agent's own page holds of the fixed kinds: its Inbox, which it may always draw, its agent being the one that posts; the plan and its comments are a task's alone. */
-export const AGENT_PAGE_HOLDS: TaskHolds = { [SIDE_PANEL_TAB.INBOX]: true };
 
 /** The open task as the panel draws its fixed tabs: its id, none while no task is open, and what it holds. */
 export interface OpenTask {
@@ -854,8 +839,7 @@ function orderOn(held: HeldState, taskId: string | undefined): readonly SidePane
 /**
  * The task's fixed tabs in the strip's order: each it holds something of and
  * was not closed on, and each opened on it, of the kinds the panel draws
- * (`DRAWN_KINDS`). The Inbox stands only opened, and only on a task that may
- * draw one.
+ * (`DRAWN_KINDS`).
  */
 function drawnFixed(held: HeldState, task: OpenTask): readonly FixedSidePanelTab[] {
   if (task.bare === true) return NO_FIXED;
@@ -863,10 +847,7 @@ function drawnFixed(held: HeldState, task: OpenTask): readonly FixedSidePanelTab
   const open = held.tabs.filter(
     (tab) =>
       DRAWN_KINDS.includes(tab) &&
-      (tab === SIDE_PANEL_TAB.INBOX
-        ? chosen.opened.includes(tab) && task.holds[tab] === true
-        : chosen.opened.includes(tab) ||
-          (!chosen.closed.includes(tab) && task.holds[tab] === true)),
+      (chosen.opened.includes(tab) || (!chosen.closed.includes(tab) && task.holds[tab] === true)),
   );
   return inTaskOrder(open, orderOn(held, task.id), (tab) => tab);
 }
@@ -1110,45 +1091,6 @@ function withTab(
         macTerminals,
         tab: chosen,
       };
-}
-
-/** An inbox read with nothing waiting, or never read. */
-const NO_ITEMS: readonly string[] = [];
-
-/**
- * The state with `waiting`, the items waiting in the inbox of the task `on`
- * by id, seen, and its Inbox opened and chosen, the panel shown, where one
- * did not wait at its last read; an Inbox already open only sees them. Note
- * that an item answered leaves what is kept as it settles, so posted again
- * it is new, and that a task that has read nothing has seen no item, so its
- * first opens its Inbox. Where `shows` is false, as in a narrow room, whose
- * panel would stand full screen over the plan, the Inbox's tab opens at the
- * strip's end without being chosen, and the panel stays as it stood.
- */
-function withInboxRead(
-  held: HeldState,
-  on: string,
-  waiting: readonly string[],
-  drawn: DrawnTabs,
-  shows: boolean,
-): HeldState {
-  const was = taskTabs(held, on);
-  const seen = was.inboxSeen ?? NO_ITEMS;
-  const fresh = waiting.some((item) => !seen.includes(item));
-  if (!fresh && waiting.length === seen.length) return held;
-  const read = withTaskTabs(held, on, (choices) => ({ ...choices, inboxSeen: waiting }));
-  const tab = SIDE_PANEL_TAB.INBOX;
-  if (!fresh || was.opened.includes(tab)) return read;
-  if (!shows) {
-    const placed =
-      on === drawn.task.id ? withTabLast(read, tab, drawn) : withTabLastOn(read, on, tab);
-    return withChoice(placed, on, tab, true);
-  }
-  const here =
-    on === drawn.task.id
-      ? withTabLast(withChosenViewed(read, tab, drawn), tab, drawn)
-      : withTabLastOn(read, on, tab);
-  return { ...withTab(here, tab, on), open: true };
 }
 
 /** The range a reference lights, none for a whole file. */
@@ -1673,7 +1615,7 @@ function panelChoice(tab: typeof anyTabSchema.Type): tab is FixedSidePanelTab | 
 function currentTasks(tasks: SidePanelState["tasks"]): HeldState["tasks"] {
   return Object.fromEntries(
     Object.entries(tasks ?? {}).map(
-      ([task, { opened, closed, recent, order, changes, inboxSeen, viewedAt }]) => [
+      ([task, { opened, closed, recent, order, changes, viewedAt }]) => [
         task,
         {
           opened: opened.filter(current),
@@ -1681,7 +1623,6 @@ function currentTasks(tasks: SidePanelState["tasks"]): HeldState["tasks"] {
           ...(recent === undefined ? undefined : { recent: recent.filter(panelChoice) }),
           ...(order === undefined ? undefined : { order: order.filter(panelChoice) }),
           ...(changes === undefined ? undefined : { changes }),
-          ...(inboxSeen === undefined ? undefined : { inboxSeen }),
           ...(viewedAt === undefined
             ? undefined
             : {
@@ -1802,7 +1743,7 @@ function storedTasks(tasks: HeldState["tasks"]): NonNullable<SidePanelState["tas
   };
   return Object.fromEntries(
     Object.entries(tasks).map(
-      ([task, { opened, closed, recent = [], order = [], changes, inboxSeen, viewedAt = [] }]) => {
+      ([task, { opened, closed, recent = [], order = [], changes, viewedAt = [] }]) => {
         const stamps = viewedAt.flatMap(({ tab, at }) => (keptChoice(tab) ? [{ tab, at }] : []));
         return [
           task,
@@ -1812,7 +1753,6 @@ function storedTasks(tasks: HeldState["tasks"]): NonNullable<SidePanelState["tas
             recent: kept(recent),
             order: kept(order),
             changes: changes === undefined || changes.length === 0 ? undefined : changes,
-            inboxSeen,
             viewedAt: stamps.length === 0 ? undefined : stamps,
           },
         ] as const;
@@ -1900,10 +1840,7 @@ function shownTab(
   return drawsSubagent(kept, drawn) ? kept : tabs[0];
 }
 
-/**
- * The kinds whose first hold opens the panel on them, which every kind but the Inbox does: the Inbox stands
- * only once opened (`drawnFixed`).
- */
+/** The kinds whose first hold opens the panel on them, which every kind but the retired Inbox does. */
 const HELD_KINDS = SIDE_PANEL_TABS.filter((tab) => tab !== SIDE_PANEL_TAB.INBOX);
 
 /** Whether two reads of what a task holds say the same of every kind. */
@@ -2130,14 +2067,9 @@ export function useSidePanel(
     setNewTabAsked(true);
   }, [update, taskId]);
   const onNewTabAnswered = useCallback(() => setNewTabAsked(false), []);
-  // Note that a narrow room holds the panel only full screen, so an item arriving there adds its tab without taking the plan's place.
-  const onInboxRead = useCallback(
-    (on: string, waiting: readonly string[]) =>
-      update((held) => withInboxRead(held, on, waiting, drawn, !narrow)),
-    [update, drawn, narrow],
-  );
   const onChoose = useCallback(
     (tab: SidePanelTab) => {
+      if (tab === SIDE_PANEL_TAB.INBOX) return;
       setAsked(undefined);
       update((held) => ({
         ...withTab(
@@ -2151,12 +2083,15 @@ export function useSidePanel(
     },
     [update, drawn, taskId],
   );
-  // Note that a tab shown on another task is not counted viewed on the open
-  // one, because the task it is viewed on is the one about to open, whose
+  // Note that the Inbox's kind of old, which a step of the history or a pin
+  // an earlier version kept may still name, is never chosen nor shown: a
+  // task's threads open in the window's Inbox. A tab shown on another task
+  // is not counted viewed on the open one, because the task it is viewed on is the one about to open, whose
   // strip is not drawn yet; it goes to that strip's end only where it is
   // sure to stand in none of it (`withTabLastOn`).
   const onShow = useCallback(
     (on: string, tab: SidePanelTab) => {
+      if (tab === SIDE_PANEL_TAB.INBOX) return;
       setAsked({ task: on, tab });
       update((held) => {
         const here =
@@ -2357,7 +2292,6 @@ export function useSidePanel(
     onToggleFullScreen,
     onNewTab,
     onNewTabAnswered,
-    onInboxRead,
     onChoose,
     onShow,
     onClose,

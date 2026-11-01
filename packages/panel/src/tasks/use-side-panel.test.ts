@@ -307,11 +307,7 @@ test("closing the last tab shuts the panel and leaves full screen, and the toggl
   assert.equal(panel.control().fullScreen, false, "shown again beside the document");
   assert.deepEqual(panel.control().strip, []);
   assert.equal(panel.control().tab, undefined);
-  // The Inbox, never opened on the task, never stood to be closed.
-  assert.deepEqual(
-    panel.control().closedTabs,
-    DRAWN_KINDS.filter((tab) => tab !== SIDE_PANEL_TAB.INBOX),
-  );
+  assert.deepEqual(panel.control().closedTabs, DRAWN_KINDS);
 });
 
 test("a plan whose strip holds no tab draws no panel, and the next plan with a tab draws it again, still open", () => {
@@ -375,81 +371,6 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
 
   render(false);
   assert.deepEqual(panel().strip, [{ changes: AGENT }, { file: "src/invites.ts" }]);
-});
-
-/** Mounts the panel over a task holding comments and, where `inbox` says, an Inbox it may draw, answering the control. */
-function inboxPanel(inbox: { task: string; held: boolean }, room: ShellRoom = SHELL_ROOM.WIDE) {
-  let control: SidePanelControl | undefined;
-  function Probe({ held }: { held: { task: string; held: boolean } }) {
-    control = useSidePanel(
-      undefined,
-      {
-        id: held.task,
-        holds: { [SIDE_PANEL_TAB.COMMENTS]: true, [SIDE_PANEL_TAB.INBOX]: held.held },
-      },
-      undefined,
-      [],
-      [],
-      undefined,
-      room,
-    );
-    return null;
-  }
-  const root = createRoot(document.body.appendChild(document.createElement("div")));
-  roots.push(root);
-  const render = (held: { task: string; held: boolean }) =>
-    act(() => root.render(createElement(Probe, { held })));
-  render(inbox);
-  return {
-    control: () => {
-      assert.ok(control);
-      return control;
-    },
-    render,
-  };
-}
-
-test("a task's Inbox stands only once an item the developer has not seen waits, opening and choosing it with the panel shown, and closed, it stays closed until a newer item does", () => {
-  const panel = inboxPanel({ task: TASK, held: true });
-  act(() => panel.control().onToggle());
-  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.COMMENTS], "the comments stand alone");
-  assert.equal(panel.control().open, false);
-
-  act(() => panel.control().onInboxRead(TASK, ["item-1"]));
-  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.COMMENTS, SIDE_PANEL_TAB.INBOX]);
-  assert.equal(panel.control().tab, SIDE_PANEL_TAB.INBOX);
-  assert.equal(panel.control().open, true, "an item not seen shows the panel");
-
-  act(() => panel.control().onClose(SIDE_PANEL_TAB.INBOX));
-  act(() => panel.control().onInboxRead(TASK, ["item-1"]));
-  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.COMMENTS], "an item seen opens nothing");
-  act(() => panel.control().onInboxRead(TASK, ["item-1", "item-2"]));
-  assert.equal(panel.control().tab, SIDE_PANEL_TAB.INBOX, "a newer item opens it again");
-});
-
-test("in a narrow room an Inbox item not seen opens the Inbox's tab at the strip's end without choosing it, so the tab the panel stood on, or the column it stood shut over, stays", () => {
-  const panel = inboxPanel({ task: TASK, held: true }, SHELL_ROOM.NARROW);
-  assert.deepEqual(
-    { open: panel.control().open, tab: panel.control().tab },
-    { open: true, tab: SIDE_PANEL_TAB.COMMENTS },
-  );
-  act(() => panel.control().onInboxRead(TASK, ["item-1"]));
-  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.COMMENTS, SIDE_PANEL_TAB.INBOX]);
-  assert.equal(panel.control().tab, SIDE_PANEL_TAB.COMMENTS, "the comments stay chosen");
-
-  act(() => panel.control().onClose(SIDE_PANEL_TAB.INBOX));
-  act(() => panel.control().onSetOpen(false));
-  act(() => panel.control().onInboxRead(TASK, ["item-1", "item-2"]));
-  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.COMMENTS, SIDE_PANEL_TAB.INBOX]);
-  assert.equal(panel.control().open, false, "a newer item leaves the panel shut");
-});
-
-test("a task that may draw no Inbox, holding no agent and nothing waiting, draws none, though an item read on it was not seen", () => {
-  const panel = inboxPanel({ task: TASK, held: false });
-  act(() => panel.control().onInboxRead(TASK, ["item-1"]));
-  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.COMMENTS]);
-  panel.render({ task: TASK, held: true });
-  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.COMMENTS, SIDE_PANEL_TAB.INBOX]);
 });
 
 test("a record kept while the Call and Code stood in the panel reads with their tabs let go from the strip, and the Call's pin let go too", () => {

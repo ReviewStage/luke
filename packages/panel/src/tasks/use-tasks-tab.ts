@@ -189,7 +189,7 @@ import {
   usePlanHistory,
 } from "./use-plan-history.js";
 import {
-  AGENT_PAGE_HOLDS,
+  DRAWN_KINDS,
   drawsChanges,
   drawsMacTerminal,
   drawsSubagent,
@@ -703,14 +703,6 @@ export interface TasksControl {
   commentReveal:
     | { readonly planId: string; readonly thread: string; readonly ask: number }
     | undefined;
-  /** The last ask to open one of a task's Inbox items in its Inbox tab, as a link to it asks, under the task it was asked of; let go once the task takes it. */
-  inboxItemReveal:
-    | { readonly planId: string; readonly itemId: string; readonly ask: number }
-    | undefined;
-  /** The task took the ask, so a later visit to the task does not open the item again. */
-  onInboxItemRevealed: (ask: number) => void;
-  /** Opens a task on its Inbox tab the same way, opening the tab where it was closed: what ⌘K's Inbox row asks. */
-  onShowInboxTab: (taskId: string) => void;
   /** Opens the window's Inbox narrowed to one task's items, on nothing chosen: what a task's "needs you" count asks. */
   onShowInbox: (narrowed: { readonly taskId: string }) => void;
   /** What waits on the developer across the account's tasks, as main's read last answered: each task with an open inbox item, and its items. */
@@ -1061,7 +1053,7 @@ const NO_PENDING_TASKS: readonly string[] = [];
 /** A task with no page, the same array every render, so the arrivals read no change in it. */
 const NO_PAGES: NonNullable<TasksView["pages"]> = [];
 
-/** What the Inbox's bare panel holds of the plan's panel kinds: nothing, the task's page drawing what they show. */
+/** What the Inbox's bare panel, and an agent's own page, hold of the plan's panel kinds: nothing, the task's page drawing what they show. */
 const NO_HOLDS: TaskHolds = {};
 
 /** No ids, the same array every render. */
@@ -1196,17 +1188,8 @@ function inWorkspace<Entry extends { readonly taskId: string }>(
   return entries.filter((entry) => listed.has(entry.taskId));
 }
 
-/**
- * What the open task holds of each fixed tab's kind: its plan always, and of
- * its Inbox whether it may draw one, an agent held, an archived one among
- * them, or an item waiting (`inbox`).
- */
-function taskHolds(inbox: boolean): TaskHolds {
-  return {
-    [SIDE_PANEL_TAB.PLAN]: true,
-    [SIDE_PANEL_TAB.INBOX]: inbox,
-  };
-}
+/** What the open task holds of each fixed tab's kind: its plan always. */
+const TASK_HOLDS: TaskHolds = { [SIDE_PANEL_TAB.PLAN]: true };
 
 export function useTasksTab(input: {
   acts: Pick<ActHandle, "act" | "press" | "tell">;
@@ -1289,8 +1272,6 @@ export function useTasksTab(input: {
   const [sectionReveal, setSectionReveal] = useState<TasksControl["sectionReveal"]>(undefined);
   const [messageReveal, setMessageReveal] = useState<MessageReveal | undefined>(undefined);
   const [commentReveal, setCommentReveal] = useState<TasksControl["commentReveal"]>(undefined);
-  const [inboxItemReveal, setInboxItemReveal] =
-    useState<TasksControl["inboxItemReveal"]>(undefined);
   const messageAsks = useRef(0);
   const [threadReveal, setThreadReveal] = useState<ThreadReveal | undefined>(undefined);
   /** The asks to show a section made so far, so each is its own even after the last was let go. */
@@ -1479,11 +1460,6 @@ export function useTasksTab(input: {
     named,
     agents.draft?.id,
   );
-  // The task's Inbox stands on a task holding an agent, an archived one among them, since only an
-  // agent posts, or one main's read across the account says an item waits on.
-  const inboxHeld =
-    (agents.heldIds?.length ?? 0) > 0 ||
-    input.inboxWaiting.some((task) => task.taskId === viewed.activeTaskId);
   mainRef.current = mainTabs;
   // A task whose column holds no tab past its Overview once its agents are
   // read opens a new agent's draft beside it (`use-main-tabs.ts`), so a task
@@ -1594,8 +1570,8 @@ export function useTasksTab(input: {
           bare: true,
         }
       : pageAgents === undefined
-        ? { id: viewed.activeTaskId, holds: taskHolds(inboxHeld) }
-        : { id: pageAgent, holds: AGENT_PAGE_HOLDS },
+        ? { id: viewed.activeTaskId, holds: TASK_HOLDS }
+        : { id: pageAgent, holds: NO_HOLDS },
     inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
     NO_IDS,
     inboxView !== undefined ? inboxPageIds : pageAgents === undefined ? pages : agentPageIds,
@@ -1701,21 +1677,12 @@ export function useTasksTab(input: {
         : columnShown && mainTabs.tab !== undefined && isAgentTab(mainTabs.tab)
           ? mainTabs.tab.agent
           : null;
-  // The task's Inbox is the side panel's, on screen while the panel shows it beside the task, or beside the agent on its own page.
-  const panelShown =
-    shown &&
-    historyFor === undefined &&
-    standIn === undefined &&
-    fixture === undefined &&
-    sidePanel.open;
   const shownInbox =
     shown && fixture === undefined && inboxView !== undefined
       ? inboxChosen !== undefined && "taskId" in inboxChosen
         ? inboxChosen.taskId
         : null
-      : panelShown && sidePanel.tab === SIDE_PANEL_TAB.INBOX
-        ? (pageAgent ?? viewed.activeTaskId ?? null)
-        : null;
+      : null;
   // Main is told which agent's tab is on screen, whose end it marks unseen nowhere then.
   const reportedAgent = useRef<string | null | undefined>(undefined);
   useEffect(() => {
@@ -3029,31 +2996,34 @@ export function useTasksTab(input: {
     }
   };
 
-  /** An Inbox item opened where its task, found already, holds it: in the task's own Inbox tab where the account lists the task, else in the window's Inbox. */
+  /**
+   * An Inbox item opened in the window's Inbox where its task, found
+   * already, holds it: narrowed to the task where the account lists it, as
+   * the task's "needs you" count narrows it, else among every item.
+   */
   const openInboxItemOn = (workspace: string, place: InboxItemPlace, planId: string | null) => {
     // An item of a task the account lists is shown in the task's own workspace, whatever the slug says.
     const holder = planId === null ? undefined : viewed.tasks.find((task) => task.id === planId);
     listLinked(holder?.workspaceId ?? workspace);
-    // An item of a task the account lists opens in that task's own Inbox tab, which opens it once its read holds it.
-    if (holder !== undefined) {
-      showPanelTab(holder.id, SIDE_PANEL_TAB.INBOX);
-      setInboxItemReveal((last) => ({
-        planId: holder.id,
-        itemId: place.itemId,
-        ask: (last?.ask ?? 0) + 1,
-      }));
-      return;
+    if (holder !== undefined) chooseInboxTask(holder.id);
+    else {
+      // Note that a link names the thread and not its channel, which an Inbox narrowed to a channel follows once its item is read (`useThreadChannel`).
+      if (channelsOn) openChannelThread(place.itemId);
+      openTaskThread("planId" in place ? place.planId : undefined);
     }
-    // Note that a link names the thread and not its channel, which an Inbox narrowed to a channel follows once its item is read (`useThreadChannel`).
-    if (channelsOn) openChannelThread(place.itemId);
-    // Note that an item of a task opens in the task's own Inbox tab above, so one here is on no task and leaves any task the Inbox is narrowed to.
-    openTaskThread(undefined);
     standInFor({
       kind: STAND_IN.INBOX,
       chosen:
-        "planId" in place
-          ? { taskId: place.planId, itemId: place.itemId, opened: true }
-          : { agentId: place.agentId, itemId: place.itemId, opened: true },
+        holder !== undefined
+          ? {
+              taskId: holder.id,
+              ...("agentId" in place ? { itemAgentId: place.agentId } : undefined),
+              itemId: place.itemId,
+              opened: true,
+            }
+          : "planId" in place
+            ? { taskId: place.planId, itemId: place.itemId, opened: true }
+            : { agentId: place.agentId, itemId: place.itemId, opened: true },
     });
   };
 
@@ -3268,8 +3238,8 @@ export function useTasksTab(input: {
     [panelStrip, panelFiles, closePanelTab, viewed.activeTaskId, setClosedTabs, latestClosedTabs],
   );
   // Whether the open task's strips draw a closed tab of it again: an agent's
-  // while the agent is not archived, the Inbox while the task holds an
-  // agent, a Changes tab while its agent is the task's, archived or not,
+  // while the agent is not archived, never the Inbox, which the panel
+  // draws no more, a Changes tab while its agent is the task's, archived or not,
   // and a subagent's, a Terminal tab, or a page's on the strip's own
   // terms. Note that what the task has not read yet counts as drawn, as the
   // strips stand a tab until the read says otherwise.
@@ -3279,11 +3249,7 @@ export function useTasksTab(input: {
     if (closed.strip === CLOSED_TAB_STRIP.COLUMN) {
       return !isAgentTab(tab) || agentIds === undefined || agentIds.includes(tab.agent);
     }
-    if (tab === SIDE_PANEL_TAB.INBOX) {
-      const held = agents.heldIds;
-      const waiting = input.inboxWaiting.some((task) => task.taskId === closed.task);
-      return held === undefined || held.length > 0 || waiting;
-    }
+    if (tab === SIDE_PANEL_TAB.INBOX) return false;
     if (isSubagentTab(tab))
       return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: NO_IDS });
     if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agents.heldIds });
@@ -3439,8 +3405,8 @@ export function useTasksTab(input: {
       reopenHere(closed);
       return;
     }
-    // Note that the plan's kind of old stands nowhere in the panel now, so it is passed over.
-    const closedKind = sidePanel.closedTabs.findLast((tab) => tab !== SIDE_PANEL_TAB.PLAN);
+    // Note that the plan's and the Inbox's kinds of old stand nowhere in the panel now, so they are passed over.
+    const closedKind = sidePanel.closedTabs.findLast((tab) => DRAWN_KINDS.includes(tab));
     if (closedKind === undefined) sidePanel.onToggle();
     else sidePanel.onChoose(closedKind);
   };
@@ -3681,14 +3647,9 @@ export function useTasksTab(input: {
     onRevealThread: revealThread,
     sectionReveal,
     commentReveal,
-    inboxItemReveal,
-    // Only the ask taken is let go; a newer one stands until its own task takes it.
-    onInboxItemRevealed: (ask) =>
-      setInboxItemReveal((last) => (last?.ask === ask ? undefined : last)),
     // Only the ask shown is let go; a newer one stands until its own task shows it.
     onSectionRevealed: (ask) =>
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),
-    onShowInboxTab: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.INBOX)),
     onShowInbox: guard(({ taskId }: { readonly taskId: string }) => {
       timeInboxOpen();
       setHistoryFor(undefined);

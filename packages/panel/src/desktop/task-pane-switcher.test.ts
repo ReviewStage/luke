@@ -478,20 +478,6 @@ test("on a phone a tab draws no bar of its own, and the task's header's ⋯ offe
   assert.ok(page.menu().includes(`View page${PAGE.title}`), "the source is shown");
 });
 
-test("on a phone the task's Inbox tab draws no head over its list, its search standing alone, and the task's header's ⋯ offers no View options, the tab listing everything", async () => {
-  const page = mount(SHELL_ROOM.NARROW, true, SIDE_PANEL_TAB.INBOX);
-  await act(async () => undefined);
-  assert.equal(page.container.querySelector(".inbox-tasks-bar"), null);
-  assert.ok(
-    page.container.querySelector('.inbox-search input[aria-label="Search inbox"]'),
-    "the search's field stands over the list",
-  );
-  assert.equal(
-    page.menu().some((each) => each.startsWith("View options")),
-    false,
-  );
-});
-
 /** Chooses Rename from Overview's ⋯ in a wide window's column. */
 function chooseOverviewRename(container: HTMLElement): void {
   const more = container.querySelector<HTMLButtonElement>(

@@ -43,7 +43,6 @@ import {
   useAgentComposer,
 } from "./tasks/use-agent-composer.js";
 import type { MainTab } from "./tasks/use-main-tabs.js";
-import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import { type TaskInboxControl, useTaskInbox } from "./tasks/use-task-inbox.js";
 import { NO_LOOKS } from "./tasks/use-task-looks.js";
 import type { TasksControl } from "./tasks/use-tasks-tab.js";
@@ -780,12 +779,6 @@ function feedOf(plans: Record<string, readonly InboxItem[]>): AppHostRead<AppInb
   return { rows: { [INBOX_SCOPE_KIND.PLAN]: plans, [INBOX_SCOPE_KIND.AGENT]: {} } };
 }
 
-/** The side panel shown on `tab`, its Plan and Inbox standing. */
-function inboxPanel(tab: SidePanelTab): TasksControl["sidePanel"] {
-  const tabs = [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX];
-  return { ...tasksControl().sidePanel, open: true, tabs, strip: tabs, tab };
-}
-
 /**
  * The window open on the Teammate invitations task with `tabs` beside its
  * plan's, `chosen` among them, its agent standing as `agent` says, the draft
@@ -797,7 +790,6 @@ async function columnOn(
   tabs: readonly MainTab[],
   chosen: MainTab | undefined,
   agent = INVITES.agent,
-  side: SidePanelTab | undefined = undefined,
   opening = "",
 ) {
   handInboxItems(feedOf({ [INVITES.plan.id]: [approval(1)] }));
@@ -814,7 +806,6 @@ async function columnOn(
         ? [INVITES.agent.id]
         : [],
     },
-    ...(side === undefined ? undefined : { sidePanel: inboxPanel(side) }),
     agents: {
       ...agentsControl({ agents: [agent], agentIds: [agent.id] }),
       draft: {
@@ -871,21 +862,10 @@ async function columnOn(
   };
 }
 
-test("an inbox card's answer and a draft agent's first message mark their tabs while another is chosen, never their open task's row", async () => {
+test("a draft agent's first message marks its tab while another is chosen, never its open task's row", async () => {
   window.localStorage.setItem(
     "luke.composerDrafts",
     JSON.stringify([
-      {
-        accountId: null,
-        place: {
-          kind: "inbox",
-          planId: INVITES.plan.id,
-          agentId: INVITES.agent.id,
-          itemId: "a1b2c3d4-0000-4000-8000-000000000001",
-          revision: 1,
-        },
-        text: "Only for teammates",
-      },
       {
         accountId: null,
         place: { kind: "newAgent", planId: INVITES.plan.id, draftId: DRAFT_KEY },
@@ -894,45 +874,19 @@ test("an inbox card's answer and a draft agent's first message mark their tabs w
     ]),
   );
   const tabs = [{ draft: DRAFT_KEY }];
-  for (const [chosen, side, inboxMarked, draftMarked] of [
-    [undefined, SIDE_PANEL_TAB.PLAN, true, true],
-    [undefined, SIDE_PANEL_TAB.INBOX, false, true],
-    [{ draft: DRAFT_KEY }, SIDE_PANEL_TAB.INBOX, false, false],
-    [{ draft: DRAFT_KEY }, SIDE_PANEL_TAB.PLAN, true, false],
+  for (const [chosen, draftMarked] of [
+    [undefined, true],
+    [{ draft: DRAFT_KEY }, false],
   ] as const) {
-    const column = await columnOn(tabs, chosen, INVITES.agent, side, "Write the expiry job");
-    assert.equal(column.tabDrafted(TAB_WORDS.INBOX), inboxMarked);
+    const column = await columnOn(tabs, chosen, INVITES.agent, "Write the expiry job");
     assert.equal(column.tabDrafted(TAB_WORDS.NEW_AGENT), draftMarked);
     assert.equal(column.rowDrafted(), false);
     column.unmount();
   }
 });
 
-test("a draft agent's tab holding no words, and an Inbox whose only draft is a pick on an item since changed, wear no Draft pencil", async () => {
-  window.localStorage.setItem(
-    "luke.composerDrafts",
-    JSON.stringify([
-      {
-        accountId: null,
-        place: {
-          kind: "inbox",
-          planId: INVITES.plan.id,
-          agentId: INVITES.agent.id,
-          itemId: "a1b2c3d4-0000-4000-8000-000000000001",
-          revision: 0,
-        },
-        text: "",
-        choices: ["Approve"],
-      },
-    ]),
-  );
-  const column = await columnOn(
-    [{ draft: DRAFT_KEY }],
-    undefined,
-    INVITES.agent,
-    SIDE_PANEL_TAB.PLAN,
-  );
-  assert.equal(column.tabDrafted(TAB_WORDS.INBOX), false);
+test("a draft agent's tab holding no words wears no Draft pencil", async () => {
+  const column = await columnOn([{ draft: DRAFT_KEY }], undefined);
   assert.equal(column.tabDrafted(TAB_WORDS.NEW_AGENT), false);
 });
 
@@ -981,95 +935,6 @@ function approval(revision: number): InboxItem {
     updatedAt: 1_000,
   };
 }
-
-/**
- * The window on its own registry, open on the Teammate invitations task's
- * Inbox tab, whose read answers `item`. Its sidebar row is drawn as it is
- * while another task is open, the only time it wears the Draft pencil.
- */
-async function inboxOn(item: InboxItem) {
-  answerMotion();
-  handInboxItems(feedOf({ [INVITES.plan.id]: [item] }));
-  const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  roots.push(root);
-  const tasks = tasksControl({
-    page: TASKS_PAGE.DOCUMENT,
-    tasks: [INVITES.plan],
-    activeTaskId: INVITES.plan.id,
-    region: { kind: DOCUMENT_REGION.READY, task: INVITES.plan },
-    sidePanel: inboxPanel(SIDE_PANEL_TAB.INBOX),
-    agents: agentsControl({ agents: [INVITES.agent], agentIds: [INVITES.agent.id] }),
-  });
-  await act(async () =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(
-          Fragment,
-          null,
-          createElement(SignedIn, { account: undefined }),
-          createElement(
-            "ul",
-            null,
-            createElement(SidebarTask, {
-              tasks: tasks,
-              task: INVITES.plan,
-              current: false,
-              unread: false,
-              now: 3,
-              onOpen: () => undefined,
-            }),
-          ),
-          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: tasks }),
-        ),
-      ),
-    ),
-  );
-  await settle();
-  // Note that the tab chooses nothing by itself, so the item is opened as a press on its row opens it.
-  const row =
-    container.querySelector<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main") ??
-    assert.fail("the item's row");
-  await act(async () => row.click());
-  await settle();
-  const box = () => container.querySelector(".inbox-view") ?? assert.fail("the card's answer box");
-  return {
-    /** The words the card's note shows. */
-    note: () => composerEditor(box()).textContent,
-    /** Types the words into the card's note, as the field's own input does. */
-    type: async (words: string) => {
-      typeInComposer(box(), words);
-      await settle();
-    },
-    drafted: () =>
-      container.querySelector(`ul > li > button [role="img"][aria-label="${DRAFT_WORD}"]`) !== null,
-    reload: () => {
-      for (const each of roots.splice(0)) act(() => each.unmount());
-      container.remove();
-    },
-  };
-}
-
-test("an inbox card's note outlasts a reload, its task's row marked meanwhile, and the agent posting on the item again", async () => {
-  const before = await inboxOn(approval(1));
-  await before.type("Only for teammates, not guests");
-  assert.equal(before.drafted(), true);
-  before.reload();
-
-  const after = await inboxOn(approval(1));
-  assert.equal(after.note(), "Only for teammates, not guests");
-  assert.equal(after.drafted(), true);
-  after.reload();
-
-  const changed = await inboxOn(approval(2));
-  assert.equal(
-    changed.note(),
-    "Only for teammates, not guests",
-    "the agent's post never takes the words being written",
-  );
-  assert.equal(changed.drafted(), true);
-});
 
 /** One item of an agent's with no plan, open and asking for an approval, at `revision`. */
 function tasklessItem(agentId: string, id: string, revision: number): InboxItem {
