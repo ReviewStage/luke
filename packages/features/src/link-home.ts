@@ -45,6 +45,21 @@ const APP_PROTOCOLS: ReadonlySet<string> = new Set(
   [LINK_HOME.APP_SCHEME, ...SCHEME_ALIASES].map((scheme) => `${scheme}:`),
 );
 
+/** A literal as a pattern that matches it alone. */
+function escapedPattern(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+/**
+ * The opening of a link's address in a text, `<scheme>://<host>`, as a
+ * pattern: by the web's scheme or the desktop's, on the home's host, or by a
+ * scheme or on a host it once had, so a scan of words already kept still
+ * finds the links a rename left behind.
+ */
+export const LINK_HOME_PATTERN = `(?:${["https", LINK_HOME.APP_SCHEME, ...SCHEME_ALIASES]
+  .map(escapedPattern)
+  .join("|")}):\\/\\/(?:${[...HOSTS].map(escapedPattern).join("|")})`;
+
 /** Whether an address is in the desktop's own scheme, or one it was once handed links in. */
 export function isAppLinkProtocol(protocol: string): boolean {
   return APP_PROTOCOLS.has(protocol);

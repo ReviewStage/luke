@@ -11,12 +11,14 @@
  * served at, so both render the same view.
  */
 
+import { LINK_ORIGIN } from "@luke/features/link-home";
+
 export const CHANGELOG_PATH = "/changelog";
 /** The changelog's RSS feed, every release an item linking to its own page. */
 export const CHANGELOG_FEED_PATH = "/changelog/rss.xml";
 const CHANGELOG_FEED_TITLE = "Luke changelog";
 const CHANGELOG_PAGE_SIZE = 10;
-const SITE_ORIGIN = "https://tryluke.dev";
+const SITE_ORIGIN = LINK_ORIGIN;
 
 /** What a changelog address shows: a page of releases, or one release alone. */
 export const CHANGELOG_VIEW = {
