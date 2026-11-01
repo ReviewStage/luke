@@ -129,14 +129,16 @@ async function settle(): Promise<void> {
  * The task open on its own tab, a working agent's tab and a draft's beside
  * it, and the side panel open with the done agent's Changes tab, the working agent's Terminal tab, and a page's tab.
  */
-async function mount(shown: { body?: string; tab?: SidePanelTab } = {}): Promise<HTMLElement> {
+async function mount(
+  shown: { body?: string; tab?: SidePanelTab; listed?: TaskSummary } = {},
+): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
   const base = tasksControl();
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
-    tasks: [SUMMARY],
+    tasks: [shown.listed ?? SUMMARY],
     activeTaskId: TASK.id,
     region: {
       kind: DOCUMENT_REGION.READY,
@@ -272,12 +274,13 @@ test("the side panel's + offers an agent's Pull request in the look its tab wear
   );
 });
 
-test("the column's strip leads with the task's Overview, under the document's glyph, and the side panel offers no Plan", async () => {
-  const container = await mount();
+test("the column's strip leads with the task itself, named as the list names it now, and the side panel offers no Plan", async () => {
+  // Note that the list renamed the task before its document was read again, so the tab follows the list.
+  const container = await mount({ listed: { ...SUMMARY, name: "Expire invites after a week" } });
   const column = container.querySelector(".main-tabs");
   assert.ok(column, "the task's column's strip");
   const first = column.querySelector<HTMLElement>('[role="tab"] .luke-tab-label');
-  assert.equal(first?.textContent, TAB_WORDS.OVERVIEW, "Overview leads the strip");
+  assert.equal(first?.textContent, "Expire invites after a week", "the task leads the strip");
   const panel = container.querySelector(".side-panel-tabs");
   assert.ok(panel, "the side panel's strip");
   assert.ok(!tabLooks(panel).has(TASK.name) && !tabLooks(panel).has("Plan"), "no Plan tab");

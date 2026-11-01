@@ -1174,7 +1174,7 @@ function PlanDocument({
                           measure
                           title={
                             <MainTabStrip
-                              task={task}
+                              task={listed}
                               main={mainTabs}
                               agents={agents}
                               unread={tasks.unreadTabs}

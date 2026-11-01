@@ -504,6 +504,7 @@ export function MainTabStrip({
   onShown,
   planMenu,
 }: {
+  /** The task as the list names it now, its name and status first there, which its first tab wears. */
   task: TaskSummary;
   main: MainTabsControl;
   agents: AgentsControl;
