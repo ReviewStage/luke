@@ -15,6 +15,7 @@ import { cn } from "../../cn.js";
 import { FoldChevronIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, type PressPulse, pulsePress } from "../../press-pulse.js";
 import { type DisclosureMotion, disclosureMotion, useDisclosure } from "../../use-disclosure.js";
+import { useListMotionReplay } from "../list-motion/list-motion.js";
 
 /**
  * disclosure.tsx -- a fold: a `details` whose open state is React's, so a closed body is not drawn at all.
@@ -37,7 +38,12 @@ import { type DisclosureMotion, disclosureMotion, useDisclosure } from "../../us
  * (`use-disclosure.ts`). For the moment it moves, the body's height is
  * published on the element as `--disclosure-rise`, which is how a fold
  * whose line travels as it opens tells its stylesheet how far. A fold drawn
- * open from the start, or drawn again, replays nothing.
+ * open from the start, or drawn again, replays nothing. Under a list's
+ * motion (`ListMotion`), what stands below the fold glides to where each
+ * change puts it: down as a press opens it, and up once a closed body has
+ * faded and leaves the layout. Note that the fold tells the motion of both
+ * commits (`useListMotionReplay`), because a fold that keeps its own state
+ * draws them without the list.
  *
  * While an app's find looks through what holds the fold (`DisclosureFind`),
  * a closed body is drawn after all, still hidden inside its closed `details`
@@ -175,7 +181,8 @@ export function useDisclosureFold(
   };
   // Whether the open state is a press's, which alone plays the opening.
   const [pressed, setPressed] = useState(false);
-  const shown = useDisclosure(open);
+  const replay = useListMotionReplay();
+  const shown = useDisclosure(open, replay);
   const root = useRef<HTMLDetailsElement | null>(null);
   const held = useRef<HTMLElement | null>(null);
   const shownRef = shown.ref;
@@ -208,6 +215,7 @@ export function useDisclosureFold(
       toggle: () => {
         setPressed(true);
         setOpen(!open);
+        if (!open) replay();
       },
       body,
     },
