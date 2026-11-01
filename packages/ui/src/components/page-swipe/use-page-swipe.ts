@@ -21,8 +21,9 @@
  *
  * Only a finger swipes (`pointerType` touch): a mouse and a pen keep their
  * own drags. A claimed swipe's moves are kept from what lies under the
- * finger, so a picture under it does not move too, and its touch moves are
- * held from scrolling the page.
+ * finger, so a picture under it does not move too, its touch moves are
+ * held from scrolling the page, and a click the browser sends once it is let
+ * go reaches nothing, so it neither zooms the picture nor closes the viewer.
  */
 
 import { type RefObject, useEffect, useRef } from "react";
@@ -44,6 +45,9 @@ const PAGE_SWIPE = {
 /** The surface's mark while a finger holds it, and how far the finger has gone. */
 const SWIPE_ATTRIBUTE = "data-luke-page-swipe";
 const OFFSET_PROPERTY = "--luke-page-swipe-offset";
+
+/** The boxes that take a sideways drag of their own: a field, and a slider, whose thumb and track are no field (`@luke/ui`'s Slider, as a video's scrubber). */
+const DRAGGED_ITSELF = 'input, textarea, [role="slider"], [data-slot="slider"]';
 
 /** What a sideways overflow says where a box scrolls along it. */
 const SCROLLING_OVERFLOW = new Set(["auto", "scroll"]);
@@ -98,10 +102,10 @@ function stepOnRelease(offset: number, velocity: number, width: number): 1 | -1 
   return landed < 0 ? 1 : -1;
 }
 
-/** Whether `target`, or a box between it and `surface`, is a field or scrolls sideways itself, which keeps a finger on it. */
+/** Whether `target`, or a box between it and `surface`, is dragged sideways itself or scrolls sideways, which keeps a finger on it. */
 function keepsFinger(target: Element, surface: HTMLElement): boolean {
   for (let box: Element | null = target; box !== null && box !== surface; box = box.parentElement) {
-    if (box instanceof HTMLInputElement || box instanceof HTMLTextAreaElement) return true;
+    if (box.matches(DRAGGED_ITSELF)) return true;
     if (box.scrollWidth <= box.clientWidth) continue;
     if (SCROLLING_OVERFLOW.has(getComputedStyle(box).overflowX)) return true;
   }
@@ -118,6 +122,8 @@ export function usePageSwipe(options: PageSwipeOptions): void {
   const latest = useRef(options);
   latest.current = options;
   const swipe = useRef<Swipe | undefined>(undefined);
+  // Whether a swipe was let go since the last finger went down, so the click a browser may send after it is no press.
+  const swiped = useRef(false);
   const { enabled, surface } = options;
 
   useEffect(() => {
@@ -131,6 +137,7 @@ export function usePageSwipe(options: PageSwipeOptions): void {
       unmark();
     };
     const down = (event: PointerEvent) => {
+      swiped.current = false;
       // A second finger makes the swipe a pinch, which is no swipe.
       if (swipe.current !== undefined) {
         drop();
@@ -179,24 +186,36 @@ export function usePageSwipe(options: PageSwipeOptions): void {
       const held = swipe.current;
       if (held === undefined || held.pointerId !== event.pointerId) return;
       drop();
-      if (held.state !== SWIPE_STATE.CLAIMED || event.type !== "pointerup") return;
+      if (held.state !== SWIPE_STATE.CLAIMED) return;
+      swiped.current = true;
+      if (event.type !== "pointerup") return;
       // Note that the release is a sample of its own, so a finger held still before it lifts carries no speed from before the pause.
       const offset = event.clientX - held.x;
       held.samples.push({ at: event.timeStamp, offset });
       const step = stepOnRelease(offset, speed(held.samples), held.width);
       if (step !== undefined) latest.current.onStep(step);
     };
+    // Note that a click after a swipe reaches nothing, because a swipe let go short of a page would otherwise zoom the picture under it or close the viewer from its veil.
+    const click = (event: MouseEvent) => {
+      // A click a key sends (`detail` 0) is a press of its own.
+      if (!swiped.current || event.detail === 0) return;
+      swiped.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+    };
     const capture = { capture: true } as const;
     window.addEventListener("pointerdown", down, capture);
     window.addEventListener("pointermove", move, capture);
     window.addEventListener("pointerup", up, capture);
     window.addEventListener("pointercancel", up, capture);
+    window.addEventListener("click", click, capture);
     window.addEventListener("touchmove", touchMove, { capture: true, passive: false });
     return () => {
       window.removeEventListener("pointerdown", down, capture);
       window.removeEventListener("pointermove", move, capture);
       window.removeEventListener("pointerup", up, capture);
       window.removeEventListener("pointercancel", up, capture);
+      window.removeEventListener("click", click, capture);
       window.removeEventListener("touchmove", touchMove, capture);
       drop();
     };
