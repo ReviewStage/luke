@@ -376,15 +376,11 @@ export const SERVER_HANDED = {
 
 export type ServerHanded = (typeof SERVER_HANDED)[keyof typeof SERVER_HANDED];
 
-/** What a server's card says of what a mention of it does. */
+/** What a server's card says of what a mention of it does, where its corner's On or Off does not already say it all. */
 export const SERVER_MENTION_NOTE = {
-  ON: "On for this agent.",
-  ON_NAMED: "On for this agent, and this message names it.",
-  OFF: "Off for this agent.",
-  OFF_OPENS:
-    "Off for this agent. This message hands it to the turn it opens alone; the switch stays off.",
+  OFF_OPENS: "This message hands it to the turn it opens alone; the switch stays off.",
   OFF_STEERS:
-    "Off for this agent. Sent into a turn under way, this message hands it to the next turn alone; the switch stays off.",
+    "Sent into a turn under way, this message hands it to the next turn alone; the switch stays off.",
   NOT_CONNECTED: "Not connected, so no agent is handed it.",
   EXPIRED: "Sign-in expired. A call to it asks you to reconnect it first.",
 } as const;
@@ -392,13 +388,14 @@ export const SERVER_MENTION_NOTE = {
 /**
  * What a server's card says of a mention of it, from its row and the agent
  * the words are written to, if any, and how they reach it: an agent with
- * the server on has it anyway, and one with it off is handed it for one
- * turn, the one the words open or, where they reached a turn under way, the
- * next, its switch untouched (the service's `mentionedServers`); a server
- * not connected is handed to no agent, and one whose sign-in expired is
- * handed all the same, its calls asking for it to be reconnected. Nothing
- * where the row already says it, a problem of its server's or a sign-in
- * under way, or nothing is read yet.
+ * it off is handed it by the developer's words for one turn, the one the
+ * words open or, where they reached a turn under way, the next, its switch
+ * untouched (the service's `mentionedServers`); a server not connected is
+ * handed to no agent, and one whose sign-in expired is handed all the same,
+ * its calls asking for it to be reconnected. Nothing where the card already
+ * says it: an agent with the server on, which has it anyway, or the agent's
+ * own words, where the corner's On or Off is the whole of it; a problem of
+ * its server's or a sign-in under way; or nothing read yet.
  */
 export function serverMentionNote(
   row: ServerRow,
@@ -415,11 +412,7 @@ export function serverMentionNote(
     case SERVER_ROW.RETRY:
       return undefined;
     case SERVER_ROW.SWITCH:
-      if (agent === undefined) return undefined;
-      if (row.on) {
-        return agent.handed === undefined ? SERVER_MENTION_NOTE.ON : SERVER_MENTION_NOTE.ON_NAMED;
-      }
-      if (agent.handed === undefined) return SERVER_MENTION_NOTE.OFF;
+      if (agent?.handed === undefined || row.on) return undefined;
       return agent.handed === SERVER_HANDED.STEERS
         ? SERVER_MENTION_NOTE.OFF_STEERS
         : SERVER_MENTION_NOTE.OFF_OPENS;

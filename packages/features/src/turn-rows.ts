@@ -156,7 +156,7 @@ export const CALL_WORDS = {
   [CALL_KIND.MOVE_THREAD]: { verb: "Moved a thread to", code: false },
   [CALL_KIND.WORKER]: { verb: "Asked the worker", code: false },
   [CALL_KIND.WORKER_WAIT]: { verb: "Waited for the worker", code: false },
-  [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped subagent", code: false },
+  [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped the worker", code: false },
   [CALL_KIND.LIST_AGENTS]: { verb: "Listed the agents", code: false },
   [CALL_KIND.READ_AGENT]: { verb: "Read the agent", code: false },
   [CALL_KIND.MESSAGE_AGENT]: { verb: "Messaged the agent", code: false },

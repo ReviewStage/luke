@@ -84,7 +84,7 @@ export const EXPERIMENTS = [
     name: "Memory",
     detail:
       "Your agents keep settled facts about how your team works and recall them in later work, " +
-      "shared across your workspace and reviewed in Settings › Memory.",
+      "shared across your workspace.",
     owner: "Dean",
     since: "2026-10-23",
   },

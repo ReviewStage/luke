@@ -42,7 +42,6 @@ import {
   REPLAY_PAGE,
   replayCallsServer,
   replayCount,
-  replayLede,
   replayPage,
   replayTaskTodos,
   replayVerb,
@@ -467,7 +466,7 @@ function ReplayFoot({
 
 /**
  * The card: the source's chip and how many steps on its summary row, and,
- * opened, the lede, Luke's summary and the steps left out, the newest steps
+ * opened, Luke's summary and the steps left out, the newest steps
  * a page at a time, and the foot; the line naming who started the agent and
  * when under it.
  */
@@ -548,9 +547,6 @@ export function ReplayCard({
           </OneLine>
         </PlanHeader>
         <PlanContent layout={PLAN_BODY_LAYOUT.STACK}>
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {replayLede(name)}
-          </Text>
           {summary === undefined || replay.summary === undefined ? null : (
             <SummaryRow line={summary} text={replay.summary.text} />
           )}

@@ -37,7 +37,7 @@ function Consent(): React.JSX.Element {
     <AuthPage
       mark={<AuthMark tone={failure ? LANDING_TONE.DANGER : undefined} />}
       title={failure ? "Luke could not continue" : "Continuing to Luke…"}
-      description={failure ? "Start sign-in again." : "This window will close soon."}
+      description={failure ? "Start sign-in again." : undefined}
       action={failure ? openLukeFromMac() : undefined}
     />
   );

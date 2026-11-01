@@ -261,11 +261,6 @@ export function summaryLine(replay: Replay): string | undefined {
   return `Summary of ${steps === 1 ? "1 earlier step" : `${steps} earlier steps`} (written by Luke)`;
 }
 
-/** The lede the card's body opens on, naming the source by its tab's name. */
-export function replayLede(source: string): string {
-  return `What this agent was handed of ${source}'s work, as it was sent.`;
-}
-
 /** The steps drawn of `kept` once `shown` of the newest are: never fewer than one page, nor more than are kept. */
 export function replayPage(kept: number, shown: number): ReplayPage {
   const from = Math.max(0, kept - Math.max(shown, REPLAY_PAGE));
