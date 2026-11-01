@@ -1064,7 +1064,8 @@
   --spacing-plan-changed-note: 22px; /* off-scale: the line's room, which its button overhangs */
   --color-plan-changed: color-mix(in srgb, var(--accent) 9%, transparent);
   /* A transcript (`ai-elements/`): its column's inset; a reply's reading
-     leading; the developer's bubble, at most nearly the column, at a large
+     leading; a bubble, the developer's and a received one alike, at most
+     enough short of the column that the two sides stand apart, at a large
      corner; where a line's words start past its icon (`--transcript-gutter`,
      tasks.css), which what opens under a line is set in to; a call's chip at a pill's widest
      in its line; the measure of the line said in place of lines, and of a
@@ -1072,7 +1073,7 @@
      its own, ringed and lifted, kept inside the log's edges, and the ground a
      button floats on there; and the line of an address that opens nothing. */
   --spacing-content-inset: var(--content-inset);
-  --spacing-bubble: 95%; /* off-scale: a share of the column */
+  --spacing-bubble: 85%; /* off-scale: a share of the column */
   --spacing-transcript-gutter: var(--transcript-gutter);
   --spacing-tool-chip: var(--luke-inline-ref-pill-width);
   --spacing-conversation-empty: 280px; /* off-scale: a short line's measure */
