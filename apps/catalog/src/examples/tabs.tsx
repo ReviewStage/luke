@@ -191,7 +191,7 @@ function TabsExamples(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection
         id="tabs-frame"
-        title="On the frame: led by the task, the chosen tab in the soft fill"
+        title="On the frame: the chosen tab lifted in the sheet's ground"
       >
         <Strip frame />
       </CatalogSection>

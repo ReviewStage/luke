@@ -393,16 +393,16 @@ stand and how they space, never their size:
 | Component | `Toolbar`, `Tabs`, `SearchField` with `SEARCH_FIELD_LOOK.FRAME` | `PaneBar` |
 | Row | A top row's height (`--desktop-bar-height`), no fill, on the frame, the window's handle where nothing is pressed | `--luke-pane-bar-height`, the hover fill, a hairline under it |
 | Spacing | A control's gap (`--luke-control-gap`) between controls; a pair that is one control (Previous and Next) stands touching | The glyphs close (`--luke-space-2`), the bar's groups a control's gap apart |
-| Chosen | The soft fill (`--luke-color-fill-strong`), no outline or shadow | — |
+| Chosen | Lifted in the sheet's ground beneath it (`--luke-color-ground`), by a hairline and a soft shadow, as the sidebar draws the place standing open | — |
 
-Every row of a pane, on the frame or in its sheet, stands its first and
-last control on the same two lines: a column's inset (`--column-inset`) in
-from the sheet's left and right edges. So in each pane the top row's last
-glyph stands over the sheet's bars' last glyph, and its first control over
-theirs; the side panel's toggle, ending the rightmost row, stands on that
-line too; and a row past the traffic lights and the sidebar's toggle, while
-the sidebar is folded, starts past them instead. Every control stands on
-its row's centre line.
+Every row of a pane, on the frame or in its sheet, stands its last control
+on one line: a column's inset (`--column-inset`) in from the sheet's right
+edge. So in each pane the top row's last glyph stands over the sheet's
+bars' last glyph, and the side panel's toggle, ending the rightmost row,
+stands on that line too. A tab row's first tab stands flush with its
+sheet's left edge, or past the traffic lights and the sidebar's toggle
+while the sidebar is folded; a bar in the sheet starts its first control a
+column's inset in. Every control stands on its row's centre line.
 
 A field on the frame takes `SEARCH_FIELD_LOOK.FRAME`, the sheet's own ground,
 because the hover fill a well wears in a sheet all but vanishes on the

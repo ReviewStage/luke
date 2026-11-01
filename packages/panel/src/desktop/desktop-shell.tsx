@@ -684,9 +684,7 @@ function KeptInbox({
  * window as one pane at a time (`shell-room.ts`): the sidebar is a drawer its
  * toggle opens, with no edge to peek it out, and the side panel stands only
  * full screen, and Settings and a version history each show their
- * list or the item chosen in it, one at a time. The window stands no title
- * bar over its panes: each pane's top row is the window's top row, beside
- * the sidebar's own, and each page names itself there. Back and forward ride the left column's title-bar row,
+ * list or the item chosen in it, one at a time. Back and forward ride the left column's title-bar row,
  * the tasks' sidebar or Settings' page list alike, and leaving Settings is
  * going back to wherever it was opened from, or to the tasks when nothing
  * stands behind it. New task's dialog stands over the tasks or a version
