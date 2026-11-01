@@ -16,6 +16,7 @@ import {
 import { DEVICE_ISOLATION, type DeviceIsolation } from "@luke/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_ANSWER_LEAD, INBOX_MESSAGE_LEAD } from "@luke/features/inbox-wire";
+import { LINK_HOME, LINK_ORIGIN } from "@luke/features/link-home";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
 import { SENDER_LABEL_LEAD } from "../attached-files.js";
@@ -382,7 +383,7 @@ When a result reads better as something to look at or click through than as word
  */
 const TASK_PLACE_WORDS = {
   onTask: {
-    link: ` A \`https://tryluke.dev/<workspace>/plan/<id>\` link names a task, or with \`#\` one of its plan's sections: what its plan said when the message was sent follows the developer's words, under "${MENTIONED_HEADING}".`,
+    link: ` A \`${LINK_ORIGIN}/<workspace>/plan/<id>\` link names a task, or with \`#\` one of its plan's sections: what its plan said when the message was sent follows the developer's words, under "${MENTIONED_HEADING}".`,
     olderLinks: ", `luke://folder/<path>/`, and `luke://plan/<id>#<heading>`",
     startAgent:
       " Start it on your own task, which is where a piece of this task's work belongs; start one on another task, or on a new task of its own, only for work unrelated to your task, or where the developer asked for that",
@@ -490,18 +491,18 @@ function namingWords(repository: string | null, taskLink: string | null): string
 - A file of your repository: \`[@session-store.ts](https://github.com/${repository}/blob/HEAD/apps/web/session-store.ts)\`; a folder the same way with \`tree\` for \`blob\`; lines at a commit already on GitHub: \`[@session-store.ts:3–5](https://github.com/${repository}/blob/<commit>/apps/web/session-store.ts#L3-L5)\`.`;
   const inboxItem =
     taskLink === null
-      ? "https://tryluke.dev/acme/agent/<agent-id>/inbox/<item-id>"
+      ? `${LINK_ORIGIN}/acme/agent/<agent-id>/inbox/<item-id>`
       : `${taskLink}/inbox/<item-id>`;
   const ownTask =
     taskLink === null
       ? `
-- A page you showed, which stands on you since you work on no task, by the \`mention\` \`${CODER_TOOL.SHOW_PAGE}\` or \`${CODER_TOOL.READ_PAGE}\` answered: \`[@Invite funnel](https://tryluke.dev/acme/agent/<agent-id>/page/<page-id>)\`.`
+- A page you showed, which stands on you since you work on no task, by the \`mention\` \`${CODER_TOOL.SHOW_PAGE}\` or \`${CODER_TOOL.READ_PAGE}\` answered: \`[@Invite funnel](${LINK_ORIGIN}/acme/agent/<agent-id>/page/<page-id>)\`.`
       : `
 - Your task's plan, whose link is \`${taskLink}\`: \`[@<the task's name>](${taskLink})\`, and one of its sections by its heading's anchor, the heading as GitHub spells an anchor (lower case, spaces as hyphens, punctuation dropped): \`[@Rollout](${taskLink}#rollout)\`.
 - A page shown on the task, by the \`mention\` \`${CODER_TOOL.SHOW_PAGE}\` or \`${CODER_TOOL.READ_PAGE}\` answered: \`[@Invite funnel](${taskLink}/page/<page-id>)\`.`;
   return `Name a thing the developer can open as a mention: a Markdown link whose words are \`@\` and the thing's name, \`[@name](target)\`. Luke draws it as the thing's chip, which opens it, wherever you write it: in a message, a thread, or the plan. Keep a mention in the plan exactly as it stands when you edit around it. Copy a target a tool answered rather than spelling one:${files}
 - A pull request or an issue on GitHub, or a Linear issue, by its own address: \`[@#42 Fix the refresh](https://github.com/${repository ?? EXAMPLE_REPOSITORY}/pull/42)\`, \`[@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142)\`. Write one so every time you name it, in passing and in a report to another agent among them, never as a bare \`#42\`, which draws as no chip; where no tool answered a pull request's address, spell it from its number, its repository's address with \`/pull/\` and the number.${ownTask}
-- Another agent, or another task, by the \`mention\` \`${CODER_TOOL.LIST_AGENTS}\`, \`${CODER_TOOL.START_AGENT}\`, or \`${CODER_TOOL.LIST_TASKS}\` answered: \`[@Wire the desktop](https://tryluke.dev/acme/plan/<task-id>/agent/<agent-id>)\`.
+- Another agent, or another task, by the \`mention\` \`${CODER_TOOL.LIST_AGENTS}\`, \`${CODER_TOOL.START_AGENT}\`, or \`${CODER_TOOL.LIST_TASKS}\` answered: \`[@Wire the desktop](${LINK_ORIGIN}/acme/plan/<task-id>/agent/<agent-id>)\`.
 - One of your threads, by the \`mention\` each of your thread tools answered for it: \`[@Review the invite flow](${inboxItem})\`.
 - A date, which opens nothing, by its day, or its time with the offset it is at, and a range by both ends joined by a slash, its words the date in full: \`[@Oct 20, 2026](luke://date/2026-10-20)\`, \`[@Oct 20, 2026, 3:00 PM PDT](luke://date/2026-10-20T15:00-07:00)\`, \`[@Oct 20, 2026 → Oct 24, 2026](luke://date/2026-10-20/2026-10-24)\`.
 - An MCP server, by its connection's name as your tools list it: \`[@Linear](luke://mcp/linear)\`, or \`[@Notion](luke://mcp/notion-2)\` for a second Notion account.
@@ -1024,7 +1025,7 @@ const OPERATOR_SECTIONS = `
 
 The developer's own agents are the ones they started, by hand or through any of their agents, you among them; every other agent of the workspace is a teammate's. For the developer's own agents you may, without asking: steer one, with \`${MESSAGE_AGENT_TOOL.name}\`; continue a failed one with \`${CODER_TOOL.START_AGENT}\`'s \`from\`, once, and never a second time for the same agent, which the service refuses, so where its continuation failed too, tell the developer; stop a runaway one with \`${CODER_TOOL.STOP_AGENT}\`, such as one going round the same failure or going the wrong way; archive an agent of theirs whose work is done with \`${CODER_TOOL.UPDATE_AGENT}\`, such as one whose pull request merged; and mark a task of theirs done with \`${CODER_TOOL.UPDATE_TASK}\` once its pull requests merged. Before you start new work, a new agent or a new task, ask the developer in a thread with \`${INBOX_TOOLS.POST.name}\`, unless they asked you for that work in this conversation. Always allowed: reading everything the developer reaches, summarising it, posting threads, and messaging any agent of the workspace with \`${MESSAGE_AGENT_TOOL.name}\`, a teammate's included.
 
-Report each action you took unasked as a line of its own in your reply: what you did, to which agent or task, and why, such as "Stopped [@Ana](https://tryluke.dev/acme/plan/<task-id>/agent/<agent-id>): it had retried the same failing migration for an hour." The developer scrolls back over these lines to see what you did.
+Report each action you took unasked as a line of its own in your reply: what you did, to which agent or task, and why, such as "Stopped [@Ana](${LINK_ORIGIN}/acme/plan/<task-id>/agent/<agent-id>): it had retried the same failing migration for an hour." The developer scrolls back over these lines to see what you did.
 
 ## Never
 
@@ -1223,7 +1224,7 @@ export function coderInstructions(
       : CODER_SECTION_WORDS;
   return `${place.work}${tools.todos}
 
-${place.search}${place.skills}${place.links}${place.link} Older messages write the same things as \`luke://file/<path>\`${place.olderLinks}. Write the name rather than a \`luke://\` link anywhere outside Luke, such as a commit or a pull request, where it leads nowhere; a GitHub or tryluke.dev link may be written as it is.
+${place.search}${place.skills}${place.links}${place.link} Older messages write the same things as \`luke://file/<path>\`${place.olderLinks}. Write the name rather than a \`luke://\` link anywhere outside Luke, such as a commit or a pull request, where it leads nowhere; a GitHub or ${LINK_HOME.HOST} link may be written as it is.
 
 ## Threads
 

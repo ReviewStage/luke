@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readPlanAttachment } from "@luke/database/models/plan-attachments";
+import { LINK_ORIGIN } from "@luke/features/link-home";
 import { type Picture, type PictureType, pictureTypeSchema } from "@luke/features/picture-wire";
 import { planAttachmentOf } from "@luke/features/plan-attachment-link";
 import { type UnparsedWireValue, unparsedWire } from "@luke/wire";
@@ -80,7 +81,7 @@ export type PictureLookResult =
 const LOOK_INPUT = Schema.Struct({
   address: describeWire(
     Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(PICTURE_LOOK.MAX_ADDRESS_CHARS)),
-    "The picture's address exactly as the plan's text writes it, inside its ![alt](address): https://tryluke.dev/<workspace>/plan/<plan>/files/<picture>.",
+    `The picture's address exactly as the plan's text writes it, inside its ![alt](address): ${LINK_ORIGIN}/<workspace>/plan/<plan>/files/<picture>.`,
   ),
 });
 

@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { AppLinkInbox } from "@luke/features/app-links";
+import { LINK_ORIGIN } from "@luke/features/link-home";
 import { type RunMode, runModeFor } from "@luke/host";
 import {
   buildCarriesDeveloperIdSigning,
@@ -98,8 +99,7 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
 
   // The account service's one development override stops at packaging.
   const accountBaseUrl =
-    (app.isPackaged ? undefined : environment.LUKE_ACCOUNT_BASE_URL) ??
-    "https://tryluke.dev/api/auth";
+    (app.isPackaged ? undefined : environment.LUKE_ACCOUNT_BASE_URL) ?? `${LINK_ORIGIN}/api/auth`;
 
   return {
     stateRoot,

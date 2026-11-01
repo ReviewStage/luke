@@ -1,3 +1,4 @@
+import { LINK_ORIGIN } from "@luke/features/link-home";
 import { type GatewayEventKind, NODE_CAPABILITY_STATUS, NodeRegistry } from "@luke/gateway";
 import type { WireValue } from "@luke/wire";
 import { Effect } from "effect";
@@ -47,7 +48,7 @@ export interface HostKernel {
  */
 export const ACCOUNT_BASE_URL_VARIABLE = "LUKE_ACCOUNT_BASE_URL";
 
-const ACCOUNT_BASE_URL = "https://tryluke.dev/api/auth";
+const ACCOUNT_BASE_URL = `${LINK_ORIGIN}/api/auth`;
 
 /**
  * The account service's address: on the service origin a shell named, where it
