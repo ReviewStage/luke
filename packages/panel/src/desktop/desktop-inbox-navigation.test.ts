@@ -1304,7 +1304,7 @@ test("a channel chosen while the workspace's channels could not be read says so 
   const notRead =
     page.querySelector<HTMLElement>('section[aria-label="Channels not read"]') ??
     assert.fail("the failed read is said");
-  assert.match(notRead.textContent ?? "", /Could not read this workspace's channels\./u);
+  assert.match(notRead.textContent ?? "", /This workspace's channels could not be read\./u);
   assert.equal(runAppCommand(APP_COMMAND.MARK_INBOX_READ), true);
   await settle();
   assert.deepEqual(world.readMarks, [`read:${THRESHOLD.id}`], "never the workspace's whole");

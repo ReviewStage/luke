@@ -1,5 +1,6 @@
 import type { ArchivedChannel } from "@luke/features/channel-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { readFailedWords } from "@luke/features/words";
 import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
@@ -47,7 +48,7 @@ interface ArchivedAsk {
 /** What the dialog says while it reads, where it could not, and where nothing is archived. */
 const ARCHIVED_WORDS = {
   READING: "Reading archived channels…",
-  NOT_READ: "Could not read this workspace's archived channels.",
+  NOT_READ: readFailedWords("this workspace's archived channels"),
   NONE: "Nothing here is archived.",
   UNARCHIVE: "Unarchive",
   UNARCHIVING: "Unarchiving",
