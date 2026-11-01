@@ -26,20 +26,23 @@ const FULL_SET = "000001ffffffffff";
 /** The emptied set every command a person or a model drives runs under. */
 const EMPTIED = "0000000000000000";
 
-/** One process as `/proc/<pid>/status` names it: its name and its bounding set. */
+/** One process as `/proc/<pid>/status` names it: its name, its bounding set, and its session, its own where none is given; and its command line, where one is written. */
 interface Process {
   readonly pid: number;
   readonly name: string;
   readonly bounding: string;
+  readonly session?: number;
+  readonly argv?: readonly string[];
 }
 
-/** `/proc/<pid>/status` as the kernel writes it, cut to the lines around the two the probe reads. */
-function statusFile({ pid, name, bounding }: Process): string {
+/** `/proc/<pid>/status` as the kernel writes it, cut to the lines around the three the probe reads. */
+function statusFile({ pid, name, bounding, session = pid }: Process): string {
   return [
     `Name:\t${name}`,
     "State:\tS (sleeping)",
     `Pid:\t${pid}`,
     "PPid:\t1",
+    `NSsid:\t${session}`,
     "CapInh:\t0000000000000000",
     "CapPrm:\t0000000000000000",
     "CapEff:\t0000000000000000",
@@ -57,6 +60,10 @@ const procOf = (processes: readonly Process[]) =>
       for (const process of processes) {
         mkdirSync(join(root, String(process.pid)));
         writeFileSync(join(root, String(process.pid), "status"), statusFile(process));
+        if (process.argv !== undefined) {
+          // Note that the kernel ends each argument with a NUL, the last one included.
+          writeFileSync(join(root, String(process.pid), "cmdline"), `${process.argv.join("\0")}\0`);
+        }
       }
       return root;
     }),
@@ -86,10 +93,32 @@ function sandboxOver(proc: string): RepositorySandbox {
 
 const SANDBOX_INIT: Process = { pid: 1, name: "sandbox-init", bounding: FULL_SET };
 const API_SHELL: Process = { pid: 1298, name: "bash", bounding: FULL_SET };
+/** Luke's browser, which the agent opened earlier in the turn: Xvfb and Chromium each leading a session of their own, a renderer in Chromium's. */
+const LUKE_BROWSER: readonly Process[] = [
+  {
+    pid: 300,
+    name: "Xvfb",
+    bounding: EMPTIED,
+    argv: ["Xvfb", ":77", "-screen", "0", "1280x800x24"],
+  },
+  {
+    pid: 310,
+    name: "chrome",
+    bounding: EMPTIED,
+    argv: ["/usr/local/chromium/chrome", "--remote-debugging-port=9333", "about:blank"],
+  },
+  {
+    pid: 311,
+    name: "chrome",
+    bounding: EMPTIED,
+    session: 310,
+    argv: ["/usr/local/chromium/chrome", "--type=renderer"],
+  },
+];
 
-it.effect("a sandbox running only what the sandbox's API started is idle", () =>
+it.effect("a sandbox running only what the sandbox's API started and Luke's browser is idle", () =>
   Effect.gen(function* () {
-    const proc = yield* procOf([SANDBOX_INIT, API_SHELL]);
+    const proc = yield* procOf([SANDBOX_INIT, API_SHELL, ...LUKE_BROWSER]);
     assert.equal(yield* sandboxIdle(sandboxOver(proc)), true);
   }).pipe(Effect.scoped),
 );

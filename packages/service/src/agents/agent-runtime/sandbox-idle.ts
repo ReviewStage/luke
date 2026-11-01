@@ -1,3 +1,4 @@
+import { LUKE_BROWSER_PIN } from "@luke/agent-runner/pins";
 import { Effect, Result } from "effect";
 import type { RepositorySandbox } from "../repository-shell.js";
 
@@ -9,7 +10,7 @@ import type { RepositorySandbox } from "../repository-shell.js";
  * a stop in the middle of a turn, as a long pause asks
  * (`sandbox.ts`'s `parksForLongSleep`), must find nothing of the agent's
  * still running: a dev server, a watch of its checks, a slow suite left in
- * the background, its browser.
+ * the background.
  *
  * Every process a person or a model drives in the sandbox starts under
  * `setpriv` with its capability bounding set emptied
@@ -25,6 +26,19 @@ import type { RepositorySandbox } from "../repository-shell.js";
  * the whole set. The probe reads `CapBnd` from each process's
  * `/proc/<pid>/status` and names each process whose set is empty.
  *
+ * Luke's own browser is the one such process it passes over: Xvfb, and
+ * Chromium with its renderers and helpers, each in a session led by Xvfb on
+ * Luke's display or by Chromium on Luke's DevTools port
+ * (`@luke/agent-runner/pins`'s `LUKE_BROWSER_PIN`), which the probe reads
+ * from the session's leader's `/proc/<sid>/cmdline`. Once the agent opened
+ * it, it would otherwise hold every pause's sandbox up for the rest of the
+ * turn. A stop ends it, and the next connection starts it again on the
+ * profile the stop kept on disk and reopens the agent's tabs
+ * (`../browser/restore-tabs.ts`), losing only what its pages held unsaved.
+ * The bridge a live view reaches it through is no session of the browser's,
+ * so a member watching still reads as busy, beside the lease that holds the
+ * sandbox for them (`sandbox.ts`).
+ *
  * Where the probe cannot tell, because the sandbox would not run it, it
  * exited otherwise, or its answer is not the one it writes, the sandbox is
  * read as busy, so it is left up.
@@ -38,16 +52,23 @@ const PROBE_AGENT = "luke-probe-agent";
 
 /**
  * The probe, as a script the sandbox's API runs. A process that ends
- * between the listing and its read is passed over. The count of processes
- * read is written last, so an answer cut short, or a `/proc` with nothing
- * readable, reads as no answer rather than as no process.
+ * between the listing and its read is passed over, and one whose session
+ * is named nowhere (`NSsid`) or whose leader's command line cannot be read
+ * is never taken for the browser's. The count of processes read is written
+ * last, so an answer cut short, or a `/proc` with nothing readable, reads
+ * as no answer rather than as no process.
  */
 const PROBE = [
   "read=0",
+  "leads_browser() {",
+  `  tr '\\0' '\\n' <"/proc/$1/cmdline" 2>/dev/null | awk -v xvfb='${LUKE_BROWSER_PIN.XVFB}' -v display=':${LUKE_BROWSER_PIN.DISPLAY}' -v devtools='--remote-debugging-port=${LUKE_BROWSER_PIN.DEVTOOLS_PORT}' 'NR == 1 { count = split($0, path, "/"); led = path[count] == xvfb } led && NR == 2 { found = $0 == display } !led && $0 == devtools { found = 1 } END { exit !found }'`,
+  "}",
   "for status in /proc/[0-9]*/status; do",
-  `  line=$(awk '$1 == "Name:" { name = $2 } $1 == "CapBnd:" { bounding = $2 } END { if (bounding ~ /^0+$/) print "${PROBE_AGENT} " name }' "$status" 2>/dev/null) || continue`,
+  `  line=$(awk '$1 == "Name:" { name = $2 } $1 == "NSsid:" { session = $2 } $1 == "CapBnd:" { bounding = $2 } END { if (bounding ~ /^0+$/) print (session == "" ? "-" : session) " " name }' "$status" 2>/dev/null) || continue`,
   "  read=$((read + 1))",
-  '  if [ -n "$line" ]; then printf \'%s\\n\' "$line"; fi',
+  '  [ -n "$line" ] || continue',
+  `  if leads_browser "\${line%% *}"; then continue; fi`,
+  `  printf '${PROBE_AGENT} %s\\n' "\${line#* }"`,
   "done",
   `printf '${PROBE_DONE} %d\\n' "$read"`,
 ].join("\n");
