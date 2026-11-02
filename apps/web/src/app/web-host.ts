@@ -134,6 +134,33 @@ class ComposedWebTag extends Context.Service<ComposedWebTag, ComposedWeb>()(
   "@luke/web/ComposedWeb",
 ) {}
 
+/**
+ * The session-storage entry a sign-in leaving the tab is kept under, so the
+ * page it comes back to counts it: the tab's own, so another tab's return
+ * is never this one's, and it outlives the provider's pages between.
+ */
+const SIGN_IN_LEFT_KEY = "luke.host.signInLeft";
+
+/** Keeps that a sign-in is leaving the tab; a storage the browser refuses keeps nothing, and the return goes uncounted. */
+function keepSignInLeft(): void {
+  try {
+    window.sessionStorage.setItem(SIGN_IN_LEFT_KEY, "1");
+  } catch {
+    // Storage refused: nothing to count the return by.
+  }
+}
+
+/** Whether a sign-in left the tab for the page now loading, taking the note so a reload is not that return again. */
+function takeSignInLeft(): boolean {
+  try {
+    const left = window.sessionStorage.getItem(SIGN_IN_LEFT_KEY) !== null;
+    window.sessionStorage.removeItem(SIGN_IN_LEFT_KEY);
+    return left;
+  } catch {
+    return false;
+  }
+}
+
 /** A line about the host's own running, on the tab's console. */
 const report = (message: string): void => {
   console.warn(message);
@@ -141,7 +168,8 @@ const report = (message: string): void => {
 
 /**
  * What the cookie session needs of the tab: where it stands, a way to leave
- * for the provider, asking first while a page holds unsaved work, and each
+ * for the provider, asking first while a page holds unsaved work, whether
+ * the page now loading is a sign-in's return, and each
  * return to it, shown again or focused, on which the session is read again,
  * because another tab may have signed in as someone else.
  */
@@ -153,7 +181,14 @@ function cookieDoor(tab: PageLeave): CookieSessionDoor {
   const focused = Stream.fromEventListener(window, "focus");
   return {
     currentAddress: addressHere,
-    navigate: (url) => Effect.sync(() => tab.leave(() => location.assign(url))),
+    navigate: (url, signingIn) =>
+      Effect.sync(() =>
+        tab.leave(() => {
+          if (signingIn) keepSignInLeft();
+          location.assign(url);
+        }),
+      ),
+    returnedFromSignIn: Effect.sync(takeSignInLeft),
     revisits: Stream.as(Stream.merge(shown, focused), undefined),
   };
 }

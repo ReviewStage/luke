@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { listMemories, MEMORY_OUTCOME } from "@luke/database/models/memory-store";
 import { user } from "@luke/database/schemas/auth";
+import { memory } from "@luke/database/schemas/memory";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { noDatabase } from "@luke/database/testing/no-database";
 import { MEMORY_BOUNDS } from "@luke/features/memory-wire";
@@ -105,9 +106,18 @@ it.layer(getTestDB())("the coding agent's memory tools", (it) => {
         const gone = randomUUID();
 
         const late = yield* runRemember(call, { text: DEPLOYS, replaces: gone });
-        for (let index = 0; index < MEMORY_BOUNDS.MAX_MEMORIES; index += 1) {
-          yield* runRemember(call, { text: `Convention number ${index}.` });
-        }
+        // Note that the workspace is filled in one insert, because a remember per memory reads every memory kept so far.
+        const db = yield* Database;
+        const now = new Date(0);
+        yield* db.insert(memory).values(
+          Array.from({ length: MEMORY_BOUNDS.MAX_MEMORIES }, (_, index) => ({
+            organizationId: call.workspaceId,
+            userId: call.userId,
+            text: `Convention number ${index}.`,
+            createdAt: now,
+            updatedAt: now,
+          })),
+        );
         const past = yield* runRemember(call, { text: DEPLOYS });
 
         assert.equal(late.status, ACTION_RESULT_STATUS.REJECTED);

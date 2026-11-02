@@ -221,12 +221,16 @@ export function startSiteAnalytics(): void {
       // recorder never runs on its pages, and no event or recording on any
       // page keeps a credential in an address.
       disable_session_recording: onAuthPage(),
-      // A sign-in page leaves for the desktop the moment its sign-in is
-      // counted, and the library gzips an unbatched event, the identify among
-      // them, on a promise before it posts it, which a page that has already
-      // left never gets to. Uncompressed, the post starts within the call, on a
-      // keepalive request the browser finishes after the page has gone.
+      // A sign-in page leaves the moment its work is done: for the provider, or
+      // for the desktop once its sign-in is counted. So on those pages every
+      // event is posted within the call that captures it, uncompressed, on a
+      // keepalive request the browser finishes after the page has gone. Note
+      // that neither half may go: the library gzips an event on a promise
+      // that a page already gone never gets to, and what it batches leaves
+      // with the page as a beacon of base64 form data, which the capture
+      // endpoint the project routes events to (`/i/v0/e/`) refuses.
       disable_compression: onAuthPage(),
+      request_batching: !onAuthPage(),
       before_send: (event) => event && sanitizeAnalyticsUrls(event),
       session_recording: {
         // The sign-in address is the only thing anybody types on this site,
@@ -316,11 +320,8 @@ export function signInCountDeadline(): AbortSignal {
  * PostHog.
  *
  * Resolves once both have been handed to the browser to send, so the caller
- * may leave the page on the next line. Note that the client is shut down to
- * get there, because the library otherwise batches an event for a few
- * seconds and flushes on unload, and a sign-in page leaves at once for the
- * desktop's loopback; its shutdown sends what is queued as a beacon, which
- * the browser delivers after the page has gone.
+ * may leave the page on the next line: on a sign-in page each is posted
+ * within its own call (`request_batching` in `startSiteAnalytics`).
  */
 export async function completeSiteSignIn(
   signedIn: Promise<SiteSession | null | undefined>,
@@ -332,5 +333,4 @@ export async function completeSiteSignIn(
   const { id, name, email } = account.user;
   posthog.identify(id, { name, email });
   if (firstCountOf(account.session.id)) posthog.capture(SITE_EVENT.SIGN_IN_COMPLETE);
-  await posthog.shutdown();
 }

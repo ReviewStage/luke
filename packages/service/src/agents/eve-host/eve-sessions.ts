@@ -220,6 +220,8 @@ export type KeyRefusal = (typeof KEY_REFUSAL)[keyof typeof KEY_REFUSAL];
  */
 export const RUNTIME_REFUSAL = {
   NOT_HERE: "not_here",
+  /** The agent ran on eve, which runs no agent any more; nothing reaches it again, and only a new agent goes on from its work. */
+  EVE_RETIRED: "eve_retired",
   /** The harness's sandbox image is still being prepared; the same call a little later is taken. */
   IMAGE_PREPARING: "image_preparing",
   /** The agent's device is a host its account removed; no message reaches it again. */

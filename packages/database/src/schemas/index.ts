@@ -19,6 +19,7 @@ export * from "./github-install-intent.js";
 export * from "./github-installation.js";
 export * from "./github-personal-token.js";
 export * from "./github-rate-hold.js";
+export * from "./github-repository.js";
 export * from "./github-repository-read.js";
 export * from "./host-pairing.js";
 export * from "./inbox.js";

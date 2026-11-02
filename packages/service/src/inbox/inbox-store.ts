@@ -739,19 +739,20 @@ const insertMessageFile = SqlSchema.void({
 const AskStandingSchema = Schema.Struct({
   status: Schema.Literals(Object.values(INBOX_ASK_STATUS)),
   withdrawnReason: Schema.NullOr(Schema.String),
+  /** When a withdrawn ask was withdrawn, in epoch milliseconds; null on any other standing. */
+  withdrawnAt: Schema.NullOr(Schema.Number),
 });
 
 /**
- * The keys of an ask's standing merged over the ask as it was kept. Note
- * that nothing else of the ask is written, because a deployment that does
- * not know the ask's type must never strip the keys it does not read.
+ * The keys of an ask's standing merged over the ask as it was kept, a null
+ * one left out. Note that nothing else of the ask is written, because a
+ * deployment that does not know the ask's type must never strip the keys it
+ * does not read, and that a withdrawal's time is taken off first, so an ask
+ * opened again never keeps the time of a withdrawal that no longer stands.
  */
-function askStanding({ status, withdrawnReason }: typeof AskStandingSchema.Type): SQL {
-  const standing =
-    withdrawnReason === null
-      ? sql`jsonb_build_object('status', ${status}::text)`
-      : sql`jsonb_build_object('status', ${status}::text, 'withdrawnReason', ${withdrawnReason}::text)`;
-  return sql`${inboxMessage.ask} || ${standing}`;
+function askStanding({ status, withdrawnReason, withdrawnAt }: typeof AskStandingSchema.Type): SQL {
+  const standing = sql`jsonb_strip_nulls(jsonb_build_object('status', ${status}::text, 'withdrawnReason', ${withdrawnReason}::text, 'withdrawnAt', ${withdrawnAt}::bigint))`;
+  return sql`(${inboxMessage.ask} - 'withdrawnAt') || ${standing}`;
 }
 
 /** Whether a message's ask stands open, as it was kept. */
@@ -2246,6 +2247,7 @@ function keepPost(
       except: message.id,
       status: INBOX_ASK_STATUS.REPLACED,
       withdrawnReason: null,
+      withdrawnAt: null,
     });
     if (ask !== null) yield* holdAsk({ itemId, messageId: message.id });
     yield* Effect.forEach(post.pictures, (picture, position) =>
@@ -2583,6 +2585,7 @@ export function closeInboxItem(
           except: null,
           status: INBOX_ASK_STATUS.WITHDRAWN,
           withdrawnReason: reason,
+          withdrawnAt: now.getTime(),
         });
         return Option.some(yield* itemAsWritten(agent.userId, itemId));
       }),
@@ -3236,6 +3239,7 @@ export function withdrawInboxAnswer(
             messageId: openAsk,
             status: INBOX_ASK_STATUS.OPEN,
             withdrawnReason: null,
+            withdrawnAt: null,
           });
           yield* deleteMessage({ itemId, clientKey: answerKey });
         }
@@ -3277,6 +3281,7 @@ export function closeInboxItemAsMember(
           except: null,
           status: INBOX_ASK_STATUS.WITHDRAWN,
           withdrawnReason: null,
+          withdrawnAt: now.getTime(),
         });
         yield* upsertRead({ userId, itemId });
         const { txid } = closed.value;
@@ -3378,6 +3383,7 @@ export function withdrawInboxClose(
             messageId: openAsk,
             status: INBOX_ASK_STATUS.OPEN,
             withdrawnReason: null,
+            withdrawnAt: null,
           });
         }
         yield* upsertRead({ userId, itemId });
@@ -3438,6 +3444,7 @@ function keepAnswer(write: AnswerWrite): InboxStoreEffect<void> {
       messageId: write.askId,
       status: INBOX_ASK_STATUS.ANSWERED,
       withdrawnReason: null,
+      withdrawnAt: null,
     });
     const written = yield* answeringMessage({
       itemId,

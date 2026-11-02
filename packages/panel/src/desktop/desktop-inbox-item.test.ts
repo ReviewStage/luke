@@ -2039,7 +2039,7 @@ test.each([
     quoted: "Seven days, to match the trial.",
   },
   {
-    words: "the line saying an ask was withdrawn",
+    words: "why the line saying an ask was withdrawn says it was",
     shown: threadItem(
       [
         askingMessage(EXPIRY_ASK, {
@@ -2049,8 +2049,8 @@ test.each([
       ],
       { status: INBOX_STATUS.CLOSED, settledAt: 2_000 },
     ),
-    within: '[data-inbox-settled="withdrawn"]',
-    quoted: "Withdrawn",
+    within: '[data-inbox-comment="withdrawn"] [data-inbox-withdrawn-why]',
+    quoted: "The plan settled it.",
   },
   {
     words: "the item's title",

@@ -20,7 +20,8 @@ import {
 
 type AuthCountName =
   | typeof SERVER_EVENT.ACCOUNT_SIGN_UP
-  | typeof SERVER_EVENT.WORKSPACE_INVITE_ACCEPT;
+  | typeof SERVER_EVENT.WORKSPACE_INVITE_ACCEPT
+  | typeof SERVER_EVENT.GITHUB_ACCOUNT_LINK;
 
 /** One count a hook noted: a server event, with the account it is under and its own properties. */
 export type AuthCount = {
@@ -72,10 +73,20 @@ export function recordAuthCount(count: AuthCount) {
       return recordServerEvent(count.name, count.userId, count.properties);
     case SERVER_EVENT.WORKSPACE_INVITE_ACCEPT:
       return recordServerEvent(count.name, count.userId, count.properties);
+    case SERVER_EVENT.GITHUB_ACCOUNT_LINK:
+      return recordServerEvent(count.name, count.userId, count.properties);
   }
 }
 
-/** Better Auth's `databaseHooks`: an account made is a sign-up, counted under the new account's own id. */
+const GITHUB_PROVIDER_ID = SERVER_SIGN_IN_METHOD.GITHUB;
+
+/**
+ * Better Auth's `databaseHooks`: an account made is a sign-up, counted under
+ * the new account's own id; and a GitHub row made for an account that was not
+ * made in the same request is a link, counted under that account. A sign-up
+ * through GitHub makes its row in the request that made the user, after the
+ * sign-up was noted, and is the sign-up's count alone.
+ */
 export const authDatabaseHooks = {
   user: {
     create: {
@@ -84,6 +95,25 @@ export const authDatabaseHooks = {
           name: SERVER_EVENT.ACCOUNT_SIGN_UP,
           userId: user.id,
           properties: { method: signInMethodOf(request) },
+        });
+      },
+    },
+  },
+  account: {
+    create: {
+      after: async (account: { readonly userId: string; readonly providerId: string }) => {
+        if (account.providerId !== GITHUB_PROVIDER_ID) return;
+        const signedUpHere = noted
+          .getStore()
+          ?.some(
+            (count) =>
+              count.name === SERVER_EVENT.ACCOUNT_SIGN_UP && count.userId === account.userId,
+          );
+        if (signedUpHere === true) return;
+        countFromAuth({
+          name: SERVER_EVENT.GITHUB_ACCOUNT_LINK,
+          userId: account.userId,
+          properties: {},
         });
       },
     },

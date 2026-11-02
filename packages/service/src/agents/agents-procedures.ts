@@ -64,7 +64,7 @@ import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { Clock, Duration, Effect, type Layer, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { HostedEnvironment } from "../environment.js";
-import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
+import { recordServerEvent, SERVER_AGENT_SETTING, SERVER_EVENT } from "../events/server-events.js";
 import { changesPeople, namedReviewOptions } from "../github/github-people.js";
 import {
   imageCommits,
@@ -515,7 +515,20 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const changed = yield* hostedStoreOrUnavailable(
         updateAgentChoiceCommitted(userId, agent.id, choice),
       );
-      if (Option.isSome(changed)) yield* runnerChoiceApplied(changed.value.agent);
+      if (Option.isSome(changed)) {
+        yield* runnerChoiceApplied(changed.value.agent);
+        // Counted for each of the two the member's change moved, under the member; a window alone counts none.
+        if (choice.model !== agent.model) {
+          yield* recordServerEvent(SERVER_EVENT.AGENT_SETTINGS_CHANGE, userId, {
+            changed: SERVER_AGENT_SETTING.MODEL,
+          });
+        }
+        if (choice.effort !== agent.effort) {
+          yield* recordServerEvent(SERVER_EVENT.AGENT_SETTINGS_CHANGE, userId, {
+            changed: SERVER_AGENT_SETTING.EFFORT,
+          });
+        }
+      }
       return yield* committedAgent(userId, changed);
     }),
     /**

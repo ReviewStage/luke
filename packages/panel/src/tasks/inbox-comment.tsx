@@ -11,11 +11,12 @@ import { REPLY_SCOPE } from "./reply-to-selection.js";
  * holds is the reader's own, still being written.
  */
 
-/** Which message of the thread a comment is: the agent's question, the developer's answer, the agent taking the item back, a member closing it without an answer, a message on the thread, or the reader's draft reply at its end. */
+/** Which message of the thread a comment is: the agent's question, the developer's answer, the agent taking an ask back, the agent replacing one with a newer post, a member closing it without an answer, a message on the thread, or the reader's draft reply at its end. */
 export const COMMENT = {
   ASKED: "asked",
   ANSWERED: "answered",
   WITHDRAWN: "withdrawn",
+  REPLACED: "replaced",
   CLOSED: "closed",
   MESSAGE: "message",
   DRAFT: "draft",
@@ -62,7 +63,7 @@ export function InboxComment({
   author: CommentAuthor;
   /** The writer's name as the window names anyone, hanging their card. */
   nameRef: React.ReactNode;
-  /** What they did, after their name, for a line of what happened to the thread: a member resolving it. */
+  /** What they did, after their name, for a line of what happened to the thread: a member resolving it, or the agent withdrawing or replacing an ask. */
   said?: string | undefined;
   /** When they wrote it; none for the reader's draft reply. */
   at?: number | undefined;

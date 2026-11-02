@@ -607,13 +607,12 @@ it("a start the host could not make is answered with why", async () => {
   });
 });
 
-it("a web link opens an http or https address in the browser, and no other scheme nor an address past the cap", async () => {
+it("a web link opens an http, https, or mail address outside the window, and no other scheme nor an address past the cap", async () => {
   const { client, browsed } = windowPort(PANEL);
   const refused = [
     "javascript:alert(1)",
     "file:///etc/passwd",
     "luke://plan/7",
-    "mailto:dean@example.com",
     "//example.com/docs",
     "https://",
     `https://example.com/docs?q=${"a".repeat(2_048)}`,
@@ -622,10 +621,15 @@ it("a web link opens an http or https address in the browser, and no other schem
 
   assert.deepEqual(await open("https://example.com/docs"), { answer: undefined });
   assert.deepEqual(await open("http://localhost:3000/"), { answer: undefined });
+  assert.deepEqual(await open("mailto:dean@example.com"), { answer: undefined });
   for (const url of refused) {
     assert.deepEqual(await open(url), { refused: REFUSAL[TASKS_ACT_KIND.WEB_OPEN] });
   }
-  assert.deepEqual(browsed, ["https://example.com/docs", "http://localhost:3000/"]);
+  assert.deepEqual(browsed, [
+    "https://example.com/docs",
+    "http://localhost:3000/",
+    "mailto:dean@example.com",
+  ]);
 });
 
 it("a GitHub link opens GitHub's own addresses in the browser and no other", async () => {

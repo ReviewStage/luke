@@ -692,7 +692,7 @@ function AppWindow(): React.JSX.Element {
                             </MessageRevealProvider>
                           </div>
                         </ShellRoomContext.Provider>
-                        {/* A note to the people who make Fullspin, written in a dialog over the
+                        {/* A note to the people who make the app, written in a dialog over the
           window. */}
                         <FeedbackDialog
                           kind={feedbackKind}

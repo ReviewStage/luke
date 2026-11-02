@@ -104,8 +104,17 @@ const SIGNED_OUT: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
 export interface CookieSessionDoor {
   /** Where the tab stands, as a path with its query and fragment, for a sign-in to come back to. */
   readonly currentAddress: () => string;
-  /** Takes the tab to an address, such as the provider's consent a sign-in leaves for. */
-  readonly navigate: (url: string) => Effect.Effect<void>;
+  /**
+   * Takes the tab to an address, such as the provider's consent a sign-in
+   * leaves for. A sign-in's departure (`signingIn`) is kept by the tab as it
+   * leaves, for the page it comes back to (`returnedFromSignIn`).
+   */
+  readonly navigate: (url: string, signingIn: boolean) => Effect.Effect<void>;
+  /**
+   * Whether this page is the one a sign-in that left the tab came back to,
+   * answered once, so a reload of it is not that return again.
+   */
+  readonly returnedFromSignIn: Effect.Effect<boolean>;
   /**
    * Each return to the tab (shown again, or focused), built by the shell from
    * the page's own events. The session is read again on each, because the
@@ -503,7 +512,7 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 
   /** Asks the service for the provider's address and leaves the tab for it. */
-  const leaveFor = (path: string, provider: AccountProvider) =>
+  const leaveFor = (path: string, provider: AccountProvider, signingIn: boolean) =>
     Effect.gen(function* () {
       const asked = generation;
       const answer = yield* send(authCall, {
@@ -522,7 +531,7 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
       if (Result.isFailure(redirect)) return yield* failed("Sign-in could not start", answer);
       // A cancel pressed while the service answered keeps the tab where it is.
       if (asked !== generation) return false;
-      yield* door.navigate(redirect.success.url);
+      yield* door.navigate(redirect.success.url, signingIn);
       return true;
     });
 
@@ -532,7 +541,7 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
       generation += 1;
       const started = generation;
       yield* settleOn({ status: ACCOUNT_STATUS.SIGNING_IN });
-      const left = yield* Effect.result(leaveFor(AUTH_PATH.SIGN_IN_SOCIAL, provider));
+      const left = yield* Effect.result(leaveFor(AUTH_PATH.SIGN_IN_SOCIAL, provider, true));
       if (Result.isFailure(left)) {
         if (started === generation) yield* settleOn(SIGNED_OUT);
         return yield* Effect.fail(left.failure);
@@ -599,6 +608,7 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
       yield* Deferred.succeed(initialized, undefined);
       return account;
     }),
+    returnedFromSignIn: door.returnedFromSignIn,
     beginSignIn,
     // Over a session that stands, the provider is linked to the same person
     // again, which renews its grant: Better Auth refuses a link to an
@@ -606,7 +616,7 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
     // tab. Nothing lands on this page either way, since it leaves.
     signInAgain: (provider) =>
       account.status === ACCOUNT_STATUS.SIGNED_IN
-        ? Effect.as(leaveFor(AUTH_PATH.LINK_SOCIAL, provider), false)
+        ? Effect.as(leaveFor(AUTH_PATH.LINK_SOCIAL, provider, false), false)
         : Effect.as(beginSignIn(provider), false),
     cancelSignIn: () => {
       if (account.status !== ACCOUNT_STATUS.SIGNING_IN) return;

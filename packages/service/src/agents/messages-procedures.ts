@@ -409,6 +409,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
             machine: agent.machine ?? AGENT_MACHINE.VERCEL,
             agent_kind: agent.kind,
             turn_running: sent.turnRunning,
+            queued: false,
           });
         }
         const summary = yield* summaryOf(context.userId, agent);

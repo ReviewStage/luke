@@ -662,7 +662,7 @@ headers at every address it answers at.
 ## The sandbox's host
 
 An agent's page runs the script the agent wrote, so the web app draws it from
-a registrable domain of its own, `fullspin.page`
+a registrable domain of its own, `vespin.page`
 (`@luke/features/page-frame`'s `PAGE_SANDBOX_ORIGIN`), attached to this
 project beside the app's. That host serves one route and nothing else. The
 first top-level rewrite sends every request made to it into the web service,
@@ -672,7 +672,7 @@ link's `/p/<token>` to the page route with its token in a query and every
 other path of the host to a file of the build's own,
 `public/sandbox-not-found.txt`, under a forced 404, so a stray request wakes
 no function. A host condition is written as an anchored pattern,
-`{"re": "^fullspin\\.page\\.?$"}`, so the spelling with a trailing dot a
+`{"re": "^vespin\\.page\\.?$"}`, so the spelling with a trailing dot a
 browser may send is held too, and no host that merely holds the name is;
 never as a bare string, which Vercel may match anywhere in the host. The page
 route

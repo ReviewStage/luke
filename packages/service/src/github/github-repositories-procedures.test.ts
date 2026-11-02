@@ -78,6 +78,7 @@ import {
   memberRepositoryJson,
   openGithubUser,
   openTokenMember,
+  repositoryIdOf,
 } from "../testing/github-app-fake.js";
 import type { GitHubApp } from "./github-app.js";
 import { setInstallationStatus } from "./github-installations.js";
@@ -380,6 +381,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
           installed: true,
           repositories: [
             {
+              id: repositoryIdOf({ owner: "octocat", name: "relay" }),
               owner: "octocat",
               name: "relay",
               fullName: "octocat/relay",
@@ -389,6 +391,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
               access: GITHUB_ACCESS.APP,
             },
             {
+              id: repositoryIdOf({ owner: "octocat", name: "dotfiles" }),
               owner: "octocat",
               name: "dotfiles",
               fullName: "octocat/dotfiles",

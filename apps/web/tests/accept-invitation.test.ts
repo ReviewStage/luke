@@ -11,8 +11,9 @@ import { PANEL_PATH } from "../src/app/web-address";
 /**
  * accept-invitation.test.ts -- the invitation page says where an invitation
  * stands and offers the one action that moves it on: a valid invitation is
- * accepted from a button that says it is joining while it does; a spent or
- * unreachable one offers nothing to press; and a signed-out visitor is
+ * accepted from a button that says it is joining while it does; a reader
+ * already in its workspace is offered the way in; a spent or unreachable one
+ * offers nothing to press; and a signed-out visitor is
  * offered the providers, whose failure to start is announced. The page runs
  * as it does in the browser, mounted on its own `#root`; the network, the
  * HTTP boundary to Better Auth and our route, is a fake.
@@ -137,7 +138,7 @@ test("a valid invitation names its workspace and inviter and is accepted from it
     ]),
   );
   await titled(page, "Join Atlas");
-  expect(page.textContent).toContain("Grace invited you to plan in Atlas on Vespin, as member.");
+  expect(page.textContent).toContain("Grace invited you to work in Atlas on Vespin, as a member.");
   expect(buttonNames(page)).toEqual(["Accept invitation"]);
 
   vi.mocked(globalThis.fetch).mockImplementationOnce(
@@ -149,16 +150,24 @@ test("a valid invitation names its workspace and inviter and is accepted from it
   await act(async () => buttonNamed(page, "Accept invitation").click());
   expect(buttonNamed(page, "Joining").getAttribute("aria-busy")).toBe("true");
 
-  // Note that accepting rereads the session on a timer, after which the route answers spent.
-  offer = offerRead({ refused: INVITATION_OFFER_REFUSAL.SPENT });
+  // Note that accepting rereads the session on a timer, after which the route answers a member.
+  offer = offerRead({ member: { workspaceName: "Atlas" } });
   await act(async () => settleAccept({ status: 200, body: { invitation: {}, member: {} } }));
   await act(async () => vi.advanceTimersByTimeAsync(SESSION_REREAD_DELAY_MS));
   await titled(page, "You joined Atlas");
-  expect(page.textContent).toContain("Return to Vespin. You can close this tab.");
+  expect(page.textContent).toContain("Atlas is in your sidebar in Vespin. You can close this tab.");
   expect(buttonNames(page)).toEqual([]);
   const open = page.querySelector("a");
   expect(open?.textContent).toBe("Open Vespin on the web");
   expect(open?.getAttribute("href")).toBe(PANEL_PATH);
+});
+
+test("a reader already in the workspace is told so and offered the way in, not a spent link", async () => {
+  const page = await openPage(signedInReading(offerRead({ member: { workspaceName: "Atlas" } })));
+
+  await titled(page, "You're already in Atlas");
+  expect(buttonNames(page)).toEqual([]);
+  expect(page.querySelector("a")?.getAttribute("href")).toBe(PANEL_PATH);
 });
 
 test("a spent invitation says so and offers nothing to press", async () => {
@@ -196,7 +205,7 @@ test("a signed-out visitor is offered the providers, and a sign-in that cannot s
     ]),
   );
   await titled(page, "Sign in to accept your invitation");
-  expect(page.textContent).toContain(`Sign in with the account that uses ${INVITED}.`);
+  expect(page.textContent).toContain(`Use the Google or GitHub account at ${INVITED}.`);
 
   await act(async () => buttonNamed(page, "Continue with GitHub").click());
 

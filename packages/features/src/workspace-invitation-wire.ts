@@ -129,8 +129,8 @@ export const invitationOfferQuerySchema = EffectSchema.Struct({
 
 /**
  * An invitation as its recipient is offered it: the workspace's name, the
- * role, and who invited them while they are still a member; or why there is
- * none to offer.
+ * role, and who invited them while they are still a member; that the reader
+ * is already a member of its workspace, named; or why there is none to offer.
  */
 export const invitationOfferAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
@@ -142,6 +142,9 @@ export const invitationOfferAnswerSchema = EffectSchema.Union([
         EffectSchema.Struct({ name: EffectSchema.String, email: EffectSchema.String }),
       ),
     }),
+  }),
+  EffectSchema.Struct({
+    member: EffectSchema.Struct({ workspaceName: EffectSchema.String }),
   }),
   EffectSchema.Struct({
     refused: EffectSchema.Literals(Object.values(INVITATION_OFFER_REFUSAL)),

@@ -80,7 +80,6 @@ import {
   AGENT_MESSAGES,
   countedFor,
   countedProperties,
-  deploymentFor,
   fakeEve,
   INBOX_ATTACHMENT,
   INBOX_CLOSE,
@@ -104,6 +103,7 @@ import {
   userTexts,
 } from "../testing/agents-app-support.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
+import { harnessFor } from "../testing/native-harness-fake.js";
 import { CODER } from "./coder-host/bounds.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { EVE_SEND_OUTCOME } from "./eve-host/eve-sessions.js";
@@ -191,7 +191,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     }) as const;
 
   it.effect(
-    "over a browser's session cookie an answer to an item and a message on its thread reach its agent as the deployment acting for the cookie's account, each line kept as the thread's",
+    "over a browser's session cookie an answer to an item and a message on its thread reach its agent through its harness acting for its starter, each line kept as the thread's",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -227,8 +227,8 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.deepEqual(
           eve.sent.map((each) => [each.authorization, each.sessionId]),
           [
-            [deploymentFor(owner), sessionId],
-            [deploymentFor(owner), sessionId],
+            [harnessFor(owner), sessionId],
+            [harnessFor(owner), sessionId],
           ],
         );
         const metadataOf = (clientKey: string) =>

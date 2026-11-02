@@ -1553,11 +1553,13 @@ export function askingMessage(
     id = ASKING_ID,
     status = INBOX_ASK_STATUS.OPEN,
     withdrawnReason,
+    withdrawnAt,
     createdAt = 1_000,
   }: {
     id?: string;
     status?: InboxReadAsk["status"];
     withdrawnReason?: string;
+    withdrawnAt?: number;
     createdAt?: number;
   } = {},
 ): InboxMessage {
@@ -1565,7 +1567,12 @@ export function askingMessage(
     id,
     author: INBOX_MESSAGE_AUTHOR.AGENT,
     text: "Invites expire after 24 hours today, which trips up teams across time zones.",
-    ask: { ...ask, status, ...(withdrawnReason === undefined ? undefined : { withdrawnReason }) },
+    ask: {
+      ...ask,
+      status,
+      ...(withdrawnReason === undefined ? undefined : { withdrawnReason }),
+      ...(withdrawnAt === undefined ? undefined : { withdrawnAt }),
+    },
     createdAt,
   };
 }
