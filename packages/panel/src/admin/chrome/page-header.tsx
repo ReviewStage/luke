@@ -14,11 +14,11 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Toolbar,
 } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import { createContext, useContext } from "react";
 import { PhoneHead } from "../../desktop/phone-head.js";
-import { PlaceToolbar } from "../../desktop/title-bar.js";
 import type { AdminTab } from "../routing.js";
 import { adminPlace } from "./places.js";
 
@@ -138,7 +138,7 @@ function AdminToolbar({
     );
   }
   return (
-    <PlaceToolbar
+    <Toolbar
       title={placed?.title ?? title}
       trail={
         back === undefined || section === undefined

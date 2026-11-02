@@ -112,7 +112,6 @@ import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
 import { RecentRow } from "./recent-row.js";
 import { useTaskListView } from "./task-list-view.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
-import { PlaceToolbar, useTitleBar } from "./title-bar.js";
 import { useAutomations } from "./use-automations.js";
 
 /**
@@ -647,9 +646,8 @@ function PersonColumn({
   away: TaskHeadBack | undefined;
 }): React.JSX.Element {
   const now = useMinute();
-  // What a phone's bar picks up from the page's header once it scrolls away, and what the window's title bar names them by.
+  // What a phone's bar picks up from the page's header once it scrolls away.
   const [pickUp, setPickUp] = useState<ToolbarPickUp>({ name: "", shown: false });
-  const titled = useTitleBar() !== null;
   const listed = tasks.listed.tasks;
   // Named as the list names them, else as the members read does, else by the name the page was opened with, else as the former members read does; nobody's name where none does.
   const { members, readerId, former, refused, retry } = useMemberDirectory();
@@ -731,7 +729,7 @@ function PersonColumn({
   const detail = (
     <DetailPage
       frame={PAGE_FRAME.PAGE}
-      onPickUp={away === undefined && !titled ? undefined : setPickUp}
+      onPickUp={away === undefined ? undefined : setPickUp}
       title={
         unnamed ? (
           refused ? (
@@ -865,15 +863,6 @@ function PersonColumn({
   const linked = (
     <LinkWorkspaceProvider value={linkWorkspaceOf(tasks)}>{detail}</LinkWorkspaceProvider>
   );
-  // Under the window's title bar the page is named there in its header's words, its own top row standing under it.
-  if (away === undefined && titled) {
-    return (
-      <Fill className="person-framed">
-        <PlaceToolbar pickUp={pickUp} />
-        {linked}
-      </Fill>
-    );
-  }
   if (away === undefined) return linked;
   return (
     <Fill className="person-phone">

@@ -19,7 +19,6 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorLine,
   ErrorState,
-  FramePlace,
   IconButton,
   joinRefs,
   LIST_LEAVING_SELECTOR,
@@ -53,7 +52,6 @@ import {
   Text,
   TOOLBAR_INSET,
   Toolbar,
-  type ToolbarPlace,
   Tooltip,
   UnreadMark,
   useLeaving,
@@ -106,7 +104,6 @@ import {
   useMenuAsk,
 } from "../desktop/phone-head.js";
 import { type TabActionGroups, useTabActions } from "../desktop/strip-tabs.js";
-import { TitleBarPlace, useTitleBar } from "../desktop/title-bar.js";
 import { refusedShown, unreadShown } from "../failure-report.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
@@ -1015,7 +1012,7 @@ function ListHead({
       {head.tab === true ? (
         <PaneBar title={title} actions={options} />
       ) : channel?.archivedAt === undefined ? (
-        <InboxBar title={title} detail={channel?.detail} task={head.task} actions={options} />
+        <InboxBar title={title} detail={channel?.detail} actions={options} />
       ) : (
         <ArchivedChannelBar title={title} archivedAt={channel.archivedAt} actions={options} />
       )}
@@ -1031,43 +1028,17 @@ function ListHead({
   );
 }
 
-/**
- * The window's Inbox's bar, its actions at its end, and the Inbox's name:
- * at the bar's head, or in the window's title bar where one stands, the
- * task the Inbox is narrowed to after it, the Inbox's own name a press
- * back to every task's items, as the task's chip under the bar clears it.
- */
+/** The window's Inbox's bar: its name at the bar's head, quiet words after it, and its actions at its end. */
 function InboxBar({
   title,
   detail,
-  task,
   actions,
 }: {
   title: string;
   detail: string | undefined;
-  task?: InboxTaskHead | undefined;
   actions: React.ReactNode;
 }): React.JSX.Element {
-  const up = useTitleBar() !== null;
-  const trail: ToolbarPlace[] | undefined =
-    task === undefined ? undefined : [{ label: title, onPress: task.onClear }];
-  return (
-    <>
-      <TitleBarPlace>
-        <FramePlace
-          title={task === undefined ? title : (task.name ?? UNNAMED_TASK)}
-          trail={trail}
-          detail={detail}
-        />
-      </TitleBarPlace>
-      <Toolbar
-        title={up ? undefined : title}
-        detail={up ? undefined : detail}
-        actions={actions}
-        end={TOOLBAR_INSET.COLUMN}
-      />
-    </>
-  );
+  return <Toolbar title={title} detail={detail} actions={actions} end={TOOLBAR_INSET.COLUMN} />;
 }
 
 /**

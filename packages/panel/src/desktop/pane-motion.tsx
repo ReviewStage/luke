@@ -6,9 +6,7 @@
  * what that moved replays the journey on `transform` and `clip-path`
  * (docs/DESIGN.md, "Whatever its room displaced replays the journey"): the
  * task's tabs, its document or an agent's tab, its toolbar's buttons, and
- * the place's head, named in the window's title bar, which starts past the
- * title bar's buttons while the sidebar is folded, or standing under the
- * tabs where no title bar stands, glide from where they were
+ * the place's head standing under the tabs, glide from where they were
  * drawn to where they now stand, and so does the
  * task's summary as it is pinned or collapses to its rail, the side panel
  * slides in from the window's right, and a panel that grew over the
