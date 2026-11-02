@@ -682,7 +682,7 @@ query named it, and it refuses any host but the sandbox's, so its own `/api/`
 path on the app's host answers 404 too. It answers a frame's load alone, as
 the browser names it in `Sec-Fetch-Dest`, and so does the mint below: a page
 opened in a whole tab would be free of the app's `frame-src` on a domain of
-Luke's own, so a load that names itself a tab's, or names nothing, is 404.
+Fullspin's own, so a load that names itself a tab's, or names nothing, is 404.
 
 A frame on the app's host asks the app's own `…/versions/{version}/frame`
 procedure under the session cookie, which answers 303 to a link on the

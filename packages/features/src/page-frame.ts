@@ -11,7 +11,7 @@
  * one a coding agent on no task showed is `/agent/<agentId>/<pageId>/<version>`;
  * a task's id is a uuid, so it is never the word `agent`.
  *
- * A browser has no scheme of Luke's own, so the web draws a page from a site
+ * A browser has no scheme of Fullspin's own, so the web draws a page from a site
  * of its own instead (`PAGE_SANDBOX_ORIGIN`). Its frame loads the version
  * through the service's same-origin answer, which sends it on to a link
  * minted for the account that asked, or to the page saying pages open in the
