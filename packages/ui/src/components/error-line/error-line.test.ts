@@ -15,7 +15,7 @@ import { TextField } from "../text-field/text-field.js";
  * said: a form field's error and a Settings row's each describe the control
  * it is about, and are said through the window's
  * announcer as it arrives: a form field's politely, a Settings row's as an
- * alert.
+ * alert; and once nothing is wrong, its last words fade out before it goes.
  */
 
 declare global {
@@ -29,6 +29,7 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
 });
 
 function render(element: ReactElement): HTMLElement {
@@ -107,4 +108,28 @@ test("a form field's error is said politely as it arrives", () => {
 
 test("a Settings row's refused write is said as an alert as it arrives", () => {
   assert.deepEqual(saidOnArrival(settingsRow), { polite: "", alert: REFUSED });
+});
+
+test("once nothing is wrong, the last words stay out of reach through their fade, and go once it has played", () => {
+  const fade = new EventTarget();
+  Object.defineProperty(HTMLElement.prototype, "getAnimations", {
+    configurable: true,
+    value(this: HTMLElement) {
+      return this.dataset.leaving === "true" ? [fade] : [];
+    },
+  });
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(formField(REFUSED)));
+  const line = container.querySelector<HTMLElement>('[data-slot="field-error"]');
+
+  act(() => root.render(formField(undefined)));
+
+  assert.equal(line?.textContent, REFUSED, "the words fade rather than going at once");
+  assert.equal(line?.hasAttribute("inert"), true);
+  act(() => {
+    fade.dispatchEvent(new Event("finish"));
+  });
+  assert.equal(line?.textContent, "");
 });

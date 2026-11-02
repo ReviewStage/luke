@@ -67,7 +67,7 @@ import { useFloatDismiss } from "./hover-pane.js";
 import { useLukeOperator } from "./luke-operator.js";
 import { MobileBar, mobileBarShown } from "./mobile-bar.js";
 import { NewTaskButton } from "./new-task-button.js";
-import { OfflineMark, useOffline } from "./offline-mark.js";
+import { OfflineMark } from "./offline-mark.js";
 import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { PersonPageSkeleton } from "./person-frame.js";
@@ -735,7 +735,6 @@ export function DesktopShell({
   });
   // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
   const summary = useSummaryPin(sidebar.staged);
-  const offline = useOffline();
   usePlaceCommands(!gated, tab, onTabChange, tasks, settings, history);
   // The Admin place is an admin's alone: an account known to be no admin, or no longer one, is given the task's place back,
   // while one whose access is still being read, as a reloaded Admin address's is, has the place wait on it.
@@ -938,7 +937,6 @@ export function DesktopShell({
       data-sidebar-collapsed={String(sidebar.collapsed)}
       data-sidebar-overlay={sidebar.overlay}
       data-panel-toggle={String(panelToggle && room !== SHELL_ROOM.NARROW)}
-      data-offline={String(offline)}
       data-mobile-bar={String(barShown)}
     >
       <DesktopSidebar

@@ -1,7 +1,9 @@
 import { HOST_LIVE } from "@luke/features/tasks-view";
 import { ANNOUNCE, Tooltip, useAnnounce } from "@luke/ui";
 import { RefreshCwIcon, WifiOffIcon } from "@luke/ui/icons";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import * as Atom from "effect/reactivity/Atom";
+import { useRef } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 
 /**
@@ -13,8 +15,9 @@ import { APP_SLICE, useAppSlice } from "../use-app-state.js";
  * reads the document's `network` slice, which main keeps from the
  * platform's answer, and the host's live state beside the task list
  * (`HOST_LIVE`), which its follow keeps, and draws nothing while both are
- * well. It is a status rather than a press, so it is announced as one, and
- * a sidebar too narrow for its word draws its glyph alone and still names it.
+ * well, once the pill has faded out. It is a status rather than a press, so
+ * it is announced as one, and a sidebar too narrow for its word draws its
+ * glyph alone and still names it.
  */
 
 /** What the pill stands for, the Mac's own network first, since nothing else can be read without it. */
@@ -50,21 +53,24 @@ const liveMarkAtom: Atom.Atom<LiveMark | undefined> = Atom.make((get) => {
   return undefined;
 });
 
-/** Whether the pill stands, offline or catching up: what the room the title bar makes for it answers. */
-export function useOffline(): boolean {
-  return useAppSlice(liveMarkAtom) !== undefined;
-}
-
 /** The pill, or nothing while the Mac is online and live updates are current. */
 export function OfflineMark(): React.JSX.Element | null {
   const mark = useAppSlice(liveMarkAtom);
   useAnnounce(ANNOUNCE.POLITE, mark === undefined ? "" : LIVE_MARK_LOOK[mark].word);
-  if (mark === undefined) return null;
-  const { word, hint, Icon } = LIVE_MARK_LOOK[mark];
+  // Note that the last mark is held drawn through its fade, as anything leaving is.
+  const shown = useDisclosure(mark !== undefined);
+  const last = useRef(mark);
+  if (mark !== undefined) last.current = mark;
+  const drawn = mark ?? last.current;
+  if (!shown.mounted || drawn === undefined) return null;
+  const { word, hint, Icon } = LIVE_MARK_LOOK[drawn];
   return (
     <Tooltip label={hint}>
       <span
-        className="offline-mark inline-flex h-offline-mark flex-none animate-offline-arrive items-center gap-tight-gap self-center whitespace-nowrap rounded-luke-full bg-attention-tint px-row-inset text-caption-inline font-luke-semibold text-attention [&_svg]:size-offline-glyph"
+        ref={shown.ref}
+        data-leaving={shown.leaving ? "true" : undefined}
+        inert={shown.leaving}
+        className="offline-mark inline-flex h-offline-mark flex-none animate-offline-arrive data-[leaving=true]:animate-leave items-center gap-tight-gap self-center whitespace-nowrap rounded-luke-full bg-attention-tint px-row-inset text-caption-inline font-luke-semibold text-attention [&_svg]:size-offline-glyph"
         role="img"
         aria-label={word}
       >

@@ -16,8 +16,9 @@ import { Label } from "./label.js";
  * says rather than a list of validation errors, which `ErrorLine` says
  * through the window's `Announcer` rather than a live region of its own. The classes are Luke's: the parts six
  * apart, the description in the muted caption, and the error in the danger
- * ink, dropping into its line as it arrives and, while empty, standing out
- * of the flow, so it gives back the gap before it in whatever stack holds it.
+ * ink, dropping into its line as it arrives, fading out where its caller
+ * holds it leaving (`data-leaving`), and, while empty, standing out of the
+ * flow, so it gives back the gap before it in whatever stack holds it.
  * None of shadcn's ring utilities (`anti-slop/no-shadcn-focus-ring`). `@luke/ui`'s
  * `FormField` (`components/form-field`) is what an app draws, and its
  * `ErrorLine` (`components/error-line`) the error alone; this is their inside.
@@ -55,7 +56,7 @@ export function FieldError({ className, ...props }: React.ComponentProps<"p">) {
     <p
       data-slot="field-error"
       className={cn(
-        "m-0 font-body text-caption font-text text-danger wrap-anywhere not-empty:animate-drop-in empty:absolute",
+        "m-0 font-body text-caption font-text text-danger wrap-anywhere not-empty:animate-drop-in data-[leaving=true]:animate-leave empty:absolute",
         className,
       )}
       {...props}

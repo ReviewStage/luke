@@ -69,7 +69,7 @@ export function ProgressRing({
         strokeWidth={RING_STROKE}
       />
       <circle
-        className={`transition-[stroke-dasharray] ${TONE_STROKE[tone]}`}
+        className={`transition-[stroke-dasharray] duration-(--luke-duration-quick) ease-motion-exit ${TONE_STROKE[tone]}`}
         strokeLinecap="round"
         cx="8"
         cy="8"
