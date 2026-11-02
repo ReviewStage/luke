@@ -85,14 +85,14 @@ export function connectStepFromSearch(search: string): ConnectStep {
   return { kind: CONNECT_STEP.NOTHING };
 }
 
-/** What failed, as the first words of a refusal Fullspin has no words of its own for. */
+/** What failed, as the first words of a refusal we have no words of our own for. */
 export const LINK_FAILED = {
   CONNECT: "GitHub could not be connected",
 } as const;
 
 type LinkFailed = (typeof LINK_FAILED)[keyof typeof LINK_FAILED];
 
-/** A refusal in words: ours for the codes Fullspin expects, Better Auth's own message or code for any other. */
+/** A refusal in words: ours for the codes we expect, Better Auth's own message or code for any other. */
 export function linkErrorWords(
   failed: LinkFailed,
   code: string | undefined,

@@ -7,8 +7,8 @@ import { afterEach, expect, test, vi } from "vitest";
 /**
  * desktop-session.test.ts -- the desktop-session page says where the Mac's
  * hand-off stands: under way while the transfer is asked for and once it is
- * sent on, a link that did not come from Vespin or a transfer Vespin refused
- * with Open Vespin on a Mac and nothing to press elsewhere, and a signed-out
+ * sent on, a link that did not come from us or a transfer the service refused
+ * with the Open link on a Mac and nothing to press elsewhere, and a signed-out
  * browser offered the providers,
  * whose failure to start is announced. The page runs as it does in the
  * browser, mounted on its own `#root`; the network, the HTTP boundary to

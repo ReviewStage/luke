@@ -288,7 +288,7 @@ function answer(request: Asked): Promise<Answered> {
         email: request.payload.email,
         role: request.payload.role,
         expiresAt: "2026-10-16T12:00:00.000Z",
-        acceptUrl: `https://tryluke.dev/accept-invitation.html?id=inv-${request.payload.email}`,
+        acceptUrl: `https://vespin.dev/accept-invitation.html?id=inv-${request.payload.email}`,
       };
       invitations = [...invitations, made];
       return Promise.resolve(done(made));
@@ -2025,7 +2025,7 @@ test("the invitations the host streams are drawn, another Mac's invitation among
     email: "ola@example.com",
     role: WORKSPACE_ROLE.MEMBER,
     expiresAt: "2026-10-16T12:00:00.000Z",
-    acceptUrl: "https://tryluke.dev/accept-invitation.html?id=inv-ola@example.com",
+    acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-ola@example.com",
   };
   act(() => {
     for (const stream of invitationStreams) {
@@ -2071,7 +2071,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
   await settle();
 
   assert.deepEqual(invitationLink, [
-    "https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com",
+    "https://vespin.dev/accept-invitation.html?id=inv-alan@example.com",
   ]);
   assert.deepEqual(listed, [
     "alan@example.com",
@@ -2107,7 +2107,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
       ],
     ],
   );
-  assert.deepEqual(copied, ["https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com"]);
+  assert.deepEqual(copied, ["https://vespin.dev/accept-invitation.html?id=inv-alan@example.com"]);
 });
 
 test("an invitation's role is a field chip, Member by default, whose menu checks the role and says what each may do, and the invitation is sent as the role chosen", async () => {
@@ -2231,7 +2231,7 @@ test("each pending invitation's Cancel invitation stands in a group named by its
     email: `${name}@example.com`,
     role: WORKSPACE_ROLE.MEMBER,
     expiresAt: "2026-10-16T12:00:00.000Z",
-    acceptUrl: `https://tryluke.dev/accept-invitation.html?id=inv-${name}`,
+    acceptUrl: `https://vespin.dev/accept-invitation.html?id=inv-${name}`,
   }));
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
@@ -2251,7 +2251,7 @@ test("Cancel invitation, drawn red, sends nothing while an invitation is on its 
       email: "sam@example.com",
       role: WORKSPACE_ROLE.MEMBER,
       expiresAt: "2026-10-16T12:00:00.000Z",
-      acceptUrl: "https://tryluke.dev/accept-invitation.html?id=inv-sam",
+      acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-sam",
     },
   ];
   let release: () => void = () => undefined;
@@ -2367,7 +2367,7 @@ test("an invitations read that failed says so with Retry in the list's place, wh
       email: "sam@example.com",
       role: WORKSPACE_ROLE.MEMBER,
       expiresAt: "2026-10-16T12:00:00.000Z",
-      acceptUrl: "https://tryluke.dev/accept-invitation.html?id=inv-sam",
+      acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-sam",
     },
   ];
   refuseInvitationsRead = true;
@@ -2534,7 +2534,7 @@ test("each member's ⋯ holds Copy link, which copies that person's link under t
   await chooseAction(memberNamed(page, "Sam"), "Copy link");
   await settle();
 
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/person/${MEMBER.userId}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/person/${MEMBER.userId}`]);
   assert.match(document.body.textContent ?? "", /Link copied/u);
 });
 

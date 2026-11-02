@@ -31,7 +31,7 @@ import {
  * conversation.tsx -- AI Elements' Conversation: a log of messages that keeps to its newest line while the reader is there.
  *
  * Copied from the AI Elements registry (https://elements.ai-sdk.dev) and
- * restyled to Fullspin's tokens. One change of substance: the registry's
+ * restyled to our tokens. One change of substance: the registry's
  * Conversation scrolls on `use-stick-to-bottom`, which animates the scroll
  * on timings of its own, where docs/DESIGN.md has content land at once and
  * every duration come from a motion token. So the log here follows its

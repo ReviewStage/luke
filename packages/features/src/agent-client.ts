@@ -580,7 +580,7 @@ export class HostedAgentClient {
     );
   }
 
-  /** The memories Fullspin's agents kept in a workspace the account is a member of, most recently kept first. */
+  /** The memories our agents kept in a workspace the account is a member of, most recently kept first. */
   readMemories(
     params: MemoriesReadParams,
   ): Effect.Effect<MemoriesAnswerView, never, HttpClient.HttpClient> {
@@ -621,7 +621,7 @@ export class HostedAgentClient {
     return hostedAnswer(askHosted(this.#hosted.account.saveProviderKey, admitted), {});
   }
 
-  /** The account's `ext_agent_host_id` for Fullspin's hosted runtime, which a ChatGPT sign-in names as its host. */
+  /** The account's `ext_agent_host_id` for our hosted runtime, which a ChatGPT sign-in names as its host. */
   chatGptHost(): Effect.Effect<ChatGptHostAnswer | Failed, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.account.chatGptHost, undefined), {});
   }
@@ -1103,7 +1103,7 @@ export class HostedAgentClient {
     );
   }
 
-  /** Which of Fullspin's own tools one agent is offered, and whether its `run_on_mac` would run now. */
+  /** Which of our own tools one agent is offered, and whether its `run_on_mac` would run now. */
   lukeTools(
     agentId: string,
   ): Effect.Effect<AgentLukeToolsAnswerView, never, HttpClient.HttpClient> {

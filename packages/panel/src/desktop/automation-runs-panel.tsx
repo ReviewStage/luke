@@ -51,7 +51,7 @@ import { type MenuAction, rowMenu } from "./action-menu.js";
 import { AUTOMATION_ROW_META } from "./automation-list-frame.js";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups.js";
 import { usePaneSlide } from "./pane-motion.js";
-import { PhoneHead } from "./phone-head.js";
+import { PhoneFindButton, PhoneHead } from "./phone-head.js";
 import type { RunsRead } from "./use-automation-runs.js";
 
 /** What the runs' own screen is called on a phone. */
@@ -396,7 +396,7 @@ export function AutomationRunsScreen({
         place="automation-runs-page"
         start={<BackButton label={name} place={name} onBack={onBack} />}
         title={RUNS}
-        end={null}
+        end={<PhoneFindButton />}
       />
       <RunsBody headed={false} {...shown} />
     </Fill>

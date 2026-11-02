@@ -1068,7 +1068,7 @@ interface RecordedLine {
 /**
  * P16's recording cut into the launches P20's runner makes of it, each as
  * the events it posts: the notifications app-server sent, an ACCEPTED for
- * each of Vespin's lines where the runner's `turn/start` or `turn/steer` hands
+ * each of our lines where the runner's `turn/start` or `turn/steer` hands
  * one over, and the launch's END. The first launch runs the workflow turn
  * (steered once), the second the `sleep 600` turn it stops, and the third,
  * after a restart, the resumed thread's turn.

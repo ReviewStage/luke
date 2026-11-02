@@ -21,7 +21,7 @@ import { sessionSandboxCleanup } from "../session-sandbox.js";
 import { conversations } from "../storage.js";
 
 /**
- * The migration that drops the per-task Vespin's data: its conversations,
+ * The migration that drops the per-task assistant's data: its conversations,
  * stamped deleted with every child under them so the sweep purges them, and
  * `task.conversation_id`. Each test
  * stands its own database where it stood before the migration, the migration
@@ -38,7 +38,7 @@ const UNDO = [
   `ALTER TABLE "task" ADD CONSTRAINT "plan_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE set null`,
 ];
 
-/** The per-task Vespin's conversation kind, as old rows store it; no code names it now. */
+/** The per-task assistant's conversation kind, as old rows store it; no code names it now. */
 const OLD_KIND = { CONVERSATION: "plan" } as const;
 
 /** The database stood where it was before the migration. */

@@ -10,7 +10,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * reads exactly as it was shown. Versions count from one within their page.
  *
  * The service answers a page's HTML inside JSON and never as a document of
- * its own origin, so nothing an agent wrote ever runs as tryluke.dev; the Mac
+ * its own origin, so nothing an agent wrote ever runs as vespin.dev; the Mac
  * draws it in a sandboxed frame of its own scheme.
  */
 
@@ -51,14 +51,14 @@ export const pageWriteSchema = EffectSchema.Struct({
 
 export type PageWrite = typeof pageWriteSchema.Type;
 
-/** Who showed a version of a page: Fullspin, from a call, or one of the plan's coding agents. */
+/** Who showed a version of a page: the app, from a call, or one of the plan's coding agents. */
 export const PAGE_SHOWER = {
   LUKE: "luke",
   AGENT: "agent",
 } as const;
 
 /**
- * Who showed a version of a page: Fullspin, or a coding agent by its id alone,
+ * Who showed a version of a page: the app, or a coding agent by its id alone,
  * so whoever reads it names the agent by what its row says now, as a plan's
  * agent edits are named (`plan-template.ts`'s `planAgentEditSchema`).
  */
@@ -109,7 +109,7 @@ export const PAGE_OWNER = {
 
 /**
  * What a page stands on, by its id: a task, whose pages every agent on it
- * and Fullspin show and revise, or a coding agent on no task, whose pages are
+ * and the app show and revise, or a coding agent on no task, whose pages are
  * its own. Its rule of who may read the page is the owner's.
  */
 export type PageOwner =

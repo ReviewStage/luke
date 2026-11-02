@@ -62,7 +62,7 @@ export const FENCE_LANGUAGE_MAX_CHARS = 32;
 /** The one host the browser is sent to from a task: a repository's page, or the App's installation page. */
 const GITHUB_ADDRESS = /^https:\/\/github\.com\//u;
 
-/** An address on GitHub, and nowhere else: what a repository link, the installation link, or Fullspin's own issues open. */
+/** An address on GitHub, and nowhere else: what a repository link, the installation link, or our own issues open. */
 export const githubAddress = EffectSchema.String.check(
   EffectSchema.isMaxLength(2_048),
   EffectSchema.isPattern(GITHUB_ADDRESS),

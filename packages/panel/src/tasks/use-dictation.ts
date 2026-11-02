@@ -18,13 +18,13 @@ import { base64Of } from "./attached-files.js";
 import { openPreferredMicrophone } from "./microphone-choice.js";
 
 /**
- * use-dictation.ts -- a message box's dictation: the microphone recorded in this panel, heard as words by Fullspin's service, and the words put at the caret.
+ * use-dictation.ts -- a message box's dictation: the microphone recorded in this panel, heard as words by our service, and the words put at the caret.
  *
  * The press opens the preferred microphone (the Mac's own over a
  * Bluetooth headset's, `./microphone-choice.ts`), after
  * asking macOS where it has not been asked, and records it as Opus in
  * WebM at the wire's bitrate, measured by an analyser the strip draws.
- * Finishing hands the clip to main in one act, and main to Fullspin's service,
+ * Finishing hands the clip to main in one act, and main to our service,
  * which has OpenAI hear it and answers the words; the renderer never
  * reaches OpenAI. The words go in at the caret the press found, carried
  * through whatever changed the words since as a mark the box's editor keeps

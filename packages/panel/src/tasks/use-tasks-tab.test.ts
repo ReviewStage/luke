@@ -316,7 +316,7 @@ function _undoButton(): HTMLButtonElement {
   return undo;
 }
 
-/** A task with a history: Vespin wrote it on a call, over a first version. */
+/** A task with a history: the app wrote it on a call, over a first version. */
 const _EDITED: TasksView = {
   ...OPEN,
   document: {
@@ -325,7 +325,7 @@ const _EDITED: TasksView = {
   },
 };
 
-/** One revision as the history lists it, written by Vespin on a call. */
+/** One revision as the history lists it, written by the app on a call. */
 function _revisionLine(seq: number) {
   return {
     seq,

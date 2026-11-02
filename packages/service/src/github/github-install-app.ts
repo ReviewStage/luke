@@ -2,7 +2,7 @@
  * github-install-app.ts -- the install group: the door to GitHub's install page, the Setup URL GitHub returns through, and the callback a workspace's connect is confirmed at.
  *
  * Browser navigations, none carrying an account bearer. The first sends the
- * developer to GitHub to install the Fullspin GitHub App or choose its
+ * developer to GitHub to install our GitHub App or choose its
  * repositories. The second is the App's registered Setup URL: GitHub lands
  * the browser here with `installation_id` and `setup_action`, and without a
  * connect's `state` the route only confirms the installation is this App's
@@ -16,7 +16,7 @@
  * guidance for the Setup URL is to generate a user access token for the user
  * who installed the App and check the installation is associated with them
  * (https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/about-the-setup-url).
- * Fullspin keeps no user's token for that, so the Setup URL sends the browser on
+ * We keep no user's token for that, so the Setup URL sends the browser on
  * through GitHub's web application flow, with PKCE and the App's
  * registered callback URL `GITHUB_INSTALLED_AUTHORIZED` named as its
  * `redirect_uri`

@@ -329,7 +329,7 @@ test("an agent's row in the summary draws the agent's one menu, Copy link copyin
   await act(async () => copy.click());
 
   assert.deepEqual(labels, ["Copy link", "Rename", "Archive", "Permanently delete"]);
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${AGENT.id}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${AGENT.id}`]);
 });
 
 test("under a finger, an agent's row in the summary draws no ⋯, and held it offers the agent's menu", () => {

@@ -37,7 +37,7 @@ import { clearRevokedAuthorization, GitHubApp } from "./github-app.js";
 import { setInstallationStatus } from "./github-installations.js";
 
 /**
- * github-webhook-app.ts -- the Fullspin GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again, one about an installation marks its workspace active or not, and a revoked authorization clears that GitHub user's tokens.
+ * github-webhook-app.ts -- our GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again, one about an installation marks its workspace active or not, and a revoked authorization clears that GitHub user's tokens.
  *
  * The events read are a pull request's, a check suite's, a check run's once
  * it ends, and a commit status's, since the checks' one word counts the

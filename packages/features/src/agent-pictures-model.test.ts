@@ -119,11 +119,8 @@ test("a call whose answer is no list of blocks, or whose blocks carry no picture
 });
 
 test("a picture is added to a plan's text as its own last paragraph, escaped, and Undo takes exactly that back out", () => {
-  const line = taskPictureLine(
-    "Members [after]",
-    "https://tryluke.dev/acme/plan/5d8e/files/(3c9e)",
-  );
-  assert.equal(line, "![Members \\[after\\]](https://tryluke.dev/acme/plan/5d8e/files/\\(3c9e\\))");
+  const line = taskPictureLine("Members [after]", "https://vespin.dev/acme/plan/5d8e/files/(3c9e)");
+  assert.equal(line, "![Members \\[after\\]](https://vespin.dev/acme/plan/5d8e/files/\\(3c9e\\))");
 
   for (const plan of [
     "# Teammate invitations\n\nInvite by email.\n",

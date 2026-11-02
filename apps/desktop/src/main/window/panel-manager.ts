@@ -73,7 +73,7 @@ interface PanelManagerOptions {
 /**
  * Checklist: scripts/evidence.sh validates every capture at WIDTH by HEIGHT.
  *
- * The window Fullspin first opens in: large enough to read a plan beside its
+ * The window the app first opens in: large enough to read a plan beside its
  * questions, and never past the display's work area less a margin, so a
  * small display still shows the whole window with the Dock and the menu bar
  * clear of it.
@@ -133,7 +133,7 @@ function desktopBounds(display: Display): Rectangle {
 }
 
 /**
- * Fullspin's one window: an ordinary, resizable app window, opened where it was
+ * The app's one window: an ordinary, resizable app window, opened where it was
  * last left (`window-placement.ts`) and always showing the panel. It is kept
  * under the panel's old name and shape because every caller — the IPC
  * handlers, the tray, the talk key — addresses a panel by display, and the

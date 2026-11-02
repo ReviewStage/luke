@@ -14,7 +14,7 @@ import type { MenuAction } from "../desktop/action-menu.js";
  * Each menu says what pressing one does where it is drawn, so the sidebar's
  * Rename edits the row and the title's edits the title, but both draw the
  * item the same way, as the window's one list words and marks it
- * (`command-items.tsx`). The link is the task's own address on tryluke.dev,
+ * (`command-items.tsx`). The link is the task's own address on vespin.dev,
  * written by the mention encoder (`@luke/features/mention-link`) as a mention
  * of the task is, so it opens the task in the app as a mention's chip does.
  * Mark as unread turns to Mark as read on a task already unread, as Mail,

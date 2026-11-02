@@ -256,12 +256,14 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         yield* recordAgentPublished(userId, agent.id, pullRequestIn(PULL_REQUEST_STATE.MERGED));
         yield* turnOf(agent, TURN_STATUS.SETTLED);
 
-        // Its pull request merged and its turn ended: Vespin finishes the task and leaves the agent standing.
+        // Its pull request merged and its turn ended: the service finishes the task and leaves the
+        // agent standing.
         yield* settleTaskAfterTurn(userId, task.id, agent.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.DONE);
         assert.equal(yield* archived(userId, agent.id), false);
 
-        // Messaged, its turn takes the task up, and its reply ends the turn, at whose end Vespin finishes it again.
+        // Messaged, its turn takes the task up, and its reply ends the turn, at whose end the
+        // service finishes it again.
         yield* reopenTaskForWork(userId, task.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.IN_PROGRESS);
         yield* turnOf(agent, TURN_STATUS.SETTLED);

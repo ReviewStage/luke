@@ -2,7 +2,7 @@ import { githubInstallApp } from "@luke/service/github/github-install-app";
 import { routeFromHttpRouter } from "../../route-effect.js";
 
 /**
- * Sends the browser to GitHub to install the Fullspin GitHub App. The logic lives
+ * Sends the browser to GitHub to install our GitHub App. The logic lives
  * in `packages/service/src/github/github-install-app.ts`, over the `GitHubApp` the web runtime
  * builds; this file only hands the group to the route adaptor.
  */

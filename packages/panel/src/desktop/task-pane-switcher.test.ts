@@ -426,6 +426,16 @@ test("on a phone the ⋯'s Rename edits the task's name in the row's title", asy
   assert.deepEqual(page.told, [`rename ${TASK.id} Invite teammates`]);
 });
 
+test("on a phone, which has no ⌘F to press, the ⋯'s Find opens the find bar over the plan with the caret in its field", () => {
+  const page = mount(SHELL_ROOM.NARROW);
+  page.choose("Find");
+  const field = page.container.querySelector<HTMLInputElement>(
+    '.side-panel-content .find-bar input[aria-label="Find"]',
+  );
+  assert.ok(field, "the plan's find bar stands");
+  assert.equal(document.activeElement, field);
+});
+
 test("a wide window keeps the panel's strip and the column's toolbar, the task's ⋯ the Plan tab's, and draws no row of a phone's", () => {
   const page = mount(SHELL_ROOM.WIDE);
   assert.equal(page.container.querySelector(".task-head"), null);

@@ -15,7 +15,7 @@ import type { VersionHistoryControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { longPress, underAFinger } from "../testing/finger.js";
-import { pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
+import { menuItems, pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { TaskVersionHistory } from "./desktop-version-history.js";
@@ -183,12 +183,18 @@ test("on a phone a revision's sections are headed by the way back to every versi
   assert.deepEqual(exits, ["sections"]);
 });
 
-test("on a phone a version is headed by the way back to the list, when it was saved, and Restore this version as a button, never a ⋯ of one item", () => {
+test("on a phone a version is headed by the way back to the list, when it was saved, and a ⋯ holding Restore this version and Find, since a corner holds one control and a phone has no ⌘F", () => {
   const { view, exits } = drawn(SHELL_ROOM.NARROW, VIEWING_2);
 
   const head = readPhoneHead(view, "version");
-  assert.deepEqual([head.start, head.end], [["Versions"], ["Restore this version"]]);
+  assert.deepEqual([head.start, head.end], [["Versions"], ["Version actions"]]);
   assert.ok(head.title, "the moment it was saved is the title");
+  pressInPhoneHead(view, "version", "Version actions");
+  assert.deepEqual(
+    menuItems().map((item) => item.label),
+    ["Restore this version", "Find"],
+  );
+  pressInPhoneHead(view, "version", "Version actions");
   pressInPhoneHead(view, "version", "Versions");
   assert.deepEqual(exits, ["list"]);
 });
@@ -200,10 +206,11 @@ test("on a phone the newest version's Restore stands unavailable, as the wide ba
     viewing: VIEWING_2.viewing && { ...VIEWING_2.viewing, line: line(3), current: true },
   });
 
-  const restore = [...view.querySelectorAll<HTMLButtonElement>("header.version-head button")].find(
-    (each) => each.textContent === "Restore this version",
+  pressInPhoneHead(view, "version", "Version actions");
+  assert.deepEqual(
+    menuItems().find((item) => item.label === "Restore this version"),
+    { label: "Restore this version", disabled: true },
   );
-  assert.equal(restore?.getAttribute("aria-disabled") ?? String(restore?.disabled), "true");
 });
 
 test("a wide room keeps the versions' Back row and title and a version's Restore button, with no phone's header", () => {

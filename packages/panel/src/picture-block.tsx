@@ -49,7 +49,7 @@ export const PICTURE_IMAGE_CLASS =
 export const PICTURE_PENDING_CLASS =
   "picture-pending grid aspect-screenshot w-picture-stand-in max-w-full cursor-default place-items-center";
 
-/** A picture from outside Fullspin, a link to it never fetched, marked by a glyph a step under its words' size. */
+/** A picture from outside the app, a link to it never fetched, marked by a glyph a step under its words' size. */
 export const OUTSIDE_GLYPH_CLASS = "mr-[0.25em] size-picture-glyph align-[-0.12em]";
 
 /** A picture this reader cannot reach, or whose bytes are gone: its words, at a stand-in's width. */

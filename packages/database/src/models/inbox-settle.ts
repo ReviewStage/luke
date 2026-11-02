@@ -2,7 +2,7 @@
  * inbox-settle.ts -- the inbox items whose reason is gone settled on their own: their task's work done or canceled, or their agent archived.
  *
  * An ask waits on the developer for as long as its task's work does. A
- * task moved to Done or Canceled, by a member or by Fullspin's own finish, and
+ * task moved to Done or Canceled, by a member or by our own finish, and
  * an agent archived, by whoever archives it, close every open item of
  * theirs that holds an ask or whose agent waits on a reply, in the same
  * transaction as the write that moved them, so no caller has to remember
@@ -23,7 +23,7 @@
  * since closed. An item the other act still settles, its agent still
  * archived or its task still Done or Canceled, stays settled and is handed
  * to that act instead, its reason and stamp, so undoing that act in turn
- * opens it. A task Fullspin reopens on its own, as a turn starting on it does
+ * opens it. A task we reopen on our own, as a turn starting on it does
  * (`beginTaskWork`), opens nothing; only the agent's own post under the
  * item's key does.
  */

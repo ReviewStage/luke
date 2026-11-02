@@ -1,8 +1,8 @@
 /**
- * vercel-sandbox-api.ts -- the few calls Fullspin makes of Vercel Sandbox's REST API itself, under the deployment's own OIDC token.
+ * vercel-sandbox-api.ts -- the few calls we make of Vercel Sandbox's REST API itself, under the deployment's own OIDC token.
  *
  * eve opens and drives each session's sandbox through the SDK it bundles,
- * and hands Fullspin's own code no handle to it. What Fullspin asks of a sandbox
+ * and hands our own code no handle to it. What we ask of a sandbox
  * outside an eve tool — a retired session's sandboxes deleted, a sandbox no
  * terminal holds stopped, a developer's resume, a short command for a
  * terminal's list, a terminal's PTY, the GitHub credential at its firewall —
@@ -17,18 +17,18 @@
  * the SDK bundled into a function fails it as it loads and carries a dozen
  * Node modules these calls never use.
  *
- * A native harness's sandbox is the one sandbox Fullspin opens itself rather
+ * A native harness's sandbox is the one sandbox we open ourselves rather
  * than eve, so its calls are copied from the SDK's 3.8.0 client, the first
  * with stdin on a detached command: the create from a snapshot, a file
  * upload, a detached command started with its stdin held open, a write to
  * that stdin, a command's exit read as it waits for it, its kill, and a sandbox's tags updated;
- * and, for Fullspin's own template of that sandbox's image
+ * and, for our own template of that sandbox's image
  * (`native-sandbox-template.ts`), a sandbox looked up and listed by name,
  * one created on an image, and a running session snapshotted.
  *
  * Every sandbox eve opens carries its session's id as a tag, so a session's
  * sandbox is found by the tag alone; a session has one, so the first page is
- * all of them. What is sent is a tag, a name, and the argv of a command Fullspin
+ * all of them. What is sent is a tag, a name, and the argv of a command we
  * wrote; what a failure carries is the call that failed, its status, and
  * Vercel's own error code and message, or the cause's where Vercel never
  * answered, and never what was sent. A deployment without an OIDC token
@@ -43,10 +43,10 @@ import { HttpClient, HttpClientRequest } from "effect/http";
 import { EXCESS_KEYS, unparsedWire } from "../core.js";
 import { jsonOf } from "../http/http-effect.js";
 
-/** The tag eve sets on every session's sandbox, its value the session's id; a sandbox Fullspin opens itself carries it too. */
+/** The tag eve sets on every session's sandbox, its value the session's id; a sandbox we open ourselves carries it too. */
 export const SESSION_TAG = "sessionId";
 
-/** The statuses Vercel names a sandbox by that Fullspin reads: up in `running`, which the list of running sandboxes filters on. */
+/** The statuses Vercel names a sandbox by that we read: up in `running`, which the list of running sandboxes filters on. */
 export const SANDBOX_STATUS = {
   PENDING: "pending",
   RUNNING: "running",
@@ -143,7 +143,7 @@ export type SandboxCall = (typeof SANDBOX_CALL)[keyof typeof SANDBOX_CALL];
  * that failed, the status where Vercel answered one, its error code where it
  * named one, and what went wrong in a line, Vercel's own error code and
  * message or the cause's where it never answered. None of it is anything
- * Fullspin sent.
+ * we sent.
  */
 export class SandboxUnavailable extends Data.TaggedError("SandboxUnavailable")<{
   readonly call?: SandboxCall;
@@ -242,7 +242,7 @@ export type NetworkPolicy =
       >;
     };
 
-/** The argv of a command Fullspin wrote, where it runs, and the variables it is handed beside the sandbox's own. */
+/** The argv of a command we wrote, where it runs, and the variables it is handed beside the sandbox's own. */
 export interface CommandAsk {
   readonly command: string;
   readonly args: readonly string[];
@@ -641,7 +641,7 @@ const PASSING_RETRY = Schedule.max([
 /**
  * A run of characters shaped like a credential: twenty or more of a token's
  * alphabet unbroken, which a bearer, a provider key, a JWT, and an env value
- * Fullspin sent all are, and Vercel's prose, codes, and a URL's slashed path
+ * we sent all are, and Vercel's prose, codes, and a URL's slashed path
  * segments mostly are not.
  */
 const TOKEN_SHAPED = /[A-Za-z0-9._~+-]{20,}=*/gu;
@@ -778,7 +778,7 @@ function tarOctal(value: number, length: number): string {
  * The files as one gzipped ustar archive, each under its path relative to
  * the root, which is what the file write takes. Note that a path past a
  * hundred bytes is split at a slash into ustar's prefix, and one that will
- * not split is refused, since every path here is Fullspin's own.
+ * not split is refused, since every path here is our own.
  */
 function tarOf(files: readonly SandboxFile[]): Uint8Array | undefined {
   const blocks: Uint8Array[] = [];

@@ -51,7 +51,7 @@ export const ownedByTaskAlone = (table: {
   sql`(${table.taskId} is not null and num_nonnulls(${sql.join(ownerColumns(table), sql`, `)}) = 0)`;
 
 /**
- * attachment.ts -- one file Fullspin keeps for something it belongs to: its bytes, kept beside the row that owns it, whatever kind of row that is.
+ * attachment.ts -- one file the service keeps for something it belongs to: its bytes, kept beside the row that owns it, whatever kind of row that is.
  *
  * Every attachment, of every owner, is a row of this one table. Its owner is
  * named by one foreign key column per kind of owner, and exactly one of

@@ -3,7 +3,7 @@ import { AGENT_TODO_STATUS } from "@luke/features/agent-wire";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire";
 
 /**
- * native-tool-calls.ts -- a call a native harness made, as the transcript draws it: the tool of Fullspin's whose renderer draws its kind, and its input and answer in that tool's shapes.
+ * native-tool-calls.ts -- a call a native harness made, as the transcript draws it: the tool of ours whose renderer draws its kind, and its input and answer in that tool's shapes.
  *
  * A coding agent running on a provider's own harness stores each call under
  * the harness's own tool name (`CLAUDE_CODE_TOOL`), with the harness's own
@@ -14,7 +14,7 @@ import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire
  * its name, its input under the keys that tool takes, and its answer under the
  * key that tool answers its words in. Everything after the read (rows, the
  * to-do list, a loaded skill, a copy of the transcript) then draws it as it
- * draws eve's. A call to Fullspin's own MCP server is stored under Fullspin's tool's
+ * draws eve's. A call to our own MCP server is stored under our tool's
  * name and needs no reading, and a subagent's call (`Agent`) keeps its name,
  * which the tab draws as a delegation's row, as eve's `delegate` is drawn.
  *
@@ -325,7 +325,7 @@ function codexSubagentAnswer(output: WireValue | undefined): WireValue | undefin
  * Codex's items, each read as the eve call that does what it does: a
  * command as `bash`, a file change as an `apply_patch` of its files, a web
  * search as `web_search`, and the turn's plan as `write_todos`. A call to
- * an MCP server other than Fullspin's is named by its server and its tool, which
+ * an MCP server other than ours is named by its server and its tool, which
  * the generic row draws, its arguments as its input. A spawn of a subagent
  * is read as Claude Code's `Agent`, the one name the tab draws a native
  * subagent's delegation row by (`delegates`); any other subagent call keeps
@@ -353,7 +353,7 @@ const CODEX_CALLS: Record<(typeof CODEX_TOOL)[keyof typeof CODEX_TOOL], NativeCa
     input: codexTodosInput(input),
     output,
   }),
-  // Note that the server's name is joined to the tool's with a dot, which no tool of Fullspin's or eve's is named with, so no renderer of theirs takes it.
+  // Note that the server's name is joined to the tool's with a dot, which no tool of ours or eve's is named with, so no renderer of theirs takes it.
   [CODEX_TOOL.MCP_TOOL_CALL]: ({ input, output }) => ({
     tool: `${inputString(input, "server") ?? ""}.${inputString(input, "tool") ?? ""}`,
     input: isRecord(input) ? input.arguments : input,

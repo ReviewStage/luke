@@ -178,7 +178,7 @@ describe("a host's daemon", () => {
                   seq: 1,
                   kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
                   payload: {
-                    checkoutPath: `${home}/.luke/agents/${AGENT_ID}/repository`,
+                    checkoutPath: `${home}/.vespin/agents/${AGENT_ID}/repository`,
                     repository: null,
                     startBranch: null,
                     firstSequence: 1,
@@ -228,7 +228,7 @@ describe("a host's daemon", () => {
         const launched = spawner.spawned.filter(isRunner);
         expect(launched).toHaveLength(1);
         const [runner] = launched;
-        const folder = `${home}/.luke/agents/${AGENT_ID}`;
+        const folder = `${home}/.vespin/agents/${AGENT_ID}`;
         expect(runner?.args).toEqual([runnerBundle]);
         expect(runner?.cwd).toBe(`${folder}/repository`);
         expect(runner?.extendEnv).toBe(false);
@@ -435,7 +435,7 @@ describe("hostRuntime", () => {
       platform: "darwin",
       home: "/Users/ada",
       os: DARWIN_HOST,
-      stateRoot: "/Users/ada/Library/Application Support/Luke",
+      stateRoot: "/Users/ada/Library/Application Support/Vespin",
     },
     {
       platform: "linux",

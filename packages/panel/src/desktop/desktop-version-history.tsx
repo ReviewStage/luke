@@ -100,7 +100,7 @@ import type { SidebarCollapse } from "./sidebar-collapse.js";
  * own edge, never folding, as Settings' page list does. At its head stand
  * back and forward and the Back row, which Escape presses too, then the
  * view's title, then the versions, newest first: who wrote each, drawn as
- * the rest of the window draws them (Fullspin's face as the Transcript wears
+ * the rest of the window draws them (the app's face as the Transcript wears
  * it, the reader's account picture as You, a teammate's sign-in picture
  * where the workspace's members read lists one, a coding agent's harness and
  * title), what it did, and how long ago, in the sidebar's few letters with
@@ -270,7 +270,7 @@ function RevisionRow({
       ? []
       : [{ label: "Restore this version", icon: <RotateCcwIcon />, onSelect: onRestore }],
   ].filter((group) => group.length > 0);
-  // Note that the author's card hangs beside the row as the pointer rests on it, Fullspin's its own; an agent or an automation the version names by name alone hangs nothing.
+  // Note that the author's card hangs beside the row as the pointer rests on it, the app's its own; an agent or an automation the version names by name alone hangs nothing.
   const card = actorCard(author);
   return (
     <RowHintOptions card={card}>

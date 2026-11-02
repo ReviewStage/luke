@@ -96,7 +96,7 @@ import {
  * install command's update, this Mac's app updated, or, for another Mac,
  * either, since the service lists no word of how a Mac joined. Remove,
  * behind the row's ⋯, refuses that machine at once, after asking with the
- * command that takes Fullspin off the machine itself where the install command
+ * command that takes the host off the machine itself where the install command
  * may have set it up. Adding takes a Linux server and a Mac alike, through
  * one command.
  *

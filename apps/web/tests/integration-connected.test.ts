@@ -17,7 +17,7 @@ import { appTab, closeAppTabs } from "./support/connect-app-tab";
  * integration-connected.test.ts -- an integration's landing says how its
  * sign-in settled and how to go on: a connection says the tab can go, every
  * other ending says how to try again, and the provider's name is said only
- * where the address named one. A landing nothing answered offers Open Vespin
+ * where the address named one. A landing nothing answered offers the Open link
  * for the Mac app on a Mac, and nothing elsewhere. A sign-in the web app's tab
  * handed off is answered by that tab, and by no other, and the page closes
  * where it connected and stays to say why where it did not, unless the

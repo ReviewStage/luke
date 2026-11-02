@@ -1,4 +1,4 @@
-/* Fullspin's app window: a sidebar of places on the left, the chosen work on the
+/* Our app window: a sidebar of places on the left, the chosen work on the
    right, and the confirm and feedback dialogs over it. Last in index.css, so a rule here wins over a panel rule of equal
    weight. */
 
@@ -675,7 +675,7 @@ body,
 /* Its column is a `ScrollArea` with nothing scrolling sideways, since
    nothing in a plan is wider than the column (its code and tables scroll on
    their own), and a stable gutter, so where macOS draws a bar that takes
-   room the column does not shift sideways on the line Fullspin writes that
+   room the column does not shift sideways on the line the app writes that
    first makes it scroll. This is the block inside it. */
 .desktop-document .plan-document-body {
   padding: var(--luke-page-inset);

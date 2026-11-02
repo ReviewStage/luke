@@ -5,7 +5,7 @@ import { inAppScheme, isLinkHome, LINK_ORIGIN } from "./link-home.js";
 import { parsedUrl } from "./parsed-url.js";
 
 /**
- * link-grammar.ts -- every link the app reads and writes, as the address it is and the Markdown it is written into words as: Fullspin's own places, GitHub's and Linear's pages, and the older `luke://` forms.
+ * link-grammar.ts -- every link the app reads and writes, as the address it is and the Markdown it is written into words as: our own places, GitHub's and Linear's pages, and the older `luke://` forms.
  *
  * This is the one module that knows how an address is spelled. A mention
  * (`mention-link.ts`) names what a link names and reads it through here; a
@@ -13,7 +13,7 @@ import { parsedUrl } from "./parsed-url.js";
  * through here too, so no two of them spell one address two ways, and every
  * label is escaped the same way (`markdownLink`).
  *
- * A Fullspin link is the thing's address on the web, `https://<home>/<workspace>/…`
+ * A link of ours is the thing's address on the web, `https://<home>/<workspace>/…`
  * (`link-home.ts`), and the desktop is handed the same address in its own
  * scheme. Each step after the
  * workspace says what kind of thing comes next,
@@ -52,15 +52,15 @@ import { parsedUrl } from "./parsed-url.js";
  * or denies it. `connect` is a reserved slug, so no workspace's link is
  * ever read as one.
  *
- * An issue's page, `/issue/<issueId>`, is no place now that Fullspin keeps no
- * issues of its own, and Factory's, `/factory`, none now that Factory is
+ * An issue's page, `/issue/<issueId>`, is no place now that we keep no
+ * issues of our own, and Factory's, `/factory`, none now that Factory is
  * gone, so an old link to either reads as a link it does not know.
  *
  * An agent's place was once written under its task too,
  * `/plan/<id>/agent/<agentId>/…`, and an Inbox item under its agent's task,
  * `/plan/<id>/inbox/<itemId>`, each still read, the task kept, and still
- * written while a writer names the task. A turn of Fullspin's own work,
- * `/plan/<id>/work/<at>`, and a worker of Fullspin's own,
+ * written while a writer names the task. A turn of our own work,
+ * `/plan/<id>/work/<at>`, and a worker of our own,
  * `/plan/<id>/worker/<callId>`, are drawn nowhere now, so each is read as
  * its task and written no more.
  *
@@ -92,7 +92,7 @@ import { parsedUrl } from "./parsed-url.js";
  * commit, since a branch's lines drift. A Linear issue's page is
  * `https://linear.app/<workspace>/issue/<KEY-123>`, its slug after it or not.
  *
- * The forms written before Fullspin's links were settled, `luke://<host>/<path>`,
+ * The forms written before our links were settled, `luke://<host>/<path>`,
  * are read forever, and kept for what has no page of its own on the web, an
  * MCP server and a date; what each host's path means is the mention's.
  *
@@ -269,7 +269,7 @@ const LINEAR_ISSUE_STEP = "issue";
 /** A Linear issue's identifier, its team's key and its number, `ENG-123`, as Linear spells it. */
 export const LINEAR_IDENTIFIER = /^[A-Z][A-Z0-9_]{0,9}-[1-9]\d{0,8}$/u;
 
-/** The scheme of the forms written before Fullspin's links were settled. */
+/** The scheme of the forms written before our links were settled. */
 const LEGACY_PROTOCOL = "luke:";
 
 /** What a `luke://` address's host says its path names. */
@@ -411,7 +411,7 @@ const linkPlaceSchema = EffectSchema.Union([
 ]);
 
 /**
- * A place in Fullspin a link can send someone to, by the ids that find it. An
+ * A place in the app a link can send someone to, by the ids that find it. An
  * agent's place names its task only where a link written under the task
  * did, or a writer still does, so a reader finds the task by the agent.
  */
@@ -453,7 +453,7 @@ export function decodedStep(step: string): string | undefined {
   }
 }
 
-/** A step of a Fullspin link read back, or nothing where its encoding is broken or it is too long to be one. */
+/** A step of a link of ours read back, or nothing where its encoding is broken or it is too long to be one. */
 function boundedStep(step: string): string | undefined {
   return step.length > LINK_BOUNDS.MAX_STEP_CHARS * 3 ? undefined : decodedStep(step);
 }
@@ -464,7 +464,7 @@ function namesItemPicture(more: readonly string[]): boolean {
   return step === STEP.FILES && id !== undefined && PICTURE_ID.test(id) && after.length === 0;
 }
 
-/** The steps after a task's id: a version, a page, an agent's, or an Inbox item; a turn of Fullspin's or a worker of Fullspin's read as the task, since each is drawn nowhere now. */
+/** The steps after a task's id: a version, a page, an agent's, or an Inbox item; a turn of ours or a worker of ours read as the task, since each is drawn nowhere now. */
 function taskFields(taskId: string, rest: readonly string[]) {
   const [step, id, ...more] = rest;
   if (step === STEP.AGENT && id !== undefined) return agentFields(taskId, id, more);
@@ -674,7 +674,7 @@ export function channelPlace(channelId: string): LinkPlace {
 
 /**
  * The place a link names and the workspace it was written under, by the
- * web's scheme or the desktop's, on Fullspin's home or a host it once had;
+ * web's scheme or the desktop's, on our home or a host it once had;
  * nothing for any other address, or one naming no place.
  */
 export function readLink(target: string): ReadLink | undefined {
@@ -731,7 +731,7 @@ export interface AccountLink {
   readonly place: AccountPlace;
 }
 
-/** A Fullspin link the system hands a window: a place under the workspace it was written in, or one of the account's own. */
+/** A link of ours the system hands a window: a place under the workspace it was written in, or one of the account's own. */
 export type ShownLink = ReadLink | AccountLink;
 
 /** The step a pairing's link names its code after, as its path spells it. */
@@ -739,7 +739,7 @@ const CONNECT_PREFIX = `${HOST_WIRE.CONNECT_PATH}/`;
 
 /**
  * The place of the account's own a link names, by the web's scheme or the
- * desktop's, on Fullspin's home: a pairing's, its code read whatever its case
+ * desktop's, on our home: a pairing's, its code read whatever its case
  * and dash; nothing for any other address.
  */
 function readAccountLink(target: string): AccountLink | undefined {
@@ -963,7 +963,7 @@ export interface LegacyLink {
   readonly search: string;
 }
 
-/** The parts of an address in the form written before Fullspin's links were settled; nothing for any other address. */
+/** The parts of an address in the form written before our links were settled; nothing for any other address. */
 export function readLegacyLink(target: string): LegacyLink | undefined {
   const url = parsedUrl(target);
   if (url?.protocol !== LEGACY_PROTOCOL) return undefined;

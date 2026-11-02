@@ -12,6 +12,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useFittedColumns } from "./fitted-columns.js";
+import { nestsOf } from "./nested-rows.js";
 import { openPullRequests, TaskListRow } from "./task-list-row.js";
 import { useStandingDoor } from "./task-row-parts.js";
 import { useTasksSelection } from "./tasks-selection.js";
@@ -32,7 +33,8 @@ import { useTasksSelection } from "./tasks-selection.js";
  * opens it, and its ⋯, a right-click, and the menu key open its menu. Its
  * rows are one Tab stop that ↑↓ walk, and are chosen together as the List's
  * are, a row chosen among several offering the List's bar's acts on every
- * one chosen. A row may stand nested under another (`depth`), and fold the
+ * one chosen. A row may stand nested under another (`depth`), read at its
+ * level and its place among its siblings (`nestsOf`), and fold the
  * rows nested under it (`fold`), whose owner keeps whether they stand open
  * and hands only the rows drawn. A row may stand settled, its name muted,
  * and lead its menu with groups of its owner's (`menu`).
@@ -115,6 +117,7 @@ export function RelatedTasks({
     reserved: ownRoom(filled),
   });
   const cells = filled.filter((cell) => !isListColumn(cell) || fitted.includes(cell));
+  const nests = nestsOf(rows.map(({ depth = 0 }) => ({ depth })));
   return (
     // Note that the list is measured from a box of its own, the width its rows stand in, so its columns fold for the room it has.
     <div ref={setList} className="related-tasks min-w-0">
@@ -124,7 +127,7 @@ export function RelatedTasks({
         cells={cells}
         selection={{ selected: selection.selected, onChange: selection.onChange }}
       >
-        {rows.map(({ task, end, depth, fold, settled, menu, unlisted }) => (
+        {rows.map(({ task, end, depth, fold, settled, menu, unlisted }, at) => (
           <TaskListRow
             key={task.id}
             tasks={tasks}
@@ -137,6 +140,7 @@ export function RelatedTasks({
             onOpen={() => tasks.onSelect(task.id)}
             onStanding={(standing) => setStanding(task, standing)}
             depth={depth}
+            nest={nests[at]}
             fold={fold}
             settled={settled}
             menuGroups={menu}

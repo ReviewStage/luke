@@ -26,7 +26,7 @@ const WAYS_IN = [
 ] as const;
 
 /**
- * The sign-in, alone in the window on an AuthPage card: Fullspin's resting face over the two ways in.
+ * The sign-in, alone in the window on an AuthPage card: the app's resting face over the two ways in.
  * A press sends the browser to the provider and the gate waits in place —
  * the pressed button says so, the other stands disabled, and Cancel takes the
  * wait back — because the browser holds the actual work and there is nothing

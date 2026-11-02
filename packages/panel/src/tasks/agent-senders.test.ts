@@ -41,8 +41,8 @@ import { OpenLinkProvider } from "./use-open-link.js";
 /**
  * agent-senders.test.ts -- in an agent's tab, a message a teammate sent the
  * agent carries their face and name under its bubble, as a teammate's line
- * on a call does, and the reader's own carries none; Vespin's carries
- * his tile, an automation's its own, GitHub's the login it names, another
+ * on a call does, and the reader's own carries none; the app's carries
+ * its tile, an automation's its own, GitHub's the login it names, another
  * coding agent's its harness's mark by its name, where the service says
  * the model it runs on, and a member's who has left the quiet
  * outline, and a message from before senders were kept names nobody.
@@ -141,7 +141,7 @@ const MESSAGES: readonly AgentTranscriptMessage[] = [
     model: "anthropic/claude-opus-5.5",
     agentId: SENDER_ID,
   }),
-  // A service older than the sender's kind names Vespin by name alone.
+  // A service older than the sender's kind names the app by name alone.
   line("older", "Rebase again.", { name: "Vespin" }),
 ];
 

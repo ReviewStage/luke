@@ -2,7 +2,7 @@
  * workspace-github-procedures.ts -- a workspace's GitHub connected by an owner or an admin of it, and the old disconnect refused.
  *
  * `POST /api/workspaces/github/connect` answers where the browser goes to
- * connect GitHub: the Fullspin GitHub App's install address with a single-use
+ * connect GitHub: our GitHub App's install address with a single-use
  * intent as its `state`, which the connect's callback spends
  * (`github-install-app.ts`), adding the installation beside any the
  * workspace holds; it takes an owner or admin of the workspace, and a

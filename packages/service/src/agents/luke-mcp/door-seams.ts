@@ -1,5 +1,5 @@
 /**
- * door-seams.ts -- the seams the agent doors that reach eve or the store's writer read, as the web function serving Fullspin's MCP server builds them.
+ * door-seams.ts -- the seams the agent doors that reach eve or the store's writer read, as the web function serving our MCP server builds them.
  *
  * eve's coding agent reads these from the coder host's own seams
  * (`../coder-host/production.ts`), which compose eve's runtime; the MCP

@@ -32,7 +32,7 @@ import type { OpenTerminalSocket } from "../compose-terminals.js";
 import type { RunMode as RunModeFacts } from "../run-mode.js";
 import type { SecretCipher as SecretCipherSeam } from "../settings-store.js";
 
-/** Fullspin's own application-state root, given explicitly. */
+/** The app's own application-state root, given explicitly. */
 export class StateRoot extends Context.Service<StateRoot, string>()("@luke/host/StateRoot") {}
 
 /** What this launch is allowed to do. */
@@ -235,7 +235,7 @@ export interface LocalAgentPlatformSeam {
   readonly clis: LocalAgentClis;
   /**
    * Whether agents on this device may have run on the developer's own logins
-   * before Fullspin gave each agent a folder of its own
+   * before we gave each agent a folder of its own
    * (`DEVICE_ISOLATION.BARE`): This Mac's did, a host's never. On such a
    * device the follower keeps how each agent ran, takes an agent from before
    * that record with a checkout as one that ran so, never starts it again,
@@ -301,7 +301,7 @@ export interface ThisMacHostSeam {
     never,
     ChildProcessSpawner.ChildProcessSpawner
   >;
-  /** The Mac as its `luke-host` registers it, which its enroll names so Fullspin creates the device where it never saw this Mac. */
+  /** The Mac as its `luke-host` registers it, which its enroll names so the service creates the device where it never saw this Mac. */
   readonly machine: Effect.Effect<{
     readonly name: string;
     readonly platform: DevicePlatform;

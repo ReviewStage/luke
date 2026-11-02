@@ -1815,7 +1815,7 @@ test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⇧�
     `Copy link to task · ${DOCUMENT_TASK.name}`,
   ]);
   assert.equal(chord, "⇧⌘C");
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${LINKED_AGENT}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${LINKED_AGENT}`]);
   assert.equal(newestToastSays(), "Link copied");
 });
 
@@ -1855,9 +1855,9 @@ test("⇧⌘C copies the link of what is open, the most specific first: the Inbo
   }
 
   assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/agent/${LINKED_AGENT}`,
-    `https://tryluke.dev/acme/agent/${LINKED_AGENT}/inbox/${itemId}`,
-    `https://tryluke.dev/acme/automation/${automationId}`,
+    `https://vespin.dev/acme/agent/${LINKED_AGENT}`,
+    `https://vespin.dev/acme/agent/${LINKED_AGENT}/inbox/${itemId}`,
+    `https://vespin.dev/acme/automation/${automationId}`,
   ]);
 });
 
@@ -1886,8 +1886,8 @@ test("on an agent's page with a page it showed open in the panel, ⇧⌘C copies
   }
 
   assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/agent/${LINKED_AGENT}/page/${pageId}`,
-    `https://tryluke.dev/acme/agent/${LINKED_AGENT}`,
+    `https://vespin.dev/acme/agent/${LINKED_AGENT}/page/${pageId}`,
+    `https://vespin.dev/acme/agent/${LINKED_AGENT}`,
   ]);
 });
 
@@ -1912,7 +1912,7 @@ test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile a
   await act(async () => undefined);
 
   assert.deepEqual(listed, ["Copy link to profile"]);
-  assert.deepEqual(copied, ["https://tryluke.dev/acme/person/user-charles"]);
+  assert.deepEqual(copied, ["https://vespin.dev/acme/person/user-charles"]);
 });
 
 test("on the home page nothing has a link, so ⇧⌘C is not offered and ⌘K lists no Copy link", () => {
@@ -1945,7 +1945,7 @@ test("with the side panel filling the window over an agent's tab, ⇧⌘C copies
   });
   await act(async () => undefined);
 
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${LINKED_AGENT}/changes`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${LINKED_AGENT}/changes`]);
 });
 
 test("⌘K pressed with the keyboard in the side panel offers its tab's link first, wearing ⇧⌘C, as ⇧⌘C there copies", () => {
@@ -1998,7 +1998,7 @@ test("on an agent's page in another workspace than the one listed, ⇧⌘C names
   });
   await act(async () => undefined);
 
-  assert.deepEqual(copied, [`https://tryluke.dev/beta/agent/${LINKED_AGENT}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/beta/agent/${LINKED_AGENT}`]);
 });
 
 test("People lists the listed workspace's members as every people menu does, the reader first as You and the rest by name with their email, found by email too, each hanging their card, and a choice opens their page", async () => {

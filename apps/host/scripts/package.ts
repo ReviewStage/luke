@@ -189,7 +189,7 @@ async function main(): Promise<void> {
   });
   if (values.os === DEVICE_PLATFORM.DARWIN && values.into !== undefined) {
     await stage(values.into, BUNDLES, NODE_MAC_PIN);
-    process.stdout.write(`Staged Luke host for macOS in ${values.into}\n`);
+    process.stdout.write(`Staged the host for macOS in ${values.into}\n`);
     return;
   }
   // Note that a Mac release is Apple silicon's alone, since NODE_MAC_PIN is its Node.

@@ -7,7 +7,7 @@
  * (https://www.better-auth.com/docs/integrations/electron#handling-authorization-in-the-browser),
  * and sends the plugin's single-use code back to the loopback, where the Mac
  * exchanges it with its verifier. The plugin's own browser client would
- * redirect through a custom URL scheme; Fullspin's Mac listens on the loopback
+ * redirect through a custom URL scheme; the Mac app listens on the loopback
  * its OAuth sign-in already uses, so the page returns there, and only to a
  * loopback (`desktop-session-wire.ts`).
  *
@@ -102,10 +102,10 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
 }
 
 /**
- * The page opens on Fullspin's mark, badged as failed once the hand-off ended
+ * The page opens on the app's mark, badged as failed once the hand-off ended
  * short of the Mac: the title says where the hand-off stands, the description
  * what to do about it, the body holds the providers when a sign-in comes
- * first, and Open Fullspin goes back where it ended. A sign-in that cannot start
+ * first, and the Open link goes back where it ended. A sign-in that cannot start
  * is said in the page's alert region rather than under the choices.
  */
 function DesktopSession(): React.JSX.Element {

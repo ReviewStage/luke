@@ -6,7 +6,7 @@ import type { MicrophoneStatus } from "./microphone.js";
 import type { RunningBuild, UpdateSnapshot } from "./update.js";
 
 /**
- * Whether Fullspin may open the microphone, and the two things that can be done
+ * Whether the app may open the microphone, and the two things that can be done
  * about that: asking the system for access, or opening the one place the
  * system's own grant can be changed.
  */
@@ -19,9 +19,9 @@ export interface MicrophoneControl {
 }
 
 /**
- * What macOS last answered a notification of Fullspin's: nothing yet, showed it,
+ * What macOS last answered a notification of the app's: nothing yet, showed it,
  * or refused it, which is the only word Electron gives of whether
- * notifications are on for Fullspin.
+ * notifications are on for the app.
  */
 export const NOTIFICATIONS_STATUS = {
   UNKNOWN: "unknown",
@@ -32,7 +32,7 @@ export const NOTIFICATIONS_STATUS = {
 export type NotificationsStatus = (typeof NOTIFICATIONS_STATUS)[keyof typeof NOTIFICATIONS_STATUS];
 
 /**
- * Whether macOS shows Fullspin's notifications, which the one notification Fullspin
+ * Whether macOS shows the app's notifications, which the one notification the app
  * posts, a command waiting on this Mac, reaches the developer through, and
  * the one place that grant can be changed.
  */

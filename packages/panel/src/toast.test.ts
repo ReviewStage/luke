@@ -66,7 +66,7 @@ const TRACED: Pick<ShownFailureSentry, "getActiveSpan" | "getCurrentScope"> = {
   getCurrentScope: () => ({ getPropagationContext: () => ({ traceId: TRACE_FIXTURE }) }),
 };
 
-/** An agent's Stop that Vespin never heard back on, the fetch beneath it naming a credential. */
+/** An agent's Stop that we never heard back on, the fetch beneath it naming a credential. */
 function unheardStop(): ToastNotice {
   // A credential in the cause's code as well as its message, since a code is sent as a tag and grouped by.
   const unreached = Object.assign(new TypeError("fetch failed with token=fixture-secret"), {

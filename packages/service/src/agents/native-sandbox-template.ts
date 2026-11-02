@@ -1,9 +1,9 @@
 /**
- * native-sandbox-template.ts -- Fullspin's own template of the coding agent's image, which a native harness's sandbox opens from: found, built once, snapshotted, and swept.
+ * native-sandbox-template.ts -- our own template of the coding agent's image, which a native harness's sandbox opens from: found, built once, snapshotted, and swept.
  *
  * eve prepares the coding agent's image into a snapshot of its own and hands
- * no code of Fullspin's its id, so a sandbox Fullspin opens itself for Claude Code or
- * Codex opens from a template Fullspin prepares from the same preparation
+ * no code of ours its id, so a sandbox we open ourselves for Claude Code or
+ * Codex opens from a template we prepare from the same preparation
  * (`agent-runtime/sandbox-image.ts`'s `prepareImage`) on eve's own base
  * image, as eve's template is. The preparation is recorded rather than run:
  * `prepareImage` is handed a session that keeps the files it writes and the

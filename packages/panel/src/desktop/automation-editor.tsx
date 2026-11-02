@@ -196,7 +196,7 @@ import { automationDeleteQuestion, automationOwnerName } from "./automation-word
 import { useRunsPanel } from "./folded-groups.js";
 import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
-import { PhoneHead } from "./phone-head.js";
+import { PhoneHead, phoneFindGroups } from "./phone-head.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
 import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
@@ -306,7 +306,7 @@ const SENTRY_EVENTS: readonly { value: SentryTriggerEvent; label: string }[] = [
   { value: SENTRY_TRIGGER_EVENT.ISSUE_CREATED, label: "New issue" },
 ];
 
-/** What a Sentry event's row says under its name where its name alone cannot: how an alert reaches Fullspin. */
+/** What a Sentry event's row says under its name where its name alone cannot: how an alert reaches us. */
 const SENTRY_EVENT_DETAIL: Partial<Record<SentryTriggerEvent, string>> = {
   [SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED]: `Set the alert rule's action to send a notification to the ${PRODUCT_NAME} integration.`,
 };
@@ -749,7 +749,7 @@ function optionValue<Value extends string>(
   return (raw) => options.find((option) => option.value === raw)?.value;
 }
 
-/** When the draft runs next, its next two runs; nothing for one Fullspin cannot read. */
+/** When the draft runs next, its next two runs; nothing for one we cannot read. */
 function nextRunsText(draft: AutomationDraft): string | undefined {
   const [first, second] = draftNextRuns(draft, new Date(), 2);
   if (first === undefined) return undefined;
@@ -791,7 +791,7 @@ function ScheduleRows({
   const time = useRef<HTMLInputElement>(null);
   const { schedule, timezone } = draft;
   const zones = TIME_ZONES.includes(timezone) ? TIME_ZONES : [timezone, ...TIME_ZONES];
-  // Note that a zone Fullspin cannot read is said under the zone's row, and any other refusal under the cron's or the time's.
+  // Note that a zone we cannot read is said under the zone's row, and any other refusal under the cron's or the time's.
   const read =
     problem === undefined
       ? undefined
@@ -1038,7 +1038,7 @@ function AutomationActions({
   onDelete,
   running,
   onRunNow,
-  lead = [],
+  lead,
   heading,
 }: {
   /** The automation, whose link, Run now, and Delete the menu offers; none on a new automation's page, a phone's alone. */
@@ -1070,7 +1070,10 @@ function AutomationActions({
           label={moreLabel(ACTIONS_THING)}
           menu={menu.drawn}
           heading={heading}
-          groups={[...lead, ...own].filter((group) => group.length > 0)}
+          // Note that a phone's ⋯, the one given a lead, also stands in for ⌘F, read as the menu is drawn.
+          groups={[...(lead === undefined ? [] : [...lead, ...phoneFindGroups()]), ...own].filter(
+            (group) => group.length > 0,
+          )}
           onClose={menu.close}
         />
       )}

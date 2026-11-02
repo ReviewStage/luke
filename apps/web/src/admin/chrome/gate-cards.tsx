@@ -5,7 +5,7 @@ import { UNREPORTED } from "@luke/ui/reported-failure";
 import { useSocialSignIn } from "../../sign-in-choices";
 import { authClient } from "../auth-client";
 
-/** Fullspin's mark at the head of the gate's cards. */
+/** The app's mark at the head of the gate's cards. */
 function AdminMark(): React.JSX.Element {
   return (
     <span className="inline-flex w-13">

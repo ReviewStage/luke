@@ -27,7 +27,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * environment is, and travels sealed: the bearer's account through the auth
  * service's own userinfo, the writer over the coding agent's tool set, and
  * the keys a step runs on, the account's own read from its rows for every
- * step and never Fullspin's. The
+ * step and never ours. The
  * writer is built on first use and kept for the instance, so the agent's
  * discovery, which imports the authored files, touches no database. An
  * authored file hands what it needs here and nothing else.

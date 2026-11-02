@@ -208,7 +208,7 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   const decorate: FileTreeRowDecorationRenderer = ({ item }) =>
     item.kind === "file" ? rowDecoration(markOf.get(repositoryPath(item.path))) : null;
 
-  // The tree standing now, drawn with the search held: the files Fullspin
+  // The tree standing now, drawn with the search held: the files the app
   // showed while the filter is on, the whole repository while a search
   // stands and it was handed, the folders listed so far otherwise; or the
   // words saying the search matches nothing.

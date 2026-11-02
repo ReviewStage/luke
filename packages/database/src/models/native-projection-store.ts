@@ -11,7 +11,7 @@ import type { ConversationTarget } from "./writer.js";
  * native-projection-store.ts -- where the projection of a native harness's events keeps its place between the runner's batches.
  *
  * A runner posts its events in numbered batches and posts a batch again
- * until Fullspin takes it, so the projection keeps, on the conversation's own
+ * until the service takes it, so the projection keeps, on the conversation's own
  * row, the number of the last event it applied and what it holds of the
  * turn under way. Both are read under the row's lock and written in the
  * same transaction as everything the batch wrote, so a batch posted twice,

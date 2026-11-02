@@ -1,5 +1,5 @@
 /**
- * app.ts -- Fullspin's MCP server: the tools that touch Fullspin, served to a native harness's agent over streamable HTTP under its runner's bearer.
+ * app.ts -- our MCP server: the tools that touch the app, served to a native harness's agent over streamable HTTP under its runner's bearer.
  *
  * Claude Code (`mcp__luke__<tool>`) and Codex (`mcp_servers.luke`) both reach
  * it as a standard MCP server: JSON-RPC 2.0 over streamable HTTP, each
@@ -234,11 +234,11 @@ function toolResult(tool: LukeMcpTool, result: LukeMcpToolResult): McpToolCallRe
  * takes whole, the pinned CLI's (2.1.304) own ceiling, where past 50,000
  * characters it would save the result to a file and hand the model a path
  * (code.claude.com/docs/en/mcp, "Raise the limit for a specific tool"). Eve
- * hands its model a Fullspin tool's whole result, which each door bounds.
+ * hands its model the whole result of a tool of ours, which each door bounds.
  */
 const TOOL_META = { "anthropic/maxResultSizeChars": 500_000 } as const;
 
-/** What an agent whose row is gone is offered by: no repository, on Fullspin's own machine. */
+/** What an agent whose row is gone is offered by: no repository, on our own machine. */
 const NO_AGENT_OFFERED: LukeMcpOfferedTo = { repository: null, machine: AGENT_MACHINE.VERCEL };
 
 /** What beside its row an agent whose row is gone is offered by: no Memory, and under no pilot. */
@@ -265,11 +265,11 @@ export interface LukeMcpDoors {
 /**
  * One MCP server as the endpoint answers it for an admitted agent: the name
  * it gives itself, its `tools/list`, and its `tools/call` on the call's
- * params; Fullspin's own, or one integration's.
+ * params; our own, or one integration's.
  */
 interface McpServer {
   readonly name: string;
-  /** What `initialize` tells the client of the server, which the harness shows the model; none for Fullspin's own, whose tools say it. */
+  /** What `initialize` tells the client of the server, which the harness shows the model; none for our own, whose tools say it. */
   readonly instructions: (
     admitted: AdmittedConversation,
   ) => Effect.Effect<Option.Option<string>, never, LukeMcpServices>;
@@ -369,7 +369,7 @@ function listLukeTools(
   );
 }
 
-/** Fullspin's own server, over the doors the edge composes. */
+/** Our own server, over the doors the edge composes. */
 function lukeServer(doors: LukeMcpDoors): McpServer {
   return {
     name: "luke",
@@ -545,7 +545,7 @@ const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/lukeMcpEndpoint")(function* (
   return yield* answerMessage(server.value, admitted.value, message.success, parsed.success);
 });
 
-/** The group: Fullspin's server over the sandbox door and the browser the edge composes, each integration's server beside it, and the hosted vocabulary's own refusal for any other path. */
+/** The group: our server over the sandbox door and the browser the edge composes, each integration's server beside it, and the hosted vocabulary's own refusal for any other path. */
 export function lukeMcpApp(doors: LukeMcpDoors): WebRoutes<LukeMcpServices> {
   const luke = Option.some(lukeServer(doors));
   return Layer.mergeAll(

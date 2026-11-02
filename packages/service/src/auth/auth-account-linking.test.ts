@@ -88,7 +88,7 @@ async function withAuth(
   }
 }
 
-/** Signs a Vespin account up and links GitHub from its session; answers where the callback sent the browser and the account's providers. */
+/** Signs an account up and links GitHub from its session; answers where the callback sent the browser and the account's providers. */
 async function linkGitHub(auth: Auth) {
   const signedUp = await auth.handler(
     new Request(`${BASE_URL}/api/auth/sign-up/email`, {
@@ -130,7 +130,7 @@ async function linkGitHub(auth: Auth) {
   };
 }
 
-/** Signs in with GitHub, GitHub holding the address given; answers the Vespin user the session is for. */
+/** Signs in with GitHub, GitHub holding the address given; answers our user the session is for. */
 async function signInWithGitHub(auth: Auth, email: string): Promise<string> {
   vi.stubGlobal("fetch", githubWithAddress(email));
   const started = await auth.handler(

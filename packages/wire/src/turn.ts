@@ -2,8 +2,8 @@
  * What a turn row says about the run it records: what opened it and where it
  * stands. Every trigger the brain answers to is a queued turn — a developer's
  * typed or spoken ask, an observed transcript's change, a child's completion —
- * and the origin is the record of which, so a view can mark an action Fullspin
- * took on his own judgment apart from one the developer asked for. Declared
+ * and the origin is the record of which, so a view can mark an action the brain
+ * took on its own judgment apart from one the developer asked for. Declared
  * here so the store that writes the row, the service that answers it, and the
  * clients that fold a turn by it all spell the same words.
  */
@@ -18,7 +18,7 @@ export const TURN_ORIGIN = {
    * The requester's turn, opened because a child it delegated to finished.
    * Kept apart from `child` because the two record different judgments: the
    * child's turn is the child's, this one is the parent's, and a reader
-   * tracing why Fullspin spoke should not have to infer which from the
+   * tracing why the brain spoke should not have to infer which from the
    * conversation's kind.
    */
   CHILD_COMPLETION: "child_completion",

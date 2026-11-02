@@ -1,5 +1,5 @@
 /**
- * runner.test.ts -- one launch of the runner against a scripted CLI playing P00's recorded stream and a fake Vespin: the config line in, messages in, Stop, every event out in order through failed posts, a heartbeat while the CLI says nothing, and the launch's end where the agent's turn ends.
+ * runner.test.ts -- one launch of the runner against a scripted CLI playing P00's recorded stream and a fake service: the config line in, messages in, Stop, every event out in order through failed posts, a heartbeat while the CLI says nothing, and the launch's end where the agent's turn ends.
  */
 
 import assert from "node:assert/strict";
@@ -114,7 +114,7 @@ const FIRST_MESSAGE: InputLine = {
   ],
 };
 
-/** The fake Vespin events route these launches post to. */
+/** The fake events route these launches post to. */
 function fakeLuke(answers: readonly Answer[] = [], watchFor?: string) {
   return makeFakeLuke({
     url: EVENTS_URL,
@@ -140,7 +140,7 @@ function kinds(events: readonly RunnerEvent[]): string[] {
   });
 }
 
-/** One launch over stdin lines the test writes, against a fake CLI and a fake Vespin. */
+/** One launch over stdin lines the test writes, against a fake CLI and a fake service. */
 function launch(
   steps: readonly Step[],
   luke: ReturnType<typeof fakeLuke>,
@@ -401,14 +401,14 @@ it.effect(
     }),
 );
 
-/** How many IDLE events Vespin has taken. */
+/** How many IDLE events the service has taken. */
 function idles(luke: ReturnType<typeof fakeLuke>): number {
   return luke.applied.filter(
     ({ message }) => "type" in message && message.type === RUNNER_EVENT.IDLE,
   ).length;
 }
 
-/** Waits, without moving the clock, until Vespin has taken the IDLE events given. */
+/** Waits, without moving the clock, until the service has taken the IDLE events given. */
 function untilIdles(luke: ReturnType<typeof fakeLuke>, count: number) {
   return Effect.gen(function* () {
     for (let step = 0; step < 5_000 && idles(luke) < count; step += 1) yield* Effect.yieldNow;
@@ -589,7 +589,7 @@ it.effect("lets a heartbeat Vespin never answers go, and posts the next one an i
   Effect.gen(function* () {
     const luke = fakeLuke([], "Working on the first message.");
     let hung = 0;
-    // Vespin holds the first heartbeat open, answering nothing until the runner lets it go.
+    // The service holds the first heartbeat open, answering nothing until the runner lets it go.
     const stalling: typeof luke = {
       ...luke,
       layer: fakeHttpClientLayer((url, init) => {
@@ -774,7 +774,7 @@ it.effect("posts each event once and in order through posts Vespin failed or nev
   }),
 );
 
-/** A fake Vespin that answers nothing, as a network that is down does, until `isUp` says it is back. */
+/** A fake service that answers nothing, as a network that is down does, until `isUp` says it is back. */
 function downUntil(luke: ReturnType<typeof fakeLuke>, isUp: () => boolean): typeof luke {
   return {
     ...luke,
@@ -963,7 +963,7 @@ it.effect(
       assert.deepEqual(options.settingSources, ["project"]);
       assert.equal(options.permissionMode, "bypassPermissions");
       assert.equal(options.includePartialMessages, true);
-      // The tools the prompt names that CLI 2.1.304 leaves out of its default set, and the built-ins beside Vespin's own.
+      // The tools the prompt names that CLI 2.1.304 leaves out of its default set, and the built-ins beside our own.
       for (const tool of ["Glob", "Grep", "TaskCreate", "TaskUpdate"]) {
         assert.ok(options.allowedTools?.includes(tool), tool);
       }
@@ -981,7 +981,7 @@ it.effect(
       assert.equal(options.sandbox?.failIfUnavailable, true);
       assert.equal(options.sandbox?.enableWeakerNestedSandbox, true);
       assert.deepEqual(options.sandbox?.network?.allowedDomains, CONFIG.allowedDomains);
-      // A command may write the folder Vespin reads a shown picture or page from.
+      // A command may write the folder the service reads a shown picture or page from.
       assert.deepEqual(options.sandbox?.filesystem?.allowWrite, [SHARED_FILES_DIRECTORY]);
       const denied = (options.sandbox?.credentials?.envVars ?? []).map(
         (rule: { name: string; mode: string }) => `${rule.name}:${rule.mode}`,
@@ -1056,7 +1056,7 @@ it.effect(
     }),
 );
 
-/** The MCP route of a fake Vespin: answers each request as its server does, notifications with 202, and keeps what each post carried. */
+/** The MCP route of a fake service: answers each request as its server does, notifications with 202, and keeps what each post carried. */
 function fakeMcpRoute(answer: "take" | "refuse" = "take") {
   const calls: { authorization: string | null; body: unknown }[] = [];
   const respond = async (_url: string, init: RequestInit) => {
@@ -1087,7 +1087,7 @@ function fakeCliTransport() {
   return { transport, sent, answered };
 }
 
-/** A launch whose Vespin answers the MCP server's route as `mcp` does, and that SDK server the CLI was handed, connected to a fake channel; Vespin's own unless an integration's is named. */
+/** A launch whose fake service answers the MCP server's route as `mcp` does, and that SDK server the CLI was handed, connected to a fake channel; our own unless an integration's is named. */
 function launchWithMcp(
   mcp: ReturnType<typeof fakeMcpRoute>,
   named: { readonly name: string; readonly url: string } = { name: "luke", url: CONFIG.mcpUrl },
@@ -1268,7 +1268,7 @@ it.effect(
     }),
 );
 
-/** Vespin's browser, which the agent opened earlier in the turn: Xvfb and Chromium each leading a session of their own, a renderer in Chromium's. */
+/** Our browser, which the agent opened earlier in the turn: Xvfb and Chromium each leading a session of their own, a renderer in Chromium's. */
 const LUKE_BROWSER: readonly FakeProcess[] = [
   { pid: 300, parent: 1, emptied: true, argv: ["Xvfb", ":77", "-screen", "0", "1280x800x24"] },
   {
@@ -1286,7 +1286,7 @@ const LUKE_BROWSER: readonly FakeProcess[] = [
   },
 ];
 
-/** The sandbox's processes while the agent waits: the sandbox's init, the runner, the CLI it spawned, the CLI's own command-sandbox bridge (a `socat`), and Vespin's browser, nothing of the agent's beside them. */
+/** The sandbox's processes while the agent waits: the sandbox's init, the runner, the CLI it spawned, the CLI's own command-sandbox bridge (a `socat`), and our browser, nothing of the agent's beside them. */
 const WAITING_PROCESSES: readonly FakeProcess[] = [
   ...LUKE_BROWSER,
   { pid: 1, parent: 0, emptied: false },

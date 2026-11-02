@@ -128,7 +128,7 @@ import { issueByNumber } from "./issues.js";
 import { PullRequestLinkKey, PullRequestLinks } from "./pull-request-links.js";
 
 /**
- * Better Auth's codes for an unlink it refused that Fullspin reads: a session
+ * Better Auth's codes for an unlink it refused that we read: a session
  * older than its freshness bound, which `unlinkAccount` asks of a session,
  * and GitHub as the account's last way to sign in.
  */

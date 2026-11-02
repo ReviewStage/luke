@@ -19,9 +19,9 @@
 export const AGENT_USER = "agent";
 
 /**
- * Where an agent saves a file Fullspin reads back, a screenshot it shows or a
+ * Where an agent saves a file the service reads back, a screenshot it shows or a
  * page it posts: a folder each launch makes `agent`'s and world-readable,
- * which Claude Code's command sandbox may write, since Fullspin reads a file as
+ * which Claude Code's command sandbox may write, since the service reads a file as
  * the sandbox's default user and the CLI's own temp folder
  * (`/tmp/claude-<uid>`) is private to `agent`.
  */
@@ -39,7 +39,7 @@ export const SHARED_FILES_DIRECTORY = "/tmp/luke";
  * which also has a repository's own Playwright install its browsers in its
  * own `node_modules`, which the agent writes, rather than in a shared folder
  * it may not. `BROWSERS` is where npm's global install puts them, which the
- * image checks and Fullspin's own browser reads.
+ * image checks and our own browser reads.
  */
 export const PLAYWRIGHT_PIN = {
   VERSION: "1.64.1",
@@ -48,7 +48,7 @@ export const PLAYWRIGHT_PIN = {
 } as const;
 
 /**
- * Fullspin's own browser in an agent's sandbox, as its start (`@luke/service`'s
+ * Our own browser in an agent's sandbox, as its start (`@luke/service`'s
  * `browser/sandbox-browser.ts`) runs it: Chromium's DevTools port and the X
  * display Xvfb draws it on. Each is started in a session of its own, so the
  * two readers of the sandbox's processes, the runner's (`processes.ts`) and

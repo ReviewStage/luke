@@ -17,7 +17,7 @@ import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./agent-model.js";
 
 /**
- * use-link-standing.ts -- a GitHub pull request or issue a link in Fullspin's words names, as its chip says it: its key, its title, where it stands, who opened it, and a pull request's lines added and removed, read through the workspace's own GitHub App.
+ * use-link-standing.ts -- a GitHub pull request or issue a link in the app's words names, as its chip says it: its key, its title, where it stands, who opened it, and a pull request's lines added and removed, read through the workspace's own GitHub App.
  *
  * The workspace is the one the words are of: the plan's, where they are a
  * plan's, else the one the place drawing them names, as the window's Inbox

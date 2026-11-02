@@ -4,7 +4,7 @@
  * The models route, answered by the hosted oRPC router the way the web
  * route answers it, over a real dialect: the signed-in desktop reads the offered models as
  * the catalog holds them, but for Anthropic's fast versions where the key
- * its agents run on, its own or Vespin's, belongs to an organization never
+ * its agents run on, its own or ours, belongs to an organization never
  * granted fast mode, and nobody else reads anything.
  *
  * Synthetic accounts, bearers, and sealed keys throughout.

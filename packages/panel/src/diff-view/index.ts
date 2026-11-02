@@ -153,7 +153,7 @@ import { wholeOf } from "./whole-diff.js";
  * and each note under its line drawn in the element the view keeps for it,
  * as a list's are. Pierre numbers a file from its first line, so the file
  * is handed whole. One patch alone takes notes under its lines the same way
- * (\`mount\`), as a Code card's snippet, an excerpt of a file, carries Fullspin's;
+ * (\`mount\`), as a Code card's snippet, an excerpt of a file, carries the app's;
  * a feed of such cards colours each in the same pool (\`pooled\`), so many
  * landing at once never hold the window's thread.
  *

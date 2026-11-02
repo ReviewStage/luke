@@ -43,7 +43,7 @@ const MENDED_BY_NEW_AGENT: ReadonlySet<AgentFailure> = new Set([
 ]);
 
 /**
- * Why an agent that ran on its Mac before Fullspin gave each agent a folder of
+ * Why an agent that ran on its Mac before we gave each agent a folder of
  * its own failed there, and where its work still is, said whole in place of
  * a failure's words: on the reader's own Mac where no one is named, else on
  * the named starter's, whose Mac holds it.

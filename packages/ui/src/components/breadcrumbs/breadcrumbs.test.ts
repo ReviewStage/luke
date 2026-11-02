@@ -296,3 +296,20 @@ test.each([
     ]);
   },
 );
+
+test("a folded path unfolds when its bar widens in the same render that draws it again", () => {
+  layOut(250);
+  const container = draw({ label: "Path", crumbs: THREE_CRUMBS });
+  const drawn = () => [...container.querySelectorAll("ol > li")].map((item) => item.textContent);
+  expect(drawn()).toEqual(["…", "What the expired invite page says"]);
+  layOut(1000);
+  act(() => roots[0]?.render(createElement(Breadcrumbs, { label: "Path", crumbs: THREE_CRUMBS })));
+  act(() => {
+    for (const resized of resizeWatchers) resized();
+  });
+  expect(drawn()).toEqual([
+    "Teammate invitations",
+    "Build teammate invitations",
+    "What the expired invite page says",
+  ]);
+});

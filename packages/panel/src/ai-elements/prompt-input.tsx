@@ -2,7 +2,7 @@ import { COMPOSER_ELEMENT, ComposerFrame, cn } from "@luke/ui";
 import type { FormEventHandler, HTMLAttributes, ReactNode } from "react";
 
 /**
- * prompt-input.tsx -- AI Elements' PromptInput as Fullspin's one composer: the card a message is written in.
+ * prompt-input.tsx -- AI Elements' PromptInput as our one composer: the card a message is written in.
  *
  * Copied from the AI Elements registry (https://elements.ai-sdk.dev) and
  * restyled on the corner and the hairline the window's menus and cards

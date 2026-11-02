@@ -13,7 +13,7 @@
  * press on the same link drawn there would, because a press in the editor
  * only places the caret; the window's own where no place said one. A link
  * to an agent's page offers Open in browser after it, opening the page's own
- * Fullspin link outside the window (`open-in-browser-item.tsx`). Copy link
+ * app link outside the window (`open-in-browser-item.tsx`). Copy link
  * copies the address as written and says Link copied, as every menu's copy
  * does.
  */
@@ -86,7 +86,7 @@ function placementOf(event: MouseEvent, element: HTMLElement): MenuPlacement {
 /**
  * The window's one link menu, drawn wherever a right-click on a link hangs
  * it. It is mounted once, at the window's root, under the window's opener
- * for a place in Fullspin and its toast.
+ * for a place in the app and its toast.
  */
 export function LinkMenu(): React.JSX.Element | null {
   const { drawn, show, close } = useMenu(true);

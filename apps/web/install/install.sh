@@ -1,11 +1,11 @@
 #!/bin/sh
-# install.sh -- installs Vespin's host into the account that runs it, on a Linux box (x64 or arm64) or an Apple silicon Mac, connects it to Vespin with a code a member approves, and upgrades it in place when run again.
+# install.sh -- installs our host into the account that runs it, on a Linux box (x64 or arm64) or an Apple silicon Mac, connects it to the service with a code a member approves, and upgrades it in place when run again.
 #
 # Served by the web app at /install.sh with the release, and the origin it
 # was fetched from, written in (packages/service/src/agents/host-install-script-app.ts),
 # and run, with no sudo, as the account whose agents the host should run:
 #
-#   curl -fsSL https://tryluke.dev/install.sh | sh
+#   curl -fsSL https://vespin.dev/install.sh | sh
 #
 # Before it changes anything it checks the computer and says what is missing:
 # Linux x64 or arm64 with a systemd user manager it can reach, or an Apple
@@ -28,9 +28,9 @@
 #   ~/.local/bin/luke-host                          absolute link to …/current/bin/luke-host
 #   ~/.local/state/luke-host/                       the state root: the box's record and its agents'
 #   ~/.config/systemd/user/luke-host.service        Linux: the service, run through current
-#   ~/Library/LaunchAgents/dev.reviewstage.luke.host.standalone.plist
+#   ~/Library/LaunchAgents/dev.vespin.host.standalone.plist
 #                                                   Mac: the LaunchAgent, run through current
-#   ~/Library/Logs/Luke Host/luke-host.log          Mac: the LaunchAgent's log
+#   ~/Library/Logs/Vespin Host/luke-host.log          Mac: the LaunchAgent's log
 #
 # On Linux it turns on lingering first, so the service keeps running after
 # the account logs out: on its own where the account may, and otherwise with
@@ -41,7 +41,7 @@
 # the service before the box is connected, a systemd user service enabled at
 # boot or a LaunchAgent that runs while the user is logged in, which waits
 # until the box's record stands; then it runs `luke-host connect`, which prints
-# a link and a code and waits for a member to approve it in Vespin, or answers at
+# a link and a code and waits for a member to approve it in the app, or answers at
 # once where the box is connected already. Once it is connected it restarts the
 # service on the new release and removes every other release. Where the code
 # is denied or lapses, the service stands waiting, so a later
@@ -61,10 +61,10 @@ URL_DARWIN_ARM64="@@URL_DARWIN_ARM64@@"
 ORIGIN="@@ORIGIN@@"
 UNIT="luke-host.service"
 # A Mac's LaunchAgent, by its label, which an install that came before used too.
-MAC_LABEL="dev.reviewstage.luke.host.standalone"
-# Where a Mac's install that came before put Vespin host, under its user's home.
-MAC_EARLIER_FOLDER="Library/Application Support/Luke Host"
-# Where a Linux box's install that came before put Vespin host and its service.
+MAC_LABEL="dev.vespin.host.standalone"
+# Where a Mac's install that came before put the host, under its user's home.
+MAC_EARLIER_FOLDER="Library/Application Support/Vespin Host"
+# Where a Linux box's install that came before put the host and its service.
 EARLIER_INSTALL_DIR="/opt/luke-host"
 EARLIER_UNIT_FILE="/etc/systemd/system/$UNIT"
 # The oldest macOS it installs on: the release's launcher reads its own path
@@ -99,7 +99,7 @@ account_paths() {
   LINK="$HOME/.local/bin/luke-host"
   UNIT_FILE="$HOME/.config/systemd/user/$UNIT"
   PLIST="$HOME/Library/LaunchAgents/$MAC_LABEL.plist"
-  MAC_LOG="$HOME/Library/Logs/Luke Host/luke-host.log"
+  MAC_LOG="$HOME/Library/Logs/Vespin Host/luke-host.log"
 }
 
 # The computer's own architecture. On a Mac it reads the hardware, so Apple
@@ -113,7 +113,7 @@ hardware_machine() {
   fi
 }
 
-# Refuses a computer Vespin host does not run on, as the script's first word on
+# Refuses a computer the host does not run on, as the script's first word on
 # it, before it changes anything: its kernel ($1), its machine ($2), and its
 # /proc/version ($3). WSL2's names its kernel microsoft-standard (and WSL2 since
 # 5.10) and is let through, setting ON_WSL; WSL1's names Microsoft alone.
@@ -264,8 +264,8 @@ download() {
 # Writes the service's unit, run through current so a release is switched by
 # moving that link, and started with the user manager, which lingering starts
 # at boot. Note that it is restarted a minute after any exit, a clean one
-# among them: the daemon exits 0 on a record Vespin refused, the box removed in
-# Vespin, and asks Vespin nothing on it, so a box paired again by hand with
+# among them: the daemon exits 0 on a record the service refused, the box removed in
+# the app, and asks the service nothing on it, so a box paired again by hand with
 # luke-host connect is followed within a minute, as the daemon's own rest
 # follows one never connected.
 write_unit() {
@@ -273,7 +273,7 @@ write_unit() {
   cat >"$UNIT_FILE" <<UNIT_EOF
 [Unit]
 Description=Vespin host
-Documentation=https://tryluke.dev
+Documentation=https://vespin.dev
 
 [Service]
 Type=simple
@@ -485,7 +485,7 @@ release_target() {
   [ -n "$target_sha256" ] || fail "Vespin host $VERSION has no release for $target_name yet."
 }
 
-# Installs, connects and starts Vespin host in this account, the options parsed.
+# Installs, connects and starts the host in this account, the options parsed.
 main() {
   while [ "$#" -gt 0 ]; do
     case "$1" in

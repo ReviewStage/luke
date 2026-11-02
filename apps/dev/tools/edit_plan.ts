@@ -13,7 +13,7 @@ import { editPlanNotes } from "../host.js";
 import { planNotesTaken } from "../session-prompt.js";
 
 /**
- * Fullspin's own `edit_plan`: the notetaker's notes, taken into the plan of the
+ * Our own `edit_plan`: the notetaker's notes, taken into the plan of the
  * task the call names (`packages/service/src/agents/coder-host/plan-edit.ts`). The call reaches the store
  * through the host's door (`../host.ts`), as the delegation does, and the
  * turn's count of notes is the session's own state, pinned before anything
