@@ -209,7 +209,7 @@ function PressRows(): React.JSX.Element {
       </SettingsRow>
       <SettingsRow
         label="Sentry"
-        description="Not installed."
+        description="Not installed. Install to start automations from Sentry alerts."
         leading={<Mark provider={MARK_PROVIDER.SENTRY} />}
       >
         {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Install for workspace</Button>}

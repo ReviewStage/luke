@@ -2394,8 +2394,11 @@ test("the Sentry row reads again as the window comes forward: an install made on
   });
   await settle();
 
-  assert.deepEqual(before, ["Sentry", "Not installed."]);
-  assert.deepEqual(installed, ["Sentry", "Installed · acme"]);
+  assert.deepEqual(before, [
+    "Sentry",
+    "Not installed. Install to start automations from Sentry alerts.",
+  ]);
+  assert.deepEqual(installed, ["Sentry", "Installed for automations · acme"]);
   assert.equal([...githubGroup(page).querySelectorAll(ROWS)].map(nameOf).includes("Sentry"), false);
   assert.ok(sentryFailure(page));
 });
@@ -2436,7 +2439,10 @@ test("a Sentry read that failed says so with Retry, for a member too, and Retry 
 
   assert.equal(failed, true);
   assert.equal(sentryFailure(page), undefined);
-  assert.deepEqual(rowWords(rowNamed(githubGroup(page), "Sentry")), ["Sentry", "Installed · acme"]);
+  assert.deepEqual(rowWords(rowNamed(githubGroup(page), "Sentry")), [
+    "Sentry",
+    "Installed for automations · acme",
+  ]);
 });
 
 test("an admin installs Sentry for the workspace from its row, which opens Sentry at once", async () => {
@@ -2448,7 +2454,10 @@ test("an admin installs Sentry for the workspace from its row, which opens Sentr
   act(() => button(row, "Install for workspace").click());
   await settle();
 
-  assert.deepEqual(before, ["Sentry", "Not installed."]);
+  assert.deepEqual(before, [
+    "Sentry",
+    "Not installed. Install to start automations from Sentry alerts.",
+  ]);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   assert.deepEqual(sentrySent(), [[ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId: ACME.id }]]);
 });
@@ -2467,15 +2476,18 @@ test("an installed workspace's Sentry names its organization, its Disconnect but
   const member = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
   const memberRow = rowNamed(githubGroup(member.page), "Sentry");
 
-  assert.deepEqual(words, ["Sentry", "Installed · acme"]);
+  assert.deepEqual(words, ["Sentry", "Installed for automations · acme"]);
   assert.deepEqual(sentrySent(), [
     [
       ACT_KIND.WORKSPACE_SENTRY_DISCONNECT,
       { workspaceId: ACME.id, installationId: "installation-1" },
     ],
   ]);
-  assert.deepEqual(after, ["Sentry", "Not installed."]);
-  assert.deepEqual(rowWords(memberRow), ["Sentry", "Installed · acme"]);
+  assert.deepEqual(after, [
+    "Sentry",
+    "Not installed. Install to start automations from Sentry alerts.",
+  ]);
+  assert.deepEqual(rowWords(memberRow), ["Sentry", "Installed for automations · acme"]);
   assert.deepEqual(rowButtons(memberRow), []);
 });
 

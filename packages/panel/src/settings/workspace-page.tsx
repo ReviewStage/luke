@@ -289,11 +289,18 @@ const SENTRY_MARK = (
   </SettingsRowMark>
 );
 
-/** What the Sentry row's line says, by whether an installation stands and who is reading it. */
+/**
+ * What the Sentry row's line says, by whether an installation stands and who
+ * is reading it. Note that every line names automations, because this row is
+ * easily read as the Sentry an agent reads through, which is each member's
+ * own in Settings › Integrations; this one only carries Sentry's alerts and
+ * new issues to the workspace's automations.
+ */
 const SENTRY_LINE = {
-  INSTALLED: (accounts: string) => (accounts === "" ? "Installed" : `Installed · ${accounts}`),
-  MANAGES: "Not installed.",
-  MEMBER: "Not installed. Ask an owner or admin.",
+  INSTALLED: (accounts: string) =>
+    accounts === "" ? "Installed for automations" : `Installed for automations · ${accounts}`,
+  MANAGES: "Not installed. Install to start automations from Sentry alerts.",
+  MEMBER: "Not installed. Ask an owner or admin to install it for automations.",
 } as const;
 
 /** One connected GitHub account as the page lists it: its login, whether its installation is active, and its id where the service named it. */
