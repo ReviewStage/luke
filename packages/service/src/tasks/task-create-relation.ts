@@ -222,16 +222,15 @@ export function createTaskRelated(
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        // Note that every other task the start touches is held, in id order, before the task's row is written,
-        // because each relation's write locks its own task in turn, and a relation change between two of them
-        // locks both in id order, so the two would otherwise each hold a row the other waits on. The parent
-        // is among them, because the row's reference to it takes its own lock on the parent.
+        // Note that every other task the start touches is held in id order before the task's row is written,
+        // its parent among them, because each relation's write locks its own task in turn, and a relation
+        // change between two of them locks both in id order, so the two would each hold a row the other waits on.
         const touched = asked.map((relation) => relation.taskId);
-        yield* lockTasksForBlocks(
+        const created = yield* createTaskCommitted(
           userId,
+          started,
           started.parentTaskId === undefined ? touched : [started.parentTaskId, ...touched],
         );
-        const created = yield* createTaskCommitted(userId, started);
         const taskId = created.task.task.id;
         for (const relation of asked) yield* relationWritten(userId, taskId, relation);
         const read = yield* readTask(userId, taskId);

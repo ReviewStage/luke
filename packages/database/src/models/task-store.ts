@@ -72,7 +72,12 @@ import {
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { stampConversationsDeleted } from "./soft-delete.js";
-import { leaveTaskBlocks, readTaskBlocks, taskBlockedFor } from "./task-block-store.js";
+import {
+  leaveTaskBlocks,
+  lockTasksForBlocks,
+  readTaskBlocks,
+  taskBlockedFor,
+} from "./task-block-store.js";
 import {
   isWorkspaceMember,
   reachableTask,
@@ -1185,11 +1190,18 @@ export function createTask(
 /**
  * A task started, as `createTask` starts one, as the service holds it, so a
  * Start on it in the same request need not read it again, and the
- * transaction its row was written in.
+ * transaction its row was written in. `holding` names the other tasks the
+ * caller's transaction goes on to change, held for update in id order once
+ * the task's number is taken and before its row is written. Note that they
+ * are held there, because every start takes the workspace's number before
+ * its row's reference to a parent locks that parent, and a relation change
+ * locks its two tasks in id order, so a start holding them any other way
+ * would hold a lock one of those waits on while it waits on theirs.
  */
 export function createTaskCommitted(
   userId: string,
   started: NewTask,
+  holding: readonly string[] = [],
 ): Effect.Effect<
   TaskCommitted<StoredTask>,
   TaskStoreFailure | TaskAssigneeNotMember,
@@ -1199,7 +1211,9 @@ export function createTaskCommitted(
     client.withTransaction(
       Effect.gen(function* () {
         yield* assigneeAdmitted(started.assigneeId, started.organizationId);
-        const { txid, ...row } = yield* insertTask(yield* insertOf(userId, started)).pipe(
+        const values = yield* insertOf(userId, started);
+        if (holding.length > 0) yield* lockTasksForBlocks(userId, holding);
+        const { txid, ...row } = yield* insertTask(values).pipe(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
