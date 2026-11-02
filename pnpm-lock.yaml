@@ -952,6 +952,9 @@ importers:
       '@luke/agent-runner':
         specifier: workspace:*
         version: link:../agent-runner
+      '@luke/brand':
+        specifier: workspace:*
+        version: link:../brand
       '@luke/database':
         specifier: workspace:*
         version: link:../database

@@ -193,6 +193,7 @@
     "@better-auth/oauth-provider": "1.7.7",
     "@effect/sql-pg": "catalog:",
     "@luke/agent-runner": "workspace:*",
+    "@luke/brand": "workspace:*",
     "@luke/database": "workspace:*",
     "@luke/features": "workspace:*",
     "@luke/runtime": "workspace:*",

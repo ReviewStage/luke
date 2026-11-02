@@ -21,6 +21,7 @@
  * nothing of the letter, the address least of all, is logged.
  */
 
+import { BRAND_PALETTE } from "@luke/brand";
 import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   INVITATION_ROLE,
@@ -51,35 +52,37 @@ const ICON_PATH = "/app-icon-192.png";
 const MAIL_UNSET = `${INVITATION_MAIL_ENVIRONMENT.RESEND_API_KEY} or ${INVITATION_MAIL_ENVIRONMENT.FROM} is not set, so workspace invitations are not emailed: each one's link is copied by hand.`;
 
 /**
- * The email's colours, light and dark: the one place the letter names a
- * colour, so a change of palette is a change here alone. Each stands for a
- * role of the site's palette (`--luke-color-*`), spelled as a plain hex
- * because an email client reads no custom property. The button is the
- * accent's fill under its own words, and the link the accent's text ink.
+ * The email's colours, light and dark: the brand's own, read off the brand
+ * table `@luke/brand` generates `@luke/ui`'s palette from, so a change of
+ * brand reaches the letter with no second copy to forget. Each is spelled as
+ * a plain hex because an email client reads no custom property. The page is
+ * the sidebar's ground, the letter's card the overlay, the button the
+ * accent's fill under its own words, and the link the accent's text ink. The
+ * signature is the quiet ink, which still reads at AA on the page.
  */
 const MAIL_PALETTE = {
   LIGHT: {
-    GROUND: "#f4f4f3",
-    SURFACE: "#ffffff",
-    WELL: "#f9f9f8",
-    EDGE: "#e4e3e1",
-    TEXT: "#161615",
-    TEXT_MUTED: "#646361",
-    TEXT_FAINT: "#8a8987",
-    ACCENT: "#161615",
-    ON_ACCENT: "#ffffff",
-    ACCENT_TEXT: "#161615",
+    GROUND: BRAND_PALETTE.LIGHT.SIDEBAR,
+    SURFACE: BRAND_PALETTE.LIGHT.OVERLAY,
+    WELL: BRAND_PALETTE.LIGHT.WELL,
+    EDGE: BRAND_PALETTE.LIGHT.CHIP_EDGE,
+    TEXT: BRAND_PALETTE.LIGHT.TEXT,
+    TEXT_MUTED: BRAND_PALETTE.LIGHT.TEXT_MUTED,
+    TEXT_FAINT: BRAND_PALETTE.LIGHT.TEXT_MUTED,
+    ACCENT: BRAND_PALETTE.LIGHT.ACCENT,
+    ON_ACCENT: BRAND_PALETTE.LIGHT.ON_ACCENT,
+    ACCENT_TEXT: BRAND_PALETTE.LIGHT.ACCENT_TEXT,
   },
   DARK: {
-    GROUND: "#121211",
-    SURFACE: "#1a1918",
-    WELL: "#121211",
-    EDGE: "#2a2a29",
-    TEXT: "#f3f2ef",
-    TEXT_MUTED: "#a3a3a2",
-    ACCENT: "#f3f2ef",
-    ON_ACCENT: "#121211",
-    ACCENT_TEXT: "#f3f2ef",
+    GROUND: BRAND_PALETTE.DARK.SIDEBAR,
+    SURFACE: BRAND_PALETTE.DARK.OVERLAY,
+    WELL: BRAND_PALETTE.DARK.WELL,
+    EDGE: BRAND_PALETTE.DARK.CHIP_EDGE,
+    TEXT: BRAND_PALETTE.DARK.TEXT,
+    TEXT_MUTED: BRAND_PALETTE.DARK.TEXT_MUTED,
+    ACCENT: BRAND_PALETTE.DARK.ACCENT,
+    ON_ACCENT: BRAND_PALETTE.DARK.ON_ACCENT,
+    ACCENT_TEXT: BRAND_PALETTE.DARK.ACCENT_TEXT,
   },
 } as const;
 
