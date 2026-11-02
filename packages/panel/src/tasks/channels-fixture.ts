@@ -1,7 +1,7 @@
 /**
  * channels-fixture.ts -- the synthetic workspace the `channels` fixture profiles draw: its channels, staged on the document as the host holds them, their threads, and the answers the Channels view's writes take in place of the service's (STAG-547).
  *
- * The Inbox fixture's machinery (`inbox-fixture.ts`) over Fullspin's own kind of
+ * The Inbox fixture's machinery (`inbox-fixture.ts`) over our own kind of
  * work: two people, a handful of tasks across the app, the service, and
  * infra, and threads in each channel, open asks of each kind and notices,
  * some settled on earlier days. `channels` reads it as Dean, and
@@ -1111,7 +1111,7 @@ const STAGE: Workspace = stage({
   github: null,
 });
 
-/** The list as the channels profiles draw it: the first workspace named Stage, holding Fullspin's tasks alone. */
+/** The list as the channels profiles draw it: the first workspace named Stage, holding our own tasks alone. */
 export function channelsTasksView(profile: string, list: TasksView): TasksView {
   if (!READERS.has(profile)) return list;
   return {

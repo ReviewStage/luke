@@ -223,7 +223,7 @@ export interface PlanEditing {
   readonly holdWords: (handOver: (() => void) | undefined) => void;
   /** The open editor came to hold words it has not handed over yet, which are unsaved until they are. */
   readonly holdingWords: () => void;
-  /** The base and words once the open editor has taken Fullspin's part of a save's merged answer. */
+  /** The base and words once the open editor has taken the app's part of a save's merged answer. */
   readonly rebase: (base: string, text: string) => void;
   readonly keepMine: () => void;
   readonly takeTheirs: () => void;
@@ -237,7 +237,7 @@ export interface PlanEditing {
 /**
  * Whether any plan holds words the service does not: typed and not yet
  * saved, a save still out, or words a task was left with that its save
- * refused. A shell asks before a way out of Fullspin while they stand, since
+ * refused. A shell asks before a way out of the app while they stand, since
  * no way out of the app saves them.
  */
 export function usePlanWordsUnsaved(): boolean {

@@ -11,7 +11,7 @@ import { revisionOfSave } from "./plan-history-model.js";
  * The history is read through the service while the plan's version history
  * stands, the newest page first and each older page as the list asks, and
  * the newest page is followed while it stands: main streams it each time a
- * save lands (over Neon Realtime), so a save Fullspin makes on a call lands at
+ * save lands (over Neon Realtime), so a save the app makes on a call lands at
  * the head of the list as it lands in the document, and nothing is read
  * again here. A history its source does not follow reads its newest page
  * once. The newest revision, the plan as it stands, is chosen until the

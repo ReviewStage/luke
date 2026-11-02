@@ -121,8 +121,8 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * plan's column. An `@` in its box offers its repository's files, its
  * skills, and the servers, read through its workspace since no plan names
  * them (`tasklessMentions`), the pages the agent showed and the pull request
- * it opened, and the workspace's agents, Fullspin's box among
- * them, though he works in no repository; a skill a message names is its
+ * it opened, and the workspace's agents, the app's box among
+ * them, though it works in no repository; a skill a message names is its
  * chip, which opens the skill's `SKILL.md` on GitHub, as a file it names does, since no
  * File tab reads a repository no plan names; and a dictation listens for its repository and
  * its title. A row of its inbox calls opens the panel's Inbox tab, which
@@ -603,7 +603,7 @@ export function DesktopAgentPage({
     });
     return card ?? undefined;
   });
-  // What an `@` offers once the read named the agent's workspace, and its repository's files where it has one: Fullspin works in none.
+  // What an `@` offers once the read named the agent's workspace, and its repository's files where it has one: the app works in none.
   const mentionWorkspace = listed?.slug ?? workspaceId;
   const { onShowMention } = tasks;
   // An agent on no task offers the pages it showed and the pull request it opened, as a task offers its own.

@@ -22,7 +22,7 @@ import { SettingsPanel, type SettingsPanelProps } from "./settings-panel.js";
 
 /**
  * Settings › Profile's Links group as the panel draws it: where the
- * account's Vespin links open, a pop-up naming the browser until the account
+ * account's app links open, a pop-up naming the browser until the account
  * chooses, whose choice is written as the setting; and nothing of it while
  * signed out, since the choice is the account's.
  */

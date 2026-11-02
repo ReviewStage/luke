@@ -26,7 +26,7 @@ import { PageCard } from "./page-card.js";
 import { useTaskMentions } from "./task-mentions.js";
 
 /**
- * chip-cards.tsx -- the cards the chips of places in Fullspin hang, each the card the window already hangs for what the chip names, read from what the window holds.
+ * chip-cards.tsx -- the cards the chips of places in the app hang, each the card the window already hangs for what the chip names, read from what the window holds.
  *
  * A chip names a place (`mention-chip.tsx`), and its card is the one every
  * other place naming the same thing hangs, so a plan reads alike from its

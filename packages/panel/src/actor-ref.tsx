@@ -62,7 +62,7 @@ import { AgentHoverCard } from "./tasks/agent-ref.js";
 import { AgentMark } from "./tasks/tab-look.js";
 
 /**
- * actor-ref.tsx -- whoever did something, drawn one way wherever the window names them: a person on a circle, and Fullspin, an agent, or an automation by its glyph in a rounded square's box, on a solid tile in a facepile whose faces overlap.
+ * actor-ref.tsx -- whoever did something, drawn one way wherever the window names them: a person on a circle, and the app, an agent, or an automation by its glyph in a rounded square's box, on a solid tile in a facepile whose faces overlap.
  *
  * A person's circle is the shared `Avatar`: their sign-in picture once it
  * loads, and the first letter of their name on the hue read off their id
@@ -75,8 +75,8 @@ import { AgentMark } from "./tasks/tab-look.js";
  * wears a quiet "bot" badge wherever it is said, as GitHub's own pages mark
  * one. A picture on GitHub's avatar host is asked for at twice the size it
  * is drawn, so a Retina screen draws it sharp and nothing larger is
- * fetched. Fullspin's square holds
- * his face in his own blue, an agent's its harness, swapped for the working
+ * fetched. The app's own square holds
+ * its face in its own blue, an agent's its harness, swapped for the working
  * mark while it writes as its tab's glyph is, and an automation's its Zap,
  * each its glyph alone on the ground beneath it, as a tab's is. In a
  * facepile (`ActorStack`) whose faces overlap each stands on one solid
@@ -149,7 +149,7 @@ const FOR_OF_SIZE = {
   [ACTOR_SIZE.PAGE]: "-right-actor-for-near -bottom-actor-for-near scale-100",
 } as const satisfies Record<ActorSize, string>;
 
-/** Whether an actor stands in a rounded square rather than on a circle: Fullspin, an agent, an automation, and an App's bot on GitHub. */
+/** Whether an actor stands in a rounded square rather than on a circle: the app, an agent, an automation, and an App's bot on GitHub. */
 function squared(actor: Actor): boolean {
   return (
     actor.kind === ACTOR_KIND.LUKE ||
@@ -352,7 +352,7 @@ function Face({
 
 /**
  * An actor as `Comment` draws its writer's face: a person on a circle by
- * their picture or letter, Fullspin, an agent, an automation and an App's bot
+ * their picture or letter, the app, an agent, an automation and an App's bot
  * by their glyph on a square, and someone unnamed by the glyph for why.
  * The name `Comment` says is the caller's, as `ActorRef` says it.
  */
@@ -442,7 +442,7 @@ export function ActorMark({
   /** Whether a square stands on its solid tile rather than bare, as a facepile's overlapping faces do. */
   tiled?: boolean;
   /**
-   * The member Fullspin, an agent, or an automation acted for, as a task one of
+   * The member that the app, an agent, or an automation acted for, as a task one of
    * them made for that member wears them: their face, small, on the square's
    * corner, as GitHub draws an App acting for someone. None for anyone else.
    */
@@ -459,7 +459,7 @@ export function ActorMark({
         "actor-mark relative inline-grid flex-none align-middle text-foreground",
         "[--state-glyph-size:var(--spacing-avatar-glyph-share)] [&_.state-glyph>:is(svg,img)]:size-full",
         squared(actor) ? "rounded-avatar-square" : "rounded-disc",
-        // Fullspin wears its blue on its face, the colour its voice already answers in, its face filling more of its square than a glyph does. Note that the size is important, because base.css sizes every face outside the layers.
+        // The app wears its blue on its face, the colour its voice already answers in, its face filling more of its square than a glyph does. Note that the size is important, because base.css sizes every face outside the layers.
         actor.kind === ACTOR_KIND.LUKE &&
           "text-working [&_.luke-face]:size-actor-face-share! [&_.luke-face]:text-inherit",
         actor.kind === ACTOR_KIND.SOMEONE && "text-muted-foreground",
@@ -669,7 +669,7 @@ export function PersonCard({
   );
 }
 
-/** Fullspin's card: its face, how long ago it wrote where the place knows, then what it wrote here. Read, never followed. */
+/** The app's own card: its face, how long ago it wrote where the place knows, then what it wrote here. Read, never followed. */
 export function LukeCard({
   sub,
   latest,
@@ -858,7 +858,7 @@ function KnownAutomationActorCard({ automationId }: { automationId: string }): R
 /**
  * The card each kind of actor hangs where the place naming it adds
  * nothing, one entry per kind, so a kind added fails to compile until it
- * says: Fullspin its own, an agent its tab's (`AgentHoverCard`), read as it is
+ * says: the app its own, an agent its tab's (`AgentHoverCard`), read as it is
  * hung, and an automation its own, as the directory around it knows it.
  * An agent or an automation named by its name alone hangs none, its name
  * standing as a pill.

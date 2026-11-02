@@ -30,7 +30,7 @@ import { type ChipWhere, type LinkStanding, useWordsWorkspaceId } from "./use-li
  *
  * A thing wears the mark its row wears wherever the window lists it, and
  * its chip wears that same mark whichever way it was written: a mention's
- * chip and a Fullspin link's chip both lead with `thingMark`, so a person
+ * chip and an app link's chip both lead with `thingMark`, so a person
  * named by a link wears their face as their mention does, and an agent of
  * the plan open wears its tab's tile either way. The table is keyed by
  * every `THING_KIND` and typed over each kind's own `Thing`, so a kind

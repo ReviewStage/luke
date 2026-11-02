@@ -18,7 +18,7 @@ import { restOn } from "./testing/hint-rest.js";
 
 /**
  * Whoever did something is drawn one way: a person by their picture once it
- * loads and their letter until then, Vespin, an agent, and an automation each
+ * loads and their letter until then, the app, an agent, and an automation each
  * by their own mark, someone unnamed by an outline; named in a line, an
  * actor with a page is a press that opens it and a person is not; a
  * facepile counts the rest only where asked. Synthetic people.

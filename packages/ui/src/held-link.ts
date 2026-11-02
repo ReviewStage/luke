@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 
 /**
- * held-link.ts -- a Fullspin link the system hands the window while sign-in stands, held until the account is signed in.
+ * held-link.ts -- an app link the system hands the window while sign-in stands, held until the account is signed in.
  *
  * A link can launch the app before anyone is signed in, and the Plans tab
  * opens nothing behind the sign-in gate: its select is refused and the
