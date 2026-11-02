@@ -86,7 +86,9 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  SPINNER_SIZE,
   SpinnerRegion,
+  SpinnerRing,
   STATUS_TONE,
   Stack,
   type StatusTone,
@@ -113,6 +115,7 @@ import {
   PlayIcon,
   RotateCwIcon,
   ScanSearchIcon,
+  TriangleAlertIcon,
   XIcon,
 } from "@luke/ui/icons";
 import { landedMark } from "@luke/ui/landed";
@@ -452,15 +455,15 @@ function landed<A>(part: Part<A>): A | undefined {
 /** The glyph a check wears for where it stands. */
 const CHECK_GLYPHS = {
   [CHECK_STATE.FAILED]: <XIcon />,
-  [CHECK_STATE.PENDING]: <GLYPH.STATUS />,
+  [CHECK_STATE.PENDING]: <SpinnerRing size={SPINNER_SIZE.SMALL} />,
   [CHECK_STATE.PASSED]: <CheckIcon />,
   [CHECK_STATE.SKIPPED]: <CircleSlashIcon />,
 } as const satisfies Record<CheckState, ReactNode>;
 
-/** The ink a check's glyph wears for where it stands: passed green, failed red, one still running the working ink, since it is work under way rather than something that needs you, and one skipped quiet. */
+/** The ink a check's glyph wears for where it stands: passed green, failed red, and one still running or skipped quiet, a running one turning the ring every wait turns, since it is work under way rather than something that needs you. */
 const CHECK_INK = {
   [CHECK_STATE.FAILED]: "text-destructive",
-  [CHECK_STATE.PENDING]: "text-working",
+  [CHECK_STATE.PENDING]: "text-muted-foreground",
   [CHECK_STATE.PASSED]: "text-complete",
   [CHECK_STATE.SKIPPED]: "text-muted-foreground",
 } as const satisfies Record<CheckState, string>;
@@ -2033,7 +2036,7 @@ function summaryCountOf(checks: readonly PullRequestCheck[], summary: CheckSumma
 /** The glyph the Checks tab wears for how its checks went, as the pull request's mark tells it; none where there are none. */
 const SUMMARY_GLYPHS = {
   [CHECK_SUMMARY.FAILING]: <XIcon />,
-  [CHECK_SUMMARY.PENDING]: <GLYPH.STATUS />,
+  [CHECK_SUMMARY.PENDING]: <SpinnerRing size={SPINNER_SIZE.SMALL} />,
   [CHECK_SUMMARY.PASSING]: <CheckIcon />,
   [CHECK_SUMMARY.NONE]: null,
 } as const satisfies Record<CheckSummary, ReactNode>;
@@ -2046,10 +2049,10 @@ const SUMMARY_WORDS = {
   [CHECK_SUMMARY.NONE]: "none",
 } as const satisfies Record<CheckSummary, string>;
 
-/** The tone the Checks tab's count takes for how its checks went, as its glyph does. */
+/** The tone the Checks tab's count takes for how its checks went, as its glyph does: a wait quiet, under the ring every wait turns. */
 const SUMMARY_TONES = {
   [CHECK_SUMMARY.FAILING]: STATUS_TONE.DANGER,
-  [CHECK_SUMMARY.PENDING]: STATUS_TONE.WORKING,
+  [CHECK_SUMMARY.PENDING]: STATUS_TONE.NEUTRAL,
   [CHECK_SUMMARY.PASSING]: STATUS_TONE.COMPLETE,
   [CHECK_SUMMARY.NONE]: STATUS_TONE.NEUTRAL,
 } as const satisfies Record<CheckSummary, StatusTone>;
@@ -2076,20 +2079,20 @@ const CHAPTERS_TAB_WORDS = {
   VIEWED: "viewed",
 } as const;
 
-/** The glyphs the Chapters tab wears for being made, a failed generation, and new commits since, as the Checks tab's are kept: made once, never in a draw. */
+/** The glyphs the Chapters tab wears for being made, a failed generation, and new commits since, as the Checks tab's are kept: made once, never in a draw. New commits since wear the merge box's Behind (`merge-box.tsx`), a branch its base moved on from. */
 const CHAPTERS_TAB_GLYPHS = {
-  GENERATING: <GLYPH.STATUS />,
+  GENERATING: <SpinnerRing size={SPINNER_SIZE.SMALL} />,
   FAILED: <XIcon />,
-  STALE: <GLYPH.TIME />,
+  STALE: <TriangleAlertIcon aria-hidden="true" />,
 } as const;
 
 /**
  * What the Chapters tab counts, as the Chapters view tells their state
- * (`chaptersShown`): a ring in the working tone while they are made, a cross
+ * (`chaptersShown`): the ring every wait turns while they are made, a cross
  * in the danger tone where the generation failed, and once ready their count,
- * in the attention tone under a clock where new commits came since, else how
- * many are viewed of how many where any is, in the complete tone once all
- * are; nothing while there are none. Note that viewed is read from the files
+ * in the attention tone under the merge box's Behind where new commits came
+ * since, else how many are viewed of how many where any is; nothing while
+ * there are none. Note that viewed is read from the files
  * and the marks Files changed reads, so it stands only once either view has
  * read them; before then the files' head is taken as the pull request's,
  * which is the head the view will read them at, and once read it is
@@ -2110,7 +2113,6 @@ function chaptersTabCount(
     return [
       {
         text: "",
-        tone: STATUS_TONE.WORKING,
         glyph: CHAPTERS_TAB_GLYPHS.GENERATING,
         glyphLabel: CHAPTERS_TAB_WORDS.GENERATING,
       },
@@ -2147,12 +2149,7 @@ function chaptersTabCount(
           chapterViewed(chapterPaths(chapter, files.files), marks.viewed),
         ).length;
   if (viewed === 0) return [{ text: formatCount(total) }];
-  return [
-    {
-      text: `${formatCount(viewed)}/${formatCount(total)} ${CHAPTERS_TAB_WORDS.VIEWED}`,
-      tone: viewed === total ? STATUS_TONE.COMPLETE : undefined,
-    },
-  ];
+  return [{ text: `${formatCount(viewed)}/${formatCount(total)} ${CHAPTERS_TAB_WORDS.VIEWED}` }];
 }
 
 /** What the Files changed tab counts: the lines left to review and, in its hint, the whole; or the whole alone. */
