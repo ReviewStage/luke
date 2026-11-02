@@ -43,6 +43,29 @@ export const LINK_PLATFORM = {
 
 export type LinkPlatform = (typeof LINK_PLATFORM)[keyof typeof LINK_PLATFORM];
 
+/**
+ * The query a Fullspin link carries where Fullspin's own Open in browser
+ * opened it, so the web page it lands on stays there rather than hand it
+ * straight back to the Mac app, and drops it from the address once read
+ * (`mac-app-handoff.ts`). It is the flag's alone, and names no place.
+ */
+const STAY_ON_WEB = { QUERY: "stay", VALUE: "web" } as const;
+
+/** A Fullspin link as Open in browser opens it: flagged to stay on the web. */
+export function stayingOnWeb(link: string): string {
+  const url = new URL(link);
+  url.searchParams.set(STAY_ON_WEB.QUERY, STAY_ON_WEB.VALUE);
+  return url.href;
+}
+
+/** The address with Open in browser's flag taken out of it, where it carried one; nothing where it carried none. */
+export function withoutStayOnWeb(address: string): string | undefined {
+  const url = parsedUrl(address);
+  if (url?.searchParams.get(STAY_ON_WEB.QUERY) !== STAY_ON_WEB.VALUE) return undefined;
+  url.searchParams.delete(STAY_ON_WEB.QUERY);
+  return url.href;
+}
+
 const readsLinkOpen = Schema.is(Schema.Literals(LINK_OPEN_LIST));
 
 /** Whether a value is one of the choices, as one arriving from storage or the wire is read. */

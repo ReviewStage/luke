@@ -1,3 +1,4 @@
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import {
   PAGE_FIND_ACT,
   PAGE_FIND_KEY,
@@ -31,6 +32,7 @@ import { Option, Schema } from "effect";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
+import { useLinkWorkspace } from "../copy-link-item.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
 import { unreadShown } from "../failure-report.js";
@@ -42,6 +44,7 @@ import {
   useFindPress,
   useFindSource,
 } from "../find-in-tab.js";
+import { openPageInBrowserItem } from "../open-in-browser-item.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
@@ -66,8 +69,10 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * The bar's code toggle shows the version's HTML in the frame's place, as a
  * File tab draws a file (`file-tab.tsx`): the same numbered, coloured lines
  * under the same settings, and ⌘F over them. The tab's one ⋯, the strip's,
- * offers its Copy link, then Copy source while the source is shown, then
- * Reload page, which the page hands up on every screen (`useTabActions`).
+ * offers its Copy link, then Open in browser, then Copy source while the
+ * source is shown, then Reload page, which the page hands up on every
+ * screen (`useTabActions`). Open in browser opens the page's own Fullspin
+ * link, never the address the frame is drawn from (`open-in-browser-item.tsx`).
  * The frame's own read is the frame's alone, so the source is read again,
  * once a version, through main, which colours it as HTML
  * (`ACT_KIND.TASKS_PAGE_SOURCE`), and is held by the tab until Reload.
@@ -441,6 +446,19 @@ export function PagePane({
     onSelect: reload,
   };
   const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.LINES });
+  const workspace = useLinkWorkspace();
+  // None where the surface hands down no workspace to write the page's link under, as Copy link stands nowhere there.
+  const inBrowser =
+    workspace === undefined
+      ? []
+      : [
+          openPageInBrowserItem(
+            "taskId" in place
+              ? { kind: LINK_PLACE.PAGE, planId: place.taskId, pageId: page.id }
+              : { kind: LINK_PLACE.PAGE, agentId: place.agentId, pageId: page.id },
+            workspace,
+          ),
+        ];
   const phone = usePhoneRoom();
   const versionWords = `Version ${version} of ${page.version}`;
   useTabActions(
@@ -469,9 +487,12 @@ export function PagePane({
             reloadAction,
           ],
           showingSource ? [settings.action, copySource] : [],
+          inBrowser,
         ].filter((group) => group.length > 0)
       : // Note that the strip's one ⋯ for the tab offers these after its Copy link, so the bar draws no ⋯ of its own.
-        [showingSource ? [copySource] : [], [reloadAction]].filter((group) => group.length > 0),
+        [inBrowser, showingSource ? [copySource] : [], [reloadAction]].filter(
+          (group) => group.length > 0,
+        ),
   );
   return (
     <FindScope

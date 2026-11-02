@@ -8,8 +8,9 @@ import { pageLoadedBy } from "./support/page-load";
  * Which loads of a tab the hand-off counts as fresh, by what the browser
  * says of how it loaded the page: a navigation to the address is one; a
  * reload, a Back or Forward into the tab, or a navigation onto an entry
- * holding a place the panel saved is not; and a browser that says nothing is
- * taken as not.
+ * holding a place the panel saved is not, nor one Fullspin's own Open in
+ * browser flagged to stay on the web, once; and a browser that says nothing
+ * is taken as not.
  */
 
 const TASK_ADDRESS = "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
@@ -39,6 +40,15 @@ test("a navigation onto an entry holding a place the panel saved is not", () => 
   pageLoadedBy("navigate");
 
   assert.equal(browserLoadedFresh(), false);
+});
+
+test("a navigation Open in browser flagged to stay on the web is not, once, the flag leaving the address and nothing else", () => {
+  window.history.replaceState(null, "", `${TASK_ADDRESS}?comment=t1&stay=web`);
+  pageLoadedBy("navigate");
+
+  assert.equal(browserLoadedFresh(), false);
+  assert.equal(`${location.pathname}${location.search}`, `${TASK_ADDRESS}?comment=t1`);
+  assert.equal(browserLoadedFresh(), true, "an ordinary navigation to the address still is");
 });
 
 test("a browser that does not say how it loaded the page is taken as not", () => {
