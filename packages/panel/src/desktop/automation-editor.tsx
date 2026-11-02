@@ -2465,12 +2465,16 @@ export function AutomationPageSkeleton({
             runs={undefined}
             onRetry={() => undefined}
             onOpenAgent={() => undefined}
+            onOpenSetup={() => undefined}
           />
         )
       }
     />
   );
 }
+
+/** The setup's own scrolling column, which a run with nothing of its own to open hands the keyboard. */
+const SETUP_COLUMN = ".luke-detail-page-main";
 
 /** An automation's page's two screens in a narrow room: its setup, toolbar and all, and its runs. */
 const EDITOR_SCREENS: NarrowColumns = {
@@ -2686,6 +2690,17 @@ export function AutomationEditor({
     },
     confirmFailure(FAILURE_SURFACE.AUTOMATION_DELETE, { automationId: automation?.id }),
   );
+  // A run with nothing of its own to open opens the setup, where whatever kept it from starting is mended:
+  // in one column it stands the setup again, as the runs' way back does; in two, where the setup already
+  // stands beside the runs, it hands the setup's column the keyboard, scrolled to its top.
+  const openSetup = () => {
+    const column = editorLayout.current?.querySelector<HTMLElement>(SETUP_COLUMN);
+    if (single) onRuns(false);
+    else if (column) {
+      column.scrollTop = 0;
+      column.focus({ preventScroll: true });
+    }
+  };
   const runsRead = {
     mine: automation === undefined || automation.mine === true,
     created: automation !== undefined,
@@ -2694,6 +2709,7 @@ export function AutomationEditor({
     runs: runs.read,
     onRetry: runs.reload,
     onOpenAgent,
+    onOpenSetup: openSetup,
   };
   return (
     <AutomationPageFrame

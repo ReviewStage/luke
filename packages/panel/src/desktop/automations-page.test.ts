@@ -2436,11 +2436,12 @@ test("an automation's runs stand on its page's right, newest first, a run that s
   );
   act(() => started?.querySelector("button")?.click());
   assert.deepEqual(agentsOpened, [CI_DIGEST.id]);
-  assert.equal(
-    runRows(page).filter((row) => row.querySelector(".luke-list-row-main")?.tagName === "BUTTON")
-      .length,
-    1,
-    "a run that started no agent is no press",
+  const unstarted = refused?.querySelector<HTMLButtonElement>(".luke-list-row-main");
+  assert.equal(unstarted?.tagName, "BUTTON", "a run that started no agent is a press too");
+  act(() => unstarted?.click());
+  assert.ok(
+    document.activeElement?.querySelector("input[aria-label='Automation name']"),
+    "it opens the automation's setup beside it, handing it the keyboard",
   );
 });
 
@@ -2510,6 +2511,37 @@ test("the Runs tab lists every automation's runs, each naming its automation, na
   assert.deepEqual(agentsOpened, [CI_DIGEST.id]);
 });
 
+test("on the Runs tab a run that started no agent and names no subject opens its automation", async () => {
+  standing = [SWEEP, DIGEST];
+  workspaceRuns = [{ ...UNSTARTED_RUN, automation: { id: DIGEST.id, name: DIGEST.name } }];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.RUNS });
+  await settle();
+
+  act(() => page.querySelector<HTMLElement>("ul[aria-label='Runs'] .luke-list-row-main")?.click());
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.EDIT, automationId: DIGEST.id });
+});
+
+test("under a finger no run draws a ⋯, and a long press opens its menu", async () => {
+  underAFinger();
+  standing = [SWEEP, DIGEST];
+  workspaceRuns = [
+    { ...SWEEP_RUN, automation: { id: SWEEP.id, name: SWEEP.name } },
+    { ...UNSTARTED_RUN, automation: { id: DIGEST.id, name: DIGEST.name } },
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.RUNS });
+  await settle();
+  const presses = [
+    ...page.querySelectorAll<HTMLElement>("ul[aria-label='Runs'] .luke-list-row-main"),
+  ];
+
+  assert.equal(presses.length, 2);
+  assert.ok(page.querySelector("button[aria-label='Run actions']") === null, "no run draws a ⋯");
+  const [, unstarted] = presses;
+  assert.ok(unstarted);
+  longPress(unstarted);
+  assert.ok(menuItem("Copy link"), "the long press opens the run's menu");
+});
+
 test("an automation's runs stand as quiet rows under the panel's heading while they are first read", async () => {
   runsHeld = true;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
@@ -2567,6 +2599,17 @@ const SWEEP_RUN = {
   agent: { id: CI_DIGEST.id, title: "Fix the flaky test", status: "running" },
   firedAt: 3,
   settledAt: 3,
+} as const;
+
+/** A run that started no agent and names no subject, so has nothing of its own to open. */
+const UNSTARTED_RUN = {
+  id: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+  firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 2 },
+  status: AUTOMATION_RUN_STATUS.FAILED,
+  reason: "creator-left",
+  agent: null,
+  firedAt: 2,
+  settledAt: 2,
 } as const;
 
 test("opening a run's agent with unsaved changes asks first, and Leave opens it", async () => {
@@ -3129,7 +3172,7 @@ function screensShown(page: HTMLElement): string[] {
 
 test("on a narrow stage an automation's setup stands the whole width with its runs hidden, until Runs stands them alone under a way back that returns to the setup", async () => {
   window.localStorage.clear();
-  runs = [SWEEP_RUN];
+  runs = [SWEEP_RUN, UNSTARTED_RUN];
   const sheets = layContainersAt({});
   try {
     const page = mountNarrow({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
@@ -3144,10 +3187,18 @@ test("on a narrow stage an automation's setup stands the whole width with its ru
     phoneRuns();
     assert.deepEqual(screensShown(page), ["runs"]);
     const runsScreen = page.querySelector("section[aria-label='Runs']");
-    assert.equal(runsScreen?.querySelectorAll("li").length, 1, "its runs are listed");
+    assert.equal(runsScreen?.querySelectorAll("li").length, 2, "its runs are listed");
 
     act(() => button(SWEEP.name).click());
     assert.deepEqual(screensShown(page), ["setup"]);
+
+    phoneRuns();
+    act(() => runsScreen?.querySelectorAll<HTMLElement>(".luke-list-row-main")[1]?.click());
+    assert.deepEqual(
+      screensShown(page),
+      ["setup"],
+      "a run that opens nothing else opens the setup",
+    );
   } finally {
     sheets.remove();
   }
