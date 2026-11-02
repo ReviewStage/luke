@@ -80,14 +80,13 @@ export const CODER_TOOL = {
   DELETE_AUTOMATION: AGENT_TOOL.DELETE_AUTOMATION,
   RUN_AUTOMATION: AGENT_TOOL.RUN_AUTOMATION,
   LIST_MODELS: AGENT_TOOL.LIST_MODELS,
-  REMEMBER: AGENT_TOOL.REMEMBER,
-  RECALL: AGENT_TOOL.RECALL,
+  SAVE_MEMORY: AGENT_TOOL.SAVE_MEMORY,
+  SEARCH_MEMORY: AGENT_TOOL.SEARCH_MEMORY,
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
   READ_COMMENTS: AGENT_TOOL.READ_COMMENTS,
   REPLY_TO_COMMENT: AGENT_TOOL.REPLY_TO_COMMENT,
-  RESOLVE_THREAD: AGENT_TOOL.RESOLVE_THREAD,
-  REOPEN_THREAD: AGENT_TOOL.REOPEN_THREAD,
+  UPDATE_COMMENT: AGENT_TOOL.UPDATE_COMMENT,
   READ_PAGE: AGENT_TOOL.READ_PAGE,
   RUN_ON_MAC: AGENT_TOOL.RUN_ON_MAC,
   BROWSER: AGENT_TOOL.BROWSER,
@@ -134,13 +133,13 @@ export function starterToolsOf(starter: {
   return starter.underPilot ? new Set() : new Set([CODER_TOOL.POST_THREAD]);
 }
 
-/** The tools only an agent in a sandbox of Fullspin's is offered. */
+/** The tools only an agent in a sandbox of ours is offered. */
 export type MachineTool = typeof CODER_TOOL.BROWSER;
 
 /**
- * The tools an agent is offered by where it runs: the browser of Fullspin's,
+ * The tools an agent is offered by where it runs: the browser of ours,
  * a Chromium in the agent's own sandbox, to an agent in one, and nothing to
- * a local agent, whose Mac runs no browser of Fullspin's (it drives its own
+ * a local agent, whose Mac runs no browser of ours (it drives its own
  * from its shell instead), so the tool would only be refused. The
  * instructions leave out the same words (`instructions.ts`).
  */
@@ -169,14 +168,14 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
   ...repositoryToolsOf({ repository: "any" }),
   ...starterToolsOf({ underPilot: false }),
   ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
-  CODER_TOOL.REMEMBER,
-  CODER_TOOL.RECALL,
+  CODER_TOOL.SAVE_MEMORY,
+  CODER_TOOL.SEARCH_MEMORY,
 ]);
 
 /**
  * Every tool eve offers the agent on a turn, in the registry's order: each
  * coder's tool no agent is denied, and each narrowed one where its
- * repository, who started it, or where it runs offers it, and `remember` and `recall` where
+ * repository, who started it, or where it runs offers it, and `save_memory` and `search_memory` where
  * its starter has Memory on, the same rules eve's tool files read as each
  * turn starts (`apps/dev/host.ts`'s `offeredRepositoryTools`,
  * `offeredStarterTools`, and `memoryOffered`).
@@ -189,7 +188,7 @@ export function offeredCoderTools(
     ...repositoryToolsOf(agent),
     ...starterToolsOf(beside),
     ...machineToolsOf(agent),
-    ...(beside.memoryOn ? [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL] : []),
+    ...(beside.memoryOn ? [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY] : []),
   ]);
   return [...toolsOf(AGENT_ROLE.CODER)].filter(
     (tool) => !NARROWED_CODER_TOOLS.has(tool) || offered.has(tool),
@@ -199,7 +198,7 @@ export function offeredCoderTools(
 /**
  * The tools a coding agent's transcript may name that no agent is offered
  * now: eve's provider-run page fetch, which coding agents ran before they had
- * the hosted page read, Fullspin's own hosted search on Fullspin's key, since
+ * the hosted page read, our own hosted search on our key, since
  * replaced by eve's provider-run `web_search` on the agent's own key, the archive, unarchive, and move of a task into a
  * section since folded into `update_agent` and `update_task`, and the close
  * of and reply on an inbox item since folded into `withdraw_ask` and
@@ -207,8 +206,10 @@ export function offeredCoderTools(
  * `read_threads`, the four of the workspace's Chat, removed with it,
  * `show_code`, `draw_on_board`, and `look_at_board`, removed with the Code
  * and Board tabs, and a voice call's `queue_question`, `withdraw_question`,
- * and `end_call`, removed with GPT Live. A transcript written then names
- * them, and reads back under the same set.
+ * and `end_call`, removed with GPT Live, `remember` and `recall`, since
+ * named `save_memory` and `search_memory`, and `resolve_thread` and
+ * `reopen_thread`, since folded into `update_comment`. A transcript written
+ * then names them, and reads back under the same set.
  */
 export const RETIRED_CODER_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -230,6 +231,10 @@ export const RETIRED_CODER_TOOL = {
   QUEUE_QUESTION: RETIRED_TOOL.QUEUE_QUESTION,
   WITHDRAW_QUESTION: RETIRED_TOOL.WITHDRAW_QUESTION,
   END_CALL: RETIRED_TOOL.END_CALL,
+  REMEMBER: RETIRED_TOOL.REMEMBER,
+  RECALL: RETIRED_TOOL.RECALL,
+  RESOLVE_THREAD: RETIRED_TOOL.RESOLVE_THREAD,
+  REOPEN_THREAD: RETIRED_TOOL.REOPEN_THREAD,
 } as const;
 
 /**
@@ -298,8 +303,8 @@ const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
 /**
  * The two task controls eve adds beside any task, which a coding agent's
  * \`delegate\` is (\`apps/dev/tools/delegate.ts\`): eve runs them, so they are no
- * tool of Fullspin's, but a turn that waits on its worker or stops one names them.
- * Their tasks are eve's subagent tasks, not a Fullspin task.
+ * tool of ours, but a turn that waits on its worker or stops one names them.
+ * Their tasks are eve's subagent tasks, not a task of ours.
  */
 const CODER_TASK_TOOL = {
   TASK_WAIT: "task_wait",

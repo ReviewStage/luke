@@ -1,6 +1,6 @@
 ---
 name: changelog-screenshots
-description: Take the CHANGELOG.md screenshots for a Fullspin release, or redo an older release's, from that release's own build on the developer's Mac with mock data staged for each picture. Plans one intentional shot per feature section that needs one, writes a throwaway staging patch (fixture profiles, canned answers, layout), builds and captures on the Mac, frames each shot or a close-up of it on the Golden Gate wallpaper, and lands the pictures. Use when asked for changelog or release screenshots, or to improve an old release's.
+description: Take the CHANGELOG.md screenshots for a Vespin release, or redo an older release's, from that release's own build on the developer's Mac with mock data staged for each picture. Plans one intentional shot per feature section that needs one, writes a throwaway staging patch (fixture profiles, canned answers, layout), builds and captures on the Mac, frames each shot or a close-up of it on the Golden Gate wallpaper, and lands the pictures. Use when asked for changelog or release screenshots, or to improve an old release's.
 ---
 
 # Changelog screenshots
@@ -12,13 +12,13 @@ tagged, the head of its version pull request. The
 work is in four parts: plan the shots, stage them in a throwaway patch, build
 and capture on the Mac, then frame and land them.
 
-You need the developer's Mac (a run-on-Mac tool, such as Fullspin's `run_on_mac`):
+You need the developer's Mac (a run-on-Mac tool, such as Vespin's `run_on_mac`):
 the native build, the window capture, and the framer are macOS-only. The cloud
 workspace writes code and reviews pictures; with the workspace's file sync on,
 anything under its `.context/` appears in the workspace's synced copy on the
 Mac (`$S` below), and nothing syncs back.
 
-Without file sync (a Fullspin coding agent's sandbox), files cross through scratch
+Without file sync (a Vespin coding agent's sandbox), files cross through scratch
 refs on GitHub, never a command line, which cannot carry a patch of pictures:
 the cloud commits the staged worktree and pushes it to
 `refs/luke-shots/<tag>`, and the Mac fetches it into its clone and diffs it
@@ -161,7 +161,7 @@ The helpers in `scripts/` run on the Mac from the synced copy of this skill,
 through `bash`, since file sync drops the executable bit.
 `SHOTS_WORKTREE` (default `~/Developer/luke-changelog-shots`) is a throwaway
 worktree of the clone at `LUKE_REPO` (default `~/Developer/luke`); nothing
-touches the developer's own checkout or a running Fullspin.
+touches the developer's own checkout or a running Vespin.
 
 ```sh
 S=<the workspace's synced copy on the Mac>
@@ -212,7 +212,7 @@ that against a real tap before staging around it.
 
 ### The notch era (before 0.7.0)
 
-Before 0.7.0 Fullspin drew no ordinary window: a borderless panel hung from the
+Before 0.7.0 Vespin drew no ordinary window: a borderless panel hung from the
 notch at a high window level, and onboarding was a full-display overlay, so
 `window.sh` finds nothing to capture. Build with `LUKE_SHOT_PATCH_DIST=0` (the
 window patches would pull the panel off the top edge), have the staging raise

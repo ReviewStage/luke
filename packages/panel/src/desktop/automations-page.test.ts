@@ -398,7 +398,7 @@ beforeEach(() => {
           scope: scope ?? AUTOMATION_SCOPE.PERSONAL,
           repositories: repositories ?? [],
           ...(hooked
-            ? { webhookUrl: "https://tryluke.dev/api/automations/made/webhook" }
+            ? { webhookUrl: "https://vespin.dev/api/automations/made/webhook" }
             : undefined),
         });
         // A webhook's secret is answered once, by the write that minted it.
@@ -2640,12 +2640,12 @@ test("a new automation set to a GitHub event takes its settings as switches in t
     pickerDetail(page, "Type"),
     "When a pull request by people is opened, marked ready, or pushed to in acme/ledger",
   );
-  act(() => switchNamed("From Fullspin's agents").click());
+  act(() => switchNamed("From Vespin's agents").click());
   assert.equal(isOn("Skip drafts"), true);
   assert.equal(isOn("Include forks"), false);
   assert.equal(
     pickerDetail(page, "Type"),
-    "When a pull request by people or Fullspin's agents is opened, marked ready, or pushed to in acme/ledger",
+    "When a pull request by people or Vespin's agents is opened, marked ready, or pushed to in acme/ledger",
   );
   type(page.querySelector("input[aria-label='Automation name']"), "Code review");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Review this pull request.");
@@ -2665,12 +2665,12 @@ test("a new automation set to a GitHub event takes its settings as switches in t
   assert.ok(
     says(
       rowOf(page, "Code review"),
-      "When a pull request by people or Fullspin's agents is opened, marked ready, or pushed to in acme/ledger",
+      "When a pull request by people or Vespin's agents is opened, marked ready, or pushed to in acme/ledger",
     ),
   );
 });
 
-test("a schedule Fullspin cannot read is not created, and the refusal is announced under its row", async () => {
+test("a schedule Vespin cannot read is not created, and the refusal is announced under its row", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
 
@@ -2682,17 +2682,16 @@ test("a schedule Fullspin cannot read is not created, and the refusal is announc
   await settle();
 
   assert.deepEqual(creates, []);
-  assert.ok(announced("That isn't a schedule Fullspin can read."), "the refusal is announced");
+  assert.ok(announced("That isn't a schedule Vespin can read."), "the refusal is announced");
   assert.ok(
-    !pickerDescription(page, "Type").includes("That isn't a schedule Fullspin can read."),
+    !pickerDescription(page, "Type").includes("That isn't a schedule Vespin can read."),
     "the refusal stands under the cron's row, not the trigger's",
   );
   const cron = page.querySelector("input[aria-label='Cron']");
   const describedBy = cron?.getAttribute("aria-describedby")?.split(" ") ?? [];
   assert.ok(
     describedBy.some(
-      (id) =>
-        document.getElementById(id)?.textContent === "That isn't a schedule Fullspin can read.",
+      (id) => document.getElementById(id)?.textContent === "That isn't a schedule Vespin can read.",
     ),
     "the refusal describes the Cron field it is about",
   );
@@ -2700,7 +2699,7 @@ test("a schedule Fullspin cannot read is not created, and the refusal is announc
 
   type(page.querySelector("input[aria-label='Cron']"), "0 2 * * *");
   await settle();
-  assert.ok(!announced("That isn't a schedule Fullspin can read."), "the refusal is gone");
+  assert.ok(!announced("That isn't a schedule Vespin can read."), "the refusal is gone");
   assert.equal(
     page.querySelector("input[aria-label='Cron']")?.getAttribute("aria-invalid"),
     null,
@@ -2790,7 +2789,7 @@ test("a new secret, asked for first, is shown once on the page that asked, and i
   const hooked = automation(8, {
     name: "Fix Sentry alerts",
     trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
-    webhookUrl: "https://tryluke.dev/api/automations/hooked/webhook",
+    webhookUrl: "https://vespin.dev/api/automations/hooked/webhook",
   });
   standing = [hooked];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: hooked.id });
@@ -2894,7 +2893,7 @@ test("an automation's ⋯ in its editor, its row's right-click in the list, and 
   });
   await act(async () => menuItem("Copy link").click());
 
-  const automationLink = `https://tryluke.dev/${WORKSPACE.id}/automation/${SWEEP.id}`;
+  const automationLink = `https://vespin.dev/${WORKSPACE.id}/automation/${SWEEP.id}`;
   assert.deepEqual(copied.slice(-4), [
     automationLink,
     `${automationLink}/run/6a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d`,
@@ -2977,7 +2976,7 @@ test("an automation row's ⋯, its right-click and the menu key open the same me
   doors[2]?.();
   await settle();
   await act(async () => menuItem("Copy link").click());
-  assert.equal(copied.at(-1), `https://tryluke.dev/${WORKSPACE.id}/automation/${SWEEP.id}`);
+  assert.equal(copied.at(-1), `https://vespin.dev/${WORKSPACE.id}/automation/${SWEEP.id}`);
   doors[0]?.();
   await settle();
   await act(async () => menuItem("Run now").click());
@@ -3467,7 +3466,7 @@ test("Sentry chosen before the read says the deployment holds no Sentry integrat
   act(() => button("Create automation").click());
   await settle();
   assert.equal(creates.length, 0);
-  assert.match(page.textContent ?? "", /Fullspin cannot receive Sentry events here/u);
+  assert.match(page.textContent ?? "", /Vespin cannot receive Sentry events here/u);
 });
 
 test("on a phone the list is headed by New automation and one ⋯ holding Create with an agent, its title centred between them", async () => {

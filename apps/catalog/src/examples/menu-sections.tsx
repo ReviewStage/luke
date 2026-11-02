@@ -1,4 +1,5 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   GLYPH_INK,
   GlyphSlot,
@@ -32,7 +33,7 @@ function MenuSections(): React.JSX.Element {
                   <WingFace />
                 </GlyphSlot>
               }
-              title="Fullspin"
+              title={PRODUCT_NAME}
               meta="Always on"
             />
           </List>

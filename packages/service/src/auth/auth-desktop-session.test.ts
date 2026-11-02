@@ -27,7 +27,7 @@ import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "./oauth-clients.js";
  * session it carries as a signed bearer token. Synthetic accounts throughout.
  */
 
-const SERVICE_URL = "https://tryluke.dev";
+const SERVICE_URL = "https://vespin.dev";
 const LOOPBACK = "http://127.0.0.1:54698/callback";
 
 const GITHUB_CODE = "github-code-under-test";
@@ -59,7 +59,7 @@ const decodeSession = Schema.decodeUnknownSync(
 
 function desktopAuth() {
   return betterAuth({
-    appName: "Fullspin",
+    appName: "Vespin",
     baseURL: SERVICE_URL,
     secret: "desktop-session-test-secret-of-enough-length",
     database: memoryAdapter({
@@ -267,7 +267,7 @@ test("after its OAuth sign-in the Mac holds a session of its own, carried as a s
 
   const session = await sessionFor(auth, { authorization: `Bearer ${signed}` });
   assert.equal(session?.user.email, GITHUB_EMAIL);
-  // Fullspin's own routes still read the OAuth token through userinfo, beside the bearer plugin.
+  // Our own routes still read the OAuth token through userinfo, beside the bearer plugin.
   assert.equal(await userInfoSubject(auth, accessToken), session?.user.id);
 });
 

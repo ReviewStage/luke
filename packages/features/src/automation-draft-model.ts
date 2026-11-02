@@ -33,6 +33,7 @@ import {
 } from "./automation-wire.js";
 import type { ModelChoice } from "./models-wire.js";
 import { formatCount } from "./number-format.js";
+import { PRODUCT_NAME } from "./product-name.js";
 import {
   SENTRY_TRIGGER_EVENT,
   type SentryTriggerEvent,
@@ -180,7 +181,7 @@ const NEW_SCHEDULE: ScheduleDraft = {
 
 /** Why a schedule was refused, as its field says it. */
 const SCHEDULE_REFUSAL_WORDS = {
-  [SCHEDULE_REFUSAL.CRON]: "That isn't a schedule Fullspin can read.",
+  [SCHEDULE_REFUSAL.CRON]: `That isn't a schedule ${PRODUCT_NAME} can read.`,
   [SCHEDULE_REFUSAL.TIMEZONE]: "Pick a time zone.",
   [SCHEDULE_REFUSAL.TOO_FREQUENT]: "It can run at most every 15 minutes.",
 } as const satisfies Record<ScheduleRefusal, string>;
@@ -464,7 +465,7 @@ export function repositoryHeld(automation: AutomationSummary | undefined): boole
 
 /**
  * What stops a draft saving, at the field it is about: a name and a task
- * written, a schedule Fullspin reads and that fires no more often than its
+ * written, a schedule we read and that fires no more often than its
  * floor, an integration's filters within their bounds and its cooldown a
  * whole number of hours up to a week, and a repository chosen where none
  * is held (`repositoryHeld`).
@@ -527,7 +528,7 @@ function githubSettingsProblem(draft: AutomationDraft): string | undefined {
   return undefined;
 }
 
-/** The next instants a draft's schedule is due after `now`, as many as asked; none for one Fullspin cannot read. */
+/** The next instants a draft's schedule is due after `now`, as many as asked; none for one we cannot read. */
 export function draftNextRuns(draft: AutomationDraft, now: Date, count: number): readonly number[] {
   if (draft.triggerKind !== AUTOMATION_TRIGGER.SCHEDULE) return [];
   const schedule = { cron: cronOf(draft.schedule), timezone: draft.timezone };

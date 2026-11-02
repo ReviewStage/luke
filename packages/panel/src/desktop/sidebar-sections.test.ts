@@ -392,6 +392,22 @@ test("the status filter leaves a section's backlog task out as it does the list'
   );
 });
 
+test("a section whose only task is done says so in place of Drag tasks here, and the Tasks line counts it no more", async () => {
+  const sidebar = await mountSidebar([], SECTIONS, {
+    tasks: [
+      { ...INVITES, status: TASK_STATUS.DONE },
+      { ...RETRIES, status: TASK_STATUS.DONE },
+    ],
+  });
+  const hiddenIn = (label: string) =>
+    sidebar.querySelector(`nav[aria-label="${label}"] .sidebar-hidden-statuses button`)
+      ?.textContent;
+
+  assert.equal(hiddenIn("Sections"), "1 more in Done");
+  assert.ok(!sidebar.textContent?.includes("Drag tasks here"));
+  assert.equal(hiddenIn("My tasks"), "1 more in Done");
+});
+
 test("a task's Move to section puts it on top of the section chosen", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
@@ -575,9 +591,9 @@ test("a section's Move all to section puts every task in it on top of the sectio
   assert.deepEqual(sectionTaskIds(moved, LAUNCH), []);
 });
 
-test("a section's Remove all from section takes every task in it out of every section", async () => {
+test("a section's Remove all from section takes every task in it out of every section, and Undo puts them back in their order", async () => {
   const writes: TaskSectionWrite[] = [];
-  const sidebar = await mountSidebar(writes, BOTH_IN_LAUNCH);
+  const { container: sidebar, draw } = await mountSidebarRedrawn(writes, BOTH_IN_LAUNCH);
 
   openSectionMenu(sidebar, "Launch");
   act(() => item("Remove all from section").click());
@@ -586,6 +602,13 @@ test("a section's Remove all from section takes every task in it out of every se
     { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES.id, sectionId: null },
     { kind: TASK_SECTION_WRITE.PLACE, taskId: RETRIES.id, sectionId: null },
   ]);
+  const removed = applied(BOTH_IN_LAUNCH, writes.splice(0));
+  await draw(removed);
+  assert.match(newestToastSays() ?? "", /2 tasks removed from their sections/u);
+
+  act(() => newestToastAction()?.click());
+
+  assert.deepEqual(sectionTaskIds(applied(removed, writes), LAUNCH), [INVITES.id, RETRIES.id]);
 });
 
 test("a section's Status sets every task in it at the status picked at once, asking nothing even where a task has agents", async () => {

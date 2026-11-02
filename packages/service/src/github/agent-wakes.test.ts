@@ -58,7 +58,7 @@ import {
  * to the agent as a message from GitHub: a review, a comment on the pull
  * request, and a failed check on its branch are read off their deliveries
  * and nothing else is; a person's review reaches the agent whether or not it
- * is at work, a comment Fullspin's own App made reaches only an agent idle since
+ * is at work, a comment our own App made reaches only an agent idle since
  * before it was made, so an agent's own reply never wakes it, and a failed
  * check only an agent not at work; and every check on an agent's head
  * finished only the agent at work on that head, once GitHub says none is
@@ -87,7 +87,7 @@ const repository = {
   html_url: `https://github.com/${RELAY_FULL_NAME}`,
 };
 
-/** Who GitHub names by the login given: the member by the id their Fullspin account is linked to, anyone else by one of their own. */
+/** Who GitHub names by the login given: the member by the id their account is linked to, anyone else by one of their own. */
 function sender(login: string) {
   return {
     login,
@@ -468,7 +468,7 @@ test("a check suite or check run completed, whatever its conclusion, or a commit
   }
 });
 
-test("a person's review reaches an agent at work or not, Fullspin's App's only an agent idle since before it was made, a failed check only an agent idle since before it failed, and an archived agent nothing", () => {
+test("a person's review reaches an agent at work or not, Vespin's App's only an agent idle since before it was made, a failed check only an agent idle since before it failed, and an archived agent nothing", () => {
   const review = (by: string): AgentWake => ({
     kind: AGENT_WAKE.REVIEW,
     repository: RELAY_FULL_NAME,
@@ -494,7 +494,7 @@ test("a person's review reaches an agent at work or not, Fullspin's App's only a
   assert.deepEqual(
     [idleBefore, endedSince, atWork].map((at) => woken(review(LUKE_BOT), at)),
     [true, false, false],
-    "Fullspin's App's review reaches only an agent that could not have made it",
+    "Vespin's App's review reaches only an agent that could not have made it",
   );
   assert.deepEqual(
     [idleBefore, endedSince, atWork].map((at) => woken(failed, at)),
@@ -521,7 +521,7 @@ test("a person's review reaches an agent at work or not, Fullspin's App's only a
 
 it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) => {
   it.effect(
-    "a person's review is told to the agent on the branch once under the delivery's id, drawn as theirs, and Fullspin's App's reply made while the agent was at work is told to nobody",
+    "a person's review is told to the agent on the branch once under the delivery's id, drawn as theirs, and Vespin's App's reply made while the agent was at work is told to nobody",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -562,7 +562,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           login: "octocat",
         });
 
-        // The agent replied as Fullspin's App inside a turn that has since ended: its own reply wakes nobody.
+        // The agent replied as our App inside a turn that has since ended: its own reply wakes nobody.
         yield* endedTurn(owner, agent.conversationId, MADE_AT + 30_000);
         const reply = { ...wake, by: LUKE_BOT, at: MADE_AT + 20_000 };
         const own = yield* wakeAgents(eve.eveFor, reply, randomUUID(), LUKE_BOT).pipe(

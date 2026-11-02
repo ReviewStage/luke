@@ -92,7 +92,7 @@ import {
  * own (`plan-pin.ts`), so a plan of a shared workspace one member pinned
  * reads pinned for them alone, on every Mac they sign in on. A plan's repository is kept here as
  * handed and confirmed nowhere here: whether the account reaches it through
- * the Fullspin GitHub App is the route's to settle before it calls, on the
+ * our GitHub App is the route's to settle before it calls, on the
  * service that reads GitHub (`github/github-app.ts`), and so is whether the
  * account is a member of the workspace a task starts in. A save is one `update` over the row that
  * stands and never an insert, so a task deleted before a save lands stays
@@ -245,7 +245,7 @@ export interface NewTask {
   readonly priority?: TaskPriority;
   /** The member the task is assigned to as it starts, who must be a member of its workspace; no one where none is named. */
   readonly assigneeId?: string;
-  /** Who made the task for its member, where they did not make it by hand: Fullspin on their call, or a coding agent by its id. */
+  /** Who made the task for its member, where they did not make it by hand: the brain on their call, or a coding agent by its id. */
   readonly origin?: TaskOrigin;
   /** Where its agents run; a sandbox where none is named. */
   readonly runsOn?: TaskRunsOnWrite;
@@ -2067,7 +2067,7 @@ const lockDoneBy = SqlSchema.findOneOption({
  * to Done and the guard reads the agent idle under its conversation's lock,
  * as that move archived the task's idle agents, at this moment and as whoever
  * moved it: what a turn's end asks of an agent still at work when its task
- * moved to Done. A Done Fullspin's own finish made archives nothing, and neither
+ * moved to Done. A Done made by our own finish archives nothing, and neither
  * does one the agent made itself (`archivedIdleWithTask`). A turn's start
  * takes the task up again (`beginTaskWork`), which clears who moved it, so a
  * Done this reads was made while the agent's turn ran. The task is read under

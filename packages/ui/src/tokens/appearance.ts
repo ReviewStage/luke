@@ -3,7 +3,7 @@
  *
  * A root wears `dark` or `light` where its theme is chosen, as the web app's
  * does from the account's Theme setting, and `system` where it follows the
- * machine, as the desktop's windows do: there Fullspin's own Theme setting is
+ * machine, as the desktop's windows do: there the app's own Theme setting is
  * applied to the machine's appearance itself (`nativeTheme.themeSource`), so
  * following the machine is following the setting. A sheet picks its inks by
  * `light-dark()`, which the root's theme decides through `color-scheme`. What

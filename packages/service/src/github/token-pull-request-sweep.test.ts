@@ -216,7 +216,7 @@ const sweepAt = (
     Effect.provide(github.layer),
   );
 
-/** Who GitHub names by the login given: the member by the id their Fullspin account is linked to, anyone else by one of their own. */
+/** Who GitHub names by the login given: the member by the id their account is linked to, anyone else by one of their own. */
 function author(login: string) {
   return {
     login,

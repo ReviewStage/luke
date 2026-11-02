@@ -134,7 +134,10 @@ it.layer(getTestDB())("a plan's history", (it) => {
       assert.equal((yield* revisionsOf(userId, taskId)).length, 1);
     }),
   );
-  /** Fullspin's notes, each a revision of its own: the saves stand further apart than any join. */
+  /**
+   * The notetaker's notes, each a revision of its own: the saves stand further apart than
+   * any join.
+   */
   const apart = (userId: string, taskId: string, notes: readonly (readonly [string, string])[]) =>
     Effect.forEach(
       notes,
@@ -249,7 +252,7 @@ it.layer(getTestDB())("a plan's history", (it) => {
       }),
   );
 
-  it.effect("Fullspin's notes on a member's turn are kept under that member", () =>
+  it.effect("Vespin's notes on a member's turn are kept under that member", () =>
     Effect.gen(function* () {
       const { userId, taskId } = yield* openTask;
       yield* saveNotes({ userId, taskId }, DRAFT_NOTES, NOTETAKER);

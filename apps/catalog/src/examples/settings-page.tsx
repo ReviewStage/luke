@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   BackButton,
   BUTTON_VARIANT,
@@ -52,7 +53,7 @@ function Page({ title, look }: { title: string; look?: ToolbarLook }): React.JSX
       <SettingsSection title="General">
         <SwitchRow
           label="Launch at login"
-          description="Fullspin opens with the Mac, in the menu bar."
+          description={`${PRODUCT_NAME} opens with the Mac, in the menu bar.`}
         />
         <SwitchRow
           label="Show captions"

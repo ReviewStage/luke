@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   AVATAR_SIZE,
@@ -28,7 +29,7 @@ import { CatalogSection } from "../section";
 
 /**
  * sidebar-parts.tsx -- the parts every surface drawing the app's sidebar
- * shares: Fullspin's head, and the same head naming the surface it stands on;
+ * shares: the app's head, and the same head naming the surface it stands on;
  * the places over their rule; a place and the rows that narrow it, which
  * its row folds, its ⋯ standing beside its chord under the pointer; and the
  * foot's account row.
@@ -76,12 +77,12 @@ function SidebarParts(): React.JSX.Element {
     <>
       <CatalogSection id="sidebar-identity" title="Head">
         <div className="catalog-narrow">
-          <SidebarIdentity name="Fullspin" face={<WingFace fill />} />
+          <SidebarIdentity name={PRODUCT_NAME} face={<WingFace fill />} />
         </div>
       </CatalogSection>
       <CatalogSection id="sidebar-identity-qualified" title="Head on a surface of its own">
         <div className="catalog-narrow">
-          <SidebarIdentity name="Fullspin" qualifier="Admin" face={<WingFace fill />} />
+          <SidebarIdentity name={PRODUCT_NAME} qualifier="Admin" face={<WingFace fill />} />
         </div>
       </CatalogSection>
       <CatalogSection id="sidebar-places" title="Places over their rule">

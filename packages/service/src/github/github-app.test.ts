@@ -42,7 +42,7 @@ import {
 } from "./github-installations.js";
 
 /**
- * The Fullspin GitHub App's server client with GitHub a fake behind the
+ * Our GitHub App's server client with GitHub a fake behind the
  * `HttpClient` and the rows on a real Postgres dialect. What is held here:
  * the App speaks as itself with a JWT its own key signed; an installation is
  * confirmed as the App's own or not at all; a workspace's repositories are
@@ -1012,7 +1012,7 @@ it.layer(getTestDB())("a repository on a member's own token", (it) => {
   );
 });
 
-const CALLBACK = "https://tryluke.dev/api/github/installed/authorized";
+const CALLBACK = "https://vespin.dev/api/github/installed/authorized";
 const VERIFIER = "fixture-code-verifier-of-enough-length-for-pkce-0123456789abcdef";
 
 it.effect(

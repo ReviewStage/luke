@@ -18,6 +18,7 @@
  * to the menu and from there to the same nothing.
  */
 
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { isWireString, type UnparsedWireValue } from "@luke/wire";
 import { HOST_CAPABILITY, type HostCapability } from "./capabilities.js";
 import { type Experiment, type ExperimentChoices, experimentOn } from "./experiments.js";
@@ -480,7 +481,7 @@ export const APP_SHORTCUTS = {
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },
   [APP_COMMAND.HIDE]: {
-    label: "Hide Fullspin",
+    label: `Hide ${PRODUCT_NAME}`,
     chord: { key: SHORTCUT_KEY.H },
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },
@@ -490,7 +491,7 @@ export const APP_SHORTCUTS = {
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },
   [APP_COMMAND.QUIT]: {
-    label: "Quit Fullspin",
+    label: `Quit ${PRODUCT_NAME}`,
     chord: { key: SHORTCUT_KEY.Q },
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },

@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Something in Fullspin does not work as it should
+about: Something in Vespin does not work as it should
 labels: bug
 ---
 
@@ -16,5 +16,5 @@ labels: bug
 
 ## Environment
 
-- Fullspin version:
+- Vespin version:
 - macOS version:

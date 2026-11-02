@@ -58,8 +58,8 @@ import {
  * synthetic task and tab throughout, the live view over a fake door.
  */
 
-/** Fullspin, whose browser a tab is in, wearing a plain glyph. */
-const LUKE_OWNER = { name: "Fullspin", icon: createElement("span") };
+/** The app, whose browser a tab is in, wearing a plain glyph. */
+const LUKE_OWNER = { name: "Vespin", icon: createElement("span") };
 
 /** An agent whose browser a draft opens in. */
 const AGENT_ID = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";

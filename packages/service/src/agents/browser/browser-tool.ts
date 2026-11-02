@@ -1,7 +1,7 @@
 /**
  * browser-tool.ts -- `browser`, an agent's one tool for a real browser: its input, the one place a call is routed to a browser, a member's takeover heeded, the tab store kept in step, and the result as the model and the stored conversation each see it.
  *
- * Fullspin and a coding agent are offered the same tool, and neither's workers,
+ * The app and a coding agent are offered the same tool, and neither's workers,
  * which read and change nothing. A
  * call names one to ten actions of the shared vocabulary
  * (`@luke/features/browser-agent-actions`) and runs them in order on the
@@ -11,7 +11,7 @@
  *
  * The agent's tabs are kept in the service under the conversation whose
  * agent's browser holds them (`@luke/database/models/agent-browser-tabs`):
- * a coding agent's own, the task's for Fullspin. Before a
+ * a coding agent's own, the task's for the app. Before a
  * call runs, the action on a tab a member drives is refused, with words that
  * say so, and nothing after it runs, so the agent waits for the tab to be
  * handed back or asks; what ran before it stands. After it runs, the store
@@ -105,7 +105,7 @@ const BROWSER_INPUT = Schema.Struct({
 
 const readInput = readEither(BROWSER_INPUT);
 
-/** The tool as every agent is offered it, Fullspin, a coding agent, and either's workers alike: its name, its words, and its input schema. */
+/** The tool as every agent is offered it, the app, a coding agent, and either's workers alike: its name, its words, and its input schema. */
 export const BROWSER_TOOL = {
   name: AGENT_TOOL.BROWSER,
   description:
@@ -203,7 +203,7 @@ export const BROWSER_TOOL_REFUSAL = {
 export interface BrowserCall {
   /** The eve session whose sandbox the browser runs in: the root's own (`browserSessionOf`). */
   readonly browserSession: string;
-  /** The conversation of the agent whose browser holds the tabs: a coding agent's own, the task's for Fullspin. */
+  /** The conversation of the agent whose browser holds the tabs: a coding agent's own, the task's for the app. */
   readonly conversationId: string;
   /** The transcript the call is written to, which keeps its screenshots: the agent's own, since no worker is offered the tool. */
   readonly transcript: ConversationTarget;

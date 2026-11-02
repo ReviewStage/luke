@@ -27,7 +27,7 @@ import { stateWith } from "./testing/app-state.js";
 const WINDOW = Symbol("window");
 const PANEL: ActSender = { sender: WINDOW, panel: true };
 
-/** A Fullspin link to a task, and to another, as the system hands them the app. */
+/** An app link to a task, and to another, as the system hands them the app. */
 const LINK = { workspace: "workspace-1", place: { kind: LINK_PLACE.TASK, planId: "task-1" } };
 const OTHER_LINK = { ...LINK, place: { kind: LINK_PLACE.TASK, planId: "task-2" } };
 

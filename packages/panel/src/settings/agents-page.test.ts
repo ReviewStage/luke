@@ -418,7 +418,7 @@ test("a model whose fast version the key's organization was never granted rests 
   );
 });
 
-test("on Fullspin's key the resting Fast row says the same and links nowhere, since only the key's own organization can ask", async () => {
+test("on Vespin's key the resting Fast row says the same and links nowhere, since only the key's own organization can ask", async () => {
   models = [{ ...OPUS, fastNotEnabled: true }];
   const page = await mount();
 

@@ -21,13 +21,13 @@ import type { WebStoreRun } from "../../run.js";
 import type { OwnKey, ProviderKey, ProviderKeys } from "./model.js";
 
 /**
- * account-keys.ts -- the keys one account's coding-agent step, and every call beside its agents, runs on: its own API keys, and never Fullspin's.
+ * account-keys.ts -- the keys one account's coding-agent step, and every call beside its agents, runs on: its own API keys, and never ours.
  *
  * Read afresh for every step, so a key saved, replaced, or removed in
  * Settings is the one the agent's next step runs on. A provider the account
  * holds a row for runs on that row's key; one it holds none for is absent,
  * so its steps are refused as having no key, and nothing falls back to
- * Fullspin's own. Where the deployment's ring cannot open the row, or the
+ * our own. Where the deployment's ring cannot open the row, or the
  * deployment holds no ring at all, the provider answers unreadable and its
  * steps are refused too. Only
  * API keys are read here; a subscription credential runs no eve step. Each
@@ -119,7 +119,7 @@ function openedRow(
  * agent's title, a pull request's chapters, or a replay's summary: the
  * preferred provider's where the account saved one that opens, the other
  * provider's otherwise, and nothing where it holds neither, which leaves
- * the call unmade. Fullspin's own key is never one.
+ * the call unmade. Our own key is never one.
  */
 export function ownKeyOf(
   userId: string,

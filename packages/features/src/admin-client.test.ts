@@ -25,7 +25,7 @@ function client(
   },
 ): HostedAdminClient {
   return new HostedAdminClient({
-    serviceBaseUrl: "https://tryluke.dev",
+    serviceBaseUrl: "https://vespin.dev",
     sessionCredential: sessionBearer({
       readAccessToken: () => Effect.succeed("token-1"),
       refreshAccount: () => Effect.void,

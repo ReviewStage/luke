@@ -61,6 +61,7 @@ import {
 } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { clockText, dateOfText, dayAndTimeText, timeZoneNames } from "@luke/features/time-format";
@@ -195,7 +196,7 @@ import { automationDeleteQuestion, automationOwnerName } from "./automation-word
 import { useRunsPanel } from "./folded-groups.js";
 import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
-import { PhoneHead } from "./phone-head.js";
+import { PhoneHead, phoneFindGroups } from "./phone-head.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
 import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
@@ -267,7 +268,7 @@ function sentryWithheld(
 const SENTRY_NOT_SET_UP = "Not set up on this deployment yet";
 
 /** What the page says where a Sentry trigger is held back from saving. */
-const SENTRY_WITHHELD = "Fullspin cannot receive Sentry events here. Choose another trigger.";
+const SENTRY_WITHHELD = `${PRODUCT_NAME} cannot receive Sentry events here. Choose another trigger.`;
 
 /** What the Trigger card says where the read of the workspace's Sentry did not land. */
 const SENTRY_UNREAD = readFailedWords("the workspace's Sentry");
@@ -305,10 +306,9 @@ const SENTRY_EVENTS: readonly { value: SentryTriggerEvent; label: string }[] = [
   { value: SENTRY_TRIGGER_EVENT.ISSUE_CREATED, label: "New issue" },
 ];
 
-/** What a Sentry event's row says under its name where its name alone cannot: how an alert reaches Fullspin. */
+/** What a Sentry event's row says under its name where its name alone cannot: how an alert reaches us. */
 const SENTRY_EVENT_DETAIL: Partial<Record<SentryTriggerEvent, string>> = {
-  [SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED]:
-    "Set the alert rule's action to send a notification to the Fullspin integration.",
+  [SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED]: `Set the alert rule's action to send a notification to the ${PRODUCT_NAME} integration.`,
 };
 
 /** Sentry's levels as the level pills name them, least severe first. */
@@ -360,8 +360,7 @@ const SAVE_REFUSAL_WORDS = {
   [AUTOMATION_CALL_FAILURE.UNANSWERED]: "The automation could not be saved. Try again.",
   [AUTOMATION_CALL_FAILURE.NOT_FOUND]: "This automation, or its workspace, is gone.",
   [AUTOMATION_CALL_FAILURE.NO_REPOSITORY]: "Choose the repository it works in.",
-  [AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Fullspin cannot reach that repository from this workspace on GitHub.",
+  [AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]: `${PRODUCT_NAME} cannot reach that repository from this workspace on GitHub.`,
   [AUTOMATION_CALL_FAILURE.INVALID]:
     "The automation could not be saved as written. Check its schedule and prompt.",
   [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
@@ -750,7 +749,7 @@ function optionValue<Value extends string>(
   return (raw) => options.find((option) => option.value === raw)?.value;
 }
 
-/** When the draft runs next, its next two runs; nothing for one Fullspin cannot read. */
+/** When the draft runs next, its next two runs; nothing for one we cannot read. */
 function nextRunsText(draft: AutomationDraft): string | undefined {
   const [first, second] = draftNextRuns(draft, new Date(), 2);
   if (first === undefined) return undefined;
@@ -792,7 +791,7 @@ function ScheduleRows({
   const time = useRef<HTMLInputElement>(null);
   const { schedule, timezone } = draft;
   const zones = TIME_ZONES.includes(timezone) ? TIME_ZONES : [timezone, ...TIME_ZONES];
-  // Note that a zone Fullspin cannot read is said under the zone's row, and any other refusal under the cron's or the time's.
+  // Note that a zone we cannot read is said under the zone's row, and any other refusal under the cron's or the time's.
   const read =
     problem === undefined
       ? undefined
@@ -1039,7 +1038,7 @@ function AutomationActions({
   onDelete,
   running,
   onRunNow,
-  lead = [],
+  lead,
   heading,
 }: {
   /** The automation, whose link, Run now, and Delete the menu offers; none on a new automation's page, a phone's alone. */
@@ -1071,7 +1070,10 @@ function AutomationActions({
           label={moreLabel(ACTIONS_THING)}
           menu={menu.drawn}
           heading={heading}
-          groups={[...lead, ...own].filter((group) => group.length > 0)}
+          // Note that a phone's ⋯, the one given a lead, also stands in for ⌘F, read as the menu is drawn.
+          groups={[...(lead === undefined ? [] : [...lead, ...phoneFindGroups()]), ...own].filter(
+            (group) => group.length > 0,
+          )}
           onClose={menu.close}
         />
       )}
@@ -1294,8 +1296,8 @@ const SENDER_CHOICES: readonly { value: GitHubSender; label: string; detail?: st
   { value: GITHUB_SENDER.PEOPLE, label: "From people" },
   {
     value: GITHUB_SENDER.LUKE_AGENTS,
-    label: "From Fullspin's agents",
-    detail: "What Fullspin's agents open, as you or as the workspace's GitHub App.",
+    label: `From ${PRODUCT_NAME}'s agents`,
+    detail: `What ${PRODUCT_NAME}'s agents open, as you or as the workspace's GitHub App.`,
   },
   {
     value: GITHUB_SENDER.OTHER_BOTS,
@@ -1311,7 +1313,7 @@ const MOMENT_CHOICES: readonly { value: PullRequestMoment; label: string; detail
   {
     value: PULL_REQUEST_MOMENT.PUSHED,
     label: "When pushed to",
-    detail: "A push by Fullspin's own agents never starts a run.",
+    detail: `A push by ${PRODUCT_NAME}'s own agents never starts a run.`,
   },
 ];
 
@@ -1687,8 +1689,8 @@ function WebhookRows({
         description={
           <>
             POST to the address with the secret as <code>Authorization: Bearer</code>. Don't send
-            secrets in the body: Fullspin hands the body to the run's agent, and it shows in the
-            run's transcript.
+            secrets in the body: {PRODUCT_NAME} hands the body to the run's agent, and it shows in
+            the run's transcript.
           </>
         }
       >
@@ -1724,7 +1726,7 @@ function WebhookRows({
         confirm={rotation}
         question={{
           title: "Make a new secret?",
-          body: `The secret your sender uses now stops working until you give it the new one, which Fullspin shows you once. ${IRREVERSIBLE_WORDS}`,
+          body: `The secret your sender uses now stops working until you give it the new one, which ${PRODUCT_NAME} shows you once. ${IRREVERSIBLE_WORDS}`,
           verb: "Make secret",
           running: "Making",
           loss: CONFIRM_LOSS.IRREVERSIBLE,

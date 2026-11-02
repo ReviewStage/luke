@@ -8,14 +8,14 @@
  * lowered to it on the way, for its next sessions, since Vercel reapplies a
  * sandbox's configuration at every resume, and one opened before its
  * snapshot retention was bounded is brought onto the bound
- * (`sandbox-retention.ts`), so its next stop writes the one snapshot Fullspin
- * keeps. A sandbox that is not running
+ * (`sandbox-retention.ts`), so its next stop writes the one snapshot we
+ * keep. A sandbox that is not running
  * has nothing to keep alive, and a stopped one is never resumed here.
  *
  * eve opens one persistent Vercel Sandbox per top-level session, tagged with
  * the session's id, and a worker shares its parent's; a stopped sandbox
- * keeps its checkout in snapshots until Vercel lets them expire. Once Fullspin
- * lets go of a session for good, the purge of a deleted task's
+ * keeps its checkout in snapshots until Vercel lets them expire. Once we
+ * let go of a session for good, the purge of a deleted task's
  * conversations or an account's deletion queues it
  * (`session-sandbox-cleanup.ts`), and the scheduled sweep takes the queue a
  * bounded batch at a time: every sandbox carrying the session's tag is

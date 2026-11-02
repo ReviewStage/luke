@@ -29,7 +29,7 @@ import { SLEEP_TOOL } from "./sleep.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /** The link of the task an agent on one works on, as its instructions are handed it. */
-const TASK_ADDRESS = "https://tryluke.dev/acme/plan/pl_1";
+const TASK_ADDRESS = "https://vespin.dev/acme/plan/pl_1";
 
 const SECRET = "eve-deployment-secret-1";
 const ACCOUNT = "user-a";
@@ -195,8 +195,8 @@ test("the deployment's retire of a session, which a delete a browser asked for e
   }
 });
 
-test("a Claude Code agent is told of Claude Code's own tools and never of Fullspin's it is not offered, and an eve agent of Fullspin's as before", () => {
-  // The tools Claude Code owns in place of Fullspin's, as eve's instructions name Fullspin's.
+test("a Claude Code agent is told of Claude Code's own tools and never of Vespin's it is not offered, and an eve agent of Vespin's as before", () => {
+  // The tools Claude Code owns in place of ours, as eve's instructions name ours.
   const LUKES = [
     "`bash`",
     "`read_file`",
@@ -242,7 +242,7 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Fullsp
           [],
           label,
         );
-        // The tools that touch Fullspin stay Fullspin's, under their own names.
+        // The tools that touch the app stay ours, under their own names.
         for (const kept of [INBOX_TOOLS.POST.name, CODER_TOOL.START_AGENT, CODER_TOOL.SHOW_IMAGE]) {
           assert.ok(claudeCode.includes(`\`${kept}\``), `${label}: ${kept}`);
         }
@@ -262,7 +262,7 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Fullsp
   }
 });
 
-test("a Claude Code or Codex agent is told of its browser, which Fullspin's MCP server serves it, with Playwright run from its own shell", () => {
+test("a Claude Code or Codex agent is told of its browser, which Vespin's MCP server serves it, with Playwright run from its own shell", () => {
   const BROWSER = `\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox`;
   const SHELL_OF = [
     [CODER_HARNESS.CLAUDE_CODE, "on Playwright from Bash,"],
@@ -294,9 +294,9 @@ test("a local agent is told its folders on the Mac, its own harness's sandbox, a
   const MAC = {
     local: true,
     isolation: DEVICE_ISOLATION.BARE,
-    checkoutPath: "/Users/dev/.luke/agents/a1/repository",
-    installedSkills: "/Users/dev/.luke/agents/a1/installed-skills",
-    sharedFiles: "/Users/dev/.luke/agents/a1/tmp",
+    checkoutPath: "/Users/dev/.vespin/agents/a1/repository",
+    installedSkills: "/Users/dev/.vespin/agents/a1/installed-skills",
+    sharedFiles: "/Users/dev/.vespin/agents/a1/tmp",
   };
   const SANDBOX_OF = [
     [CODER_HARNESS.CLAUDE_CODE, "Claude Code's own sandbox", "Codex's own sandbox"],
@@ -353,14 +353,14 @@ test.each([
     untold: ["Linux virtual machine of your own", "Claude Code's own sandbox"],
   },
 ])(
-  "a local agent run on Fullspin's sign-ins on its device ($isolation) is told where it runs and what it reaches, and to save pages where its device reads them",
+  "a local agent run on Vespin's sign-ins on its device ($isolation) is told where it runs and what it reaches, and to save pages where its device reads them",
   ({ isolation, told, untold }) => {
     const VM = {
       local: true,
       isolation,
-      checkoutPath: "/home/luke-host/.luke/agents/a1/repository",
-      installedSkills: "/home/luke-host/.luke/agents/a1/installed-skills",
-      sharedFiles: "/home/luke-host/.luke/agents/a1/tmp",
+      checkoutPath: "/home/luke-host/.vespin/agents/a1/repository",
+      installedSkills: "/home/luke-host/.vespin/agents/a1/installed-skills",
+      sharedFiles: "/home/luke-host/.vespin/agents/a1/tmp",
     };
     for (const repository of ["Acme/Relay", null]) {
       const words = coderInstructions(
@@ -389,8 +389,8 @@ test.each([
   },
 );
 
-test("a Codex agent is told of Codex's own tools and never of Fullspin's it is not offered, nor of Claude Code's", () => {
-  // Fullspin's tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.
+test("a Codex agent is told of Codex's own tools and never of Vespin's it is not offered, nor of Claude Code's", () => {
+  // Our tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.
   const LUKES = [
     "`bash`",
     "`read_file`",
@@ -463,7 +463,7 @@ test("a Codex agent is told of Codex's own tools and never of Fullspin's it is n
 });
 
 test("an agent on a task is told of the task's links, pages, and comments, and one an automation started with no task of its own pages alone", () => {
-  const TASK_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names a task";
+  const TASK_LINK = "`https://vespin.dev/<workspace>/plan/<id>` link names a task";
   const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;
   const COMMENTS = `answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\``;
   for (const brief of Object.values(AGENT_BRIEF)) {
@@ -574,7 +574,7 @@ test("the session sends whatever is ready for the developer to look at or review
   }
 });
 
-test("an agent writing as its developer is told to end every commit on the trailer naming Fullspin as co-author, one writing as the App is told never to add one, and both open a pull request through the service, never gh", () => {
+test("an agent writing as its developer is told to end every commit on the trailer naming Vespin as co-author, one writing as the App is told never to add one, and both open a pull request through the service, never gh", () => {
   const TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
   for (const brief of Object.values(AGENT_BRIEF)) {
     const developer = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS, TRAILER);
@@ -738,7 +738,7 @@ test("every agent is told to look at a UI it built in the image's Chromium and s
 });
 
 /** The task link the golden's on-task prompts were composed with. */
-const TASK_LINK = "https://tryluke.dev/acme/task/5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
+const TASK_LINK = "https://vespin.dev/acme/task/5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
 
 /** A coding agent's instructions, recorded for each brief, on a task and on none, byte for byte. */
 const CODER_PATH = fileURLToPath(
@@ -792,11 +792,11 @@ test("with Memory off the instructions say nothing of the workspace's memory; wi
       true,
     );
     assert.ok(!off.includes("## The workspace's memory"), brief);
-    assert.ok(!off.includes(`\`${CODER_TOOL.REMEMBER}\``), brief);
+    assert.ok(!off.includes(`\`${CODER_TOOL.SAVE_MEMORY}\``), brief);
     const start = on.indexOf("## The workspace's memory\n\n");
     const end = on.indexOf("## What your messages are", start);
     assert.ok(start > 0 && end > start, brief);
-    assert.ok(on.slice(start, end).includes(`\`${CODER_TOOL.RECALL}\``), brief);
+    assert.ok(on.slice(start, end).includes(`\`${CODER_TOOL.SEARCH_MEMORY}\``), brief);
     assert.equal(on.slice(0, start) + on.slice(end), off, brief);
   }
 });

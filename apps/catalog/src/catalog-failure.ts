@@ -2,11 +2,12 @@
  * catalog-failure.ts -- the failure every catalog example of a failure drawn in place stands on: reported nowhere, its details a fixed block like the one the panel builds, copied to the browser's own clipboard.
  */
 
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import type { ReportedFailure } from "@luke/ui/reported-failure";
 
 /** What a failure's Copy details puts on the clipboard, as the panel builds it from the failure's report. */
 const FAILURE_DETAILS = [
-  "Fullspin showed an error. Find it in Sentry and the logs by these details:",
+  `${PRODUCT_NAME} showed an error. Find it in Sentry and the logs by these details:`,
   "time: 2026-10-29T18:20:03.198Z",
   "failure.surface: tasks.read",
   "failure.kind: unexpected",

@@ -1,8 +1,8 @@
 /**
- * runner.ts -- one launch of a Fullspin agent: the bearer and the config line read, the harness the config names run (Claude Code here, Codex in `codex.ts`), and the launch's last event posted; for Claude Code, `query()` started in streaming input mode, Fullspin's lines fed to it, its messages posted out, and the launch ended when the agent's turn is.
+ * runner.ts -- one launch of an agent: the bearer and the config line read, the harness the config names run (Claude Code here, Codex in `codex.ts`), and the launch's last event posted; for Claude Code, `query()` started in streaming input mode, the service's lines fed to it, its messages posted out, and the launch ended when the agent's turn is.
  *
- * Two loops run side by side. The input loop reads Fullspin's lines, from stdin
- * or, where the config names the read, from Fullspin (`lines.ts`), and acts on
+ * Two loops run side by side. The input loop reads the service's lines, from stdin
+ * or, where the config names the read, from the service (`lines.ts`), and acts on
  * each at once: a message joins the prompt stream, a stop calls
  * `interrupt()`, a model change calls `setModel()` or `applyFlagSettings()`.
  * It never waits on the session's output, so a stop reaches the CLI even
@@ -17,13 +17,13 @@
  * runs before each `result`, reports that work (`background_tasks`,
  * `session_crons`), so the agent's turn is over at a `result` only when
  * the last Stop hook reported none, and otherwise the runner posts a WAITING
- * event and keeps the CLI up. Nor is it over while a message Fullspin sent during
+ * event and keeps the CLI up. Nor is it over while a message the service sent during
  * a turn is still unanswered: the CLI runs it as its next turn, and where a
  * `result` that named no prompt left the message, the launch fails once the
  * CLI has said nothing for `RUNNER_UNANSWERED`. A turn that
  * is over ends the launch, or, where the config asks it to stay `warm`,
- * posts IDLE and keeps the CLI up (`RUNNER_WARM`) for Fullspin's next message,
- * until Fullspin retires it or its cap ends it. A `result` after a stop
+ * posts IDLE and keeps the CLI up (`RUNNER_WARM`) for the service's next message,
+ * until the service retires it or its cap ends it. A `result` after a stop
  * ends the launch whatever is pending, and so does one no Stop hook came
  * before, such as an error's. A stop interrupts whichever turn is running, a
  * wakeup's included, and ends a launch with none at once.
@@ -95,14 +95,14 @@ import {
 } from "./protocol.js";
 import { oneShotDueAt } from "./wakeups.js";
 
-/** The name the Fullspin MCP server is registered under, so its tools reach the model as `mcp__luke__<tool>`. */
+/** The name our MCP server is registered under, so its tools reach the model as `mcp__luke__<tool>`. */
 const MCP_SERVER = "luke";
 
 /**
  * The variables no command the agent runs may see: the plan's token, every
  * other way the CLI could be handed one, and the runner's own bearer. Denied
  * rather than masked, as P00 found, because no command the agent runs has a
- * reason to reach Anthropic or Fullspin as the agent.
+ * reason to reach Anthropic or the service as the agent.
  */
 const DENIED_VARIABLES = [
   RUNNER_ENV.CLAUDE_TOKEN,
@@ -115,7 +115,7 @@ const DENIED_VARIABLES = [
 /**
  * The worker the agent hands a scoped job to (`CLAUDE_CODE_WORKER`): its
  * own model's, without the tools that write a file, start another worker,
- * or act through Fullspin, and told it never commits or pushes, which Bash
+ * or act through the service, and told it never commits or pushes, which Bash
  * alone could still do.
  */
 const WORKER: AgentDefinition = {
@@ -200,7 +200,7 @@ function commandSandbox(config: ClaudeCodeConfig): NonNullable<Options["sandbox"
     network: { allowedDomains: [...config.allowedDomains] },
     credentials: { envVars: DENIED_VARIABLES.map((name) => ({ name, mode: "deny" })) },
     // Note that a command writes only the checkout and the CLI's own temp folder otherwise, which
-    // Fullspin cannot read, so a screenshot saved anywhere but the checkout never reaches the developer.
+    // we cannot read, so a screenshot saved anywhere but the checkout never reaches the developer.
     filesystem: { allowWrite: [SHARED_FILES_DIRECTORY] },
   };
 }
@@ -238,7 +238,7 @@ function queryOptions(
     // leaves an undefined one unset.
     env: { ...env, ...SANDBOX_TOOL_ENV, [RUNNER_ENV.BEARER]: undefined },
     // Note that the SDK puts an HTTP server's config, headers and all, in the
-    // CLI's argv, which any process in the sandbox can read, so Fullspin's is an
+    // CLI's argv, which any process in the sandbox can read, so ours is an
     // SDK server the runner relays over the CLI's own stdio (`mcp-relay.ts`), as is each integration's.
     mcpServers: { ...servers },
     sandbox: runsOnHost(env) ? { enabled: false } : commandSandbox(config),
@@ -250,7 +250,7 @@ function queryOptions(
   if (from.resume !== undefined) options.resume = from.resume;
   if (from.at !== undefined) options.resumeSessionAt = from.at;
   // The member's installed skills load as a local plugin, which leaves the checkout and the
-  // settings Claude Code reads (`project` alone) as they stand; Fullspin holds its MCP servers.
+  // settings Claude Code reads (`project` alone) as they stand; we hold its MCP servers.
   const manifest = installedSkillsPath(config.installedSkills, INSTALLED_SKILLS.MANIFEST);
   if (manifest !== undefined && config.installedSkills !== undefined) {
     options.plugins = [{ type: "local", path: config.installedSkills, skipMcpDiscovery: true }];
@@ -283,9 +283,9 @@ interface Launch {
   readonly prompts: Queue.Queue<SDKUserMessage, Cause.Done>;
   readonly sink: EventSink;
   readonly inFlight: MutableRef.MutableRef<InFlight | undefined>;
-  /** Whether the CLI is in a turn: from a message Fullspin sent, or from the CLI's own output, a wakeup's turn included. */
+  /** Whether the CLI is in a turn: from a message the service sent, or from the CLI's own output, a wakeup's turn included. */
   readonly turnRunning: Ref.Ref<boolean>;
-  /** The messages Fullspin sent that no `result` has answered yet, by their uuid. */
+  /** The messages the service sent that no `result` has answered yet, by their uuid. */
   readonly unanswered: Ref.Ref<ReadonlySet<string>>;
   /** How many messages of turn output the CLI has put out, so a held message's bound sees whether the CLI has said anything since. */
   readonly heard: Ref.Ref<number>;
@@ -296,7 +296,7 @@ interface Launch {
   readonly warmable: boolean;
   /** Whether the launch is warm: its turn over at an IDLE, and nothing taken or begun since. */
   readonly warm: Ref.Ref<boolean>;
-  /** The wakeups a released wait left for Fullspin to deliver; none until it is released. */
+  /** The wakeups a released wait left for the service to deliver; none until it is released. */
   readonly released: Ref.Ref<readonly RunnerWakeup[] | undefined>;
   /** Held while a message is taken into the launch and while a wait is released, so no message lands in a launch a release ends. */
   readonly admission: Semaphore.Semaphore;
@@ -309,7 +309,7 @@ interface Launch {
  * Calls one of the session's control requests, reporting a failure rather
  * than ending the launch on it; answers whether the CLI answered within
  * `RUNNER_CONTROL.ANSWER_MS`. Note that one it never answers is let go, so
- * it holds up none of Fullspin's later lines.
+ * it holds up none of the service's later lines.
  */
 function control(step: string, call: () => Promise<unknown>) {
   return Effect.tryPromise(call).pipe(
@@ -323,7 +323,7 @@ function control(step: string, call: () => Promise<unknown>) {
   );
 }
 
-/** One of Fullspin's lines, acted on at once. */
+/** One of the service's lines, acted on at once. */
 const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, text: string) {
   const line = decodeLine(text);
   if (Option.isNone(line)) {
@@ -339,7 +339,7 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
       return yield* launch.admission.withPermit(
         Effect.gen(function* () {
           // A launch a released wait ended takes nothing more: the line stays unaccepted, for the
-          // launch Fullspin starts on its END, or on its next send, to be handed.
+          // launch the service starts on its END, or on its next send, to be handed.
           if ((yield* Ref.get(launch.released)) !== undefined) {
             return yield* Effect.logWarning(
               "agent-runner: skipped a message for a released launch",
@@ -427,7 +427,7 @@ function promptsOf(result: SdkResult): readonly string[] | undefined {
 }
 
 /**
- * The messages Fullspin sent that a `result` leaves unanswered: all but those it
+ * The messages the service sent that a `result` leaves unanswered: all but those it
  * names, since a result names every prompt its turn consumed, folded ones
  * included, and the CLI runs a message left as its next turn. Note that we
  * take a result naming no prompt as answering nothing, because the CLI runs
@@ -462,7 +462,7 @@ const takeMessage = Effect.fn("agent-runner/takeMessage")(function* (
   if (yield* Ref.get(launch.stopping)) {
     return yield* Deferred.succeed(launch.ended, RUNNER_END.STOPPED);
   }
-  // A message Fullspin sent that the turn did not take runs as the CLI's next
+  // A message the service sent that the turn did not take runs as the CLI's next
   // turn, so the launch goes on until it is answered; bounded where the
   // `result` took none, since nothing then says the CLI will take it up.
   const left = stillUnanswered(yield* Ref.get(launch.unanswered), message);
@@ -502,8 +502,8 @@ const stillWarm = Effect.fn("agent-runner/stillWarm")(function* (launch: Launch)
 
 /**
  * The agent's turn over, and the launch kept warm rather than ended: its
- * IDLE posted, so Fullspin settles the turn, and a watch armed that ends it at
- * `RUNNER_WARM.IDLE_CAP_MS` where Fullspin never retires it. Decided under the
+ * IDLE posted, so the service settles the turn, and a watch armed that ends it at
+ * `RUNNER_WARM.IDLE_CAP_MS` where the service never retires it. Decided under the
  * admission, so a message taken since the `result` starts the CLI's next
  * turn instead, and posts no IDLE for a turn that is not over.
  */
@@ -670,7 +670,7 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
     firstSequence: config.firstSequence,
   };
 
-  // Fullspin closing stdin ends the prompt stream, and the CLI ends once it has
+  // The service closing stdin ends the prompt stream, and the CLI ends once it has
   // answered what it was given.
   const inputLoop = Effect.gen(function* () {
     for (;;) yield* takeLine(launch, yield* Queue.take(lines));
@@ -699,7 +699,7 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
   const posting = yield* Effect.forkScoped(outputLoop);
 
   // The loops stop before the launch's last event is posted, so nothing the
-  // CLI emits on the way down is numbered after it. Note that Fullspin's lines
+  // CLI emits on the way down is numbered after it. Note that the service's lines
   // stop first, so none is taken into a CLI being closed, and the CLI is
   // closed before the output loop is waited on, because the SDK's iterator
   // answers its return only once the read under way does, which a quiet CLI
@@ -718,7 +718,7 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
 
 /**
  * One launch, from its config line to its last event. Answers why it ended;
- * fails where it never started, or where Fullspin would not take its events.
+ * fails where it never started, or where the service would not take its events.
  */
 export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: RunnerInput) {
   const bearerValue = input.env[RUNNER_ENV.BEARER];
@@ -735,9 +735,9 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
   const secrets = [bearer, ...tokens];
 
   // Stdin is read in a loop of its own from the first line on, so nothing
-  // the session does can hold up a line Fullspin wrote. Its end ends Fullspin's lines
+  // the session does can hold up a line the service wrote. Its end ends the service's lines
   // only where the config names no read of them, since a launch that reads
-  // them from Fullspin goes on past it, and at once where it ended before the
+  // them from the service goes on past it, and at once where it ended before the
   // config, which then never comes.
   const lines = yield* Queue.unbounded<string, Cause.Done>();
   const readsLines = yield* Deferred.make<boolean>();
@@ -768,8 +768,8 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     firstSequence: config.firstSequence,
     secrets,
   });
-  // A config that names the read has Fullspin's later lines read from Fullspin, beside any stdin still
-  // carries, into the same queue, so neither harness knows where a line came from.
+  // A config that names the read has the service's later lines read from it, beside any
+  // stdin still carries, into the same queue, so neither harness knows where a line came from.
   if (config.linesUrl !== undefined) {
     const read = { url: config.linesUrl, bearer, launch: config.firstSequence };
     yield* Effect.forkScoped(readLines(read, lines));
@@ -787,7 +787,7 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     ...(wakeups === undefined ? undefined : { wakeups }),
   };
   yield* sink.emit(last);
-  // A stopped launch is Fullspin's own doing, so it does not wait out an outage for its last events.
+  // A stopped launch is our own doing, so it does not wait out an outage for its last events.
   yield* end === RUNNER_END.STOPPED ? sink.drainStopped : sink.drain;
   return end;
 });

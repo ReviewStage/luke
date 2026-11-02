@@ -4,7 +4,7 @@
  * eve's agents reach an integration through eve's two built-in tools over
  * the connection each turn is handed (`../agents/agent-runtime/connections.ts`).
  * A native harness's agent is handed each connection as an MCP server of
- * its own at Fullspin (`../agents/luke-mcp/app.ts`), the way Claude Code and
+ * its own at the service (`../agents/luke-mcp/app.ts`), the way Claude Code and
  * Codex take any remote server: its launch names one server per connection
  * (`nativeAgentConnections`), and each server lists the provider's own tools
  * and forwards a call of one, which is this door.
@@ -28,10 +28,10 @@
  * every call keeps its grant's list current at no further ask. A token the
  * provider refuses is dropped from Connect's in-process cache and read once
  * more (`evictGrantToken`), never forced fresh on every read. A grant
- * revoked at the provider that Fullspin has not yet seen lists its kept tools,
+ * revoked at the provider that we have not yet seen lists its kept tools,
  * and its first call answers why.
  *
- * Fullspin's account settings are where an integration is connected, so
+ * The app's account settings are where an integration is connected, so
  * nothing here starts a sign-in: a connection the member has not
  * connected, or whose grant expired, lists no tools, and a call of it is
  * refused with `requiresSignIn` and the sentence that says how to connect it.
@@ -459,7 +459,7 @@ export function callConnectionTool(
       Effect.as(
         Effect.logWarning(`integration server ${name} call failed: ${causeKind(cause)}`),
         Result.fail(
-          refused("Fullspin could not reach this integration just now; try again in a moment."),
+          refused("This integration could not be reached just now; try again in a moment."),
         ),
       ),
     ),

@@ -4,10 +4,10 @@ import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
 /**
- * integration.ts -- one account's connection to one account at an integration, as Fullspin holds it.
+ * integration.ts -- one account's connection to one account at an integration, as we hold it.
  *
  * Vercel Connect keeps each provider's grant and refreshes it; this row is
- * Fullspin's own word on whether its agents may use that grant, because Connect
+ * our own word on whether its agents may use that grant, because Connect
  * has no way to ask whether a sign-in finished and its SDK caches tokens in
  * process. A row standing `connected` is what lets an agent read a token
  * (`packages/service/src/integrations/integration-connection.ts`); no row is a disconnected provider, so
@@ -17,13 +17,13 @@ import { user } from "./auth.js";
  * finds the row by it alone; it stands only while a sign-in is under way, and
  * a connected row keeps its status while the account signs in again.
  *
- * A Fullspin account may hold more than one account at a provider (two Notion
+ * A user account may hold more than one account at a provider (two Notion
  * workspaces), each its own row and its own grant: `connectSubject` is the
  * subject every ask of Connect names for it, so two rows are two grants, and
  * `connectionName` is the one name the account goes by everywhere else (eve's
  * connection, a coding agent's switches and mentions, the routes' query).
  * The account first connected at a provider is named after the provider and
- * asks under the Fullspin account's own user id, as every row did before a second
+ * asks under our account's own user id, as every row did before a second
  * one was possible.
  *
  * `tools` is the list the provider's MCP server last gave this account
@@ -54,7 +54,7 @@ export const integrationConnection = pgTable(
     state: text("state"),
     /** When the sign-in under way began; null when none is. */
     stateIssuedAt: timestamptz("state_issued_at"),
-    /** Retired: Connect's handle on a sign-in, read by nothing since Fullspin stopped asking Connect's undocumented result endpoint; dropped once that deployment drains. */
+    /** Retired: Connect's handle on a sign-in, read by nothing since we stopped asking Connect's undocumented result endpoint; dropped once that deployment drains. */
     connectVerifier: text("connect_verifier"),
     /** When a sign-in last completed; null until one has. */
     connectedAt: timestamptz("connected_at"),

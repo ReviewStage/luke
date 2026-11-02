@@ -18,7 +18,7 @@ import {
 /**
  * What the panel beside an Inbox item opens of a link pressed on the item:
  * a file of the task's repository, a page of the task, an agent of the
- * task's transcript, an agent's Pull request tab as a Fullspin link names it, or that tab on its conversation as
+ * task's transcript, an agent's Pull request tab as an app link names it, or that tab on its conversation as
  * the pull request's own page on GitHub names it, by its number where it is
  * another pull request of the task's repository.
  */
@@ -70,7 +70,7 @@ function holdsAgent(
 
 /**
  * What the panel beside the item opens of the link, or nothing where the
- * window opens it, leaving the Inbox or for the browser: a Fullspin link to a
+ * window opens it, leaving the Inbox or for the browser: an app link to a
  * page or an agent's Pull request tab of the item's own task, the page on
  * GitHub of a pull request one of its agents opened, or a file of the
  * item's repository on GitHub, which the panel reads through the task it

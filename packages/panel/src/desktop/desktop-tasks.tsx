@@ -72,7 +72,7 @@ import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { DesktopWelcome } from "./desktop-welcome.js";
 import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
-import { PhoneBack, PhoneHead, PlaceMore, phoneBar } from "./phone-head.js";
+import { PhoneBack, PhoneHead, PlaceMore, phoneBar, phoneFindGroups } from "./phone-head.js";
 import { PlanAgents } from "./plan-agents.js";
 import { PlanRelations } from "./plan-relations.js";
 import { type InboxItemAsk, SideInboxTab } from "./side-inbox-tab.js";
@@ -1108,7 +1108,11 @@ function PlanDocument({
         <PlaceMore
           thing="Task"
           shown={tasks.shown}
-          groups={(opener) => [taskPaneItems(pane, choosePane), ...shownGroups(opener)]}
+          groups={(opener) => [
+            taskPaneItems(pane, choosePane),
+            ...phoneFindGroups(),
+            ...shownGroups(opener),
+          ]}
           ends={() => (pane === TASK_PANE.PLAN ? planMenu : undefined)}
         />
       }
@@ -1385,7 +1389,7 @@ export const DesktopTasks = memo(function DesktopTasks({
         <SkillFiles
           source={tasks.agents.readSkills}
           // Note that a skill's file opens as a file the palette finds does, whole,
-          // so its tab stands on this task though Fullspin never showed it.
+          // so its tab stands on this task though the app never showed it.
           onOpen={(skill) => tasks.sidePanel.onOpenFile({ path: skill.path })}
         >
           <PlanDocument

@@ -39,8 +39,8 @@ import {
  * on a thread of its own, which its subagent call stands for, so anything
  * of a thread other than the session's is passed over but the end of its
  * turn, which settles the spawn that started it: the spawn answers the
- * moment the thread starts, so it is kept open until then. A call to Fullspin's own
- * MCP server is named as Fullspin's tool and its answer read as the JSON that
+ * moment the thread starts, so it is kept open until then. A call to our own
+ * MCP server is named as our tool and its answer read as the JSON that
  * tool answers, a picture in it standing in for its bytes; a call to an
  * integration's own server is stored as eve's call of that integration's
  * tool is, so it draws with the service's mark and the tool's own name. Each shape is
@@ -259,7 +259,7 @@ interface Answered extends Call {
 }
 
 /**
- * An MCP result's text blocks joined. A picture in a Fullspin tool's answer is
+ * An MCP result's text blocks joined. A picture in our own tool's answer is
  * left out, so the JSON the tool answered reads whole; in any other server's
  * a stand-in takes the place of its bytes.
  */
@@ -275,8 +275,8 @@ function mcpAnswerText(content: readonly WireValue[], lukeTool: boolean): string
 }
 
 /**
- * The name and input a call to an MCP server is stored under: Fullspin's tool's
- * own for Fullspin's server; for an integration's own server, its integration's
+ * The name and input a call to an MCP server is stored under: our tool's own
+ * for our own server; for an integration's own server, its integration's
  * fixed name and envelope, as eve's nested call of the tool is stored
  * (`storedServerCall`); `mcpToolCall` naming the server and tool otherwise.
  */

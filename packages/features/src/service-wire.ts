@@ -77,13 +77,13 @@ export const HOSTED_API_ERROR = {
   AGENT_IMAGE_PREPARING: "agent-image-preparing",
   /**
    * The agent runs on a native harness (Claude Code or Codex) that this part
-   * of Fullspin cannot reach yet, such as a call, which runs on eve alone; nothing
+   * of the app cannot reach yet, such as a call, which runs on eve alone; nothing
    * was written or charged. It is reached from the agent's own tab.
    */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
   /**
    * What was asked runs on OpenAI (a voice call, a dictated clip) and the
-   * account saved no OpenAI API key of its own, which Fullspin spends none of its
+   * account saved no OpenAI API key of its own, which we spend none of our
    * own in place of; nothing was sent or charged. The key is added in Settings.
    */
   OPENAI_KEY_MISSING: "openai-key-missing",
@@ -128,7 +128,7 @@ export const HOSTED_API_ERROR = {
   /**
    * The account keeps no credential that pays for a coding agent on the
    * model's provider: neither that provider's subscription (a Claude
-   * setup-token, a ChatGPT sign-in) nor its API key. Fullspin's own key pays for
+   * setup-token, a ChatGPT sign-in) nor its API key. Our own key pays for
    * no coding agent, so nothing was written; the refusal names the provider,
    * which the account connects in Settings › Agents.
    */

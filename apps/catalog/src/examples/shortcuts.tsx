@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { APP_COMMAND, APP_SHORTCUTS, SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import { GAP, Inline, Shortcut, Stack, Text } from "@luke/ui";
 import type { Example } from "../examples";
@@ -24,7 +25,7 @@ function Shortcuts(): React.JSX.Element {
             <Shortcut chord={{ key: SHORTCUT_KEY.ESCAPE, bare: true }} />
           </Inline>
           <Inline gap={GAP.CONTROL}>
-            <Text>Talk to Fullspin</Text>
+            <Text>Talk to {PRODUCT_NAME}</Text>
             <Shortcut accelerator="Alt+Space" />
           </Inline>
         </Stack>

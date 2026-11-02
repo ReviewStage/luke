@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   TASK_STATUS,
   type Task,
@@ -156,20 +157,18 @@ export function repositoryOwnerPictureUrl(repository: string): string {
 }
 
 /** What the New task dialog says when the service answered no task, beside its Retry. */
-const START_FAILED_NOTE = "Fullspin's service did not answer.";
+const START_FAILED_NOTE = "The service did not answer.";
 
 /** What a call that named a repository says when the service refused it, by its reason, beside a Retry. */
 const REPOSITORY_FAILURE_NOTES = {
   [TASK_CALL_FAILURE.UNANSWERED]: START_FAILED_NOTE,
-  [TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Fullspin cannot see that repository on GitHub. Choose which repositories Fullspin can see.",
+  [TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]: `${PRODUCT_NAME} cannot see that repository on GitHub. Choose which repositories ${PRODUCT_NAME} can see.`,
 } as const satisfies Record<RepositoryCallFailure, string>;
 
 /** The same refusals of a change of the task's repository, said under its chip with no Retry beside them. */
 const REPOSITORY_CHANGE_FAILURE_NOTES = {
-  [TASK_CALL_FAILURE.UNANSWERED]: "Fullspin's service did not answer. Try again.",
-  [TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Fullspin cannot see that repository on GitHub. Choose which repositories Fullspin can see, then try again.",
+  [TASK_CALL_FAILURE.UNANSWERED]: "The service did not answer. Try again.",
+  [TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]: `${PRODUCT_NAME} cannot see that repository on GitHub. Choose which repositories ${PRODUCT_NAME} can see, then try again.`,
 } as const satisfies Record<RepositoryCallFailure, string>;
 
 /** The sentence the page shows beside its Retry for a start or a read of repositories the service refused. */

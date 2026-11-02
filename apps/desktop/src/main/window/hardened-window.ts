@@ -2,7 +2,7 @@ import type { RunMode } from "@luke/host";
 import type { BrowserWindow } from "electron";
 
 /**
- * The one posture every renderer window of Fullspin's runs under: the sandbox,
+ * The one posture every renderer window of the app's runs under: the sandbox,
  * and the navigation refusals below, kept here once.
  */
 export function hardenedWebPreferences(input: {

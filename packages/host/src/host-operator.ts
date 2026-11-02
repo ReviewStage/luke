@@ -504,7 +504,7 @@ export interface HostOperator {
   /** One repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
   tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
   tasksWriteSection(params: TasksWriteSectionParams): Effect.Effect<boolean>;
-  /** The repositories the account reaches through the Fullspin GitHub App, read from the service now; or why there is no list. */
+  /** The repositories the account reaches through our GitHub App, read from the service now; or why there is no list. */
   tasksRepositories(params: TasksRepositoriesParams): Effect.Effect<TasksRepositoriesAnswer>;
   /** One task given its repository, or none; the repository as kept, or why it is unchanged. */
   tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
@@ -601,7 +601,7 @@ export interface HostOperator {
   ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
   /** A workspace's GitHub organization disconnected; the workspace as it then stands, or why it is not. */
   workspaceGitHubDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** Whether the deployment holds Fullspin's Sentry integration, and a workspace's installations of it; or why there is no answer. */
+  /** Whether the deployment holds our Sentry integration, and a workspace's installations of it; or why there is no answer. */
   workspaceSentry(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSentryAnswer>;
   /** A workspace's Sentry install begun; Sentry's install address to open, or why there is none. */
   workspaceSentryInstall(
@@ -811,7 +811,7 @@ export interface HostOperator {
   ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams; or why there is no answer. */
   agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
-  /** Which of Fullspin's own tools one agent is offered and whether its `run_on_mac` would run now; or why there is no answer. */
+  /** Which of our own tools one agent is offered and whether its `run_on_mac` would run now; or why there is no answer. */
   agentLukeTools(params: AgentPullRequestParams): Effect.Effect<AgentLukeToolsAnswerView>;
   /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
   agentOverviewChecks(
@@ -839,7 +839,7 @@ export interface HostOperator {
   githubTokenSave(params: GitHubTokenSaveParams): Effect.Effect<GitHubTokenAnswerView>;
   /** The member's GitHub token removed; none then stands. */
   githubTokenRemove(): Effect.Effect<GitHubTokenAnswerView>;
-  /** The memories Fullspin's agents kept in a workspace; or why there are none. */
+  /** The memories our agents kept in a workspace; or why there are none. */
   memoriesRead(params: MemoriesReadParams): Effect.Effect<MemoriesAnswerView>;
   /** One memory forgotten for good; the workspace's memories as they then stand, or why they are unchanged. */
   memoryForget(params: MemoryForgetParams): Effect.Effect<MemoriesAnswerView>;
@@ -1011,7 +1011,7 @@ function record(result: GatewayCallResult): WireRecord | undefined {
 
 /** One answered value of the host's, as the domain type its method documents. */
 function answered<Value>(value: UnparsedWireValue): Value | undefined {
-  // SAFETY: the host is Fullspin's own authenticated process answering the shape the method documents; the act's own answer guard re-checks it before a renderer sees it.
+  // SAFETY: the host is our own authenticated process answering the shape the method documents; the act's own answer guard re-checks it before a renderer sees it.
   return value === undefined ? undefined : (value as unknown as Value);
 }
 

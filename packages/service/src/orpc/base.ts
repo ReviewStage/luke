@@ -167,7 +167,7 @@ export interface DeviceCaller extends HostedCaller {
  * secret no standing machine holds and a host program below the floor).
  * A desktop's own sign-in, which released desktop builds followed the
  * queue on before every machine ran the host program, is refused as
- * needing an upgrade, so such a build says to update Fullspin rather than
+ * needing an upgrade, so such a build says to update the app rather than
  * failing unexplained; any other bearer is refused as unauthenticated. The
  * one read of a device's caller, which the device-agents procedures and
  * the runner token route both take.

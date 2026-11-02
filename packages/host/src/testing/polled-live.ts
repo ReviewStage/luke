@@ -17,7 +17,7 @@ import { Deferred, Effect } from "effect";
  * missed until a later one, as a follow that missed it would. Rows `set` on
  * such a read stand over what it reads until the next `move`. A `set` may
  * name the txids of the writes that moved it, which every part of each
- * answer carries until the next `set` or `move`, as an answer Fullspin Sync woke
+ * answer carries until the next `set` or `move`, as an answer Sync woke
  * does.
  */
 export function polledLive<

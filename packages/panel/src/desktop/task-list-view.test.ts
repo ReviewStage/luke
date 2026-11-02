@@ -602,7 +602,7 @@ test("a one-off agent's row offers Copy link on a right-click, copying the agent
   });
   await act(async () => menuItem("Copy link").click());
 
-  assert.deepEqual(copied, ["https://tryluke.dev/acme/agent/a-1"]);
+  assert.deepEqual(copied, ["https://vespin.dev/acme/agent/a-1"]);
   assert.equal(newestToastSays(), "Link copied");
 });
 

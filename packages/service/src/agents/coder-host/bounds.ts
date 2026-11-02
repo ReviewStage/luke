@@ -1,6 +1,7 @@
 import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/agent-status";
 import { AGENT_MACHINE, type AgentMachineKind } from "@luke/features/agent-wire";
 import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { Duration } from "effect";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 
@@ -67,7 +68,7 @@ export const CODER = {
   /**
    * The repositories whose agents' sandboxes open larger than
    * `SANDBOX_VCPUS`, by `owner/name` lowercased, as `sandboxVcpus` reads
-   * them; a repository asks for more by a row here. Fullspin's own is four,
+   * them; a repository asks for more by a row here. This repository's own is four,
    * because its typecheck needs about 5 GB of real memory. Measured on a
    * fresh checkout: `pnpm typecheck` takes 83 seconds at four vCPUs and peaks
    * near 5.2 GB, and at two vCPUs (4 GB) it is killed out of memory at a
@@ -219,7 +220,7 @@ export const CODER = {
    * through a relaunched CLI, a new GitHub token, and the last runner's
    * grace. Thirty, half the runner's own cap (`@luke/agent-runner`'s
    * `RUNNER_WARM.IDLE_CAP_MS`, sixty minutes), because the window is closed
-   * by Fullspin's retire under the lease and never by the runner ending itself,
+   * by our retire under the lease and never by the runner ending itself,
    * whose stdin a message its host writes in that instant is lost on: the
    * sweep retires it past the window, a message sent past it ends the
    * runner and relaunches whether or not the sweep ran (`sendHolding`), and
@@ -229,7 +230,7 @@ export const CODER = {
    * to end on its own, because a runner ending by itself stops reading its
    * stdin while its END is still posted, and a message written then would be
    * taken as delivered and never run; a runner that reads its lines from
-   * Fullspin leaves such a message waiting instead, and its END hands it on
+   * the service leaves such a message waiting instead, and its END hands it on
    * (`runner-sessions.ts`'s `LINES_WAITING`). A window is one line here:
    * raise it, and its sweep retires runners past it.
    */
@@ -291,13 +292,11 @@ export const CODER_MODEL_FIXTURE = {
 export const CODER_REFUSAL = {
   NO_AGENT: "Not run: this conversation is no agent's.",
   NO_REPOSITORY: "Not run: the agent works in no repository.",
-  UNKNOWN_PROVIDER: "Not run: the agent's model is outside the providers Fullspin runs agents on.",
+  UNKNOWN_PROVIDER: `Not run: the agent's model is outside the providers ${PRODUCT_NAME} runs agents on.`,
   NO_PROVIDER_KEY: "Not run: the account saved no API key for the agent's model provider.",
-  NO_FAST_VERSION:
-    "Not run: Fullspin cannot run the fast version of the agent's model at its provider. Choose the model with Fast off.",
+  NO_FAST_VERSION: `Not run: ${PRODUCT_NAME} cannot run the fast version of the agent's model at its provider. Choose the model with Fast off.`,
   /** No step is refused this way since Fast runs on an account's own key; kept for the turns that were refused so before, which still read as this. */
-  FAST_ON_OWN_KEY:
-    "Not run: Fast isn't available on your own API key; Fullspin runs Fast on its own Anthropic key alone. Choose the model with Fast off.",
+  FAST_ON_OWN_KEY: `Not run: Fast isn't available on your own API key; ${PRODUCT_NAME} runs Fast on its own Anthropic key alone. Choose the model with Fast off.`,
   /** No step fails this way since a refused fast call runs at standard speed; kept for the turns that failed so before, which still read as this. */
   FAST_NOT_ENABLED:
     "Not run: Fast mode isn't enabled for this Anthropic organization. Choose the model with Fast off.",

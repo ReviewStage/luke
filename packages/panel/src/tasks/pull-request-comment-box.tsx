@@ -13,7 +13,7 @@ import {
  *
  * The comment is one change (`PULL_REQUEST_ACTION.COMMENT`), made on GitHub
  * by the service as the member pressing Comment, on their own GitHub
- * sign-in and never the Fullspin GitHub App's. Once GitHub took it the box lets
+ * sign-in and never our GitHub App's. Once GitHub took it the box lets
  * its words go and the tab reads the conversation again, so the comment
  * stands in it; GitHub's refusal stands under the box in its own words,
  * with the sign-in offered where GitHub would not take the member's, and

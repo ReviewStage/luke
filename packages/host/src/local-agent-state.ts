@@ -24,8 +24,8 @@ const STATE_FILE = "local-agents.json";
  * whose folder this machine made, named for the agent, from its first
  * launch or files, or, for one it last ran before it kept this record, the
  * first time its follower's gate opens after, until a discard removes its
- * folder. The folder stands in the user's own `~/.luke/agents`, which every
- * Fullspin install for that user shares, so `luke-host uninstall` reads this to
+ * folder. The folder stands in the user's own `~/.vespin/agents`, which every
+ * install for that user shares, so `luke-host uninstall` reads this to
  * remove its own and no other's (`apps/host/scripts/luke-host.sh`), and the
  * follower to pass over its own alone (`ownedAgents`).
  */

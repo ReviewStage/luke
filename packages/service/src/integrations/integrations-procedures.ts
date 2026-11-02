@@ -3,7 +3,7 @@
  *
  * Seven procedures the signed-in desktop calls with its bearer, or a page of
  * the deployment's own with its session cookie; the browser's return from a
- * sign-in is `integrations-app.ts`'s. A Fullspin account may hold more than
+ * sign-in is `integrations-app.ts`'s. A user account may hold more than
  * one account at a provider, each its own row and grant under its own
  * connection name; every route about one account reads it from the
  * `connection` query beside the provider, and without one means the
@@ -16,7 +16,7 @@
  *   desktop that reads again after the browser closed learns the outcome
  *   whatever address the browser was returned to; one with no token yet
  *   stands pending until its window runs out, since Connect documents no
- *   way to ask why a sign-in that never returned to Fullspin ended. A provider
+ *   way to ask why a sign-in that never returned to us ended. A provider
  *   the deployment does not offer the account
  *   (`accountIntegrationConnect`) stands unavailable, and every route below
  *   refuses it as one with no connector here. A caller with only the
@@ -149,7 +149,7 @@ interface ToolsRead {
   readonly tools: readonly McpTool[];
 }
 
-/** The tools read lately, by Fullspin account and then by connection name, for as long as the instance stands. */
+/** The tools read lately, by user account and then by connection name, for as long as the instance stands. */
 type ToolsCache = Map<string, Map<string, ToolsRead>>;
 
 /** Every read past its time let go, so an instance that stands long holds the lists of no account that stopped asking. */

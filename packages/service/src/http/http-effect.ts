@@ -154,7 +154,7 @@ export const HOSTED_REFUSAL = {
   AGENT_PLAN_LIMIT_REACHED: { error: HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED },
   /** The agent runs on its starter's plan, which its provider said is not eligible to run it; nothing was written, and nothing turned to another payer. */
   AGENT_PLAN_INELIGIBLE: { error: HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE },
-  /** The account keeps neither the model provider's subscription nor its API key, and Fullspin's key pays for no coding agent; nothing was written. */
+  /** The account keeps neither the model provider's subscription nor its API key, and our key pays for no coding agent; nothing was written. */
   AGENT_CREDENTIAL_MISSING: { error: HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING },
   /** The agent runs on its starter's API key, which is saved but does not open under this deployment's key ring; nothing was written, and no retry opens it. */
   AGENT_API_KEY_UNREADABLE: { error: HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE },

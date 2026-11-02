@@ -59,7 +59,7 @@ export function createElectronBuilderConfig(env = process.env) {
   const developerIdSigned = signing.mode === SIGNING_MODE.DEVELOPER_ID;
 
   return {
-    appId: "dev.reviewstage.luke",
+    appId: "dev.vespin.app",
     productName,
     copyright: `Copyright (c) ${new Date().getFullYear()} Stage Inc.`,
     electronVersion: desktopPackage.devDependencies.electron,
@@ -127,7 +127,7 @@ export function createElectronBuilderConfig(env = process.env) {
     mac: {
       category: "public.app-category.developer-tools",
       target: "default",
-      artifactName: `Luke-\${version}-macos-\${arch}.\${ext}`,
+      artifactName: `Vespin-\${version}-macos-\${arch}.\${ext}`,
       executableName: productName,
       icon: packageAssets.iconPath,
       identity: developerIdSigned ? signing.identity : "-",
@@ -146,10 +146,10 @@ export function createElectronBuilderConfig(env = process.env) {
           HOST_RESOURCES.node,
         ),
       ],
-      // The app's own scheme, which a Luke link's "Open in Luke" page hands
+      // The app's own scheme, which an app link's page that opens it in the app hands
       // the plan to (`src/main/services/window-service.ts`): written into the
       // bundle's CFBundleURLTypes, which macOS registers the app for.
-      protocols: [{ name: "Luke link", schemes: ["tryluke"], role: "Viewer" }],
+      protocols: [{ name: "Vespin link", schemes: ["vespin", "tryluke"], role: "Viewer" }],
       extendInfo: {
         CFBundleName: productName,
         CFBundleDisplayName: productName,
@@ -160,7 +160,7 @@ export function createElectronBuilderConfig(env = process.env) {
       },
     },
     dmg: {
-      artifactName: `Luke-\${version}-\${arch}.\${ext}`,
+      artifactName: `Vespin-\${version}-\${arch}.\${ext}`,
       title: RELEASE_VOLUME_NAME,
       background: packageAssets.dmgBackgroundPath,
       iconSize: DMG_WINDOW.ICON_SIZE,

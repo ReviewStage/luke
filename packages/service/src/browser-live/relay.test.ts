@@ -37,11 +37,10 @@ import { type BrowserLiveDependencies, type BrowserLiveViewer, relayBrowserTab }
  * page state follows, input is refused until the member takes the tab
  * over and reaches the page mapped onto it after, any socket of the member
  * whose takeover stands drives it, a member who does not control the agent
- * cannot take it, a close hands the tab back, and a
- * coding agent's sandbox is held while its tab is watched and Fullspin's is
- * not. A tab the browser no longer holds, or the store no longer lists,
- * closes as gone; an agent with no sandbox yet as not opened; and a panel
- * that sends nothing as idle.
+ * cannot take it, a close hands the tab back, and a coding agent's sandbox
+ * is held while its tab is watched. A tab the browser no longer holds, or
+ * the store no longer lists, closes as gone; an agent with no sandbox yet
+ * as not opened; and a panel that sends nothing as idle.
  */
 
 const SESSION = "wrun_live_fixture";

@@ -35,6 +35,7 @@
 
 import { Predicate } from "effect";
 import { redactCredentials } from "./credential-redaction.js";
+import { PRODUCT_NAME } from "./product-name.js";
 
 /** Where a failure was shown: the surface whose words said so. */
 export const FAILURE_SURFACE = {
@@ -387,8 +388,7 @@ const DETAIL_KEY = {
 } as const;
 
 /** The line a failure's copied details open with, saying what the rest is for. */
-const DETAILS_HEADING =
-  "Fullspin showed an error. Find it in Sentry and the logs by these details:";
+const DETAILS_HEADING = `${PRODUCT_NAME} showed an error. Find it in Sentry and the logs by these details:`;
 
 /** The issue's context its attributes travel under. */
 const SHOWN_FAILURE_CONTEXT = "shown_failure";

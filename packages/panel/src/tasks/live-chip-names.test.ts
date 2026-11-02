@@ -45,7 +45,7 @@ const UNTITLED_TASK = "4e5f6a7b-8c9d-4e0f-8a1b-2c3d4e5f6a72";
 const UNLISTED_TASK = "5f6a7b8c-9d0e-4f1a-8b2c-3d4e5f6a7b83";
 const LATER_TASK = "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c94";
 
-const HOME = "https://tryluke.dev/acme";
+const HOME = "https://vespin.dev/acme";
 const PLAN = `${HOME}/plan/${TASK_ID}`;
 
 const TASK: TaskSummary = {

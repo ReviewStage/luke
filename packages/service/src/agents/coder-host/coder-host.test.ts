@@ -441,7 +441,7 @@ const STEP_START = "step-start";
 
 /** Another agent's message as `message_agent` steers one in: its words, which are no task of the developer's. */
 const AGENT_MESSAGE =
-  "Message · [@Invite emails](https://tryluke.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) to you:\n\nThe invite table is mine, leave it.";
+  "Message · [@Invite emails](https://vespin.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) to you:\n\nThe invite table is mine, leave it.";
 
 /** The agent that sends `AGENT_MESSAGE`, as its line's row keeps it. */
 const MESSAGE_SENDING_AGENT = {
@@ -1225,7 +1225,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "a worker asked for on a fast version is refused as no model Fullspin offers where Anthropic never granted the organization of the account's own key fast mode, and recorded on it where Anthropic did",
+      "a worker asked for on a fast version is refused as no model Vespin offers where Anthropic never granted the organization of the account's own key fast mode, and recorded on it where Anthropic did",
       () =>
         Effect.gen(function* () {
           const host = yield* hostOverStore();
@@ -1245,7 +1245,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             .pipe(Effect.provide(catalog));
 
           assert.ok(Result.isFailure(refused));
-          assert.match(refused.failure, /is no model Fullspin offers/u);
+          assert.match(refused.failure, /is no model Vespin offers/u);
           assert.deepEqual(accepted, Result.succeed({ model: fast.id, effort: "high" }));
         }),
     );
@@ -1597,13 +1597,13 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const thread = yield* openThread(userId, sibling.id);
           const call = (
             name: Parameters<CoderHost["comment"]>[1],
-            input: Readonly<Record<string, string>>,
+            input: Readonly<Record<string, string | boolean>>,
           ) => host.comment(admitted, name, unparsedWire({ taskId: sibling.id, ...input }));
 
           const read = yield* call(CODER_TOOL.READ_COMMENTS, {});
           const replied = yield* call(CODER_TOOL.REPLY_TO_COMMENT, { thread, words: "Link too." });
-          const resolved = yield* call(CODER_TOOL.RESOLVE_THREAD, { thread });
-          const reopened = yield* call(CODER_TOOL.REOPEN_THREAD, { thread });
+          const resolved = yield* call(CODER_TOOL.UPDATE_COMMENT, { thread, resolved: true });
+          const reopened = yield* call(CODER_TOOL.UPDATE_COMMENT, { thread, resolved: false });
 
           assert.deepEqual(
             [read, replied, resolved, reopened].map((answer) => answer.status),
@@ -1841,7 +1841,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           // The thread's id and mention are spelled out in `coder-inbox.test.ts`; here they are only carried.
           const [{ mention, id: _id, ...line } = { mention: undefined, id: undefined }] =
             "inbox" in read ? read.inbox : [];
-          assert.match(mention ?? "", /^\[@Which region\?\]\(https:\/\/tryluke\.dev\//u);
+          assert.match(mention ?? "", /^\[@Which region\?\]\(https:\/\/vespin\.dev\//u);
           assert.deepEqual(
             { ...read, inbox: [line] },
             {
@@ -2283,11 +2283,11 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
               (answer) => answer.status,
             );
 
-          // Fullspin's notes before the agent's first turn: that turn opens on the plan as its first message.
+          // Our notes before the agent's first turn: that turn opens on the plan as its first message.
           yield* TestClock.adjust("1 minute");
           yield* saveNotes(binding, [added("Context", "Invites go by email.")]);
           assert.equal(yield* typedAt("turn_0"), undefined);
-          // The first turn runs, started at the relay's clock, after Fullspin's notes.
+          // The first turn runs, started at the relay's clock, after our notes.
           const session = { id: sessionId, auth, turn: { id: "turn_0" } };
           const state = memoryRelayState();
           for (const event of codingTurn("turn_0", "turn.completed")) {
@@ -2306,7 +2306,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           );
           assert.equal(yield* typedAt("turn_1"), undefined);
 
-          // Fullspin's notes while that turn ran, and the agent's after them in the same section, which
+          // Our notes while that turn ran, and the agent's after them in the same section, which
           // leave the agent the section's last writer: the next typed turn is handed the plan all the same.
           yield* TestClock.adjust("1 minute");
           yield* saveNotes(binding, [

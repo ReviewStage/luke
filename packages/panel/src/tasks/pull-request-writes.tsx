@@ -10,6 +10,7 @@ import {
   type PullRequestState,
 } from "@luke/features/agent-wire";
 import { saidWords } from "@luke/features/integration-health";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_BOUNDS,
@@ -80,7 +81,7 @@ import { useOpenWorkspaceGitHub } from "./repository-remedy.js";
  *
  * Every change is one act (`AGENTS_PULL_REQUEST_ACTION`), which the
  * service makes on GitHub as the member pressing it, on their own GitHub
- * sign-in and never as the Fullspin GitHub App (`pull-request-write-wire.ts`).
+ * sign-in and never as our GitHub App (`pull-request-write-wire.ts`).
  * One is out at a time; while it is, the controls that would send another
  * stand disabled. Once GitHub took it, or refused it, the tab's reads are
  * asked again (`onWritten`), so the header and the page say where the pull
@@ -89,7 +90,7 @@ import { useOpenWorkspaceGitHub } from "./repository-remedy.js";
  * is sent: our sentence where GitHub refused the change, with GitHub's own
  * words quoted on a line of their own under it, naming GitHub, never inside
  * our sentence; an offer to sign in with GitHub again where it would not
- * take the member's sign-in; and Fullspin's own words where the change never
+ * take the member's sign-in; and our own words where the change never
  * reached GitHub.
  *
  * The pill is `@luke/ui`'s pill chip in the tone of where the pull request
@@ -149,10 +150,10 @@ const WRITE_WORDS = {
   /** Who said the words quoted under a refusal. */
   SOURCE: "GitHub",
   /** A repository out of the workspace's reach, and where it is given back: the workspace's GitHub in Settings, whose Manage on GitHub chooses the App's repositories. */
-  UNREACHED: `${REPOSITORY_UNREACHED_NOTE} Choose which repositories Fullspin can see.`,
+  UNREACHED: `${REPOSITORY_UNREACHED_NOTE} Choose which repositories ${PRODUCT_NAME} can see.`,
 } as const;
 
-/** Fullspin's own words where a change never reached GitHub, by why. */
+/** Our own words where a change never reached GitHub, by why. */
 function failureWords(failure: AgentCallFailure): string {
   switch (failure) {
     case AGENT_CALL_FAILURE.NOT_FOUND:
@@ -363,7 +364,7 @@ const CLOSE_QUEUED_QUESTION: DialogQuestion = {
 /** The question Close asks of an open pull request whose place in the merge queue could not be read, since it may be in it. */
 const CLOSE_UNKNOWN_QUESTION: DialogQuestion = {
   ...CLOSE_QUEUED_QUESTION,
-  body: `Fullspin could not read whether this pull request is in the merge queue. If it is, closing it takes it out, and reopening it does not queue it again. ${QUEUE_WARNING}`,
+  body: `Could not read whether this pull request is in the merge queue. If it is, closing it takes it out, and reopening it does not queue it again. ${QUEUE_WARNING}`,
 };
 
 /** What the toast says once a pull request is closed, and its one way back. */

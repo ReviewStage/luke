@@ -5,9 +5,8 @@ import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
 import {
   READ_COMMENTS_TOOL,
-  REOPEN_THREAD_TOOL,
   REPLY_TO_COMMENT_TOOL,
-  RESOLVE_THREAD_TOOL,
+  UPDATE_COMMENT_TOOL,
 } from "../../tasks/comment-tools.js";
 import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
@@ -31,7 +30,7 @@ import {
 } from "../automation-tools.js";
 import { BROWSER_TOOL } from "../browser/browser-tool.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
-import { RECALL_TOOL, REMEMBER_TOOL } from "../memory-tools.js";
+import { SAVE_MEMORY_TOOL, SEARCH_MEMORY_TOOL } from "../memory-tools.js";
 import { READ_WEB_PAGE_TOOL } from "../public-research.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
@@ -212,13 +211,13 @@ const AUTHORED_TOOLS = {
     description: LIST_MODELS_TOOL.description,
     inputSchema: emitJsonSchema(LIST_MODELS_TOOL.inputSchema),
   },
-  [CODER_TOOL.REMEMBER]: {
-    description: REMEMBER_TOOL.description,
-    inputSchema: emitJsonSchema(REMEMBER_TOOL.inputSchema),
+  [CODER_TOOL.SAVE_MEMORY]: {
+    description: SAVE_MEMORY_TOOL.description,
+    inputSchema: emitJsonSchema(SAVE_MEMORY_TOOL.inputSchema),
   },
-  [CODER_TOOL.RECALL]: {
-    description: RECALL_TOOL.description,
-    inputSchema: emitJsonSchema(RECALL_TOOL.inputSchema),
+  [CODER_TOOL.SEARCH_MEMORY]: {
+    description: SEARCH_MEMORY_TOOL.description,
+    inputSchema: emitJsonSchema(SEARCH_MEMORY_TOOL.inputSchema),
   },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
   [CODER_TOOL.SHOW_PAGE]: {
@@ -233,13 +232,9 @@ const AUTHORED_TOOLS = {
     description: REPLY_TO_COMMENT_TOOL.description,
     inputSchema: emitJsonSchema(REPLY_TO_COMMENT_TOOL.inputSchema),
   },
-  [CODER_TOOL.RESOLVE_THREAD]: {
-    description: RESOLVE_THREAD_TOOL.description,
-    inputSchema: emitJsonSchema(RESOLVE_THREAD_TOOL.inputSchema),
-  },
-  [CODER_TOOL.REOPEN_THREAD]: {
-    description: REOPEN_THREAD_TOOL.description,
-    inputSchema: emitJsonSchema(REOPEN_THREAD_TOOL.inputSchema),
+  [CODER_TOOL.UPDATE_COMMENT]: {
+    description: UPDATE_COMMENT_TOOL.description,
+    inputSchema: emitJsonSchema(UPDATE_COMMENT_TOOL.inputSchema),
   },
   [CODER_TOOL.READ_PAGE]: {
     description: READ_PAGE_TOOL.description,

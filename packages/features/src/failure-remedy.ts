@@ -1,6 +1,7 @@
 import { harnessNameOf } from "./agent-runtime-models.js";
 import { INTEGRATION_NAME, type IntegrationProvider } from "./integration-wire.js";
 import type { ModelProvider } from "./models-wire.js";
+import { PRODUCT_NAME } from "./product-name.js";
 
 /**
  * failure-remedy.ts -- why a failure stands, as a typed word beside its sentence, and what the press that mends it says.
@@ -99,7 +100,7 @@ export function remedyLabel(failure: Failure): string | undefined {
     case FAILURE_REASON.RECONNECT_GITHUB:
       return "Reconnect GitHub";
     case FAILURE_REASON.ADD_REPOSITORY:
-      return `Add ${failure.repository} to Fullspin's GitHub App`;
+      return `Add ${failure.repository} to ${PRODUCT_NAME}'s GitHub App`;
     case FAILURE_REASON.CHOOSE_REPOSITORY:
       return "Choose a repository";
     case FAILURE_REASON.MOVE_TASK:
@@ -116,7 +117,7 @@ export function remedyLabel(failure: Failure): string | undefined {
 }
 
 /**
- * Whether Retry stands beside the remedy: a remedy finished somewhere Fullspin
+ * Whether Retry stands beside the remedy: a remedy finished somewhere we
  * cannot watch, on GitHub or in Settings, leaves the same send to be made
  * again once it is done.
  */

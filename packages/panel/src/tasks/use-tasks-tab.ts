@@ -646,10 +646,10 @@ export interface TasksControl {
   onShowSource: (taskId: string, source: RevisionSource) => void;
   /** Opens a task on its own document tab, out from under its version history and a side panel filling the window: the call card's way back. */
   onShowTask: (taskId: string) => void;
-  /** Opens a task the same way, scrolled to the section a mention or a Fullspin link names, or at its top for the task's own. */
+  /** Opens a task the same way, scrolled to the section a mention or an app link names, or at its top for the task's own. */
   onShowMention: (mention: PlanMention) => void;
   /**
-   * Opens the place a Fullspin link names, of the Plans tab's: a task, its
+   * Opens the place an app link names, of the Plans tab's: a task, its
    * section, version, page, call, or turn; an agent, on its task's tab or
    * its own page; an Inbox item, in its task's Inbox tab, or the Inbox on one with no task; Automations, on one. A
    * place of a workspace the account lists by the link's slug is shown in
@@ -3001,7 +3001,7 @@ export function useTasksTab(input: {
   };
 
   /**
-   * A Fullspin link's place opened through the door each kind already has: the
+   * An app link's place opened through the door each kind already has: the
    * task's tabs, its side panel, its version history, or what stands in the
    * plan's place. One of an agent's messages opens the agent's tab and asks
    * it to bring the message into view. Note

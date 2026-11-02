@@ -43,7 +43,7 @@ type TerminalStateKind = (typeof TERMINAL_STATE)[keyof typeof TERMINAL_STATE];
 
 /** Why the tab could not reach its shell. */
 export const TERMINAL_UNREACHED = {
-  /** Fullspin's service could not be reached, or did not answer. */
+  /** Our service could not be reached, or did not answer. */
   SERVICE: "service",
   /** The service answered, and the agent's sandbox did not: Vercel Sandbox's API, or tmux in the sandbox. */
   SANDBOX: "sandbox",
@@ -107,7 +107,7 @@ const RESUME = { kind: TERMINAL_ACTION.RESUME, label: "Resume sandbox" } as cons
 
 /** What the unreachable bar says, by why. */
 const UNREACHED_WORDS = {
-  [TERMINAL_UNREACHED.SERVICE]: "Fullspin's service did not answer.",
+  [TERMINAL_UNREACHED.SERVICE]: "The service did not answer.",
   [TERMINAL_UNREACHED.SANDBOX]: "The agent’s sandbox didn’t answer.",
   [TERMINAL_UNREACHED.NOT_FOUND]: "Could not find this agent’s shell.",
   [TERMINAL_UNREACHED.RELAY]: "The terminal service isn’t set up on this deployment.",

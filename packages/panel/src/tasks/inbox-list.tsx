@@ -100,6 +100,7 @@ import {
   type MenuAsk,
   PhoneHead,
   PlaceMore,
+  phoneFindGroups,
   useAskedMenu,
   useMenuAsk,
 } from "../desktop/phone-head.js";
@@ -920,6 +921,7 @@ function ListHead({
                           onSelect: () => asked.onAsk(opener),
                         },
                       ],
+                  ...phoneFindGroups(),
                   readAll === undefined ? [] : [markAllAction(readAll)],
                 ].filter((group) => group.length > 0)
               }

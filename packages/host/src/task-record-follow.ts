@@ -14,7 +14,7 @@ import { decodedLiveRows, type LiveBroken } from "./live-follow.js";
  * follows them (`live-follow.ts`) for as long as the task stands open, and
  * answers each delivery with the parts it moved, which the caller reads
  * again from the service. The calls and code parts the service still
- * answers for a released desktop are read by no one: Fullspin takes no calls,
+ * answers for a released desktop are read by no one: the app takes no calls,
  * and no window draws the code agents
  * showed. Only which parts moved leaves.
  */

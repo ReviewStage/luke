@@ -8,7 +8,7 @@ import { afterEach, test } from "vitest";
 import { useLinkOpener } from "./held-link.js";
 
 /**
- * A Fullspin link handed while sign-in stands opens once the account is signed
+ * An app link handed while sign-in stands opens once the account is signed
  * in, the latest one only, and one handed after opens at once. Synthetic
  * tasks.
  */

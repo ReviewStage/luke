@@ -1,11 +1,11 @@
 #!/bin/sh
-# install.sh -- installs Fullspin's host into the account that runs it, on a Linux box (x64 or arm64) or an Apple silicon Mac, connects it to Fullspin with a code a member approves, and upgrades it in place when run again.
+# install.sh -- installs our host into the account that runs it, on a Linux box (x64 or arm64) or an Apple silicon Mac, connects it to the service with a code a member approves, and upgrades it in place when run again.
 #
 # Served by the web app at /install.sh with the release, and the origin it
 # was fetched from, written in (packages/service/src/agents/host-install-script-app.ts),
 # and run, with no sudo, as the account whose agents the host should run:
 #
-#   curl -fsSL https://tryluke.dev/install.sh | sh
+#   curl -fsSL https://vespin.dev/install.sh | sh
 #
 # Before it changes anything it checks the computer and says what is missing:
 # Linux x64 or arm64 with a systemd user manager it can reach, or an Apple
@@ -28,9 +28,9 @@
 #   ~/.local/bin/luke-host                          absolute link to …/current/bin/luke-host
 #   ~/.local/state/luke-host/                       the state root: the box's record and its agents'
 #   ~/.config/systemd/user/luke-host.service        Linux: the service, run through current
-#   ~/Library/LaunchAgents/dev.reviewstage.luke.host.standalone.plist
+#   ~/Library/LaunchAgents/dev.vespin.host.standalone.plist
 #                                                   Mac: the LaunchAgent, run through current
-#   ~/Library/Logs/Luke Host/luke-host.log          Mac: the LaunchAgent's log
+#   ~/Library/Logs/Vespin Host/luke-host.log          Mac: the LaunchAgent's log
 #
 # On Linux it turns on lingering first, so the service keeps running after
 # the account logs out: on its own where the account may, and otherwise with
@@ -41,7 +41,7 @@
 # the service before the box is connected, a systemd user service enabled at
 # boot or a LaunchAgent that runs while the user is logged in, which waits
 # until the box's record stands; then it runs `luke-host connect`, which prints
-# a link and a code and waits for a member to approve it in Fullspin, or answers at
+# a link and a code and waits for a member to approve it in the app, or answers at
 # once where the box is connected already. Once it is connected it restarts the
 # service on the new release and removes every other release. Where the code
 # is denied or lapses, the service stands waiting, so a later
@@ -61,10 +61,10 @@ URL_DARWIN_ARM64="@@URL_DARWIN_ARM64@@"
 ORIGIN="@@ORIGIN@@"
 UNIT="luke-host.service"
 # A Mac's LaunchAgent, by its label, which an install that came before used too.
-MAC_LABEL="dev.reviewstage.luke.host.standalone"
-# Where a Mac's install that came before put Fullspin host, under its user's home.
-MAC_EARLIER_FOLDER="Library/Application Support/Luke Host"
-# Where a Linux box's install that came before put Fullspin host and its service.
+MAC_LABEL="dev.vespin.host.standalone"
+# Where a Mac's install that came before put the host, under its user's home.
+MAC_EARLIER_FOLDER="Library/Application Support/Vespin Host"
+# Where a Linux box's install that came before put the host and its service.
 EARLIER_INSTALL_DIR="/opt/luke-host"
 EARLIER_UNIT_FILE="/etc/systemd/system/$UNIT"
 # The oldest macOS it installs on: the release's launcher reads its own path
@@ -99,7 +99,7 @@ account_paths() {
   LINK="$HOME/.local/bin/luke-host"
   UNIT_FILE="$HOME/.config/systemd/user/$UNIT"
   PLIST="$HOME/Library/LaunchAgents/$MAC_LABEL.plist"
-  MAC_LOG="$HOME/Library/Logs/Luke Host/luke-host.log"
+  MAC_LOG="$HOME/Library/Logs/Vespin Host/luke-host.log"
 }
 
 # The computer's own architecture. On a Mac it reads the hardware, so Apple
@@ -113,7 +113,7 @@ hardware_machine() {
   fi
 }
 
-# Refuses a computer Fullspin host does not run on, as the script's first word on
+# Refuses a computer the host does not run on, as the script's first word on
 # it, before it changes anything: its kernel ($1), its machine ($2), and its
 # /proc/version ($3). WSL2's names its kernel microsoft-standard (and WSL2 since
 # 5.10) and is let through, setting ON_WSL; WSL1's names Microsoft alone.
@@ -123,15 +123,15 @@ require_supported_os() {
     Darwin)
       case "$2" in
         arm64) ;;
-        *) fail "Fullspin does not run agents on Intel Macs." ;;
+        *) fail "Vespin does not run agents on Intel Macs." ;;
       esac
       ;;
-    *) fail "Fullspin host runs on Linux, not $1." ;;
+    *) fail "Vespin host runs on Linux, not $1." ;;
   esac
   case "$3" in
     *microsoft-standard* | *WSL2*) ON_WSL=true ;;
     *[Mm]icrosoft* | *WSL*)
-      fail "Fullspin host needs WSL2, and this is WSL1, which has no Linux kernel. Upgrade it with: wsl --set-version <distro> 2"
+      fail "Vespin host needs WSL2, and this is WSL1, which has no Linux kernel. Upgrade it with: wsl --set-version <distro> 2"
       ;;
   esac
 }
@@ -150,7 +150,7 @@ require_macos_version() {
   if [ "$major" -gt "$need_major" ] || { [ "$major" -eq "$need_major" ] && [ "$minor" -ge "$need_minor" ]; }; then
     return 0
   fi
-  fail "Fullspin host needs macOS $MAC_MIN_VERSION or later, and this Mac runs macOS ${1:-of a version it did not say}. Update macOS, then run this again."
+  fail "Vespin host needs macOS $MAC_MIN_VERSION or later, and this Mac runs macOS ${1:-of a version it did not say}. Update macOS, then run this again."
 }
 
 # Refuses a run as root under sudo from another account, whose files would
@@ -162,12 +162,12 @@ require_macos_version() {
 # manager cannot be reached.
 require_own_account() {
   if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
-    fail "Run it without sudo, as the account whose agents Fullspin host should run: curl -fsSL $ORIGIN/install.sh | sh"
+    fail "Run it without sudo, as the account whose agents Vespin host should run: curl -fsSL $ORIGIN/install.sh | sh"
   fi
   if [ "$(uname -s)" = "Darwin" ] && [ "$(id -u)" -eq 0 ]; then
-    fail "Run it from the Mac account whose agents Fullspin host should run, not as root: curl -fsSL $ORIGIN/install.sh | sh"
+    fail "Run it from the Mac account whose agents Vespin host should run, not as root: curl -fsSL $ORIGIN/install.sh | sh"
   fi
-  [ -n "${HOME:-}" ] && [ -d "$HOME" ] || fail "This account has no home folder to install Fullspin host into (HOME is ${HOME:-not set})."
+  [ -n "${HOME:-}" ] && [ -d "$HOME" ] || fail "This account has no home folder to install Vespin host into (HOME is ${HOME:-not set})."
 }
 
 # Refuses an install that came before, which this one would run beside, and
@@ -177,10 +177,10 @@ require_no_earlier_install() {
   if [ "$(uname -s)" = "Darwin" ]; then
     earlier="$HOME/$MAC_EARLIER_FOLDER"
     [ -e "$earlier" ] || return 0
-    fail "Fullspin host is already installed for this account in $earlier, by an earlier install. Remove it first with: sudo '$earlier/luke-host/bin/luke-host' uninstall — then run this again."
+    fail "Vespin host is already installed for this account in $earlier, by an earlier install. Remove it first with: sudo '$earlier/luke-host/bin/luke-host' uninstall — then run this again."
   fi
   [ -e "$EARLIER_INSTALL_DIR" ] || [ -e "$EARLIER_UNIT_FILE" ] || return 0
-  fail "Fullspin host is already installed on this box under $EARLIER_INSTALL_DIR, by an earlier install. Remove it first with: sudo $EARLIER_INSTALL_DIR/bin/luke-host uninstall — then run this again."
+  fail "Vespin host is already installed on this box under $EARLIER_INSTALL_DIR, by an earlier install. Remove it first with: sudo $EARLIER_INSTALL_DIR/bin/luke-host uninstall — then run this again."
 }
 
 # Refuses a box not run by systemd, or whose systemd user manager for this
@@ -189,12 +189,12 @@ require_no_earlier_install() {
 require_user_manager() {
   if ! command -v systemctl >/dev/null 2>&1 || [ ! -d "$SYSTEMD_RUN_DIR" ]; then
     if [ "$ON_WSL" = true ]; then
-      fail "Fullspin host needs systemd. Turn it on with [boot] systemd=true in /etc/wsl.conf, run wsl --shutdown in Windows, and run this again."
+      fail "Vespin host needs systemd. Turn it on with [boot] systemd=true in /etc/wsl.conf, run wsl --shutdown in Windows, and run this again."
     fi
-    fail "Fullspin host needs systemd."
+    fail "Vespin host needs systemd."
   fi
   systemctl --user show-environment >/dev/null 2>&1 ||
-    fail "Could not reach the systemd user manager of $(id -un), which Fullspin host runs under. Run this from a login of that account, over SSH or at its console, rather than through su or sudo."
+    fail "Could not reach the systemd user manager of $(id -un), which Vespin host runs under. Run this from a login of that account, over SSH or at its console, rather than through su or sudo."
 }
 
 # Refuses a computer without git, which agents make their worktrees with, or
@@ -202,12 +202,12 @@ require_user_manager() {
 require_tools() {
   if ! git --version >/dev/null 2>&1; then
     if [ "$(uname -s)" = "Darwin" ]; then
-      fail "Fullspin host needs git, which its agents make their worktrees with. Install it with: xcode-select --install — then run this again."
+      fail "Vespin host needs git, which its agents make their worktrees with. Install it with: xcode-select --install — then run this again."
     fi
-    fail "Fullspin host needs git, which its agents make their worktrees with. Install it with your package manager, then run this again."
+    fail "Vespin host needs git, which its agents make their worktrees with. Install it with your package manager, then run this again."
   fi
   command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 ||
-    fail "Fullspin host needs sha256sum (coreutils) or shasum to check its download."
+    fail "Vespin host needs sha256sum (coreutils) or shasum to check its download."
 }
 
 # Answers whether the account named $1 lingers, its user manager kept running
@@ -223,20 +223,20 @@ lingering() {
 enable_lingering() {
   user="$(id -un)"
   if lingering "$user"; then
-    ok "Lingering is on for $user, so Fullspin host keeps running after you log out"
+    ok "Lingering is on for $user, so Vespin host keeps running after you log out"
     return 0
   fi
   if loginctl --no-ask-password enable-linger >/dev/null 2>&1 && lingering "$user"; then
-    ok "Turned lingering on for $user, so Fullspin host keeps running after you log out"
+    ok "Turned lingering on for $user, so Vespin host keeps running after you log out"
     return 0
   fi
-  printf 'Fullspin host keeps running after you log out only with lingering on for %s, which this account may not turn on by itself.\n' "$user"
+  printf 'Vespin host keeps running after you log out only with lingering on for %s, which this account may not turn on by itself.\n' "$user"
   printf 'Turning it on with sudo, the one thing this script asks sudo for: sudo loginctl enable-linger %s\n' "$user"
   if command -v sudo >/dev/null 2>&1 && sudo loginctl enable-linger "$user" && lingering "$user"; then
-    ok "Turned lingering on for $user, so Fullspin host keeps running after you log out"
+    ok "Turned lingering on for $user, so Vespin host keeps running after you log out"
     return 0
   fi
-  fail "Could not turn lingering on for $user, so nothing was installed: without it Fullspin host would stop when you log out. Have an administrator of this box run sudo loginctl enable-linger $user, then run this again."
+  fail "Could not turn lingering on for $user, so nothing was installed: without it Vespin host would stop when you log out. Have an administrator of this box run sudo loginctl enable-linger $user, then run this again."
 }
 
 # Fails unless the file's SHA-256 is the one given: $1 the file, $2 its digest.
@@ -257,23 +257,23 @@ download() {
   elif command -v wget >/dev/null 2>&1; then
     wget -q -O "$2" "$1" || fail "Could not download $1"
   else
-    fail "Fullspin host needs curl or wget to download its release."
+    fail "Vespin host needs curl or wget to download its release."
   fi
 }
 
 # Writes the service's unit, run through current so a release is switched by
 # moving that link, and started with the user manager, which lingering starts
 # at boot. Note that it is restarted a minute after any exit, a clean one
-# among them: the daemon exits 0 on a record Fullspin refused, the box removed in
-# Fullspin, and asks Fullspin nothing on it, so a box paired again by hand with
+# among them: the daemon exits 0 on a record the service refused, the box removed in
+# the app, and asks the service nothing on it, so a box paired again by hand with
 # luke-host connect is followed within a minute, as the daemon's own rest
 # follows one never connected.
 write_unit() {
   mkdir -p "$(dirname "$UNIT_FILE")"
   cat >"$UNIT_FILE" <<UNIT_EOF
 [Unit]
-Description=Fullspin host
-Documentation=https://tryluke.dev
+Description=Vespin host
+Documentation=https://vespin.dev
 
 [Service]
 Type=simple
@@ -329,7 +329,7 @@ stop_launch_agent() {
   stopping=0
   while launchctl print "$agent" >/dev/null 2>&1; do
     [ "$stopping" -lt "$MAC_STOP_WAIT_SECONDS" ] ||
-      fail "Could not stop Fullspin host for this account, so nothing was changed. Stop it with launchctl bootout $agent, then run this again."
+      fail "Could not stop Vespin host for this account, so nothing was changed. Stop it with launchctl bootout $agent, then run this again."
     sleep 1
     stopping=$((stopping + 1))
   done
@@ -385,7 +385,7 @@ install_release() {
   ln -sfn "versions/$VERSION" "$RELEASES/current"
   mkdir -p "$(dirname "$LINK")"
   ln -sfn "$RELEASES/current/bin/luke-host" "$LINK"
-  ok "Installed Fullspin host $VERSION to $target"
+  ok "Installed Vespin host $VERSION to $target"
 }
 
 # Removes every release but the one current names, once the service runs it.
@@ -413,7 +413,7 @@ connect_box() {
   code=0
   "$LINK" connect --origin "$ORIGIN" || code=$?
   [ "$code" -eq 0 ] && return 0
-  printf '%s This box is not connected yet. Fullspin host is installed and follows it once it is. For a new code, run: %s connect --origin %s\n' "$CROSS" "$(command_name)" "$ORIGIN" >&2
+  printf '%s This box is not connected yet. Vespin host is installed and follows it once it is. For a new code, run: %s connect --origin %s\n' "$CROSS" "$(command_name)" "$ORIGIN" >&2
   exit "$code"
 }
 
@@ -434,7 +434,7 @@ enable_unit() {
 restart_unit() {
   systemctl --user restart "$UNIT" ||
     fail "Could not start $UNIT. See journalctl --user -u $UNIT"
-  ok "Started $UNIT on Fullspin host $VERSION"
+  ok "Started $UNIT on Vespin host $VERSION"
 }
 
 # Writes the LaunchAgent and loads it before the box is connected, where this
@@ -479,13 +479,13 @@ release_target() {
         target_url="$URL_ARM64"
         target_sha256="$SHA256_ARM64"
         ;;
-      *) fail "Fullspin host runs on x64 and arm64, not $(uname -m)." ;;
+      *) fail "Vespin host runs on x64 and arm64, not $(uname -m)." ;;
     esac
   fi
-  [ -n "$target_sha256" ] || fail "Fullspin host $VERSION has no release for $target_name yet."
+  [ -n "$target_sha256" ] || fail "Vespin host $VERSION has no release for $target_name yet."
 }
 
-# Installs, connects and starts Fullspin host in this account, the options parsed.
+# Installs, connects and starts the host in this account, the options parsed.
 main() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -499,13 +499,13 @@ main() {
         shift
         ;;
       --token | --token=*)
-        fail "Fullspin host no longer takes an install token. Run it without sudo, and approve the code it shows in Fullspin: curl -fsSL $ORIGIN/install.sh | sh"
+        fail "Vespin host no longer takes an install token. Run it without sudo, and approve the code it shows in Vespin: curl -fsSL $ORIGIN/install.sh | sh"
         ;;
       *) fail "Unknown option: $1" ;;
     esac
   done
 
-  [ -n "$VERSION" ] || fail "Fullspin host has no release yet."
+  [ -n "$VERSION" ] || fail "Vespin host has no release yet."
   case "$ORIGIN" in
     https://*) ;;
     *) fail "--origin must be an https:// address, not $ORIGIN" ;;
@@ -522,7 +522,7 @@ main() {
   require_tools
   release_target
 
-  printf 'Fullspin host %s for %s, for %s\n' "$VERSION" "$target_name" "$(id -un)"
+  printf 'Vespin host %s for %s, for %s\n' "$VERSION" "$target_name" "$(id -un)"
   [ "$kernel" = "Darwin" ] || enable_lingering
 
   mkdir -p "$RELEASES"
@@ -547,7 +547,7 @@ main() {
   fi
   remove_other_releases
 
-  printf '\nConnected. This box gets ready in Fullspin, then you can pick it under a task'"'"'s Runs on.\n'
+  printf '\nConnected. This box gets ready in Vespin, then you can pick it under a task'"'"'s Runs on.\n'
   printf 'To upgrade later, run the same command again.\n'
   printf 'To remove it: %s uninstall\n' "$(command_name)"
   # Note that a systemd service does not keep a WSL distro up: WSL stops it about

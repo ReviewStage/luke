@@ -6,7 +6,7 @@ import { agentTable } from "./agent.js";
  * token-pull-request-poll.ts -- what the scheduled sweep last read of a token agent's pull request.
  *
  * A coding agent on its starter's own GitHub token works on a repository no
- * installation of the Fullspin GitHub App reaches, so no webhook tells it of a
+ * installation of our GitHub App reaches, so no webhook tells it of a
  * review, a comment, or a check on its pull request; the sweep polls the
  * pull request instead (`token-pull-request-sweep.ts`). One row per such
  * agent, made the first time the sweep claims it: the pull request polled,

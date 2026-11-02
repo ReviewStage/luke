@@ -8,12 +8,12 @@ import { PLAN_SECTION_BOUNDS, TASK_BOUNDS } from "./task-wire.js";
 import { trimmedText } from "./text-schema.js";
 
 /**
- * plan-template.ts -- the notes Fullspin takes into a plan's text, and the agents' journal of them.
+ * plan-template.ts -- the notes the app takes into a plan's text, and the agents' journal of them.
  *
  * A plan is one Markdown text that starts empty (`plan-document.ts`,
  * `docs/TASKS.md`), its headings its sections.
  *
- * Fullspin changes the text only by taking notes, of two kinds: a point added
+ * The app changes the text only by taking notes, of two kinds: a point added
  * under a heading, and text replaced, the one generic edit, which names any
  * text standing exactly once in the plan, headings and whole sections
  * among it, and an empty replacement deletes. So a heading is renamed, a

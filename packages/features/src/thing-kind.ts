@@ -7,8 +7,8 @@ import {
   pullRequestAddressOf,
 } from "./link-grammar.js";
 import { MENTION_KIND, type Mention } from "./mention-link.js";
-import { PRODUCT_NAME } from "./model-label.js";
 import type { KnownNames } from "./place-chip-model.js";
+import { PRODUCT_NAME } from "./product-name.js";
 import { TERM } from "./words.js";
 
 /**
@@ -16,7 +16,7 @@ import { TERM } from "./words.js";
  *
  * A thing is named in words in two ways: a mention (`mention-link.ts`), a
  * plan, a file, an agent, a pull request's page, and a link to a place in
- * Fullspin (`link-grammar.ts`), an Inbox item, an automation, a version of a
+ * the app (`link-grammar.ts`), an Inbox item, an automation, a version of a
  * plan. Both name some of the same things, a plan, a section, a page, an
  * agent, a person, so `THING_KIND` is the one list of them all, and a
  * mention or a place is read as the `Thing` it names (`thingOfMention`,
@@ -279,7 +279,7 @@ export const THING_WORD: { readonly [K in ThingKind]: string } = {
   [THING_KIND.PAGE]: TERM.PAGE.one,
   [THING_KIND.AGENT]: TERM.AGENT.one,
   [THING_KIND.WORKER]: TERM.WORKER.one,
-  [THING_KIND.LUKE]: "Fullspin",
+  [THING_KIND.LUKE]: PRODUCT_NAME,
   [THING_KIND.CHANGES]: "changes",
   [THING_KIND.PULL_REQUEST]: TERM.PULL_REQUEST.one,
   [THING_KIND.PULL_REQUEST_THREAD]: "review thread",
@@ -308,7 +308,7 @@ export const THING_WORD: { readonly [K in ThingKind]: string } = {
 /**
  * The word a screen reader hears before a thing's name: its kind's
  * (`THING_WORD`), or nothing where the name already starts with it, as
- * "Inbox", "Fullspin", and "Changes by Ada" do. Note that a link labelled with
+ * "Inbox", the app's own name, and "Changes by Ada" do. Note that a link labelled with
  * words of its own, `[my queue](…/inbox)`, still says its kind.
  */
 export function thingWordHeard(kind: ThingKind, name: string): string | undefined {
@@ -384,7 +384,7 @@ export function thingOfMention(mention: Mention): Thing {
   return mention;
 }
 
-/** The thing a link to a place in Fullspin names. */
+/** The thing a link to a place in the app names. */
 export function thingOfPlace(place: LinkPlace): Thing {
   return placeThing(place.kind, place);
 }

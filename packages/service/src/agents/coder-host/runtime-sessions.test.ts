@@ -97,7 +97,7 @@ import { type EveReach, eveFor, stoppedTurn } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
- * runtime-sessions.test.ts -- every way Fullspin reaches a coding agent's session answers it by the runtime its conversation runs on.
+ * runtime-sessions.test.ts -- every way the service reaches a coding agent's session answers it by the runtime its conversation runs on.
  *
  * Two agents stand side by side in one workspace: one on eve, as every
  * agent ran before native harnesses, and one on Claude Code, paid for by its
@@ -207,7 +207,7 @@ function runtimes() {
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 /** Where a synthetic Mac keeps the Codex it checked. */
 const CODEX_EXECUTABLE =
-  "/Users/fixture/Library/Application Support/Fullspin/agent-tools/codex/bin/codex";
+  "/Users/fixture/Library/Application Support/Vespin/agent-tools/codex/bin/codex";
 const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 64 }, (_, index) => ({
   id: 9_100 + index,
   login: RELAY.owner,
@@ -241,7 +241,7 @@ function environment(): Layer.Layer<HostedEnvironment> {
 const openTeam = Effect.gen(function* () {
   const owner = yield* openGithubUser();
   const teammate = yield* openGithubUser();
-  // The owner's agents on eve run on its own keys, since Fullspin's pays for no coding agent.
+  // The owner's agents on eve run on its own keys, since ours pays for no coding agent.
   yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
   yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.OPENAI);
   const workspaceId = yield* openWorkspace(owner);
@@ -488,7 +488,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           );
 
           assert.deepEqual(eve.calls, ["send:wrun_eve"]);
-          // eve is handed no id of Fullspin's for the line, as before.
+          // eve is handed no id of ours for the line, as before.
           assert.equal(eve.messages[0]?.lineId, undefined);
           assert.deepEqual(claudeCode.calls, [`send:${nativeSession}`]);
           assert.equal(claudeCode.messages[0]?.lineId, sentLineId("key-native"));
@@ -496,7 +496,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a message to an agent Fullspin's key paid for is refused by name whatever its starter keeps now, and so is one to an agent on eve whose starter keeps no API key for its model, from before payers were recorded or on a key since removed, and one on Claude Code whose API key was since removed; nothing reaches eve and no payer moves",
+      "a message to an agent Vespin's key paid for is refused by name whatever its starter keeps now, and so is one to an agent on eve whose starter keeps no API key for its model, from before payers were recorded or on a key since removed, and one on Claude Code whose API key was since removed; nothing reaches eve and no payer moves",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
@@ -546,7 +546,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
 
           for (const [name, starter, agent] of [
-            ["Fullspin's key paid, an API key saved since", owner, lukes],
+            ["Vespin's key paid, an API key saved since", owner, lukes],
             ["no payer recorded, no API key", bare, unrecorded],
             ["its API key removed", bare, keyRemoved],
             ["on Claude Code, its API key removed", bare, nativeKeyRemoved],
@@ -774,7 +774,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.match(
             texts[0]?.[0] ?? "",
             new RegExp(
-              `^\\[sender: \\[@Test User\\]\\(https://tryluke\\.dev/[^/]+/person/${teammate}\\), a teammate\\]$`,
+              `^\\[sender: \\[@Test User\\]\\(https://vespin\\.dev/[^/]+/person/${teammate}\\), a teammate\\]$`,
               "u",
             ),
           );
@@ -1200,7 +1200,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
   "a Start decides the runtime and the payer once",
   (it) => {
     it.effect(
-      "an account with a setup-token starts a Claude agent on Claude Code paid by its plan; a GPT model, an account with no setup-token, or a function with no harness, none with an API key, is refused by name with the provider and leaves no agent, since Fullspin's key pays for no coding agent",
+      "an account with a setup-token starts a Claude agent on Claude Code paid by its plan; a GPT model, an account with no setup-token, or a function with no harness, none with an API key, is refused by name with the provider and leaves no agent, since Vespin's key pays for no coding agent",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -1270,7 +1270,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start on a task that runs on one of its starter's devices runs only with that device there lately, pinned to it on the model's harness, paid for by its own login to it where it has one, a plan in Fullspin or none; Codex on a device with none checked, or the device gone or away, is refused by name and leaves no agent",
+      "a Start on a task that runs on one of its starter's devices runs only with that device there lately, pinned to it on the model's harness, paid for by its own login to it where it has one, a plan in Vespin or none; Codex on a device with none checked, or the device gone or away, is refused by name and leaves no agent",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -1283,7 +1283,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               runs: ["claude_code", AGENT_PAYER.CLAUDE_SUBSCRIPTION],
             },
             {
-              name: "no plan saved in Fullspin, the Mac signed in to Claude Code",
+              name: "no plan saved in Vespin, the Mac signed in to Claude Code",
               mac: true,
               plan: false,
               signedIn: { claudeCode: true },
@@ -1293,7 +1293,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               runs: ["claude_code", AGENT_PAYER.MAC_SIGN_IN],
             },
             {
-              name: "a GPT model on a Mac that checked a Codex, the ChatGPT plan saved in Fullspin",
+              name: "a GPT model on a Mac that checked a Codex, the ChatGPT plan saved in Vespin",
               mac: true,
               codex: true,
               chatGpt: "signed_in",
@@ -1302,7 +1302,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               runs: ["codex", AGENT_PAYER.CHATGPT_SUBSCRIPTION],
             },
             {
-              name: "a GPT model, nothing of OpenAI's saved in Fullspin, the Mac signed in to Codex",
+              name: "a GPT model, nothing of OpenAI's saved in Vespin, the Mac signed in to Codex",
               mac: true,
               codex: true,
               signedIn: { codex: true },
@@ -1562,7 +1562,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Mac is offered as running a provider's models only where the account pays for its harness in Fullspin or the Mac is signed in to it, and GPT models only on a Mac that checked a Codex",
+      "a Mac is offered as running a provider's models only where the account pays for its harness in Vespin or the Mac is signed in to it, and GPT models only on a Mac that checked a Codex",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -1982,7 +1982,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "where the Claude plan is offered, Settings' choice alone decides: Subscription runs every Claude model on Claude Code, a fast version with its own fast mode, and API key runs on Claude Code on the API key, a fast version included; with no API key saved and the plan not selected, or nothing connected, the Start is refused, never run on Fullspin's key",
+      "where the Claude plan is offered, Settings' choice alone decides: Subscription runs every Claude model on Claude Code, a fast version with its own fast mode, and API key runs on Claude Code on the API key, a fast version included; with no API key saved and the plan not selected, or nothing connected, the Start is refused, never run on Vespin's key",
       () =>
         Effect.gen(function* () {
           const cases: readonly {
@@ -2189,7 +2189,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 PROVIDER_KEY_KIND.CHATGPT_OAUTH,
                 false,
               );
-              // API key selected is a key saved, which pays now that Fullspin's never does.
+              // API key selected is a key saved, which pays now that ours never does.
               yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.OPENAI);
             }
             const { eve, codex, native } = runtimes();

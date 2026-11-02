@@ -66,6 +66,7 @@ import { automationTriggerText } from "@luke/features/automation-list-model";
 import type { AutomationSummary } from "@luke/features/automation-wire";
 import type { Channel } from "@luke/features/channel-wire";
 import { formatCount } from "@luke/features/number-format";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   TASK_CREATE_RELATION_KIND,
@@ -298,10 +299,10 @@ function filterLabels(experiments: ExperimentChoices): Record<PaletteFilter, str
   return labels;
 }
 
-/** What the search field asks for: Fullspin under All, and the kind, as it stands mid-sentence, under its filter. */
+/** What the search field asks for: the product's name under All, and the kind, as it stands mid-sentence, under its filter. */
 function filterPlaceholder(filter: PaletteFilter, labels: Record<PaletteFilter, string>): string {
   return filter === PALETTE_FILTER.ALL
-    ? "Search Fullspin"
+    ? `Search ${PRODUCT_NAME}`
     : `Search ${labels[filter].toLowerCase()}`;
 }
 
@@ -763,7 +764,7 @@ function steppedFilter(
   return filters[(at + step + count) % count] ?? PALETTE_FILTER.ALL;
 }
 
-/** The word a task Fullspin or an agent made is also found by, beside its maker's name. */
+/** The word a task the app or an agent made is also found by, beside its maker's name. */
 const MADE_BY_WORDS: Partial<Record<Actor["kind"], string>> = {
   [ACTOR_KIND.LUKE]: "luke",
   [ACTOR_KIND.AGENT]: "agent",
@@ -848,7 +849,7 @@ function taskRows(
       numbered === undefined ? undefined : taskKey(numbered.workspaceName, numbered.number);
     const createdBy = task.createdBy?.name ?? null;
     const assignedTo = task.assignee?.name ?? null;
-    // Note that a task Fullspin or an agent made says them in its detail, so it is found by them.
+    // Note that a task the app or an agent made says them in its detail, so it is found by them.
     const origin = originOf(task);
     const madeBy = origin === undefined ? null : actorName(origin);
     const words: RowWords = {

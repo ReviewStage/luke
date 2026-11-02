@@ -66,7 +66,7 @@ it.effect(
       assert.equal(`${page.origin}${page.pathname}`, CHATGPT_FAKE.AUTHORIZE_URL);
       const query = page.searchParams;
       assert.equal(query.get("client_id"), "dynamic_agent_client");
-      assert.equal(query.get("agent_name_hint"), "Fullspin");
+      assert.equal(query.get("agent_name_hint"), "Vespin");
       assert.equal(query.get("ext_agent_host_id"), HOST_ID);
       assert.equal(query.get("response_type"), "code");
       assert.equal(query.get("scope"), CHATGPT_FAKE.GRANTED);

@@ -379,7 +379,7 @@ const AUTOMATION_WORDS = "Automation";
  * What a transcript opens on where something handed it its first message:
  * the sender line under the card, naming who, the card's kind where it is not
  * the transcript's own lead, and the card's words where they are not the
- * message's own, an automation's prompt without the lines Fullspin adds of its
+ * message's own, an automation's prompt without the lines we add of its
  * firing, with the webhook body that rode in with it.
  */
 export interface TranscriptOrigin {
@@ -696,27 +696,22 @@ function DelegationRow({
 /**
  * One call carrying the agent's to-do list, a write of the whole list or a
  * call on Claude Code's task list (`agent-todos.ts`): the list as it stood
- * after the call, open while it is the newest and folded once a newer one
- * stands, or a call's row where no list reads from it. Note that the row is
- * keyed by whether it is open, because the fold reads `defaultOpen` once.
+ * after the call, folded until pressed as every call's row is, or a call's
+ * row where no list reads from it.
  */
 function TodosRow({
   part,
   todos,
-  open,
   live,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
   todos: AgentTodos["todos"] | undefined;
-  open: boolean;
   live: boolean;
 }): ReactNode {
   if (todos === undefined) return <ToolCallView part={part} />;
   return (
     <TranscriptTodos
-      key={String(open)}
       data-call-id={part.callId}
-      defaultOpen={open}
       state={part.state}
       subject={todosSummary(todos)}
       todos={todos}
@@ -726,10 +721,9 @@ function TodosRow({
   );
 }
 
-/** Where the transcript draws the agent's to-do lists: the call whose list stays out of a finished turn's fold, the call whose list is drawn open, none while the list is docked above the composer, the call whose list the agent is at, none once it stops, and the list as it stood after each of Claude Code's task calls (`taskTodos`). */
+/** Where the transcript draws the agent's to-do lists: the call whose list stays out of a finished turn's fold, the call whose list the agent is at, none once it stops, and the list as it stood after each of Claude Code's task calls (`taskTodos`). */
 interface TodosPlace {
   readonly kept: string | undefined;
-  readonly open: string | undefined;
   readonly live: string | undefined;
   readonly lists: ReadonlyMap<string, AgentTodos["todos"]>;
 }
@@ -737,27 +731,22 @@ interface TodosPlace {
 /** A transcript that holds no to-do list, as the brain's does not. */
 const NO_TODOS: TodosPlace = {
   kept: undefined,
-  open: undefined,
   live: undefined,
   lists: new Map(),
 };
 
-/** Whether two places draw the to-do lists alike: the same calls kept, open, and live, and each task call's list the one it was; none alike only with none. */
+/** Whether two places draw the to-do lists alike: the same calls kept and live, and each task call's list the one it was; none alike only with none. */
 function sameTodosPlace(a: TodosPlace | undefined, b: TodosPlace | undefined): boolean {
   if (a === undefined || b === undefined) return a === b;
-  return (
-    a.kept === b.kept && a.open === b.open && a.live === b.live && sameEntries(a.lists, b.lists)
-  );
+  return a.kept === b.kept && a.live === b.live && sameEntries(a.lists, b.lists);
 }
 
-/** Where the to-do lists are drawn for the transcript given: the newest kept and open, unless it is docked while the agent works on it, and live while the agent works. */
+/** Where the to-do lists are drawn for the transcript given: the newest kept, and live while the agent works. */
 function todosPlace(messages: readonly AgentTranscriptMessage[], working: boolean): TodosPlace {
   const lists = taskTodos(messages);
   const standing = newestTodos(messages, lists);
-  const docked = dockedTodos(standing, working);
   return {
     kept: standing?.callId,
-    open: docked === undefined ? standing?.callId : undefined,
     live: working ? standing?.callId : undefined,
     lists,
   };
@@ -1034,7 +1023,6 @@ function AgentPartView({
           <TodosRow
             part={part}
             todos={todosOfPart(part, todos.lists)}
-            open={part.callId === todos.open}
             live={part.callId === todos.live}
           />
         );
@@ -1449,7 +1437,7 @@ export function AgentMessage({
   moving: boolean;
   delegation: DelegationDoors | undefined;
   todos?: TodosPlace;
-  /** Who wrote or said the message, named over it: a teammate, Fullspin, or an automation; none for the reader's own, or where nobody is named. */
+  /** Who wrote or said the message, named over it: a teammate, the app, or an automation; none for the reader's own, or where nobody is named. */
   sender?: Actor | undefined;
   /** The developer's lines that reached this turn while it ran (`placedMessages`), each drawn where it arrived. */
   arrived?: readonly ArrivedLine[];
@@ -1513,7 +1501,7 @@ export function AgentMessage({
         </Message>
       );
     }
-    // A line anyone but the reader sent (a teammate's, an automation's, Fullspin's) stands at the left under its sender, as another agent's message does, so the reader's own alone stands at the right.
+    // A line anyone but the reader sent (a teammate's, an automation's, the app's) stands at the left under its sender, as another agent's message does, so the reader's own alone stands at the right.
     const received = sender !== undefined;
     const threadHead =
       thread === undefined ? null : (

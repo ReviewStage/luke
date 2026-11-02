@@ -12,7 +12,7 @@ import * as FileSystem from "effect/FileSystem";
  * a folder made `0700` before a byte of the secret is written, beside the
  * file and moved over it, so a write cut off leaves the last whole record.
  * The daemon reads it as it starts and calls every procedure on its secret.
- * Once Fullspin refuses that secret, the machine was removed, and the daemon
+ * Once the service refuses that secret, the machine was removed, and the daemon
  * marks the record refused rather than deleting it, so nothing that reads
  * it, the daemon at its next start or the app, takes the machine as never
  * enrolled and enrolls it again unasked. The record is never logged, and no
@@ -30,7 +30,7 @@ const HostDeviceSchema = Schema.Struct({
     ),
   ),
   serviceOrigin: Schema.String,
-  /** Present once Fullspin refused the secret: the machine was removed, and comes back only by joining again. */
+  /** Present once the service refused the secret: the machine was removed, and comes back only by joining again. */
   refused: Schema.optionalKey(Schema.Literal(true)),
 });
 
