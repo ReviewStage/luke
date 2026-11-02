@@ -3380,7 +3380,7 @@ export function AgentSubagentTab({
               sessionStarting={status === AGENT_STATUS.STARTING}
               startedAt={shown ? transcript.runStartedAt : undefined}
               ended={transcript.pages === 0 ? undefined : endLineParts(status, transcript.failure)}
-              failureAbout={{ agentId, taskId: owner?.planId ?? undefined }}
+              failureAbout={{ agentId, taskId: owner?.planId ?? undefined, callId }}
               onRetry={transcript.onRetry}
               onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
               olderFailed={transcript.olderFailed}
