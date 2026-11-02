@@ -23,6 +23,7 @@
 import { AGENT_TOOL, type AgentTool } from "./agent-tools.js";
 import { MESSAGE_SENDER, type MessageSender } from "./agent-wire.js";
 import { RUN_ON_MAC_OFF, type RunOnMacStanding } from "./luke-tools-wire.js";
+import { PRODUCT_NAME } from "./product-name.js";
 import { dayAndTimeText } from "./time-format.js";
 
 /** The groups Fullspin's tools stand under on its page, in the order they are drawn. */
@@ -306,8 +307,7 @@ export const RUN_ON_MAC_REASON_WORDS = {
   [RUN_ON_MAC_REASON.SETTINGS_OFF]: { short: "Off in Settings" },
   [RUN_ON_MAC_REASON.MAC_AWAY]: {
     short: "No Mac listening",
-    detail:
-      "Fullspin isn't open on any Mac of the developer who started this agent, or it stopped listening.",
+    detail: `${PRODUCT_NAME} isn't open on any Mac of the developer who started this agent, or it stopped listening.`,
   },
   [RUN_ON_MAC_REASON.OUTSIDE_WORDS]: {
     short: "Someone else's words",

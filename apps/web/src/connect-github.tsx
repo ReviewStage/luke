@@ -35,6 +35,7 @@ import { useEffect, useRef, useState } from "react";
 import { landingDescription, useConnectReturn } from "./connect-return";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { UNREPORTED } from "@luke/ui/reported-failure";
 import { mountPrerenderedPage } from "./mount-page";
 
@@ -70,7 +71,7 @@ type View =
 const WORKING: View = { kind: VIEW.WORKING };
 const GITHUB = INTEGRATION_NAME[INTEGRATION_PROVIDER.GITHUB];
 const RELOAD = "Reload this page to try again.";
-const SIGN_IN_BODY = "Sign in to the Fullspin account you use on your Mac.";
+const SIGN_IN_BODY = `Sign in to the ${PRODUCT_NAME} account you use on your Mac.`;
 
 /** A claim that did not settle: the browser has no session, or the service gave no answer. */
 const CLAIM_UNSETTLED = { SIGNED_OUT: "signed-out", UNANSWERED: "unanswered" } as const;
@@ -111,7 +112,7 @@ async function connect(intent: string): Promise<View> {
   if (claim === GITHUB_CONNECT_CLAIM.OTHER_ACCOUNT) {
     return signIn(
       "Sign in as the account you're connecting",
-      "This browser is signed in to a different Fullspin account than the one that asked to connect GitHub.",
+      `This browser is signed in to a different ${PRODUCT_NAME} account than the one that asked to connect GitHub.`,
     );
   }
   if (claim === GITHUB_CONNECT_CLAIM.EXPIRED) return said(LANDING_OUTCOME.EXPIRED);

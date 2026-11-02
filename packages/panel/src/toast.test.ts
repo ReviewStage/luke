@@ -79,7 +79,7 @@ function unheardStop(): ToastNotice {
     hold: TOAST_HOLD.FAILED,
     failure: {
       surface: FAILURE_SURFACE.AGENT_STOP,
-      cause: new Error("Fullspin didn't hear back.", { cause: unreached }),
+      cause: new Error("No answer came back.", { cause: unreached }),
       about: { agentId: "agent-fixture" },
     },
   };
@@ -302,7 +302,7 @@ test("a failure toast reports what failed: an unexpected one as an error line an
     "failure.kind": "unexpected",
     "failure.code": "[redacted]",
     "error.name": "Error",
-    "error.message": "Fullspin didn't hear back.",
+    "error.message": "No answer came back.",
     "error.root.name": "TypeError",
     "error.root.code": "[redacted]",
     "error.root.status": 503,
@@ -347,7 +347,7 @@ test("a failure toast reports what failed: an unexpected one as an error line an
       contexts: { shown_failure: unexpected },
     },
   });
-  assert.equal(issue?.error.message, "Fullspin didn't hear back.");
+  assert.equal(issue?.error.message, "No answer came back.");
   // Sentry reads the causes beneath an issue's error too, so they go redacted, their frames among them.
   const beneath = issue?.error.cause;
   assert.ok(beneath instanceof Error);
@@ -373,7 +373,7 @@ test("a failure toast for a hosted call that never answered reports what the hos
 
   act(() =>
     show?.({
-      words: "Fullspin didn't hear back.",
+      words: "No answer came back.",
       tone: STATUS_TONE.DANGER,
       hold: TOAST_HOLD.FAILED,
       failure: {
@@ -450,7 +450,7 @@ test("a failure toast's Copy details copies what its report sent, to paste as it
       "failure.kind: unexpected",
       "failure.code: [redacted]",
       "error.name: Error",
-      "error.message: Fullspin didn't hear back.",
+      "error.message: No answer came back.",
       "error.root.name: TypeError",
       "error.root.code: [redacted]",
       "error.root.status: 503",

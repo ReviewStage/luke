@@ -140,7 +140,7 @@ it.effect("a sign-in the service refuses is a sentence for the row, and no keys"
     });
     const answered = JSON.parse(yield* press(setup));
     assert.deepEqual(answered, {
-      refused: "Fullspin couldn't verify the ChatGPT sign-in. Try again.",
+      refused: "Couldn't verify the ChatGPT sign-in. Try again.",
     });
   }),
 );

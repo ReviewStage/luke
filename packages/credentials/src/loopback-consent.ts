@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { SIGN_IN_FAILURE } from "@luke/features/words";
 import { Deferred, Duration, Effect, Exit, Option, Result, type Scope, Semaphore } from "effect";
 import * as HttpServer from "effect/http/HttpServer";
@@ -61,10 +62,10 @@ const ARRIVAL_GRACE_MS = 1_000;
  * a row shows beside the provider's name.
  */
 const SHARED_REASON = {
-  UNAVAILABLE: "Fullspin could not open a sign-in callback on this machine.",
+  UNAVAILABLE: "Could not open a sign-in callback on this machine.",
   ALREADY_WAITING: "A sign-in is already waiting in your browser.",
-  BROWSER: "Fullspin could not open the sign-in page in your browser.",
-  CHALLENGE: "Fullspin could not prepare a secure sign-in on this machine.",
+  BROWSER: "Could not open the sign-in page in your browser.",
+  CHALLENGE: "Could not prepare a secure sign-in on this machine.",
   OFFLINE: "This machine is offline.",
 } as const;
 
@@ -75,7 +76,7 @@ const SHARED_REASON = {
 const ALREADY_USED_CARD = {
   badge: "Already used",
   title: "This sign-in has already been used",
-  body: "You can close this tab and return to Fullspin.",
+  body: `You can close this tab and return to ${PRODUCT_NAME}.`,
 } as const;
 
 const RESPONSE_STATUS = {

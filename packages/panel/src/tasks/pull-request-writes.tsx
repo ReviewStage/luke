@@ -10,6 +10,7 @@ import {
   type PullRequestState,
 } from "@luke/features/agent-wire";
 import { saidWords } from "@luke/features/integration-health";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_BOUNDS,
@@ -149,7 +150,7 @@ const WRITE_WORDS = {
   /** Who said the words quoted under a refusal. */
   SOURCE: "GitHub",
   /** A repository out of the workspace's reach, and where it is given back: the workspace's GitHub in Settings, whose Manage on GitHub chooses the App's repositories. */
-  UNREACHED: `${REPOSITORY_UNREACHED_NOTE} Choose which repositories Fullspin can see.`,
+  UNREACHED: `${REPOSITORY_UNREACHED_NOTE} Choose which repositories ${PRODUCT_NAME} can see.`,
 } as const;
 
 /** Fullspin's own words where a change never reached GitHub, by why. */
@@ -363,7 +364,7 @@ const CLOSE_QUEUED_QUESTION: DialogQuestion = {
 /** The question Close asks of an open pull request whose place in the merge queue could not be read, since it may be in it. */
 const CLOSE_UNKNOWN_QUESTION: DialogQuestion = {
   ...CLOSE_QUEUED_QUESTION,
-  body: `Fullspin could not read whether this pull request is in the merge queue. If it is, closing it takes it out, and reopening it does not queue it again. ${QUEUE_WARNING}`,
+  body: `Could not read whether this pull request is in the merge queue. If it is, closing it takes it out, and reopening it does not queue it again. ${QUEUE_WARNING}`,
 };
 
 /** What the toast says once a pull request is closed, and its one way back. */

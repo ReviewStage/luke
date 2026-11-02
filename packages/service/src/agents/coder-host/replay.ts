@@ -44,6 +44,7 @@ import { isVideoType } from "@luke/features/conversation-picture-wire";
 import { mentionMarkdownLink } from "@luke/features/link-grammar";
 import { agentName } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { CALL_KIND, CALL_WORDS as ROW_CALL_WORDS } from "@luke/features/turn-rows";
 import { type FileUIPart, isFileUIPart, isTextUIPart } from "ai";
 import { Effect, Option } from "effect";
@@ -187,7 +188,7 @@ const CALL_ENTRY_WORDS = {
 const REPLAY_WORDS = {
   SAID: "Said",
   DEVELOPER: "The developer",
-  LUKE: "Fullspin",
+  LUKE: PRODUCT_NAME,
   FORMER_MEMBER: "A former member",
   STARTING_AGENT: "The agent that started it",
   ATTACHED: "Attached file",
@@ -750,8 +751,8 @@ function preambleOf(
     counts.summarized === 0
       ? ""
       : left > 0
-        ? ` ${unfit} of its ${counts.total} steps did not fit: a summary of ${counts.summarized} of them comes first, written by Fullspin rather than by that agent, so read it as a recap, not its words; the other ${left} are left out.`
-        : ` The oldest ${counts.summarized} of its ${counts.total} steps did not fit, so a summary of them comes first, written by Fullspin rather than by that agent: read it as a recap, not its words.`;
+        ? ` ${unfit} of its ${counts.total} steps did not fit: a summary of ${counts.summarized} of them comes first, written by ${PRODUCT_NAME} rather than by that agent, so read it as a recap, not its words; the other ${left} are left out.`
+        : ` The oldest ${counts.summarized} of its ${counts.total} steps did not fit, so a summary of them comes first, written by ${PRODUCT_NAME} rather than by that agent: read it as a recap, not its words.`;
   const dropped =
     left > 0 && counts.summarized === 0
       ? ` The oldest ${left} of its ${counts.total} steps are left out to fit.`

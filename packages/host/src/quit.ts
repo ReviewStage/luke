@@ -9,6 +9,7 @@
  * see that from the next statement it resumes on.
  */
 
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { countWords, type Noun } from "@luke/features/words";
 
 /** Where the process stands: nothing asked for, a teardown under way, or one finished. */
@@ -166,13 +167,17 @@ const STAY_ANSWER = 1;
 
 /** What each way out asks, the act its button names, and whether it closes this Mac's terminals. */
 const LEAVE_WORDS = {
-  [LEAVE.QUIT]: { message: "Quit Fullspin?", act: "Quit", closesTerminals: true },
+  [LEAVE.QUIT]: { message: `Quit ${PRODUCT_NAME}?`, act: "Quit", closesTerminals: true },
   [LEAVE.RESTART]: {
-    message: "Restart Fullspin to update?",
+    message: `Restart ${PRODUCT_NAME} to update?`,
     act: "Restart",
     closesTerminals: true,
   },
-  [LEAVE.SIGN_OUT]: { message: "Sign out of Fullspin?", act: "Sign out", closesTerminals: false },
+  [LEAVE.SIGN_OUT]: {
+    message: `Sign out of ${PRODUCT_NAME}?`,
+    act: "Sign out",
+    closesTerminals: false,
+  },
   [LEAVE.RELOAD]: { message: "Reload this window?", act: "Reload", closesTerminals: false },
 } as const satisfies Record<Leave, { message: string; act: string; closesTerminals: boolean }>;
 

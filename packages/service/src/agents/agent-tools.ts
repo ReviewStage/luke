@@ -71,6 +71,7 @@ import { MENTION_KIND } from "@luke/features/mention-link";
 import { agentName, modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
 import { PAGE_OWNER, type PageOwner } from "@luke/features/page-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import {
   TASK_BOUNDS,
@@ -322,7 +323,7 @@ export const UPDATE_TASK_REFUSAL = {
     "Not run: a thread of that task still holds an ask open for the developer, which marking " +
     `it done would withdraw. Withdraw each ask of yours it no longer needs with ${AGENT_TOOL.WITHDRAW_ASK} ` +
     `(${AGENT_TOOL.READ_THREADS} lists them), then mark it done; or leave it as it stands until ` +
-    "they are answered: Fullspin then marks a task whose pull request merged done by itself, and " +
+    `they are answered: ${PRODUCT_NAME} then marks a task whose pull request merged done by itself, and ` +
     "you mark any other done once the answer reaches you.",
   NOT_MEMBER:
     "Not run: that assignee is no member of the task's workspace, or names no person; name a " +
@@ -423,8 +424,7 @@ export const START_AGENT_REFUSAL = {
     "Not started: the plan that would pay for it has reached its usage limit; start it after the limit resets, or its starter chooses the API key in Settings.",
   PLAN_INELIGIBLE:
     "Not started: the plan's provider said the account is not eligible to run it; its starter chooses the API key in Settings.",
-  CREDENTIAL_MISSING:
-    "Not started: no subscription or API key of its starter's pays for that model, and Fullspin's key pays for no agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.",
+  CREDENTIAL_MISSING: `Not started: no subscription or API key of its starter's pays for that model, and ${PRODUCT_NAME}'s key pays for no agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.`,
   API_KEY_UNREADABLE:
     "Not started: the API key that would pay for it is saved but cannot be read here; its starter saves it again in Settings › Agents.",
   DEVICE_REMOVED:
@@ -490,8 +490,7 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
 
 /** Why a start on a device refused it, in words the calling model can act on: by what the device refused it for, bar another member's device, which names whose it is (`notOwnerWords`). */
 const LOCAL_AGENT_REFUSAL_WORDS = {
-  [LOCAL_AGENT_REFUSAL.MAC_AWAY]:
-    "Not started: the device this task runs its agents on is away, asleep or with Fullspin closed, so it cannot take an agent. Try again once it is back, or ask the member to change where the task runs.",
+  [LOCAL_AGENT_REFUSAL.MAC_AWAY]: `Not started: the device this task runs its agents on is away, asleep or with ${PRODUCT_NAME} closed, so it cannot take an agent. Try again once it is back, or ask the member to change where the task runs.`,
   [LOCAL_AGENT_REFUSAL.CODEX]:
     "Not started: the device this task runs its agents on has no Codex set up yet, so it cannot run this model. Start on a Claude model, or ask the member to change where the task runs.",
   [LOCAL_AGENT_REFUSAL.NO_HARNESS]:
@@ -697,7 +696,7 @@ const START_AGENT_INPUT = Schema.Struct({
       }),
       "Another agent of your workspace to take over from, on its own task, or on no " +
         "task where it has none: the new " +
-        "agent is handed its brief and its transcript (with Fullspin's summary of the steps that " +
+        `agent is handed its brief and its transcript (with ${PRODUCT_NAME}'s summary of the steps that ` +
         "do not fit) and a copy of its work, runs on its model unless you name one, and hears " +
         "the note after them; it takes no prompt and no branch. Without messageId it continues " +
         "the agent, which is stopped; with one it forks the agent at that message, which goes on.",

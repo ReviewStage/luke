@@ -1,5 +1,6 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import type {
   WorkspaceSentry,
   WorkspaceSentryInstallation,
@@ -205,8 +206,7 @@ const OWNER_INVITES_ADMINS = "Only the owner invites admins";
 const INVITE_LINK_COPIED = "Invite link copied";
 
 /** What the invitations say where none is pending, with the one fact a reader cannot guess: Fullspin mails no one. */
-const INVITATIONS_EMPTY =
-  "No invitations. Fullspin sends no email, so copy each invitation's link and send it yourself.";
+const INVITATIONS_EMPTY = `No invitations. ${PRODUCT_NAME} sends no email, so copy each invitation's link and send it yourself.`;
 
 /** What a list's line says where its read did not land, in `ErrorState`'s words. */
 const READ_FAILED = {
@@ -1554,7 +1554,7 @@ function ManagedSentry({
         confirm={disconnect}
         question={{
           title: `Disconnect Sentry from ${workspace.name}?`,
-          body: "Its alerts and new issues stop triggering this workspace's automations. Uninstall Fullspin in Sentry's settings to remove it there too.",
+          body: `Its alerts and new issues stop triggering this workspace's automations. Uninstall ${PRODUCT_NAME} in Sentry's settings to remove it there too.`,
           verb: "Disconnect",
           running: "Disconnecting",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,

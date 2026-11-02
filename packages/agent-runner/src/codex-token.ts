@@ -44,19 +44,19 @@ export const askCodexToken = Effect.fn("agent-runner/askCodexToken")(function* (
     .pipe(
       Effect.timeout(ASK_TIMEOUT),
       // Note that the client's error is not kept, because the request it describes carries the bearer.
-      Effect.mapError(() => new CodexTokenFailed({ detail: "Fullspin did not answer" })),
+      Effect.mapError(() => new CodexTokenFailed({ detail: "The service did not answer" })),
     );
   if (response.status !== HTTP_OK) {
     return yield* new CodexTokenFailed({
-      detail: `Fullspin refused the token: ${response.status}`,
+      detail: `The service refused the token: ${response.status}`,
     });
   }
   const body = yield* response.json.pipe(
-    Effect.mapError(() => new CodexTokenFailed({ detail: "Fullspin's answer is not JSON" })),
+    Effect.mapError(() => new CodexTokenFailed({ detail: "The service's answer is not JSON" })),
   );
   const answer = decodeAnswer(body);
   if (Option.isNone(answer) || answer.value.accessToken === "") {
-    return yield* new CodexTokenFailed({ detail: "Fullspin's answer holds no token" });
+    return yield* new CodexTokenFailed({ detail: "The service's answer holds no token" });
   }
   return answer.value.accessToken;
 });

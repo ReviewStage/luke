@@ -6,6 +6,7 @@
 
 import type { AdminReliabilityDay } from "@luke/features/admin-answer-wire";
 import { formatPercent } from "@luke/features/number-format";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { formatDayTick } from "@luke/features/time-format";
 import { formatTooltipDay, RATE_PLACES } from "@luke/ui/admin-format";
 import {
@@ -20,7 +21,7 @@ import { ChartEmpty, ChartFrame, ChartFrameSkeleton, SeriesLegend } from "./char
 
 /** The three rates, in the order the legend names them. */
 const FAILURE_RATES_CHART = {
-  lukeTurns: { label: "Fullspin turns", color: "var(--luke-color-chart-1)" },
+  lukeTurns: { label: `${PRODUCT_NAME} turns`, color: "var(--luke-color-chart-1)" },
   agentRuns: { label: "Agent runs", color: "var(--luke-color-chart-2)" },
   automationRuns: { label: "Automation runs", color: "var(--luke-color-chart-3)" },
 } satisfies ChartConfig;

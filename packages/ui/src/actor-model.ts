@@ -1,8 +1,8 @@
 import { githubUserAvatarUrl } from "@luke/features/account-picture";
 import type { GitHubPerson } from "@luke/features/agent-wire";
 import type { AutomationFiring, AutomationTrigger } from "@luke/features/automation-wire";
-import { PRODUCT_NAME } from "@luke/features/model-label";
 import type { ModelProvider } from "@luke/features/models-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   PLAN_ACTOR,
   type PlanEditor,

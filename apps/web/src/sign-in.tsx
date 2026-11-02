@@ -8,6 +8,7 @@ import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
 import { openLukeFromMac } from "./open-luke";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { UNREPORTED } from "@luke/ui/reported-failure";
 import { mountPrerenderedPage } from "./mount-page";
 
@@ -44,12 +45,14 @@ function SignIn(): React.JSX.Element {
   return (
     <AuthPage
       mark={<AuthMark provider={provider} tone={provider ? undefined : LANDING_TONE.DANGER} />}
-      title={provider ? "Sign in to Fullspin" : "Fullspin could not continue"}
+      title={provider ? `Sign in to ${PRODUCT_NAME}` : `${PRODUCT_NAME} could not continue`}
       description={provider ? undefined : "Start sign-in again."}
       error={failed ? { words: SIGN_IN_UNFINISHED, failure: UNREPORTED.NO_REPORTER } : undefined}
       action={provider ? undefined : openLukeFromMac()}
       footnote={
-        provider ? "You can close this window after Fullspin confirms the sign-in." : undefined
+        provider
+          ? `You can close this window after ${PRODUCT_NAME} confirms the sign-in.`
+          : undefined
       }
     >
       {provider ? (

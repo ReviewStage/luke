@@ -1,5 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   ANNOUNCE,
@@ -62,7 +63,7 @@ export function SignInGate({
   return (
     <AuthPage
       mark={<WingFace />}
-      title="Sign in to Fullspin"
+      title={`Sign in to ${PRODUCT_NAME}`}
       error={
         failure === undefined
           ? undefined

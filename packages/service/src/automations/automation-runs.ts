@@ -42,6 +42,7 @@ import {
   GITHUB_TRIGGER_EVENT,
   type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   TRIGGER_CATALOG,
   TRIGGER_PROVIDER,
@@ -303,7 +304,7 @@ function automationStart(automation: Automation, run: ActedRun): AutomationStart
   const lines = [
     automation.action.prompt,
     "---",
-    `Fullspin started this run for the automation "${automation.name}" because ${firingSentence(automation, run)}. No one is watching it as it runs: decide on your own, and post a thread only for what needs the developer.`,
+    `${PRODUCT_NAME} started this run for the automation "${automation.name}" because ${firingSentence(automation, run)}. No one is watching it as it runs: decide on your own, and post a thread only for what needs the developer.`,
     ...githubEventLines(run),
     ...missingEventLines(automation, run),
   ];

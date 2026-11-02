@@ -4079,7 +4079,7 @@ test("Close on an open pull request whose merge status could not be read asks fi
   const question = document.querySelector('[role="dialog"], [role="alertdialog"]');
   assert.match(
     question?.textContent ?? "",
-    /could not read whether this pull request is in the merge queue/u,
+    /Could not read whether this pull request is in the merge queue/u,
   );
   assert.deepEqual(changes, []);
 });

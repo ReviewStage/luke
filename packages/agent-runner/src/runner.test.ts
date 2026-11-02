@@ -1180,7 +1180,7 @@ it.effect("answers the CLI's MCP request with a JSON-RPC error where Fullspin re
     yield* Fiber.join(run);
 
     assert.deepEqual(channel.sent, [
-      { jsonrpc: "2.0", id: 7, error: { code: -32603, message: "Fullspin answered 401" } },
+      { jsonrpc: "2.0", id: 7, error: { code: -32603, message: "The service answered 401" } },
     ]);
   }),
 );

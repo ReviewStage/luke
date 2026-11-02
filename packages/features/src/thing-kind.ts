@@ -7,8 +7,8 @@ import {
   pullRequestAddressOf,
 } from "./link-grammar.js";
 import { MENTION_KIND, type Mention } from "./mention-link.js";
-import { PRODUCT_NAME } from "./model-label.js";
 import type { KnownNames } from "./place-chip-model.js";
+import { PRODUCT_NAME } from "./product-name.js";
 import { TERM } from "./words.js";
 
 /**
@@ -279,7 +279,7 @@ export const THING_WORD: { readonly [K in ThingKind]: string } = {
   [THING_KIND.PAGE]: TERM.PAGE.one,
   [THING_KIND.AGENT]: TERM.AGENT.one,
   [THING_KIND.WORKER]: TERM.WORKER.one,
-  [THING_KIND.LUKE]: "Fullspin",
+  [THING_KIND.LUKE]: PRODUCT_NAME,
   [THING_KIND.CHANGES]: "changes",
   [THING_KIND.PULL_REQUEST]: TERM.PULL_REQUEST.one,
   [THING_KIND.PULL_REQUEST_THREAD]: "review thread",

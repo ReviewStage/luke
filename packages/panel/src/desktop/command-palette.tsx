@@ -66,6 +66,7 @@ import { automationTriggerText } from "@luke/features/automation-list-model";
 import type { AutomationSummary } from "@luke/features/automation-wire";
 import type { Channel } from "@luke/features/channel-wire";
 import { formatCount } from "@luke/features/number-format";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   TASK_CREATE_RELATION_KIND,
@@ -301,7 +302,7 @@ function filterLabels(experiments: ExperimentChoices): Record<PaletteFilter, str
 /** What the search field asks for: Fullspin under All, and the kind, as it stands mid-sentence, under its filter. */
 function filterPlaceholder(filter: PaletteFilter, labels: Record<PaletteFilter, string>): string {
   return filter === PALETTE_FILTER.ALL
-    ? "Search Fullspin"
+    ? `Search ${PRODUCT_NAME}`
     : `Search ${labels[filter].toLowerCase()}`;
 }
 

@@ -66,7 +66,7 @@ const WORDS = {
   HELD: "Your account tried too many codes that match no host.",
   HELD_SOON: "Try again in a few minutes.",
   UNREAD: readFailedWords("the code"),
-  UNANSWERED: "Fullspin could not reach the service. Try again.",
+  UNANSWERED: "Could not reach the service. Try again.",
 } as const;
 
 /** Where the dialog stands: reading the pairing, unable to, asking, or done in one of the ways it ends. */

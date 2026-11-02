@@ -459,7 +459,7 @@ export function callConnectionTool(
       Effect.as(
         Effect.logWarning(`integration server ${name} call failed: ${causeKind(cause)}`),
         Result.fail(
-          refused("Fullspin could not reach this integration just now; try again in a moment."),
+          refused("This integration could not be reached just now; try again in a moment."),
         ),
       ),
     ),

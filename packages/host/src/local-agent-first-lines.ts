@@ -4,6 +4,7 @@ import {
   type ContentBlock,
   INPUT_LINE,
 } from "@luke/agent-runner/protocol";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { Option, Schema } from "effect";
 
 /**
@@ -25,12 +26,11 @@ import { Option, Schema } from "effect";
 /** What the device tells the agent of the machine its turn starts on, each as the paragraph it reads. */
 export const LAUNCH_NOTE = {
   /** The agent's folder on the device was cleared since its last turn, so it starts afresh from what it pushed. */
-  CLEARED:
-    "Your folder on this machine was cleared since your last turn, so this turn starts in a fresh one, with none of your earlier work but what you pushed to GitHub, and with no memory of the conversation before it. Fetch your branch to carry on from what you pushed. Your transcript is still in Fullspin.",
+  CLEARED: `Your folder on this machine was cleared since your last turn, so this turn starts in a fresh one, with none of your earlier work but what you pushed to GitHub, and with no memory of the conversation before it. Fetch your branch to carry on from what you pushed. Your transcript is still in ${PRODUCT_NAME}.`,
 } as const;
 
 /** What leads the device's notes, so the agent reads them as Fullspin's rather than the developer's. */
-const NOTES_LEAD = "From Fullspin, about the machine this turn runs on:";
+const NOTES_LEAD = `From ${PRODUCT_NAME}, about the machine this turn runs on:`;
 
 /** The keys of a runner's config that continue a harness's session: Claude Code's session, Codex's thread, and the cut a rewind makes in either. */
 const RESUME_KEYS = ["resume", "threadId", "rewindBefore"] as const satisfies readonly (

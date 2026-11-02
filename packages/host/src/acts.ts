@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { workspaceInvitationSchema } from "@luke/features/workspace-invitation-wire";
 import { formerMemberSchema, workspaceMemberSchema } from "@luke/features/workspace-wire";
 import { Schema as EffectSchema } from "effect";
@@ -27,7 +28,7 @@ const _workspaceInvitationsSchema = EffectSchema.Array(workspaceInvitationSchema
 
 /** What a GitHub disconnect is refused with where GitHub is the account's only way to sign in. */
 export const GITHUB_LAST_SIGN_IN_REFUSAL =
-  "GitHub is the only way you sign in to this Fullspin account, so it cannot be disconnected." as const;
+  `GitHub is the only way you sign in to this ${PRODUCT_NAME} account, so it cannot be disconnected.` as const;
 
 /** What an invitation is refused with where the address is already in the workspace or already invited. */
 export const ALREADY_INVITED_REFUSAL =

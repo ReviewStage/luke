@@ -17,6 +17,7 @@ import {
   type AgentTodos,
   type AgentTranscriptMessage,
 } from "@luke/features/agent-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { CALL_KIND, CALL_WORDS, type CallKind } from "@luke/features/turn-rows";
 import { isRecord, valueFromJsonText, type WireValue } from "@luke/wire";
 import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
@@ -258,7 +259,7 @@ export function leftOutLine(replay: Replay): string | undefined {
 export function summaryLine(replay: Replay): string | undefined {
   const steps = replay.summary?.steps;
   if (steps === undefined) return undefined;
-  return `Summary of ${steps === 1 ? "1 earlier step" : `${steps} earlier steps`} (written by Fullspin)`;
+  return `Summary of ${steps === 1 ? "1 earlier step" : `${steps} earlier steps`} (written by ${PRODUCT_NAME})`;
 }
 
 /** The steps drawn of `kept` once `shown` of the newest are: never fewer than one page, nor more than are kept. */

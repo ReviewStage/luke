@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   BUTTON_VARIANT,
   Button,
@@ -85,7 +86,7 @@ function GlyphSlots(): React.JSX.Element {
             <GlyphSlot ink={GLYPH_INK.VOICE}>
               <WingFace fill inherit />
             </GlyphSlot>
-            <Text variant={TEXT_VARIANT.CAPTION}>Fullspin's note on lines 3–4</Text>
+            <Text variant={TEXT_VARIANT.CAPTION}>{PRODUCT_NAME}'s note on lines 3–4</Text>
           </span>
         </Stack>
       </CatalogSection>
@@ -126,7 +127,7 @@ function GlyphSlots(): React.JSX.Element {
           <GlyphSlot ink={GLYPH_INK.VOICE}>
             <WingFace fill inherit />
           </GlyphSlot>
-          <Text variant={TEXT_VARIANT.CAPTION}>Fullspin</Text>
+          <Text variant={TEXT_VARIANT.CAPTION}>{PRODUCT_NAME}</Text>
         </span>
       </CatalogSection>
     </>

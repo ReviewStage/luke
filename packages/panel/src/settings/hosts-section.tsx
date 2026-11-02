@@ -11,6 +11,7 @@ import {
   hostInstallCommand,
   hostUpgradeCommand,
 } from "@luke/features/host-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { agoText } from "@luke/features/time-format";
 import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
@@ -145,8 +146,8 @@ const WORDS = {
   CHECKING: "Checking",
   UPGRADE_NEEDED: "Update needed",
   UPGRADE_TITLE: "Run this on the host to update it",
-  MAC_UPGRADE: "Update the Fullspin app on this Mac.",
-  OTHER_MAC_UPGRADE: "If you added it from the Fullspin app on it, update the app there.",
+  MAC_UPGRADE: `Update the ${PRODUCT_NAME} app on this Mac.`,
+  OTHER_MAC_UPGRADE: `If you added it from the ${PRODUCT_NAME} app on it, update the app there.`,
   OTHER_MAC_UPGRADE_TITLE: "If you used the install command, run this on it",
   INSTALL_TITLE: "Run this on each host",
   INSTALL_NEXT: "Then open the link it prints, and approve its code.",
@@ -169,7 +170,7 @@ const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 /** A remove the service did not take, said in the dialog that asked. */
 const REFUSED: ActionResult = {
   status: ACTION_RESULT_STATUS.REJECTED,
-  reason: "Fullspin could not reach the service. Try again.",
+  reason: "Could not reach the service. Try again.",
 };
 
 /** Where a host stands now; one the read does not name, though it is the account's own, is gone. */
@@ -280,8 +281,7 @@ function UpgradeHow({
 }
 
 /** What Remove says goes, whatever the machine. */
-const REMOVED =
-  "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Fullspin.";
+const REMOVED = `It stops taking agents now, and its agents stop. Their tasks and transcripts stay in ${PRODUCT_NAME}.`;
 
 /**
  * What Remove says, and the title of the uninstall command it shows, by what
@@ -290,13 +290,13 @@ const REMOVED =
  * Mac may be either, since the service lists no word of how a Mac joined.
  */
 const REMOVE_WORDS = {
-  SERVER: { body: REMOVED, uninstall: "Run this on the host to remove Fullspin from it" },
+  SERVER: { body: REMOVED, uninstall: `Run this on the host to remove ${PRODUCT_NAME} from it` },
   THIS_MAC: {
     body: `${REMOVED} To use it again, choose Turn on again under This Mac.`,
     uninstall: undefined,
   },
   MAC: {
-    body: `${REMOVED} If you added it from the Fullspin app on it, choose Turn on again under This Mac there to use it again.`,
+    body: `${REMOVED} If you added it from the ${PRODUCT_NAME} app on it, choose Turn on again under This Mac there to use it again.`,
     uninstall: "If you used the install command, run this on it",
   },
 } as const;

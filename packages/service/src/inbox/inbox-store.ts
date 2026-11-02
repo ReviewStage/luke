@@ -3600,7 +3600,7 @@ export function answerInboxAsk(
         const ask = knownAsk(asking.value.ask);
         const refusal =
           ask === undefined
-            ? "The ask is one this Fullspin does not know."
+            ? "The ask is one this version does not know."
             : inboxAnswersRefusal(ask, sent.answers, sent.text, files);
         if (refusal !== undefined) return standing(INBOX_ASK_ANSWER.REFUSED, refusal);
         const now = yield* DateTime.nowAsDate;

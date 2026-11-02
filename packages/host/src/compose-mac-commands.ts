@@ -14,6 +14,7 @@ import {
   type MacShellCommand,
   type MacShellResult,
 } from "@luke/features/mac-command-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@luke/gateway";
 import { MAC_COMMAND_MODE, type MacCommandMode } from "@luke/settings";
 import {
@@ -171,7 +172,7 @@ const ACCOUNT_CHANGED: MacCommandRefusal = {
 /** What a command of a kind this Mac cannot run answers, such as one a newer service queued. */
 const CANNOT_RUN: MacCommandRefusal = {
   refused:
-    "Not run: Fullspin on the developer's Mac cannot run this kind of command; updating Fullspin there " +
+    `Not run: ${PRODUCT_NAME} on the developer's Mac cannot run this kind of command; updating ${PRODUCT_NAME} there ` +
     "may let it.",
 };
 
@@ -179,7 +180,7 @@ const CANNOT_RUN: MacCommandRefusal = {
 const NO_HOME: MacShellResult = {
   exitCode: null,
   stdout: "",
-  stderr: "Fullspin could not start the command: this Mac names no home folder.",
+  stderr: "Could not start the command: this Mac names no home folder.",
   truncated: false,
   timedOut: false,
 };

@@ -90,8 +90,8 @@ const FEEDBACK_LIMITS = {
 };
 
 const SUBJECT_LINE = {
-  [FEEDBACK_KIND.FEEDBACK]: "Fullspin feedback",
-  [FEEDBACK_KIND.PROMPT]: "Fullspin prompt",
+  [FEEDBACK_KIND.FEEDBACK]: "Feedback",
+  [FEEDBACK_KIND.PROMPT]: "Prompt",
 };
 
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
@@ -261,7 +261,7 @@ function emailBody(submission) {
     submission.name || submission.email
       ? `From: ${[submission.name, submission.email].filter(Boolean).join(" — ")}`
       : "From: unsigned";
-  return [submission.message, "", "—", credit, "Sent from the Fullspin panel."].join("\n");
+  return [submission.message, "", "—", credit, "Sent from the panel."].join("\n");
 }
 
 /**

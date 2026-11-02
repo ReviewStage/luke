@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { PRODUCT_NAME } from "./product-name.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
@@ -32,8 +33,7 @@ export type GitHubTokenStatus = (typeof GITHUB_TOKEN_STATUS)[keyof typeof GITHUB
  * for checked and Fullspin as its note. Creating one, in GitHub's docs:
  * https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic
  */
-export const GITHUB_TOKEN_CREATE_URL =
-  "https://github.com/settings/tokens/new?scopes=repo,read:org,workflow,read:user&description=Fullspin";
+export const GITHUB_TOKEN_CREATE_URL = `https://github.com/settings/tokens/new?scopes=repo,read:org,workflow,read:user&description=${PRODUCT_NAME}`;
 
 /** Why a save kept nothing. */
 export const GITHUB_TOKEN_REJECTION = {

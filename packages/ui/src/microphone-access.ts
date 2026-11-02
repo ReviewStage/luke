@@ -2,6 +2,7 @@
  * microphone-access.ts -- what the microphone's row and the controls that need the microphone say, from macOS's answer.
  */
 
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/settings/microphone";
 
 /** Why a dictated clip cannot run: it runs on the account's own OpenAI key, kept under Codex in settings, and none is saved. */
@@ -16,11 +17,11 @@ export const OPENAI_KEY_MISSING_NOTE = "Add an OpenAI key in settings";
 function microphoneStatusDetail(status: MicrophoneStatus): string | undefined {
   switch (status) {
     case MICROPHONE_STATUS.DENIED:
-      return "Allow Fullspin in System Settings › Privacy & Security › Microphone.";
+      return `Allow ${PRODUCT_NAME} in System Settings › Privacy & Security › Microphone.`;
     case MICROPHONE_STATUS.RESTRICTED:
       return "This Mac does not permit microphone access.";
     case MICROPHONE_STATUS.UNKNOWN:
-      return "Fullspin could not read the microphone permission.";
+      return "Could not read the microphone permission.";
     default:
       return undefined;
   }

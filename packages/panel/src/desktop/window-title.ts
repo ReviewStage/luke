@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { useEffect } from "react";
 
@@ -21,8 +22,8 @@ export function windowTitle(input: {
   readonly subject: string | undefined;
   readonly workspace: Pick<Workspace, "name"> | undefined;
 }): string {
-  if (!input.signedIn) return "Fullspin";
-  if (input.workspace === undefined) return input.subject ?? "Fullspin";
+  if (!input.signedIn) return PRODUCT_NAME;
+  if (input.workspace === undefined) return input.subject ?? PRODUCT_NAME;
   return input.subject === undefined
     ? input.workspace.name
     : `${input.subject} — ${input.workspace.name}`;

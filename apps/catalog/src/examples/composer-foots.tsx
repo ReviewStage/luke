@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   AttachmentChip,
   BUTTON_VARIANT,
@@ -106,7 +107,10 @@ function ComposerFoots(): React.JSX.Element {
       <CatalogSection id="composer-foot-states" title="States">
         <div className="catalog-column">
           <Stack gap={GAP.FIELD}>
-            <Box words="Ask Fullspin to change something…" send={{ label: "Send", empty: true }} />
+            <Box
+              words={`Ask ${PRODUCT_NAME} to change something…`}
+              send={{ label: "Send", empty: true }}
+            />
             <Box
               words="Add a note"
               send={{

@@ -34,6 +34,7 @@ import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./a
 import { openLukeFromMac } from "./open-luke";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { UNREPORTED } from "@luke/ui/reported-failure";
 import { mountPrerenderedPage } from "./mount-page";
 
@@ -67,7 +68,7 @@ function said(title: string, body: string): View {
 /** Asks the plugin for the code and sends the browser on to the loopback; answers what to show when it cannot. */
 async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View> {
   if (query === undefined) {
-    return said("This link did not come from Fullspin", "Sign in again.");
+    return said(`This link did not come from ${PRODUCT_NAME}`, "Sign in again.");
   }
   // Note that the session is read beside the transfer rather than after it,
   // and under a deadline, so counting the sign-in adds little to the
@@ -86,9 +87,9 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
       ? {
           kind: VIEW.SIGN_IN,
           title: "Sign in to finish",
-          body: "Sign in with the account you use in Fullspin.",
+          body: `Sign in with the account you use in ${PRODUCT_NAME}.`,
         }
-      : said("Fullspin could not be reached", "Sign in again.");
+      : said(`${PRODUCT_NAME} could not be reached`, "Sign in again.");
   }
   const code = Schema.decodeUnknownSync(TransferAnswer)(answered.data).electron_authorization_code;
   // Note that the sign-in is counted here, before the page leaves, because

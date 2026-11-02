@@ -4,6 +4,7 @@ import { createTaskOnce, readTask } from "@luke/database/models/task-store";
 import { AGENT_KIND } from "@luke/features/agent-wire";
 import { githubRepositoryFullNameSchema } from "@luke/features/github-repositories-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   PLAN_ACTOR,
   TASK_BOUNDS,
@@ -228,7 +229,7 @@ const CREATE_TASK_INPUT = Schema.Struct({
   brief: Schema.optionalKey(
     describeWire(
       Schema.Trim.check(Schema.isMaxLength(TASK_BOUNDS.MAX_BRIEF_CHARS)),
-      "The developer's own words about the task, which Fullspin is handed when they open a call on " +
+      `The developer's own words about the task, which ${PRODUCT_NAME} is handed when they open a call on ` +
         "it; their words where they gave them, left out otherwise.",
     ),
   ),

@@ -1,4 +1,5 @@
 import { LANDING_TONE } from "@luke/features/landing-outcome";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   AuthMark,
   AuthPage,
@@ -26,7 +27,7 @@ import { CatalogSection } from "../section";
  */
 
 /** Open Fullspin as a page offers it; the catalog goes nowhere. */
-const OPEN_LUKE = { label: "Open Fullspin", href: "#" } as const;
+const OPEN_LUKE = { label: `Open ${PRODUCT_NAME}`, href: "#" } as const;
 
 function Face(): React.JSX.Element {
   return (
@@ -49,7 +50,7 @@ function EmailForm(): React.JSX.Element {
   const [email, setEmail] = useState("someone@acme-corporation.example");
   return (
     <>
-      <FormField label="Work email" description="Fullspin sends a sign-in link to it.">
+      <FormField label="Work email" description={`${PRODUCT_NAME} sends a sign-in link to it.`}>
         {(control) => (
           <TextField
             field={control}
@@ -71,8 +72,8 @@ function AuthPages(): React.JSX.Element {
         <div className="catalog-screen">
           <AuthPage
             mark={<Face />}
-            title="Sign in to Fullspin"
-            footnote="You can close this window after Fullspin confirms the sign-in."
+            title={`Sign in to ${PRODUCT_NAME}`}
+            footnote={`You can close this window after ${PRODUCT_NAME} confirms the sign-in.`}
           >
             <ProviderChoices />
           </AuthPage>
@@ -83,7 +84,7 @@ function AuthPages(): React.JSX.Element {
           <div className="catalog-screen catalog-screen-phone">
             <SocialSignInCard
               mark={<Face />}
-              title="Fullspin admin"
+              title={`${PRODUCT_NAME} admin`}
               pending={undefined}
               onPress={() => undefined}
             />
@@ -119,7 +120,7 @@ function AuthPages(): React.JSX.Element {
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
               mark={<AuthMark provider={MARK_PROVIDER.NOTION} tone={LANDING_TONE.DANGER} />}
-              title="Fullspin could not reach Notion"
+              title={`${PRODUCT_NAME} could not reach Notion`}
               description="Try again in a moment."
               action={OPEN_LUKE}
             />
@@ -128,20 +129,20 @@ function AuthPages(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection
         id="auth-luke"
-        title="Fullspin's own mark, on its way and failed, with no Open Fullspin"
+        title={`${PRODUCT_NAME}'s own mark, on its way and failed, with no Open ${PRODUCT_NAME}`}
       >
         <div className="catalog-screens">
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
               mark={<AuthMark />}
-              title="Continuing to Fullspin…"
+              title={`Continuing to ${PRODUCT_NAME}…`}
               description="This window will close soon."
             />
           </div>
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
               mark={<AuthMark tone={LANDING_TONE.DANGER} />}
-              title="Fullspin could not continue"
+              title={`${PRODUCT_NAME} could not continue`}
               description="Start sign-in again."
             />
           </div>

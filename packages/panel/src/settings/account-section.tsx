@@ -2,6 +2,7 @@ import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { GitHubTokenSummary } from "@luke/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { IRREVERSIBLE_WORDS, VERB } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -40,8 +41,7 @@ const NO_CAPTURE = "ph-no-capture";
 const TOKEN_LABEL = "GitHub personal access token";
 
 /** What the row says while no token is saved, so what the token is for is told before it is asked for. */
-const TOKEN_PURPOSE =
-  "Lets agents work in repositories Fullspin's GitHub App does not reach, and open pull requests as you.";
+const TOKEN_PURPOSE = `Lets agents work in repositories ${PRODUCT_NAME}'s GitHub App does not reach, and open pull requests as you.`;
 
 /** What the row says where the token could not be read, so what stands is unknown. */
 const TOKEN_READ_FAILED = "The token could not be read.";

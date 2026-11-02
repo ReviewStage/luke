@@ -1,5 +1,6 @@
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { HOST_WIRE, hostUpgradeCommand } from "@luke/features/host-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { HTTP_STATUS } from "@luke/wire";
 import { Clock, Deferred, Duration, Effect, Ref } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -27,7 +28,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 const QUIET = Duration.minutes(5);
 
 /** What the daemon says once Fullspin first took its register, which a person following its log reads as the box connected. */
-const HOST_CONNECTED_REPORT = "Fullspin host: Connected to Fullspin.";
+const HOST_CONNECTED_REPORT = `${PRODUCT_NAME} host: Connected to ${PRODUCT_NAME}.`;
 
 /** What Fullspin last said of this host. */
 const HOST_STANDING = {
@@ -48,8 +49,8 @@ function refusalReport(
 ): string {
   const script = `${serviceOrigin}${HOST_WIRE.INSTALL_SCRIPT_PATH}`;
   return refusal === HOST_STANDING.UPGRADE_NEEDED
-    ? `Fullspin host: upgrade needed: Fullspin no longer accepts this version. Rerun the install command to upgrade in place: ${hostUpgradeCommand(script)}`
-    : "Fullspin host: Fullspin refused this box's secret, so it was removed in Settings › Hosts. Stopping its agents. Add it again with Add hosts, and rerun the install command it shows.";
+    ? `${PRODUCT_NAME} host: upgrade needed: ${PRODUCT_NAME} no longer accepts this version. Rerun the install command to upgrade in place: ${hostUpgradeCommand(script)}`
+    : `${PRODUCT_NAME} host: ${PRODUCT_NAME} refused this box's secret, so it was removed in Settings › Hosts. Stopping its agents. Add it again with Add hosts, and rerun the install command it shows.`;
 }
 
 /** The host's standing with Fullspin, as its calls heard it, and the client every call of its goes through. */
@@ -100,7 +101,7 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
       }
       if (status >= 200 && status < 300 && before.kind !== HOST_STANDING.STANDING) {
         yield* Ref.set(standing, { kind: HOST_STANDING.STANDING, until: 0 });
-        options.report("Fullspin host: Fullspin took this box's calls again.");
+        options.report(`${PRODUCT_NAME} host: ${PRODUCT_NAME} took this box's calls again.`);
       }
     });
 

@@ -78,7 +78,7 @@ function versionWords(revision: number): string {
 const OPEN_NOTHING = (): void => undefined;
 
 /** What a page's card says where its page cannot be read: deleted, or on a plan or an agent the reader cannot reach. */
-const PAGE_UNREAD = "Fullspin can't read this page.";
+const PAGE_UNREAD = "Can't read this page.";
 
 /** A page's card where its page cannot be read: the chip's glyph and name, and a note saying so. */
 export function UnreadPageCard({ glyph, name }: { glyph: ReactNode; name: string }): ReactNode {

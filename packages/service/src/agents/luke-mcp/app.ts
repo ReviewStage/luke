@@ -40,6 +40,7 @@ import { readAgentOfConversation, readAgentUnderPilot } from "@luke/database/mod
 import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { MAC_COMMAND_BOUNDS } from "@luke/features/mac-command-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { failureKind } from "@luke/runtime/effect";
 import {
   EXCESS_KEYS,
@@ -142,7 +143,7 @@ const MCP_METHOD = {
 
 /** What a tool call answers where its door failed rather than refused, which names nothing of the failure: the same input tried again within the window is keyed to this call (`call-key.ts`), so a start or a message it may have made is made once. */
 const DOOR_FAILED =
-  "Fullspin could not run this tool just now; try it again in a moment with the same input, which runs it once.";
+  "This tool could not run just now; try it again in a moment with the same input, which runs it once.";
 
 const IdSchema = Schema.Union([Schema.String, Schema.Number]);
 const ParamsSchema = Schema.Record(Schema.String, Schema.Unknown);
@@ -310,7 +311,7 @@ function callLukeTool(
     Effect.map((result) => Result.succeed(toolResult(tool, result))),
     Effect.catchCause((cause) =>
       Effect.as(
-        Effect.logWarning(`Fullspin MCP tool ${name} failed: ${failureKind(cause)}`),
+        Effect.logWarning(`${PRODUCT_NAME} MCP tool ${name} failed: ${failureKind(cause)}`),
         Result.succeed(DOOR_FAILED_RESULT),
       ),
     ),
@@ -361,8 +362,8 @@ function listLukeTools(
     }),
     Effect.catchCause((cause) =>
       Effect.as(
-        Effect.logWarning(`Fullspin MCP tools/list failed: ${failureKind(cause)}`),
-        rpcFailure(JSON_RPC_ERROR.INTERNAL_ERROR, "Fullspin could not list its tools just now"),
+        Effect.logWarning(`${PRODUCT_NAME} MCP tools/list failed: ${failureKind(cause)}`),
+        rpcFailure(JSON_RPC_ERROR.INTERNAL_ERROR, "The tools could not be listed just now"),
       ),
     ),
   );

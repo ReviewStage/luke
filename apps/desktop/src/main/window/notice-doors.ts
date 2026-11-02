@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import type { AgentNoticeDoorsSurface } from "@luke/host/agent-notices";
 import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@luke/settings/settings-controls";
 import { app, Notification } from "electron";
@@ -38,7 +39,7 @@ export function electronNoticeDoors(dependencies: {
     posted.on("show", () => onAnswered(NOTIFICATIONS_STATUS.ON));
     posted.on("failed", (_event, error) => {
       release();
-      report(`macOS did not show Fullspin's notification: ${error}`);
+      report(`macOS did not show ${PRODUCT_NAME}'s notification: ${error}`);
       onAnswered(NOTIFICATIONS_STATUS.OFF);
     });
     posted.show();

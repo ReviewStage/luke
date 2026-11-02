@@ -787,7 +787,7 @@ test("a message Fullspin heard nothing back on says to try again in the Inbox, w
       messageFailureWords(AGENT_CALL_FAILURE.UNANSWERED),
       messageFailureNote({ failure: AGENT_CALL_FAILURE.UNANSWERED }, null).text,
     ],
-    ["Fullspin didn't hear back. Try again.", "Fullspin didn't hear back."],
+    ["No answer came back. Try again.", "No answer came back."],
   );
 });
 

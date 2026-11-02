@@ -1,4 +1,5 @@
 import { DEVICE_SETUP, type DeviceSetup } from "@luke/features/device-agent-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { ACT_KIND } from "@luke/host/acts";
 import { THIS_MAC_HOST_STANDING, type ThisMacHostStanding } from "@luke/host/contract";
 import {
@@ -60,7 +61,7 @@ function lineOf(standing: ThisMacHostStanding): HostLine | null {
       return {
         words:
           "Run agents here, straight on this Mac, each in a folder of its own. Turning on downloads " +
-          "Claude Code, Codex, and GitHub's CLI and starts Fullspin's host at login.",
+          `Claude Code, Codex, and GitHub's CLI and starts ${PRODUCT_NAME}'s host at login.`,
         state: SETTINGS_ROW_STATE.PLAIN,
         act: "Turn on",
       };
@@ -72,12 +73,12 @@ function lineOf(standing: ThisMacHostStanding): HostLine | null {
       return { words: "Not running yet.", state: SETTINGS_ROW_STATE.PLAIN };
     case THIS_MAC_HOST_STANDING.REQUIRES_APPROVAL:
       return {
-        words: "Allow Fullspin in System Settings › General › Login Items.",
+        words: `Allow ${PRODUCT_NAME} in System Settings › General › Login Items.`,
         state: SETTINGS_ROW_STATE.ATTENTION,
       };
     case THIS_MAC_HOST_STANDING.REMOVED:
       return {
-        words: "Removed from Fullspin.",
+        words: `Removed from ${PRODUCT_NAME}.`,
         state: SETTINGS_ROW_STATE.ATTENTION,
         act: "Turn on again",
       };
@@ -86,7 +87,7 @@ function lineOf(standing: ThisMacHostStanding): HostLine | null {
     case THIS_MAC_HOST_STANDING.SETUP_FAILED:
       return { ...setupLineOf(DEVICE_SETUP.FAILED, standing.reason), act: "Retry" };
     case THIS_MAC_HOST_STANDING.OTHER_ACCOUNT:
-      return { words: "Used by another Fullspin account.", state: SETTINGS_ROW_STATE.PLAIN };
+      return { words: `Used by another ${PRODUCT_NAME} account.`, state: SETTINGS_ROW_STATE.PLAIN };
   }
 }
 

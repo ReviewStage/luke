@@ -76,17 +76,19 @@ function relay(
   return client.execute(request).pipe(
     Effect.flatMap((response) => {
       if (response.status < 200 || response.status >= 300) {
-        return failed(`Fullspin answered ${response.status}`);
+        return failed(`The service answered ${response.status}`);
       }
       if (requestId(message) === undefined) return Effect.void;
       return response.json.pipe(
         Effect.flatMap((body) =>
-          isJsonRpc(body) ? deliver(transport, body) : failed("Fullspin's answer was no JSON-RPC"),
+          isJsonRpc(body)
+            ? deliver(transport, body)
+            : failed("The service's answer was no JSON-RPC"),
         ),
       );
     }),
     // Note that the client's error is not kept, because the request it describes carries the bearer.
-    Effect.catch(() => failed("Fullspin unreachable")),
+    Effect.catch(() => failed("Service unreachable")),
   );
 }
 

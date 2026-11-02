@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@luke/features/dictation-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/settings/microphone";
@@ -54,8 +55,7 @@ type DictationPhase = (typeof DICTATION_PHASE)[keyof typeof DICTATION_PHASE];
 
 /** Why a dictation left nothing, in the words the box's note says. */
 const DICTATION_NOTE = {
-  MICROPHONE_DENIED:
-    "Fullspin cannot use the microphone. Allow it in System Settings › Privacy & Security › Microphone.",
+  MICROPHONE_DENIED: `${PRODUCT_NAME} cannot use the microphone. Allow it in System Settings › Privacy & Security › Microphone.`,
   MICROPHONE_FAILED: "The microphone could not be opened.",
   BOX_FULL: "There is no room for the dictated words.",
   NO_WORDS: "No words were heard.",

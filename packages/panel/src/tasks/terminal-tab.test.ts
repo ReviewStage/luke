@@ -585,12 +585,8 @@ test("a service it cannot reach shows a bar that says so, whose action asks agai
   mountAnnouncer();
   const tab = await mount();
   assert.equal(tab.standing(), "· sandbox · unreachable");
-  assert.equal(tab.bar(), "Fullspin's service did not answer.");
-  assert.equal(
-    announcedPolitely(),
-    "Fullspin's service did not answer.",
-    "the bar is said as it lands",
-  );
+  assert.equal(tab.bar(), "The service did not answer.");
+  assert.equal(announcedPolitely(), "The service did not answer.", "the bar is said as it lands");
   main.down.clear();
   await act(async () => tab.action()?.click());
   await settle();

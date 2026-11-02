@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { SIGN_IN_CHOSEN } from "@luke/panel/admin/prefs";
 import { AuthPage, BUTTON_VARIANT, Button, FaceMark, SocialSignInCard } from "@luke/ui";
 import { UNREPORTED } from "@luke/ui/reported-failure";
@@ -21,7 +22,7 @@ export function SignInCard(): React.JSX.Element {
   return (
     <SocialSignInCard
       mark={<AdminMark />}
-      title="Fullspin admin"
+      title={`${PRODUCT_NAME} admin`}
       pending={pending}
       failed={failed ? UNREPORTED.NO_REPORTER : undefined}
       onPress={begin}

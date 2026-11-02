@@ -187,7 +187,7 @@ export function replyFromWords(agent: string, lead?: string): string {
 export const REFRESH_FAILED_WORDS = "Could not refresh";
 
 /** What an act that failed on its way to the service says, whatever the failure's own text: a person reads this, and the text goes to the log. */
-export const ACT_UNREACHED_WORDS = "Fullspin could not reach the service. Try again.";
+export const ACT_UNREACHED_WORDS = "Could not reach the service. Try again.";
 
 /**
  * Why a sign-in ended without landing, each said in words of its own. The
@@ -215,7 +215,7 @@ export type SignInFailure = (typeof SIGN_IN_FAILURE)[keyof typeof SIGN_IN_FAILUR
 
 export const SIGN_IN_FAILURE_WORDS = {
   [SIGN_IN_FAILURE.TIMED_OUT]: "Sign-in timed out waiting for your browser. Try again.",
-  [SIGN_IN_FAILURE.BROWSER]: "Fullspin couldn't open the sign-in page in your browser. Try again.",
+  [SIGN_IN_FAILURE.BROWSER]: "Couldn't open the sign-in page in your browser. Try again.",
   [SIGN_IN_FAILURE.ALREADY_WAITING]:
     "A sign-in is already waiting in your browser. Finish it there, or try again later.",
   [SIGN_IN_FAILURE.REFUSED]: "The sign-in was declined in your browser. Try again.",
