@@ -153,7 +153,7 @@ import { withoutFinishedRuns } from "./finished-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
-import { childTasksFold, movedBeside, storedSlot, useNestedRows } from "./nested-rows.js";
+import { childTasksFold, movedBeside, nestsOf, storedSlot, useNestedRows } from "./nested-rows.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { useChannelWaiting, useInboxWaiting } from "./places-waiting.js";
@@ -472,6 +472,7 @@ function TaskRows({
     onCarried: context.onCarried,
   });
   const drawn = useLeaving(nested, ({ row }) => taskRowKey(row));
+  const nests = nestsOf(drawn.map(({ value }) => value));
   return (
     <Stack
       as={LAYOUT_ELEMENT.UL}
@@ -480,8 +481,9 @@ function TaskRows({
       moves
       onPointerDown={drag}
     >
-      {drawn.map(({ value: held }) => {
+      {drawn.map(({ value: held }, at) => {
         const { row } = held;
+        const nest = nests[at];
         return row.kind === TASK_ROW.TASK ? (
           <SidebarTask
             key={row.task.id}
@@ -495,6 +497,7 @@ function TaskRows({
             repository={repository?.(row)}
             faces={faces}
             depth={held.depth}
+            nest={nest}
             fold={childTasksFold(held, context.onFoldTask)}
             childCount={context.childCount(row.task.id)}
             onOpen={() => context.onOpen(row.task.id)}
@@ -510,6 +513,7 @@ function TaskRows({
             at={taskRowTime(row)}
             repository={repository?.(row)}
             face={faces.creator && faces.assignee}
+            nest={nest}
             shown={context.tasks.shown && context.inSight}
             onOpen={() => context.onOpenAgent(row.agent.id)}
             onPin={pinOf(context.tasks, row.agent)}
@@ -838,6 +842,7 @@ function PinnedRows({
       : { at, count: rows.length, onMove: movePin };
   };
   const drawn = useLeaving(listed, pinnedDrawnKey);
+  const nests = nestsOf(drawn.map(({ value }) => depthOf(value)));
   return (
     // An open Pinned keeps an order a row carried in lands at a place in; a folded one draws only some of its rows, so a drop lands on top.
     <Stack
@@ -849,7 +854,8 @@ function PinnedRows({
       onPointerDown={drag}
       {...keys}
     >
-      {drawn.map(({ key, value: { pin: row, held } }) => {
+      {drawn.map(({ key, value: { pin: row, held } }, at) => {
+        const nest = nests[at];
         if (row === undefined) {
           const child = held.row;
           return child.kind === TASK_ROW.TASK ? (
@@ -862,6 +868,7 @@ function PinnedRows({
               unread={context.unread(child.task)}
               now={context.now}
               depth={held.depth}
+              nest={nest}
               fold={childTasksFold(held, context.onFoldTask)}
               childCount={context.childCount(child.task.id)}
               onOpen={() => context.onOpen(child.task.id)}
@@ -876,6 +883,7 @@ function PinnedRows({
                 tasks={context.tasks}
                 pin={pin}
                 on={{ agent }}
+                nest={nest}
                 current={context.markedPin(pin)}
                 inSight={context.inSight}
                 onOpen={() => onOpenTab(pin)}
@@ -896,6 +904,7 @@ function PinnedRows({
                 unread={context.unseenAgent(agent.id)}
                 now={context.now}
                 at={agent.activityAt}
+                nest={nest}
                 shown={context.tasks.shown && context.inSight}
                 onOpen={() => context.onOpenAgent(agent.id)}
                 onPin={pinOf(context.tasks, agent)}
@@ -916,6 +925,7 @@ function PinnedRows({
                 open={context.current(task.id)}
                 unread={context.unread(task)}
                 now={context.now}
+                nest={nest}
                 fold={held === undefined ? undefined : childTasksFold(held, context.onFoldTask)}
                 childCount={context.childCount(task.id)}
                 onOpen={() => context.onOpen(task.id)}
@@ -925,6 +935,7 @@ function PinnedRows({
                 tasks={context.tasks}
                 pin={pin}
                 on={{ task }}
+                nest={nest}
                 current={context.marked(task.id, pin)}
                 inSight={context.inSight}
                 onOpen={() => onOpenTab(pin)}
@@ -2270,7 +2281,7 @@ function SidebarColumn({
                       folded: folds.sectionFolded,
                       onToggle: folds.toggleSection,
                       opened: folds.taskOpened,
-                      row: (held) => {
+                      row: (held, nest) => {
                         const { row } = held;
                         return row.kind === TASK_ROW.TASK ? (
                           <SidebarTask
@@ -2283,6 +2294,7 @@ function SidebarColumn({
                             now={now}
                             faces={context.faces}
                             depth={held.depth}
+                            nest={nest}
                             fold={childTasksFold(held, folds.toggleTask)}
                             childCount={context.childCount(row.task.id)}
                             onOpen={() => context.onOpen(row.task.id)}
@@ -2297,6 +2309,7 @@ function SidebarColumn({
                             now={now}
                             at={taskRowTime(row)}
                             face={context.faces.creator && context.faces.assignee}
+                            nest={nest}
                             shown={tasks.shown && overlay.inSight}
                             onOpen={() => context.onOpenAgent(row.agent.id)}
                             onPin={pinOf(tasks, row.agent)}

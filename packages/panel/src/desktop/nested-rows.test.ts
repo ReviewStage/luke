@@ -1,12 +1,13 @@
 import type { TaskSummary } from "@luke/features/task-wire";
 import { drawnTaskRows, type TaskRow, taskRow, taskRowName } from "@luke/ui/task-list-model";
 import { expect, test } from "vitest";
-import { movedBeside, siblingsAt, storedSlot } from "./nested-rows.js";
+import { movedBeside, nestsOf, siblingsAt, storedSlot } from "./nested-rows.js";
 
 /**
  * nested-rows.test.ts -- a section keeps its rows in an order of its own,
  * which nesting redraws, so a move goes among a row's siblings as drawn and
- * a drop lands at the top where it was let go.
+ * a drop lands at the top where it was let go; and each row is read at its
+ * place among its siblings.
  */
 
 function task(name: string, parentTaskId?: string): TaskSummary {
@@ -38,6 +39,16 @@ test("a row moved up past a parent's child tasks lands beside the parent, never 
   expect(movedBeside(DRAWN, at("Parent"), at("Child"))).toBe(at("Other"));
   expect(movedBeside(DRAWN, at("Child"), at("Parent"))).toBeUndefined();
   expect(siblingsAt(DRAWN, at("Child"))).toEqual([at("Child")]);
+});
+
+test("each row is read at its place among the rows under the same parent, a list nesting none at no place at all", () => {
+  // Drawn Parent, Child, Other: Parent and Other are the two at the top, Child the one under Parent.
+  expect(nestsOf(DRAWN)).toEqual([
+    { position: 1, size: 2 },
+    { position: 1, size: 1 },
+    { position: 2, size: 2 },
+  ]);
+  expect(nestsOf([{ depth: 0 }, { depth: 0 }])).toEqual([undefined, undefined]);
 });
 
 test("a row let go between a child task and the next row at the top lands before that row in the section's order", () => {

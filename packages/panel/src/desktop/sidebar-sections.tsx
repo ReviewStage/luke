@@ -31,6 +31,7 @@ import {
   type GroupHeaderEditorHandle,
   Inline,
   LAYOUT_ELEMENT,
+  type ListRowNest,
   MoreButton,
   motionKey,
   NOTE_LINE_LOOK,
@@ -71,7 +72,7 @@ import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { undoToast, useToast } from "../toast.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
-import { movedBeside, siblingsAt, useNestedRows } from "./nested-rows.js";
+import { movedBeside, nestsOf, siblingsAt, useNestedRows } from "./nested-rows.js";
 import { type RowPlace, RowPlaced, useRowMoveKeys, withRowMoves } from "./row-moves.js";
 import { SectionIconWell, sectionGlyph } from "./section-icon-picker.js";
 import { foldedCount, SIDEBAR_SECTION_SLOT, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
@@ -527,8 +528,8 @@ interface SectionContext {
   readonly onToggle: (sectionId: string) => void;
   /** Whether a task's child tasks stand open under its row, folded until first opened. */
   readonly opened: (taskId: string) => boolean;
-  /** A task's row or an agent's, as it stands in any list of the sidebar, at the depth it stands nested at. */
-  readonly row: (row: DrawnTaskRow) => React.JSX.Element;
+  /** A task's row or an agent's, as it stands in any list of the sidebar, at the depth it stands nested at and in its place among its siblings (`nestsOf`). */
+  readonly row: (row: DrawnTaskRow, nest: ListRowNest | undefined) => React.JSX.Element;
   /** Hears a row let go over another zone: a section by its id, Tasks, or Pinned. */
   readonly onDropRow: (row: TaskRow, zone: string, at: number) => void;
   /** Hears a row lifted into a drag and that drag ended, while which an empty Pinned stands to take it. */
@@ -679,6 +680,7 @@ function SectionRows({
   const keys = useRowMoveKeys(move);
   // Note that a row on its way out has no place among the rows a drag or a menu moves.
   const shown = useLeaving(nested, ({ row }) => taskRowKey(row));
+  const nests = nestsOf(shown.map(({ value }) => value));
   const listedAt = new Map(nested.map(({ row }, at) => [taskRowKey(row), at]));
   const placeOf = (key: string) => {
     const at = listedAt.get(key);
@@ -703,9 +705,9 @@ function SectionRows({
       onPointerDown={drag}
       {...keys}
     >
-      {shown.map(({ key, value: held }) => (
+      {shown.map(({ key, value: held }, at) => (
         <RowPlaced key={key} place={placeOf(key)}>
-          {context.row(held)}
+          {context.row(held, nests[at])}
         </RowPlaced>
       ))}
     </Stack>

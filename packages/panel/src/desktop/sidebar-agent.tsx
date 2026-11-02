@@ -7,6 +7,7 @@ import {
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
+  type ListRowNest,
   OneLine,
   RowHint,
   RowHintOptions,
@@ -108,6 +109,7 @@ export function SidebarAgent({
   at,
   repository,
   face = true,
+  nest,
   shown,
   onOpen,
   onPin,
@@ -129,6 +131,8 @@ export function SidebarAgent({
   repository?: string | undefined;
   /** Whether a teammate's agent wears their face, which a group by creator says instead. */
   face?: boolean;
+  /** Where the row stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
+  nest?: ListRowNest | undefined;
   /** Whether the sidebar is on screen and in sight, which the row's menu does not outlive. */
   shown: boolean;
   onOpen: () => void;
@@ -214,6 +218,7 @@ export function SidebarAgent({
         <ListRow
           ref={hold}
           motionKey={agent.id}
+          nest={nest}
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
