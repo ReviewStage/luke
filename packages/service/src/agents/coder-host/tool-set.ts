@@ -206,8 +206,10 @@ export function offeredCoderTools(
  * `read_threads`, the four of the workspace's Chat, removed with it,
  * `show_code`, `draw_on_board`, and `look_at_board`, removed with the Code
  * and Board tabs, and a voice call's `queue_question`, `withdraw_question`,
- * and `end_call`, removed with GPT Live. A transcript written then names
- * them, and reads back under the same set.
+ * and `end_call`, removed with GPT Live, `remember` and `recall`, since
+ * named `save_memory` and `search_memory`, and `resolve_thread` and
+ * `reopen_thread`, since folded into `update_comment`. A transcript written
+ * then names them, and reads back under the same set.
  */
 export const RETIRED_CODER_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -229,6 +231,10 @@ export const RETIRED_CODER_TOOL = {
   QUEUE_QUESTION: RETIRED_TOOL.QUEUE_QUESTION,
   WITHDRAW_QUESTION: RETIRED_TOOL.WITHDRAW_QUESTION,
   END_CALL: RETIRED_TOOL.END_CALL,
+  REMEMBER: RETIRED_TOOL.REMEMBER,
+  RECALL: RETIRED_TOOL.RECALL,
+  RESOLVE_THREAD: RETIRED_TOOL.RESOLVE_THREAD,
+  REOPEN_THREAD: RETIRED_TOOL.REOPEN_THREAD,
 } as const;
 
 /**
