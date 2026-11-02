@@ -193,8 +193,6 @@ export const INBOX_POST_REFUSAL = {
   NO_CHANNEL: "no-channel",
   /** The post addresses its ask to an account that is no member of the agent's workspace. */
   NO_ADDRESSEE: "no-addressee",
-  /** Another agent started the agent (`started_by_agent_id`), and posts the threads the developer reads in its place. */
-  STARTED_BY_AGENT: "started-by-agent",
   /** The post addresses its ask to a member of the workspace who may not read its thread (`itemVisibleTo`): one who sees not the agent, or not its task, as their GitHub access stands. */
   ADDRESSEE_CANNOT_SEE: "addressee-cannot-see",
 } as const;
@@ -604,7 +602,6 @@ const lockAgent = SqlSchema.findOneOption({
     id: Schema.String,
     organizationId: Schema.String,
     workspaceStep: Schema.String,
-    startedByAgentId: Schema.NullOr(Schema.String),
   }),
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
@@ -613,7 +610,6 @@ const lockAgent = SqlSchema.findOneOption({
           id: agentTable.id,
           organizationId: AGENT_WORKSPACE,
           workspaceStep: AGENT_WORKSPACE_STEP,
-          startedByAgentId: agentTable.startedByAgentId,
         })
         .from(agentTable)
         .where(
@@ -2523,10 +2519,6 @@ export function postInboxThread(
       Effect.gen(function* () {
         const locked = yield* lockAgent(agent);
         if (Option.isNone(locked)) return Result.fail(INBOX_POST_REFUSAL.NO_AGENT);
-        // Note that an agent another agent started reports to it instead, however deep the chain, since the developer's threads are its starter's to post.
-        if (locked.value.startedByAgentId !== null) {
-          return Result.fail(INBOX_POST_REFUSAL.STARTED_BY_AGENT);
-        }
         const standing = yield* findAgentItem({ ...agent, key: post.key });
         const placed = yield* placeOf(agent, locked.value, post);
         if (Result.isFailure(placed)) return Result.fail(placed.failure);

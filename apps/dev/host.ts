@@ -47,8 +47,6 @@ import {
   macToolsOf,
   type RepositoryTool,
   repositoryToolsOf,
-  type StarterTool,
-  starterToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
 import type { TurnHanded } from "@luke/service/agents/coder-host/turn-context";
 import {
@@ -210,26 +208,6 @@ export function offeredRepositoryTools(
       const agent = yield* host.agent(admitted.success);
       if (Result.isFailure(agent)) return new Set<RepositoryTool>();
       return repositoryToolsOf(agent.success);
-    }),
-  );
-}
-
-/**
- * The tools the session is offered by who started its agent for the turn it
- * opens, for those tools' own files (`starterToolsOf`): none for a session
- * the host does not admit or whose conversation is no agent's.
- */
-export function offeredStarterTools(
-  auth: SessionAuth,
-  sessionId: string,
-): Promise<ReadonlySet<StarterTool>> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return new Set<StarterTool>();
-      const agent = yield* host.agent(admitted.success);
-      if (Result.isFailure(agent)) return new Set<StarterTool>();
-      return starterToolsOf(agent.success);
     }),
   );
 }

@@ -1375,20 +1375,16 @@ function agentIntroduction(agent: Agent): string {
  * that its final message reaches that agent by itself once its turn ends
  * (`coder-host/starter-report.ts`), that it messages it before then with
  * `message_agent` by that agent's id, as every word between two agents goes
- * (`coder-host/agent-message.ts`), and that the threads the developer reads
- * are its starter's to post, so what it would post in one goes to its
- * starter, who relays what the developer must see, then the note it was
- * given.
+ * (`coder-host/agent-message.ts`), then the note it was given. Note that it
+ * is not told to keep off the developer's threads: it posts in one what it
+ * would post there, as any agent may.
  */
 function startedByNote(starter: Agent, note: string | undefined): string {
   const lead =
     `You were started by another agent of your workspace, ${agentIntroduction(starter)}, ` +
     "not by the developer. Your final message reaches it by itself once your turn ends, so make " +
     "that message your report: what you did, what you published, and what you need of it. To " +
-    `reach it before then, call ${AGENT_TOOL.MESSAGE_AGENT} with its agentId, ${starter.id}. ` +
-    "Threads to the developer are that agent's to post: post none yourself, and send that agent what " +
-    "you would have posted in one instead, a pull request ready for review, a decision, a question, " +
-    "or something only the developer can do by hand.";
+    `reach it before then, call ${AGENT_TOOL.MESSAGE_AGENT} with its agentId, ${starter.id}.`;
   return note === undefined ? lead : `${lead}\n\n${note}`;
 }
 

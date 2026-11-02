@@ -223,32 +223,6 @@ const agentWithBearer = Effect.gen(function* () {
   };
 });
 
-/** An agent with a bearer that the agent given started, as its `start_agent` starts one: on its task and its account. */
-function agentStartedBy(starter: {
-  readonly userId: string;
-  readonly taskId: string;
-  readonly agentId: string;
-}) {
-  return Effect.gen(function* () {
-    const started = yield* createAgent(starter.userId, {
-      taskId: starter.taskId,
-      idempotencyKey: randomUUID(),
-      model: "anthropic/claude-opus-5.5",
-      effort: "high",
-      repository: "acme/relay",
-      planSnapshot: null,
-      prompt: "Fix the invite email",
-      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-      payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
-      startedByAgentId: starter.agentId,
-    });
-    const agent = Option.getOrThrow(started).agent;
-    const bearer = randomBytes(32).toString("base64url");
-    yield* recordAgentRunnerToken(starter.userId, agent.id, runnerTokenDigest(bearer));
-    return { userId: starter.userId, taskId: starter.taskId, agentId: agent.id, bearer };
-  });
-}
-
 /** A Codex agent on no task and in no repository, as an automation's run starts one, with a runner's bearer recorded for its conversation. */
 const agentOnNoTaskWithBearer = Effect.gen(function* () {
   const db = yield* Database;
@@ -651,15 +625,6 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       why: "in no repository, the checkout's",
       agent: agentOnNoTaskWithBearer,
       withheld: ["open_pull_request"],
-    },
-    {
-      why: "another agent started, post_thread, however deep its chain",
-      agent: Effect.gen(function* () {
-        const starter = yield* agentWithBearer;
-        const middle = yield* agentStartedBy(starter);
-        return yield* agentStartedBy(middle);
-      }),
-      withheld: ["post_thread"],
     },
     {
       why: "a teammate has put words into, run_on_mac",

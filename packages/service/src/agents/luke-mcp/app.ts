@@ -239,12 +239,8 @@ function toolResult(tool: LukeMcpTool, result: LukeMcpToolResult): McpToolCallRe
  */
 const TOOL_META = { "anthropic/maxResultSizeChars": 500_000 } as const;
 
-/** What an agent whose row is gone is offered by: no repository, on our own machine, started by no agent. */
-const NO_AGENT_OFFERED: LukeMcpOfferedTo = {
-  repository: null,
-  machine: AGENT_MACHINE.VERCEL,
-  startedByAgentId: null,
-};
+/** What an agent whose row is gone is offered by: no repository, on our own machine. */
+const NO_AGENT_OFFERED: LukeMcpOfferedTo = { repository: null, machine: AGENT_MACHINE.VERCEL };
 
 /** What beside its row an agent whose row is gone is offered by: no Memory, and no outside words. */
 const NO_AGENT_BESIDE: OfferedBeside = { memoryOn: false, heardFromAnotherAccount: false };
@@ -325,9 +321,8 @@ function callLukeTool(
 
 /**
  * The tools listed to the admitted agent: those eve offers it, by its
- * repository, whether another agent started it, where it runs, whether
- * anyone but its starter has put words into it, and its starter's Memory
- * (`offeredLukeMcpTool`),
+ * repository, where it runs, whether anyone but its starter has put words
+ * into it, and its starter's Memory (`offeredLukeMcpTool`),
  * each in the words it is shown them with (`describe`); those eve offers
  * every agent where its row is gone, since no narrowed tool's door would
  * carry out a call for an agent that no longer stands.

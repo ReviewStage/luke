@@ -127,7 +127,6 @@ import {
   macToolsOf,
   type OfferedBeside,
   repositoryToolsOf,
-  starterToolsOf,
 } from "../coder-host/tool-set.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
@@ -431,16 +430,15 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
 ]);
 
 /** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
-export type LukeMcpOfferedTo = Pick<Agent, "repository" | "machine" | "startedByAgentId">;
+export type LukeMcpOfferedTo = Pick<Agent, "repository" | "machine">;
 
 /** The workspace's shared memory, which eve offers only where the agent's starter turned Memory on (`apps/dev/tools/save_memory.ts`'s `memoryOffered`). */
 const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY];
 
-/** The tools eve offers some agents and not others: each one some agent's repository, starter, machine, outside words, or starter's Memory withholds. */
+/** The tools eve offers some agents and not others: each one some agent's repository, machine, outside words, or starter's Memory withholds. */
 const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...MEMORY_TOOLS,
   ...repositoryToolsOf({ repository: "any" }),
-  ...starterToolsOf({ startedByAgentId: null }),
   ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
   ...macToolsOf({ machine: AGENT_MACHINE.VERCEL }, { heardFromAnotherAccount: false }),
 ]);
@@ -448,8 +446,7 @@ const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
 /**
  * Whether the server lists a tool to an agent: every tool eve offers every
  * agent, and each narrowed one where eve offers it to this agent, by its
- * repository, whether another agent started it, where it runs, and, beside
- * its row, whether anyone but its starter has put words into it and whether
+ * repository, where it runs, and, beside its row, whether anyone but its starter has put words into it and whether
  * its starter has Memory on (`beside`), the same rules eve's tool files read
  * at each turn. Note that a harness reads the list as its launch begins, so
  * an agent is narrowed launch by launch, as eve's is turn by turn, and that
@@ -463,7 +460,6 @@ export function offeredLukeMcpTool(
   const offered: ReadonlySet<string> = new Set<string>([
     ...(beside.memoryOn ? MEMORY_TOOLS : []),
     ...repositoryToolsOf(agent),
-    ...starterToolsOf(agent),
     ...machineToolsOf(agent),
     ...macToolsOf(agent, beside),
   ]);

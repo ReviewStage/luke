@@ -6,9 +6,8 @@
  * `offeredCoderTools`), and for one on Claude Code or Codex the tools of
  * our MCP server, whose harness keeps its own shell and files
  * (`luke-mcp/tools.ts`'s `offeredLukeMcpTool`), each narrowed by its
- * repository, its kind, whether another agent started it, where it runs,
- * whether anyone but its starter has put words into it, and its starter's
- * Memory. Nothing is
+ * repository, its kind, where it runs, whether anyone but its starter has
+ * put words into it, and its starter's Memory. Nothing is
  * kept beside those rules, so the popover cannot name a tool the agent is
  * not handed. `run_on_mac` is answered off for the reasons a call would be
  * refused now (`mac-command.ts`): no Mac of the starter's listening, then
@@ -29,7 +28,7 @@ import { macListening } from "./mac-command.js";
 
 /** What of an agent decides which of our tools it is offered: what narrows them, and whether it runs on a provider's own harness. */
 export interface LukeToolsOfferedTo {
-  readonly agent: Pick<Agent, "repository" | "kind" | "machine" | "startedByAgentId">;
+  readonly agent: Pick<Agent, "repository" | "kind" | "machine">;
   /** Whether the agent runs on Claude Code or Codex rather than eve. */
   readonly native: boolean;
   /** Whether the agent's starter has Memory on. */

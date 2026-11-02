@@ -112,28 +112,6 @@ export function repositoryToolsOf(agent: Pick<Agent, "repository">): ReadonlySet
   return new Set([CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.APPLY_PATCH]);
 }
 
-/** The tools offered by who started the agent: `post_thread` to every agent no other agent started. */
-export type StarterTool = typeof CODER_TOOL.POST_THREAD;
-
-/**
- * The tools an agent is offered by who started it, on every turn:
- * `post_thread` to every agent but one another agent started
- * (`started_by_agent_id`), a coding agent or a pilot alike, which reports to
- * its starter with `message_agent` instead, since the threads the developer
- * reads are its starter's to post. Note that this holds however deep the
- * chain, since every agent in it names the agent that started it, and that
- * an agent whose starter's row is gone, or that a member continued by hand,
- * names none and posts its own. Note too that the tool withheld is one its
- * call would only be refused by (`inbox-store.ts`'s `postInboxThread`), and
- * that its siblings stay, since none opens or adds to a thread:
- * `withdraw_ask` settles an ask only on a thread of the agent's own, which
- * such an agent never opens, `move_thread` moves a thread without a word
- * added to it, and `read_threads` only reads.
- */
-export function starterToolsOf(agent: Pick<Agent, "startedByAgentId">): ReadonlySet<StarterTool> {
-  return agent.startedByAgentId === null ? new Set([CODER_TOOL.POST_THREAD]) : new Set();
-}
-
 /** The tools only an agent in a sandbox of ours is offered. */
 export type MachineTool = typeof CODER_TOOL.BROWSER;
 
@@ -171,7 +149,7 @@ export function macToolsOf(
 }
 
 /** What of an agent decides which tools eve offers it. */
-export type CoderOfferedTo = Pick<Agent, "repository" | "machine" | "startedByAgentId">;
+export type CoderOfferedTo = Pick<Agent, "repository" | "machine">;
 
 /** What beside its own row decides which tools an agent is offered: whether its starter has Memory on, and whether anyone but its starter has put words into it (`macToolsOf`). */
 export interface OfferedBeside {
@@ -181,7 +159,7 @@ export interface OfferedBeside {
 
 /**
  * The coder's tools eve offers some agents and not others: each one some
- * agent's repository, starter, machine, Memory, or outside words withholds. Note that
+ * agent's repository, machine, Memory, or outside words withholds. Note that
  * no tool is withheld by the agent's task, since every one that acts on a
  * task names it or acts on the agent itself where it works on none: the
  * plan's notes, pictures, and comments any task of its workspace, and a
@@ -189,7 +167,6 @@ export interface OfferedBeside {
  */
 const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
   ...repositoryToolsOf({ repository: "any" }),
-  ...starterToolsOf({ startedByAgentId: null }),
   ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
   ...macToolsOf({ machine: AGENT_MACHINE.VERCEL }, { heardFromAnotherAccount: false }),
   CODER_TOOL.SAVE_MEMORY,
@@ -199,12 +176,11 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
 /**
  * Every tool eve offers the agent on a turn, in the registry's order: each
  * coder's tool no agent is denied, and each narrowed one where its
- * repository, who started it, or where it runs offers it, `run_on_mac` where
- * no one but its starter has put words into it, and `save_memory` and
- * `search_memory` where its starter has Memory on, the same rules eve's tool
- * files read as each turn starts (`apps/dev/host.ts`'s
- * `offeredRepositoryTools`, `offeredStarterTools`, `offeredMacTools`, and
- * `memoryOffered`).
+ * repository or where it runs offers it, `run_on_mac` where no one but its
+ * starter has put words into it, and `save_memory` and `search_memory` where
+ * its starter has Memory on, the same rules eve's tool files read as each
+ * turn starts (`apps/dev/host.ts`'s `offeredRepositoryTools`,
+ * `offeredMacTools`, and `memoryOffered`).
  */
 export function offeredCoderTools(
   agent: CoderOfferedTo,
@@ -212,7 +188,6 @@ export function offeredCoderTools(
 ): readonly AgentTool[] {
   const offered: ReadonlySet<AgentTool> = new Set<AgentTool>([
     ...repositoryToolsOf(agent),
-    ...starterToolsOf(agent),
     ...machineToolsOf(agent),
     ...macToolsOf(agent, beside),
     ...(beside.memoryOn ? [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY] : []),
