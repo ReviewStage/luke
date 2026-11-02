@@ -3,7 +3,7 @@
   "version": "0.24.0",
   "private": true,
   "type": "module",
-  "description": "The desktop's Node kernel: everything that executes, persists, schedules, or holds an account, reached only through the Gateway",
+  "description": "The Node kernel of the desktop app and the host daemon (`./daemon`): everything that executes, persists, schedules, or holds an account; the desktop reaches it only through the Gateway",
   "exports": {
     ".": "./src/index.js",
     "./effect": "./src/effect/index.js",

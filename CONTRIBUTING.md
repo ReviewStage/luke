@@ -1,33 +1,45 @@
 # Contributing to Vespin
 
-Vespin is a macOS Electron app for working through a task with coding agents
-that read your code, write the task's plan, and open its pull requests.
+Vespin is an inbox for all your coding agents.
 
-This page covers setup and points at the documents that own the rest.
+This page covers how to set up the repository, run the app and the checks, and
+open a pull request. It points at the documents that own the rest.
 
 ## Before you write code
 
-[AGENTS.md](AGENTS.md) is the guide for coding agents and holds the rules
-reviewers hold a pull request to; read it to know what review will check, not as
-a setup guide. Its Never section matters most: no credential or account secret
-reaches an answer, an event, a trace, or a fixture, and
-session replay leaves the machine as layout, never text. A change that widens
+[AGENTS.md](AGENTS.md) is the guide for coding agents working in this
+repository. It lists the rules a pull request is reviewed against; read it to
+know what review will check. It is not a setup guide. Its Never section matters
+most: a credential or account secret never goes into a response the app sends
+to its window, an analytics event, a trace, or a test fixture, and session
+replay records the layout of the screen, never its text. A change that widens
 what Vespin may read or write, or what leaves the developer's machine, is a
 product decision, so open an issue first rather than a pull request.
 
 ## Set up
 
-Requires an Apple Silicon Mac on macOS 14 or newer, Node.js 24 or newer, the
-pnpm version `packageManager` in the root `package.json` pins, and the Xcode
-Command Line Tools.
+To run the app, you need an Apple silicon Mac on macOS 14 or newer and the
+Xcode Command Line Tools.
+
+To run the checks, you need Linux or macOS, Node.js 24 or newer, and the pnpm
+version that `packageManager` in the root `package.json` pins. `corepack enable`
+installs that pnpm.
 
 ```sh
 ./scripts/bootstrap.sh   # install pinned workspace dependencies
 ./scripts/run.sh         # launch against live sessions
 ./scripts/run.sh --fixture smoke   # launch against deterministic fixture data
 ./scripts/run.sh --instance second # launch a named instance beside the running one
+./scripts/run.sh --keep-running    # launch without quitting the running instance
 ./scripts/run.sh --preview         # launch against this branch's Vercel Preview, as its own instance
 ```
+
+A plain `./scripts/run.sh` quits any running Vespin first: a development build,
+a test build, and the installed release (`scripts/lib/workspace.sh`). Pass
+`--instance <name>` to leave the plain instance running, or `--keep-running` to
+leave every running instance as it is; the new launch then quits at startup
+and only brings the running panel forward. `--preview` needs a Vercel Preview
+that a maintainer has approved.
 
 ## Developing without Vespin's accounts
 
@@ -46,31 +58,33 @@ Command Line Tools.
 ### Running more than one Vespin Dev
 
 A plain `./scripts/run.sh` is the plain development instance, "Vespin Dev", and
-replaces its own earlier run (and a running test or release build). `--instance
-<name>` (lower-case letters, digits, and single hyphens) launches "Vespin Dev
-<name>" beside it, replacing only that instance's earlier run. A `--preview` run
-is a named instance without asking: `preview-<branch>` for the Preview the script
-looks up, `preview-<host>` for an address given by hand, so each Preview keeps a
-sign-in of its own and never touches the plain instance's.
+replaces its own earlier run, a running test build, and the installed release.
+`--instance <name>` (lower-case letters, digits, and single hyphens) launches
+"Vespin Dev <name>" beside it, replacing only that instance's earlier run. A
+`--preview` run with no `--instance` gets one named for its Preview:
+`preview-<branch>` for the Preview the script looks up, `preview-<host>` for an
+address you give it. Each Preview then keeps its own sign-in and never touches
+the plain instance's.
 
 Each instance has its own profile under `~/Library/Application Support/Vespin Dev
 <name>/` (sign-in, settings, window place, single-instance lock) and its own
 `Vespin Dev <name> Safe Storage` Keychain entry. Its windows' titles end in `(<name>)`, and its app menu
 says "Quit Vespin Dev <name>". No development run claims the
 `vespin:` links, named or not.
-Agents' commands for this Mac go to whichever signed-in instance of the account
-reads them first, once each, and every instance runs them in the same login
-shell; turn "Let agents run commands" off in an instance that should not take
-them. A Preview instance is signed in to the Preview's own database, so it
-takes only that Preview's commands.
+Agents can run commands on your Mac. When an agent sends one, the first
+signed-in instance of your account to read it runs it, and no other instance
+does. Every instance runs it in the same login shell. In an instance that should
+not take commands, set Settings › This Mac › "Let agents run commands on this
+Mac" to Never. A Preview instance is signed in to the Preview's own database, so
+it takes only that Preview's commands.
 
 A named instance signs in on its own: sign in from its panel as on a first
 launch. To start one over, quit it and delete its profile folder; to forget it
 for good, also delete its Keychain entry in Keychain Access.
 
-Two instances launched from one checkout share its build: a second launch
-rebuilds `apps/desktop/dist` under the first, which a running instance reads
-again only when it opens or reloads a window.
+Two instances launched from one checkout share one build, in `apps/desktop/dist`.
+A second launch rebuilds it while the first is running. The first instance
+loads the new build only when it opens or reloads a window.
 
 ## Repository layout
 
@@ -78,7 +92,8 @@ again only when it opens or reloads a window.
 apps/
   catalog/        every shared @luke/ui component on synthetic data, built and never deployed
   desktop/        the Electron app: main, preload, the renderer windows, build and release scripts
-  web/            the site, the Vercel function routes (server/routes/), and the deployment shell
+  host/           @luke/host-daemon, the `luke-host` daemon that runs on a user's own machine; released as host-v* tags
+  web/            the site, the web app, the Vercel function routes (server/routes/), and the deployment shell
 packages/
   agent-runner/   the runner in a coding agent's sandbox: Claude Code or Codex, messages in and out
   brand/          the design sources, the generators, and the generated art, motion tokens, and geometry
@@ -86,7 +101,7 @@ packages/
   database/       the hosted store's Drizzle schema, queries, migrations, and test databases
   features/       the hosted service's contract and clients: paths, wire, tasks, product events, feedback
   gateway/        the one protocol between the renderer and the host
-  host/           the desktop's Node kernel, reached only through the Gateway
+  host/           the Node kernel the desktop app and the host daemon run on; the desktop reaches it only through the Gateway
   panel/          shared React for the panel every client mounts: the desktop window and the web tab
   runtime/        Effect infrastructure: storage, timers, queues, single-flight, test support
   service/        the hosted backend's logic: agents, maintenance sweep, observability
@@ -97,8 +112,10 @@ tools/
   anti-slop/      the repository's oxlint rules
   claude-code-probe/  proves Claude Code runs inside a Vespin sandbox
   codex-probe/    proves Codex runs inside a Vespin sandbox
+  demo-postgres/  a throwaway Postgres for the local demo
+  polish/         screenshots every scene of the app, in both themes and three widths, for a design review
 scripts/          bootstrap, check, run, evidence, and release; repository-checks.sh holds the contract checks
-docs/             design, tasks, style, and workflow; a plan lives on its task, never in a document here
+docs/             design, tasks, and style; a plan lives on its task, never in a document here
 ```
 
 Application logic lives in `packages/`; an app holds only what is specific to
@@ -108,21 +125,29 @@ package's `package.json` `description` says what it holds.
 
 ## Make the change
 
-[docs/WORKFLOW.md](docs/WORKFLOW.md) is the step-by-step, from the scoped task
-to the merge.
+Before you edit, read what the task rules out and what it must not touch, and
+make the smallest change that does the job. Test it as the Testing section of
+[AGENTS.md](AGENTS.md) says, with deterministic fixtures rather than personal
+data or live provider state.
 
 Keep Electron main and preload code thin, keep the renderer sandboxed, and put
 platform-independent behavior in a package (see Repository layout above).
 
+If the work needs access, credentials, hardware, or a product decision you do
+not have, stop and say so in the issue or the pull request.
+
 ## Check your work
 
-The canonical commands and when each one is required are the command table in
-[AGENTS.md](AGENTS.md).
+The command table in [AGENTS.md](AGENTS.md) lists each command and when to run
+it. Running the tests you touched, or `pnpm check:affected`, before you push is
+optional, because CI runs every check; `./scripts/check.sh` is the full local
+run. CI runs on Linux only, so a green pull request says nothing about the Mac.
 
 ## Open the pull request
 
 Open it ready for review, not as a draft, with a short summary of what changed
-and why; root [AGENTS.md](AGENTS.md)'s "Merging" says how it merges.
+and why, and say which tests you ran and which you left to CI. The "Merging"
+section of [AGENTS.md](AGENTS.md) says how it merges.
 
 ## What happens to your PR
 

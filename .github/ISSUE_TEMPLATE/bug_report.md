@@ -16,5 +16,6 @@ labels: bug
 
 ## Environment
 
+- Desktop, web, or host:
 - Vespin version:
-- macOS version:
+- Operating system and version:
