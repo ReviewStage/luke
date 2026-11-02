@@ -34,8 +34,11 @@ export const pageLinkPressSchema = EffectSchema.Struct({
 /**
  * The script the frame runs, ahead of the page's own. It is plain JavaScript in
  * a string because it runs in the page, apart from every bundle of Fullspin's.
- * It hears a press on the window, after every element of the page has heard
- * it, so a press the page took for itself (`preventDefault`) stays the page's.
+ * It hears a press last of all: on the window as the press sets out, it adds
+ * a listener of its own to the window for the press's way back, which the
+ * window then hears after every listener the page gave it, its own scripts
+ * running after this one, so a press the page took for itself
+ * (`preventDefault`), on an element or on the window, stays the page's.
  * A link out is one to a web address on another site than the one the page's
  * links are read against, its own, since its policy refuses it a `<base>`;
  * any other link is left to the frame.
@@ -45,19 +48,27 @@ export const PAGE_LINK_SCRIPT = `(() => {
   const TYPE = ${JSON.stringify(PAGE_LINK_TYPE)};
   const WEB = new Set(["http:", "https:"]);
 
-  addEventListener("click", (event) => {
-    if (event.defaultPrevented || event.button !== 0) return;
-    const target = event.target;
+  const linkOut = (target) => {
     const link = target instanceof Element ? target.closest("a[href], area[href]") : null;
-    if (link === null) return;
+    if (link === null) return undefined;
     let address;
     try {
       address = new URL(link.href);
     } catch {
-      return;
+      return undefined;
     }
-    if (!WEB.has(address.protocol) || address.origin === new URL(document.baseURI).origin) return;
-    event.preventDefault();
-    parent.postMessage({ type: TYPE, href: address.href }, "*");
-  });
+    if (!WEB.has(address.protocol) || address.origin === new URL(document.baseURI).origin) return undefined;
+    return address.href;
+  };
+
+  addEventListener("click", (event) => {
+    if (event.button !== 0) return;
+    const href = linkOut(event.target);
+    if (href === undefined) return;
+    addEventListener("click", (back) => {
+      if (back !== event || event.defaultPrevented) return;
+      event.preventDefault();
+      parent.postMessage({ type: TYPE, href }, "*");
+    }, { once: true });
+  }, true);
 })();`;

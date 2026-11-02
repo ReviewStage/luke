@@ -335,7 +335,9 @@ it.effect(
           '<a id="out" href="https://example.com/docs?q=1"><b id="inner">Docs</b></a>',
           '<a id="within" href="#totals">Totals</a>',
           '<a id="taken" href="https://example.com/tab">Tab</a>',
+          '<a id="delegated" href="https://example.com/preview">Preview</a>',
           "<script>document.getElementById('taken').addEventListener('click', (event) => event.preventDefault());</script>",
+          "<script>addEventListener('click', (event) => { if (event.target.id === 'delegated') event.preventDefault(); });</script>",
         ].join("\n"),
       );
       const page = frame.contentDocument ?? assert.fail();
@@ -345,9 +347,9 @@ it.effect(
         return event.defaultPrevented;
       };
 
-      const prevented = [press("inner"), press("within"), press("taken")];
+      const prevented = [press("inner"), press("within"), press("taken"), press("delegated")];
 
-      assert.deepEqual(prevented, [true, false, true]);
+      assert.deepEqual(prevented, [true, false, true, true]);
       assert.deepEqual(posted, [{ type: PAGE_LINK_TYPE, href: "https://example.com/docs?q=1" }]);
     }),
 );
