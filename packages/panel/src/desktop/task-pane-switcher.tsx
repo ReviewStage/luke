@@ -5,6 +5,7 @@ import {
   InlineEdit,
   type InlineEditEnd,
   NO_BACK_KEY,
+  OneLine,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -103,8 +104,9 @@ interface TaskHeadRename {
 /**
  * The row heading a task on a phone; see the module's head. It is a phone's
  * header (`phone-head.tsx`): the way back at its start, the ⋯ at its end,
- * and the title centred between them, words the bar draws on one line that
- * fades where it is cut, or the task's name as a field while it is renamed.
+ * and the title centred between them, in every phone header's title type,
+ * on one line that fades where it is cut (`OneLine`), or the task's name as
+ * a field while it is renamed.
  */
 export function TaskHead({
   back,
@@ -123,6 +125,8 @@ export function TaskHead({
   /** The row's one ⋯ (`PlaceMore`). */
   actions: React.ReactNode;
 }): React.JSX.Element {
+  // Note that the row draws the picked-up heading as its own title, in a phone header's title type, rather than the bar's larger page title.
+  const named = title ?? (pickUp?.shown === true ? pickUp.name : undefined);
   return (
     <PhoneHead
       place="task"
@@ -136,23 +140,24 @@ export function TaskHead({
           onBack={back.onPress}
         />
       }
-      pickUp={pickUp}
       title={
-        title === undefined || rename?.editing !== true ? (
-          title
-        ) : (
+        named === undefined ? undefined : (
           <Text
             as={TEXT_ELEMENT.H1}
             variant={TEXT_VARIANT.TOOLBAR_TITLE}
             className="luke-toolbar-title"
           >
-            <InlineEdit
-              value={title}
-              label="Task name"
-              maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
-              editing
-              onEnd={(end) => rename.onEnd(end)}
-            />
+            {rename?.editing === true ? (
+              <InlineEdit
+                value={named}
+                label="Task name"
+                maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
+                editing
+                onEnd={(end) => rename.onEnd(end)}
+              />
+            ) : (
+              <OneLine>{named}</OneLine>
+            )}
           </Text>
         )
       }
