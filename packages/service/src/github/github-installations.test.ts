@@ -30,7 +30,7 @@ import {
  * account, so a retry of the same installation changes nothing but its
  * names, a reinstall on the account moves the account's own row onto the new
  * installation within its workspace, and an account that stands for one
- * workspace is never taken by another, however the two race, until Vespin is
+ * workspace is never taken by another, however the two race, until our App is
  * uninstalled from it, when another workspace's install takes it; the callback's
  * link reads the account's role again before it writes; a webhook's status
  * reaches its own installation alone; and a workspace's GitHub accounts are

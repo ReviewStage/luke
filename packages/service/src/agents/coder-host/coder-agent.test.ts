@@ -196,7 +196,7 @@ test("the deployment's retire of a session, which a delete a browser asked for e
 });
 
 test("a Claude Code agent is told of Claude Code's own tools and never of Vespin's it is not offered, and an eve agent of Vespin's as before", () => {
-  // The tools Claude Code owns in place of Vespin's, as eve's instructions name Vespin's.
+  // The tools Claude Code owns in place of ours, as eve's instructions name ours.
   const LUKES = [
     "`bash`",
     "`read_file`",
@@ -242,7 +242,7 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Vespin
           [],
           label,
         );
-        // The tools that touch Vespin stay Vespin's, under their own names.
+        // The tools that touch the app stay ours, under their own names.
         for (const kept of [INBOX_TOOLS.POST.name, CODER_TOOL.START_AGENT, CODER_TOOL.SHOW_IMAGE]) {
           assert.ok(claudeCode.includes(`\`${kept}\``), `${label}: ${kept}`);
         }
@@ -390,7 +390,7 @@ test.each([
 );
 
 test("a Codex agent is told of Codex's own tools and never of Vespin's it is not offered, nor of Claude Code's", () => {
-  // Vespin's tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.
+  // Our tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.
   const LUKES = [
     "`bash`",
     "`read_file`",

@@ -263,9 +263,9 @@ export function runCommentTool(
 }
 
 /**
- * The plan's open threads as Fullspin is handed them every turn, beside the
+ * The plan's open threads as the task's assistant is handed them every turn, beside the
  * saved document: one line each, read again every turn, so a comment a
- * member left since his last turn is there to raise. Nothing where the plan
+ * member left since its last turn is there to raise. Nothing where the plan
  * holds no open thread.
  */
 export function openThreadsText(threads: readonly PlanCommentThread[]): readonly string[] {
@@ -274,5 +274,5 @@ export function openThreadsText(threads: readonly PlanCommentThread[]): readonly
   return [OPEN_THREADS_MARKER, ...open.map((thread) => JSON.stringify(threadRead(thread)))];
 }
 
-/** The marker the open threads ride behind in Fullspin's standing context. */
+/** The marker the open threads ride behind in the assistant's standing context. */
 export const OPEN_THREADS_MARKER = "[open comment threads]";

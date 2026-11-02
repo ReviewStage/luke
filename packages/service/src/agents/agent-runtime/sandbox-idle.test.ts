@@ -93,7 +93,7 @@ function sandboxOver(proc: string): RepositorySandbox {
 
 const SANDBOX_INIT: Process = { pid: 1, name: "sandbox-init", bounding: FULL_SET };
 const API_SHELL: Process = { pid: 1298, name: "bash", bounding: FULL_SET };
-/** Vespin's browser, which the agent opened earlier in the turn: Xvfb and Chromium each leading a session of their own, a renderer in Chromium's. */
+/** Our browser, which the agent opened earlier in the turn: Xvfb and Chromium each leading a session of their own, a renderer in Chromium's. */
 const LUKE_BROWSER: readonly Process[] = [
   {
     pid: 300,

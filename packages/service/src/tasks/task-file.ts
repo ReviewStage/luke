@@ -34,7 +34,7 @@ import {
  * GitHub, at the head of the repository's default branch, through the same
  * reach a checkout is made through: the task is read under
  * the account first, so a task another account owns reads as no task, then
- * the Fullspin GitHub App confirms the installation of the task's workspace
+ * our GitHub App confirms the installation of the task's workspace
  * reaches the task's repository and mints a token for that one repository
  * with contents read (`github-app.ts`'s `repositoryReadToken`). The token is used for the one
  * read and goes nowhere else: not into the answer, a log line, or a trace.
@@ -126,7 +126,7 @@ type TaskRepositoryReach =
   | { readonly refused: TaskFileRefused };
 
 /**
- * The Fullspin GitHub App's reach of the task's repository through the
+ * Our GitHub App's reach of the task's repository through the
  * installation of the task's workspace: a token for that one repository
  * with contents read, and the repository as GitHub confirmed it, or the
  * refusal a failed reach answers; or, where no installation reaches it,

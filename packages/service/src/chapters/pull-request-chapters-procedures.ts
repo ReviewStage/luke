@@ -22,7 +22,7 @@
  * query names (`askedPullRequest`). It reads the pull request's files,
  * title, description, and commit messages, claims the
  * generation for its head, and tells the chapters in one model call on
- * the API key the member who pressed it saved, never Fullspin's
+ * the API key the member who pressed it saved, never ours
  * (`chapters-generator.ts`), on the Claude model they chose in Settings
  * (Haiku where they never chose, or where what they stored is no model this
  * build offers), or OpenAI's of its tier where they saved only an OpenAI

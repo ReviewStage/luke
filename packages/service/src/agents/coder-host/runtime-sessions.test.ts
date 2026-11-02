@@ -97,7 +97,7 @@ import { type EveReach, eveFor, stoppedTurn } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
- * runtime-sessions.test.ts -- every way Vespin reaches a coding agent's session answers it by the runtime its conversation runs on.
+ * runtime-sessions.test.ts -- every way the service reaches a coding agent's session answers it by the runtime its conversation runs on.
  *
  * Two agents stand side by side in one workspace: one on eve, as every
  * agent ran before native harnesses, and one on Claude Code, paid for by its
@@ -241,7 +241,7 @@ function environment(): Layer.Layer<HostedEnvironment> {
 const openTeam = Effect.gen(function* () {
   const owner = yield* openGithubUser();
   const teammate = yield* openGithubUser();
-  // The owner's agents on eve run on its own keys, since Vespin's pays for no coding agent.
+  // The owner's agents on eve run on its own keys, since ours pays for no coding agent.
   yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
   yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.OPENAI);
   const workspaceId = yield* openWorkspace(owner);
@@ -488,7 +488,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           );
 
           assert.deepEqual(eve.calls, ["send:wrun_eve"]);
-          // eve is handed no id of Vespin's for the line, as before.
+          // eve is handed no id of ours for the line, as before.
           assert.equal(eve.messages[0]?.lineId, undefined);
           assert.deepEqual(claudeCode.calls, [`send:${nativeSession}`]);
           assert.equal(claudeCode.messages[0]?.lineId, sentLineId("key-native"));
@@ -2189,7 +2189,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 PROVIDER_KEY_KIND.CHATGPT_OAUTH,
                 false,
               );
-              // API key selected is a key saved, which pays now that Vespin's never does.
+              // API key selected is a key saved, which pays now that ours never does.
               yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.OPENAI);
             }
             const { eve, codex, native } = runtimes();

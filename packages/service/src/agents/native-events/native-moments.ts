@@ -17,7 +17,7 @@ import type { UnparsedWireValue, WireValue } from "@luke/wire";
  */
 
 export const NATIVE_MOMENT = {
-  /** A line Fullspin wrote was handed to the harness: the awaiting row written under this client id is the turn's. */
+  /** A line we wrote was handed to the harness: the awaiting row written under this client id is the turn's. */
   LINE_ACCEPTED: "line_accepted",
   /** The harness named its own session or thread, which a relaunch resumes. */
   SESSION: "session",
@@ -83,7 +83,7 @@ export const NATIVE_MOMENT = {
 export const NATIVE_ENDING = {
   /** The work is done. */
   DONE: "done",
-  /** Fullspin's Stop ended it. */
+  /** The app's Stop ended it. */
   STOPPED: "stopped",
   /** The harness or its runner failed, or stopped short of the end. */
   FAILED: "failed",
@@ -180,7 +180,7 @@ export interface NativeContextUsage {
   readonly cacheWriteTokens: number;
 }
 
-/** A wakeup Fullspin delivers to a native agent as a message once it comes due. */
+/** A wakeup we deliver to a native agent as a message once it comes due. */
 export interface NativeWakeup {
   readonly at: number;
   readonly prompt: string;

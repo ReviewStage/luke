@@ -30,7 +30,7 @@ const MANAGING_ROLES: ReadonlySet<string> = new Set([WORKSPACE_ROLE.OWNER, WORKS
 /**
  * A plugin call under the session: its refusal of the session as
  * unauthenticated, an address already in or invited as such, any other
- * refusal as not permitted, since Fullspin's own rules already passed, and a
+ * refusal as not permitted, since our own rules already passed, and a
  * failure that is not a refusal as the outage the Mac may retry, logged by
  * its kind alone.
  */

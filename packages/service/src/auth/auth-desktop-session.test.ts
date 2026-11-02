@@ -267,7 +267,7 @@ test("after its OAuth sign-in the Mac holds a session of its own, carried as a s
 
   const session = await sessionFor(auth, { authorization: `Bearer ${signed}` });
   assert.equal(session?.user.email, GITHUB_EMAIL);
-  // Vespin's own routes still read the OAuth token through userinfo, beside the bearer plugin.
+  // Our own routes still read the OAuth token through userinfo, beside the bearer plugin.
   assert.equal(await userInfoSubject(auth, accessToken), session?.user.id);
 });
 

@@ -10,7 +10,7 @@ import { DESKTOP_SESSION_CLIENT_ID } from "@luke/features/desktop-session-wire";
 import { USER_ROLE } from "../admin/admin-access.js";
 
 /**
- * What a GitHub sign-in asks for. It is the Fullspin GitHub App's user
+ * What a GitHub sign-in asks for. It is our GitHub App's user
  * authorization, and a GitHub App has permissions rather than scopes: what
  * the token reaches is fixed by the App's registration (repository metadata,
  * contents, and pull requests where the App is installed and the user has
@@ -47,7 +47,7 @@ export const ACCOUNT_TOKEN_STORAGE = {
  * The Better Auth endpoints this deployment does not serve. `/token` is the
  * JWT plugin's, which the OAuth provider's own token endpoint stands in for.
  * The other two would hand a signed-in browser its GitHub access token:
- * nothing of Fullspin's reads that token anywhere but on the server
+ * nothing of ours reads that token anywhere but on the server
  * (`github/github-app.ts`), and root AGENTS.md pins that no credential
  * travels in an answer, so neither door is open.
  *
@@ -55,19 +55,19 @@ export const ACCOUNT_TOKEN_STORAGE = {
  * the invitations. A session free to create an organization, or to rename
  * its own, could take a slug before the team it belongs to arrives, so
  * workspaces are created, renamed, given a photo, and their members removed
- * only by Fullspin's server, through the server-only `auth.api` calls, which
+ * only by our server, through the server-only `auth.api` calls, which
  * these paths do not reach; a rename there hands the plugin a name and never
  * a slug, and a photo a logo it has read as one.
  *
  * A teammate joins by invitation, Better Auth's own
  * (https://www.better-auth.com/docs/plugins/organization#invitations). An
  * owner or an admin asks for one, lists and cancels the pending ones from
- * the Mac, through Fullspin's routes and the server-only calls, so those paths
+ * the Mac, through our routes and the server-only calls, so those paths
  * are shut too; the invitee's page reads and accepts theirs on the browser's
  * session, so exactly those two endpoints are served (`get-invitation`,
  * `accept-invitation`). The plugin checks each against the caller's address
  * itself. Rejecting and listing one's own invitations stay shut, since no
- * page of Fullspin's asks for either. The team
+ * page of ours asks for either. The team
  * and role endpoints are listed although this deployment does not mount
  * them, so turning either option on later opens no door by itself.
  *
@@ -137,7 +137,7 @@ export const SESSION_COOKIE_CACHE = {
  * the `user` table, and it is returned on the session so the dashboard reads
  * it without a query of its own. `input: false` keeps a sign-up from
  * asserting its own role — the role is set only by a maintainer's own write
- * to the database, never by anything Fullspin runs.
+ * to the database, never by anything we run.
  */
 export const USER_FIELDS = {
   additionalFields: {
@@ -159,8 +159,8 @@ export const DESKTOP_SESSION = { clientID: DESKTOP_SESSION_CLIENT_ID } as const;
  * How Better Auth keeps workspaces, each an organization of its members. A
  * workspace is never deleted, so no task is lost with one, and no signed-in
  * user creates one: the plugin still lets a server-only call that names a
- * `userId` and carries no session through, which is the one way Fullspin
- * creates a workspace.
+ * `userId` and carries no session through, which is the one way we
+ * create a workspace.
  *
  * An invitation's id is the accept link the service emails the invitee and
  * an owner may also copy and share by hand, so it can travel outside the
@@ -180,7 +180,7 @@ export const JWT_KEY_STORAGE = {
   },
 } as const;
 
-/** Fullspin provisions its own native clients; signed-in users cannot add or alter OAuth clients. */
+/** We provision our own native clients; signed-in users cannot add or alter OAuth clients. */
 export function denyOAuthClientPrivileges(): false {
   return false;
 }

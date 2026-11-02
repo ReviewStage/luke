@@ -3039,7 +3039,7 @@ export interface WorkspaceChannelsLiveStatements {
 }
 
 /**
- * A workspace's channels list as its reader reads it, written for Fullspin
+ * A workspace's channels list as its reader reads it, written for
  * Sync, each column under the key `channel-live.ts` reads it by and each
  * instant in epoch milliseconds: every channel of it, open or archived, as
  * its row holds it; how many threads of each the reader may read and when

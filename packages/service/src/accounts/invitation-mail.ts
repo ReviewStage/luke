@@ -12,7 +12,7 @@
  *
  * The deployment holds the Resend key (`RESEND_API_KEY`, the one the
  * feedback form sends with) and the sender (`INVITE_FROM`, such as
- * `Vespin <invites@…>` on a domain Resend has verified). Without either,
+ * `Name <invites@…>` on a domain Resend has verified). Without either,
  * nothing is mailed and the invitation is made as before, its link copied by
  * hand; the build says so once, by the variables' names. A send Resend
  * refuses or never answers leaves the invitation standing, since the link

@@ -55,8 +55,8 @@ import { agentPublished } from "./published.js";
  * the agent is told, so it can tell the developer. A refusal of the pull
  * request itself, such as one already open from the branch, is the agent's
  * to read and opens nothing. The description is the agent's own, with no
- * line of Fullspin's added: where its author is a person, the trailer on its
- * commits (`checkout.ts`) names Fullspin's bot as co-author, which GitHub shows
+ * line of ours added: where its author is a person, the trailer on its
+ * commits (`checkout.ts`) names our bot as co-author, which GitHub shows
  * on the pull request, as it does for Claude Code. It merges into the
  * repository's default branch unless the agent names another base, such as
  * the branch of the pull request it stacks on; a base GitHub does not know

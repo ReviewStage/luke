@@ -92,7 +92,7 @@ import { lukeMcpDoorSeams } from "./door-seams.js";
 import { LUKE_MCP_TOOLS, type LukeMcpServices, refusedByDoor } from "./tools.js";
 
 /**
- * Vespin's MCP server, answered by its group the way a function answers it,
+ * Our MCP server, answered by its group the way a function answers it,
  * over a real dialect, and driven by the MCP SDK's own client, the one a
  * harness speaks: a runner's bearer admits its agent's conversation, the
  * server lists `read_threads` and runs it through the coder host's inbox door
@@ -278,7 +278,7 @@ const agentInSandbox = Effect.gen(function* () {
   return { ...agent, conversationId };
 });
 
-/** An SDK client connected under the bearer to the server at the path given, Vespin's own unless another is named. */
+/** An SDK client connected under the bearer to the server at the path given, our own unless another is named. */
 function connected(fetch: typeof globalThis.fetch, bearer: string, path: string = LUKE_MCP_PATH) {
   return Effect.promise(async () => {
     const client = new Client({ name: "runner-test", version: "1.0.0" });
@@ -314,7 +314,7 @@ function post(
   });
 }
 
-/** The tools a native agent is served: every Vespin tool of the eve agent's that its harness has no equal of. */
+/** The tools a native agent is served: every tool of ours the eve agent is offered that its harness has no equal of. */
 const SERVED_TOOLS = [
   "post_thread",
   "read_threads",

@@ -383,7 +383,7 @@ export const RUN_AUTOMATION_TOOL = {
   inputSchema: RUN_AUTOMATION_INPUT,
 } as const;
 
-/** What the automation tools reach: the store, the catalog a model is checked against, GitHub through the workspace's installation, and Fullspin's Sentry integration. */
+/** What the automation tools reach: the store, the catalog a model is checked against, GitHub through the workspace's installation, and our Sentry integration. */
 type AutomationToolServices =
   | DatabaseServices
   | ModelCatalog

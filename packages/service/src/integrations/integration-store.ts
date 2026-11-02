@@ -1,11 +1,11 @@
 /**
  * integration-store.ts -- the reads and writes of an account's integration rows.
  *
- * A row (`schemas/integration.ts`) is Fullspin's word on whether its agents may
+ * A row (`schemas/integration.ts`) is our word on whether our agents may
  * use the grant Connect holds for one account at one provider: `connected`
- * lets them, anything else or no row does not. A Fullspin account may hold more
+ * lets them, anything else or no row does not. A user account may hold more
  * than one account at a provider, each its own row under its own connection
- * name, so every read and write here names the row by the Fullspin account and
+ * name, so every read and write here names the row by the user account and
  * that name. A sign-in begins by writing its one-time state beside whatever
  * the row already said, so an account signing in again keeps working while
  * it does; the sign-in completes by setting the row connected and clearing the
@@ -107,7 +107,7 @@ function rowOf(row: typeof IntegrationRowSchema.Type): IntegrationConnectionRow 
 
 const AccountSchema = Schema.Struct({ userId: Schema.String, connectionName: Schema.String });
 
-/** The row one Fullspin account holds under one connection name. */
+/** The row one user account holds under one connection name. */
 function ofAccount({ userId, connectionName }: typeof AccountSchema.Type) {
   return and(
     eq(integrationConnection.userId, userId),

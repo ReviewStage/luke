@@ -1,5 +1,5 @@
 /**
- * watch.ts -- what a wait on the database waits through: a watch on topics, woken by Fullspin Sync or by its own clock.
+ * watch.ts -- what a wait on the database waits through: a watch on topics, woken by Sync or by its own clock.
  *
  * A reader that waits for rows to change opens a watch on the topics those
  * rows notify (`@luke/database/sync/notification`), then reads, then waits on
@@ -7,7 +7,7 @@
  * first read, so a write that commits while that read runs still wakes the
  * next `next`. Where nothing can wake it (no hub, its listener down, or a
  * watch on no topics) `next` waits the watch's fallback, the caller's own
- * poll, which is how every wait behaved before Fullspin Sync.
+ * poll, which is how every wait behaved before Sync.
  *
  * `Sync` is the instance's hub (`hub.ts`) where the runtime provides one, as
  * the deployment's does, and the clock where it does not, so a runtime or a
@@ -62,7 +62,7 @@ const CLOCK_SYNC: SyncShape = {
   watch: (_topics, fallback) => Effect.succeed(clockWatch(fallback)),
 };
 
-/** Fullspin Sync as one runtime has it: the hub where the runtime provides one, the clock otherwise. */
+/** Sync as one runtime has it: the hub where the runtime provides one, the clock otherwise. */
 export const Sync = Context.Reference<SyncShape>("@luke/service/Sync", {
   defaultValue: () => CLOCK_SYNC,
 });

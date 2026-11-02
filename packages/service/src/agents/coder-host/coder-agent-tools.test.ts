@@ -383,7 +383,7 @@ async function fakeCoderEve(
   };
 }
 
-/** Vespin's Sentry integration as a deployment that configures it holds it. */
+/** Our Sentry integration as a deployment that configures it holds it. */
 const SENTRY_CONFIGURED = Layer.succeed(
   SentryApp,
   sentryAppService(
@@ -696,7 +696,7 @@ test("read_agent reads a teammate's agent on another task of the caller's worksp
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
-  // The teammate's final report runs past the short entry Vespin summarises aloud.
+  // The teammate's final report runs past the short entry the app summarises aloud.
   const report = Array.from(
     { length: 10 },
     () => "The invitations backfill stalls on rows whose inviter left the workspace.",

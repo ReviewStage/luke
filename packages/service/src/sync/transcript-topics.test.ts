@@ -54,7 +54,7 @@ import type { LiveParams } from "./live-query.js";
  * task's, and its workspace's too, so every view of the agent's status
  * hears it; and for a worker opened, its delegation recorded, and its title
  * filled, which notify the agent's own conversation, whose transcript lists
- * its workers. A transcript read held on Vespin Sync answers the agent's
+ * its workers. A transcript read held on Sync answers the agent's
  * message, and a wait for a worker's delegation its record, within a
  * coalesce window of the write.
  *

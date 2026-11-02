@@ -30,7 +30,7 @@ import { sentryInstallApp } from "./sentry-install-app.js";
 import { sentryInstallProcedures } from "./sentry-install-procedures.js";
 
 /**
- * Vespin's Sentry integration installed for a workspace, as the install group
+ * Our Sentry integration installed for a workspace, as the install group
  * answers it: an owner or admin opens an install at Sentry, Sentry returns
  * the browser with a code the group proves with Sentry before it links the
  * installation, any member reads what stands, and an admin disconnects one.
@@ -65,7 +65,7 @@ interface SentryCall {
 }
 
 /**
- * Sentry's integration platform: a code exchanged under Vespin's client for a
+ * Sentry's integration platform: a code exchanged under our client for a
  * token where the code is the one `codes` holds for the installation, and an
  * installation verified with that token, answering the organization it is on.
  */

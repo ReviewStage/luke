@@ -30,7 +30,7 @@ import {
  * native-projection.ts -- a native harness's moments folded into the store writer's events, as eve's relay folds eve's stream.
  *
  * A coding agent on a native harness runs one turn per launch of its runner:
- * the turn opens at the first sign of work (the line Fullspin handed it, the
+ * the turn opens at the first sign of work (the line we handed it, the
  * harness's start, or its first words) and ends with the launch, so a model
  * turn that ends with background work or a wakeup still to come leaves the
  * agent's turn running, as eve's parked turn does. Inside it each model call
@@ -180,7 +180,7 @@ export const NATIVE_WRITE = {
   COMPACTED: "compacted",
   /** Record how a turn found the plan that pays for the agent, on its row. */
   PLAN_STATUS: "plan_status",
-  /** Replace the wakeups Fullspin delivers to the agent once due (`agent-wakeups.ts`). */
+  /** Replace the wakeups we deliver to the agent once due (`agent-wakeups.ts`). */
   WAKEUPS: "wakeups",
   /** Record what the newest model call read on the agent's row, which its context ring reads. */
   CONTEXT: "context",
