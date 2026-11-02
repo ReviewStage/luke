@@ -35,7 +35,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { storedScrolls, useKeptScroll } from "../use-kept-scroll.js";
 import { NewTaskButton } from "./new-task-button.js";
-import { PhoneHead, PlaceMore, useMenuAsk } from "./phone-head.js";
+import { PhoneHead, PlaceMore, phoneFindGroups, useMenuAsk } from "./phone-head.js";
 import { TasksBoard } from "./tasks-board.js";
 import { TasksList } from "./tasks-list.js";
 import {
@@ -267,6 +267,7 @@ export function TasksPage({
                   onSelect: () => optionsAsk.onAsk(opener),
                 },
               ],
+              ...phoneFindGroups(),
             ]}
           />
         }

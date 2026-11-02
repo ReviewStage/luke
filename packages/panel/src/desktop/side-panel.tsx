@@ -177,7 +177,7 @@ import { useFileTreeWidth } from "./folded-groups.js";
 import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
 import { paneTiming } from "./pane-motion.js";
-import { PhoneBack, PhoneHead, PlaceMore } from "./phone-head.js";
+import { PhoneBack, PhoneHead, PlaceMore, phoneFindGroups } from "./phone-head.js";
 import {
   type AddEntry,
   AddTabButton,
@@ -2853,6 +2853,7 @@ function PanelPhoneHead({
                       },
                     ]),
               ],
+              ...phoneFindGroups(),
               ...tabActions,
             ].filter((group) => group.length > 0);
           }}

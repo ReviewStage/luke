@@ -16,11 +16,13 @@ import {
   Toolbar,
   Tooltip,
 } from "@luke/ui";
+import { RotateCcwIcon } from "@luke/ui/icons";
 import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useRef, useState } from "react";
 import type { Kept } from "../act.js";
-import { PhoneHead } from "../desktop/phone-head.js";
+import type { MenuEntry } from "../desktop/action-menu.js";
+import { PhoneHead, PlaceMore, phoneFindGroups } from "../desktop/phone-head.js";
 import { unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { TOAST_HOLD, type ToastNotice, undoToast, useToast } from "../toast.js";
@@ -94,6 +96,9 @@ const CURRENT_HINT = "This version is already current";
 
 /** What the version's restore says. */
 const RESTORE_LABEL = "Restore this version";
+
+/** What a phone's ⋯ over a version is called: "Version actions". */
+const VERSION_THING = "Version";
 
 /** What Restore this version says while its restore is under way. */
 const RESTORING = "Restoring";
@@ -316,16 +321,24 @@ export function sayRestored(
   );
 }
 
-/** The page a version stands on: its bar, led by `lead`, naming the version in `title` with `actions` at its end, over the version's document; a phone's header ends in the same `actions`, its one Restore, which no ⋯ of one item would hold. */
+/**
+ * The page a version stands on: its bar, led by `lead`, naming the version in
+ * `title` with `actions` at its end, over the version's document. A phone's
+ * header ends in a ⋯ holding `phoneGroups` where they are given, since its
+ * Restore and ⌘F's Find are two and a corner holds one; in the same
+ * `actions` where they are not, as while the version is read.
+ */
 function VersionPageFrame({
   lead,
   title,
   actions,
+  phoneGroups,
   children,
 }: {
   lead?: React.ReactNode;
   title: React.ReactNode;
   actions: React.ReactNode;
+  phoneGroups?: (() => readonly (readonly MenuEntry[])[]) | undefined;
   children: React.ReactNode;
 }): React.JSX.Element {
   // Note that only a phone leads the bar with a way back, the version standing there alone.
@@ -339,7 +352,18 @@ function VersionPageFrame({
       {lead === undefined ? (
         <Toolbar title={titled} actions={actions} />
       ) : (
-        <PhoneHead place="version" start={lead} title={titled} end={actions} />
+        <PhoneHead
+          place="version"
+          start={lead}
+          title={titled}
+          end={
+            phoneGroups === undefined ? (
+              actions
+            ) : (
+              <PlaceMore thing={VERSION_THING} shown groups={phoneGroups} />
+            )
+          }
+        />
       )}
       <Fill className="desktop-document @container/plan-document">
         <DocumentScroll>{children}</DocumentScroll>
@@ -400,6 +424,18 @@ export function VersionView({
           </Button>
         </Tooltip>
       }
+      phoneGroups={() => [
+        [
+          {
+            label: RESTORE_LABEL,
+            icon: <RotateCcwIcon />,
+            disabled: viewing.current || restore.busy,
+            detail: viewing.current ? CURRENT_HINT : undefined,
+            onSelect: () => restore.onRestore(),
+          },
+        ],
+        ...phoneFindGroups(),
+      ]}
     >
       <VersionContent
         viewing={viewing}

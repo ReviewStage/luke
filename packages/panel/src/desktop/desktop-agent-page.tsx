@@ -90,7 +90,7 @@ import {
   useAutomationRunPlace,
 } from "./automation-agent-run.js";
 import { AgentPane } from "./main-tabs.js";
-import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
+import { PhoneBack, PhoneHead, phoneBar, phoneFindGroups } from "./phone-head.js";
 import { type InboxItemAsk, SideInboxTab } from "./side-inbox-tab.js";
 import {
   COLUMN,
@@ -298,12 +298,24 @@ function AgentPageBar({
         <ActionMenu
           label={moreLabel(ACTIONS_THING)}
           menu={menu.drawn}
+          // A phone's ⋯ also stands in for ⌘F, and for the panel's toggle it has no room for.
           groups={
-            phone?.onShowPanel === undefined
+            phone === undefined
               ? groups
               : [
+                  ...phoneFindGroups(),
                   ...groups,
-                  [{ label: SHOW_PANEL, icon: <SidePanelIcon />, onSelect: phone.onShowPanel }],
+                  ...(phone.onShowPanel === undefined
+                    ? []
+                    : [
+                        [
+                          {
+                            label: SHOW_PANEL,
+                            icon: <SidePanelIcon />,
+                            onSelect: phone.onShowPanel,
+                          },
+                        ],
+                      ]),
                 ]
           }
           onClose={menu.close}

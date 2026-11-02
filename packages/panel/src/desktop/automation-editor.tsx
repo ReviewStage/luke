@@ -196,7 +196,7 @@ import { automationDeleteQuestion, automationOwnerName } from "./automation-word
 import { useRunsPanel } from "./folded-groups.js";
 import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
-import { PhoneHead } from "./phone-head.js";
+import { PhoneHead, phoneFindGroups } from "./phone-head.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
 import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
@@ -1038,7 +1038,7 @@ function AutomationActions({
   onDelete,
   running,
   onRunNow,
-  lead = [],
+  lead,
   heading,
 }: {
   /** The automation, whose link, Run now, and Delete the menu offers; none on a new automation's page, a phone's alone. */
@@ -1070,7 +1070,10 @@ function AutomationActions({
           label={moreLabel(ACTIONS_THING)}
           menu={menu.drawn}
           heading={heading}
-          groups={[...lead, ...own].filter((group) => group.length > 0)}
+          // Note that a phone's ⋯, the one given a lead, also stands in for ⌘F, read as the menu is drawn.
+          groups={[...(lead === undefined ? [] : [...lead, ...phoneFindGroups()]), ...own].filter(
+            (group) => group.length > 0,
+          )}
           onClose={menu.close}
         />
       )}
