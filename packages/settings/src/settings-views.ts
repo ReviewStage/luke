@@ -93,8 +93,6 @@ export const SETTINGS_SECTION = {
   LEAVE: "workspace-leave",
   /** A workspace's GitHub, the group once called GitHub repositories and still anchored by its name: the GitHub accounts connected, and Connect or Manage on GitHub, where accounts are added and repositories chosen. */
   GITHUB_REPOSITORIES: "workspace-github-repositories",
-  /** Where each repository is cloned on this Mac and the command that runs it, which Open on this Mac reads. */
-  MAC_REPOSITORIES: "workspace-mac-repositories",
   /** Claude's row on Agents: the account's Claude plan and Anthropic key, anchored as its search result is. */
   CLAUDE: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
   /** Codex's row on Agents: the account's ChatGPT plan and OpenAI key, which dictation runs on too. */

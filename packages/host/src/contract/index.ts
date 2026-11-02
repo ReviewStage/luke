@@ -66,7 +66,6 @@ export {
   WINDOW_SURFACE_ACT_KIND,
   WORKSPACE_ACT_KIND,
 } from "./kinds.js";
-export { MAC_REPOSITORIES_REFUSAL } from "./mac-terminals.js";
 export {
   type EventPushName,
   PUSH,

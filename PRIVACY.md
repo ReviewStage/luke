@@ -58,20 +58,6 @@ that wrote it is signed in. The files attached to such a message or answer
 stay in memory only.
 None of it is sent anywhere.
 
-**Run on this Mac.** Run, in an agent tab's ⋯, opens a terminal inside
-Vespin, in a tab of its side panel, on this Mac. Its shell clones the repository
-from GitHub into Vespin's application data the first time, with your own git
-login, fetches the agent's pushed branch, checks it out in a worktree there,
-runs the run command you set for that repository if you set one, and stays
-open for you to type in. It runs as your macOS user in your login shell, and
-reaches what you can. Each repository's run command is kept in this Mac's
-settings, under Settings › Workspace › Repositories, and never sent anywhere;
-what the terminal prints and what you type pass only between Vespin's windows
-on this Mac, are held in memory up to the latest 256 KB of output while the
-tab stays open, and are never written to disk, logged, counted, or recorded.
-Closing the tab, or quitting Vespin, hangs up the terminal and everything it
-started on it; the clone and the worktree stay until you delete them.
-
 **Commands agents run on your Mac.** Every agent can run any shell
 command on your Mac, as many at a time as you allow; the workers an agent hands work to cannot, and run their own commands in the agent's
 sandbox with no network at all. This holds whenever Vespin is open on the Mac and
@@ -1654,8 +1640,7 @@ keys, or calendar grants an earlier version kept there, which stay as they
 were but for a voice key, removed as described above. Nothing of your
 conversations with agents or their working memory is kept on your Mac
 beyond the layout of its window described under "On your Mac", and the
-switch for commands on your Mac and each repository's run command for Run
-are kept with that Mac's settings. Vespin in a browser keeps your settings in
+switch for commands on your Mac is kept with that Mac's settings. Vespin in a browser keeps your settings in
 that browser's own storage for the site, and no sign-in token at all: it is
 signed in by the site's session cookie, which only the browser holds. Its
 screen recording keeps, in that browser's storage for the site, the

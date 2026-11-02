@@ -4,7 +4,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { BROWSER_LIVE_PORT_CHANNEL } from "@luke/features/browser-live-acts";
-import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import {
   browserLiveProcedures,
@@ -13,7 +12,6 @@ import {
   terminalProcedures,
 } from "@luke/host/act-port";
 import type { AppStateSnapshot } from "@luke/host/app-state";
-import { startMacTerminal, worktreesRoot } from "@luke/host/node";
 import { LEAVE } from "@luke/host/quit";
 import type { WireBoundaryInput } from "@luke/wire";
 import {
@@ -122,19 +120,10 @@ export function registerDesktopIpc(services: DesktopServices): void {
       run,
     }),
     ...macTerminalProcedures({
-      host: operator.host,
-      worktreesRoot: worktreesRoot(os.homedir()),
       home: os.homedir(),
       openInTerminal: (folder) =>
         execFile("/usr/bin/open", ["-a", "Terminal", folder], () => undefined),
       exists: (folder) => fs.existsSync(folder),
-      stateRoot: config.stateRoot,
-      ports: {
-        open: portTo(MAC_TERMINAL_PORT_CHANNEL),
-        whenGone: whenPageGone,
-      },
-      start: startMacTerminal,
-      fork: (effect) => void run(effect),
     }),
     ...terminalProcedures<WebContents>({
       host: operator.host,

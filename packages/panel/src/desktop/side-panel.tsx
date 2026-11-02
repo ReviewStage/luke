@@ -8,7 +8,6 @@ import {
 } from "@luke/features/agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -17,7 +16,6 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CloseIcon,
   CollapseIcon,
-  ConfirmDialog,
   ExpandIcon,
   Fill,
   IconButton,
@@ -40,7 +38,6 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
-  useConfirmDialog,
   useResizeEdge,
 } from "@luke/ui";
 import { ListIcon } from "@luke/ui/icons";
@@ -51,12 +48,10 @@ import {
   isChangesTab,
   isCloudBrowserTab,
   isFileTab,
-  isMacTerminalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
   isTranscriptTab,
-  type MacTerminalStripTab,
   type PageStripTab,
   type StripTab,
   type SubagentStripTab,
@@ -65,7 +60,6 @@ import {
   type TerminalStripTab,
   tabKey,
 } from "@luke/ui/tab-strip-model";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
 import {
   Fragment,
   type ReactNode,
@@ -85,7 +79,6 @@ import { appPlatform } from "../app-platform.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
-import { confirmFailure } from "../failure-report.js";
 import { FindScope } from "../find-in-tab.js";
 import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
@@ -122,11 +115,6 @@ import {
 } from "../tasks/cloud-browser-tabs.js";
 import { FileView, type TreeShown } from "../tasks/file-view.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
-import {
-  MAC_TERMINAL_CLOSE_QUESTION,
-  MacTerminalTab,
-  macTerminalGoing,
-} from "../tasks/mac-terminal-tab.js";
 import { OpenFileTabProvider } from "../tasks/open-file-tab.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { PlanCommentsTab } from "../tasks/plan-comments.js";
@@ -172,7 +160,6 @@ import {
   sameHolder,
 } from "../tasks/use-side-panel.js";
 import { useCapability } from "../use-app-state.js";
-import { useAgentTerminalDoors } from "./agent-actions.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
@@ -906,8 +893,6 @@ function stripTabs(input: {
   copied: TranscriptCopier;
   /** Opens an agent's tab in the plan's column, as a card naming the agent offers. */
   onOpenAgent: (agentId: string) => void;
-  /** Closes a Mac terminal's tab, which asks first while its run is going. */
-  onCloseMacTerminal: (tab: MacTerminalStripTab) => void;
   /** The agent whose tab the plan's column shows, whose card follows its run. */
   shownAgent: string | undefined;
   /** The open plan, or the agent on no task, whose pages a page tab's card previews, and whose panel a closed cloud Browser draft leaves. */
@@ -1047,12 +1032,6 @@ function stripTabs(input: {
       close: () => panel.onClose(tab),
     };
   });
-  // A terminal of this Mac's tab names the repository it runs beside its word.
-  const macTerminalTabs = panel.strip.filter(isMacTerminalTab).map((tab) => ({
-    tab,
-    look: look(tab, { ...tabLook({ kind: TAB_KIND.MAC_TERMINAL }), detail: tab.repository }),
-    close: () => input.onCloseMacTerminal(tab),
-  }));
   // A cloud Browser tab is named by its page's title, wearing the glyph of whose browser it is in,
   // and hangs a card saying whose browser that is, with its address; a draft closed is discarded.
   const cloudBrowserTabs = panel.strip.filter(isCloudBrowserTab).flatMap((tab) => {
@@ -1103,7 +1082,6 @@ function stripTabs(input: {
     ...changesTabs,
     ...pageTabs,
     ...terminalTabs,
-    ...macTerminalTabs,
     ...cloudBrowserTabs,
   ];
 }
@@ -1170,7 +1148,6 @@ function PanelTabs({
   handed,
   planMenu,
   onOpenAgent,
-  onCloseMacTerminal,
   shownAgent,
   inbox,
   inboxDrafted,
@@ -1215,8 +1192,6 @@ function PanelTabs({
   planMenu: DocumentMenu | undefined;
   /** Opens an agent's tab in the plan's column, as a Changes tab's card offers. */
   onOpenAgent: (agentId: string) => void;
-  /** Closes a Mac terminal's tab, asking first while its run is going. */
-  onCloseMacTerminal: (tab: MacTerminalStripTab) => void;
   /** The agent whose tab the plan's column shows, whose Changes card follows its run. */
   shownAgent: string | undefined;
   /** The task's Inbox as its board reads, whose items waiting on the developer its tab counts and its card says; none beside anything but a task's page. */
@@ -1246,7 +1221,6 @@ function PanelTabs({
     held,
     copied,
     onOpenAgent,
-    onCloseMacTerminal,
     shownAgent,
     pagePlace: holderPlaceOf(holder, taskId),
     plan: task,
@@ -1396,34 +1370,6 @@ function PanelTabs({
       />
     </PanelTabsRow>
   );
-}
-
-/**
- * What closes a Mac terminal's tab, asking first while its run is going,
- * since closing it ends what runs there: every way of closing one (its ×,
- * ⌘W, its menu, a phone's header) goes through `close`, and `question` is
- * drawn once by the panel.
- */
-function useMacTerminalClose(panel: SidePanelControl) {
-  const closing = useRef<MacTerminalStripTab | undefined>(undefined);
-  const confirm = useConfirmDialog(
-    { subject: true, surfaceOpen: true },
-    () => {
-      if (closing.current !== undefined) panel.onClose(closing.current);
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
-    confirmFailure(FAILURE_SURFACE.TERMINAL_CLOSE),
-  );
-  const close = (tab: MacTerminalStripTab) => {
-    if (!macTerminalGoing(tab.macTerminal)) {
-      panel.onClose(tab);
-      return;
-    }
-    closing.current = tab;
-    confirm.ask();
-  };
-  const question = <ConfirmDialog open confirm={confirm} question={MAC_TERMINAL_CLOSE_QUESTION} />;
-  return { close, question };
 }
 
 /**
@@ -1823,7 +1769,6 @@ function TabContent({
   inbox,
   transcript,
   onTabActions,
-  onRunOnMac,
 }: {
   tab: SidePanelTab;
   taskId: string;
@@ -1882,15 +1827,10 @@ function TabContent({
   transcript: ((agentId: string) => React.ReactNode) | undefined;
   /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
   onTabActions: (tab: SidePanelTab, actions: TabActionGroups | undefined) => void;
-  /** Runs a branch in an agent's terminal of this Mac in this panel, which every Pull request tab's Run offers: the agent's own, or the head of the pull request `number` names; none where no repository is known or the platform has no Mac terminal. */
-  onRunOnMac: ((agentId: string, number?: number) => void) | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const directory = useMemberDirectory();
   if (isTranscriptTab(tab)) return <>{transcript?.(tab.transcript)}</>;
-  if (isMacTerminalTab(tab)) {
-    return <MacTerminalTab key={tab.macTerminal} tab={tab} />;
-  }
   if (isCloudBrowserTab(tab)) {
     const drawn = cloudBrowsers.find((each) => each.id === tab.cloudBrowser);
     // The tab stands for one the service no longer lists only until the panel moves on, a render away.
@@ -1967,10 +1907,6 @@ function TabContent({
               view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
               onView={(view) => onPullRequestView(tab, view)}
               onActions={(actions) => onTabActions(tab, actions)}
-              // Note that Run reads the branch of the pull request the tab shows: the agent's own, or the one its number names.
-              onRun={
-                onRunOnMac === undefined ? undefined : () => onRunOnMac(tab.changes, tab.number)
-              }
             />
           </Suspense>
         </OpenFileTabProvider>
@@ -2548,11 +2484,9 @@ export function SidePanel({
                 ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
                 : isTerminalTab(tab)
                   ? TAB_WORDS.TERMINAL
-                  : isMacTerminalTab(tab)
-                    ? TAB_WORDS.MAC_TERMINAL
-                    : isCloudBrowserTab(tab)
-                      ? cloudBrowserLabel(tab.cloudBrowser)
-                      : tabLook({ kind: TAB_KIND.PANEL, tab, plan: task }).label;
+                  : isCloudBrowserTab(tab)
+                    ? cloudBrowserLabel(tab.cloudBrowser)
+                    : tabLook({ kind: TAB_KIND.PANEL, tab, plan: task }).label;
   const keys = shown && leaving === PANEL_LEAVING.NONE;
   // Note that only one tab panel stands at a time, so the one pair of ids serves whichever tab is chosen.
   const tabId = useId();
@@ -2561,8 +2495,6 @@ export function SidePanel({
   const planShown = !listing && tab === SIDE_PANEL_TAB.PLAN;
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
-  // A Pull request tab's Run opens the agent's branch on this Mac in this panel, which already holds the keys.
-  const macTerminalDoors = useAgentTerminalDoors(panel, repository, noFocusMove);
   const offers = panelOffers({
     holder,
     taskId,
@@ -2584,7 +2516,6 @@ export function SidePanel({
   });
   // Something on offer past the fixed kinds, which an empty panel offers in place as a closed kind is.
   const offersMore = offers.some((entry) => entry.row.section !== undefined);
-  const macTerminalClose = useMacTerminalClose(panel);
 
   return (
     <PanelFrame
@@ -2603,11 +2534,7 @@ export function SidePanel({
             listing={listing}
             shown={ownShown}
             onList={() => setOwnListed(true)}
-            onCloseShown={
-              tab === undefined
-                ? undefined
-                : () => (isMacTerminalTab(tab) ? macTerminalClose.close(tab) : panel.onClose(tab))
-            }
+            onCloseShown={tab === undefined ? undefined : () => panel.onClose(tab)}
           />
         ) : undefined
       }
@@ -2633,7 +2560,6 @@ export function SidePanel({
           handed={handed}
           planMenu={planMenu}
           onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
-          onCloseMacTerminal={macTerminalClose.close}
           shownAgent={shownAgent}
           inbox={inbox?.board}
           inboxDrafted={inbox?.drafted ?? false}
@@ -2737,13 +2663,11 @@ export function SidePanel({
                 inbox={inbox?.body}
                 transcript={transcript}
                 onTabActions={handTabActions}
-                onRunOnMac={macTerminalDoors.onOpenOnMac}
               />
             </HandTabActionsContext.Provider>
           </div>
         </FindScope>
       )}
-      {macTerminalClose.question}
     </PanelFrame>
   );
 }

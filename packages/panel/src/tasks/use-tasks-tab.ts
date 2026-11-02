@@ -66,7 +66,6 @@ import {
   isCloudBrowserTab,
   isDraftTab,
   isFileTab,
-  isMacTerminalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
@@ -188,7 +187,6 @@ import {
 import {
   AGENT_PAGE_HOLDS,
   drawsChanges,
-  drawsMacTerminal,
   drawsSubagent,
   drawsTerminal,
   isPinnable,
@@ -3210,15 +3208,14 @@ export function useTasksTab(input: {
     if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agents.heldIds });
     if (isPageTab(tab)) return viewed.pages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
-    if (isMacTerminalTab(tab)) return drawsMacTerminal(tab, { taskAgents: agentIds });
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain);
 
   // A tab not viewed for a day closes itself onto the same stack (`use-idle-tabs.ts`), unless it is
   // pinned, its agent works, waits on the developer, or ended unseen, or nothing could open it again:
-  // a draft's, which lets the draft go, a Browser tab's or a terminal of this Mac's, which take their
-  // page or shell with them, and a cloud Browser tab's, which the strip draws again on no open. The
+  // a draft's, which lets the draft go, a Browser tab's, which takes its
+  // page with it, and a cloud Browser tab's, which the strip draws again on no open. The
   // side panel's fixed kinds, the only tabs it names by a word, are its own and close only by hand.
   const workingAgents = useMemo(
     () =>
@@ -3270,11 +3267,7 @@ export function useTasksTab(input: {
             viewedAt: sidePanel.viewedAt,
             onViewedAt: sidePanel.onViewedAt,
             onIdle: closeSidePanelTab,
-            keeps: (tab) =>
-              typeof tab === "string" ||
-              isCloudBrowserTab(tab) ||
-              isMacTerminalTab(tab) ||
-              pinnedHere(tab),
+            keeps: (tab) => typeof tab === "string" || isCloudBrowserTab(tab) || pinnedHere(tab),
           },
     awake: awakeAgents,
     onWake: mainTabs.onWake,

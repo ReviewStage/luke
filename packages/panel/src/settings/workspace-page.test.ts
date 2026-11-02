@@ -14,7 +14,6 @@ import {
 } from "@luke/features/github-repositories-wire";
 import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { MacRepository } from "@luke/features/mac-terminal-wire";
 import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
 import type {
   TasksWorkspaceInvitationsAnswer,
@@ -41,7 +40,6 @@ import {
   TASKS_ACT_KIND,
   WORKSPACE_ACT_KIND,
 } from "@luke/host/contract";
-import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { ProviderMark, SettingsPage } from "@luke/ui";
@@ -152,10 +150,6 @@ let refuseRename = false;
 let refusePhoto = false;
 /** Whether the service refuses a role change for the account's role. */
 let refuseRole = false;
-/** Each repository's clone and command set on this Mac, as its settings file holds them. */
-let macRepositories: MacRepository[] = [];
-/** While set, the Repositories group's save waits on it before it is answered. */
-let macSaveHeld: Promise<void> | undefined;
 /** The repositories the workspace reaches on GitHub, by full name. */
 let githubRepositories: string[] = [];
 /** While set, the read of the repositories the workspace reaches waits on it before it is answered. */
@@ -227,12 +221,6 @@ type AnswerValue = PortActResult<PortActKind>;
 type Answered = FakeActAnswer;
 
 const done = (value: AnswerValue): Answered => ({ status: FAKE_ANSWER.DONE, value });
-
-/** What the Repositories group reads as the page opens, which a test of another group's acts leaves aside. */
-const MAC_GROUP_READS: ReadonlySet<string> = new Set([
-  ACT_KIND.TASKS_REPOSITORIES,
-  ACT_KIND.MAC_REPOSITORIES,
-]);
 
 /** The bridge, answering the section's acts the way the host would. */
 function answer(request: Asked): Promise<Answered> {
@@ -397,23 +385,6 @@ function answer(request: Asked): Promise<Answered> {
       );
     case ACT_KIND.GITHUB_TOKEN_READ:
       return Promise.resolve(done({ token: tokenSaved ? SAVED_TOKEN : null }));
-    case ACT_KIND.MAC_REPOSITORIES:
-      return Promise.resolve(done({ repositories: macRepositories }));
-    case ACT_KIND.MAC_REPOSITORY_SET: {
-      if (macSaveHeld !== undefined) {
-        const held = macSaveHeld;
-        macSaveHeld = undefined;
-        return held.then(() => answer({ ...request }));
-      }
-      const entry = request.payload;
-      macRepositories = [
-        ...macRepositories.filter(
-          (each) => each.repository.toLowerCase() !== entry.repository.toLowerCase(),
-        ),
-        entry,
-      ];
-      return Promise.resolve(done(undefined));
-    }
     case ACT_KIND.WORKSPACE_LEAVE:
       return Promise.resolve(done(undefined));
     case ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ: {
@@ -452,14 +423,12 @@ function onPort(kind: PortActKind) {
   };
 }
 
-/** The act port answering every workspace and task kind, and the run commands', as `answer` does. */
+/** The act port answering every workspace and task kind, as `answer` does. */
 function workspacePort(): Parameters<typeof fakeActPort>[0] {
   const kinds: readonly PortActKind[] = [
     ...Object.values(TASKS_ACT_KIND),
     ...Object.values(WORKSPACE_ACT_KIND),
     ACT_KIND.GITHUB_TOKEN_READ,
-    ACT_KIND.MAC_REPOSITORIES,
-    ACT_KIND.MAC_REPOSITORY_SET,
   ];
   const procedures = kinds.map((kind) => [kind, onPort(kind)]);
   // SAFETY: each kind's procedure answers that kind's own result, as `answer` gives it.
@@ -539,8 +508,6 @@ beforeEach(() => {
   refusePhoto = false;
   refuseRole = false;
   automations = undefined;
-  macRepositories = [];
-  macSaveHeld = undefined;
   githubRepositories = [];
   repositoriesHeld = undefined;
   tokenReach = [];
@@ -2090,8 +2057,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
           request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ &&
           request.kind !== ACT_KIND.WORKSPACE_PEOPLE &&
           request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ &&
-          request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ &&
-          !MAC_GROUP_READS.has(request.kind),
+          request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ,
       )
       .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),
     [
@@ -2538,110 +2504,6 @@ test("each member's ⋯ holds Copy link, which copies that person's link under t
   assert.match(document.body.textContent ?? "", /Link copied/u);
 });
 
-test("on a platform without this Mac's terminal, the Workspace page draws no Repositories group beside its Integrations", async () => {
-  githubRepositories = ["acme/app"];
-  handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.MAC_TERMINAL));
-  const { page } = await mount(ACME);
-  const group = (section: string) =>
-    page.querySelector(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${section}"]`);
-
-  assert.equal(group(SETTINGS_SECTION.GITHUB_REPOSITORIES) !== null, true, "the page is drawn");
-  assert.equal(group(SETTINGS_SECTION.MAC_REPOSITORIES) !== null, false);
-});
-
-test("while the repositories are read, placeholder rows stand in the Repositories group's, and the repositories land in their place", async () => {
-  githubRepositories = ["acme/app"];
-  const { promise: held, resolve: land } = Promise.withResolvers<void>();
-  repositoriesHeld = held;
-  const { page } = await mount(ACME);
-  const group = section(page, SETTINGS_SECTION.MAC_REPOSITORIES);
-
-  // Note that the group is named for the Mac, since the page around it is the workspace's.
-  assert.equal(group.querySelector("h2")?.textContent, "Repositories on this Mac");
-  assert.deepEqual(placeholderOf(group), ["Reading the repositories", 2]);
-  land();
-  await settle();
-  assert.equal(placeholderOf(group), undefined);
-  assert.deepEqual(
-    [...group.querySelectorAll("input")].map((each) => each.getAttribute("aria-label")),
-    ["acme/app run command"],
-  );
-});
-
-test("the Repositories group lists the workspace's repositories and those set here, and saves a command typed on this Mac", async () => {
-  githubRepositories = ["acme/app"];
-  macRepositories = [{ repository: "acme/old", command: "make run" }];
-  const { page } = await mount(ACME);
-  const group = page.querySelector<HTMLElement>(
-    `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.MAC_REPOSITORIES}"]`,
-  );
-  assert.ok(group !== null);
-  const fields = () => [...group.querySelectorAll<HTMLInputElement>("input")];
-  const field = (name: string) => {
-    const input = fields().find(
-      (each) => each.getAttribute("aria-label") === `${name} run command`,
-    );
-    assert.ok(input !== undefined, name);
-    return input;
-  };
-  assert.deepEqual(
-    fields().map((each) => each.getAttribute("aria-label")),
-    ["acme/app run command", "acme/old run command"],
-  );
-  assert.equal(field("acme/app").value, "");
-  assert.equal(field("acme/old").value, "make run");
-
-  const typed = field("acme/app");
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-      typed,
-      " pnpm dev ",
-    );
-    typed.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  act(() => typed.form?.requestSubmit());
-  await settle();
-
-  assert.deepEqual(
-    sent.flatMap((request) =>
-      request.kind === ACT_KIND.MAC_REPOSITORY_SET ? [request.payload] : [],
-    ),
-    [{ repository: "acme/app", command: "pnpm dev" }],
-  );
-  assert.equal(field("acme/app").value, "pnpm dev");
-});
-
-test("a repository's Save is named Saving while its command is sent, and Save again once it is kept", async () => {
-  githubRepositories = ["acme/app"];
-  let release: () => void = () => undefined;
-  macSaveHeld = new Promise<void>((resolve) => {
-    release = () => resolve();
-  });
-  const { page } = await mount(ACME);
-  const group = page.querySelector<HTMLElement>(
-    `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.MAC_REPOSITORIES}"]`,
-  );
-  assert.ok(group !== null);
-  const typed = group.querySelector<HTMLInputElement>("form input");
-  assert.ok(typed !== null);
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-      typed,
-      "pnpm dev",
-    );
-    typed.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  const save = button(group, "Save");
-
-  act(() => typed.form?.requestSubmit());
-  const during = [save.getAttribute("aria-label"), save.getAttribute("aria-busy")];
-  release();
-  await settle();
-
-  assert.deepEqual(during, ["Saving", "true"]);
-  assert.deepEqual([save.getAttribute("aria-label"), save.getAttribute("aria-busy")], [null, null]);
-});
-
 /**
  * Presses Escape in `field` with the caret in it, and reports what the window's own
  * Escape would see: whether the press arrived marked taken, which it passes by.
@@ -2680,25 +2542,4 @@ test("Escape in the invite email field lets go of it, its words kept, and the wi
   assert.equal(seen.taken, true, "the window's Escape passes a taken press by");
   assert.notEqual(document.activeElement, address, "the caret is let go");
   assert.equal(address.value, "alan@example.com");
-});
-
-test("Escape in a repository's run command field lets go of it, its words kept, and the window never takes it to leave Settings", async () => {
-  githubRepositories = ["acme/app"];
-  const { page } = await mount(ACME);
-  const command =
-    page.querySelector<HTMLInputElement>('input[aria-label="acme/app run command"]') ??
-    assert.fail("no command field");
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-      command,
-      "pnpm dev",
-    );
-    command.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-
-  const seen = escapeIn(command);
-
-  assert.equal(seen.taken, true, "the window's Escape passes a taken press by");
-  assert.notEqual(document.activeElement, command, "the caret is let go");
-  assert.equal(command.value, "pnpm dev");
 });

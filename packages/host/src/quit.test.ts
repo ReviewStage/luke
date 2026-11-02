@@ -17,13 +17,13 @@ import {
 
 /**
  * The quit and every way out beside it, as main composes them: while a panel
- * holds unsaved words or a Mac terminal is open, a quit, a restart to update, and a sign-out ask first, with Cancel the default and
+ * holds unsaved words, a quit, a restart to update, and a sign-out ask first, with Cancel the default and
  * each thing that would be lost named; while nothing would be, none of them
  * asks; and the updater's own quit, behind a finished teardown, is never
  * held. Synthetic windows throughout.
  */
 
-const NOTHING: AtStake = { unsavedWork: false, macTerminals: 0 };
+const NOTHING: AtStake = { unsavedWork: false };
 
 /** One question put, and the answer the developer gives it. */
 interface Asked {
@@ -32,14 +32,14 @@ interface Asked {
 }
 
 /**
- * Main's quit over a panel that tells whether it holds unsaved work and the
- * stakes beside it, with every question asked kept for the test to answer
- * and every quit asked again counted.
+ * Main's quit over a panel that tells whether it holds unsaved work, with
+ * every question asked kept for the test to answer and every quit asked
+ * again counted.
  */
-function composedQuit(beside: Omit<AtStake, "unsavedWork"> = NOTHING) {
+function composedQuit() {
   const panel = Symbol("panel");
   const unsavedWork = unsavedWorkHolders<symbol>(() => false);
-  const atStake = () => ({ ...beside, unsavedWork: unsavedWork.holding() });
+  const atStake = () => ({ unsavedWork: unsavedWork.holding() });
   const asked: Asked[] = [];
   const askFirst = leaveGate({
     atStake,
@@ -126,7 +126,7 @@ it("a window that is gone holds no unsaved work, whatever it last said", () => {
 });
 
 it("a quit, a restart to update, and a sign-out ask under the same conditions, naming what each would lose", () => {
-  const stakes: AtStake = { unsavedWork: true, macTerminals: 2 };
+  const stakes: AtStake = { unsavedWork: true };
   const asks = (leave: Leave) => {
     const question = leaveQuestion(leave, stakes);
     assert.ok(question !== undefined);
@@ -140,33 +140,25 @@ it("a quit, a restart to update, and a sign-out ask under the same conditions, n
 
   assert.deepEqual(asks(LEAVE.QUIT), {
     message: "Quit Vespin?",
-    detail:
-      "Edits that haven't saved will be lost. 2 Mac terminals will close, with what's running in them.",
+    detail: "Edits that haven't saved will be lost.",
     act: "Quit",
     returnPresses: "Cancel",
   });
   assert.deepEqual(asks(LEAVE.RESTART), {
     message: "Restart Vespin to update?",
-    detail:
-      "Edits that haven't saved will be lost. 2 Mac terminals will close, with what's running in them.",
+    detail: "Edits that haven't saved will be lost.",
     act: "Restart",
     returnPresses: "Cancel",
   });
-  // Note that a sign-out leaves this Mac's terminals open, so it does not name them.
   assert.deepEqual(asks(LEAVE.SIGN_OUT), {
     message: "Sign out of Vespin?",
     detail: "Edits that haven't saved will be lost.",
     act: "Sign out",
     returnPresses: "Cancel",
   });
-  assert.equal(
-    leaveQuestion(LEAVE.RESTART, { ...NOTHING, macTerminals: 1 })?.detail,
-    "1 Mac terminal will close, with what's running in it.",
-  );
   for (const leave of Object.values(LEAVE)) {
     assert.equal(leaveQuestion(leave, NOTHING), undefined);
   }
-  assert.equal(leaveQuestion(LEAVE.SIGN_OUT, { ...NOTHING, macTerminals: 3 }), undefined);
 });
 
 it("a restart to update asks while a panel holds unsaved words, goes at once while nothing would be lost, and a second press behind the sheet does nothing", async () => {
@@ -194,7 +186,7 @@ it("a question that could not be put is a no", async () => {
 });
 
 it("the updater's own quit, behind the teardown it runs first, is never held, though words stand unsaved", async () => {
-  const { quit, asked, tell } = composedQuit({ macTerminals: 1 });
+  const { quit, asked, tell } = composedQuit();
   tell(true);
 
   // Note that this is what Restart to update does once the developer said to:

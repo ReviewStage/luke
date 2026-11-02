@@ -34,7 +34,6 @@ import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
 import { composeInstalledSkills } from "./compose-installed-skills.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
-import { composeMacTerminal } from "./compose-mac-terminal.js";
 import { composeSettings } from "./compose-settings.js";
 import { composeTasks } from "./compose-tasks.js";
 import { composeTerminals, type TerminalsComposer } from "./compose-terminals.js";
@@ -99,7 +98,6 @@ type HostAssemblyRequirements =
 interface PlatformConcernRequirements {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: ChildProcessSpawner.ChildProcessSpawner;
   [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]: ChildProcessSpawner.ChildProcessSpawner | ThisMacHost;
-  [HOST_PLATFORM_CONCERN.MAC_TERMINAL]: never;
   [HOST_PLATFORM_CONCERN.TERMINALS]: TerminalSocket;
   [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: SignInConsent;
 }
@@ -263,9 +261,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           }),
         })
       : unavailableConcern(HOST_PLATFORM_CONCERN.LOCAL_AGENTS);
-    const macTerminal = platform.has(HOST_PLATFORM_CONCERN.MAC_TERMINAL)
-      ? composeMacTerminal({ store: settings.store })
-      : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_TERMINAL);
     const terminals: TerminalsComposer = platform.has(HOST_PLATFORM_CONCERN.TERMINALS)
       ? yield* composeTerminals({
           kernel,
@@ -346,7 +341,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.INSTALLED_SKILLS]: installedSkills,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
       [HOST_CONCERN.LOCAL_AGENTS]: localAgents,
-      [HOST_CONCERN.MAC_TERMINAL]: macTerminal,
       [HOST_CONCERN.TERMINALS]: terminals,
       [HOST_CONCERN.CHATGPT_SIGN_IN]: chatGptSignIn,
     } satisfies Readonly<Record<HostConcern, Composer>>;

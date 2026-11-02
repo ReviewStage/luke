@@ -38,7 +38,6 @@ export const TAB_WORDS = {
   AGENT: "Agent",
   PULL_REQUEST: "Pull request",
   TERMINAL: "Terminal",
-  MAC_TERMINAL: "This Mac",
   BROWSER: "Browser",
 } as const;
 
@@ -102,21 +101,6 @@ export interface PageStripTab {
   readonly page: string;
 }
 
-/**
- * A terminal of this Mac run on a pushed branch, named by the agent, with
- * its repository and when Run was last pressed for it, which has the tab
- * read the branch again. The branch is the agent's own, or, where Run was
- * pressed on a Pull request tab naming another pull request of the agent's
- * repository, that pull request's head (`number`). An agent has one such
- * terminal, so a run of another pull request takes its place.
- */
-export interface MacTerminalStripTab {
-  readonly macTerminal: string;
-  readonly repository: string;
-  readonly asked: number;
-  readonly number?: number;
-}
-
 /** One Browser tab in an agent's cloud browser, named by the id the service keeps it under. */
 export interface CloudBrowserStripTab {
   readonly cloudBrowser: string;
@@ -138,7 +122,6 @@ export type StripTab =
   | ChangesStripTab
   | TerminalStripTab
   | PageStripTab
-  | MacTerminalStripTab
   | CloudBrowserStripTab;
 
 /**
@@ -177,11 +160,6 @@ export function isTranscriptTab(tab: StripTab): tab is TranscriptStripTab {
 /** Whether a tab is one agent's terminal. */
 export function isTerminalTab(tab: StripTab): tab is TerminalStripTab {
   return tab instanceof Object && "terminal" in tab;
-}
-
-/** Whether a tab is a terminal of this Mac. */
-export function isMacTerminalTab(tab: StripTab): tab is MacTerminalStripTab {
-  return tab instanceof Object && "macTerminal" in tab;
 }
 
 /** Whether a tab is one page's. */
@@ -241,7 +219,6 @@ export function sameTab(a: StripTab | undefined, b: StripTab | undefined): boole
   if (isChangesTab(a)) return isChangesTab(b) && a.changes === b.changes && a.number === b.number;
   if (isTerminalTab(a)) return isTerminalTab(b) && a.terminal === b.terminal;
   if (isPageTab(a)) return isPageTab(b) && a.page === b.page;
-  if (isMacTerminalTab(a)) return isMacTerminalTab(b) && a.macTerminal === b.macTerminal;
   if (isCloudBrowserTab(a)) return isCloudBrowserTab(b) && a.cloudBrowser === b.cloudBrowser;
   return a === b;
 }
@@ -303,7 +280,6 @@ export function tabKey(tab: StripTab): string {
   if (isAgentTab(tab)) return tab.agent;
   if (isTranscriptTab(tab)) return transcriptKey(tab.transcript);
   if (isTerminalTab(tab)) return terminalKey(tab.terminal);
-  if (isMacTerminalTab(tab)) return terminalKey(`mac:${tab.macTerminal}`);
   if (isDraftTab(tab)) return tab.draft;
   if (isFileTab(tab)) return tab.file;
   if (isChangesTab(tab)) {

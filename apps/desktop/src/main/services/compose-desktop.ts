@@ -17,7 +17,6 @@ import {
   hostStandingLayer,
   layersInOrder,
 } from "@luke/host/effect";
-import { openMacTerminals } from "@luke/host/node";
 import {
   confirmingHold,
   type DesktopQuit,
@@ -241,14 +240,11 @@ export function composeDesktop(
       });
       const colourCode = yield* colourCodeInUtilityProcess(config.resourceDirectory);
       // A quit, a restart to update, and a sign-out asked for while a panel
-      // holds unsaved work or a terminal of this Mac is open ask first, with
-      // Cancel the default, as a Mac app asks before it loses anything; while
-      // nothing would be lost none of them asks at all.
+      // holds unsaved work ask first, with Cancel the default, as a Mac app
+      // asks before it loses anything; while nothing would be lost none of
+      // them asks at all.
       const unsavedWork = unsavedWorkHolders<WebContents>((sender) => sender.isDestroyed());
-      const atStake = () => ({
-        unsavedWork: unsavedWork.holding(),
-        macTerminals: openMacTerminals(),
-      });
+      const atStake = () => ({ unsavedWork: unsavedWork.holding() });
       const askFirst = leaveGate({
         atStake,
         ask: (question) => askBeforeLeaving(windows.panels.primaryPanel(), question),

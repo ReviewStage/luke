@@ -242,7 +242,6 @@
   "src/tasks/inbox-model.test.ts": 49,
   "src/tasks/inbox-settling.test.ts": 86,
   "src/tasks/live-chip-names.test.ts": 364,
-  "src/tasks/mac-terminal-tab.test.ts": 2327,
   "src/tasks/markdown-editor.test.ts": 1054,
   "src/tasks/mention-lines.test.ts": 1398,
   "src/tasks/mention-picker.test.ts": 287,

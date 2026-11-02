@@ -112,7 +112,6 @@ import {
   ExternalLinkIcon,
   GLYPH,
   MessagesSquareIcon,
-  PlayIcon,
   RotateCwIcon,
   ScanSearchIcon,
   TriangleAlertIcon,
@@ -283,9 +282,7 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * first where a deployment of its head serves an address, opening it or, for
  * several, a menu of their environments (`PreviewControl`). Open on GitHub
  * and Refresh stand in the side panel's own ⋯ over the tab, which the tab
- * hands them to while it is drawn (`useHandedTabActions`), and Run after
- * them, which runs the shown pull request's branch in a terminal of this Mac
- * in the side panel, where the panel offers one (`onRun`). Under it one
+ * hands them to while it is drawn (`useHandedTabActions`). Under it one
  * line, wrapping where it must:
  * its branches, with the stack it stands in beside them
  * (`pull-request-stack.tsx`); who opened it and when, as the Changes tab
@@ -360,7 +357,6 @@ const PULL_REQUEST_WORDS = {
   CHECKS_FAILED: "The checks could not be read.",
   CONVERSATION_FAILED: "The conversation could not be read.",
   NO_PULL_REQUEST: "No pull request yet.",
-  RUN_LABEL: "Run on this Mac",
   PREVIEW: "Preview",
   PREVIEWS: "Preview deployments",
   NO_DESCRIPTION: "No description provided.",
@@ -2761,8 +2757,6 @@ interface AgentPullRequestTabProps {
   onView: (view: PullRequestView) => void;
   /** Hears what the side panel's toolbar ⋯ offers while the tab is drawn, Open on GitHub and Refresh (`useHandedTabActions`); none where no toolbar draws them. */
   onActions?: HandTabActions | undefined;
-  /** Runs the shown pull request's branch in a terminal of this Mac in the side panel, which the toolbar's ⋯ offers as Run on this Mac; none where the platform has no Mac terminal or no repository is known. A fork's pull request offers none, whatever this holds. */
-  onRun?: (() => void) | undefined;
 }
 
 /**
@@ -2852,7 +2846,6 @@ function PullRequestTabBody({
   view,
   onView,
   onActions,
-  onRun,
 }: AgentPullRequestTabProps): React.JSX.Element {
   // The agent, archived or not, since an archived agent's pull request keeps its tab.
   const agent =
@@ -2948,26 +2941,19 @@ function PullRequestTabBody({
           ],
     [url, reading],
   );
-  // The ⋯ offers Run after the pull request's own. A phone draws no actions beside the title, so
-  // its ⋯ offers Preview beside Run, and whatever the view shown hands up, Files changed's bar among them.
+  // A phone draws no actions beside the title, so its ⋯ offers Preview after the pull request's own,
+  // and whatever the view shown hands up, Files changed's bar among them.
   const phone = usePhoneRoom();
   const openLink = useOpenLink();
   const viewActions = useViewActions();
   const checksLanded = landed(parts.checks);
-  // Note that Run waits for the overview to say the head is the base repository's own, and a fork's pull request offers none, because a run makes its worktree on the head's branch name in the base repository's clone, where a fork's name could be another branch's.
-  const head = landed(parts.pullRequest);
-  const runs =
-    onRun !== undefined && held !== undefined && head !== undefined && head.headOwner === undefined;
-  const run: MenuAction[] = runs
-    ? [{ label: PULL_REQUEST_WORDS.RUN_LABEL, icon: <PlayIcon />, onSelect: onRun }]
-    : [];
   useHandedTabActions(
     onActions,
     handed === undefined
       ? undefined
       : [
           ...handed,
-          phone ? [...previewActions(checksLanded, openLink), ...run] : run,
+          phone ? previewActions(checksLanded, openLink) : [],
           ...(phone && viewActions.held?.view === view ? viewActions.held.actions : []),
         ].filter((group) => group.length > 0),
   );
