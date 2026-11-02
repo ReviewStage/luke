@@ -39,8 +39,7 @@ a test build, and the installed release (`scripts/lib/workspace.sh`). Pass
 `--instance <name>` to leave the plain instance running, or `--keep-running` to
 leave every running instance as it is; the new launch then quits at startup
 and only brings the running panel forward. `--preview` needs a Vercel Preview
-that a maintainer has approved; on a pull request from a fork, the Preview waits
-for that approval.
+that a maintainer has approved.
 
 ## Developing without Vespin's accounts
 
