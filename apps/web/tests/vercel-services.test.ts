@@ -129,10 +129,10 @@ test("no workspace's slug can be the first step of a page the web app serves und
   );
 });
 
-/** A condition a route or a rewrite holds a request to: the one host it was made to. */
+/** A condition a route or a rewrite holds a request to: the host it was made to, as a pattern of its spellings. */
 interface HostCondition {
   readonly type: "host";
-  readonly value: { readonly eq: string };
+  readonly value: { readonly re: string };
 }
 
 /**
@@ -154,12 +154,14 @@ interface WebRoute {
 /** The app's own host: any host but the sandbox's answers alike. */
 const APP_HOST = "tryluke.dev";
 
-/** The sandbox's own host, which the routing holds to the page route. */
+/** The sandbox's own host, which the routing holds to the page route, by each spelling a browser may send: with a trailing dot too. */
 const SANDBOX_HOST = new URL(PAGE_SANDBOX_ORIGIN).host;
+
+const SANDBOX_HOSTS = [SANDBOX_HOST, `${SANDBOX_HOST}.`] as const;
 
 /** Whether a request made to the host meets every condition a route or a rewrite holds it to. */
 function heldTo(entry: { readonly has?: readonly HostCondition[] }, host: string): boolean {
-  return (entry.has ?? []).every((condition) => condition.value.eq === host);
+  return (entry.has ?? []).every((condition) => new RegExp(condition.value.re, "u").test(host));
 }
 
 /**
@@ -352,7 +354,7 @@ const APP_PATHS = [
 /** The file the sandbox's host answers every path but a link's with, under a forced 404. */
 const SANDBOX_NOT_FOUND = "/sandbox-not-found.txt";
 
-test("the sandbox's host reaches the page route alone, by a link's address, and answers every other path, the app's, the API's, auth's, and eve's among them, not found from a static file", async () => {
+test("the sandbox's host, spelled with a trailing dot or without, reaches the page route alone, by a link's address, and answers every other path, the app's, the API's, auth's, and eve's among them, not found from a static file", async () => {
   const pageRoute = PAGE_LINK_ROUTE.PATH.slice("/api/".length);
   const pages = (await webFunctions(WEB)).find((definition) =>
     definition.routes.includes(pageRoute),
@@ -362,38 +364,47 @@ test("the sandbox's host reaches the page route alone, by a link's address, and 
   assert.deepEqual(pages.routes, [pageRoute]);
   const pagesPath = `/${functionPublicPath(pages)}`;
   const linkPath = `/${PAGE_LINK_ROUTE.STEP}/${LINK_TOKEN}`;
-  // Every path of the host enters the web service, whose routes hold it, eve's mount among them.
-  for (const path of [linkPath, ...APP_PATHS]) {
-    assert.equal(serviceFor(path, SANDBOX_HOST), SERVICE.WEB, path);
-  }
-  const link = servedBy(linkPath, SANDBOX_HOST);
-  assert.ok("file" in link && link.file !== undefined && link.forced === undefined);
-  const landed = new URL(link.file, PAGE_SANDBOX_ORIGIN);
-  assert.equal(landed.pathname, pagesPath);
-  assert.equal(landed.searchParams.get("route"), pageRoute);
-  assert.equal(landed.searchParams.get(PAGE_LINK_ROUTE.TOKEN_QUERY), LINK_TOKEN);
-  // Every other path is a file of the build's own, answered not found, so no function is woken by it.
   assert.ok(readdirSync(join(WEB, "public")).includes(SANDBOX_NOT_FOUND.slice(1)));
-  for (const path of APP_PATHS) {
-    const refused = servedBy(path, SANDBOX_HOST);
-    assert.ok("file" in refused, path);
-    assert.deepEqual(
-      { file: refused.file, forced: refused.forced },
-      { file: SANDBOX_NOT_FOUND, forced: 404 },
-      path,
-    );
-    assert.equal(refused.headers.get("x-content-type-options"), "nosniff", path);
-    assert.deepEqual(
-      directivesOf(refused.headers.get("content-security-policy") ?? "").get("default-src"),
-      ["'none'"],
-      path,
-    );
+  for (const host of SANDBOX_HOSTS) {
+    // Every path of the host enters the web service, whose routes hold it, eve's mount among them.
+    for (const path of [linkPath, ...APP_PATHS]) {
+      assert.equal(serviceFor(path, host), SERVICE.WEB, `${host}${path}`);
+    }
+    const link = servedBy(linkPath, host);
+    assert.ok("file" in link && link.file !== undefined && link.forced === undefined, host);
+    const landed = new URL(link.file, PAGE_SANDBOX_ORIGIN);
+    assert.equal(landed.pathname, pagesPath, host);
+    assert.equal(landed.searchParams.get("route"), pageRoute, host);
+    assert.equal(landed.searchParams.get(PAGE_LINK_ROUTE.TOKEN_QUERY), LINK_TOKEN, host);
+    // Every other path is a file of the build's own, answered not found, so no function is woken by it.
+    for (const path of APP_PATHS) {
+      const refused = servedBy(path, host);
+      assert.ok("file" in refused, `${host}${path}`);
+      assert.deepEqual(
+        { file: refused.file, forced: refused.forced },
+        { file: SANDBOX_NOT_FOUND, forced: 404 },
+        `${host}${path}`,
+      );
+      assert.equal(refused.headers.get("x-content-type-options"), "nosniff", `${host}${path}`);
+      assert.deepEqual(
+        directivesOf(refused.headers.get("content-security-policy") ?? "").get("default-src"),
+        ["'none'"],
+        `${host}${path}`,
+      );
+    }
   }
 });
 
 test("on any host but the sandbox's, a link's address reaches no route, and the app is routed as before", () => {
   const linkPath = `/${PAGE_LINK_ROUTE.STEP}/${LINK_TOKEN}`;
-  for (const host of [APP_HOST, "luke-web-git-main-stage-review.vercel.app"]) {
+  // A host that holds the sandbox's name within it is no spelling of the sandbox's.
+  for (const host of [
+    APP_HOST,
+    "luke-web-git-main-stage-review.vercel.app",
+    `www.${SANDBOX_HOST}`,
+    `${SANDBOX_HOST}.example`,
+    `${SANDBOX_HOST}s`,
+  ]) {
     assert.equal(serviceFor(linkPath, host), SERVICE.WEB, host);
     // Left to the build's own files, which hold none at that path.
     assert.equal(servedFile(linkPath, host), undefined, host);

@@ -262,14 +262,19 @@ it.layer(getTestDB())("a page framed on the web", (it) => {
       }),
   );
 
-  it.effect("a link is served on the sandbox's own host alone, never the app's", () =>
-    Effect.gen(function* () {
-      const { frame, follow } = yield* standing(SANDBOX);
-      const { teammate, task, page } = yield* pageOnTask;
-      const link = linkOf(yield* frame(teammate, framePath(task.id, page.id, 1)));
+  it.effect(
+    "a link is served on the sandbox's host as its links spell it alone: never on the app's, nor on the sandbox's spelled with a trailing dot",
+    () =>
+      Effect.gen(function* () {
+        const { frame, follow } = yield* standing(SANDBOX);
+        const { teammate, task, page } = yield* pageOnTask;
+        const link = linkOf(yield* frame(teammate, framePath(task.id, page.id, 1)));
+        const host = new URL(link).host;
 
-      assert.deepEqual(yield* refusalOf(yield* follow(link, new URL(APP_ORIGIN).host)), NOT_FOUND);
-    }),
+        for (const elsewhere of [new URL(APP_ORIGIN).host, `${host}.`]) {
+          assert.deepEqual(yield* refusalOf(yield* follow(link, elsewhere)), NOT_FOUND, elsewhere);
+        }
+      }),
   );
 
   it.effect(

@@ -671,8 +671,11 @@ generator keeps ahead of the `/api/` table (`function-rewrites.ts`), send a
 link's `/p/<token>` to the page route with its token in a query and every
 other path of the host to a file of the build's own,
 `public/sandbox-not-found.txt`, under a forced 404, so a stray request wakes
-no function. A host condition is written as `{"eq": …}`, because a bare
-string is a pattern to Vercel whose `.` matches any character. The page route
+no function. A host condition is written as an anchored pattern,
+`{"re": "^fullspin\\.page\\.?$"}`, so the spelling with a trailing dot a
+browser may send is held too, and no host that merely holds the name is;
+never as a bare string, which Vercel may match anywhere in the host. The page
+route
 is a function group of its own (`function-durations.ts`), because a
 dispatcher holding any other route would hand that route a request whose
 query named it, and it refuses any host but the sandbox's, so its own `/api/`

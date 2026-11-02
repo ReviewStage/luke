@@ -206,14 +206,17 @@ const decodeApiRewrites = Schema.decodeUnknownSync(
 );
 
 /**
- * A condition that a request was made to one host, by its exact name: what
- * holds the sandbox's host to the page route (`@luke/features/page-frame`).
- * Note that a host given as a bare string is a pattern to Vercel, whose `.`
- * matches any character, so only the exact form is taken.
+ * A condition that a request was made to one host, as a pattern held to its
+ * whole value, which names each spelling a browser may send of it, the one
+ * with a trailing dot among them: what holds the sandbox's host to the page
+ * route (`@luke/features/page-frame`). Note that it is written `re` and
+ * anchored, because a bare string is a pattern Vercel may match anywhere in
+ * the host, and a list of spellings would be reflowed by the formatter that
+ * runs on commit, against the generation this file holds the file to.
  */
 const HostConditionSchema = Schema.Struct({
   type: Schema.Literal("host"),
-  value: Schema.Struct({ eq: Schema.String }),
+  value: Schema.Struct({ re: Schema.String }),
 });
 
 /** The status a host's refused path is answered with. */

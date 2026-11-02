@@ -23,7 +23,7 @@
             {
               "type": "host",
               "value": {
-                "eq": "fullspin.page"
+                "re": "^fullspin\\.page\\.?$"
               }
             }
           ],
@@ -35,7 +35,7 @@
             {
               "type": "host",
               "value": {
-                "eq": "fullspin.page"
+                "re": "^fullspin\\.page\\.?$"
               }
             }
           ],
@@ -334,7 +334,7 @@
         {
           "type": "host",
           "value": {
-            "eq": "fullspin.page"
+            "re": "^fullspin\\.page\\.?$"
           }
         }
       ],
