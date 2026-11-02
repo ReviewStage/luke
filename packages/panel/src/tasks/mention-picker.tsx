@@ -126,7 +126,7 @@ import { AgentMark, PlanGlyph } from "./tab-look.js";
 import { useTaskStatus } from "./use-known-names.js";
 
 /**
- * mention-picker.tsx -- the list an `@` opens: the task's repository's files and folders, the plan's sections, and the task, grouped by kind, narrowed as the word is typed, the pick written as its mention.
+ * mention-picker.tsx -- the list an `@` opens: the workspace's agents, tasks, and people, the plan and its sections, and the repository's files and folders, grouped by kind, narrowed as the word is typed, the pick written as its mention.
  *
  * The list opens the way the `/` list does (`skill-picker.tsx`), at the
  * word an editor reports (`ComposerTrigger`), the caret staying in the
@@ -137,8 +137,11 @@ import { useTaskStatus } from "./use-known-names.js";
  * leaves the word. Keys an input method is composing with stay its own. Nothing typed after the `@`, it offers the task and its
  * sections; typed, it finds each kind's best few by the words typed, scored
  * as ⌘K scores them (`@luke/ui/search-score`), each row marking what found
- * it, letters typed in order finding only a path, files and folders first, each
- * group in a fixed place so a later read never moves the rows above it.
+ * it, letters typed in order finding only a path, each group in a fixed place
+ * so a later read never moves the rows above it: agents first, then tasks,
+ * people, the plan, pages, and files and folders, since agents and tasks are
+ * what is mentioned most and a path's letters in order find it by almost any
+ * word.
  * Once the words run past a space and nothing matches them, the list
  * stands aside, since they are the developer's own words rather than a
  * mention, and the keys go to the editor as they would anywhere.
@@ -227,12 +230,12 @@ import { useTaskStatus } from "./use-known-names.js";
 /** What the list's groups are called, in the order they stand. */
 const MENTION_GROUP = {
   DATES: "Dates",
-  FILES: "Files and folders",
-  PLAN: "Plan",
-  TASKS: "Tasks",
-  PAGES: "Pages",
   AGENTS: "Agents",
+  TASKS: "Tasks",
   PEOPLE: "People",
+  PLAN: "Plan",
+  PAGES: "Pages",
+  FILES: "Files and folders",
   THREADS: "Threads",
   CHANNELS: "Channels",
   PULL_REQUESTS: "Pull requests",
@@ -1057,9 +1060,9 @@ function kindRow(kind: MentionKind): MentionRow {
  * The groups the list offers for the word. Every kind at once: their first
  * few but the files, and a row for each kind, for no words; else each kind's
  * best, the date the words name first, since words that read as a date
- * mean one, and the task whose key they are whole next, then files and
- * folders. One kind: up to fifty of its rows, a
- * folder's where one was walked into.
+ * mean one, and the task whose key they are whole next, then agents, tasks,
+ * people, the plan, pages, and files and folders. One kind: up to fifty of
+ * its rows, a folder's where one was walked into.
  */
 function groupsFor(
   scope: Scope,
@@ -1083,10 +1086,6 @@ function groupsFor(
   };
   // The group holding the task the words are the key of, the plan's own or another, leads the list.
   const keyedGroup = [plan, tasks].find((group) => group.rows.some((row) => keyed(row, term)));
-  const members = [
-    { label: MENTION_GROUP.AGENTS, rows: best(rows.agents, term, PER_GROUP) },
-    { label: MENTION_GROUP.PEOPLE, rows: best(rows.people, term, PER_GROUP) },
-  ];
   // The workspace's threads and channels are offered only once a word is typed, as its tasks are.
   const inbox = bare
     ? []
@@ -1094,17 +1093,20 @@ function groupsFor(
         { label: MENTION_GROUP.THREADS, rows: best(rows.threads, term, PER_GROUP) },
         { label: MENTION_GROUP.CHANNELS, rows: best(rows.channels, term, PER_GROUP) },
       ];
-  const place = [
-    { label: MENTION_GROUP.FILES, rows: files },
-    plan,
+  // Note that agents and tasks lead and files come last of these, because they are what is
+  // mentioned most, and a path's letters in order find it by almost any word.
+  const ranked = [
+    { label: MENTION_GROUP.AGENTS, rows: best(rows.agents, term, PER_GROUP) },
     tasks,
+    { label: MENTION_GROUP.PEOPLE, rows: best(rows.people, term, PER_GROUP) },
+    plan,
     { label: MENTION_GROUP.PAGES, rows: best(rows.pages, term, PER_GROUP) },
+    { label: MENTION_GROUP.FILES, rows: files },
   ].filter((group) => group !== keyedGroup);
   return [
     { label: MENTION_GROUP.DATES, rows: rows.dates },
     ...(keyedGroup === undefined ? [] : [keyedGroup]),
-    ...place,
-    ...members,
+    ...ranked,
     ...inbox,
     { label: MENTION_GROUP.PULL_REQUESTS, rows: best(rows.pullRequests, term, PER_GROUP) },
     { label: MENTION_GROUP.SKILLS, rows: best(rows.skills, term, PER_GROUP) },
@@ -1467,12 +1469,11 @@ function treeKey(
 }
 
 /**
- * The kinds the place offers, in the list's order: its repository's files
- * and folders where it names one, the plan where one stands, the
- * workspace's other tasks where it holds any, the pages of what holds it, the
- * workspace's agents where it reads them, its people where
- * the window has read them, its Inbox threads and channels where it holds
- * any, the pull requests
+ * The kinds the place offers, in the list's order: the workspace's agents
+ * where it reads them, its other tasks where it holds any, its people where
+ * the window has read them, the plan where one stands, the pages of what
+ * holds it, its repository's files and folders where it names one, its
+ * Inbox threads and channels where it holds any, the pull requests
  * the plan's agents or the agent on no task published, the repository's skills where the words go
  * to an agent, dates wherever the list stands, and each connected server, the
  * first of each provider narrowed to by the provider's own word.
@@ -1495,18 +1496,15 @@ function kindsOf(
     (taskId !== undefined && (source.agents ?? NO_AGENTS).some((agent) => agent.id !== self));
   const known = skills?.known ?? [];
   const own: MentionKind[] = [
-    ...(repository === null || treeKey(taskId, source.workspaceId, repository) === undefined
-      ? []
-      : [{ from: MENTION_FROM.FILES, name: MENTION_GROUP.FILES, detail: repository }]),
-    ...(taskId === undefined
-      ? []
-      : [
+    ...(agents
+      ? [
           {
-            from: MENTION_FROM.PLAN,
-            name: MENTION_GROUP.PLAN,
-            detail: sectionCount(planSections(source.text()).length),
+            from: MENTION_FROM.AGENTS,
+            name: MENTION_GROUP.AGENTS,
+            detail: source.workspace || undefined,
           },
-        ]),
+        ]
+      : []),
     ...(tasks === 0
       ? []
       : [
@@ -1514,6 +1512,24 @@ function kindsOf(
             from: MENTION_FROM.TASKS,
             name: MENTION_GROUP.TASKS,
             detail: countWords(tasks, TERM.TASK),
+          },
+        ]),
+    ...(people === 0
+      ? []
+      : [
+          {
+            from: MENTION_FROM.PEOPLE,
+            name: MENTION_GROUP.PEOPLE,
+            detail: countWords(people, TERM.MEMBER),
+          },
+        ]),
+    ...(taskId === undefined
+      ? []
+      : [
+          {
+            from: MENTION_FROM.PLAN,
+            name: MENTION_GROUP.PLAN,
+            detail: sectionCount(planSections(source.text()).length),
           },
         ]),
     ...(pages === 0
@@ -1525,24 +1541,9 @@ function kindsOf(
             detail: countWords(pages, TERM.PAGE),
           },
         ]),
-    ...(agents
-      ? [
-          {
-            from: MENTION_FROM.AGENTS,
-            name: MENTION_GROUP.AGENTS,
-            detail: source.workspace || undefined,
-          },
-        ]
-      : []),
-    ...(people === 0
+    ...(repository === null || treeKey(taskId, source.workspaceId, repository) === undefined
       ? []
-      : [
-          {
-            from: MENTION_FROM.PEOPLE,
-            name: MENTION_GROUP.PEOPLE,
-            detail: countWords(people, TERM.MEMBER),
-          },
-        ]),
+      : [{ from: MENTION_FROM.FILES, name: MENTION_GROUP.FILES, detail: repository }]),
     ...(inbox.threads === 0
       ? []
       : [
