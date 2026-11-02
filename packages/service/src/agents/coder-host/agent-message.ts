@@ -139,17 +139,19 @@ const readAgentId = Schema.decodeUnknownResult(wireUuidSchema);
 /**
  * The call's id and words, each read apart so the refusal names the one
  * that failed: a malformed id, empty words, or words over the bound, told
- * with their length.
+ * with their length. The words are read under `text`, or under `message`
+ * where no `text` stands.
  */
 function readMessage(
   input: UnparsedWireValue,
 ): Result.Result<{ readonly agentId: string; readonly text: string }, string> {
-  if (!isRecord(input) || typeof input.text !== "string") {
-    return Result.fail(MESSAGE_AGENT_REFUSAL.UNREADABLE);
-  }
+  if (!isRecord(input)) return Result.fail(MESSAGE_AGENT_REFUSAL.UNREADABLE);
+  // Note that `message` is read too, because Claude Code's own messaging tools name their words so and its agents carry that name here.
+  const words = input.text ?? input.message;
+  if (typeof words !== "string") return Result.fail(MESSAGE_AGENT_REFUSAL.UNREADABLE);
   const agentId = readAgentId(input.agentId);
   if (Result.isFailure(agentId)) return Result.fail(MESSAGE_AGENT_REFUSAL.MALFORMED_ID);
-  const text = input.text.trim();
+  const text = words.trim();
   if (text.length === 0) return Result.fail(MESSAGE_AGENT_REFUSAL.EMPTY);
   if (text.length > MAX_MESSAGE_WORDS_CHARS) {
     return Result.fail(MESSAGE_AGENT_REFUSAL.TOO_LONG(text.length));

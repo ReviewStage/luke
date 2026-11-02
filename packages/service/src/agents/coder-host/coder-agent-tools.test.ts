@@ -989,6 +989,21 @@ test("message_agent refuses a malformed id, empty words, and words over the boun
   assert.equal(eve.sent.length, 0, "a refusal sends nothing");
 });
 
+test("message_agent takes the words under message where no text stands, as Claude Code's agents name them", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+
+  const sent = await call(CODER_TOOL.MESSAGE_AGENT, {
+    agentId: agents.teammates.id,
+    message: NOTE,
+  });
+
+  assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
+  const words = sentWords(eve.sent.at(-1)?.body);
+  assert.ok(words.endsWith(`${NOTE}\n\n${agentMessageReplyLine(agents.caller.id)}`), words);
+});
+
 test("start_agent refuses, in words that say why and starting nothing, a picture of another agent's conversation, a video the caller recorded, one past an image's bound, pictures past a message's bound together, and more ids than a start takes", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
