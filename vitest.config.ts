@@ -27,6 +27,7 @@ export default defineConfig({
       "packages/agent-runner",
       "tools/anti-slop",
       "tools/polish",
+      "tools/demo-postgres",
     ],
   },
 });
