@@ -2,6 +2,7 @@ import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BackButton,
   dropBelow,
+  IconButton,
   MoreButton,
   moreLabel,
   NO_BACK_KEY,
@@ -11,6 +12,7 @@ import {
   Toolbar,
   type ToolbarPickUp,
   type ToolbarProps,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
@@ -145,6 +147,23 @@ export function phoneFindGroups(): MenuAction[][] {
       },
     ],
   ];
+}
+
+/**
+ * A phone's Find where its head holds no ⋯ to put it in, as an automation's
+ * Runs is headed: the end corner's one control, its glyph alone, named still.
+ */
+export function PhoneFindButton(): React.JSX.Element {
+  const { label } = APP_SHORTCUTS[APP_COMMAND.FIND];
+  return (
+    <Tooltip label={label} command={APP_COMMAND.FIND}>
+      <IconButton
+        icon={<SearchIcon />}
+        label={label}
+        onClick={() => runAppCommand(APP_COMMAND.FIND)}
+      />
+    </Tooltip>
+  );
 }
 
 /**
