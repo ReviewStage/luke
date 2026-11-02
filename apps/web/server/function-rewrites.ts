@@ -20,7 +20,7 @@ import { functionPublicPath, webFunctions } from "./function-layout.js";
  * table, in its order. The table is its own file so the configuration can
  * one day be assembled by a `vercel.ts` that imports it: Vercel bundles a
  * config module's relative imports and evaluates it in plain Node, which can
- * take a JSON table and cannot take this module's dependencies (LUKE-183).
+ * take a JSON table and cannot take this module's dependencies.
  */
 export interface Rewrite {
   readonly src: string;

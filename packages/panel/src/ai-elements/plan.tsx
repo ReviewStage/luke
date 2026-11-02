@@ -29,7 +29,7 @@ type PlanBodyLayout = (typeof PLAN_BODY_LAYOUT)[keyof typeof PLAN_BODY_LAYOUT];
  * and is what opens it, so the registry's separate trigger button is not
  * here. Neither is its streaming title, because the plan a coding agent is
  * handed is finished before the agent starts. Closed by default, as
- * docs/TASKS.md's rule for an agent's transcript asks: the plan is
+ * docs/TASKS.md's "Transcript" section has it: the plan is
  * there to be read, never in the way of the agent's own words. Its title's
  * and body's look is tasks.css's `.plan-card-*` rules.
  */

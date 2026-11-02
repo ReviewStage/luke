@@ -2,8 +2,9 @@
 
 This is the contract every animated element in Vespin's window obeys, and the
 bar every word drawn in it has to clear. The "Panel motion" section of
-`apps/desktop/src/renderer/AGENTS.md` says what the Electron window under it
-is; this file says how anything drawn in it is allowed to move, how much it is
+`packages/panel/AGENTS.md` says how the panel's layout keeps to it, and the
+"The Electron window" section of `apps/desktop/src/renderer/AGENTS.md` says
+what the Electron window under it is; this file says how anything drawn in it is allowed to move, how much it is
 allowed to say, and which of the machine's keys Vespin may take. A change that
 adds or alters motion or copy is reviewed against these rules, and the fastest
 way to pass that review is to build from them.
@@ -116,9 +117,9 @@ its enter width so a window dragged across it does not flicker:
 Zoom is a window size. It works by shrinking the CSS pixel, so the desktop
 window's least width (760) is 608 CSS pixels at 125% and 380 at 200%, and the
 default window (1280) is 1024 at 125%. The desktop can therefore be narrow
-when zoomed, and then draws the phone's layout under a mouse. Dean accepted
-that: it is the responsive layout doing its job, and the window's least size
-does not rise with zoom. A layout change is checked at the least window at 125%
+when zoomed, and then draws the phone's layout under a mouse. That is the
+responsive layout doing its job, and the window's least size does not rise
+with zoom. A layout change is checked at the least window at 125%
 and 200% as well as at a phone's width (`desktop/shell-room.test.ts`).
 
 ## Shared tokens and components
@@ -144,8 +145,7 @@ a dialog's corner, a type role's size and leading, and each profile sets every
 role its own way. A palette (`palettes.css`) names each colour by its role,
 for each profile in each theme. A component reads roles and the palette, never
 a base value at its call site, so it moves with its profile. Both profiles set
-the same roles and every palette the same names; `tokens.test.ts` holds them
-to it. Both apps read the roles alone; neither keeps a name of its own for one.
+the same roles and every palette the same names. Both apps read the roles alone; neither keeps a name of its own for one.
 
 A shared component takes its data and callbacks as props and no class or
 style: it owns its insides, and the room around it is its container's. Its

@@ -3,7 +3,7 @@
    A profile is an attribute on an app's root and on every overlay portal it
    draws (`data-luke-profile`), so a component reads one role name and is
    drawn at the desktop's density in the window and the site's on the web.
-   Both profiles set every role; `tokens.test.ts` holds them to the same set.
+   Both profiles set every role.
 
    Two widths cannot be tokens, because a container query cannot read a
    custom property: a settings row's control wraps below its label under

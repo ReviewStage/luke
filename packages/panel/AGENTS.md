@@ -1,8 +1,9 @@
 # The panel
 
 `@luke/panel` is the panel every client mounts: the desktop's panel window
-mounts `App` from here, and the web will mount the same. It may draw with the
-DOM (`packages/AGENTS.md`), and it reaches no shell: no Electron, no
+mounts `App` from here, and so does the web app
+(`apps/web/src/app/web-root.tsx`). It may draw with the DOM
+(`packages/AGENTS.md`), and it reaches no shell: no Electron, no
 `window.luke`, and no alias of the desktop's. What only a shell can do, its root installs before anything is
 drawn: the bridge to the host (`app-bridge.ts`) and what its platform answers
 (`app-platform.ts`). The panel reads each through its door, at the moment it

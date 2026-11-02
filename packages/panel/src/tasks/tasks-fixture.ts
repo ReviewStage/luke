@@ -61,9 +61,8 @@ import type { AutomationsPlace } from "./use-tasks-tab.js";
  * would show only its signed-out line. It draws the synthetic list instead,
  * which is what the expanded capture in `scripts/evidence.sh` shows now that
  * the panel opens on Tasks, and under the tasks profile it also opens the
- * reference journey's task from `docs/TASKS.md`, a draft of the default
- * template partway through with the app working on the call about it, which is
- * what the tasks capture shows; under the tasks-comments profile its plan
+ * fixture task, a drafted plan with its version history, which is what the
+ * tasks capture shows; under the tasks-comments profile its plan
  * holds comment threads, answered as the service answers a read of them.
  * Every name and repository here is invented; nothing is read from an
  * account.

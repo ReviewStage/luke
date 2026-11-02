@@ -32,7 +32,7 @@ import { groupCount, sidebarFold } from "./sidebar-fold.js";
 import { ReadAllMenu, type SidebarReadAll } from "./sidebar-read-all.js";
 
 /**
- * sidebar-channels.tsx -- the channels under the sidebar's Inbox row while Channels is on, each a filter of the Inbox, and the questions that make, edit, and archive one (STAG-547).
+ * sidebar-channels.tsx -- the channels under the sidebar's Inbox row while Channels is on, each a filter of the Inbox, and the questions that make, edit, and archive one.
  *
  * The rows stand in under the Inbox's name (`SidebarFilters`), the
  * workspace's standing channels first and its project channels after them,

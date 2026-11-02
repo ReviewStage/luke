@@ -14,7 +14,7 @@ import { unreadShown } from "../failure-report.js";
 import type { InboxChannelHead } from "./inbox-list.js";
 
 /**
- * channel-head.tsx -- what a channel adds to the Inbox narrowed to it: its head's name, its purpose or when it was archived, and an archived channel's Unarchive; and the Inbox's place where the channel chosen stands no more (STAG-547).
+ * channel-head.tsx -- what a channel adds to the Inbox narrowed to it: its head's name, its purpose or when it was archived, and an archived channel's Unarchive; and the Inbox's place where the channel chosen stands no more.
  *
  * A channel is the Inbox narrowed to one topic (`use-inbox-listing.ts`), so
  * its list, its reading pane, and its keys are the Inbox's own; only its

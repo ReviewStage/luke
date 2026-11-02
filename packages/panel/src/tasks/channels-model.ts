@@ -1,7 +1,7 @@
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
 
 /**
- * channels-model.ts -- a workspace's channels as the sidebar lists them under the Inbox, and the channel the Inbox is narrowed to (STAG-547).
+ * channels-model.ts -- a workspace's channels as the sidebar lists them under the Inbox, and the channel the Inbox is narrowed to.
  *
  * A channel is a topic its workspace's threads live in, each thread an Inbox
  * item (`channel-wire.ts`), so a channel is the Inbox narrowed to one topic.

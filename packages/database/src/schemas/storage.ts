@@ -31,7 +31,7 @@ import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
 /**
- * The conversation storage the LUKE-95 rework settles on: one row per
+ * The conversation storage: one row per
  * message in the AI SDK's `UIMessage` shape, its parts and metadata as plain
  * `jsonb`, beside the conversation it belongs to and the turn that wrote it.
  * Nothing here is sealed: the content stored here is readable by an

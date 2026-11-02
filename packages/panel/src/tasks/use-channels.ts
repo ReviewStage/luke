@@ -17,7 +17,7 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { CHANNEL_SHOWN, channelShown, generalChannel } from "./channels-model.js";
 
 /**
- * use-channels.ts -- a workspace's channels as the host holds them, the channel the Inbox is narrowed to, and the writes on them (STAG-547).
+ * use-channels.ts -- a workspace's channels as the host holds them, the channel the Inbox is narrowed to, and the writes on them.
  *
  * A workspace's channels, open and archived, reach every surface on app
  * state, held by the host while any surface reads them and a while after
