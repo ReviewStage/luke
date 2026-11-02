@@ -116,7 +116,7 @@ other way.
 [#6121](https://github.com/ReviewStage/luke/pull/6121),
 [#6124](https://github.com/ReviewStage/luke/pull/6124))
 
-![The Invite emails agent close up, Working… 22s into a turn after Dean asked for a plain-text fallback, with three messages queued over its message box below #216, the first under the pointer offering Steer, Edit, and Delete.](apps/web/public/changelog/0.24.0/queue-a-message-behind-a-turn.png)
+![The Invite emails agent close up, Working… 20s into a turn after Dean asked for a plain-text fallback, with three messages queued over its message box below #216, the second under the pointer offering Steer, Edit, and Delete.](apps/web/public/changelog/0.24.0/queue-a-message-behind-a-turn.png)
 
 ### Tool calls in plain words
 
@@ -130,8 +130,6 @@ naming its site.
 [#6010](https://github.com/ReviewStage/luke/pull/6010),
 [#6013](https://github.com/ReviewStage/luke/pull/6013),
 [#6015](https://github.com/ReviewStage/luke/pull/6015))
-
-![An agent's turn over the whole window, its seven tool calls opened: Read invite.ts, Fetched postgresql.org, and Edited invite.ts +1 as chips, the members tests as one Terminal card with what they printed, Messaged Invite emails with the message as a quote, and Updated naming Teammate invitations' plan.](apps/web/public/changelog/0.24.0/tool-calls-in-plain-words.png)
 
 ### A faster Inbox
 
@@ -164,8 +162,6 @@ lines into view.
 [#6144](https://github.com/ReviewStage/luke/pull/6144),
 [#6148](https://github.com/ReviewStage/luke/pull/6148))
 
-![#214's Chapters close up in a wide side panel: the bar reading Pending memberships, Medium risk, Viewed 1/2, and 1 of 8 beside its arrows and view options, the rail of eight chapters with the lines each changes, a review thread, and two viewed, and the open Summary with two file pills under What to review.](apps/web/public/changelog/0.24.0/chapters-under-one-bar.png)
-
 ### One shape for every hover card
 
 Every hover card opens the same way: its subject's mark, its name with a line
@@ -184,8 +180,6 @@ finished turn's "Worked for" card gives its clock and its tokens.
 [#5870](https://github.com/ReviewStage/luke/pull/5870),
 [#5871](https://github.com/ReviewStage/luke/pull/5871),
 [#5876](https://github.com/ReviewStage/luke/pull/5876))
-
-![#214's hover card held open beside its row in the task's summary, close up: Add teammate invitations, acme/relay#214 · Open, +412 −38 in 9 files · Checks passing, opened by you and by the Add teammate invitations agent, and its reviewers Dana Moreno Approved, Jordan Lee Commented, and Priya Raman Review requested.](apps/web/public/changelog/0.24.0/one-shape-for-every-hover-card.png)
 
 ### Improvements
 
@@ -478,8 +472,6 @@ takes the place of the Tasks page's working count and pull request chips.
 [#5636](https://github.com/ReviewStage/luke/pull/5636),
 [#5799](https://github.com/ReviewStage/luke/pull/5799))
 
-![The sidebar's tasks close up, each row ending in one mark for how its agents stand: working on Teammate invitations and Onboarding checklist, a red triangle on Rotate webhook signing secrets, and pull requests open, merged, draft, and closed in GitHub's colours, Usage alert at 80% of the plan wearing none.](apps/web/public/changelog/0.23.0/one-mark-for-how-a-task-stands.png)
-
 ### One menu, in one order
 
 Every menu keeps one order, Copy link first and Permanently delete last, and
@@ -494,8 +486,6 @@ it as a button.
 [#5763](https://github.com/ReviewStage/luke/pull/5763),
 [#5766](https://github.com/ReviewStage/luke/pull/5766),
 [#5772](https://github.com/ReviewStage/luke/pull/5772))
-
-![The Add teammate invitations agent's ⋯ held open on its tab, close up: Copy link, Copy concise transcript, Copy full transcript, Rename, Show terminal, Archive, and Permanently delete, in that order, each with its shortcut.](apps/web/public/changelog/0.23.0/one-menu-in-one-order.png)
 
 ### Improvements
 

@@ -9,10 +9,10 @@ index b23a3f5c4..5e6b86f00 100644
 +/* Throwaway: the changelog shots (panel/src/shots/README.md), last so they win. */
 +@import "../../../../../packages/panel/src/shots/shots.css";
 diff --git a/packages/host/src/app-state.ts b/packages/host/src/app-state.ts
-index 8873f24c9..9cf521be2 100644
+index 8873f24c9..25927ba85 100644
 --- a/packages/host/src/app-state.ts
 +++ b/packages/host/src/app-state.ts
-@@ -92,6 +92,29 @@ export const RUN_PROFILE = {
+@@ -92,6 +92,26 @@ export const RUN_PROFILE = {
    AUTOMATIONS_EDITOR: "automations-editor",
    /** The same account on the automation whose run failed, that run marked among its runs. */
    AUTOMATIONS_RUNS: "automations-runs",
@@ -36,9 +36,6 @@ index 8873f24c9..9cf521be2 100644
 +  SHOT_ROW_SHEET: "shot-row-sheet",
 +  SHOT_SUB_TASKS: "shot-sub-tasks",
 +  SHOT_QUEUE: "shot-queue",
-+  SHOT_TOOL_CALLS: "shot-tool-calls",
-+  SHOT_CHAPTER_BAR: "shot-chapter-bar",
-+  SHOT_PR_CARD: "shot-pr-card",
  } as const;
  
  export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];
@@ -778,219 +775,6 @@ index 000000000..846a4af80
 +  if (value === undefined) return undefined;
 +  if (value === NEVER) return HELD;
 +  return Promise.resolve(value);
-+}
-diff --git a/packages/panel/src/shots/chapter-bar.ts b/packages/panel/src/shots/chapter-bar.ts
-new file mode 100644
-index 000000000..3c8b5c722
---- /dev/null
-+++ b/packages/panel/src/shots/chapter-bar.ts
-@@ -0,0 +1,207 @@
-+/**
-+ * chapter-bar.ts -- 0.24.0 shot "Chapters under one bar": #214's Chapters with the side panel full screen, its first of eight chapters under the bar (title, risk, Viewed, the pager), the rail listing the eight, and the chapter's summary with its file pills.
-+ *
-+ * Throwaway (`README.md`). 0.19.0's four chapters cut finer, one per part of
-+ * #214, so the pager reads "1 of 8" and every hunk of `pr-214.ts` stands in
-+ * exactly one chapter; the tests are Other changes in the product's own words.
-+ * Dean viewed the schema, the members list, and seats, so the first chapter's
-+ * Viewed reads 1/2 and the fifth and sixth rows wear their ✓. Framed as a
-+ * close-up of the panel, unlike 0.19.0's whole window filled by it.
-+ */
-+
-+import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-+import { type Chapter, otherChangesChapter } from "@luke/features/pull-request-chapters";
-+import { ACT_KIND } from "@luke/host/acts";
-+import { FIXTURE_CODE_PANEL } from "../tasks/tasks-fixture";
-+import { PULL_REQUEST_VIEW } from "../tasks/use-side-panel";
-+import { standingPlan, standingPlans } from "./board";
-+import { ago } from "./clock";
-+import { SHOT_ID, shotTasksView } from "./plan-document";
-+import { BASE_SHA, HEAD_SHA, INVITE_PATH } from "./pr-214";
-+import { pr214TabAnswers } from "./pr-214-tab";
-+import type { ShotSpec, ShotStep } from "./shot-spec";
-+import { acmeMembers, MEMBER, whoWorkspaces } from "./who";
-+
-+const MIGRATION = "src/db/migrations/20261013_memberships_state.sql";
-+const SCHEMA = "src/db/schema/memberships.ts";
-+const ACCEPT = "src/members/accept.ts";
-+const ROUTES = "src/routes/invites.ts";
-+const LIST = "src/members/list.ts";
-+const SEATS = "src/billing/seats.ts";
-+const ACCESS = "src/auth/workspace-access.ts";
-+
-+const CHAPTERS: Chapter[] = [
-+  {
-+    kind: "story",
-+    title: "Pending memberships",
-+    summary:
-+      "An invite is a `memberships` row before it is a member: a `state` of `pending`, `active`, or `withdrawn`, the one-time `invite_token`, who sent it, and when its link expires.",
-+    hunkRefs: [
-+      { path: MIGRATION, oldStart: 0 },
-+      { path: SCHEMA, oldStart: 6 },
-+    ],
-+    keyChanges: [
-+      {
-+        content: "`state` defaults to `active`, so every existing row stays a member without a backfill.",
-+        lineRefs: [{ path: SCHEMA, side: "additions", startLine: 9, endLine: 9 }],
-+      },
-+      {
-+        content: "`invite_token` is unique, so one link names one invite.",
-+        lineRefs: [{ path: SCHEMA, side: "additions", startLine: 10, endLine: 10 }],
-+      },
-+    ],
-+    risk: "medium",
-+    riskReasons: ["A migration on the table every request reads"],
-+  },
-+  {
-+    kind: "story",
-+    title: "Invite and withdraw",
-+    summary:
-+      "`inviteMember` makes the pending row and mails the link; `withdrawInvite` ends it. Only the sender or an admin may withdraw.",
-+    hunkRefs: [{ path: INVITE_PATH, oldStart: 0 }],
-+    keyChanges: [
-+      {
-+        content: "Withdrawing clears `invite_token`, so an old link can never be replayed.",
-+        lineRefs: [{ path: INVITE_PATH, side: "additions", startLine: 21, endLine: 21 }],
-+      },
-+      {
-+        content: "Withdraw is refused to anyone but the sender or an admin.",
-+        lineRefs: [{ path: INVITE_PATH, side: "additions", startLine: 20, endLine: 20 }],
-+      },
-+    ],
-+    risk: "high",
-+    riskReasons: ["Withdraw is gated on the sender or an admin"],
-+  },
-+  {
-+    kind: "story",
-+    title: "Accept an invite",
-+    summary: "`acceptInvite` turns a pending row active once, clearing its token, and refuses an expired link.",
-+    hunkRefs: [{ path: ACCEPT, oldStart: 0 }],
-+    keyChanges: [
-+      {
-+        content: "An expired link is refused before the row is touched.",
-+        lineRefs: [{ path: ACCEPT, side: "additions", startLine: 7, endLine: 7 }],
-+      },
-+      {
-+        content: "Accepting clears `invite_token`, so a link works once.",
-+        lineRefs: [{ path: ACCEPT, side: "additions", startLine: 8, endLine: 12 }],
-+      },
-+    ],
-+    risk: "high",
-+    riskReasons: ["The accept link is a bearer token: a replayed or expired one must never activate"],
-+  },
-+  {
-+    kind: "story",
-+    title: "Invite routes",
-+    summary:
-+      "`POST /invites` and `/invites/:token`, the latter answering **This invite is no longer valid** with a 410.",
-+    hunkRefs: [{ path: ROUTES, oldStart: 0 }],
-+    keyChanges: [
-+      {
-+        content: "A withdrawn, accepted, or expired link answers 410.",
-+        lineRefs: [{ path: ROUTES, side: "additions", startLine: 19, endLine: 19 }],
-+      },
-+    ],
-+    risk: "medium",
-+    riskReasons: ["A public route that reads a token"],
-+  },
-+  {
-+    kind: "story",
-+    title: "Members list counts active",
-+    summary: "The members list skips pending and withdrawn rows.",
-+    hunkRefs: [{ path: LIST, oldStart: 5 }],
-+    keyChanges: [
-+      {
-+        content: "Pending invites are listed beside members, not among them.",
-+        lineRefs: [{ path: LIST, side: "additions", startLine: 5, endLine: 8 }],
-+      },
-+    ],
-+    risk: "low",
-+    riskReasons: ["One filter"],
-+  },
-+  {
-+    kind: "story",
-+    title: "Seats count active",
-+    summary: "A pending invite takes no seat on the invoice.",
-+    hunkRefs: [{ path: SEATS, oldStart: 19 }],
-+    keyChanges: [
-+      {
-+        content: "`seatCount` counts active rows alone.",
-+        lineRefs: [{ path: SEATS, side: "additions", startLine: 22, endLine: 22 }],
-+      },
-+    ],
-+    risk: "low",
-+    riskReasons: ["One filter"],
-+  },
-+  {
-+    kind: "story",
-+    title: "Workspace access",
-+    summary: "A pending or withdrawn row no longer opens the workspace.",
-+    hunkRefs: [{ path: ACCESS, oldStart: 32 }],
-+    keyChanges: [
-+      {
-+        content: "`memberOf` answers no for anything but an active row.",
-+        lineRefs: [{ path: ACCESS, side: "additions", startLine: 33, endLine: 37 }],
-+      },
-+    ],
-+    risk: "medium",
-+    riskReasons: ["Every request's access check"],
-+  },
-+  otherChangesChapter([{ path: "src/members/invite.test.ts", oldStart: 0 }]),
-+];
-+
-+/** Opens #214's Pull request tab on Chapters, once the agent is listed. */
-+const OPEN_CHAPTERS: ShotStep = {
-+  key: "pull-request-chapters",
-+  ready: ({ plans }) => plans.agents.agentIds?.includes(SHOT_ID.AGENT) ?? false,
-+  run: ({ plans }) => {
-+    plans.sidePanel.onPullRequestView({ changes: SHOT_ID.AGENT }, PULL_REQUEST_VIEW.CHAPTERS);
-+    plans.sidePanel.onChoose({ changes: SHOT_ID.AGENT });
-+  },
-+};
-+
-+export function chapterBarShot(): ShotSpec {
-+  const members = acmeMembers();
-+  return {
-+    planning: shotTasksView({
-+      plan: standingPlan(),
-+      plans: standingPlans(),
-+      extra: { workspaces: whoWorkspaces(members.length) },
-+    }),
-+    sidePanel: { ...FIXTURE_CODE_PANEL, width: 1000 },
-+    readerId: MEMBER.DEAN.userId,
-+    answers: {
-+      ...pr214TabAnswers({ viewed: new Set([SCHEMA, LIST, SEATS]) }),
-+      [ACT_KIND.AGENTS_OVERVIEW_CHECKS]: (payload) =>
-+        payload.agentId !== SHOT_ID.AGENT
-+          ? undefined
-+          : {
-+              pullRequest: {
-+                checks: [
-+                  { name: "test", app: "GitHub Actions", state: "passed", url: null, startedAt: ago(30), completedAt: ago(27) },
-+                  { name: "lint", app: "GitHub Actions", state: "passed", url: null, startedAt: ago(30), completedAt: ago(29) },
-+                ],
-+              },
-+            },
-+      [ACT_KIND.CHAPTERS_READ]: (payload) =>
-+        payload.agentId !== SHOT_ID.AGENT
-+          ? undefined
-+          : {
-+              pullRequest: {
-+                number: 214,
-+                generatable: true,
-+                chapters: {
-+                  status: "ready",
-+                  headSha: HEAD_SHA,
-+                  baseSha: BASE_SHA,
-+                  model: CHAPTERS_MODEL.OPUS,
-+                  chapters: CHAPTERS,
-+                },
-+              },
-+            },
-+    },
-+    chapter: 0,
-+    layout: { sidebarCollapsed: true },
-+    steps: [OPEN_CHAPTERS],
-+  };
 +}
 diff --git a/packages/panel/src/shots/chapters.ts b/packages/panel/src/shots/chapters.ts
 new file mode 100644
@@ -2916,128 +2700,6 @@ index 000000000..238088d5b
 +export const INVITE_HUNK = `@@ -0,0 +1,${String(THREAD_LINE)} @@\n${INVITE_LINES.slice(0, THREAD_LINE)
 +  .map((line) => `+${line}`)
 +  .join("\n")}`;
-diff --git a/packages/panel/src/shots/pr-card.ts b/packages/panel/src/shots/pr-card.ts
-new file mode 100644
-index 000000000..2734498c3
---- /dev/null
-+++ b/packages/panel/src/shots/pr-card.ts
-@@ -0,0 +1,116 @@
-+/**
-+ * pr-card.ts -- 0.24.0 shot "One shape for every hover card": #214's card held open beside its row in the task's summary, its mark, title, and repository over its size and checks, who opened it and which agent, and its reviewers with where each stands.
-+ *
-+ * Throwaway (`README.md`). The reviewers reach the card from the agent's
-+ * changes read, which only the Pull request tab asks, so one step opens #214
-+ * on Files changed and closes the panel again once the read is held; the
-+ * summary, pinned open, then lists the pull request, and one step holds its
-+ * card up through the capture (`hint.tsx`'s throwaway hold). Dana approved,
-+ * Jordan commented, and Priya's review is requested.
-+ */
-+
-+import type { GitHubPerson } from "@luke/features/agent-wire";
-+import { ACT_KIND } from "@luke/host/acts";
-+import { FIXTURE_CODE_PANEL } from "../tasks/tasks-fixture";
-+import { PULL_REQUEST_VIEW } from "../tasks/use-side-panel";
-+import { standingPlan, standingPlans } from "./board";
-+import { onceDrawn } from "./dom-steps";
-+import { GITHUB } from "./github-people";
-+import { SHOT_ID, shotTasksView } from "./plan-document";
-+import { pr214Changes } from "./pr-214";
-+import { pr214TabAnswers } from "./pr-214-tab";
-+import type { ShotSpec, ShotStep } from "./shot-spec";
-+import { acmeMembers, initialPicture, MEMBER, whoWorkspaces } from "./who";
-+
-+const PRIYA: GitHubPerson = {
-+  login: "priyaraman",
-+  avatarUrl: initialPicture("P", "#c7b4f5", "#3d2a78"),
-+  bot: false,
-+  userId: MEMBER.PRIYA.userId,
-+};
-+
-+/** How many times the card is asked up again before the step gives up. */
-+const MAX_ASKS = 12;
-+
-+/** Opens #214 on Files changed, so its changes read, reviewers and all, is asked once. */
-+const READ_REVIEWERS: ShotStep = {
-+  key: "read-reviewers",
-+  ready: ({ plans }) => plans.agents.agentIds?.includes(SHOT_ID.AGENT) ?? false,
-+  run: ({ plans }) => {
-+    plans.sidePanel.onPullRequestView({ changes: SHOT_ID.AGENT }, PULL_REQUEST_VIEW.FILES);
-+    plans.sidePanel.onChoose({ changes: SHOT_ID.AGENT });
-+  },
-+};
-+
-+/** Closes the panel once the reviewers are held, so the summary stands beside the column. */
-+const CLOSE_PANEL: ShotStep = {
-+  key: "close-panel",
-+  ready: ({ plans }) => plans.agents.changesPeople.get(SHOT_ID.AGENT) !== undefined,
-+  run: ({ plans }) => {
-+    plans.sidePanel.onClose({ changes: SHOT_ID.AGENT });
-+    plans.sidePanel.onSetOpen(false);
-+  },
-+};
-+
-+/** The summary's row for #214, once drawn. */
-+function pullRequestRow(): HTMLElement | undefined {
-+  for (const row of document.querySelectorAll<HTMLElement>("aside li.luke-list-row"))
-+    if (row.querySelector(".luke-list-row-title")?.textContent?.includes("#214") === true)
-+      return row.querySelector<HTMLElement>("button.luke-list-row-main") ?? row;
-+  return undefined;
-+}
-+
-+/** Rests the pointer on #214's row, and again while its card is not up. */
-+const HOLD_CARD: ShotStep = {
-+  key: "hold-card",
-+  ready: ({ plans }) => !plans.sidePanel.open,
-+  run: () => {
-+    let asks = 0;
-+    const ask = (): void => {
-+      const row = pullRequestRow();
-+      if (row !== undefined && document.querySelector("[data-pull-request-card]") === null) {
-+        row.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, pointerType: "mouse" }));
-+        asks += 1;
-+      }
-+      if (document.querySelector("[data-pull-request-card]") !== null) {
-+        document.documentElement.dataset.shotHoldCard = "true";
-+      }
-+      if (asks < MAX_ASKS) window.setTimeout(ask, 1000);
-+    };
-+    onceDrawn("aside li.luke-list-row", () => window.setTimeout(ask, 1500));
-+  },
-+};
-+
-+export function prCardShot(): ShotSpec {
-+  const members = acmeMembers();
-+  const changes = pr214Changes();
-+  return {
-+    planning: shotTasksView({
-+      plan: standingPlan(),
-+      plans: standingPlans(),
-+      extra: { workspaces: whoWorkspaces(members.length) },
-+    }),
-+    sidePanel: FIXTURE_CODE_PANEL,
-+    readerId: MEMBER.DEAN.userId,
-+    answers: {
-+      ...pr214TabAnswers({ viewed: new Set() }),
-+      [ACT_KIND.AGENTS_CHANGES]: (payload) =>
-+        payload.agentId !== SHOT_ID.AGENT || !("pullRequest" in changes) || changes.pullRequest === null
-+          ? { pullRequest: null }
-+          : {
-+              pullRequest: {
-+                ...changes.pullRequest,
-+                author: GITHUB.DEAN,
-+                writtenAs: "developer",
-+                reviewers: [
-+                  { by: GITHUB.DANA, state: "approved" },
-+                  { by: GITHUB.JORDAN, state: "commented" },
-+                  { by: PRIYA, state: "requested" },
-+                ],
-+              },
-+            },
-+    },
-+    layout: { sidebarCollapsed: true, summaryPinned: true },
-+    steps: [READ_REVIEWERS, CLOSE_PANEL, HOLD_CARD],
-+  };
-+}
 diff --git a/packages/panel/src/shots/pull-request-tab.ts b/packages/panel/src/shots/pull-request-tab.ts
 new file mode 100644
 index 000000000..a6bba2859
@@ -3218,18 +2880,18 @@ index 000000000..a6bba2859
 +}
 diff --git a/packages/panel/src/shots/queue.ts b/packages/panel/src/shots/queue.ts
 new file mode 100644
-index 000000000..26861dfe3
+index 000000000..9db0ad67d
 --- /dev/null
 +++ b/packages/panel/src/shots/queue.ts
 @@ -0,0 +1,140 @@
 +/**
-+ * queue.ts -- 0.24.0 shot "Queue a message behind a turn": the Invite emails agent twenty seconds into a turn, three follow-ups queued over its message box, the first under the pointer with Steer, Edit, and Delete.
++ * queue.ts -- 0.24.0 shot "Queue a message behind a turn": the Invite emails agent twenty seconds into a turn, three follow-ups queued over its message box, the second under the pointer with Steer, Edit, and Delete.
 + *
 + * Throwaway (`README.md`). The agent runs on Codex, which queues a
 + * follow-up behind its turn. Its first turn finished with #216 as a draft;
 + * Dean asked for the plain-text fallback seconds before launch, and while
 + * that turn works he queued three more. The sidebar folded and the side
-+ * panel closed; one step holds the first queued row as a pointer resting on
++ * panel closed; one step holds the second queued row as a pointer resting on
 + * it draws it, its actions out.
 + */
 +
@@ -3324,13 +2986,13 @@ index 000000000..26861dfe3
 +  ];
 +}
 +
-+/** Draws the first queued row as the pointer resting on it does, its actions out, and keeps it so as the dock redraws. */
-+const REST_ON_FIRST: ShotStep = {
-+  key: "rest-on-first",
++/** Draws the second queued row as the pointer resting on it does, its ring and actions out, and keeps it so as the dock redraws. */
++const REST_ON_SECOND: ShotStep = {
++  key: "rest-on-second",
 +  ready: () => true,
 +  run: () => {
 +    window.setInterval(() => {
-+      const row = document.querySelector<HTMLElement>(".agent-queue-rows li.luke-list-row");
++      const row = document.querySelectorAll<HTMLElement>(".agent-queue-rows li.luke-list-row")[1] ?? null;
 +      if (row !== null && row.dataset.menuOpen !== "true") row.dataset.menuOpen = "true";
 +    }, 200);
 +  },
@@ -3359,7 +3021,7 @@ index 000000000..26861dfe3
 +      },
 +    }),
 +    layout: { sidebarCollapsed: true, mainTab: { agent: SHOT_ID.AGENT_2 } },
-+    steps: [REST_ON_FIRST],
++    steps: [REST_ON_SECOND],
 +  };
 +}
 diff --git a/packages/panel/src/shots/relay-pictures.ts b/packages/panel/src/shots/relay-pictures.ts
@@ -3634,10 +3296,10 @@ index 000000000..9b1062c46
 +}
 diff --git a/packages/panel/src/shots/shot-profiles.ts b/packages/panel/src/shots/shot-profiles.ts
 new file mode 100644
-index 000000000..d9f3f48e6
+index 000000000..31217633b
 --- /dev/null
 +++ b/packages/panel/src/shots/shot-profiles.ts
-@@ -0,0 +1,106 @@
+@@ -0,0 +1,100 @@
 +/**
 + * shot-profiles.ts -- the registry: which shot each `--profile shot-*` launch stages, built once on first use.
 + *
@@ -3667,9 +3329,6 @@ index 000000000..d9f3f48e6
 +import { rowMenuShot } from "./row-menu";
 +import { rowSheetShot } from "./row-sheet";
 +import { subTasksShot } from "./sub-tasks";
-+import { chapterBarShot } from "./chapter-bar";
-+import { prCardShot } from "./pr-card";
-+import { toolCallsShot } from "./tool-calls";
 +import { queueShot } from "./queue";
 +
 +/** Each shot's builder, by its profile. */
@@ -3687,9 +3346,6 @@ index 000000000..d9f3f48e6
 +  [RUN_PROFILE.SHOT_ROW_MENU, rowMenuShot],
 +  [RUN_PROFILE.SHOT_ROW_SHEET, rowSheetShot],
 +  [RUN_PROFILE.SHOT_SUB_TASKS, subTasksShot],
-+  [RUN_PROFILE.SHOT_CHAPTER_BAR, chapterBarShot],
-+  [RUN_PROFILE.SHOT_PR_CARD, prCardShot],
-+  [RUN_PROFILE.SHOT_TOOL_CALLS, toolCallsShot],
 +  [RUN_PROFILE.SHOT_QUEUE, queueShot],
 +]);
 +
@@ -4447,196 +4103,6 @@ index 000000000..b0030181d
 +    };
 +  });
 +}
-diff --git a/packages/panel/src/shots/tool-calls.ts b/packages/panel/src/shots/tool-calls.ts
-new file mode 100644
-index 000000000..e6c0964d6
---- /dev/null
-+++ b/packages/panel/src/shots/tool-calls.ts
-@@ -0,0 +1,184 @@
-+/**
-+ * tool-calls.ts -- 0.24.0 shot "Tool calls in plain words": the finished agent's turn opened out, its calls read as words: files read and edited and the page fetched named by their chips, the tests as one Terminal card with what they printed, a message to the Invite emails agent as a quote, the plan updated, and #214 opened.
-+ *
-+ * Throwaway (`README.md`). The sidebar folded and the side panel closed, the
-+ * column on the Add teammate invitations agent. A finished turn folds its
-+ * calls, and each call row starts closed, so steps open the turn's fold and
-+ * then the Terminal card and the message, as a reader's presses would, and
-+ * keeps them so until the capture.
-+ */
-+
-+import type { AgentTranscriptMessage } from "@luke/features/agent-wire";
-+import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
-+import { standingPlan, standingPlans } from "./board";
-+import { ago } from "./clock";
-+import { bash, codingAgentAnswers, MODEL, shotAgentMessages, TEST_OUTPUT, toolPart } from "./coding-agent";
-+import { AGENT_2_TITLE, PLAN_NAME, SHOT_ID, shotTasksView } from "./plan-document";
-+import type { ShotSpec, ShotStep } from "./shot-spec";
-+import { acmeMembers, MEMBER, whoWorkspaces } from "./who";
-+
-+const PATCH = [
-+  "*** Begin Patch",
-+  "*** Update File: src/members/invite.ts",
-+  "@@ export async function withdrawInvite(inviteId: string, by: Member) {",
-+  "   assertSenderOrAdmin(invite, by);",
-+  '-  await db.memberships.update(inviteId, { state: "withdrawn" });',
-+  '+  await db.memberships.update(inviteId, { state: "withdrawn", inviteToken: null });',
-+  "*** Update File: src/members/invite.test.ts",
-+  "@@",
-+  "+it(\"refuses a withdrawn invite's old link\", async () => {",
-+  "+  await withdrawInvite(invite.id, dana);",
-+  '+  await expect(acceptInvite(invite.token, sam.id)).rejects.toThrow("no-longer-valid");',
-+  "+});",
-+  "*** End Patch",
-+].join("\n");
-+
-+/** The calls drawn open: the tests' Terminal card and the message to the Invite emails agent. */
-+const CALLS_OPEN = ["call_tc4", "call_tc5"];
-+
-+const MESSAGE =
-+  "Withdrawing an invite now clears its `invite_token`, so an old link is refused.\n\n" +
-+  "If the email shows a link, read it from `acceptUrl(invite)` rather than building it.";
-+
-+/** The finished agent's transcript as 0.24.0 draws it: its brief and first turn, then Dana's review passed on, and the turn that answered it. */
-+function toolCallMessages(): AgentTranscriptMessage[] {
-+  return [
-+    ...shotAgentMessages(),
-+    {
-+      id: "t-review",
-+      role: "user",
-+      parts: [
-+        {
-+          type: "text",
-+          text: "Dana asked on #214 whether withdrawing an invite also clears `invite_token`, so an old link can never be replayed. Make it so, with a test.",
-+        },
-+      ],
-+    },
-+    {
-+      id: "t-turn",
-+      role: "assistant",
-+      startedAt: ago(19),
-+      finishedAt: ago(12),
-+      model: MODEL.OPUS,
-+      effort: "high",
-+      tokens: { inputTokens: 412_880, outputTokens: 6_214, cachedInputTokens: 371_500 },
-+      parts: [
-+        { type: "step-start" },
-+        toolPart(
-+          "read_file",
-+          "call_tc1",
-+          { filePath: "src/members/invite.ts" },
-+          { content: "export async function withdrawInvite(inviteId: string, by: Member) {\n  …\n}\n" },
-+        ),
-+        toolPart(
-+          "read_web_page",
-+          "call_tc2",
-+          { url: "https://www.postgresql.org/docs/current/sql-update.html" },
-+          { text: "UPDATE changes the values of the specified columns in all rows that satisfy the condition." },
-+        ),
-+        toolPart(
-+          "apply_patch",
-+          "call_tc3",
-+          { patchText: PATCH },
-+          {
-+            files: [
-+              { operation: "update", path: "src/members/invite.ts" },
-+              { operation: "update", path: "src/members/invite.test.ts" },
-+            ],
-+          },
-+        ),
-+        bash("call_tc4", "pnpm test src/members", TEST_OUTPUT.replace("6 tests", "7 tests").replace("15 passed (15)", "16 passed (16)"), "Run the members tests"),
-+        toolPart(
-+          "message_agent",
-+          "call_tc5",
-+          { agentId: SHOT_ID.AGENT_2, text: MESSAGE },
-+          {
-+            status: "accepted",
-+            agent: {
-+              id: SHOT_ID.AGENT_2,
-+              title: AGENT_2_TITLE,
-+              model: MODEL.SOL,
-+              status: "running",
-+              onYourTask: true,
-+            },
-+          },
-+        ),
-+        toolPart(
-+          "edit_plan",
-+          "call_tc6",
-+          {
-+            notes: [
-+              {
-+                kind: "add",
-+                section: "Decisions",
-+                text: "- Withdrawing an invite clears its token, so an old link is refused.",
-+              },
-+            ],
-+          },
-+          { status: "accepted" },
-+        ),
-+        bash("call_tc7", "git push", "To github.com:acme/relay.git\n   7c1d2e3..4f1c2a9  luke/teammate-invitations -> luke/teammate-invitations\n"),
-+        { type: "step-start" },
-+        {
-+          type: "text",
-+          text:
-+            "Done: `withdrawInvite` now clears `invite_token` alongside the state, and a new test opens a withdrawn invite's old link and is refused. " +
-+            `\`pnpm test src/members\` passes, I pushed it to #214, told the Invite emails agent, and noted the decision in ${PLAN_NAME}'s plan.`,
-+        },
-+      ],
-+    },
-+  ];
-+}
-+
-+/** Whether a fold or call row stands open: the `<details>` it is, or the one it sits in. */
-+function opened(element: Element): HTMLDetailsElement | undefined {
-+  return element instanceof HTMLDetailsElement ? element : (element.closest("details") ?? undefined);
-+}
-+
-+/** Opens the last turn's fold of calls, then its Terminal card and its message, and keeps them open until the capture. */
-+const OPEN_CALLS: ShotStep = {
-+  key: "open-calls",
-+  ready: () => true,
-+  run: () => {
-+    const open = (details: HTMLDetailsElement | undefined): void => {
-+      if (details !== undefined && !details.open) details.querySelector<HTMLElement>(":scope > summary")?.click();
-+    };
-+    window.setInterval(() => {
-+      const folds = document.querySelectorAll("[data-turn-fold]");
-+      const last = folds[folds.length - 1];
-+      // Note that the last fold is the answered turn's only once the transcript has both turns.
-+      if (last === undefined || folds.length < 2) return;
-+      open(opened(last));
-+      for (const id of CALLS_OPEN) {
-+        const row = document.querySelector(`[data-call-id="${id}"]`);
-+        if (row !== null) open(opened(row));
-+      }
-+      // The opened calls grow the transcript past its foot, so it is scrolled back down to the turn's last words.
-+      const log = document.querySelector<HTMLElement>('.desktop-task-column [role="log"]');
-+      for (let box = log; box !== null; box = box.parentElement) {
-+        if (box.scrollHeight > box.clientHeight + 1 && getComputedStyle(box).overflowY !== "visible") {
-+          box.scrollTop = box.scrollHeight;
-+          break;
-+        }
-+      }
-+    }, 700);
-+  },
-+};
-+
-+export function toolCallsShot(): ShotSpec {
-+  const members = acmeMembers();
-+  return {
-+    planning: shotTasksView({
-+      plan: standingPlan(),
-+      plans: standingPlans(),
-+      extra: { workspaces: whoWorkspaces(members.length) },
-+    }),
-+    sidePanel: FIXTURE_CLOSED_PANEL,
-+    readerId: MEMBER.DEAN.userId,
-+    answers: codingAgentAnswers(toolCallMessages),
-+    layout: { sidebarCollapsed: true, mainTab: { agent: SHOT_ID.AGENT } },
-+    steps: [
-+      OPEN_CALLS,
-+    ],
-+  };
-+}
 diff --git a/packages/panel/src/shots/use-shot-staging.ts b/packages/panel/src/shots/use-shot-staging.ts
 new file mode 100644
 index 000000000..63ccfa5c1
@@ -5172,16 +4638,3 @@ index 0d6b9f1bf..43ffcc8a4 100644
      ),
    );
  
-diff --git a/packages/ui/src/components/tooltip/hint.tsx b/packages/ui/src/components/tooltip/hint.tsx
-index 5ea642f1d..46bfefb62 100644
---- a/packages/ui/src/components/tooltip/hint.tsx
-+++ b/packages/ui/src/components/tooltip/hint.tsx
-@@ -598,6 +598,8 @@ export function Tooltip({
-   // lingers as the pointer moves on, leaves it as it was, and a hint still
-   // waiting is only called off.
-   const hide = useCallback(() => {
-+    // Throwaway: a changelog shot holds its card up through the capture (`packages/panel/src/shots/`).
-+    if (carded && document.documentElement.dataset.shotHoldCard === "true") return;
-     if (latest() === undefined) {
-       stopRest();
-       return;

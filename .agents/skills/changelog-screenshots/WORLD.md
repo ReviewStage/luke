@@ -139,17 +139,13 @@ a status and priority and adds twelve: Expire invite links after 7 days
 signing secrets, Retry Postmark sends on a 429, and others across the three
 repositories.
 
-## Marks and the Browser tab (0.23.0 on)
+## The Browser tab (0.23.0 on)
 
-`task-marks.ts` in `staging/releases/v0.23.0.patch` gives acme's tasks one
-pull request each where it shows: #218 "Resend an expired invite" (open),
-#209 on Webhook retries and #135 "Export the audit log as CSV" (merged), #217
-(draft), and #212 "Unsubscribe on a hard bounce" on Handle Postmark bounces
-(closed); Rotate webhook signing secrets' agent failed. The Invite emails
-agent's cloud browser is on `https://acme.relay.dev/invite/7Kq2mWx9`, "Join
-acme on Relay" (`relay-pictures.ts`'s accept page).
+The Invite emails agent's cloud browser is on
+`https://acme.relay.dev/invite/7Kq2mWx9`, "Join acme on Relay"
+(`relay-pictures.ts`'s accept page), its pointer on Accept invite.
 
-## Sub-tasks, relations, and #214's reviewers (0.24.0 on)
+## Sub-tasks, relations, and the queue (0.24.0 on)
 
 `sub-tasks.ts` in `staging/releases/v0.24.0.patch` breaks Teammate invitations
 (ACME-42) into five sub-tasks, all Dean's: Pending memberships schema
@@ -159,11 +155,8 @@ by Dana's Verify acme.dev with Postmark, ACME-58), and Expire invite links
 after 7 days (ACME-46), so its ring reads 2/5. Teammate invitations waited on
 Members page empty state (ACME-39, done) and holds up Resend an expired invite
 (ACME-44) and Handle Postmark bounces (ACME-43). The Invite emails agent runs on
-Codex. On #214, Dana approved, Jordan commented, and Priya's
-(`priyaraman`) review is requested. 0.24.0's chapters of #214 are eight, one
-per part of it: Pending memberships, Invite and withdraw, Accept an invite,
-Invite routes, Members list counts active, Seats count active, Workspace
-access, and Other changes.
+Codex, and while it adds the invite email's plain-text part, Dean has three
+follow-ups queued behind its turn (`queue.ts`).
 
 ## Automations
 

@@ -9,10 +9,10 @@ index b23a3f5c4..5e6b86f00 100644
 +/* Throwaway: the changelog shots (panel/src/shots/README.md), last so they win. */
 +@import "../../../../../packages/panel/src/shots/shots.css";
 diff --git a/packages/host/src/app-state.ts b/packages/host/src/app-state.ts
-index 0124487b9..6d15e4337 100644
+index 0124487b9..68baa9669 100644
 --- a/packages/host/src/app-state.ts
 +++ b/packages/host/src/app-state.ts
-@@ -87,6 +87,27 @@ export const RUN_PROFILE = {
+@@ -87,6 +87,25 @@ export const RUN_PROFILE = {
    AUTOMATIONS_EDITOR: "automations-editor",
    /** The same account on the automation whose run failed, that run marked among its runs. */
    AUTOMATIONS_RUNS: "automations-runs",
@@ -35,8 +35,6 @@ index 0124487b9..6d15e4337 100644
 +  SHOT_ROW_MENU: "shot-row-menu",
 +  SHOT_ROW_SHEET: "shot-row-sheet",
 +  SHOT_BROWSER_TAB: "shot-browser-tab",
-+  SHOT_TASK_MARKS: "shot-task-marks",
-+  SHOT_AGENT_MENU: "shot-agent-menu",
  } as const;
  
  export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];
@@ -301,72 +299,6 @@ index 000000000..4b9eb1731
 + */
 +export const ACME_PHOTO_PNG_BASE64 =
 +  "iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAAGYklEQVR42u3dPYtdVRSH8fMNbK3E1sImn0CwtPUrWNjYGW18KcSkCCKCQW3SaCCFTYogNhZCQEglRBBJIcSxMA4ScPJCJuPGC8OQyZw5czP3nL3W+m2eYmZide599imePzg8d/YtoCyDRwACAAQACAAQACAAQACAAAABAAIABAAIABAAIABAAIAAAAEAAgAEAAgAEAAgAEAAgAAAAQACAAQACAAQACAAQACAAAABAAIABAAIABAAIABAAIAAAAEAAgAEAAgAEAAgAEAAgAAAAQACAAQACAACeAogAEAAgAAAAQACAAQACAAQACAAQACAAAABAAIABAAIABAAIABAAIAAAAEAAgAEAAgAEAAgAEAAgAAZeO2LzxqeAwGK8vMftxueAwEq8uaVr/f+P+0HT4MA5fh9+++VAO0HT4MAtXj36rd7B0771TMhQBVe+OCdf3Z2DgrQfm1/9GQIUIJz31/bO3TaHz0ZAlS8/r0ECFCIb278tHfEaf/k+RAgMy+f+3Bv9LT/wFMiQMXr30uAAPmHD3sTjnEEAXLy463fpgjQ/jPPigBFr38vAQKk3b1NF8BCjgA5d2/Tj4UcARLu3qYfCzkC5Ny9TT8WcgRIO3yYcowjCJBz9zb9WMgRoOj17yVAgPzDhynHOIIAOXdv04+FHAGKXv9eAgTIP3wwjiBA0d3b9GMhR4C617+XAAHS7t4s5AhQffdmIUeA0rs3CzkCVN+9WcgRwPDBOIIAhXdvPSzkzly80PBREqDT63/TL4HzWzcbPk0CLDl8WGoc8erlr77cud1oP/hACbDM7m2phdzz77/96fatlQDth/arj5UAnV7/m3gJvH7tyurbv6L96mMlwJLDhznHES9+/N7+9b//Emh/9OESYIHd2/wLuTeuf3fw27+i/dGHS4B+r//Tegm89MlHh7/9K9o/+YgJsMDubc6F3Nlfrh8lQPsnHzEBltm9zbOQO3PxwlHf/hW6GAGW2b3Ns5A7v3VzXABdjACL7d42vZDbL1/j6GIEWHL4sKFxxMHyNY4uRoDFdm+bW8g9Ub7G0cUI0O/1v8ZL4HD5OvYloIsRYMnhw+mOI55avsbRxQiw2O7tdBdyI+VrHF2MAP1e/9NfAiPlaxxdrLoAiw8fnn0ccWz50sUI0OPu7bQWcseWL12MAIGv//GXwMTypYsRoMfd2zMu5KaXL12MAJ3u3p5lIXei8qWLEaDH3dvaC7mTli9djACd7t7WW8itUb50MQL0O3w40Thi7fKlixGgx93bSRdya5cvXay6AHGv//2XwCuXPt/Et79sF6slQOfDhynn8r0/NydAwS5WSIDOd29Tzq+P/t3ct79mFxtc/1HOg8e7l+5tbVqAal2sigCBhg9HnRsP727621+wi1URIMTubeTcffxohuu/YBcbXP8hzg8Ptuf59lfrYiUECLR7e+q5s/twzm9/qS6WX4Bwu7fD5+r9v+YXoEgXyy9AuN3bE2dr9/783/46XSy5AEF3b7OVL10sswDRhw/zlK/iXSyzAKF3b7OVr+JdbHD9K1+Vu1haAaIPH+YsX5W7WE4BEuzeZi5fZbvY4PpXvip3sYQCJBg+LFK+anaxhAJE370tWL4KdrHB9a98Ve5i2QSIvntbvHxV62KpBIi+e+uhfFXrYqkEiL5766R8lepieQSIvnvrp3yV6mJJBEgwfOiqfNXpYkkEiL5767B8Felig+tf+arcxTIIEH340G35qtDFwguQYPfWbfmq0MUG17/yVbmLxRYg+vCh//KVvovFFiD67i1E+crdxQbXv/JVuYsFFiD67i1Q+UrcxaIKEH33Fq58Ze1iUQWIvnsLV76ydrGQAkTfvQUtXym7WDwBEgwfgpavlF0sngDRd2+hy1e+Lja4/pWvyl0smADRhw8JyleyLhZJgOi7txzlK1kXG1z/ylflLhZGgOjDh2TlK00XCyNA9N1bsvKVposV+j/FAwQACAAQACAACOApgAAAAQACAAQACAAQACAAQACAAAABAAIABAAIABAAIABAAIAAAAEAAgAEAAgAEAAgAEAAgAAAAQACAAQACAAQACAAQACAAAABAAIABAAIABAAIABAAIAAAAEAAgAEAAgAEAAgAEAAgAAAAQACgAAAAQACAAQACAAQACAAQACAAAABAAIABAAIABAAIAAQkP8AGs72fisLLxUAAAAASUVORK5CYII=";
-diff --git a/packages/panel/src/shots/agent-menu.ts b/packages/panel/src/shots/agent-menu.ts
-new file mode 100644
-index 000000000..bce530bc0
---- /dev/null
-+++ b/packages/panel/src/shots/agent-menu.ts
-@@ -0,0 +1,60 @@
-+/**
-+ * agent-menu.ts -- 0.23.0 shot "One menu, in one order": the Add teammate invitations agent's ⋯ held open on its tab, its items in the one order every agent menu keeps, Copy link first and Permanently delete last.
-+ *
-+ * Throwaway (`README.md`). The sidebar folded and the side panel closed, the
-+ * column on the finished agent's transcript; one step presses its tab's ⋯
-+ * once the tab is drawn, and again whenever the capture's activation has
-+ * closed the menu, as `row-menu.ts` holds its own.
-+ */
-+
-+import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
-+import { standingPlan, standingPlans } from "./board";
-+import { codingAgentAnswers } from "./coding-agent";
-+import { AGENT_TITLE, SHOT_ID, shotTasksView } from "./plan-document";
-+import type { ShotSpec, ShotStep } from "./shot-spec";
-+import { acmeMembers, MEMBER, whoWorkspaces } from "./who";
-+import { ACT_KIND } from "@luke/host/acts";
-+
-+/** How many times the menu is opened again before the step gives up. */
-+const MAX_OPENS = 12;
-+
-+/** Opens the agent tab's ⋯ once drawn, and again whenever it has closed. */
-+const HOLD_MENU: ShotStep = {
-+  key: "agent-menu",
-+  ready: () => true,
-+  run: () => {
-+    let opens = 0;
-+    const check = (): void => {
-+      const button = document.querySelector<HTMLElement>(`button[aria-label="${AGENT_TITLE} actions"]`);
-+      if (button !== null && button.getAttribute("aria-expanded") !== "true" && opens < MAX_OPENS) {
-+        button.click();
-+        opens += 1;
-+        // The menu takes the focus to its first item, whose ring is not the point of the picture.
-+        window.setTimeout(() => {
-+          const focused = document.activeElement;
-+          if (focused instanceof HTMLElement && focused.closest('[role="menu"]') !== null) focused.blur();
-+        }, 300);
-+      }
-+    };
-+    window.setTimeout(() => window.setInterval(check, 1200), 2000);
-+  },
-+};
-+
-+export function agentMenuShot(): ShotSpec {
-+  const members = acmeMembers();
-+  return {
-+    planning: shotTasksView({
-+      plan: standingPlan(),
-+      plans: standingPlans(),
-+      extra: { workspaces: whoWorkspaces(members.length) },
-+    }),
-+    sidePanel: FIXTURE_CLOSED_PANEL,
-+    readerId: MEMBER.DEAN.userId,
-+    answers: {
-+      ...codingAgentAnswers(),
-+      [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => members,
-+    },
-+    layout: { sidebarCollapsed: true, mainTab: { agent: SHOT_ID.AGENT } },
-+    steps: [HOLD_MENU],
-+  };
-+}
 diff --git a/packages/panel/src/shots/agents-settings.ts b/packages/panel/src/shots/agents-settings.ts
 new file mode 100644
 index 000000000..29a328c9e
@@ -3299,10 +3231,10 @@ index 000000000..9b1062c46
 +}
 diff --git a/packages/panel/src/shots/shot-profiles.ts b/packages/panel/src/shots/shot-profiles.ts
 new file mode 100644
-index 000000000..6d50cc795
+index 000000000..354987c4e
 --- /dev/null
 +++ b/packages/panel/src/shots/shot-profiles.ts
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,89 @@
 +/**
 + * shot-profiles.ts -- the registry: which shot each `--profile shot-*` launch stages, built once on first use.
 + *
@@ -3331,9 +3263,7 @@ index 000000000..6d50cc795
 +import { frameTabsShot } from "./frame-tabs";
 +import { rowMenuShot } from "./row-menu";
 +import { rowSheetShot } from "./row-sheet";
-+import { taskMarksShot } from "./task-marks";
 +import { browserTabShot } from "./browser-tab";
-+import { agentMenuShot } from "./agent-menu";
 +
 +/** Each shot's builder, by its profile. */
 +const BUILDERS: ReadonlyMap<string, () => ShotSpec> = new Map([
@@ -3349,9 +3279,7 @@ index 000000000..6d50cc795
 +  [RUN_PROFILE.SHOT_FRAME_TABS, frameTabsShot],
 +  [RUN_PROFILE.SHOT_ROW_MENU, rowMenuShot],
 +  [RUN_PROFILE.SHOT_ROW_SHEET, rowSheetShot],
-+  [RUN_PROFILE.SHOT_TASK_MARKS, taskMarksShot],
 +  [RUN_PROFILE.SHOT_BROWSER_TAB, browserTabShot],
-+  [RUN_PROFILE.SHOT_AGENT_MENU, agentMenuShot],
 +]);
 +
 +/**
@@ -3665,117 +3593,6 @@ index 000000000..43c578a74
 +    },
 +    layout: { mainTab: { agent: SHOT_ID.AGENT } },
 +    steps: [slashStep(2500)],
-+  };
-+}
-diff --git a/packages/panel/src/shots/task-marks.ts b/packages/panel/src/shots/task-marks.ts
-new file mode 100644
-index 000000000..607a5bcc2
---- /dev/null
-+++ b/packages/panel/src/shots/task-marks.ts
-@@ -0,0 +1,105 @@
-+/**
-+ * task-marks.ts -- 0.23.0 shot "One mark for how a task stands": the sidebar's tasks, each row ending in the one mark for how its agents stand: working, failed, or its pull request open, draft, merged, or closed.
-+ *
-+ * Throwaway (`README.md`). Ten of acme's tasks, every one Dean's and to do or
-+ * in progress, so the sidebar's default view lists them all with no line
-+ * for hidden ones; each task's agents are reshaped so acme/relay's group
-+ * alone wears all six marks. The side panel closed; framed as a close-up of
-+ * the sidebar.
-+ */
-+
-+import type { TaskAgentsSummary, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
-+import { ACT_KIND } from "@luke/host/acts";
-+import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
-+import { moreTasks, standingPlan, standingPlans } from "./board";
-+import { ago, hoursAgo } from "./clock";
-+import { codingAgentAnswers, MODEL } from "./coding-agent";
-+import { SHOT_ID, shotTasksView } from "./plan-document";
-+import type { ShotSpec } from "./shot-spec";
-+import { acmeMembers, MEMBER, whoWorkspaces } from "./who";
-+
-+/** The board's tasks this shot lists (`board.ts`). */
-+const TASK = {
-+  EXPIRE_LINKS: "a1f0c2d4-1b2c-4d3e-8f4a-5b6c7d8e9f01",
-+  POSTMARK_BOUNCES: "a1f0c2d4-1b2c-4d3e-8f4a-5b6c7d8e9f02",
-+  RESEND_EXPIRED: "a1f0c2d4-1b2c-4d3e-8f4a-5b6c7d8e9f07",
-+  USAGE_ALERT: "a1f0c2d4-1b2c-4d3e-8f4a-5b6c7d8e9f08",
-+  ROTATE_SECRETS: "a1f0c2d4-1b2c-4d3e-8f4a-5b6c7d8e9f09",
-+} as const;
-+
-+type AgentStatus = TaskAgentsSummary["agents"][number]["status"];
-+
-+/** One pull request line, its checks passing. */
-+function pr(number: number, title: string, state: TaskPullRequestLine["state"]): TaskPullRequestLine {
-+  return { number, title, state, checks: "passing", additions: 96, deletions: 12 };
-+}
-+
-+/** A task's one agent, standing as `status`, with what it opened. */
-+function agents(
-+  id: string,
-+  title: string,
-+  status: AgentStatus,
-+  at: number,
-+  pullRequests: TaskPullRequestLine[] = [],
-+): TaskAgentsSummary {
-+  return {
-+    total: 1,
-+    working: status === "running" ? 1 : 0,
-+    ...(status === "failed" ? { failed: 1 } : undefined),
-+    activityAt: at,
-+    agents: [{ id, title, model: MODEL.OPUS, effort: "high", status, at }],
-+    pullRequestTotal: pullRequests.length,
-+    pullRequests,
-+  };
-+}
-+
-+/** How one listed task stands. */
-+interface Stand {
-+  readonly status: NonNullable<TaskSummary["status"]>;
-+  readonly updatedAt: number;
-+  readonly agents: TaskAgentsSummary | undefined;
-+}
-+
-+/** How each listed task stands: its status in the sidebar, when it moved, and its agents. */
-+const STANDS: ReadonlyMap<string, Stand> = new Map<string, Stand>([
-+  [SHOT_ID.PLAN, { status: "in-progress", updatedAt: ago(4), agents: agents("d1e2f3a4-0001-4b5c-8d9e-0f1a2b3c4d01", "Invite emails", "running", ago(1)) }],
-+  [TASK.ROTATE_SECRETS, { status: "in-progress", updatedAt: ago(18), agents: agents("d1e2f3a4-0002-4b5c-8d9e-0f1a2b3c4d02", "Rotate signing secrets", "failed", ago(18)) }],
-+  [TASK.RESEND_EXPIRED, { status: "in-progress", updatedAt: ago(41), agents: agents("d1e2f3a4-0003-4b5c-8d9e-0f1a2b3c4d03", "Resend an expired invite", "completed", ago(41), [pr(218, "Resend an expired invite", "open")]) }],
-+  [SHOT_ID.WEBHOOKS, { status: "in-progress", updatedAt: hoursAgo(2), agents: agents("d1e2f3a4-0004-4b5c-8d9e-0f1a2b3c4d04", "Retry failed webhook deliveries", "completed", hoursAgo(2), [pr(209, "Retry failed webhook deliveries", "merged")]) }],
-+  [TASK.EXPIRE_LINKS, { status: "todo", updatedAt: hoursAgo(3), agents: agents("d1e2f3a4-0005-4b5c-8d9e-0f1a2b3c4d05", "Expire invite links", "completed", hoursAgo(3), [pr(217, "Expire invite links after 7 days", "draft")]) }],
-+  [TASK.POSTMARK_BOUNCES, { status: "todo", updatedAt: hoursAgo(6), agents: agents("d1e2f3a4-0006-4b5c-8d9e-0f1a2b3c4d06", "Handle Postmark bounces", "completed", hoursAgo(6), [pr(212, "Unsubscribe on a hard bounce", "closed")]) }],
-+  [SHOT_ID.BILLING, { status: "in-progress", updatedAt: ago(26), agents: agents("d1e2f3a4-0007-4b5c-8d9e-0f1a2b3c4d07", "Meter API calls per workspace", "completed", ago(26), [pr(88, "Record usage events per workspace", "open")]) }],
-+  [TASK.USAGE_ALERT, { status: "todo", updatedAt: hoursAgo(20), agents: undefined }],
-+  [SHOT_ID.ONBOARDING, { status: "in-progress", updatedAt: hoursAgo(5), agents: agents("d1e2f3a4-0008-4b5c-8d9e-0f1a2b3c4d08", "Build the onboarding checklist", "running", ago(3)) }],
-+  [SHOT_ID.AUDIT, { status: "todo", updatedAt: hoursAgo(26), agents: agents("d1e2f3a4-0009-4b5c-8d9e-0f1a2b3c4d09", "Export the audit log", "completed", hoursAgo(26), [pr(135, "Export the audit log as CSV", "merged")]) }],
-+]);
-+
-+/** The listed tasks, Dean's, as they stand here. */
-+function markedTasks(): TaskSummary[] {
-+  return [...standingPlans(), ...moreTasks()].flatMap((task) => {
-+    const stands = STANDS.get(task.id);
-+    if (stands === undefined) return [];
-+    const { agents: shown, ...rest } = stands;
-+    const { agents: _agents, ...row } = task;
-+    return [{ ...row, ...rest, ...(shown === undefined ? undefined : { agents: shown }), assignee: MEMBER.DEAN }];
-+  });
-+}
-+
-+export function taskMarksShot(): ShotSpec {
-+  const members = acmeMembers();
-+  return {
-+    planning: shotTasksView({
-+      plan: standingPlan(),
-+      plans: markedTasks(),
-+      extra: { workspaces: whoWorkspaces(members.length) },
-+    }),
-+    sidePanel: FIXTURE_CLOSED_PANEL,
-+    readerId: MEMBER.DEAN.userId,
-+    answers: {
-+      ...codingAgentAnswers(),
-+      [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => members,
-+      [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => [],
-+    },
-+    layout: { sidebarCollapsed: false },
 +  };
 +}
 diff --git a/packages/panel/src/shots/tasks-list.ts b/packages/panel/src/shots/tasks-list.ts
