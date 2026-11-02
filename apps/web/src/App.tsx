@@ -32,9 +32,9 @@ export function App(): React.JSX.Element {
     <PublicPage
       banner={<SiteNavigation current={{ page: SITE_PAGE.HOME }} />}
       footer={<SiteFooterLinks current={{ page: SITE_PAGE.HOME }} />}
-      title="A better way to plan with agents."
+      title="An inbox for all your coding agents."
       titleStyle={PUBLIC_TITLE.HERO}
-      lead={`${PRODUCT_NAME} is an inbox for all your coding agents.`}
+      lead="Agents post to your Inbox when they need a decision, a manual step, or your eyes on something, and you answer them there. They work in cloud sandboxes on your own Claude or ChatGPT subscription or API key."
     >
       <PublicSection>
         <div className="flex flex-wrap items-center gap-3">
