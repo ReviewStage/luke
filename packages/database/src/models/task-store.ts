@@ -1166,9 +1166,15 @@ export interface TaskCommitted<A> {
   readonly txid?: string;
 }
 
-/** A task changed, as `updateTaskCommitted` answers it: with the agents its move to Done archived with it, none for any other change. */
+/**
+ * A task changed, as `updateTaskCommitted` answers it: with the agents its
+ * move to Done archived with it, none for any other change, and whether this
+ * write moved its status, read under the row's lock, so two changes naming
+ * one status that race are told apart.
+ */
 export interface TaskChanged extends TaskCommitted<Task> {
   readonly archived: readonly TaskArchivedAgent[];
+  readonly statusMoved: boolean;
 }
 
 /**
@@ -1773,8 +1779,11 @@ export function updateTaskCommitted<E = never, R = never, RA = never>(
           now,
         );
         const changed = yield* taskOf(userId, row);
+        const statusMoved = columns.status !== undefined;
         return Option.some(
-          txid === undefined ? { task: changed, archived } : { task: changed, txid, archived },
+          txid === undefined
+            ? { task: changed, archived, statusMoved }
+            : { task: changed, txid, archived, statusMoved },
         );
       }),
     ),

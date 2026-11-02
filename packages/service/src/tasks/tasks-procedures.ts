@@ -787,11 +787,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
                 changes.archived,
               ),
             );
-      // Where it stood, read only for a move to Done or Canceled, so a finish is counted where it changed.
-      const finishing =
-        status === TASK_STATUS.DONE || status === TASK_STATUS.CANCELED ? status : undefined;
-      const standing =
-        finishing === undefined ? undefined : (yield* reachedTask(userId, taskId)).status;
       const task = yield* updateTaskCommitted(
         userId,
         taskId,
@@ -821,11 +816,15 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ),
       );
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const { task: plan, txid, archived } = task.value;
+      const { task: plan, txid, archived, statusMoved } = task.value;
       if (archived.length > 0) yield* stoppedInBackground(seams, archived);
-      if (finishing !== undefined && standing !== finishing) {
+      // Counted where this write moved the task to Done or Canceled, as the store read it under the task's lock.
+      if (
+        statusMoved &&
+        (plan.status === TASK_STATUS.DONE || plan.status === TASK_STATUS.CANCELED)
+      ) {
         yield* recordServerEvent(SERVER_EVENT.TASK_FINISH, userId, {
-          status: finishing,
+          status: plan.status,
           by: SERVER_TASK_FINISHER.MEMBER,
         });
       }

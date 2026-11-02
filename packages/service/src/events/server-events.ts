@@ -213,7 +213,7 @@ export const SERVER_AGENT_START_FAILURE = {
   CUT_SHORT: "cut_short",
 } as const;
 
-/** The pull request changes a member makes in Vespin that are counted; every other change is left out. */
+/** The pull request changes a member makes through the app that are counted; every other change is left out. */
 export const SERVER_PULL_REQUEST_ACTION = {
   MERGE: "merge",
   REVIEW: "review",
