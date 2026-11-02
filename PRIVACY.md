@@ -697,8 +697,10 @@ cannot store anything, open a window, or send anything anywhere but the
 requests it makes to the one place it may load from, cdnjs.cloudflare.com, for
 code libraries such as charts and diagrams, which Cloudflare's CDN then sees
 requested from your Mac's or your browser's address. A link inside a page does
-not open. A page is never shared or published: only you can open it, from
-Fullspin.
+not open. A page is never published: it opens only in Fullspin, to whoever can
+open the task or agent it stands on, and in a browser only inside Fullspin's
+own frame, through a link that works for about a minute and loads nowhere
+else.
 
 **Agents' working memory.** Each agent works
 from a session history of its own turns — the model's record of what it read,
