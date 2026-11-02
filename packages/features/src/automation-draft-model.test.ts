@@ -112,16 +112,15 @@ test("a new draft runs at nine on weekdays in the window's zone, and a saved one
   );
 });
 
-test("a draft saves once it is named, told its task, on a schedule Vespin reads at most every 15 minutes, and in a repository", () => {
+test("a draft saves once it is named, told its task, on a schedule Vespin reads at most every 15 minutes, and in a repository where a GitHub event fires it", () => {
   const fresh = automationDraft(undefined, DEFAULTS);
   assert.deepEqual(Object.keys(draftProblems(fresh, false, NOW)).toSorted(), [
     DRAFT_FIELD.NAME,
     DRAFT_FIELD.PROMPT,
-    DRAFT_FIELD.REPOSITORY,
   ]);
 
-  const written = { ...fresh, name: " Sweep ", prompt: "Fix it.", repository: "acme/ledger" };
-  assert.deepEqual(draftProblems(written, false, NOW), {});
+  const written = { ...fresh, name: " Sweep ", prompt: "Fix it." };
+  assert.deepEqual(draftProblems(written, false, NOW), {}, "a schedule works in no repository");
 
   const often = { ...written, schedule: scheduleDraftOf("*/5 * * * *") };
   assert.equal(
@@ -136,8 +135,13 @@ test("a draft saves once it is named, told its task, on a schedule Vespin reads 
   const nowhere = { ...written, timezone: "Mars/Olympus" };
   assert.equal(draftProblems(nowhere, false, NOW)[DRAFT_FIELD.SCHEDULE], "Pick a time zone.");
 
+  const onGitHub = { ...written, triggerKind: AUTOMATION_TRIGGER.GITHUB };
+  assert.deepEqual(draftProblems(onGitHub, false, NOW), {
+    [DRAFT_FIELD.REPOSITORY]: "Choose the repository whose events start it.",
+  });
+  assert.deepEqual(draftProblems({ ...onGitHub, repository: "acme/ledger" }, false, NOW), {});
   assert.deepEqual(
-    draftProblems({ ...written, repository: null }, true, NOW),
+    draftProblems(onGitHub, true, NOW),
     {},
     "a plan's automation works in its plan's repository",
   );

@@ -2087,28 +2087,33 @@ test("a refresh that fails while an automation's page stands keeps the page and 
   assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
 });
 
-test("a new automation with no repository is not created, and the refusal describes the repository chip", async () => {
+test("a new automation with no repository is created to work in none, but not on a GitHub event, whose refusal describes the repository chip", async () => {
   noRecent = true;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
   type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
+  pick(page, "Type", "GitHub event");
   act(() => button("Create automation").click());
   await settle();
 
-  assert.deepEqual(creates, [], "nothing is created without a repository");
-  assert.ok(announced("Choose the repository it works in."), "the refusal is announced");
+  const refusal = "Choose the repository whose events start it.";
+  assert.equal(creates.length, 0, "nothing on a GitHub event is created without a repository");
+  assert.ok(announced(refusal), "the refusal is announced");
   const chip =
     page.querySelector<HTMLButtonElement>(".repository-chip .luke-chip") ??
     assert.fail("no repository chip");
   const ids = chip.getAttribute("aria-describedby")?.split(" ") ?? [];
   assert.ok(
-    ids.some(
-      (id) => document.getElementById(id)?.textContent === "Choose the repository it works in.",
-    ),
+    ids.some((id) => document.getElementById(id)?.textContent === refusal),
     "the refusal describes the chip it is about",
   );
   assert.equal(chip.getAttribute("aria-invalid"), "true");
+
+  pick(page, "Type", "Schedule");
+  act(() => button("Create automation").click());
+  await settle();
+  assert.deepEqual(creates[0]?.repositories, [], "a schedule is created to work in no repository");
 });
 
 test("the repository chosen first is not said again among the others its runs work in", async () => {

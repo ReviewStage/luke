@@ -52,7 +52,8 @@ import {
  * event is chosen with the filters the editor shows, and the hours it waits
  * before the same subject fires it again, which it writes into its guards. The repository the
  * editor shows is the first, where a run starts; any others it was given
- * are kept behind it. A save sends only what changed, so a field the editor does not
+ * are kept behind it, and with none chosen a run works in no repository,
+ * which a GitHub trigger, fired by a repository's events, cannot. A save sends only what changed, so a field the editor does not
  * show, a model or a target, stands as the service holds it. Every word a
  * field's problem says is here, beside the rule it states.
  */
@@ -193,9 +194,9 @@ function cronNumber(field: string | undefined, most: number): number | undefined
   return value <= most ? value : undefined;
 }
 
-/** The repositories a draft's runs work in: the one shown first, then the others it kept, the first among them once. */
+/** The repositories a draft's runs work in: the one shown first, then the others it kept, the first among them once; none where none is chosen. */
 export function draftRepositories(draft: AutomationDraft): readonly string[] {
-  if (draft.repository === null) return draft.alsoRepositories;
+  if (draft.repository === null) return [];
   const first = draft.repository;
   return [first, ...draft.alsoRepositories.filter((repository) => repository !== first)];
 }
@@ -467,8 +468,8 @@ export function repositoryHeld(automation: AutomationSummary | undefined): boole
  * What stops a draft saving, at the field it is about: a name and a task
  * written, a schedule Fullspin reads and that fires no more often than its
  * floor, an integration's filters within their bounds and its cooldown a
- * whole number of hours up to a week, and a repository chosen where none
- * is held (`repositoryHeld`).
+ * whole number of hours up to a week, and a repository chosen for a GitHub
+ * trigger, whose events come from it, where none is held (`repositoryHeld`).
  */
 export function draftProblems(draft: AutomationDraft, held: boolean, now: Date): DraftProblems {
   const name = textProblem(
@@ -500,7 +501,9 @@ export function draftProblems(draft: AutomationDraft, held: boolean, now: Date):
       ? `Wait a whole number of hours, from 1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}.`
       : undefined;
   const repository =
-    !held && draft.repository === null ? "Choose the repository it works in." : undefined;
+    !held && draft.repository === null && draft.triggerKind === AUTOMATION_TRIGGER.GITHUB
+      ? "Choose the repository whose events start it."
+      : undefined;
   const agent =
     draft.target === AUTOMATION_TARGET.SAME_AGENT && draft.agentId === null
       ? "Choose the agent its runs go to."
@@ -543,7 +546,7 @@ export function draftNextRuns(draft: AutomationDraft, now: Date, count: number):
   return runs;
 }
 
-/** The write that makes a draft an automation in the workspace named, its runs on a new agent each, as the service starts one. */
+/** The write that makes a draft an automation in the workspace named, its runs on a new agent each, as the service starts one, in its repositories or in none. */
 export function createRequestOf(
   draft: AutomationDraft,
   workspaceId: string,
@@ -559,7 +562,7 @@ export function createRequestOf(
     archiveSuccessful: draft.archiveSuccessful,
     ...(guards === null ? undefined : { guards }),
   } as const;
-  return draft.repository === null ? made : { ...made, repositories: draftRepositories(draft) };
+  return { ...made, repositories: draftRepositories(draft) };
 }
 
 /** Whether two drafts say the same: what a page compares to know whether anything was written into it. */
@@ -645,7 +648,7 @@ export function changeOf(
   if (draft.archiveSuccessful !== was.archiveSuccessful) {
     change.archiveSuccessful = draft.archiveSuccessful;
   }
-  if (repositoryMoved && draft.repository !== null) change.repositories = draftRepositories(draft);
+  if (repositoryMoved) change.repositories = draftRepositories(draft);
   if (draft.owner !== was.owner) change.scope = draft.owner;
   return Object.keys(change).length === 0 ? undefined : change;
 }
@@ -707,12 +710,12 @@ export function filterValuesOf(text: string): readonly string[] {
 }
 
 /**
- * A draft moved to another repository. An agent works in its own
- * repository, so a same-agent draft lets go of the agent it had chosen,
+ * A draft moved to another repository, or to none. An agent works in its
+ * own repository, so a same-agent draft lets go of the agent it had chosen,
  * which the picker then offers again from the new repository's agents,
  * rather than send its runs to an agent working elsewhere.
  */
-export function withRepository(draft: AutomationDraft, repository: string): AutomationDraft {
+export function withRepository(draft: AutomationDraft, repository: string | null): AutomationDraft {
   if (repository === draft.repository) return draft;
   return { ...draft, repository, agentId: null };
 }

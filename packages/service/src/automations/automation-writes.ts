@@ -61,8 +61,9 @@ import { type EveForAccount, executeAutomationRun } from "./automation-runs.js";
  * write checks is checked once: a schedule must read (five-field cron in a
  * known zone, no more often than every fifteen minutes), a model choice
  * must be one the catalog offers the account, an automation stands on a
- * task that names a repository or on a workspace with repositories its
- * installation reaches. A schedule's next due instant is computed whenever
+ * workspace with the repositories its runs work in, each one its
+ * installation reaches, or none, and a GitHub trigger has at least one
+ * whose events fire it. A schedule's next due instant is computed whenever
  * the automation is made, resumed, or given a new trigger, and cleared
  * while it is paused. A webhook trigger's secret is minted here, kept only
  * as its SHA-256, and answered once, on the write that made it.
@@ -245,6 +246,16 @@ const checkedScope = /* @__PURE__ */ Effect.fnUntraced(function* (
   return scope;
 });
 
+/** Refuses a GitHub trigger on no repository, since only its repositories' events fire one. */
+function checkTriggerRepositories(
+  trigger: AutomationTrigger,
+  repositories: readonly string[],
+): Effect.Effect<void, HostedRefusal> {
+  return trigger.kind === AUTOMATION_TRIGGER.GITHUB && repositories.length === 0
+    ? Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY)
+    : Effect.void;
+}
+
 /**
  * The repositories an automation's runs work in, each as GitHub spells it,
  * where the workspace's installation reaches every one; refused as the
@@ -273,9 +284,9 @@ interface Standing {
 
 /**
  * Where the request puts a new automation, read as the account: on a
- * workspace the account is a member of with repositories its installation
- * reaches; a request naming a task, or no workspace, or a workspace with no
- * repositories, is refused as no request at all.
+ * workspace the account is a member of with the repositories its
+ * installation reaches, none among them; a request naming a task, or no
+ * workspace, or not naming its repositories, is refused as no request at all.
  */
 const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -347,14 +358,7 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       : yield* checkedScope(userId, standing.organizationId, asked.scope);
   const target =
     asked.target === undefined ? undefined : yield* checkedTarget(userId, asked.target);
-  // An automation with no repository has nothing for a target to work in.
-  if (
-    asked.target !== undefined &&
-    asked.repositories === undefined &&
-    standing.repositories.length === 0
-  ) {
-    return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
-  }
+  yield* checkTriggerRepositories(trigger, asked.repositories ?? standing.repositories);
   // Note that new repositories are read through the automation's own workspace, as its runs will reach them.
   const repositories =
     asked.repositories === undefined
@@ -406,6 +410,7 @@ export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   const nextRunAt = yield* firstDue(made.trigger, now);
   const action = yield* checkedAction(userId, made.action);
   const standing = yield* standingOf(userId, made);
+  yield* checkTriggerRepositories(made.trigger, standing.repositories);
   const scope = yield* checkedScope(
     userId,
     standing.organizationId,
