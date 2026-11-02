@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { verify } from "node:crypto";
+import { randomUUID, verify } from "node:crypto";
 import { it } from "@effect/vitest";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
 } from "@luke/database/github-installation-vocabulary";
 import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
+import { createTask, readTask } from "@luke/database/models/task-store";
 import { listWorkspaces } from "@luke/database/models/workspace-store";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
@@ -458,7 +459,39 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
   );
 
   it.effect(
-    "a repository an installation of every repository does not list is gone: renamed, transferred, or deleted",
+    "a repository GitHub renamed is reached under its name now, through the redirect GitHub answers its old name with, and a task kept under the old name follows it",
+    () =>
+      Effect.gen(function* () {
+        const relay = relayInstallation(36);
+        const formerly = `octo-org/relay-before-${randomUUID().slice(0, 8)}`;
+        const fake = githubReaching([relay], undefined, undefined, (sent) =>
+          new URL(sent.url).pathname === `/repos/${formerly}`
+            ? Response.json(memberRepositoryJson({ owner: "octo-org", name: "relay" }, false))
+            : undefined,
+        );
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(workspace, relay);
+        const task = yield* createTask(owner, { organizationId: workspace, repository: formerly });
+        const app = yield* GitHubApp;
+
+        const reach = yield* app
+          .repositoryReach(workspace, formerly, undefined)
+          .pipe(Effect.provide(fake.layer));
+
+        assert.equal(
+          Result.getOrUndefined(Result.map(reach, (reached) => reached.repository.fullName)),
+          "octo-org/relay",
+        );
+        assert.equal(
+          Option.getOrThrow(yield* readTask(owner, task.id)).task.repository,
+          "octo-org/relay",
+        );
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "a repository an installation of every repository does not list, and GitHub answers under no name now, is gone",
     () =>
       Effect.gen(function* () {
         const relay = { ...relayInstallation(34), repositorySelection: "all" as const };

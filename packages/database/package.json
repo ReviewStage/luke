@@ -49,6 +49,7 @@
     "./models/provider-key-seal": "./src/models/provider-key-seal.js",
     "./models/provider-key-store": "./src/models/provider-key-store.js",
     "./models/github-rate-holds": "./src/models/github-rate-holds.js",
+    "./models/github-repositories": "./src/models/github-repositories.js",
     "./models/github-repository-reads": "./src/models/github-repository-reads.js",
     "./models/github-token-store": "./src/models/github-token-store.js",
     "./models/pull-request-chapters-store": "./src/models/pull-request-chapters-store.js",

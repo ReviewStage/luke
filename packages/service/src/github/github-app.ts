@@ -83,6 +83,7 @@ import {
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
 import { InstantColumnSchema } from "@luke/database/models/columns";
+import { noteGitHubRepository } from "@luke/database/models/github-repositories";
 import { account } from "@luke/database/schemas/auth";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import {
@@ -768,6 +769,8 @@ type InstallationRecord = typeof InstallationSchema.Type;
 const UserInstallationsSchema = Schema.Struct({ installations: Schema.Array(InstallationSchema) });
 
 const RepositorySchema = Schema.Struct({
+  /** GitHub's id for the repository, which a rename or a transfer keeps. */
+  id: Schema.Number,
   name: Schema.String,
   full_name: Schema.String,
   owner: Schema.Struct({ login: Schema.String }),
@@ -1468,6 +1471,35 @@ function githubAppService(
     );
 
   /**
+   * The repository a name the installation no longer lists stood for, where
+   * GitHub renamed or transferred it and the installation still reaches it
+   * under its name now; nothing where the name stands for no repository the
+   * installation reaches. GitHub answers a read of a repository under a
+   * name it left behind with a redirect to it
+   * (https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api#follow-redirects),
+   * which the client follows, on a token minted for the installation that
+   * reads no repository it was not given. Every name the store keeps of it
+   * is relabeled to its name now (`@luke/database/models/github-repositories`).
+   */
+  const movedOnInstallation = (reached: GitHubInstallation, fullName: string) =>
+    Effect.gen(function* () {
+      const minted = yield* mint(reached.id, { permissions: INSTALLATION_TOKEN_PERMISSIONS.LIST });
+      const response = yield* send(githubRead(repositoryPath(fullName), minted.token));
+      // Note that any answer but the repository reads as none, so the reach answers why it does not reach it as it would have.
+      const read = yield* Effect.option(readBody(response, RepositorySchema));
+      if (Option.isNone(read) || read.value.full_name === fullName) {
+        return Option.none<GitHubRepository>();
+      }
+      const record = read.value;
+      yield* noteGitHubRepository({
+        id: record.id,
+        fullName: record.full_name,
+        formerly: fullName,
+      });
+      return Option.some(repositoryOf(record));
+    }).pipe(Effect.scoped);
+
+  /**
    * The repository and the installation it is reached through, where the
    * workspace's installation on its owner reaches it, or why it does not:
    * only an installation of this workspace on the owner can reach it, never
@@ -1512,7 +1544,16 @@ function githubAppService(
         });
         return reachedThrough;
       }
-      // Note that an installation given only some repositories cannot tell one it was never given from one renamed or deleted, so it asks for the one GitHub can mend.
+      const moved = yield* movedOnInstallation(onOwner, fullName);
+      if (Option.isSome(moved)) {
+        const reachedRenamed: ReachResult = Result.succeed({
+          access: GITHUB_ACCESS.APP,
+          installation: onOwner,
+          repository: moved.value,
+        });
+        return reachedRenamed;
+      }
+      // Note that an installation given only some repositories cannot tell one it was never given from one deleted, so it asks for the one GitHub can mend.
       return unreached(
         onOwner.repositorySelection === GITHUB_REPOSITORY_SELECTION.SELECTED
           ? {
@@ -1574,6 +1615,14 @@ function githubAppService(
         return unreached(REPOSITORY_UNREACHED.TOKEN_NO_ACCESS);
       }
       const record = yield* readBody(response, TokenRepositorySchema);
+      // Note that GitHub answers a name it renamed or transferred away under the name now, which the store's names move to.
+      if (record.full_name !== fullName) {
+        yield* noteGitHubRepository({
+          id: record.id,
+          fullName: record.full_name,
+          formerly: fullName,
+        });
+      }
       if (record.permissions?.push !== true)
         return unreached(REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH);
       const reachedOn: ReachResult = Result.succeed({

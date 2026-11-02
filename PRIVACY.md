@@ -263,6 +263,14 @@ service stores its name and when you pinned it under your account, so the pin
 follows you to every Mac you sign in on. Unpinning deletes that record, and
 deleting your account removes them all.
 
+**Renamed repositories.** So that a task, an agent, an automation, or a pin
+keeps its repository when you rename or transfer it on GitHub, our service
+keeps each repository's GitHub id with the name GitHub last gave it, as
+GitHub's deliveries to the Vespin GitHub App and its answers name them, and
+moves every stored name of a repository to its new one when GitHub reports
+it. That record names no account and holds nothing else; it is not removed
+with an account.
+
 **Sidebar sections.** When you make a section in the sidebar, our service
 stores its title, its icon (an emoji, or an icon's name and the color you
 chose for it), its place among your sections, and the workspace
