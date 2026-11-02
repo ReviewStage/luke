@@ -3054,13 +3054,18 @@ export function agentConversation(
   return findAgentConversation(agentId);
 }
 
-const findSettledTurnAgentKind = SqlSchema.findOneOption({
+const SettledTurnAgentSchema = Schema.Struct({
+  kind: Schema.Literals(Object.values(AGENT_KIND)),
+  organizationId: Schema.String,
+});
+
+const findSettledTurnAgent = SqlSchema.findOneOption({
   Request: Schema.String,
-  Result: Schema.Struct({ kind: Schema.Literals(Object.values(AGENT_KIND)) }),
+  Result: SettledTurnAgentSchema,
   execute: (turnId) =>
     Database.use((db) =>
       db
-        .select({ kind: agentTable.kind })
+        .select({ kind: agentTable.kind, organizationId: agentTable.organizationId })
         .from(turns)
         .innerJoin(agentTable, eq(agentTable.conversationId, turns.conversationId))
         .where(
@@ -3072,17 +3077,19 @@ const findSettledTurnAgentKind = SqlSchema.findOneOption({
     ),
 });
 
+/** What the agent whose turn settled is, and the workspace it belongs to. */
+export type SettledTurnAgent = typeof SettledTurnAgentSchema.Type;
+
 /**
- * What the agent whose turn this is is, where the turn stands ended;
- * nothing where no agent stands on its conversation or the turn's end was
- * rolled back with the transaction that wrote it. Only for a turn the
- * service settled itself, because it reads past any account's gate.
+ * What the agent whose turn this is is, and its workspace, where the turn
+ * stands ended; nothing where no agent stands on its conversation or the
+ * turn's end was rolled back with the transaction that wrote it. Only for a
+ * turn the service settled itself, because it reads past any account's gate.
  */
-export function settledTurnAgentKind(turnId: string): AgentStoreEffect<Option.Option<AgentKind>> {
-  return Effect.map(
-    findSettledTurnAgentKind(turnId),
-    Option.map((row) => row.kind),
-  );
+export function settledTurnAgent(
+  turnId: string,
+): AgentStoreEffect<Option.Option<SettledTurnAgent>> {
+  return findSettledTurnAgent(turnId);
 }
 
 /**

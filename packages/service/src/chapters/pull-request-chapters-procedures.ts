@@ -85,6 +85,7 @@ import {
   recordServerEvent,
   SERVER_CHAPTERS_OUTCOME,
   SERVER_EVENT,
+  type ServerEventActor,
 } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import {
@@ -304,7 +305,7 @@ function hunksOf(generated: GeneratedChapters): number {
 const generated = /* @__PURE__ */ Effect.fnUntraced(function* (
   claim: ChapterClaim,
   model: ChaptersModel,
-  userId: string,
+  actor: ServerEventActor<typeof SERVER_EVENT.PULL_REQUEST_CHAPTERS_GENERATE>,
   read: {
     readonly title: string;
     readonly body: string | null;
@@ -316,7 +317,7 @@ const generated = /* @__PURE__ */ Effect.fnUntraced(function* (
     Effect.gen(function* () {
       yield* hostedStoreOrUnavailable(outcome);
       const duration = (yield* Clock.currentTimeMillis) - started;
-      yield* recordServerEvent(SERVER_EVENT.PULL_REQUEST_CHAPTERS_GENERATE, userId, {
+      yield* recordServerEvent(SERVER_EVENT.PULL_REQUEST_CHAPTERS_GENERATE, actor, {
         ...counted,
         duration_ms: duration,
       });
@@ -443,7 +444,12 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
         }),
       );
       if (claimed.outcome === CHAPTER_CLAIM_OUTCOME.CLAIMED) {
-        yield* generated(claimed.claim, model, context.userId, read);
+        yield* generated(
+          claimed.claim,
+          model,
+          { userId: context.userId, workspaceId: organizationId },
+          read,
+        );
       }
       return yield* answerOf(subject.value, pullRequest.number, true);
     }),

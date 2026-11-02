@@ -16,7 +16,12 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { type Agent, readAgent, readVisibleAgent } from "@luke/database/models/agent-store";
+import {
+  type Agent,
+  readAgent,
+  readVisibleAgent,
+  readVisibleAgentWorkspace,
+} from "@luke/database/models/agent-store";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
@@ -57,7 +62,7 @@ import { titleInboxThread } from "../agents/coder-host/title.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { HostedEnvironment } from "../environment.js";
-import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
+import { recordServerEvent, recordServerEventIn, SERVER_EVENT } from "../events/server-events.js";
 import { afterResponse } from "../http/after-response.js";
 import {
   HOSTED_REFUSAL,
@@ -206,7 +211,7 @@ const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly clientKey: string;
     readonly attachments: readonly AgentAttachment[];
   },
-  counted: Effect.Effect<void>,
+  counted: Effect.Effect<void, never, DatabaseServices>,
 ) {
   const { text, clientKey, attachments } = message;
   const handedOver = Effect.gen(function* () {
@@ -267,7 +272,12 @@ const acknowledged = /* @__PURE__ */ Effect.fnUntraced(function* (
   const counted =
     stored.value.answerKey === clientKey
       ? Effect.void
-      : recordServerEvent(SERVER_EVENT.INBOX_ANSWER_SEND, userId, {});
+      : recordServerEventIn(
+          SERVER_EVENT.INBOX_ANSWER_SEND,
+          userId,
+          readVisibleAgentWorkspace(userId, stored.value.item.agentId),
+          {},
+        );
   const written = yield* takenNod(userId, stored.value, asked);
   if (written === undefined) {
     // Not taken: the item moved on, or another answer settled it; it is answered as it now stands.
@@ -340,11 +350,18 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
   const counted =
     outcome === INBOX_ASK_ANSWER.TAKEN
       ? Effect.andThen(
-          recordServerEvent(SERVER_EVENT.INBOX_ANSWER_SEND, userId, {}),
-          recordServerEvent(SERVER_EVENT.THREAD_POST, userId, {
-            answered_ask: true,
-            has_media: attachments.length > 0,
-          }),
+          recordServerEventIn(
+            SERVER_EVENT.INBOX_ANSWER_SEND,
+            userId,
+            readVisibleAgentWorkspace(userId, item.agentId),
+            {},
+          ),
+          recordServerEventIn(
+            SERVER_EVENT.THREAD_POST,
+            userId,
+            readVisibleAgentWorkspace(userId, item.agentId),
+            { answered_ask: true, has_media: attachments.length > 0 },
+          ),
         )
       : Effect.void;
   const reply = inboxAnswersReply(answers, text);
@@ -528,10 +545,12 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   // Counted once the hand-off stands, since a failed one takes the message back above.
   if (outcome === INBOX_MESSAGE_OUTCOME.WRITTEN) {
-    yield* recordServerEvent(SERVER_EVENT.THREAD_POST, userId, {
-      answered_ask: false,
-      has_media: attachments.length > 0,
-    });
+    yield* recordServerEventIn(
+      SERVER_EVENT.THREAD_POST,
+      userId,
+      readVisibleAgentWorkspace(userId, item.agentId),
+      { answered_ask: false, has_media: attachments.length > 0 },
+    );
   }
   return { item };
 });
@@ -598,10 +617,11 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   // Counted once the hand-off stands, since a failed one takes the thread back above.
   if (outcome === INBOX_MESSAGE_OUTCOME.WRITTEN) {
-    yield* recordServerEvent(SERVER_EVENT.THREAD_POST, userId, {
-      answered_ask: false,
-      has_media: attachments.length > 0,
-    });
+    yield* recordServerEvent(
+      SERVER_EVENT.THREAD_POST,
+      { userId, workspaceId: agent.value.organizationId },
+      { answered_ask: false, has_media: attachments.length > 0 },
+    );
   }
   // Note that only the write that started the thread titles it, so a repeat asks no model again.
   if (!asked.titled && outcome === INBOX_MESSAGE_OUTCOME.WRITTEN) {

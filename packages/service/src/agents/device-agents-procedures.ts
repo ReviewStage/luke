@@ -237,9 +237,13 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
         pollHostPairing(hostSecretHash(context.pollSecret), minted.hash),
       );
       if (polled.status !== HOST_PAIRING_POLL_STATUS.APPROVED) return { status: polled.status };
-      yield* recordServerEvent(SERVER_EVENT.HOST_INSTALL, polled.userId, {
-        kind: SERVER_HOST_KIND.LUKE_HOST,
-      });
+      yield* recordServerEvent(
+        SERVER_EVENT.HOST_INSTALL,
+        { userId: polled.userId },
+        {
+          kind: SERVER_HOST_KIND.LUKE_HOST,
+        },
+      );
       return { status: polled.status, deviceId: polled.deviceId, deviceSecret: minted.secret };
     }),
     enrollOwn: signedIn.enrollOwn.effect(function* ({ context, input }) {
@@ -259,9 +263,13 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       );
       if (!enrolled) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       if (!before.some((host) => host.id === input.deviceId)) {
-        yield* recordServerEvent(SERVER_EVENT.HOST_INSTALL, userId, {
-          kind: SERVER_HOST_KIND.THIS_MAC,
-        });
+        yield* recordServerEvent(
+          SERVER_EVENT.HOST_INSTALL,
+          { userId },
+          {
+            kind: SERVER_HOST_KIND.THIS_MAC,
+          },
+        );
       }
       return { deviceId: input.deviceId, deviceSecret: minted.secret };
     }),

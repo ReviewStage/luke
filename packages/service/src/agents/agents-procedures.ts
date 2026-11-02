@@ -482,9 +482,13 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           yield* stoppedInBackground(seams, [agent]);
           // Counted only where this write archived an agent standing unarchived, under the member who archived it.
           if (archived.value.archivedNow) {
-            yield* recordServerEvent(SERVER_EVENT.AGENT_ARCHIVE, userId, {
-              agent_kind: agent.kind,
-            });
+            yield* recordServerEvent(
+              SERVER_EVENT.AGENT_ARCHIVE,
+              { userId, workspaceId: agent.organizationId },
+              {
+                agent_kind: agent.kind,
+              },
+            );
           }
         }
         return yield* committedAgent(userId, archived);
@@ -519,14 +523,22 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         yield* runnerChoiceApplied(changed.value.agent);
         // Counted for each of the two the member's change moved, under the member; a window alone counts none.
         if (choice.model !== agent.model) {
-          yield* recordServerEvent(SERVER_EVENT.AGENT_SETTINGS_CHANGE, userId, {
-            changed: SERVER_AGENT_SETTING.MODEL,
-          });
+          yield* recordServerEvent(
+            SERVER_EVENT.AGENT_SETTINGS_CHANGE,
+            { userId, workspaceId: agent.organizationId },
+            {
+              changed: SERVER_AGENT_SETTING.MODEL,
+            },
+          );
         }
         if (choice.effort !== agent.effort) {
-          yield* recordServerEvent(SERVER_EVENT.AGENT_SETTINGS_CHANGE, userId, {
-            changed: SERVER_AGENT_SETTING.EFFORT,
-          });
+          yield* recordServerEvent(
+            SERVER_EVENT.AGENT_SETTINGS_CHANGE,
+            { userId, workspaceId: agent.organizationId },
+            {
+              changed: SERVER_AGENT_SETTING.EFFORT,
+            },
+          );
         }
       }
       return yield* committedAgent(userId, changed);
@@ -562,7 +574,11 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const stopped = yield* stoppedTurn(seams, writer, context.request, userId, agent);
       // Counted only where the Stop stopped a turn, under the member who pressed it.
       if (stopped) {
-        yield* recordServerEvent(SERVER_EVENT.AGENT_STOP, userId, { agent_kind: agent.kind });
+        yield* recordServerEvent(
+          SERVER_EVENT.AGENT_STOP,
+          { userId, workspaceId: agent.organizationId },
+          { agent_kind: agent.kind },
+        );
       }
       return { agent: yield* summaryOf(userId, agent) };
     }),

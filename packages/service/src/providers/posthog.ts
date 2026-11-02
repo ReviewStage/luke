@@ -60,8 +60,11 @@ export interface PosthogPerson {
   email?: string;
 }
 
+/** A group's key under each group type (`$groups`), or the properties a `$groupidentify` sets on one (`$group_set`). */
+export type PosthogGroupFields = Readonly<Record<string, string>>;
+
 /** Every kind of value one of this build's event properties may hold. */
-type PosthogPropertyValue = string | number | boolean | PosthogPerson;
+type PosthogPropertyValue = string | number | boolean | PosthogPerson | PosthogGroupFields;
 
 /** One item of the documented batch document, as this build builds it. */
 export interface PosthogBatchItem {

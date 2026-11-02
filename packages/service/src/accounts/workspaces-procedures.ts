@@ -58,7 +58,7 @@ import {
   type WorkspaceRole,
 } from "@luke/features/workspace-wire";
 import { type Cause, Effect, Option } from "effect";
-import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
+import { recordServerEvent, SERVER_EVENT, workspaceRenamed } from "../events/server-events.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -165,7 +165,11 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
       const organizationId = yield* pluginWriteOrUnavailable(
         createWorkspace(context.userId, input.name, seams.workspaces),
       );
-      yield* recordServerEvent(SERVER_EVENT.WORKSPACE_CREATE, context.userId, {});
+      yield* recordServerEvent(
+        SERVER_EVENT.WORKSPACE_CREATE,
+        { userId: context.userId, workspaceId: organizationId },
+        {},
+      );
       return { workspace: yield* answeredWorkspace(context.userId, organizationId) };
     }),
     members: account.members.effect(function* ({ context, input }) {
@@ -264,6 +268,7 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
       yield* pluginCallOrRefused(
         seams.members.updateOrganization({ headers, organizationId: workspace.id, data: { name } }),
       );
+      yield* workspaceRenamed(userId, workspace.id);
       return { workspace: yield* answeredWorkspace(userId, workspace.id) };
     }),
     /**

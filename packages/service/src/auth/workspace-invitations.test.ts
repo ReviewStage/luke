@@ -189,7 +189,11 @@ test("an admin invites by address, and the invitee reads the invitation and acce
     assert.equal(accepted.status, 200);
     // Note that the acceptance is counted under the invitee, and the inviter's own send is the procedure's to count.
     assert.deepEqual(counts, [
-      { name: "workspace:invite_accept", userId: invitee.id, properties: {} },
+      {
+        name: "workspace:invite_accept",
+        actor: { userId: invitee.id, workspaceId },
+        properties: {},
+      },
     ]);
     assert.deepEqual(Schema.decodeUnknownSync(AcceptedSchema)(await accepted.json()).member, {
       organizationId: workspaceId,
