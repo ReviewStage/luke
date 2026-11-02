@@ -791,11 +791,15 @@ const discardedAt = (
 
 /** A Start that failed to open its agent's session, counted under the member who made it, in the count's words. */
 const startFailed = (userId: string, agent: Agent, { failure, startedBy }: StartFailed) =>
-  recordServerEvent(SERVER_EVENT.AGENT_START_FAIL, userId, {
-    failure,
-    started_by: startedBy,
-    agent_kind: agent.kind,
-  });
+  recordServerEvent(
+    SERVER_EVENT.AGENT_START_FAIL,
+    { userId, workspaceId: agent.organizationId },
+    {
+      failure,
+      started_by: startedBy,
+      agent_kind: agent.kind,
+    },
+  );
 
 /** Why a Start failed, and who started it, as the count words them. */
 interface StartFailed {
@@ -1382,21 +1386,25 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       if (Option.isSome(assigned)) committed = assigned.value.txid;
     }
   }
-  yield* recordServerEvent(SERVER_EVENT.AGENT_START, userId, {
-    model: choice.model,
-    effort: choice.effort,
-    start_kind:
-      from === undefined
-        ? SERVER_AGENT_START_KIND.FRESH
-        : continued
-          ? SERVER_AGENT_START_KIND.CONTINUE
-          : SERVER_AGENT_START_KIND.FORK,
-    is_from_automation: automationRun(ask) !== undefined,
-    // An agent's `start_agent` names its starter, an automation's run names its run, and a member's Start neither.
-    started_by: starterOf(ask),
-    has_task: ask.taskId !== null,
-    agent_kind: agent.kind,
-  });
+  yield* recordServerEvent(
+    SERVER_EVENT.AGENT_START,
+    { userId, workspaceId: agent.organizationId },
+    {
+      model: choice.model,
+      effort: choice.effort,
+      start_kind:
+        from === undefined
+          ? SERVER_AGENT_START_KIND.FRESH
+          : continued
+            ? SERVER_AGENT_START_KIND.CONTINUE
+            : SERVER_AGENT_START_KIND.FORK,
+      is_from_automation: automationRun(ask) !== undefined,
+      // An agent's `start_agent` names its starter, an automation's run names its run, and a member's Start neither.
+      started_by: starterOf(ask),
+      has_task: ask.taskId !== null,
+      agent_kind: agent.kind,
+    },
+  );
   return committed === undefined ? { agent, created } : { agent, created, txid: committed };
 });
 

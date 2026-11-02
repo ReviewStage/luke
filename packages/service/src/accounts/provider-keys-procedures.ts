@@ -204,7 +204,7 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
         yield* hostedStoreOrUnavailable(
           saveProviderKey(userId, provider, kind, sealed, providerKeyHint(key), null, now),
         );
-        yield* recordServerEvent(SERVER_EVENT.PROVIDER_KEY_CREATE, userId, { provider });
+        yield* recordServerEvent(SERVER_EVENT.PROVIDER_KEY_CREATE, { userId }, { provider });
         return yield* keysAnswer(userId, ring);
       }
       // An Anthropic key is asked about fast mode beside the check, which the catalog offers by; OpenAI has none we run.
@@ -231,7 +231,7 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
           now,
         ),
       );
-      yield* recordServerEvent(SERVER_EVENT.PROVIDER_KEY_CREATE, userId, { provider });
+      yield* recordServerEvent(SERVER_EVENT.PROVIDER_KEY_CREATE, { userId }, { provider });
       return yield* keysAnswer(userId, ring);
     }),
 
@@ -295,9 +295,13 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
           accessExpiresAt,
         ),
       );
-      yield* recordServerEvent(SERVER_EVENT.PROVIDER_KEY_CREATE, userId, {
-        provider: PROVIDER_KEY_PROVIDER.OPENAI,
-      });
+      yield* recordServerEvent(
+        SERVER_EVENT.PROVIDER_KEY_CREATE,
+        { userId },
+        {
+          provider: PROVIDER_KEY_PROVIDER.OPENAI,
+        },
+      );
       return yield* keysAnswer(userId, ring);
     }),
   };

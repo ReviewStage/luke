@@ -271,9 +271,13 @@ const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
     seams.completeSignIn(row.userId, row.connectionName, state, accountName),
   );
   if (completed) {
-    yield* recordServerEvent(SERVER_EVENT.INTEGRATION_CONNECTION_CREATE, row.userId, {
-      provider: row.provider,
-    });
+    yield* recordServerEvent(
+      SERVER_EVENT.INTEGRATION_CONNECTION_CREATE,
+      { userId: row.userId },
+      {
+        provider: row.provider,
+      },
+    );
   }
   return { completed, ...(accountName !== undefined ? { accountName } : undefined) };
 });
@@ -800,9 +804,13 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
       if (row === undefined || (yield* hostedStoreOrUnavailable(seams.deleteAccount(row)))) {
         if (row !== undefined) {
           yield* revokeIntegrationGrant(row);
-          yield* recordServerEvent(SERVER_EVENT.INTEGRATION_CONNECTION_DELETE, userId, {
-            provider: row.provider,
-          });
+          yield* recordServerEvent(
+            SERVER_EVENT.INTEGRATION_CONNECTION_DELETE,
+            { userId },
+            {
+              provider: row.provider,
+            },
+          );
         }
         return { status: INTEGRATION_STATUS.DISCONNECTED };
       }

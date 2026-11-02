@@ -15,6 +15,7 @@ import {
   recordServerEvent,
   SERVER_EVENT,
   SERVER_SIGN_IN_METHOD,
+  type ServerEventActor,
   type ServerEventProperties,
 } from "../events/server-events.js";
 
@@ -23,11 +24,11 @@ type AuthCountName =
   | typeof SERVER_EVENT.WORKSPACE_INVITE_ACCEPT
   | typeof SERVER_EVENT.GITHUB_ACCOUNT_LINK;
 
-/** One count a hook noted: a server event, with the account it is under and its own properties. */
+/** One count a hook noted: a server event, with the account it is under, its workspace where it has one, and its own properties. */
 export type AuthCount = {
   [Name in AuthCountName]: {
     readonly name: Name;
-    readonly userId: string;
+    readonly actor: ServerEventActor<Name>;
     readonly properties: ServerEventProperties[Name];
   };
 }[AuthCountName];
@@ -70,11 +71,11 @@ export async function withAuthCounts<A>(
 export function recordAuthCount(count: AuthCount) {
   switch (count.name) {
     case SERVER_EVENT.ACCOUNT_SIGN_UP:
-      return recordServerEvent(count.name, count.userId, count.properties);
+      return recordServerEvent(count.name, count.actor, count.properties);
     case SERVER_EVENT.WORKSPACE_INVITE_ACCEPT:
-      return recordServerEvent(count.name, count.userId, count.properties);
+      return recordServerEvent(count.name, count.actor, count.properties);
     case SERVER_EVENT.GITHUB_ACCOUNT_LINK:
-      return recordServerEvent(count.name, count.userId, count.properties);
+      return recordServerEvent(count.name, count.actor, count.properties);
   }
 }
 
@@ -93,7 +94,7 @@ export const authDatabaseHooks = {
       after: async (user: { readonly id: string }, request: HookRequest | null) => {
         countFromAuth({
           name: SERVER_EVENT.ACCOUNT_SIGN_UP,
-          userId: user.id,
+          actor: { userId: user.id },
           properties: { method: signInMethodOf(request) },
         });
       },
@@ -107,12 +108,12 @@ export const authDatabaseHooks = {
           .getStore()
           ?.some(
             (count) =>
-              count.name === SERVER_EVENT.ACCOUNT_SIGN_UP && count.userId === account.userId,
+              count.name === SERVER_EVENT.ACCOUNT_SIGN_UP && count.actor.userId === account.userId,
           );
         if (signedUpHere === true) return;
         countFromAuth({
           name: SERVER_EVENT.GITHUB_ACCOUNT_LINK,
-          userId: account.userId,
+          actor: { userId: account.userId },
           properties: {},
         });
       },
@@ -120,12 +121,15 @@ export const authDatabaseHooks = {
   },
 } as const;
 
-/** The organization plugin's `organizationHooks`: an invitation accepted is counted under the account that accepted it. */
+/** The organization plugin's `organizationHooks`: an invitation accepted is counted under the account that accepted it, in the workspace it joined. */
 export const authOrganizationHooks = {
-  afterAcceptInvitation: async (accepted: { readonly user: { readonly id: string } }) => {
+  afterAcceptInvitation: async (accepted: {
+    readonly user: { readonly id: string };
+    readonly organization: { readonly id: string };
+  }) => {
     countFromAuth({
       name: SERVER_EVENT.WORKSPACE_INVITE_ACCEPT,
-      userId: accepted.user.id,
+      actor: { userId: accepted.user.id, workspaceId: accepted.organization.id },
       properties: {},
     });
   },

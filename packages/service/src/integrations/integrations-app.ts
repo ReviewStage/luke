@@ -171,9 +171,13 @@ const callbackLanding = /* @__PURE__ */ Effect.fnUntraced(function* (
     seams.completeSignIn(row.userId, row.connectionName, state, issued.success.accountName),
   );
   if (completed) {
-    yield* recordServerEvent(SERVER_EVENT.INTEGRATION_CONNECTION_CREATE, row.userId, {
-      provider: row.provider,
-    });
+    yield* recordServerEvent(
+      SERVER_EVENT.INTEGRATION_CONNECTION_CREATE,
+      { userId: row.userId },
+      {
+        provider: row.provider,
+      },
+    );
   }
   // A Disconnect pressed while the browser was away, or a sign-in begun again, wins: this one completes nothing.
   return landed(

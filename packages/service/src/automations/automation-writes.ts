@@ -449,10 +449,14 @@ export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
       txid: undefined,
     };
   }
-  yield* recordServerEvent(SERVER_EVENT.AUTOMATION_CREATE, userId, {
-    trigger_kind: made.trigger.kind,
-    source,
-  });
+  yield* recordServerEvent(
+    SERVER_EVENT.AUTOMATION_CREATE,
+    { userId, workspaceId: standing.organizationId },
+    {
+      trigger_kind: made.trigger.kind,
+      source,
+    },
+  );
   return {
     automation: yield* summaryOf(userId, created.value.automation),
     webhookSecret: webhook?.secret,

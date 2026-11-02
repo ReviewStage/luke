@@ -135,7 +135,7 @@ export const webServices = Layer.mergeAll(
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
   pullRequestLinksLayer,
   productAnalyticsFromEnvironment.pipe(
-    Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment)),
+    Layer.provide(Layer.mergeAll(FetchHttpClient.layer, hostedEnvironment, webSqlClient)),
   ),
   invitationMailFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer)),
 ).pipe(Layer.provide(webConfigProvider));

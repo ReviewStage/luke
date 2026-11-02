@@ -661,9 +661,13 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ),
         );
       }
-      yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
-        source: SERVER_TASK_SOURCE.SIDEBAR,
-      });
+      yield* recordServerEvent(
+        SERVER_EVENT.TASK_CREATE,
+        { userId, workspaceId: organizationId },
+        {
+          source: SERVER_TASK_SOURCE.SIDEBAR,
+        },
+      );
       const answer: TaskStartAnswer =
         agent === undefined
           ? { plan: stored.task }
@@ -823,10 +827,14 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         statusMoved &&
         (plan.status === TASK_STATUS.DONE || plan.status === TASK_STATUS.CANCELED)
       ) {
-        yield* recordServerEvent(SERVER_EVENT.TASK_FINISH, userId, {
-          status: plan.status,
-          by: SERVER_TASK_FINISHER.MEMBER,
-        });
+        yield* recordServerEvent(
+          SERVER_EVENT.TASK_FINISH,
+          { userId, workspaceId: plan.workspaceId },
+          {
+            status: plan.status,
+            by: SERVER_TASK_FINISHER.MEMBER,
+          },
+        );
       }
       return txid === undefined ? { plan } : { plan, txid };
     }),
@@ -939,7 +947,11 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const saved = yield* saveDeveloperEdit({ userId: context.userId, taskId }, input.body);
       switch (saved.status) {
         case PLAN_SAVE_STATUS.SAVED:
-          yield* recordServerEvent(SERVER_EVENT.PLAN_EDIT, context.userId, {});
+          yield* recordServerEvent(
+            SERVER_EVENT.PLAN_EDIT,
+            { userId: context.userId, workspaceId: saved.task.workspaceId },
+            {},
+          );
           return { plan: saved.task };
         case PLAN_SAVE_STATUS.CONFLICT:
           return {

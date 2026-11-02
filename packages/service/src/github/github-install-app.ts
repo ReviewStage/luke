@@ -228,7 +228,11 @@ const connectInstallation = /* @__PURE__ */ Effect.fn("web/connectInstallation")
     linked === LINK_OUTCOME.LINKED &&
     !held.some((each) => each.installationId === installationId)
   ) {
-    yield* recordServerEvent(SERVER_EVENT.GITHUB_APP_INSTALL, userId, {});
+    yield* recordServerEvent(
+      SERVER_EVENT.GITHUB_APP_INSTALL,
+      { userId, workspaceId: organizationId },
+      {},
+    );
   }
   return LANDED_ON_LINK[linked];
 });
