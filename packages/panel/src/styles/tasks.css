@@ -1988,7 +1988,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   container: composer luke-room / inline-size;
 }
 
-.agent-composer-actions > :is(.agent-servers, .agent-context) {
+.agent-composer-actions > .agent-context {
   flex: none;
 }
 
@@ -2000,18 +2000,17 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   min-width: 0;
 }
 
-/* Too narrow for every press: the ⋯ takes in the MCP servers, the
-   context ring, and the microphone. The servers' and the
-   ring's boxes stay, out of the row at its right end, so a popover the ⋯
-   opens for them hangs where the ⋯ stands. */
+/* Too narrow for every press: the ⋯ takes in the context ring and the
+   microphone. The ring's box stays, out of the row at its right end, so
+   the popover the ⋯ opens for it hangs where the ⋯ stands. */
 /* off-scale: 400px, a card under which the box folds its own presses into its ⋯ (composer-foot.css) */
 @container composer (width < 400px) {
-  .agent-composer :is(.agent-servers-button, .agent-context-button),
+  .agent-composer .agent-context-button,
   .agent-composer > form:not(.inbox-answer) .dictate-button {
     display: none;
   }
 
-  .agent-composer-actions > :is(.agent-servers, .agent-context) {
+  .agent-composer-actions > .agent-context {
     position: absolute;
     top: 0;
     right: 0;
@@ -2023,8 +2022,8 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   }
 }
 
-/* The narrowest: the + goes into the ⋯ too, leaving what the agent
-   published, the model, the ⋯, and Send. */
+/* The narrowest: the + goes into the ⋯ too, its menu's rows with it,
+   leaving what the agent published, the model, the ⋯, and Send. */
 @container composer (width < 240px) {
   .agent-composer .agent-composer-attach {
     display: none;
