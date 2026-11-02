@@ -1,5 +1,5 @@
 /**
- * link-site.ts -- the well-known sites a link is drawn as a chip of, though no integration of Fullspin's stands behind them, and what each one's address says of the page it opens.
+ * link-site.ts -- the well-known sites a link is drawn as a chip of, though no integration of ours stands behind them, and what each one's address says of the page it opens.
  *
  * A link to a page of one of the integrations is a mention of it
  * (`mention-link.ts`), drawn with its provider's mark. A few sites are

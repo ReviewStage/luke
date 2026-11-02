@@ -1068,7 +1068,7 @@ interface RecordedLine {
 /**
  * P16's recording cut into the launches P20's runner makes of it, each as
  * the events it posts: the notifications app-server sent, an ACCEPTED for
- * each of Vespin's lines where the runner's `turn/start` or `turn/steer` hands
+ * each of our lines where the runner's `turn/start` or `turn/steer` hands
  * one over, and the launch's END. The first launch runs the workflow turn
  * (steered once), the second the `sleep 600` turn it stops, and the third,
  * after a restart, the resumed thread's turn.
@@ -1212,6 +1212,62 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         );
         const routing = yield* readAgentRouting(agent.userId, agent.agentId);
         assert.equal(Option.getOrThrow(routing).nativeSession, THREAD);
+      }),
+  );
+
+  it.effect(
+    "Claude Code's TaskStop and SendMessage and Codex's view_image are each kept as a call",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
+        const called = (id: string, name: string, input: WireRecord, text: string) => [
+          { type: "assistant", message: { content: [{ type: "tool_use", id, name, input }] } },
+          {
+            type: "user",
+            message: {
+              role: "user",
+              content: [
+                { type: "tool_result", tool_use_id: id, content: [{ type: "text", text }] },
+              ],
+            },
+          },
+        ];
+        const claude = yield* agentOn(HARNESS.CLAUDE_CODE, ["Stop the server."]);
+        const claudeTurn: WireValue[] = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: claude.lineId },
+          ...[
+            { type: "system", subtype: "init" },
+            ...called("toolu_stop", "TaskStop", { task_id: "b7k2" }, "Stopped b7k2"),
+            ...called("toolu_send", "SendMessage", { to: "worker", message: "Also" }, "Sent"),
+            { type: "result", subtype: "success", is_error: false, usage: {} },
+          ].map((message) => ({ ...message, ...envelope })),
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+        ];
+        const codex = yield* agentOn(HARNESS.CODEX, ["Look at the screenshot."]);
+        const view = { type: "imageView", id: "call_view", path: "/tmp/luke/home.png" };
+        const codexTurn: WireValue[] = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: codex.lineId },
+          notification("turn/started", { turn: { id: "turn-1" } }),
+          notification("item/completed", { item: view }),
+          notification("turn/completed", { turn: { id: "turn-1", status: "completed" } }),
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+        ];
+        // SAFETY: each message above is one the pinned SDK, app-server, or the runner emits, written in its JSON shape.
+        const events = (turn: readonly WireValue[]) =>
+          turn.map((message, sequence) => ({ sequence, message }) as RunnerEvent);
+        yield* post(claude.bearer, events(claudeTurn));
+        yield* post(codex.bearer, events(codexTurn));
+        const calls = (conversationId: string) =>
+          Effect.map(transcriptOf(conversationId), ({ rows }) =>
+            rows.flatMap((row) => row.parts.map((part) => part.type)),
+          );
+
+        const claudeCalls = yield* calls(claude.target.conversationId);
+        const codexCalls = yield* calls(codex.target.conversationId);
+        assert.ok(claudeCalls.includes("tool-TaskStop"), String(claudeCalls));
+        assert.ok(claudeCalls.includes("tool-SendMessage"), String(claudeCalls));
+        assert.ok(codexCalls.includes("tool-imageView"), String(codexCalls));
       }),
   );
 

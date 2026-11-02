@@ -16,7 +16,7 @@ import { useAct } from "../act.js";
 import { deviceSetupWords } from "../device-setup.js";
 
 /**
- * this-mac-host-row.tsx -- where This Mac's `luke-host` stands, as Settings › Hosts draws it: nothing beyond the machine's own line while it runs, and otherwise not turned on with Turn on, getting ready, not running yet, waiting for approval in Login Items, removed from Fullspin with Turn on again, or a turn-on or setup that failed with why and Retry.
+ * this-mac-host-row.tsx -- where This Mac's `luke-host` stands, as Settings › Hosts draws it: nothing beyond the machine's own line while it runs, and otherwise not turned on with Turn on, getting ready, not running yet, waiting for approval in Login Items, removed from the app with Turn on again, or a turn-on or setup that failed with why and Retry.
  *
  * A setup is said in the words every host's row says it in
  * (`setupLineOf`), so This Mac getting ready or failing to set up reads as

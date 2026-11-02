@@ -1,5 +1,5 @@
 /**
- * github-app-fake.ts -- the Vespin GitHub App over a GitHub that answers from a test's own script, a workspace's connected installation, and the account rows a sign-in leaves.
+ * github-app-fake.ts -- our GitHub App over a GitHub that answers from a test's own script, a workspace's connected installation, and the account rows a sign-in leaves.
  *
  * A suite stands the real `GitHubApp` over fixed settings and a fake
  * `HttpClient`, so what it holds is what the service asks GitHub and what it
@@ -97,7 +97,7 @@ export const GITHUB_FIXTURE_MEMBER = {
 export const GITHUB_FIXTURE_INSTALLATION_TOKEN = "ghs_fixture_installation_token";
 
 /** The token the fake App mints for listing one installation's repositories, naming the installation so the listing knows whose it is. */
-function listingTokenOf(installationId: number): string {
+export function listingTokenOf(installationId: number): string {
   return `ghs_fixture_listing_${installationId}`;
 }
 
@@ -187,10 +187,23 @@ const FIXTURE_INSTALLATION_PERMISSIONS = {
   pull_requests: "write",
 } as const;
 
+/**
+ * GitHub's id for a repository as a test names it: one per name in any
+ * case, since every reach records the id under its name and two names under
+ * one id read as a rename.
+ */
+export function repositoryIdOf(fixture: RepositoryFixture): number {
+  let hash = 2_166_136_261;
+  for (const char of `${fixture.owner}/${fixture.name}`.toLowerCase()) {
+    hash = Math.imul(hash ^ (char.codePointAt(0) ?? 0), 16_777_619) >>> 0;
+  }
+  return 1_000 + (hash % 1_000_000_000);
+}
+
 /** GitHub's own record of a repository, as much of it as the service reads and a little it does not. */
 function repositoryJson(fixture: RepositoryFixture) {
   return {
-    id: 1_000 + fixture.name.length,
+    id: repositoryIdOf(fixture),
     name: fixture.name,
     full_name: `${fixture.owner}/${fixture.name}`,
     owner: { login: fixture.owner, type: "User" },

@@ -35,8 +35,8 @@ import {
  * answer stand in the transcript, its inner work does not. A subagent the
  * CLI runs in the background, as it does by default, answers its call at
  * once with words that say only that it launched, so that call is kept
- * open instead and settled by the task notification its end posts. A call to Fullspin's
- * own MCP server is named as Fullspin's tool (`mcp__luke__read_inbox` is
+ * open instead and settled by the task notification its end posts. A call to our
+ * own MCP server is named as our tool (`mcp__luke__read_inbox` is
  * `read_inbox`) and its answer read as the JSON that tool answers; a call
  * to an integration's own server (`mcp__linear__list_issues`) is stored as
  * eve's call of that integration's tool is, so it draws with the service's
@@ -206,8 +206,8 @@ const MCP_TOOL_PREFIX = "mcp__";
 const MCP_SERVER_SEPARATOR = "__";
 
 /**
- * The name and input a call is stored under: Fullspin's tool's own for a call
- * to Fullspin's MCP server; for a call to an integration's own server, its
+ * The name and input a call is stored under: our tool's own for a call
+ * to our MCP server; for a call to an integration's own server, its
  * integration's fixed name and envelope, as eve's nested call of the tool is
  * stored (`storedServerCall`); the CLI's otherwise.
  */
@@ -253,9 +253,9 @@ function answerText(content: string | readonly WireValue[] | undefined, pictures
 /**
  * A tool's answer as the transcript settles its call: an error the CLI
  * flagged is a refusal carrying the text, and any other answer is available,
- * kept as the text a CLI tool answered, or read as the JSON a tool of Fullspin's
+ * kept as the text a CLI tool answered, or read as the JSON a tool of our
  * MCP server answers, so its status word counts as the eve relay counts it.
- * A CLI tool's pictures stand in as `[image]`; a Fullspin tool's pictures are left
+ * A CLI tool's pictures stand in as `[image]`; our tools' pictures are left
  * out, as eve's relay leaves out a look's picture, so its JSON still reads.
  */
 function settlementOf(

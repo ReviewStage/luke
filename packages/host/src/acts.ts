@@ -62,7 +62,7 @@ export const FENCE_LANGUAGE_MAX_CHARS = 32;
 /** The one host the browser is sent to from a task: a repository's page, or the App's installation page. */
 const GITHUB_ADDRESS = /^https:\/\/github\.com\//u;
 
-/** An address on GitHub, and nowhere else: what a repository link, the installation link, or Fullspin's own issues open. */
+/** An address on GitHub, and nowhere else: what a repository link, the installation link, or our own issues open. */
 export const githubAddress = EffectSchema.String.check(
   EffectSchema.isMaxLength(2_048),
   EffectSchema.isPattern(GITHUB_ADDRESS),
@@ -87,5 +87,29 @@ export const webAddress = EffectSchema.String.check(
   EffectSchema.makeFilter((address) => URL.canParse(address)),
 );
 
-/** Whether `web.open` takes an address, so a link drawn as a press is one the act will open. */
+/** Whether an address is on the web, as `webAddress` reads it. */
 export const isWebAddress: (address: string) => boolean = EffectSchema.is(webAddress);
+
+/** A mail address's scheme. */
+const MAIL_ADDRESS = /^mailto:/iu;
+
+/**
+ * A mail address as a link names it, `mailto:` and what follows, which
+ * opens a draft in the mail app and nothing else. Note that it is let out
+ * beside the web's alone, because it hands the system no more than a draft
+ * to show.
+ */
+export const mailAddress = EffectSchema.String.check(
+  EffectSchema.isMaxLength(2_048),
+  EffectSchema.isPattern(MAIL_ADDRESS),
+  EffectSchema.makeFilter((address) => URL.canParse(address)),
+);
+
+/** Whether an address is a mail address, as `mailAddress` reads it. */
+export const isMailAddress: (address: string) => boolean = EffectSchema.is(mailAddress);
+
+/** What `web.open` lets out of the window: a web address, to the browser, or a mail address, to the mail app. */
+export const openableAddress = EffectSchema.Union([webAddress, mailAddress]);
+
+/** Whether `web.open` takes an address, so a link drawn as a press is one the act will open. */
+export const isOpenableAddress: (address: string) => boolean = EffectSchema.is(openableAddress);

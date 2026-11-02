@@ -3,7 +3,7 @@
 ## Scope
 
 This policy covers the Vespin desktop app in this repository and the hosted
-service at tryluke.dev, which the app signs in to.
+service at vespin.dev, which the app signs in to.
 
 ## Supported versions
 

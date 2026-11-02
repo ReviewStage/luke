@@ -716,6 +716,12 @@ function issueCall(
   return { ...namedCall(kind, input, output, undefined), subject: answered ?? asked };
 }
 
+/** How a comment thread's change is said on its row: resolved, or reopened where `resolved` is false. */
+function commentUpdateKind(input: WireValue | undefined): CallKind {
+  const resolved = isRecord(input) ? input.resolved : undefined;
+  return resolved === false ? CALL_KIND.REOPEN_THREAD : CALL_KIND.RESOLVE_THREAD;
+}
+
 /** How an agent's change is said on its row: archived or unarchived where it named its archive, and changed otherwise. */
 function agentUpdateKind(input: WireValue | undefined): CallKind {
   const archived = isRecord(input) ? input.archived : undefined;
@@ -750,6 +756,11 @@ export interface SentWords {
   readonly note: string | undefined;
 }
 
+/** A message's words as the service reads them: under `text`, or under `message` where no `text` stands, as Claude Code's agents name them. */
+function messageWords(input: WireValue | undefined): string | undefined {
+  return stringAt(input, "text") ?? stringAt(input, "message");
+}
+
 /**
  * What a `start_agent` or a `message_agent` call sent, whole, which its row's
  * line cuts to its first line: a message's words, or a start's prompt (named
@@ -760,7 +771,7 @@ export interface SentWords {
 export function sentWords(tool: string, input: WireValue | undefined): SentWords | undefined {
   const words =
     tool === AGENT_TOOL.MESSAGE_AGENT || tool === RETIRED_TOOL.MESSAGE_CODING_AGENT
-      ? stringAt(input, "text")
+      ? messageWords(input)
       : tool === AGENT_TOOL.START_AGENT || tool === RETIRED_TOOL.START_CODING_AGENT
         ? (stringAt(input, "prompt") ?? stringAt(input, "task"))
         : undefined;
@@ -915,6 +926,16 @@ const READ_WEB_SEARCH: ToolReader = ({ input, output }) => ({
 
 const READ_INBOX_CALL: ToolReader = ({ tool, input, output }) => inboxToolView(tool, input, output);
 
+/** A memory kept, named by its words, under `save_memory` or the `remember` it was named before. */
+const SAVE_MEMORY_CALL: ToolReader = ({ input, output }) => ({
+  ...namedCall(CALL_KIND.REMEMBER, input, output, undefined),
+  subject: cardTitle(stringAt(input, "text") ?? ""),
+});
+
+/** The memory searched, named by its query, under `search_memory` or the `recall` it was named before. */
+const SEARCH_MEMORY_CALL: ToolReader = ({ input, output }) =>
+  namedCall(CALL_KIND.RECALL, input, output, "query");
+
 /**
  * How each tool an agent is offered reads on its row, which is the one place
  * a tool's kind is chosen: a `Record` over every tool, so a tool added to
@@ -930,8 +951,10 @@ const AGENT_TOOL_VIEWS = {
     namedCall(CALL_KIND.LIST_AGENTS, input, output, undefined),
   [AGENT_TOOL.READ_AGENT]: ({ input, output }) =>
     namedCall(CALL_KIND.READ_AGENT, input, output, "agentId"),
-  [AGENT_TOOL.MESSAGE_AGENT]: ({ input, output }) =>
-    namedCall(CALL_KIND.MESSAGE_AGENT, input, output, "text"),
+  [AGENT_TOOL.MESSAGE_AGENT]: ({ input, output }) => ({
+    ...namedCall(CALL_KIND.MESSAGE_AGENT, input, output, undefined),
+    subject: messageWords(input) ?? "",
+  }),
   [AGENT_TOOL.START_AGENT]: ({ input, output }) =>
     // Note that a start journaled before the prompt had its name carries it as `task`.
     namedCall(
@@ -968,11 +991,8 @@ const AGENT_TOOL_VIEWS = {
     answeredCall(CALL_KIND.RUN_AUTOMATION, input, output, "automation", "name"),
   [AGENT_TOOL.LIST_MODELS]: ({ input, output }) =>
     namedCall(CALL_KIND.LIST_MODELS, input, output, undefined),
-  [AGENT_TOOL.REMEMBER]: ({ input, output }) => ({
-    ...namedCall(CALL_KIND.REMEMBER, input, output, undefined),
-    subject: cardTitle(stringAt(input, "text") ?? ""),
-  }),
-  [AGENT_TOOL.RECALL]: ({ input, output }) => namedCall(CALL_KIND.RECALL, input, output, "query"),
+  [AGENT_TOOL.SAVE_MEMORY]: SAVE_MEMORY_CALL,
+  [AGENT_TOOL.SEARCH_MEMORY]: SEARCH_MEMORY_CALL,
   [AGENT_TOOL.WEB_SEARCH]: READ_WEB_SEARCH,
   [AGENT_TOOL.READ_WEB_PAGE]: ({ input, output }) => ({
     kind: CALL_KIND.WEB_PAGE,
@@ -1082,10 +1102,8 @@ const AGENT_TOOL_VIEWS = {
     ...namedCall(CALL_KIND.REPLY_TO_COMMENT, input, output, undefined),
     subject: cardTitle(stringAt(input, "text") ?? ""),
   }),
-  [AGENT_TOOL.RESOLVE_THREAD]: ({ input, output }) =>
-    namedCall(CALL_KIND.RESOLVE_THREAD, input, output, undefined),
-  [AGENT_TOOL.REOPEN_THREAD]: ({ input, output }) =>
-    namedCall(CALL_KIND.REOPEN_THREAD, input, output, undefined),
+  [AGENT_TOOL.UPDATE_COMMENT]: ({ input, output }) =>
+    namedCall(commentUpdateKind(input), input, output, undefined),
   // A page read is named by the title its answer gives, the id alone being all the call holds.
   [AGENT_TOOL.READ_PAGE]: ({ input, output }) => ({
     kind: CALL_KIND.READ_PAGE,
@@ -1170,12 +1188,27 @@ const RETIRED_TOOL_VIEWS = {
     issueCall(CALL_KIND.CREATE_ISSUE, input, output),
   [RETIRED_TOOL.UPDATE_ISSUE]: ({ input, output }) =>
     issueCall(CALL_KIND.UPDATE_ISSUE, input, output),
+  [RETIRED_TOOL.REMEMBER]: SAVE_MEMORY_CALL,
+  [RETIRED_TOOL.RECALL]: SEARCH_MEMORY_CALL,
+  [RETIRED_TOOL.RESOLVE_THREAD]: ({ input, output }) =>
+    namedCall(CALL_KIND.RESOLVE_THREAD, input, output, undefined),
+  [RETIRED_TOOL.REOPEN_THREAD]: ({ input, output }) =>
+    namedCall(CALL_KIND.REOPEN_THREAD, input, output, undefined),
 } as const satisfies Record<RetiredTool, ToolReader>;
 
-/** The tools eve gives a session and a native harness's subagent, which a transcript carries beside the agent's own, and the connection tools: a connection's search and its run, each naming the server its input does. */
+/** The tools eve gives a session and a native harness's subagent, a message to one and a stop of what runs in Claude Code's background, which a transcript carries beside the agent's own, and the connection tools: a connection's search and its run, each naming the server its input does. */
 const OTHER_TOOL_VIEWS: Readonly<Record<string, ToolReader>> = {
   [CLAUDE_CODE_TOOL.AGENT]: ({ input, output }) => subagentCallView(input, output),
   [CODEX_TOOL.SUBAGENT]: ({ input, output }) => subagentCallView(input, output),
+  [CLAUDE_CODE_TOOL.SEND_MESSAGE]: ({ input, output }) =>
+    namedCall(CALL_KIND.WORKER_MESSAGE, input, output, "to"),
+  [CLAUDE_CODE_TOOL.TASK_STOP]: ({ input, output }) =>
+    namedCall(
+      CALL_KIND.STOP_BACKGROUND,
+      input,
+      output,
+      stringAt(input, "task_id") === undefined ? "shell_id" : "task_id",
+    ),
   [EVE_TOOL.TASK_WAIT]: ({ input, output }) =>
     namedCall(CALL_KIND.WORKER_WAIT, input, output, undefined),
   [EVE_TOOL.TASK_CANCEL]: ({ input, output, jobs }) => ({
@@ -1391,8 +1424,9 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.LOOK_AT_PICTURE, lookedPlan],
   [AGENT_TOOL.READ_COMMENTS, namedPlan],
   [AGENT_TOOL.REPLY_TO_COMMENT, namedPlan],
-  [AGENT_TOOL.RESOLVE_THREAD, namedPlan],
-  [AGENT_TOOL.REOPEN_THREAD, namedPlan],
+  [AGENT_TOOL.UPDATE_COMMENT, namedPlan],
+  [RETIRED_TOOL.RESOLVE_THREAD, namedPlan],
+  [RETIRED_TOOL.REOPEN_THREAD, namedPlan],
   [AGENT_TOOL.OPEN_PULL_REQUEST, openedPullRequest],
   [AGENT_TOOL.POST_THREAD, namedThread],
   [RETIRED_TOOL.POST_TO_INBOX, namedThread],

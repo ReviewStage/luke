@@ -16,7 +16,7 @@ import { afterEach, expect, vi } from "vitest";
  * invitation page over the hosted oRPC routes themselves, through the
  * pages' browser client, where the route refuses: the connect page offers a
  * sign-in when the route refuses the browser's session, and the invitation
- * page says Vespin could not be reached, as it always did, whether the route
+ * page says the service could not be reached, as it always did, whether the route
  * refuses its session or its store does not answer. What a route answers
  * when it does is read through the same client on a migrated database in
  * `browser-client-orpc-route.test.ts`, since a page here runs in jsdom,

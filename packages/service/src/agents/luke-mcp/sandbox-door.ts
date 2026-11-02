@@ -1,5 +1,5 @@
 /**
- * sandbox-door.ts -- the door to a native agent's sandbox a tool of Fullspin's MCP server reads a file through.
+ * sandbox-door.ts -- the door to a native agent's sandbox a tool of our MCP server reads a file through.
  *
  * eve hands each of its tools the session's sandbox (`ctx.getSandbox()`),
  * through which `post_thread`, `edit_plan`, `show_image`, and

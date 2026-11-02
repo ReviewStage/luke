@@ -15,9 +15,14 @@ import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store
 import { awaitingLinesOfReached, readMessageByClientId } from "@luke/database/models/message-reads";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { turns } from "@luke/database/schemas/storage";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { AGENT_BOUNDS, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+import {
+  AGENT_BOUNDS,
+  AGENT_PAYER,
+  CHECK_SUMMARY,
+  PULL_REQUEST_STATE,
+} from "@luke/features/agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import {
   type GitHubLineMetadata,
@@ -58,7 +63,7 @@ import {
  * to the agent as a message from GitHub: a review, a comment on the pull
  * request, and a failed check on its branch are read off their deliveries
  * and nothing else is; a person's review reaches the agent whether or not it
- * is at work, a comment Vespin's own App made reaches only an agent idle since
+ * is at work, a comment our own App made reaches only an agent idle since
  * before it was made, so an agent's own reply never wakes it, and a failed
  * check only an agent not at work; and every check on an agent's head
  * finished only the agent at work on that head, once GitHub says none is
@@ -87,7 +92,7 @@ const repository = {
   html_url: `https://github.com/${RELAY_FULL_NAME}`,
 };
 
-/** Who GitHub names by the login given: the member by the id their Vespin account is linked to, anyone else by one of their own. */
+/** Who GitHub names by the login given: the member by the id their account is linked to, anyone else by one of their own. */
 function sender(login: string) {
   return {
     login,
@@ -195,6 +200,8 @@ const openAgentOn = (githubAccess: GitHubAccess) =>
       prompt: null,
       repository: RELAY_FULL_NAME,
       githubAccess,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+      payer: AGENT_PAYER.API_KEY,
     });
     const agent = Option.getOrThrow(started).agent;
     const ref = `luke/teammate-invitations-${randomUUID()}`;
@@ -562,7 +569,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           login: "octocat",
         });
 
-        // The agent replied as Vespin's App inside a turn that has since ended: its own reply wakes nobody.
+        // The agent replied as our App inside a turn that has since ended: its own reply wakes nobody.
         yield* endedTurn(owner, agent.conversationId, MADE_AT + 30_000);
         const reply = { ...wake, by: LUKE_BOT, at: MADE_AT + 20_000 };
         const own = yield* wakeAgents(eve.eveFor, reply, randomUUID(), LUKE_BOT).pipe(

@@ -9,7 +9,7 @@
  * write (`packages/service/src/tasks/plan-notes.ts`) that the notetaker and
  * the coding agents save their notes through: `POST /api/plans/{id}/edit` is
  * their edit of the document, saved, or answered as a conflict with the text
- * as it stands now where Fullspin wrote it meanwhile and the edit no longer
+ * as it stands now where we wrote it meanwhile and the edit no longer
  * lands, with nothing saved; and a restore puts back an earlier revision.
  * `GET /api/plans/{id}` is the window opening a plan, a read that moves
  * nothing: the list stands newest started first whatever is opened. Its
@@ -42,7 +42,7 @@
  *
  * A plan may name the GitHub repository it is about, at its start or by a
  * later change, and null is a plan with none. A repository is kept only once
- * the Fullspin GitHub App confirms the plan's workspace reaches it
+ * our GitHub App confirms the plan's workspace reaches it
  * (`packages/service/src/github/workspace-repository.ts`), so a plan never
  * names a repository its workspace could not reach at the moment it was
  * named. A plan starts in the workspace the request names, which the account
@@ -85,10 +85,12 @@ import { TASK_START_STATUS } from "@luke/features/contract";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
 import {
+  startRelationsOf,
   TASK_BLOCK_CHANGE,
   TASK_BLOCK_RELATION,
   TASK_CREATE_RELATION_KIND,
   TASK_MODE,
+  TASK_STATUS,
   type Task,
   type TaskAgentStart,
   type TaskBlockRequest,
@@ -115,7 +117,12 @@ import { retiredBeforeDelete, retiringReach } from "../agents/retire-sessions.js
 import { type SandboxStopReach, stoppedInBackground } from "../agents/session-sandboxes.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TASK_LIST_ARCHIVED } from "../core.js";
-import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
+import {
+  recordServerEvent,
+  SERVER_EVENT,
+  SERVER_TASK_FINISHER,
+  SERVER_TASK_SOURCE,
+} from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { refreshRepositoryReads } from "../github/repository-reads.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
@@ -138,7 +145,7 @@ import {
 } from "./plan-notes.js";
 import {
   createTaskRelated,
-  relationAsked,
+  relationsAsked,
   type TaskCreateRelationRefused,
 } from "./task-create-relation.js";
 import { type TaskParent, taskParentOf } from "./task-parent.js";
@@ -563,10 +570,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * `parentTaskId` or a relation as its sub-task, takes its parent's
      * repository, place to run, and, where it names none, its assignee
      * (`parentAsked`), confirmed again as any start's repository is; one
-     * started as another's parent takes that plan's repository, and one
-     * started blocking or blocked by another takes nothing of it
-     * (`relationAsked`), and the relation is written in the plan's own
-     * transaction (`createTaskRelated`).
+     * started as others' parent takes their repository, which the tree
+     * shares, and one started blocking or blocked by others takes nothing of
+     * them (`relationsAsked`), and every relation is written in the plan's
+     * own transaction (`createTaskRelated`), so one refused makes nothing.
      */
     create: plans.create.effect(function* ({ input, context }) {
       const { userId, request } = context;
@@ -579,28 +586,33 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           : yield* startedBefore(userId, agent.idempotencyKey, organizationId);
       if (Option.isSome(before)) return { status: TASK_START_STATUS.RETRIED, body: before.value };
       // A retry is answered above first, since its parent may be gone by now, or its device away, while its task stands.
-      const { relation } = input;
+      const relations = startRelationsOf(input);
       // A start as a sub-task of a plan is a start under that parent, which `parentTaskId` names as well.
       const parentTaskId =
         input.parentTaskId ??
-        (relation?.kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF ? relation.taskId : undefined);
+        relations.find((relation) => relation.kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF)
+          ?.taskId;
       const parent =
         parentTaskId === undefined
           ? undefined
           : yield* parentAsked(userId, organizationId, { ...input, parentTaskId });
-      const beside =
-        relation === undefined
-          ? undefined
-          : yield* Effect.catch(
-              relationAsked(userId, organizationId, relation, input.repository),
-              relationRefused,
-            );
-      // A plan in a tree works in the tree's repository: its parent's as a child, and its child's as a parent.
+      // A plan's children share its parent's repository, so a start under a parent holds them to that one.
+      const beside = yield* Effect.catch(
+        relationsAsked(
+          userId,
+          organizationId,
+          relations,
+          parent === undefined ? input.repository : parent.repository,
+        ),
+        relationRefused,
+      );
+      const childOf = beside.find((asked) => asked.kind === TASK_CREATE_RELATION_KIND.PARENT_OF);
+      // A plan in a tree works in the tree's repository: its parent's as a child, and its children's as a parent.
       const repository =
         parent !== undefined
           ? parent.repository
-          : beside?.kind === TASK_CREATE_RELATION_KIND.PARENT_OF
-            ? beside.repository
+          : childOf?.kind === TASK_CREATE_RELATION_KIND.PARENT_OF
+            ? childOf.repository
             : input.repository;
       if (agent !== undefined && (repository === undefined || repository === null)) {
         return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
@@ -810,8 +822,18 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ),
       );
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const { task: plan, txid, archived } = task.value;
+      const { task: plan, txid, archived, statusMoved } = task.value;
       if (archived.length > 0) yield* stoppedInBackground(seams, archived);
+      // Counted where this write moved the task to Done or Canceled, as the store read it under the task's lock.
+      if (
+        statusMoved &&
+        (plan.status === TASK_STATUS.DONE || plan.status === TASK_STATUS.CANCELED)
+      ) {
+        yield* recordServerEvent(SERVER_EVENT.TASK_FINISH, userId, {
+          status: plan.status,
+          by: SERVER_TASK_FINISHER.MEMBER,
+        });
+      }
       return txid === undefined ? { plan } : { plan, txid };
     }),
 

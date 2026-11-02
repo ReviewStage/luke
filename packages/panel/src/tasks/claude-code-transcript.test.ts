@@ -16,10 +16,10 @@ import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
  * claude-code-transcript.test.ts -- a coding agent on Claude Code stores its
  * calls under the CLI's own tool names, with the CLI's own input and the text
  * the model read as the answer (`claude-code-moments.ts`), and its tab draws
- * each on the renderer Vespin's own tool of that kind draws on: its row's verb
- * and subject, and its input and answer once opened. A call to Vespin's own MCP
- * server is stored under Vespin's tool's name and its answer as that tool's
- * JSON, and is drawn as Vespin's tool always is. Synthetic paths and words.
+ * each on the renderer our own tool of that kind draws on: its row's verb
+ * and subject, and its input and answer once opened. A call to our own MCP
+ * server is stored under our tool's name and its answer as that tool's
+ * JSON, and is drawn as our tool always is. Synthetic paths and words.
  */
 
 const ESCAPE = String.fromCharCode(27);
@@ -182,6 +182,20 @@ const CLI_CALLS: readonly {
     output: "Wakeup scheduled in 270 seconds.",
     line: ["ScheduleWakeup"],
     body: ["Wait for CI", "Wakeup scheduled"],
+  },
+  {
+    tool: "TaskStop",
+    input: { task_id: "b7k2" },
+    output: "Successfully stopped task: b7k2 (pnpm dev)",
+    line: ["Stopped", "b7k2"],
+    body: ["Successfully stopped task"],
+  },
+  {
+    tool: "SendMessage",
+    input: { to: "worker", message: "Also read the export callers." },
+    output: "Message sent to worker.",
+    line: ["Messaged the worker", "worker"],
+    body: ["Also read the export callers.", "Message sent"],
   },
   {
     tool: "Monitor",

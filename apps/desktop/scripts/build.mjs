@@ -27,7 +27,7 @@ const appVersion = JSON.parse(
 // The one release every build's reports and uploaded source maps share, a
 // Developer ID build's or not: main reports under it (`PACKAGED_SENTRY_RELEASE`)
 // and the upload below files the maps under it, so the two cannot drift.
-const sentryRelease = `Luke@${appVersion}`;
+const sentryRelease = `Vespin@${appVersion}`;
 // Whether this build uploads its source maps (`sentryPlugins` below): where
 // the token is set, unless the build is a Release workflow rehearsal (a
 // manual dispatch), which publishes no release and so must not file maps

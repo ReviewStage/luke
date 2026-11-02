@@ -34,7 +34,7 @@ import { trimmedText } from "./text-schema.js";
  * and who last changed each section as `sectionEdits`, by heading.
  * A task may name the GitHub repository it is about, `owner/name` as
  * `github-repositories-wire.ts` spells it, which the service confirms the
- * account reaches through the Fullspin GitHub App before it keeps it; null is a
+ * account reaches through our GitHub App before it keeps it; null is a
  * task with no repository yet, and every task from before repositories.
  * A task may be pinned, which the sidebar lists first; the pin is the
  * account's, so it follows it to every Mac it signs in on. Tasks are no
@@ -75,6 +75,8 @@ export const TASK_BOUNDS = {
   MAX_WORKSPACE_ID_CHARS: 200,
   /** The most characters a task's brief may spell: as many as a coding agent's prompt (`AGENT_BOUNDS.MAX_MESSAGE_CHARS`). */
   MAX_BRIEF_CHARS: 16_000,
+  /** The most relations a start may make its task in, far past what New task's rows draw. */
+  MAX_START_RELATIONS: 20,
 } as const;
 
 /** The name a plan started without one stands under until the developer renames it. */
@@ -269,12 +271,43 @@ const taskCreateRelationSchema = EffectSchema.Struct({
 
 export type TaskCreateRelation = typeof taskCreateRelationSchema.Type;
 
-/** Whether a start names its parent one way at most: `parentTaskId`, or a `relation`, which says the same of a sub-task and more. */
+/** The relations a start asks, by either door: `relations`, or the old door's one `relation` as a list of one; none where it names neither. */
+export function startRelationsOf(request: {
+  readonly relation?: TaskCreateRelation;
+  readonly relations?: readonly TaskCreateRelation[];
+}): readonly TaskCreateRelation[] {
+  if (request.relations !== undefined) return request.relations;
+  return request.relation === undefined ? [] : [request.relation];
+}
+
+/** Whether a start names its relations through one door at most: `relations`, or the old door's `relation`, never both. */
+function relationsThroughOneDoor(request: {
+  relation?: TaskCreateRelation;
+  relations?: readonly TaskCreateRelation[];
+}): boolean {
+  return request.relation === undefined || request.relations === undefined;
+}
+
+/** Whether a start names its parent one way at most: `parentTaskId`, or its relations, which say the same of a sub-task and more. */
 function relationNamedOnce(request: {
   parentTaskId?: string;
   relation?: TaskCreateRelation;
+  relations?: readonly TaskCreateRelation[];
 }): boolean {
-  return request.parentTaskId === undefined || request.relation === undefined;
+  return request.parentTaskId === undefined || startRelationsOf(request).length === 0;
+}
+
+/** Whether a start's relations name one parent at most, since a task has one, and each other task once, since a task takes one relation to another. */
+function relationsEachOnce(request: {
+  relation?: TaskCreateRelation;
+  relations?: readonly TaskCreateRelation[];
+}): boolean {
+  const relations = startRelationsOf(request);
+  const parents = relations.filter(
+    (relation) => relation.kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF,
+  );
+  const named = new Set(relations.map((relation) => relation.taskId));
+  return parents.length <= 1 && named.size === relations.length;
 }
 
 /**
@@ -288,7 +321,7 @@ function relationNamedOnce(request: {
  * (`taskAgentStartSchema`): it implies `planning: false`, so naming both is
  * refused, and the service refuses it without a repository, as it refuses
  * an agent's Start on a task with none, before anything is written. A
- * brief is the developer's own words about the task, which Fullspin is handed
+ * brief is the developer's own words about the task, which the app is handed
  * beside the plan to plan from; one left out, or nothing but whitespace,
  * starts the task with none. A brief beside `planning: false` or an `agent`
  * is kept rather than refused, and goes unread until a call is opened on the
@@ -302,16 +335,21 @@ function relationNamedOnce(request: {
  * where its agents run, so a start naming another repository is refused
  * (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), as one naming another place
  * to run is (`HOSTED_API_ERROR.RUNS_ON_LOCKED`), and a parent the starter
- * cannot reach is not found. A `relation` starts the task related to another
+ * cannot reach is not found. `relations` start the task related to others
  * the starter reaches in the same workspace, written in the start's own
- * transaction, so the task and its relation land together or not at all: a
- * sub-task of it, which is `parentTaskId` by another name, so naming both is
- * refused; its parent, which takes that task's repository as a sub-task
- * takes its parent's (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), and is
- * refused where that task has a parent already
- * (`HOSTED_API_ERROR.TASK_PARENT_HELD`), since a start takes no parent's
- * place; or a block on either side, under the blocks' own rules
- * (`taskBlockRequestSchema`). The other task out of reach is not found.
+ * transaction, so the task and every relation land together or not at all,
+ * and one refused leaves no task behind. Each is one of: a sub-task of the
+ * other, which is `parentTaskId` by another name, so naming both is
+ * refused, as more than one is, since a task has one parent; the other's
+ * parent, which takes that task's repository as a sub-task takes its
+ * parent's (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), so every task of
+ * the tree a start joins shares one, and is refused where that task has a
+ * parent already (`HOSTED_API_ERROR.TASK_PARENT_HELD`), since a start
+ * takes no parent's place; or a block on either side, under the blocks' own
+ * rules (`taskBlockRequestSchema`). No task is named twice, since a task
+ * takes one relation to another, and any other task out of reach is not
+ * found. `relation` is the old door, which desktop builds already released
+ * send: it reads as `relations` of one, and naming both is refused.
  * A task is worked by its agents unless `mode` names a pilot, which the
  * service refuses from an account without the Pilot experiment, and which
  * stands as the task was started.
@@ -336,9 +374,20 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(taskAssigneeIdSchema),
   parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
+  /** The old door, which released desktop builds send: one relation, read as `relations` of one. */
   relation: EffectSchema.optionalKey(taskCreateRelationSchema),
+  relations: EffectSchema.optionalKey(
+    EffectSchema.Array(taskCreateRelationSchema).check(
+      EffectSchema.isMaxLength(TASK_BOUNDS.MAX_START_RELATIONS),
+    ),
+  ),
   mode: EffectSchema.optionalKey(taskModeSchema),
-}).check(EffectSchema.makeFilter(agentStartsUnplanned), EffectSchema.makeFilter(relationNamedOnce));
+}).check(
+  EffectSchema.makeFilter(agentStartsUnplanned),
+  EffectSchema.makeFilter(relationsThroughOneDoor),
+  EffectSchema.makeFilter(relationNamedOnce),
+  EffectSchema.makeFilter(relationsEachOnce),
+);
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
 
@@ -535,7 +584,7 @@ export const TASK_LIST_ARCHIVED = {
 
 /**
  * Who wrote a revision of a plan: the developer, the notetaker on a call
- * (whom the developer knows as Fullspin), a coding agent, or, for the one
+ * (whom the developer knows by the app's name), a coding agent, or, for the one
  * revision a plan from before history starts with, nobody the service can
  * name.
  */
@@ -548,11 +597,11 @@ export const PLAN_ACTOR = {
 
 export type PlanActor = (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR];
 
-/** Who made a task: its member by hand, Fullspin on their call, or a coding agent acting for them; never `earlier`, which names no maker. */
+/** Who made a task: its member by hand, the app on their call, or a coding agent acting for them; never `earlier`, which names no maker. */
 export type TaskCreatorActor = Exclude<PlanActor, typeof PLAN_ACTOR.EARLIER>;
 
 /**
- * Who made a task where its member did not make it by hand: Fullspin on their
+ * Who made a task where its member did not make it by hand: the app on their
  * call, or a coding agent acting for them, by the agent's id while its row
  * stands, which the window reads its title, harness, automation, and task
  * from among the agents it already lists.
@@ -627,7 +676,7 @@ const taskSummaryFields = {
   createdBy: EffectSchema.optionalKey(memberRefSchema),
   /**
    * Who made the task for `createdBy`, where they did not make it by hand:
-   * Fullspin on their call, or a coding agent; absent for a task its member made
+   * the app on their call, or a coding agent; absent for a task its member made
    * by hand, and from a service before it was sent.
    */
   origin: EffectSchema.optionalKey(taskOriginSchema),
@@ -834,7 +883,7 @@ export const planLastEditSchema = EffectSchema.Struct({
   agentId: EffectSchema.optionalKey(wireUuidSchema),
   /** Epoch milliseconds of the revision's latest save. */
   at: countedNumber,
-  /** Always false, since Fullspin takes no calls; a released desktop still requires it. */
+  /** Always false, since the app takes no calls; a released desktop still requires it. */
   duringCall: EffectSchema.Boolean,
 });
 
@@ -1092,7 +1141,7 @@ export const TASK_FILE_BOUNDS = {
  * Why a file of the task's repository was not read for the File tab, or a
  * folder not listed for its tree: a secret file, no regular file (or no
  * folder) at the path, a file too large or not text,
- * a task with no repository, a repository the Fullspin GitHub App does not
+ * a task with no repository, a repository our GitHub App does not
  * reach for the account, or GitHub not answering just now.
  */
 export const TASK_FILE_REFUSAL = {
@@ -1137,8 +1186,8 @@ export type TaskFileRequest = typeof taskFileRequestSchema.Type;
 
 /**
  * A window of a file of the task's repository as it stands now on its
- * default branch, or at the commit the request pinned, read through the
- * Fullspin GitHub App: the path, the repository and the branch or commit read,
+ * default branch, or at the commit the request pinned, read through our
+ * GitHub App: the path, the repository and the branch or commit read,
  * the commit the lines were read at where GitHub named one, the line the first carried line is, how
  * many lines the whole file has, and the lines, each cut to the bound. A
  * window past the file's end carries no lines.
@@ -1222,7 +1271,7 @@ export type TaskTreeEntry = typeof taskTreeEntrySchema.Type;
 
 /**
  * A folder of the task's repository as it stands now on the branch the
- * File tab reads its files on, through the Fullspin GitHub App: the path, the
+ * File tab reads its files on, through our GitHub App: the path, the
  * repository and the branch read, its entries in GitHub's order, and
  * whether there were more than one listing carries. A secret file is
  * listed by name like any other, since it is its contents that are never
@@ -1257,7 +1306,7 @@ export const TASK_SKILL_BOUNDS = {
 
 /**
  * Where a skill the `/` list offers comes from: the task's repository, as
- * GitHub holds it, or a skill a member installed into Fullspin for the whole
+ * GitHub holds it, or a skill a member installed into the app for the whole
  * workspace or for themselves alone (`installed-skill-wire.ts`). Where two
  * share a name the earlier one here is offered and the later one is not,
  * as an agent's session merges them.
@@ -1299,7 +1348,7 @@ const taskSkillSchema = EffectSchema.Struct({
  * or of a workspace's repository (GET `/api/github/repositories/skills`):
  * the repository and the branch read, null where there is no repository,
  * and the skills, the repository's as they stand now on its default branch,
- * read through the Fullspin GitHub App, then the member's enabled installed
+ * read through our GitHub App, then the member's enabled installed
  * skills, the workspace's and then their own, each source in name order and
  * a name an earlier source holds left out. A skill its `SKILL.md` says the
  * model alone loads is not one of them.

@@ -40,10 +40,11 @@ import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import type { HostedApiError } from "@luke/features";
 import { type AgentQueue, QUEUE_PAUSE, type QueuePause } from "@luke/features/agent-queue-wire";
-import { AGENT_STATUS } from "@luke/features/agent-wire";
+import { AGENT_MACHINE, AGENT_STATUS } from "@luke/features/agent-wire";
 import { TURN_STATUS } from "@luke/wire";
 import { Clock, DateTime, Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import { recordServerEvent, SERVER_EVENT } from "../../events/server-events.js";
 import { type HostedRefusal, hostedStoreOrUnavailable } from "../../http/http-effect.js";
 import { deploymentEve, deploymentEveForAccounts } from "../deployment-eve.js";
 import { deploymentEveOrigin } from "../eve-host/eve-origin.js";
@@ -144,8 +145,9 @@ const atWork = Effect.fn("web/queueAtWork")(function* (agent: Agent) {
 /**
  * One claimed message sent now as its member's own message, under its own
  * send key, and taken out of the queue once it went: as the next turn where
- * none runs, or steering the one under way. A refusal fails, the message
- * still claimed, for its caller to let go of.
+ * none runs, or steering the one under way. It is counted under its member
+ * as it goes, once, since a repeat under its key sends nothing new. A refusal
+ * fails, the message still claimed, for its caller to let go of.
  */
 export const sendQueued = Effect.fn("web/sendQueued")(function* (
   eveFor: QueueEve,
@@ -153,21 +155,36 @@ export const sendQueued = Effect.fn("web/sendQueued")(function* (
   message: QueuedMessageRow,
 ) {
   const eve = yield* eveFor(message.userId);
-  yield* steerAgentWritten(eve, storeWriter({ tools: CODER_TOOL_SET }), message.userId, agent, {
-    text: message.text,
-    clientKey: message.id,
-    // Note that each file goes as it came, without the id the queue read its bytes by.
-    ...(message.attachments.length === 0
-      ? undefined
-      : {
-          attachments: message.attachments.map(({ name, mediaType, data }) => ({
-            name,
-            mediaType,
-            data,
-          })),
-        }),
-    sender: { kind: MESSAGE_SENDER.MEMBER, userId: message.userId },
-  });
+  const { sent } = yield* steerAgentWritten(
+    eve,
+    storeWriter({ tools: CODER_TOOL_SET }),
+    message.userId,
+    agent,
+    {
+      text: message.text,
+      clientKey: message.id,
+      // Note that each file goes as it came, without the id the queue read its bytes by.
+      ...(message.attachments.length === 0
+        ? undefined
+        : {
+            attachments: message.attachments.map(({ name, mediaType, data }) => ({
+              name,
+              mediaType,
+              data,
+            })),
+          }),
+      sender: { kind: MESSAGE_SENDER.MEMBER, userId: message.userId },
+    },
+  );
+  if (sent !== undefined) {
+    yield* recordServerEvent(SERVER_EVENT.MESSAGE_SEND, message.userId, {
+      runtime: sent.runtime,
+      machine: agent.machine ?? AGENT_MACHINE.VERCEL,
+      agent_kind: agent.kind,
+      turn_running: sent.turnRunning,
+      queued: true,
+    });
+  }
   // Note that the message went, so a failure to take it out of the queue is no refusal of it: it is logged, and
   // its claim left to lapse, after which the next hand-off sends it again under its id, answered as a repeat.
   yield* dropQueuedMessage(agent.id, message).pipe(

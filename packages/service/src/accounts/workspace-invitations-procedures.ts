@@ -14,7 +14,7 @@
  * /api/workspaces/invitations/offer` answers one invitation as its
  * recipient is offered it (`invitation-offers.ts`): the workspace's name,
  * the role, and the inviter while they are still a member, or why there is
- * none to offer. Fullspin's own rules stand in front of the plugin's, which
+ * none to offer. Our own rules stand in front of the plugin's, which
  * checks the caller's role and membership again itself.
  *
  * The session is resolved before the input is read, by the middleware on
@@ -63,7 +63,7 @@ function expiryOf(invitation: PluginInvitation): Date {
     : new Date(invitation.expiresAt);
 }
 
-/** The role an invitation carries, where it is one an invitation may; anything else is no invitation of Fullspin's. */
+/** The role an invitation carries, where it is one an invitation may; anything else is no invitation of ours. */
 function invitationRoleOf(role: string): WorkspaceInvitation["role"] | undefined {
   return Object.values(INVITATION_ROLE).find((one) => one === role);
 }
@@ -116,6 +116,8 @@ const emailInvitation = Effect.fn("web/emailWorkspaceInvitation")(function* (
     acceptUrl: invitation.acceptUrl,
     workspaceName,
     inviterLabel: inviter?.name.trim() || inviter?.email || INVITER_UNKNOWN,
+    role: invitation.role,
+    expiresAt: invitation.expiresAt,
   });
 });
 

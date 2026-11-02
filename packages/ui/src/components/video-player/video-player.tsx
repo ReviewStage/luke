@@ -19,7 +19,7 @@ import { Tooltip } from "../tooltip/hint.js";
 /**
  * video-player.tsx -- a video an agent recorded of what it did, played where a picture of it would be drawn, in its transcript and its inbox item, and in the file viewer an Expand opens.
  *
- * The player is Fullspin's own rather than the browser's: a bar along the
+ * The player is our own rather than the browser's: a bar along the
  * video's foot of the same icon buttons, glyphs, and slider the window draws
  * everywhere, with play and pause, how far it has run of how long, a
  * scrubber, Expand where the place has a viewer to open, and Full screen. A
@@ -228,10 +228,13 @@ const BAR =
  * The frame the video and its bar stand in, on the veil while its first
  * frame loads. It takes focus only from a press, to hold the player's keys,
  * so it draws no ring of its own; its buttons draw theirs. Full screen, it
- * fills the screen and the video stands in it at its own shape.
+ * fills the screen and the video stands in it at its own shape. Note that
+ * the frame stays a block there, because a grid's row is sized to its
+ * content, so the video's full height would resolve as auto and the video
+ * would fill the width and run off the screen's foot.
  */
 const FRAME =
-  "luke-video-player-frame group/video-frame relative block max-h-[inherit] bg-veil focus:outline-none [&:fullscreen]:grid [&:fullscreen]:h-screen [&:fullscreen]:w-stage [&:fullscreen]:place-items-center";
+  "luke-video-player-frame group/video-frame relative block max-h-[inherit] bg-veil focus:outline-none [&:fullscreen]:h-screen [&:fullscreen]:w-stage";
 
 /** The video at its own shape, as wide as its column and no taller than a picture, or the viewer's; filling the screen full screen. */
 const VIDEO =
@@ -286,7 +289,7 @@ function VideoBar({
   );
 }
 
-/** A video played in place of a picture or in the viewer, under Fullspin's own bar. */
+/** A video played in place of a picture or in the viewer, under our own bar. */
 export function VideoPlayer({
   dataUrl,
   label,

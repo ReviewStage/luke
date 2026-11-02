@@ -14,7 +14,7 @@ import { APP_HOME_LINK } from "@luke/features/link-home";
 import { LINK_PLATFORM, type LinkPlatform } from "@luke/features/link-open";
 import { openTargetOf } from "@luke/features/open-address";
 import { hostedPageFramePath } from "@luke/features/page-frame";
-import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
+import { isGitHubAddress, isMailAddress, isWebAddress } from "@luke/host/acts";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import { COMMAND_KEY, type CommandKey } from "@luke/settings/shortcuts";
 import { browserLinkPlatform } from "../link-platform";
@@ -77,6 +77,19 @@ export function openTab(url: string): void {
   window.open(url, "_blank", "noopener");
 }
 
+/**
+ * Opens a link outside the window, as the desktop's `web.open` takes it: a
+ * mail address in the mail app, as the site's Contact link does, and a web
+ * address in a tab of its own (`openTab`).
+ */
+function openLink(url: string): void {
+  if (isMailAddress(url)) {
+    location.assign(url);
+    return;
+  }
+  openTab(url);
+}
+
 /** Opens a GitHub page in a tab of its own, where its address is GitHub's, as the desktop's `github.open` takes it; any other opens nothing. */
 function openGitHubTab(url: string): void {
   if (!isGitHubAddress(url)) {
@@ -88,7 +101,7 @@ function openGitHubTab(url: string): void {
 
 /**
  * The link that opens the Mac app on what the tab's address names, or on
- * Fullspin's home where it names nothing, which still brings the app forward.
+ * the app's home where it names nothing, which still brings the app forward.
  */
 function macAppLink(): string {
   return openTargetOf(location.pathname, location.hash, location.search)?.appLink ?? APP_HOME_LINK;
@@ -154,7 +167,7 @@ export function webPlatform(
     onMenuCommand: () => ignore,
     recordSurfaceEvent: shell.recordSurfaceEvent,
     openGitHub: openGitHubTab,
-    openWeb: openTab,
+    openWeb: openLink,
     // The dashboard is served on the tab's own origin, so the Admin row links to it there.
     adminDashboard: () => ({ href: new URL(ADMIN_PAGE_PATH, location.origin).href }),
     applySessionReplay: lazySessionReplay(),

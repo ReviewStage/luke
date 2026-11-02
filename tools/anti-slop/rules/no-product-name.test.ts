@@ -25,8 +25,8 @@ tester.run("no-product-name", noProductNameRule, {
     // The words read the constant, or say what they mean without the name.
     { code: "const quit = `Quit ${PRODUCT_NAME}?`;", filename: SOURCE },
     { code: 'const failed = "The service did not answer.";', filename: SOURCE },
-    // A comment is prose about the code, not something the product says.
-    { code: "// Vespin keeps this.\nconst a = 1;", filename: SOURCE },
+    // A comment may quote code that spells the name.
+    { code: "// The bundle is `Vespin.app`.\nconst a = 1;", filename: SOURCE },
     // A test pins what a surface says.
     { code: 'const title = "Quit Vespin?";', filename: TEST_FILE },
   ],
@@ -45,6 +45,12 @@ tester.run("no-product-name", noProductNameRule, {
       code: "const a = <p>Sign in to Vespin</p>;",
       filename: SOURCE,
       errors: [{ messageId: "productName" }],
+    },
+    // A comment says what it means without the name, in a test too.
+    {
+      code: "/** Vespin keeps this. */\nconst a = 1;",
+      filename: TEST_FILE,
+      errors: [{ messageId: "productNameInComment" }],
     },
   ],
 });

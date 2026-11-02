@@ -237,7 +237,7 @@ export function offeredStarterTools(
 }
 
 /**
- * Whether the session is offered `remember` and `recall` for the turn it
+ * Whether the session is offered `save_memory` and `search_memory` for the turn it
  * opens, for those tools' own files: only where the agent's starter turned
  * Memory on (`memoryOnFor`), and never for a session the host does not
  * admit or whose conversation is no agent's.

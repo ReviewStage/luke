@@ -27,7 +27,9 @@ import type { WorkspaceRunsRead } from "./use-automation-runs.js";
  * never out of reach. Each run is the row an automation's own runs panel
  * draws (`automation-runs-panel.tsx`), its automation named on a line of
  * its own, and the tab narrows them to the runs still working or the ones
- * that failed. A run that starts slides in at the top.
+ * that failed. A run with nothing of its own to open opens its automation,
+ * as the automation's row in the list does. A run that starts slides in at
+ * the top.
  */
 
 /** Which runs the tab shows: all of them, the ones whose agent still works, or the ones that failed. */
@@ -112,6 +114,7 @@ export function WorkspaceRuns({
   mine,
   now,
   onOpenAgent,
+  onOpenAutomation,
 }: {
   runs: readonly AutomationWorkspaceRun[];
   shown: RunsShown;
@@ -119,6 +122,8 @@ export function WorkspaceRuns({
   mine: (automationId: string) => boolean;
   now: number;
   onOpenAgent: (agentId: string) => void;
+  /** Opens the automation named, for a run with nothing of its own to open. */
+  onOpenAutomation: (automationId: string) => void;
 }): React.JSX.Element {
   const body = useRef<HTMLDivElement | null>(null);
   const kept = shownRuns(runs, shown);
@@ -137,6 +142,7 @@ export function WorkspaceRuns({
               linked={false}
               now={now}
               onOpenAgent={onOpenAgent}
+              onOpenAutomation={() => onOpenAutomation(run.automation.id)}
             />
           ))}
         </List>

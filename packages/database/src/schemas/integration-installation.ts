@@ -8,9 +8,9 @@ import { organization, user } from "./auth.js";
  * integration-installation.ts -- an integration's own app installed on a workspace, whose deliveries fire that workspace's automations.
  *
  * A provider that fires automations (`@luke/features/trigger-catalog`)
- * delivers its events through an app of Fullspin's that an owner or admin
+ * delivers its events through an app of ours that an owner or admin
  * installs on their account at the provider: a Sentry organization installs
- * Fullspin's Sentry integration. Each installation stands for exactly one
+ * our Sentry integration. Each installation stands for exactly one
  * workspace, keyed on the provider and the provider's own id for it (a
  * Sentry installation's uuid), so a delivery finds its workspace by the
  * installation it names and fires no other workspace's automations. The

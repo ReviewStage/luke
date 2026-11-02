@@ -250,6 +250,22 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     return settings.flushProductEvents;
   });
 
+  /**
+   * The counts of a sign-in that left the window and came back on this
+   * launch: its start, which the page it left queued with no account to send
+   * it under and lost as it went, and, where it landed, the sign-in itself,
+   * which no change in either run shows because this launch already starts
+   * signed in.
+   */
+  const recordReturnFromSignIn = (launched: AccountSnapshot): void => {
+    settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+      account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_START,
+    });
+    if (launched.status === ACCOUNT_STATUS.SIGNED_IN) {
+      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
+    }
+  };
+
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () =>
       Effect.succeed({ account: carried(session.snapshot()) }),
@@ -334,10 +350,13 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     // starts once the launch's account stands as the one it compares against.
     // Note that a session a re-read settled on during the launch is then the
     // launch's own account: the panel hears it, and, as for a launch that read
-    // it itself, no sign-in is counted.
+    // it itself, no sign-in is counted, unless the launch is a sign-in's return.
     lifetime: Effect.gen(function* () {
       const changes = yield* session.changes;
       previousAccount = yield* session.initialize;
+      if (session.returnedFromSignIn && (yield* session.returnedFromSignIn)) {
+        recordReturnFromSignIn(previousAccount);
+      }
       yield* Effect.forkScoped(Stream.runForEach(changes, onAccountChange));
     }),
   };

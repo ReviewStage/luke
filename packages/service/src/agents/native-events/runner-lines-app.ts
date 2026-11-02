@@ -1,8 +1,8 @@
 /**
- * runner-lines-app.ts -- where a cloud runner reads Fullspin's lines past its cursor, held open until one is queued.
+ * runner-lines-app.ts -- where a cloud runner reads our lines past its cursor, held open until one is queued.
  *
  * A runner whose config names this read (`@luke/agent-runner`'s
- * `RUNNER_LINES`) takes Fullspin's lines from here rather than from its stdin,
+ * `RUNNER_LINES`) takes our lines from here rather than from its stdin,
  * so a line stands until the runner says it took it, rather than counting as
  * delivered the moment a write to a pipe succeeded. The read names the
  * launch by its first event number and the place of the last line the
@@ -13,7 +13,7 @@
  * line the developer was already told went unanswered is never run behind
  * their back. Where nothing stands past the place, the read is held on the
  * agent's topic (`../../http/held-read.ts`), which a line queued wakes
- * through Fullspin Sync, and answers none at the hold's end, as a device's read
+ * through Sync, and answers none at the hold's end, as a device's read
  * is held; the runner asks again.
  *
  * The bearer is admitted as the events route admits it
@@ -52,7 +52,7 @@ export const RUNNER_LINES_PATH = "/api/agents/runner-lines";
 /**
  * What one answer carries: at most `LIMIT` lines, and no more than
  * `MAX_BYTES` of them past the first, under the platform's own bound on a
- * function's answer; and how often a held read looks again where Fullspin Sync
+ * function's answer; and how often a held read looks again where Sync
  * cannot wake it.
  */
 const RUNNER_LINES_ANSWER = {

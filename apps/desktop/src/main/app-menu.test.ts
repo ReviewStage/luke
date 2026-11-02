@@ -225,7 +225,7 @@ describe("the developer tools", () => {
   });
 });
 
-/** A window of Vespin's, as the menu is handed the one it was chosen over. */
+/** A window of the app's, as the menu is handed the one it was chosen over. */
 function aWindow(): BaseWindow {
   return {} as BaseWindow;
 }

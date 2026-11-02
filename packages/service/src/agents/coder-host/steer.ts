@@ -61,11 +61,12 @@ import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../menti
 import { readMentioned } from "../mentioned-reads.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
+import { isNativeRuntime } from "./native-runtime.js";
 import { failedCallRefusal } from "./runtime-sessions.js";
 import { agentStatusOf } from "./status.js";
 
 /**
- * steer.ts -- the developer's words handed to a coding agent: the one path a message takes, from the message box or from Fullspin's voice.
+ * steer.ts -- the developer's words handed to a coding agent: the one path a message takes, from the message box or from the app's voice.
  *
  * The words are handed to the session the agent runs in, where they steer
  * the turn under way or open one, and written as a line awaiting its turn
@@ -97,7 +98,7 @@ import { agentStatusOf } from "./status.js";
  * (the starter alone, for an agent on its starter's own GitHub token),
  * while the line
  * lands in the agent's conversation under the member who started it,
- * naming what sent it: the member, Fullspin from a call, or an automation's run.
+ * naming what sent it: the member, the app from a call, or an automation's run.
  * A teammate's words, a member's other than the starter, are handed to eve
  * behind a label naming them by their mention link (`attached-files.ts`'s
  * `senderLabel`), which the row leaves out, since its sender is its own
@@ -105,7 +106,9 @@ import { agentStatusOf } from "./status.js";
  * Who reaches eve is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
  * deployment for the account, which the coder channel's table admits for
- * exactly this message (`coder-host/channel.ts`). An archived agent takes
+ * exactly this message (`coder-host/channel.ts`). An agent on eve takes no
+ * message either: eve runs no agent any more, so it is refused as ended,
+ * and only a new agent started from it goes on from its work. An archived agent takes
  * no message, and is refused as one that names nothing, since every list
  * leaves it out until it is brought back; it is read again under the
  * conversation's dispatch claim just before the send, which is taken under
@@ -130,7 +133,7 @@ import { agentStatusOf } from "./status.js";
  * send is made under, which a repeat carries again, and what sent them, which
  * the row keeps and eve is not told; and what the row says carried it, the
  * developer's typed ask unless the caller names another agent's message, a
- * thread, a plan comment, GitHub, Fullspin, or an automation's run, which eve is
+ * thread, a plan comment, GitHub, the app, or an automation's run, which eve is
  * not told either.
  */
 export interface SteerLine {
@@ -354,8 +357,11 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   if (Option.isNone(routing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { runtime, payer } = routing.value;
   if (!writesToAgent(userId, agent, payer)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  // Note that Fullspin's key pays for no coding agent, so one it paid for, or one on eve whose starter
-  // keeps no API key for its model now, is refused by name and never moved to another payer.
+  // Note that eve runs no agent any more, so one on it takes no words and is refused as ended, before
+  // GitHub is asked or a line is written: only a new agent, started from it, goes on from its work.
+  if (!isNativeRuntime(runtime)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
+  // Note that our key pays for no coding agent, so an agent on its starter's API key whose starter
+  // keeps none for its model now is refused by name and never moved to another payer.
   const missing = yield* hostedStoreOrUnavailable(
     messageCredentialMissing(agent, { runtime, payer }),
   );
@@ -405,7 +411,7 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
     },
     { concurrency: "unbounded" },
   );
-  // Note that a GitHub that did not answer, or that holds Fullspin's calls for its rate limit, lets the words through,
+  // Note that a GitHub that did not answer, or that holds our calls for its rate limit, lets the words through,
   // because the agent's checkout already stands and only GitHub's definite no is a reason to keep them from it.
   yield* Effect.fromResult(reached.repository).pipe(
     Effect.catch((refusal) =>

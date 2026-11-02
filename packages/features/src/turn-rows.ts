@@ -59,6 +59,10 @@ export const CALL_KIND = {
   WORKER: "worker",
   WORKER_WAIT: "worker-wait",
   WORKER_CANCEL: "worker-cancel",
+  /** More sent to one of a native harness's subagents (Claude Code's `SendMessage`), its row naming the subagent. */
+  WORKER_MESSAGE: "worker-message",
+  /** A background command, monitor, or subagent stopped (Claude Code's `TaskStop`), its row naming it by its id. */
+  STOP_BACKGROUND: "stop-background",
   LIST_AGENTS: "list-agents",
   READ_AGENT: "read-agent",
   MESSAGE_AGENT: "message-agent",
@@ -90,7 +94,7 @@ export const CALL_KIND = {
   MOVE_TASK: "move-task",
   /** A task of the workspace changed (`update_task`), its row naming the task once answered; an older transcript's archive of one reads as a change too. */
   UPDATE_TASK: "update-task",
-  /** The workspace's issues listed (`list_issues`, retired with Fullspin's own issues; an older transcript still names it). */
+  /** The workspace's issues listed (`list_issues`, retired with our own issues; an older transcript still names it). */
   LIST_ISSUES: "list-issues",
   /** One issue read (`read_issue`), filed (`create_issue`), or changed (`update_issue`), retired with `list_issues`, its row naming it by its identifier and title once answered. */
   READ_ISSUE: "read-issue",
@@ -108,17 +112,17 @@ export const CALL_KIND = {
   SLEEP: "sleep",
   /** The workspace's tasks listed (`list_tasks`). */
   LIST_TASKS: "list-tasks",
-  /** A fact kept in the workspace's shared memory (`remember`), its row saying it. */
+  /** A fact kept in the workspace's shared memory (`save_memory`, or `remember` in an older transcript), its row saying it. */
   REMEMBER: "remember",
-  /** The workspace's shared memory searched (`recall`), its row naming the query where there was one. */
+  /** The workspace's shared memory searched (`search_memory`, or `recall` in an older transcript), its row naming the query where there was one. */
   RECALL: "recall",
   /** The plan's comment threads read (`read_comments`). */
   READ_COMMENTS: "read-comments",
   /** An answer written in one of the plan's comment threads (`reply_to_comment`), its row saying it. */
   REPLY_TO_COMMENT: "reply-to-comment",
-  /** A comment thread of the plan resolved (`resolve_thread`). */
+  /** A comment thread of the plan resolved (`update_comment`, or `resolve_thread` in an older transcript). */
   RESOLVE_THREAD: "resolve-thread",
-  /** A resolved comment thread of the plan brought back (`reopen_thread`). */
+  /** A resolved comment thread of the plan brought back (`update_comment`, or `reopen_thread` in an older transcript). */
   REOPEN_THREAD: "reopen-thread",
   /** A connection's tools searched (`connection_search`), its row naming the server it searched. */
   SEARCH_TOOLS: "search-tools",
@@ -155,6 +159,8 @@ export const CALL_WORDS = {
   [CALL_KIND.WORKER]: { verb: "Asked the worker", code: false },
   [CALL_KIND.WORKER_WAIT]: { verb: "Waited for the worker", code: false },
   [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped the worker", code: false },
+  [CALL_KIND.WORKER_MESSAGE]: { verb: "Messaged the worker", code: false },
+  [CALL_KIND.STOP_BACKGROUND]: { verb: "Stopped", code: true },
   [CALL_KIND.LIST_AGENTS]: { verb: "Listed the agents", code: false },
   [CALL_KIND.READ_AGENT]: { verb: "Read the agent", code: false },
   [CALL_KIND.MESSAGE_AGENT]: { verb: "Messaged the agent", code: false },

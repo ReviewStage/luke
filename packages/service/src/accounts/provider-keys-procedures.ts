@@ -33,7 +33,7 @@
  * rather than as its stored status, so the account is told to replace it.
  * A deployment holding no ring, or one it cannot parse, answers every
  * request unavailable, before it reads anything the request carries, and
- * its agents run on Fullspin's own keys.
+ * its agents run on our own keys.
  *
  * The rotation's rewrap (`accounts/provider-key-rewrap.ts`) is a group of its
  * own (`provider-keys-app.ts`), asked by hand under the deployment's
@@ -69,6 +69,7 @@ import {
   type SubscriptionKeySummary,
 } from "@luke/features/provider-key-wire";
 import { Clock, DateTime, Duration, Effect, Redacted, Result } from "effect";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { hostedStoreOrUnavailable, type UserIdResolver } from "../http/http-effect.js";
 import { makeRateBrake } from "../http/rate-brake.js";
 import { accountMiddleware, hosted, keyRingMiddleware } from "../orpc/base.js";
@@ -203,9 +204,10 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
         yield* hostedStoreOrUnavailable(
           saveProviderKey(userId, provider, kind, sealed, providerKeyHint(key), null, now),
         );
+        yield* recordServerEvent(SERVER_EVENT.PROVIDER_KEY_CREATE, userId, { provider });
         return yield* keysAnswer(userId, ring);
       }
-      // An Anthropic key is asked about fast mode beside the check, which the catalog offers by; OpenAI has none Fullspin runs.
+      // An Anthropic key is asked about fast mode beside the check, which the catalog offers by; OpenAI has none we run.
       const [checked, fastAccess] = yield* Effect.all(
         [
           checkProviderKey(provider, key),
@@ -229,6 +231,7 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
           now,
         ),
       );
+      yield* recordServerEvent(SERVER_EVENT.PROVIDER_KEY_CREATE, userId, { provider });
       return yield* keysAnswer(userId, ring);
     }),
 
@@ -292,6 +295,9 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
           accessExpiresAt,
         ),
       );
+      yield* recordServerEvent(SERVER_EVENT.PROVIDER_KEY_CREATE, userId, {
+        provider: PROVIDER_KEY_PROVIDER.OPENAI,
+      });
       return yield* keysAnswer(userId, ring);
     }),
   };

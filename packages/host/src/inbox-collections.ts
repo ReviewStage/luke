@@ -31,7 +31,7 @@
  * read row, which wakes the account and the item's task and agent, and a
  * nod, an answer, or a close writes the item, which wakes every member's
  * account, its task, and its agent. Where a read hands no wait yet, as
- * before Fullspin Sync first woke it, the write's own answer is taken in its
+ * before Sync first woke it, the write's own answer is taken in its
  * place. A write the service did not take, the agent having changed the
  * item first, takes the item as the service answered it before it is taken
  * back, so it lands on the service's word.

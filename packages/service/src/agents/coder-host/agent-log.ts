@@ -3,7 +3,7 @@
  *
  * Every line about a coding agent carries its ids as log annotations, which
  * reach Vercel's logs and Sentry Logs, so a failure is found by the agent's
- * id: `agentId`, `conversationId`, `taskId`, Fullspin's own session as
+ * id: `agentId`, `conversationId`, `taskId`, our own session as
  * `sessionId` (its machine's tag, the one handle a session keeps across
  * resumes), and Vercel's running session as `sandboxSessionId`. A failure's
  * line adds `reason`, the failure's own kind, and, where a turn records it,
@@ -49,7 +49,7 @@ const REPORTED_KEYS = [
 /**
  * The ids of a coding agent a line is annotated with, those the caller
  * holds: its own, its conversation's, its task's where it has one, and
- * Fullspin's session its machine is tagged with.
+ * our session its machine is tagged with.
  */
 export function agentLogIds(
   agent: Partial<Pick<Agent, "id" | "conversationId" | "taskId">>,

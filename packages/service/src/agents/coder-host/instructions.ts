@@ -48,8 +48,8 @@ const AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * file tools (`files.ts`) alike.
  * The commit identity is the one thing the checkout set that the session
  * is told to leave alone (`checkout.ts`): the developer's own GitHub
- * account where the agent writes as them, with the trailer that names the
- * Fullspin GitHub App's bot as co-author handed here to end every commit with,
+ * account where the agent writes as them, with the trailer that names our
+ * GitHub App's bot as co-author handed here to end every commit with,
  * the way Claude Code names itself on a commit it made beside its user; or
  * the App's bot alone, which adds no trailer. The agent opens its pull
  * request through the service (`pull-request.ts`) rather than `gh`, so the
@@ -154,7 +154,7 @@ const CHECKS_WORDS = {
     "Your credential does not read the checks on a pull request in this repository, so do not try to watch them, and say in your final message that CI was not watched.",
 } as const;
 
-/** The harnesses whose instructions differ in the tools they name: eve, which runs Fullspin's own, and Claude Code and Codex, which each run their own. */
+/** The harnesses whose instructions differ in the tools they name: eve, which runs ours, and Claude Code and Codex, which each run their own. */
 export const CODER_HARNESS = {
   EVE: CONVERSATION_RUNTIME.EVE,
   CLAUDE_CODE: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -192,7 +192,7 @@ interface ToolWords {
   readonly skills: string;
   /** How a skill the developer names is loaded with no repository, where the member's installed ones are all it is offered. */
   readonly installedSkills: string;
-  /** What it is told of a browser the developer can watch, a tool of Fullspin's every harness is offered. */
+  /** What it is told of a browser the developer can watch, a tool of ours every harness is offered. */
   readonly browser: string;
   /** How the agent keeps its to-dos. */
   readonly todos: string;
@@ -217,7 +217,7 @@ const NATIVE_INTEGRATION_WORDS = `The services the developer connected, such as 
  * developer should see or help with, while a throwaway check of its own
  * work stays on the sandbox's Playwright, run from the harness's own shell
  * (`shell`), which leaves no tab behind. eve's agent and a native one are
- * offered the same tool, a native one over Fullspin's MCP server.
+ * offered the same tool, a native one over our MCP server.
  */
 function browserWords(shell: string): string {
   return `## Your browser
@@ -232,7 +232,7 @@ const STOPS_AT_TURN_END = "Everything you start stops when your turn ends.";
 
 /**
  * How a Claude Code agent waits on its checks. Note that ScheduleWakeup's own
- * description speaks of a /loop, which a Fullspin agent runs none of, so the
+ * description speaks of a /loop, which an agent of ours runs none of, so the
  * words say what each field it requires takes here: the prompt the wakeup
  * delivers, which wakes the agent's next turn (`runner.ts`'s `wakeupsOf`).
  */
@@ -240,11 +240,11 @@ const SCHEDULE_WAKEUP_WORDS =
   "wait with ScheduleWakeup for about as long as the checks usually take, though its description speaks of a /loop you are not in: its `prompt` is what to do once it fires, such as `Read the checks on pull request #<number>`, its `noop` is false, and its `reason` is one short sentence";
 
 /**
- * Each harness's words. eve's are Fullspin's own tools. Claude Code owns the
+ * Each harness's words. eve's are our own tools. Claude Code owns the
  * shell, the files, the web, skills, to-dos, waiting, and its subagents
  * (the `Agent` tool), so a Claude Code agent is told of those by the names
- * Claude Code gives them, and never of Fullspin's that it is not offered; the
- * tools that touch Fullspin stay Fullspin's, over its MCP server, under their own
+ * Claude Code gives them, and never of ours that it is not offered; the
+ * tools that touch the app stay ours, over our MCP server, under their own
  * names. Codex likewise owns its shell, `apply_patch`, its plan tool for
  * to-dos, its subagents, its skills (`.agents/skills`, and the member's
  * installed ones, which `native-skills.ts` writes beside the checkout), and
@@ -287,14 +287,13 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     skills: `A word like \`/name\` in the developer's message names one of your skills: the repository's, or one your developer installed into ${PRODUCT_NAME}, which Claude Code lists as \`${INSTALLED_SKILLS.PLUGIN}:<name>\`. Load it with Claude Code's Skill tool before anything else, and follow what it answers. Where it knows no such skill, read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on the default branch, and follow that instead.`,
     installedSkills: `A word like \`/name\` in the developer's message names one of the skills your developer installed into ${PRODUCT_NAME}, which Claude Code lists as \`${INSTALLED_SKILLS.PLUGIN}:<name>\`. Load it with Claude Code's Skill tool before anything else, and follow what it answers.`,
     browser: browserWords("Bash"),
-    todos:
-      "For work of more than a couple of steps, keep your to-dos with TaskCreate, one task per item, and TaskUpdate, which the developer watches: create them all before you start, keep exactly one in progress, and mark each completed as it finishes.",
+    todos: `For work of more than a couple of steps, keep your to-do items with TaskCreate, one per step, and TaskUpdate, which the developer watches; they are Claude Code's own to-do items, never ${PRODUCT_NAME}'s tasks: create them all before you start, keep exactly one in progress, and mark each completed as it finishes.`,
     checks: {
       readable: `After you push and open or update a pull request, wait on its checks rather than watching them: ${CHECKS_WAIT.NEVER_WATCH}, and ${SCHEDULE_WAKEUP_WORDS}. ${CHECKS_WAIT.TOLD_AS_TURN} Then, or once the wakeup comes without that message, read them once with \`gh pr checks <number>\`, and where some are still running, wait again. When a check fails, read why with \`gh run view <run-id> --log-failed\`, or the failing check's own details, fix the cause, push, and wait again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
       rest: `After you push and open or update a pull request, wait on its checks rather than watching them: ${CHECKS_WAIT.NEVER_WAIT}, and ${SCHEDULE_WAKEUP_WORDS}. ${CHECKS_WAIT.TOLD_AS_TURN} Then, or once the wakeup comes without that message, read its checks on the commit you pushed once with \`gh api repos/{owner}/{repo}/commits/<sha>/check-runs\` and \`gh api repos/{owner}/{repo}/commits/<sha>/status\`, and where some are still running, wait again. When a check fails, read why with \`gh api repos/{owner}/{repo}/actions/jobs/<job-id>/logs\`, its job listed by \`gh api "repos/{owner}/{repo}/actions/runs?head_sha=<sha>"\` and \`gh api repos/{owner}/{repo}/actions/runs/<run-id>/jobs\`, or the failing check's own details, fix the cause, push, and wait again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
     },
     worker: ({ readOnly, keeps }) =>
-      `Claude Code's Agent tool hands a scoped job to a worker, which Claude Code calls a subagent: give it \`subagent_type: "${CLAUDE_CODE_WORKER}"\`, ${PRODUCT_NAME}'s worker, which runs on your model and answers you once it is done; several run at once. Hand workers broad searches, a comparison of approaches, and investigations independent of each other, and keep ${keeps} to yourself: ${readOnly} A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.`,
+      `Claude Code's Agent tool hands a scoped job to a worker, which Claude Code calls a subagent: give it \`subagent_type: "${CLAUDE_CODE_WORKER}"\`, ${PRODUCT_NAME}'s worker, which runs on your model and answers you once it is done; several run at once. SendMessage only sends more to a worker of yours, by its name or id; another agent is reached with \`${MESSAGE_AGENT_TOOL.name}\`. Hand workers broad searches, a comparison of approaches, and investigations independent of each other, and keep ${keeps} to yourself: ${readOnly} A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.`,
     integrations: NATIVE_INTEGRATION_WORDS,
     ownSandbox: "Claude Code's own sandbox",
   },
@@ -318,7 +317,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
       rest: `After you push and open or update a pull request, read its checks on the commit you pushed with \`gh api repos/{owner}/{repo}/commits/<sha>/check-runs\` and \`gh api repos/{owner}/{repo}/commits/<sha>/status\`, waiting between reads with \`sleep <seconds>\` in your shell for about as long as the checks usually take rather than checking every few seconds. When a check fails, read why with \`gh api repos/{owner}/{repo}/actions/jobs/<job-id>/logs\`, its job listed by \`gh api "repos/{owner}/{repo}/actions/runs?head_sha=<sha>"\` and \`gh api repos/{owner}/{repo}/actions/runs/<run-id>/jobs\`, or the failing check's own details, fix the cause, push, and read again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
     },
     worker: ({ readOnly, keeps }) =>
-      `Codex's own subagents are your workers: each takes a scoped job, runs on a GPT model, and answers you once it is done; several run at once. Hand workers broad searches, a comparison of approaches, and investigations independent of each other, and keep ${keeps} to yourself: ${readOnly} A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.`,
+      `Codex's own subagents are your workers: each takes a scoped job, runs on a GPT model, and answers you once it is done; several run at once. Hand workers broad searches, a comparison of approaches, and investigations independent of each other, and keep ${keeps} to yourself. Nothing holds a Codex subagent to reading, so write this rule into each one's job: ${readOnly} A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints. Codex's own \`listAgents\` and \`sendMessage\` reach its subagents only, never ${PRODUCT_NAME}'s agents: use \`${CODER_TOOL.LIST_AGENTS}\` and \`${MESSAGE_AGENT_TOOL.name}\` for those.`,
     integrations: NATIVE_INTEGRATION_WORDS,
     ownSandbox: "Codex's own sandbox",
   },
@@ -390,12 +389,12 @@ const TASK_PLACE_WORDS = {
 
 ## Your task's status
 
-Keep your task's status current with \`${CODER_TOOL.UPDATE_TASK}\` and your task's id. Starting you moved it to in-progress; move it back there if you take up work on a task that stands done or canceled. Mark it done once all its work is finished, any agents you started on it included: its pull request merged, or, where it needed none, the write-up delivered. Marking it done withdraws every ask still open on its threads, so mark it done only once none you still need stands open; where one does, leave it in-progress until it is answered: ${PRODUCT_NAME} then marks it done by itself where its pull request merged, and otherwise you mark it done once the answer reaches you. Leave it in-progress while a pull request awaits review, and never cancel it unless the developer says to. Where another agent started you on its task, leave the status to that agent; one started on a task of its own keeps that status itself. Say in your message when you change it.`,
+Keep your task's status current with \`${CODER_TOOL.UPDATE_TASK}\` and your task's id. Starting you moved it to in-progress; move it back there if you take up work on a task that stands done or canceled. Mark it done once all its work is finished, any agents you started on it included: its pull request merged, or, where it needed none, the write-up delivered. Marking it done withdraws every ask still open on its threads, and \`${CODER_TOOL.UPDATE_TASK}\` refuses Done while any ask stands open: withdraw those you no longer need first, and mark it done only once none you still need stands open; where one does, leave it in-progress until it is answered: ${PRODUCT_NAME} then marks it done by itself where its pull request merged, and otherwise you mark it done once the answer reaches you. Leave it in-progress while a pull request awaits review, and never cancel it unless the developer says to. Where another agent started you on its task, leave the status to that agent; one started on a task of its own keeps that status itself. Say in your message when you change it.`,
     comments: `
 
 ## Comments
 
-Members and agents leave comment threads on a plan's text, each beside the words it is on. Each call of the comment tools names the task whose plan it acts on by its \`taskId\`, your own task or any other of your workspace. \`${CODER_TOOL.READ_COMMENTS}\` reads them at any time for context; reading asks nothing of you. A member who wants your answer mentions you in a thread, which reaches you as a message naming it: read the thread and the plan, do what it asks and nothing else it discusses, and answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\`, never in a thread no one sent you. \`${CODER_TOOL.RESOLVE_THREAD}\` settles a thread once what it asked is done, and \`${CODER_TOOL.REOPEN_THREAD}\` brings one back.`,
+Members and agents leave comment threads on a plan's text, each beside the words it is on. Each call of the comment tools names the task whose plan it acts on by its \`taskId\`, your own task or any other of your workspace. \`${CODER_TOOL.READ_COMMENTS}\` reads them at any time for context; reading asks nothing of you. A member who wants your answer mentions you in a thread, which reaches you as a message naming it: read the thread and the plan, do what it asks and nothing else it discusses, and answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\`, never in a thread no one sent you. \`${CODER_TOOL.UPDATE_COMMENT}\` resolves a thread once what it asked is done, or reopens one.`,
   },
   taskless: {
     link: "",
@@ -420,7 +419,7 @@ const PILOT_TASK_PLACE_WORDS = {
 
 ## Your task's status
 
-Keep your task's status current with \`${CODER_TOOL.UPDATE_TASK}\` and your task's id, and each child task's by its own. Starting you moved your task to in-progress. A child task stands in todo until you start its agent, moves to in-progress by itself when you start its agent, is done once its pull request merges, and is canceled once you cut it; one with a pilot of its own is marked done by that pilot. Mark your own task done once every child task is done or canceled, every agent you started is archived, and any pull request you opened yourself has merged, and never cancel it yourself. Marking a task done withdraws every ask still open on its threads, so mark one done only once none you still need stands open; where one does, leave it in-progress until it is answered: ${PRODUCT_NAME} then marks it done by itself where its pull request merged, and otherwise you mark it done once the answer reaches you. Say in your message when you change a status.`,
+Keep your task's status current with \`${CODER_TOOL.UPDATE_TASK}\` and your task's id, and each child task's by its own. Starting you moved your task to in-progress. A child task stands in todo until you start its agent, moves to in-progress by itself when you start its agent, is done once its pull request merges, and is canceled once you cut it; one with a pilot of its own is marked done by that pilot. Mark your own task done once every child task is done or canceled, every agent you started is archived, and any pull request you opened yourself has merged, and never cancel it yourself. Marking a task done withdraws every ask still open on its threads, and \`${CODER_TOOL.UPDATE_TASK}\` refuses Done while any ask stands open: withdraw those you no longer need first, and mark one done only once none you still need stands open; where one does, leave it in-progress until it is answered: ${PRODUCT_NAME} then marks it done by itself where its pull request merged, and otherwise you mark it done once the answer reaches you. Say in your message when you change a status.`,
 } as const;
 
 /** What the agent is told of updating its task's plan with `edit_plan`, and where a decision it settles goes; nothing for an agent handed a prompt on no task, which has no plan. */
@@ -467,7 +466,7 @@ ${read}${notes}`,
 /**
  * How the agent names a thing the developer can open: as a mention, the
  * `[@name](target)` the developer's own picks are written as
- * (`@luke/features/mention-link`), which Fullspin draws as the thing's chip in
+ * (`@luke/features/mention-link`), which the app draws as the thing's chip in
  * a message, a thread, and the plan alike, and which
  * a correction of the plan never drops. One example per kind, its targets
  * the codec's own: a file's or a folder's page on GitHub, any other page by
@@ -477,8 +476,8 @@ ${read}${notes}`,
  * bare `#42` draws as no chip. Another agent, a page, and a task are
  * named by the mention the tool that made or listed it answered, so no
  * address is spelled by hand. An MCP server is named by its connection's
- * mention, and a skill as `/name`, since Fullspin draws both as chips. A name
- * Fullspin shows as a label is written in sentence case, with no period. An
+ * mention, and a skill as `/name`, since the app draws both as chips. A name
+ * the app shows as a label is written in sentence case, with no period. An
  * agent with no repository is told of no file of one, and its pull request
  * example names an example repository.
  */
@@ -511,7 +510,7 @@ Name a skill as \`/name\`, which ${PRODUCT_NAME} draws as the skill's chip.
 Write a name ${PRODUCT_NAME} shows as a label in sentence case, with no period at its end: a task's name, a page's title, a thread's title, a section's name, and an ask's options.`;
 }
 
-/** Whose the agent's commits are: the developer's, ending on the trailer naming Fullspin's bot as co-author, or the App's bot's where no trailer is handed. */
+/** Whose the agent's commits are: the developer's, ending on the trailer naming our bot as co-author, or the App's bot's where no trailer is handed. */
 function authorshipRule(coAuthor: string | undefined): string {
   return coAuthor === undefined
     ? `Your commits are the ${PRODUCT_NAME} GitHub App's: the checkout's git identity is already set to its bot, so never change \`user.name\` or \`user.email\`, pass \`--author\`, add a \`Co-authored-by\` trailer, or rewrite who a commit is by.`
@@ -594,14 +593,14 @@ export interface CoderMachine {
   /**
    * How a local agent runs on its device (`DEVICE_ISOLATION`): in a VM of
    * its own, out of reach of the device's own tools and services; straight
-   * on it, on Fullspin's sign-ins, with full access to it; or on the
+   * on it, on the app's sign-ins, with full access to it; or on the
    * developer's own logins. None in the cloud.
    */
   readonly isolation?: DeviceIsolation | undefined;
   readonly checkoutPath: string;
-  /** Where the machine keeps the skills the member installed into Fullspin. */
+  /** Where the machine keeps the skills the member installed into the app. */
   readonly installedSkills: string;
-  /** Where the agent saves a file Fullspin reads back (`MachineLayout`'s `sharedFiles`). */
+  /** Where the agent saves a file the service reads back (`MachineLayout`'s `sharedFiles`). */
   readonly sharedFiles: string;
 }
 
@@ -616,7 +615,7 @@ const SANDBOX_MACHINE: CoderMachine = {
 /**
  * A harness's words on the machine given: a local agent's folders in place of
  * the sandbox's, its checkout and its installed skills, and no word of a
- * browser of Fullspin's, which a local agent is not offered (`tool-set.ts`'s
+ * browser of ours, which a local agent is not offered (`tool-set.ts`'s
  * `machineToolsOf`).
  */
 function toolsOn(tools: ToolWords, machine: CoderMachine): ToolWords {
@@ -636,7 +635,7 @@ const DEVICE_VM_WORDS = `You run in a Linux virtual machine of your own on one o
 const DEVICE_DIRECT_WORDS =
   "You run straight on one of the developer's own machines, as its own user and with full access to it, in a folder of your own: its installed tools, running services, and files are all within your reach, the folders of its other agents among them, so work in your own folder and leave what is not yours alone.";
 
-/** Where a local agent on its device runs on Fullspin's sign-ins, in a VM or straight on the device, in words; none for one on the developer's own logins or in the cloud. */
+/** Where a local agent on its device runs on the app's sign-ins, in a VM or straight on the device, in words; none for one on the developer's own logins or in the cloud. */
 function deviceWords(machine: CoderMachine): string | undefined {
   if (machine.isolation === DEVICE_ISOLATION.SANDBOX) return DEVICE_VM_WORDS;
   if (machine.isolation === DEVICE_ISOLATION.DIRECT) return DEVICE_DIRECT_WORDS;
@@ -893,7 +892,7 @@ ${build.seeing}
 /**
  * Where a pilot works, in place of an agent's job and how it works: the
  * agent that runs a pilot task, `/orchestrate`'s orchestrator built into
- * Fullspin with child tasks in place of workers on its own task. It reads its
+ * the app with child tasks in place of workers on its own task. It reads its
  * repository's checkout, or works in a sandbox where its task has none;
  * writes the task's plan as a Linear issue is written; breaks the work into
  * child tasks, each a leaf one coding agent builds as one pull request or a
@@ -1012,7 +1011,7 @@ function memoryWords(memoryOn: boolean): string {
   return memoryOn
     ? `## The workspace's memory
 
-Your workspace keeps one memory shared by every member and every one of its agents: settled facts and conventions about how the team works. Call \`${CODER_TOOL.RECALL}\` once your task comes into focus, with a few words for the area at hand, and again when you reach an area you have not searched; treat what it answers as prior context, never as rules: the developer's words now and what you read in the code win. Call \`${CODER_TOOL.REMEMBER}\` quietly, without asking or announcing it, when the developer settles a convention or a decision a later agent would want, or you confirm a fact in the code another agent would otherwise rediscover: one short self-contained statement each. Never keep a guess, an option still being weighed, your task's own detail, a remark about one member, or anything holding a credential, key, token, or password. When something a memory says turns out wrong, call \`${CODER_TOOL.REMEMBER}\` with the corrected statement and that memory's id as replaces, so the old words are rewritten rather than kept beside the new. When either answers that memory is unavailable, carry on without it.
+Your workspace keeps one memory shared by every member and every one of its agents: settled facts and conventions about how the team works. Call \`${CODER_TOOL.SEARCH_MEMORY}\` once your task comes into focus, with a few words for the area at hand, and again when you reach an area you have not searched; treat what it answers as prior context, never as rules: the developer's words now and what you read in the code win. Call \`${CODER_TOOL.SAVE_MEMORY}\` quietly, without asking or announcing it, when the developer settles a convention or a decision a later agent would want, or you confirm a fact in the code another agent would otherwise rediscover: one short self-contained statement each. Never keep a guess, an option still being weighed, your task's own detail, a remark about one member, or anything holding a credential, key, token, or password. When something a memory says turns out wrong, call \`${CODER_TOOL.SAVE_MEMORY}\` with the corrected statement and that memory's id as replaces, so the old words are rewritten rather than kept beside the new. When either answers that memory is unavailable, carry on without it.
 
 `
     : "";
@@ -1133,7 +1132,7 @@ export interface AgentInstructionsContext {
   readonly workspace: string;
   readonly memoryOn: boolean;
   readonly harness: CoderHarness;
-  /** Where the agent's machine keeps its checkout, its installed skills, and the files Fullspin reads back, and how a local agent's device runs it; where every sandbox keeps them, where unsaid. */
+  /** Where the agent's machine keeps its checkout, its installed skills, and the files the service reads back, and how a local agent's device runs it; where every sandbox keeps them, where unsaid. */
   readonly place?:
     | {
         readonly checkoutPath: string;

@@ -44,7 +44,7 @@ import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * The panel's surface, shadcn/ui's popover content (style `base-nova`) in
- * Fullspin's menu surface: its ground, edge, corner, and lift, arriving as a
+ * our menu surface: its ground, edge, corner, and lift, arriving as a
  * menu does, holding focus for its controls with no ring of its own, and no
  * section giving up its height to the bound, since it scrolls rather than
  * squeezing what it holds. A card stands its sections apart in one column

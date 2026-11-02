@@ -44,6 +44,7 @@ import {
   type SessionEndpoint,
   type UserInfoEndpoint,
 } from "@luke/service/auth/bearer";
+import { recordingProductAnalytics, SERVER_EVENT } from "@luke/service/events/server-events";
 import { LINK_OUTCOME } from "@luke/service/github/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { hostedFetch } from "@luke/service/orpc/handler";
@@ -102,8 +103,8 @@ import { dispatched } from "./support/platform-landing";
  * A plan's own routes are asked at the path a client sends, landed through
  * the committed rewrites on the hosted oRPC router; the old group's at the
  * path the rewrite hands it, the task id moved from the path into the `id`
- * query. A task's repository is kept only once the
- * Vespin GitHub App, over a GitHub the test scripts, confirms the
+ * query. A task's repository is kept only once our
+ * GitHub App, over a GitHub the test scripts, confirms the
  * installation connected to the task's workspace reaches it.
  *
  * Synthetic accounts, bearers, tokens, and repositories throughout.
@@ -238,6 +239,14 @@ function sessionOf(sessions: ReadonlyMap<string, string>): SessionEndpoint {
  * dispatcher on the hosted oRPC router; or, where a route key is named,
  * landed on a function holding the old group under that key.
  */
+/** What the routes counted, across the file; a case reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+const countedFor = (userId: string, name: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === name)
+    .map((event) => event.properties);
+
 const answer = (
   signedIn: SignedIn,
   github: FakeGitHub,
@@ -253,6 +262,7 @@ const answer = (
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       github.layer,
+      ANALYTICS.layer,
       modelCatalogOf([]),
       integrationConnectOver(LINEAR_CONNECTORS),
     );
@@ -689,6 +699,14 @@ it.layer(getTestDB())("the plan routes", (it) => {
           ).plan.priority,
           TASK_PRIORITY.LOW,
         );
+        // A member's move to Done or Canceled is counted where it changed the status, once each, and a refused one or an unchanged status is not.
+        yield* patch(owner, { status: TASK_STATUS.CANCELED });
+        yield* patch(owner, { status: TASK_STATUS.CANCELED });
+        assert.deepEqual(countedFor(owner, SERVER_EVENT.TASK_FINISH), [
+          { status: TASK_STATUS.DONE, by: "member" },
+          { status: TASK_STATUS.CANCELED, by: "member" },
+        ]);
+        assert.deepEqual(countedFor(other, SERVER_EVENT.TASK_FINISH), []);
       }),
   );
 
@@ -1488,7 +1506,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
             }),
           );
 
-        // At the bound alone, but past it once laid over the line Vespin added.
+        // At the bound alone, but past it once laid over the line we added.
         const padding = "x".repeat(TASK_BOUNDS.MAX_BODY_CHARS - INVITATIONS_TEXT.length);
         const oversized = yield* edit(
           taskId,

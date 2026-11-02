@@ -58,7 +58,7 @@ import {
  * synthetic task and tab throughout, the live view over a fake door.
  */
 
-/** Vespin, whose browser a tab is in, wearing a plain glyph. */
+/** The app, whose browser a tab is in, wearing a plain glyph. */
 const LUKE_OWNER = { name: "Vespin", icon: createElement("span") };
 
 /** An agent whose browser a draft opens in. */

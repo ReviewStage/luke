@@ -13,10 +13,10 @@ import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 /**
  * codex-transcript.test.ts -- a coding agent on Codex stores its items under
  * Codex's own names, with the shapes `codex-moments.ts` keeps of them, and
- * its tab draws each on the renderer Vespin's own tool of that kind draws on:
+ * its tab draws each on the renderer our own tool of that kind draws on:
  * its row's verb and subject, and its input and answer once opened. A call to
- * Vespin's own MCP server is stored under Vespin's tool's name and its answer as
- * that tool's JSON, and is drawn as Vespin's tool always is. The shapes are
+ * our own MCP server is stored under our tool's name and its answer as
+ * that tool's JSON, and is drawn as our tool always is. The shapes are
  * those P16's recording (`tools/codex-probe/fixtures/hermetic`) carries;
  * synthetic paths and words.
  */
@@ -115,6 +115,14 @@ const CODEX_ITEMS: readonly {
     },
     line: ["Searched the web for", "banker's rounding in JavaScript"],
     body: ["type: search"],
+  },
+  {
+    name: "a picture looked at",
+    tool: "imageView",
+    input: { path: "/tmp/luke/home.png" },
+    output: "[image]",
+    line: ["Read", "/tmp/luke/home.png"],
+    body: ["/tmp/luke/home.png", "[image]"],
   },
 
   {

@@ -397,7 +397,7 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     ) : list === undefined ? (
       <Spinner delay label={readingWords("repositories")} />
     ) : rows.length === 0 && listed?.installed ? (
-      // Installed but giving Fullspin nothing: the repositories are chosen on GitHub, through the workspace's row.
+      // Installed but giving us nothing: the repositories are chosen on GitHub, through the workspace's row.
       deadEnd([MENU_NOTE.NONE_REACHED], OWNER_ASK.ADD_REPOSITORY, undefined)
     ) : undefined;
 

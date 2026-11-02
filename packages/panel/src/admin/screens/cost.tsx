@@ -57,7 +57,7 @@ function usdOrNone(value: number | null): string {
 
 /**
  * What every dollar on the screen is and is not, said once under the
- * headline: a comparison and a trend at public prices, never Fullspin's bill.
+ * headline: a comparison and a trend at public prices, never our bill.
  */
 function ListPriceNote(): React.JSX.Element {
   return (

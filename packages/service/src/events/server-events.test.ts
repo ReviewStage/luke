@@ -1,14 +1,16 @@
-import { describe, expect, it } from "@effect/vitest";
+import { afterEach, describe, expect, it, vi } from "@effect/vitest";
 import { AGENT_KIND } from "@luke/features/agent-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import type { PosthogBatch } from "../providers/posthog.js";
+import { DEPLOYMENT_VARIABLE } from "./events.js";
 import {
   productAnalyticsFromEnvironment,
   recordServerEvent,
   SERVER_AGENT_START_KIND,
+  SERVER_AGENT_STARTER,
   SERVER_EVENT,
 } from "./server-events.js";
 
@@ -52,48 +54,60 @@ const agentStart = recordServerEvent(SERVER_EVENT.AGENT_START, "user-1", {
   effort: "high",
   start_kind: SERVER_AGENT_START_KIND.FRESH,
   is_from_automation: false,
+  started_by: SERVER_AGENT_STARTER.MEMBER,
   has_task: true,
   agent_kind: AGENT_KIND.CODER,
 });
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe("server events", () => {
-  it.effect("posts the event under the account's id, its own properties, and no location", () => {
-    const processor = analytics({
-      posthogProjectApiKey: Redacted.make("phc_project"),
-      posthogIngestHost: "https://eu.i.posthog.com",
-    });
-    return Effect.gen(function* () {
-      yield* TestClock.setTime(NOW);
-      yield* agentStart;
-      expect(processor.posted).toEqual([
-        {
-          url: "https://eu.i.posthog.com/batch/",
-          body: {
-            api_key: "phc_project",
-            historical_migration: false,
-            batch: [
-              {
-                event: "agent:start",
-                distinct_id: "user-1",
-                timestamp: "2026-08-19T12:00:00.000Z",
-                properties: {
-                  model: "anthropic/claude-opus-5.5",
-                  effort: "high",
-                  start_kind: "fresh",
-                  is_from_automation: false,
-                  has_task: true,
-                  agent_kind: "coder",
-                  $geoip_disable: true,
-                  platform: "server",
-                  $lib: "luke-service",
+  it.effect(
+    "posts the event under the account's id, its own properties, the deployment, and no location",
+    () => {
+      // The layer reads the deployment's name as it is built, so it is named before.
+      vi.stubEnv(DEPLOYMENT_VARIABLE, "preview");
+      const processor = analytics({
+        posthogProjectApiKey: Redacted.make("phc_project"),
+        posthogIngestHost: "https://eu.i.posthog.com",
+      });
+      return Effect.gen(function* () {
+        yield* TestClock.setTime(NOW);
+        yield* agentStart;
+        expect(processor.posted).toEqual([
+          {
+            url: "https://eu.i.posthog.com/batch/",
+            body: {
+              api_key: "phc_project",
+              historical_migration: false,
+              batch: [
+                {
+                  event: "agent:start",
+                  distinct_id: "user-1",
+                  timestamp: "2026-08-19T12:00:00.000Z",
+                  properties: {
+                    model: "anthropic/claude-opus-5.5",
+                    effort: "high",
+                    start_kind: "fresh",
+                    is_from_automation: false,
+                    started_by: "member",
+                    has_task: true,
+                    agent_kind: "coder",
+                    $geoip_disable: true,
+                    platform: "server",
+                    environment: "preview",
+                    $lib: "luke-service",
+                  },
                 },
-              },
-            ],
+              ],
+            },
           },
-        },
-      ]);
-    }).pipe(Effect.provide(processor.layer));
-  });
+        ]);
+      }).pipe(Effect.provide(processor.layer));
+    },
+  );
 
   it.effect("records nothing on a deployment without a project key", () => {
     const processor = analytics({});

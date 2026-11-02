@@ -4,10 +4,10 @@ import { user } from "./auth.js";
 import { conversations } from "./storage.js";
 
 /**
- * native-call-key.ts -- the key a native agent's call of a Fullspin tool runs under, kept so the call run again runs under the same one.
+ * native-call-key.ts -- the key a native agent's call of one of our tools runs under, kept so the call run again runs under the same one.
  *
  * eve keys a tool call on its own id for the call, so a call run again
- * sends or starts once. A Claude Code or Codex agent reaches Fullspin's tools
+ * sends or starts once. A Claude Code or Codex agent reaches our tools
  * over MCP (`packages/service/src/agents/luke-mcp/`), whose server keeps no
  * session and whose harness names a retry by nothing the first call had, so
  * the server keys a call on a row here: one per conversation, tool, and

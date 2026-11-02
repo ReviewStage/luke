@@ -17,7 +17,7 @@ import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-conce
 import type { HostKernel } from "./host-kernel.js";
 
 /**
- * compose-chatgpt-sign-in.ts -- Sign in with ChatGPT for Fullspin's hosted runtime, run on this Mac and handed to the service.
+ * compose-chatgpt-sign-in.ts -- Sign in with ChatGPT for our hosted runtime, run on this Mac and handed to the service.
  *
  * A press in Settings asks the service for the account's host id, runs
  * OpenAI's open-source sign-in through the developer's browser and a

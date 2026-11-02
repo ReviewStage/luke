@@ -233,7 +233,7 @@ function AppWindow(): React.JSX.Element {
   );
   const settingsPlace = useSettingsPlace(launched?.page);
   const { onEnter: enterSettings, onChoose: chooseSettingsView } = settingsPlace;
-  /** The note being written to the people who make Fullspin, while its dialog stands. */
+  /** The note being written to the people who make the app, while its dialog stands. */
   const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>();
   /** The experiment that note is about, where an experiment's row opened it. */
   const [feedbackAbout, setFeedbackAbout] = useState<Experiment>();
@@ -319,7 +319,7 @@ function AppWindow(): React.JSX.Element {
     [openSettings],
   );
 
-  /** True while sign-in stands between Fullspin and anything to watch: the gate is then what the window shows. */
+  /** True while sign-in stands between the app and anything to watch: the gate is then what the window shows. */
   const accountGated =
     run?.accountRequired === true && account?.status !== ACCOUNT_STATUS.SIGNED_IN;
 
@@ -411,7 +411,7 @@ function AppWindow(): React.JSX.Element {
     !accountGated,
     room,
   );
-  // A Fullspin link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
+  // An app link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
   // A pull request a listed task's agent, or a listed agent on no task, opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
   const listedTasks = tasks.tasks;
   const listedAgents = planning?.tasklessAgents;
@@ -436,7 +436,7 @@ function AppWindow(): React.JSX.Element {
       })();
     }
   });
-  // A Fullspin link the system handed the app opens once sign-in no longer stands in the way, and
+  // An app link the system handed the app opens once sign-in no longer stands in the way, and
   // the account's workspaces are read, since a link's slug is read against them (every account
   // holds its own workspace, so none read means none read yet).
   const workspacesUnread = tasks.workspaces.length === 0 && !tasks.listFailed;
@@ -692,7 +692,7 @@ function AppWindow(): React.JSX.Element {
                             </MessageRevealProvider>
                           </div>
                         </ShellRoomContext.Provider>
-                        {/* A note to the people who make Fullspin, written in a dialog over the
+                        {/* A note to the people who make the app, written in a dialog over the
           window. */}
                         <FeedbackDialog
                           kind={feedbackKind}

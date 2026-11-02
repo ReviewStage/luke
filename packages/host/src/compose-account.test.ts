@@ -309,7 +309,7 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
   ),
 );
 
-/** The browser tab's service, on the tab's own origin, as Better Auth and Vespin's routes answer it. */
+/** The browser tab's service, on the tab's own origin, as Better Auth and our routes answer it. */
 const TAB_ORIGIN = "https://luke.example.test";
 const BROWSER_CONTEXT = { clientId: "browser", role: GATEWAY_CLIENT_ROLE.OPERATOR };
 const PROVIDER_CONSENT = "https://github.com/login/oauth/authorize?state=state-1";
@@ -330,6 +330,8 @@ interface TabService {
   readonly sent: string[];
   /** The bodies of every batch of counts sent. */
   readonly counts: string[];
+  /** Whether the tab keeps that a sign-in left it, as its session storage does across the provider's pages. */
+  signInLeft: boolean;
 }
 
 const ACCOUNT_STEPS: readonly string[] = [
@@ -381,8 +383,16 @@ const browserAccount = (service: TabService) =>
     const departures: { url: string; countsSent: string[] }[] = [];
     const door: CookieSessionDoor = {
       currentAddress: () => "/",
-      navigate: (url) =>
-        Effect.sync(() => void departures.push({ url, countsSent: [...service.counts] })),
+      navigate: (url, signingIn) =>
+        Effect.sync(() => {
+          if (signingIn) service.signInLeft = true;
+          departures.push({ url, countsSent: [...service.counts] });
+        }),
+      returnedFromSignIn: Effect.sync(() => {
+        const left = service.signInLeft;
+        service.signInLeft = false;
+        return left;
+      }),
       revisits: Stream.never,
     };
     const machine = Layer.mergeAll(
@@ -437,6 +447,7 @@ const tabService = (initial: Partial<TabService>): TabService => ({
   stepsDown: false,
   sent: [],
   counts: [],
+  signInLeft: false,
   ...initial,
 });
 
@@ -552,6 +563,41 @@ it.effect(
         departure.countsSent.some((batch) => batch.includes(PRODUCT_ACCOUNT_ACTION.SIGN_IN_START)),
         "the sign-in's start was counted before the tab left",
       );
+    }).pipe((body) => inTab(service, body));
+  },
+);
+
+it.effect(
+  "in a browser, a sign-in that left the tab is counted once, its start with it, on the page it comes back to",
+  () => {
+    const service = tabService({ signedIn: false });
+    /** How many of the counts sent so far are `name`, as a batch's body spells it. */
+    const sentCounts = (name: string) =>
+      service.counts.join("\n").split(JSON.stringify(name)).length - 1;
+    /** One page of the tab, launched and its counts sent, closed as the tab leaves it. */
+    const page = <A>(
+      body: (tab: Effect.Success<ReturnType<typeof browserAccount>>) => Effect.Effect<A>,
+    ) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const tab = yield* browserAccount(service);
+          yield* Fiber.join(tab.launched);
+          const answer = yield* body(tab);
+          yield* tab.settings.flushProductEvents;
+          return answer;
+        }),
+      );
+    return Effect.gen(function* () {
+      yield* page(({ gateway }) =>
+        gateway.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider: ACCOUNT_PROVIDER.GITHUB }),
+      );
+      // The provider signs the person in and sends the tab back to a page of its own, which a reload follows.
+      service.signedIn = true;
+      yield* page(() => Effect.void);
+      yield* page(() => Effect.void);
+
+      assert.equal(sentCounts(PRODUCT_EVENT.ACCOUNT_SIGN_IN), 1);
+      assert.equal(sentCounts(PRODUCT_ACCOUNT_ACTION.SIGN_IN_START), 1);
     }).pipe((body) => inTab(service, body));
   },
 );

@@ -1,5 +1,5 @@
 /**
- * runtime-sessions.ts -- a coding agent's sessions answered by the runtime its conversation runs on: eve as today, or a native harness Fullspin launches.
+ * runtime-sessions.ts -- a coding agent's sessions answered by the runtime its conversation runs on: eve as today, or a native harness we launch.
  *
  * Every place that reaches a coding agent's session holds one
  * `AgentSessions`: the composer, an Inbox answer, another agent's message, a GitHub
@@ -9,9 +9,12 @@
  * implementation the conversation's `runtime` names:
  *
  * - `open` and `send` carry the conversation, whose agent and runtime are
- *   read as the caller reads them. An eve conversation, one from before the
- *   column, or one that is no coding agent's is handed to eve's client
- *   exactly as it was handed before this router stood. A native one is
+ *   read as the caller reads them. A coding agent on eve, or from before the
+ *   column, is refused as ended (`RUNTIME_REFUSAL.EVE_RETIRED`): eve runs no
+ *   agent any more, so a new agent goes on from its work, as Continue or
+ *   `start_agent`'s `from` starts one, on a native harness. One that is no
+ *   coding agent's is handed to eve's client exactly as it was handed before
+ *   this router stood. A native one is
  *   handed to that harness's sessions acting for the agent's starter, whose
  *   plan pays for it, and a session it opens claims the conversation's
  *   record, which eve's own door claims for an eve session.
@@ -110,6 +113,13 @@ const NOT_HERE = {
   runtimeRefusal: RUNTIME_REFUSAL.NOT_HERE,
 } as const;
 
+/** What an open or a send to a coding agent on eve answers: eve runs no agent any more, so nothing reaches it again. */
+const EVE_RETIRED = {
+  outcome: EVE_SEND_OUTCOME.FAILED,
+  status: HOSTED_HTTP_STATUS.CONFLICT,
+  runtimeRefusal: RUNTIME_REFUSAL.EVE_RETIRED,
+} as const;
+
 /** What a call answers where the conversation's runtime could not be read. */
 const UNREAD = {
   outcome: EVE_SEND_OUTCOME.FAILED,
@@ -125,19 +135,21 @@ function preparingNamed<Outcome extends { readonly outcome: string }>(answered: 
     : answered;
 }
 
-/** The message as eve is handed it, as it always was: Fullspin's own id for its line is a native runner's alone. */
+/** The message as eve is handed it, as it always was: our own id for its line is a native runner's alone. */
 function forEve<Turn extends EveHostTurn>(message: EveMessage<Turn>): EveMessage<Turn> {
   if (message.lineId === undefined) return message;
   const { lineId: _native, ...rest } = message;
   return rest;
 }
 
-/** Where a conversation's calls go: eve, or a native harness acting for the agent's starter. */
+/** Where a conversation's calls go: eve, for one that is no coding agent's; nowhere, for a coding agent on eve; or a native harness acting for the agent's starter. */
 type Route =
-  | { readonly runtime: typeof CONVERSATION_RUNTIME.EVE }
+  | { readonly runtime: typeof CONVERSATION_RUNTIME.EVE; readonly retired: boolean }
   | { readonly runtime: NativeRuntime; readonly starter: string };
 
-const TO_EVE: Route = { runtime: CONVERSATION_RUNTIME.EVE };
+const TO_EVE: Route = { runtime: CONVERSATION_RUNTIME.EVE, retired: false };
+
+const RETIRED: Route = { runtime: CONVERSATION_RUNTIME.EVE, retired: true };
 
 /**
  * eve's client for one caller, `account`, with every call answered by the
@@ -183,7 +195,7 @@ function routed<Turn extends EveHostTurn>(
       if (Option.isNone(agent)) return TO_EVE;
       const routing = yield* readAgentRouting(account, agent.value.id);
       const runtime = Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE;
-      return isNativeRuntime(runtime) ? { runtime, starter: agent.value.userId } : TO_EVE;
+      return isNativeRuntime(runtime) ? { runtime, starter: agent.value.userId } : RETIRED;
     }).pipe(Effect.provideContext(store));
 
   /** The harness's sessions acting for the account given, where this function has them. */
@@ -226,7 +238,9 @@ function routed<Turn extends EveHostTurn>(
         const read = yield* routeOrUnread(message.conversationId);
         if (Option.isNone(read)) return UNREAD;
         const route = read.value;
-        if (route.runtime === CONVERSATION_RUNTIME.EVE) return yield* eve.open(forEve(message));
+        if (route.runtime === CONVERSATION_RUNTIME.EVE) {
+          return route.retired ? EVE_RETIRED : yield* eve.open(forEve(message));
+        }
         const reached = harness(route.runtime, route.starter);
         if (Option.isNone(reached)) return NOT_HERE;
         const opened = yield* (yield* reached.value).open(message);
@@ -241,8 +255,9 @@ function routed<Turn extends EveHostTurn>(
         const read = yield* routeOrUnread(message.conversationId);
         if (Option.isNone(read)) return UNREAD;
         const route = read.value;
-        if (route.runtime === CONVERSATION_RUNTIME.EVE)
-          return yield* eve.send(sessionId, forEve(message));
+        if (route.runtime === CONVERSATION_RUNTIME.EVE) {
+          return route.retired ? EVE_RETIRED : yield* eve.send(sessionId, forEve(message));
+        }
         const reached = harness(route.runtime, route.starter);
         if (Option.isNone(reached)) return NOT_HERE;
         return preparingNamed(yield* (yield* reached.value).send(sessionId, message));
@@ -333,7 +348,8 @@ export const runnerHalted = (
   });
 
 /**
- * What a call that failed answers its caller as: a native harness whose
+ * What a call that failed answers its caller as: an agent on eve, as ended,
+ * which only a new agent goes on from; a native harness whose
  * image is still being prepared, which the same request later takes; a
  * native harness this function cannot reach, said by name; the starter's
  * plan refusing the launch, said by name, whose sign-in is signed in again
@@ -360,6 +376,7 @@ export function failedCallRefusal(failed: {
   }
   if (failed.planRefusal === PLAN_REFUSAL.INELIGIBLE) return HOSTED_REFUSAL.AGENT_PLAN_INELIGIBLE;
   if (failed.planRefusal !== undefined) return HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT;
+  if (failed.runtimeRefusal === RUNTIME_REFUSAL.EVE_RETIRED) return HOSTED_REFUSAL.AGENT_RETIRED;
   if (failed.runtimeRefusal === RUNTIME_REFUSAL.NOT_HERE)
     return HOSTED_REFUSAL.NATIVE_AGENT_NOT_HERE;
   if (failed.runtimeRefusal === RUNTIME_REFUSAL.IMAGE_PREPARING) {

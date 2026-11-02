@@ -1,7 +1,7 @@
 import { PRODUCT_NAME } from "@luke/features/product-name";
 
 /**
- * Fullspin's own native client, and the record shape it is provisioned under: a
+ * Our own native client, and the record shape it is provisioned under: a
  * public PKCE client with no secret.
  */
 

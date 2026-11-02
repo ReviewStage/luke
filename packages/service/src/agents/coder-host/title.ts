@@ -42,7 +42,7 @@ import { CURSOR_START } from "./transcript.js";
  * was handed, never from the other agent's transcript replayed between
  * them (`@luke/features/agent-replay`), whose words are that agent's.
  * An automation's run is named from the automation's prompt alone in its
- * opening's place, without the lines Fullspin adds of the firing, which would
+ * opening's place, without the lines we add of the firing, which would
  * name every run of it alike, and the GitHub event's subject where one
  * fired it; a run about one pull request or issue was named by it as it
  * started (`automation-runs.ts`), so no model is asked.
@@ -58,7 +58,7 @@ import { CURSOR_START } from "./transcript.js";
  * conversation leaves here but to the model.
  *
  * The model runs on the account's own API key (`account-keys.ts`'s
- * `ownKeyOf`), never Fullspin's. An account that saved none, as one paying
+ * `ownKeyOf`), never ours. An account that saved none, as one paying
  * only through a subscription, is named with no model call at all: the
  * first words of the first line of its opening, or of the automation's
  * prompt, or of the task a subagent was handed, tidied as a model's answer
@@ -66,7 +66,7 @@ import { CURSOR_START } from "./transcript.js";
  *
  * A task still standing untitled, as one started from a prompt alone does,
  * takes the title its first agent to be titled is given, and keeps it: a
- * name a member or Fullspin gave the task, before or meanwhile, is never
+ * name a member or the app gave the task, before or meanwhile, is never
  * written over, and a later agent's title never renames it.
  */
 

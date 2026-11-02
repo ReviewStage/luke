@@ -786,7 +786,7 @@ test("a member of a workspace with no GitHub connected is told only to ask an ow
   );
 });
 
-/** A read answering that the App is installed and gives Vespin no repository. */
+/** A read answering that the App is installed and gives us no repository. */
 const NOTHING_REACHED = () =>
   Promise.resolve({
     repositories: {

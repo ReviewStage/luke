@@ -53,6 +53,7 @@ import {
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { providerKeysProcedures } from "./provider-keys-procedures.js";
@@ -245,6 +246,7 @@ const answer = (
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, environment),
       seams.provider,
+      ANALYTICS.layer,
       Logger.layer([recorder]),
     );
     const response = yield* hostedAnswer({ account: procedures }, services, request);
@@ -363,6 +365,15 @@ function keysOf(answered: Answer): ProviderKeysAnswer {
 
 const refusal = (status: number, error: string) => ({ status, body: { error } });
 
+/** What the route counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+/** The providers the account was counted for saving a credential of, in order. */
+const countedProviders = (userId: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === SERVER_EVENT.PROVIDER_KEY_CREATE)
+    .map((event) => event.properties);
+
 it.layer(getTestDB())("the provider keys route", (it) => {
   it.effect(
     "a key the provider accepts is kept and answered as its hint, verified, at the instant it was saved, and never as itself",
@@ -388,6 +399,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         });
         assert.deepEqual(keysOf(read), keysOf(saved));
         for (const answered of [saved, read]) assert.ok(!answered.text.includes(KEY.ANTHROPIC));
+        assert.deepEqual(countedProviders(owner), [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }]);
         assert.deepEqual(
           checks.map((check) => [check.url, keyOf(check.headers)]).sort(),
           [
@@ -692,6 +704,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
           forAgents: true,
         };
         assert.deepEqual(keysOf(saved), { keys: [], subscriptions: [subscription] });
+        assert.deepEqual(countedProviders(owner), [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }]);
         assert.deepEqual(othersRead, { keys: [] }, "another account reads none of it");
         assert.deepEqual(othersRemoval, { keys: [] }, "another account removes none of it");
         assert.deepEqual(
@@ -941,6 +954,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         assert.equal(page.searchParams.get("ext_agent_host_id"), extAgentHostId);
         assert.ok(!("reason" in kept), "the sign-in was kept");
         assert.equal(kept.subscriptions?.[0]?.kind, PROVIDER_KEY_KIND.CHATGPT_OAUTH);
+        assert.deepEqual(countedProviders(owner), [{ provider: PROVIDER_KEY_PROVIDER.OPENAI }]);
         const rows = yield* listProviderKeyRows(owner, PROVIDER_KEY_KIND.CHATGPT_OAUTH);
         assert.equal(rows.length, 1);
         assert.equal(rows[0]?.status, PROVIDER_KEY_STATUS.UNVERIFIED);

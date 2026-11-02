@@ -9,6 +9,7 @@ import {
   CHIP_LOOK,
   CHIP_SIZE,
   Chip,
+  ChipName,
   type FootRow,
   GROUP_ACTIONS,
   GROUP_HEADING,
@@ -51,10 +52,11 @@ import { chipSubmenu } from "./standing-submenus.js";
  * card count theirs, and nests theirs under each to any depth, folded until opened, as
  * the sidebar nests and folds them; it reads the task list's
  * `parentTaskId` and nothing more. Relations, by the network glyph, holds a
- * row for each task the task waits on and each that waits on it, its kind
- * at the row's end as a compact pill by its icon and a chevron: an open
- * blocker's in the attention tone, and a blocker that is done or canceled
- * muting its row. The pill drops the four kinds, the current one checked,
+ * row for each task the task waits on and each that waits on it, led by its
+ * kind as a compact pill by its icon, its words, and a chevron, so the row
+ * reads as a sentence, Blocked by, the task's key, its status, its name: an
+ * open blocker's pill in the attention tone, and a blocker that is done or
+ * canceled muting its row. The pill drops the four kinds, the current one checked,
  * and Remove relation; a kind picked is moved in one call
  * (`onChangeTaskRelation`), so nothing is taken away and added again, and a
  * row moved to Parent leaves for the path's crumb, where a parent stands.
@@ -154,11 +156,10 @@ function relationMenu(kind: TaskRelationKind, doors: RelationDoors): readonly Me
 }
 
 /**
- * A relation's kind at its row's end: a compact pill by the kind's icon and
- * a chevron, its words its name and its hover's, since a side panel's row
- * has no room to spare its name for them, in the attention tone for a blocker still open,
- * dropping the four kinds, the current one checked, and Remove relation
- * pinned under them.
+ * A relation's kind leading its row: a compact pill by the kind's icon, its
+ * words, and a chevron, in the attention tone for a blocker still open,
+ * dropping from its start the four kinds, the current one checked, and
+ * Remove relation pinned under them.
  */
 function RelationKindPill({
   kind,
@@ -194,22 +195,21 @@ function RelationKindPill({
   ];
   return (
     <span className="plan-relation-kind relative inline-flex items-center" ref={box}>
-      <Tooltip label={open ? undefined : words}>
-        <Chip
-          ref={chip}
-          look={CHIP_LOOK.PILL}
-          size={CHIP_SIZE.COMPACT}
-          tone={attention ? STATUS_TONE.ATTENTION : undefined}
-          chevron
-          aria-label={`Relation: ${words}`}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-controls={open ? menuId : undefined}
-          onClick={() => setOpen(!open)}
-        >
-          <TaskRelationIcon kind={kind} />
-        </Chip>
-      </Tooltip>
+      <Chip
+        ref={chip}
+        look={CHIP_LOOK.PILL}
+        size={CHIP_SIZE.COMPACT}
+        tone={attention ? STATUS_TONE.ATTENTION : undefined}
+        chevron
+        aria-label={`Relation: ${words}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => setOpen(!open)}
+      >
+        <TaskRelationIcon kind={kind} />
+        <ChipName>{words}</ChipName>
+      </Chip>
       {drawn.mounted ? (
         <SearchableMenu
           leaving={drawn.leaving}
@@ -220,7 +220,7 @@ function RelationKindPill({
           value={kind}
           foot={foot}
           noMatch="No kinds match"
-          align={POPOVER_ALIGN.END}
+          align={POPOVER_ALIGN.START}
           onPick={(id) => {
             close();
             const picked = kindOf(id);
@@ -415,7 +415,7 @@ export function PlanRelations({
       const doors = doorsOf(other, kind);
       return {
         task: other,
-        end: <RelationKindPill kind={kind} open={blocker && !settled} doors={doors} />,
+        relation: <RelationKindPill kind={kind} open={blocker && !settled} doors={doors} />,
         settled: blocker && settled,
         menu: relationMenu(kind, doors),
         unlisted: !listed,

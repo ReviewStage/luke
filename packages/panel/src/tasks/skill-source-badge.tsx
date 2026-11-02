@@ -5,7 +5,7 @@ import { Badge, STATUS_TONE } from "@luke/ui";
  * skill-source-badge.tsx -- the short word saying where a skill the `/` list offers comes from: Repository, Workspace, or Only you.
  *
  * A skill is offered from the task's repository or from the skills a member
- * installed into Fullspin, for the whole workspace or for themselves
+ * installed into the app, for the whole workspace or for themselves
  * (`task-skills.ts`), and the list and Settings › Skills each say which
  * beside its name, as a skill's card says it under its name, so a member
  * reading `/release-notes` knows whether the repository keeps it or

@@ -44,6 +44,7 @@ import {
 } from "@luke/features/github-token-wire";
 import { DateTime, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import { HttpClient } from "effect/http";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { hostedStoreOrUnavailable, type UserIdResolver } from "../http/http-effect.js";
 import { makeRateBrake } from "../http/rate-brake.js";
 import { accountMiddleware, hosted, keyRingMiddleware } from "../orpc/base.js";
@@ -221,6 +222,7 @@ export function githubTokenProcedures(seams: GitHubTokenProcedureSeams) {
       yield* hostedStoreOrUnavailable(
         saveGitHubToken(userId, sealGitHubToken(ring, userId, token), facts, now),
       );
+      yield* recordServerEvent(SERVER_EVENT.GITHUB_TOKEN_SAVE, userId, {});
       return yield* tokenAnswer(userId, ring);
     }),
 

@@ -122,7 +122,7 @@ export const AGENT_CALL_FAILURE = {
   NOT_PERMITTED: "not-permitted",
   /** The agent's sandbox image is still being prepared; the same call under its key, a little later, is taken. */
   AGENT_IMAGE_PREPARING: "agent-image-preparing",
-  /** The agent runs on Claude Code or Codex, which this part of Fullspin cannot reach yet. */
+  /** The agent runs on Claude Code or Codex, which this part of the app cannot reach yet. */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
   /** The agent runs on its starter's plan, whose sign-in cannot launch it until the starter signs in again. */
   AGENT_PLAN_SIGNED_OUT: "agent-plan-signed-out",
@@ -574,7 +574,7 @@ export const agentOverviewConversationAnswerViewSchema = EffectSchema.Union([
 export type AgentOverviewConversationAnswerView =
   typeof agentOverviewConversationAnswerViewSchema.Type;
 
-/** Which of Fullspin's own tools an agent is offered and where its `run_on_mac` stands, as the window hears it: the answer, or why there is none. */
+/** Which of our own tools an agent is offered and where its `run_on_mac` stands, as the window hears it: the answer, or why there is none. */
 export const agentLukeToolsAnswerViewSchema = EffectSchema.Union([lukeToolsAnswerSchema, failed]);
 
 export type AgentLukeToolsAnswerView = typeof agentLukeToolsAnswerViewSchema.Type;

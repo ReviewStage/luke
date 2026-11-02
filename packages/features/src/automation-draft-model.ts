@@ -466,7 +466,7 @@ export function repositoryHeld(automation: AutomationSummary | undefined): boole
 
 /**
  * What stops a draft saving, at the field it is about: a name and a task
- * written, a schedule Fullspin reads and that fires no more often than its
+ * written, a schedule we read and that fires no more often than its
  * floor, an integration's filters within their bounds and its cooldown a
  * whole number of hours up to a week, and a repository chosen for a GitHub
  * trigger, whose events come from it, where none is held (`repositoryHeld`).
@@ -531,7 +531,7 @@ function githubSettingsProblem(draft: AutomationDraft): string | undefined {
   return undefined;
 }
 
-/** The next instants a draft's schedule is due after `now`, as many as asked; none for one Fullspin cannot read. */
+/** The next instants a draft's schedule is due after `now`, as many as asked; none for one we cannot read. */
 export function draftNextRuns(draft: AutomationDraft, now: Date, count: number): readonly number[] {
   if (draft.triggerKind !== AUTOMATION_TRIGGER.SCHEDULE) return [];
   const schedule = { cron: cronOf(draft.schedule), timezone: draft.timezone };

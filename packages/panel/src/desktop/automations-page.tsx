@@ -66,6 +66,7 @@ import { Fragment, useCallback, useState } from "react";
 import { unreachedAs, useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { MemberDirectory, useCreator } from "../member-directory.js";
@@ -108,7 +109,7 @@ import {
   automationOwnerName,
   READING_AUTOMATIONS,
 } from "./automation-words.js";
-import { PhoneHead, PlaceMore, phoneBar } from "./phone-head.js";
+import { PhoneHead, PlaceMore, phoneBar, phoneFindGroups } from "./phone-head.js";
 import { useWorkspaceRuns, type WorkspaceRunsRead } from "./use-automation-runs.js";
 import { useAutomations } from "./use-automations.js";
 
@@ -281,12 +282,14 @@ function useRunNow(automationId: string): { readonly running: boolean; readonly 
  * failure's mark before it, and its switch, hanging the automation's card. The maker and the next run each keep a column of their
  * own, so they line up down the list whatever each row says. Everything but the switch is one press
  * that opens its page, as a sidebar task's row is, so the row opens wherever
- * it is pressed and the switch beside the press only switches. Its
- * right-click offers Copy link, then Delete in red, which asks first, and
+ * it is pressed and the switch beside the press only switches. Its ⋯,
+ * right-click, long press and menu key offer Copy link, then Delete in red,
+ * which asks first, and
  * hands focus back to its press as the menu closes; a right-click on the switch is the switch's own and opens
  * nothing. A narrow room, a phone's, has no width for the two columns beside
  * the name, so the row keeps its name whole and says when it runs next in
- * the line under it, its maker said by its card's foot instead.
+ * the line under it, its maker said by its card's foot instead. A finger's
+ * row draws its switch and no ⋯, so what fires it keeps the room.
  */
 function AutomationRow({
   automation,
@@ -315,6 +318,7 @@ function AutomationRow({
   const working = state === GLYPH_STATE.WORKING ? glyphStateWords(state, false) : undefined;
   const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
   const hiddenWorking = working === undefined ? null : <VisuallyHidden>{working}</VisuallyHidden>;
+  const coarse = useCoarsePointer();
   return (
     <RowHintOptions
       card={<AutomationCard automation={automation} workspaceName={workspace?.name} />}
@@ -378,6 +382,7 @@ function AutomationRow({
             onDelete,
           }),
         )}
+        more={!coarse}
         motionKey={automation.id}
       />
     </RowHintOptions>
@@ -556,6 +561,7 @@ function AutomationsHead({
                 onSelect: tasks.onNewAutomationAgent,
               },
             ],
+            ...phoneFindGroups(),
           ]}
         />
       }
@@ -790,6 +796,9 @@ function RunsPage({
           mine={mine}
           now={now}
           onOpenAgent={(agentId) => tasks.agentView.onOpen(agentId)}
+          onOpenAutomation={(automationId) =>
+            view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId })
+          }
         />
       ) : null}
     </CollectionPage>

@@ -193,7 +193,7 @@ its sandbox, such as a screenshot it took of what it built, or a short video it
 recorded there of what it did, a WebM of up to 4 MB, which our service
 reads from the sandbox and keeps the same way, as added by the member the
 agent's turn runs for, with the plan's history naming the agent. The plan's text
-names the picture by an address on tryluke.dev; our service serves its bytes
+names the picture by an address on vespin.dev; our service serves its bytes
 only to Vespin signed in as a member of the task's workspace, and opening the
 address in a browser shows a page that opens the task in Vespin and nothing of
 the picture. Every member of the workspace sees it, as they see the plan.
@@ -262,6 +262,14 @@ workspace's memories go when the workspace does.
 service stores its name and when you pinned it under your account, so the pin
 follows you to every Mac you sign in on. Unpinning deletes that record, and
 deleting your account removes them all.
+
+**Renamed repositories.** So that a task, an agent, an automation, or a pin
+keeps its repository when you rename or transfer it on GitHub, our service
+keeps each repository's GitHub id with the name GitHub last gave it, as
+GitHub's deliveries to the Vespin GitHub App and its answers name them, and
+moves every stored name of a repository to its new one when GitHub reports
+it. That record names no account and holds nothing else; it is not removed
+with an account.
 
 **Sidebar sections.** When you make a section in the sidebar, our service
 stores its title, its icon (an emoji, or an icon's name and the color you
@@ -452,7 +460,7 @@ lost him, is deleted the same way, shortly after his conversation is removed.
 **A local agent on your Mac.** Once you turn on Bring your own host in
 Settings › Experimental and then This Mac in Settings › Hosts, an agent you
 start on This Mac runs Claude Code, or Codex for a GPT model, straight on your
-Mac, as you, in a folder of its own under `~/.luke/agents` that holds its
+Mac, as you, in a folder of its own under `~/.vespin/agents` that holds its
 repository, its home, and its caches. It has full access to whatever your
 account on the Mac can reach, as a program you run yourself does: your files,
 the folders of your other agents, your running programs, and the network;
@@ -684,13 +692,13 @@ conversation. Vespin
 on your Mac reads a page's HTML from our service only to draw it, in its tab
 or in the card over its tab, its row, or a chip naming it, holds it in
 memory only, and never passes it to the rest of the panel. Vespin in a
-browser draws a page in the same places, loading it from fullspin.page, a
+browser draws a page in the same places, loading it from vespin.page, a
 domain of ours kept apart from the app's own so that a page never shares a
 site with your account. As the page loads, our service makes a link to it for
 your account: the link names your account's id, the page, and its version,
 works for one minute, and is signed so that nothing but our service can make
 one. Our service keeps no record of the link; Vercel's request log records its
-address, as it records every request's. Nothing on fullspin.page sets or
+address, as it records every request's. Nothing on vespin.page sets or
 reads a cookie. A page runs sealed
 off from Vespin: it cannot read the panel, your account, or another page, and
 cannot store anything, open a window, or send anything anywhere but the
@@ -1491,7 +1499,7 @@ We do not sell your information or use it for advertising.
 
 ## Our website
 
-tryluke.dev counts page views, presses, and sign-in steps using PostHog, and
+vespin.dev counts page views, presses, and sign-in steps using PostHog, and
 records the pages themselves, except the sign-in pages, which it does not
 record. A press is counted by what was clicked and where, never the words on
 it, and a recording masks what you type into a field. Before a count or a
@@ -1510,7 +1518,7 @@ The hand-off page is one of the sign-in pages above: not recorded, its
 address cut to the page itself. Your browser contacts PostHog directly, so
 PostHog sees your network address, as it does for the app's recordings.
 
-Vespin in a browser, the app at tryluke.dev/app and at every link to something
+Vespin in a browser, the app at vespin.dev/app and at every link to something
 in Vespin, is not one of the site's pages above: it records and reports what the
 Mac app does. It makes screen recordings as described under "Screen
 recordings", with every word masked and the same parts left out, and with
@@ -1556,7 +1564,10 @@ keeps beside it, and whether it may send, under `luke_app_replay` and
 `luke_app_replay_consent`, apart from the site's own counting. A connect
 started there, such as connecting GitHub, keeps in its tab's session storage a
 random id naming the connect, or the address it left from, until the page it
-lands on, or the app opened again in that tab, lets go of it. Our service
+lands on, or the app opened again in that tab, lets go of it. A sign-in
+started there keeps in its tab's session storage a mark that it left for the
+provider, until the page it comes back to lets go of it, so that page counts
+the sign-in once. Our service
 keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and an agent's changes are held in a Vercel Sandbox and

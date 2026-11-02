@@ -129,7 +129,7 @@ test("a revision names its writer as the developer knows them, and says what it 
 });
 
 /**
- * A plan's revisions, newest first, as the service lists them: Vespin's on a
+ * A plan's revisions, newest first, as the service lists them: the app's on a
  * call, moved on by saves from three hours ago to two, an agent's five hours
  * ago, and the plan before its history began.
  */

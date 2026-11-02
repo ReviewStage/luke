@@ -177,7 +177,7 @@ none carrying an account bearer. `GET /api/github/install` sends the browser
 to `https://github.com/apps/<slug>/installations/new`, where the developer
 installs the App on an account or organization and chooses its repositories.
 The App's registered Setup URL, with "Redirect on update", is
-`https://tryluke.dev/api/github/installed`: GitHub lands the browser there
+`https://vespin.dev/api/github/installed`: GitHub lands the browser there
 with `installation_id` and `setup_action`, and the route sends it on to
 `/github-installed.html?status=…` with one word from `GITHUB_INSTALL_STATUS`
 (`@luke/features`). Without a `state`, the route confirms the installation
@@ -219,7 +219,7 @@ GitHub's "Request user authorization (OAuth) during installation" stays off:
 it disables the Setup URL and returns the code to the App's first callback
 URL, the sign-in's, and GitHub's docs say to run the full web flow with
 `redirect_uri` to choose the callback instead. So the App lists
-`https://tryluke.dev/api/github/installed/authorized` among its callback
+`https://vespin.dev/api/github/installed/authorized` among its callback
 URLs, beside the sign-in's.
 
 The page draws a fixed card per status and interpolates nothing the address
@@ -243,8 +243,25 @@ whose rows stand on it, of whichever account, at most ten, newest first, and
 each one's pull request is read again from GitHub on a token minted on its
 task's workspace installation through `agentPublished`, as the agent's tab
 reads it, which writes the row.
-A redelivery reads the same again. GitHub's `ping` and any other event are
-answered and ignored. An `installation` delivery, which GitHub sends every
+A redelivery reads the same again. Before any of that, the repository a
+delivery names is recorded by GitHub's id under the name it carries
+(`github_repository`, `@luke/database/models/github-repositories`); where
+GitHub gives the id another name than it was last seen under, every stored
+name of it (tasks, agents, automations, pins, token reads, chapters, and
+workspace token repositories) moves to the new one in the same transaction,
+so the agents and tasks the delivery is matched to are found after a rename
+or a transfer. A delivery older than the one the id was last seen in, by the
+repository's own `updated_at`, moves nothing back, since GitHub delivers
+late and redelivers. Every reach records the id under the name it reached,
+too, so a delivery under a new name finds what a start or a turn wrote under
+the old one. A `repository` delivery is read for that alone: its `renamed`
+and `transferred` actions name the name it had, so a repository renamed
+before the service ever saw it is relabeled too. The App must subscribe to
+the Repository event for those, a setting of the App on GitHub; without it,
+the next reach of the old name, which GitHub answers with a redirect to the
+new one on whichever of the workspace's installations reaches it now
+(`github-app.ts`), does the same. GitHub's `ping` and any other event are answered and
+ignored. An `installation` delivery, which GitHub sends every
 App unsubscribed, moves the status of its workspace's `github_installation`
 row: `deleted` to deleted, `suspend` to suspended, `unsuspend` back to active;
 `GET /api/workspaces` then carries that workspace's `github.active` as false,
@@ -537,7 +554,7 @@ A rotation is two steps. First put a new version at the head of the list,
 rows on version 1 still open. Then ask that deployment for the rewrap:
 
 ```
-CRON_SECRET=<the deployment's own> scripts/rewrap-provider-keys.sh https://tryluke.dev
+CRON_SECRET=<the deployment's own> scripts/rewrap-provider-keys.sh https://vespin.dev
 ```
 
 The script is a `POST /api/maintenance/provider-keys-rewrap` under the
@@ -1419,7 +1436,7 @@ and deleting the account sets `user_id` null, read as a former member.
 Recall and Settings read through `listMemories(workspaceId)`, and the same
 words stand once.
 
-The agent keeps and searches it through `remember` and `recall`
+The agent keeps and searches it through `save_memory` and `search_memory`
 (`src/agents/memory-tools.ts`), offered to the `coder` role alone and never a
 worker, on both the eve tool files and Vespin's MCP server through the shared
 agent door (`coder-host/agent-doors.ts`). The workspace and the starter are

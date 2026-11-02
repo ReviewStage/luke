@@ -89,7 +89,7 @@ import { type WorkspacesProcedureSeams, workspacesProcedures } from "./workspace
  * plugin on PGlite and a GitHub the test scripts: the bearer names the
  * account and nothing else does, a workspace a member creates is theirs to
  * own, only an owner or admin connects GitHub, nobody disconnects it from
- * Vespin, and an installation is linked to a workspace only through a live
+ * the app, and an installation is linked to a workspace only through a live
  * intent, only where the user who authorized sees it, and only to one
  * workspace.
  *
@@ -2213,7 +2213,7 @@ const accepting = (plugin: WorkspacePlugin, userId: string, invitationId: string
   });
 
 it.effect(
-  "an invitation whose inviter left is still offered to its recipient, naming nobody, and its recipient accepts it",
+  "an invitation whose inviter left is still offered to its recipient, naming nobody, and once accepted says its recipient is already a member",
   () =>
     Effect.gen(function* () {
       const plugin = yield* openWorkspacePlugin;
@@ -2233,6 +2233,7 @@ it.effect(
         yield* leaving(plugin, grace, acme);
         const afterLeaving = yield* readInSession(plugin, alan, offerAt(made.id));
         const accepted = yield* accepting(plugin, alan, made.id);
+        const afterJoining = yield* readInSession(plugin, alan, offerAt(made.id));
 
         assert.deepEqual(whileIn, {
           status: HOSTED_HTTP_STATUS.OK,
@@ -2254,6 +2255,10 @@ it.effect(
           (yield* membersOf(acme)).find((row) => row.userId === alan),
           { userId: alan, role: "member" },
         );
+        assert.deepEqual(afterJoining, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { member: { workspaceName: "Acme" } },
+        });
       }).pipe(Effect.provide(plugin.database));
     }),
 );
@@ -2406,7 +2411,7 @@ it.effect(
 );
 
 it.effect(
-  "an address already a member or already invited is refused as already invited, and is emailed its link once",
+  "an address already a member or already invited is refused as already invited, and is emailed its link, role, and expiry once",
   () =>
     Effect.gen(function* () {
       const plugin = yield* openWorkspacePlugin;
@@ -2415,7 +2420,7 @@ it.effect(
         const grace = yield* openGithubAccount("Grace Hopper");
         const acme = yield* openTeam(plugin.api, ada, [{ userId: grace, role: "member" }]);
 
-        yield* inviting(plugin, ada, acme, "lin@example.com");
+        yield* inviting(plugin, ada, acme, "lin@example.com", "admin");
         const again = yield* inviting(plugin, ada, acme, "lin@example.com");
         const member = yield* inviting(plugin, ada, acme, `${grace}@luke.test`);
 
@@ -2438,6 +2443,14 @@ it.effect(
         assert.equal(emails.length, 1);
         assert.equal(emails[0]?.from, INVITE_FROM);
         assert.ok(emails[0]?.text.includes(pending[0]?.acceptUrl ?? "missing"));
+        assert.ok(emails[0]?.text.includes("You'll join as an admin."));
+        const expiryDay = new Date(pending[0]?.expiresAt ?? 0).toLocaleDateString("en-US", {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+          timeZone: "UTC",
+        });
+        assert.ok(emails[0]?.text.includes(`This invitation expires on ${expiryDay}.`));
         assert.deepEqual(emailsTo(`${grace}@luke.test`), []);
       }).pipe(Effect.provide(plugin.database));
     }),

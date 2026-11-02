@@ -143,7 +143,9 @@ export type { ListSelection } from "../selection/list-selection.js";
  * mark gives way to it while the pointer rests on the row or the keyboard
  * is on the chevron, as a group's head gives its glyph way (`GroupHeader`),
  * standing at rest on a screen with no hover. → and ← pressed on the row
- * open and fold them, as a tree's keys do.
+ * open and fold them, as a tree's keys do. A reader hears how deep it stands
+ * and its place among its siblings (`nest`), where its list nests rows, as
+ * a nested list's items are read, though every row stands flat in one list.
  *
  * A row may carry attachments (`attachments`), what its thing holds drawn
  * small on a line of their own over its words, as a message's files stand
@@ -285,6 +287,27 @@ export interface ListRowFold {
   readonly onOpenChange: (open: boolean) => void;
   /** What the fold holds, said as the chevron's name ("Sub-tasks of Ship the release"). */
   readonly label: string;
+}
+
+/** Where a row stands among the rows nested under the same parent as it, or among the rows at the top: its place, from 1, of how many. */
+export interface ListRowNest {
+  readonly position: number;
+  readonly size: number;
+}
+
+/**
+ * What a reader hears of a row's nesting, spread on its item: its level, 1
+ * at the top, and its place among its siblings, in a list that nests rows;
+ * nothing for a row at the top of a list that nests none. Note that the
+ * rows stand flat in one list, as their motion, their drag, and a grid's
+ * columns need, so the place is said rather than left to the list to count.
+ */
+export function nestedItem(
+  depth: number,
+  nest: ListRowNest | undefined,
+): { "aria-level"?: number; "aria-posinset"?: number; "aria-setsize"?: number } {
+  if (nest === undefined) return depth === 0 ? {} : { "aria-level": depth + 1 };
+  return { "aria-level": depth + 1, "aria-posinset": nest.position, "aria-setsize": nest.size };
 }
 
 /** How a list stands: its rows apart on the ground, or edge to edge in a card. */
@@ -539,6 +562,7 @@ export function ListRow({
   menu,
   more = true,
   depth = 0,
+  nest,
   fold,
   describedAs,
   unreadWords,
@@ -613,6 +637,8 @@ export function ListRow({
   more?: boolean | undefined;
   /** How deep it stands nested under other rows: 0, at the top, unless said. */
   depth?: number | undefined;
+  /** Where it stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
+  nest?: ListRowNest | undefined;
   /** The rows nested under it, which it folds; none where it holds none. */
   fold?: ListRowFold | undefined;
   /** What a reader hears of its description, cut to what the eye reads first, which names the press by its other words and describes it by these; none where the press is named by its words as drawn. */
@@ -887,6 +913,7 @@ export function ListRow({
         id={id}
         {...(followedBy === undefined ? {} : motionKey(followedBy))}
         {...placed}
+        {...nestedItem(depth, nest)}
         ref={place === undefined ? (onPress ? undefined : ref) : itemRef}
         className={ROW_CLASS}
         data-meta={metaAt === LIST_ROW_META.MIDDLE ? undefined : metaAt}

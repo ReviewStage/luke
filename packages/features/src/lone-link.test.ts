@@ -5,7 +5,7 @@ import { LONE_LINK, loneLinkOf } from "./lone-link.js";
 
 /**
  * What a link standing alone in a paragraph is drawn as: a pull request's
- * card, a Vespin page's, or lines of a file at a commit; anything else none.
+ * card, a page of ours, or lines of a file at a commit; anything else none.
  * Synthetic ids and repositories.
  */
 

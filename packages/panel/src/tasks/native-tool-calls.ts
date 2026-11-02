@@ -3,7 +3,7 @@ import { AGENT_TODO_STATUS } from "@luke/features/agent-wire";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire";
 
 /**
- * native-tool-calls.ts -- a call a native harness made, as the transcript draws it: the tool of Fullspin's whose renderer draws its kind, and its input and answer in that tool's shapes.
+ * native-tool-calls.ts -- a call a native harness made, as the transcript draws it: the tool of ours whose renderer draws its kind, and its input and answer in that tool's shapes.
  *
  * A coding agent running on a provider's own harness stores each call under
  * the harness's own tool name (`CLAUDE_CODE_TOOL`), with the harness's own
@@ -14,7 +14,7 @@ import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire
  * its name, its input under the keys that tool takes, and its answer under the
  * key that tool answers its words in. Everything after the read (rows, the
  * to-do list, a loaded skill, a copy of the transcript) then draws it as it
- * draws eve's. A call to Fullspin's own MCP server is stored under Fullspin's tool's
+ * draws eve's. A call to our own MCP server is stored under our tool's
  * name and needs no reading, and a subagent's call (`Agent`) keeps its name,
  * which the tab draws as a delegation's row, as eve's `delegate` is drawn.
  *
@@ -114,8 +114,8 @@ function watched(input: WireValue | undefined): string {
  * it changed, a search as `glob` or `grep`, a page and a web search as
  * `read_web_page` and `web_search`, the list as `write_todos`, a skill as
  * `load_skill`, and a monitor as the command it watches. A subagent's
- * call, a scheduled wakeup, and a call on the CLI's task list keep their
- * names.
+ * call, a message to one, a scheduled wakeup, a stop of what runs in the
+ * background, and a call on the CLI's task list keep their names.
  */
 const CLAUDE_CODE_CALLS: Record<
   (typeof CLAUDE_CODE_TOOL)[keyof typeof CLAUDE_CODE_TOOL],
@@ -209,6 +209,10 @@ const CLAUDE_CODE_CALLS: Record<
   [CLAUDE_CODE_TOOL.TASK_UPDATE]: (call) => call,
   [CLAUDE_CODE_TOOL.TASK_LIST]: (call) => call,
   [CLAUDE_CODE_TOOL.TASK_GET]: (call) => call,
+  // Note that a stop keeps its name, because it stops a background command, a monitor, or a subagent alike, so no one eve call does what it does.
+  [CLAUDE_CODE_TOOL.TASK_STOP]: (call) => call,
+  // Note that a message to a subagent keeps its name, because it continues the subagent's delegation rather than starting one, so it draws as a row of its own.
+  [CLAUDE_CODE_TOOL.SEND_MESSAGE]: (call) => call,
   // Note that a subagent's call keeps its name, which the tab draws as a delegation's row, its model named as the catalog names Anthropic's.
   [CLAUDE_CODE_TOOL.AGENT]: (call) => ({ ...call, input: withMaker(call.input, ANTHROPIC) }),
 };
@@ -324,8 +328,9 @@ function codexSubagentAnswer(output: WireValue | undefined): WireValue | undefin
 /**
  * Codex's items, each read as the eve call that does what it does: a
  * command as `bash`, a file change as an `apply_patch` of its files, a web
- * search as `web_search`, and the turn's plan as `write_todos`. A call to
- * an MCP server other than Fullspin's is named by its server and its tool, which
+ * search as `web_search`, a picture looked at as `read_file` of it, as
+ * Claude Code's Read of one is, and the turn's plan as `write_todos`. A call to
+ * an MCP server other than ours is named by its server and its tool, which
  * the generic row draws, its arguments as its input. A spawn of a subagent
  * is read as Claude Code's `Agent`, the one name the tab draws a native
  * subagent's delegation row by (`delegates`); any other subagent call keeps
@@ -348,12 +353,17 @@ const CODEX_CALLS: Record<(typeof CODEX_TOOL)[keyof typeof CODEX_TOOL], NativeCa
     input: { query: inputString(input, "query") ?? "" },
     output,
   }),
+  [CODEX_TOOL.IMAGE_VIEW]: ({ input, output }) => ({
+    tool: AGENT_TOOL.READ_FILE,
+    input: { filePath: inputString(input, "path") ?? "" },
+    output: wordsUnder(output, "content"),
+  }),
   [CODEX_TOOL.TODO_LIST]: ({ input, output }) => ({
     tool: AGENT_TOOL.WRITE_TODOS,
     input: codexTodosInput(input),
     output,
   }),
-  // Note that the server's name is joined to the tool's with a dot, which no tool of Fullspin's or eve's is named with, so no renderer of theirs takes it.
+  // Note that the server's name is joined to the tool's with a dot, which no tool of ours or eve's is named with, so no renderer of theirs takes it.
   [CODEX_TOOL.MCP_TOOL_CALL]: ({ input, output }) => ({
     tool: `${inputString(input, "server") ?? ""}.${inputString(input, "tool") ?? ""}`,
     input: isRecord(input) ? input.arguments : input,

@@ -1,5 +1,5 @@
 /**
- * mcp-relay.ts -- the Fullspin MCP server as Claude Code reaches it: an in-process SDK server whose every JSON-RPC message the runner posts to Fullspin under its own bearer, so the CLI is handed no URL, no port, and no secret.
+ * mcp-relay.ts -- our MCP server as Claude Code reaches it: an in-process SDK server whose every JSON-RPC message the runner posts to the service under its own bearer, so the CLI is handed no URL, no port, and no secret.
  *
  * The Agent SDK hands the CLI an HTTP MCP server as `--mcp-config <json>` in
  * argv, headers and all (0.3.304's `ProcessTransport`), and every process in
@@ -8,13 +8,13 @@
  * 127.0.0.1, a teammate's Terminal included, which runs outside the command
  * sandbox. So the server is an SDK one (`type: "sdk"`): the CLI speaks MCP to
  * the runner over the control channel on its own stdin and stdout, which no
- * other process holds, and the runner relays each message to Fullspin's MCP URL
+ * other process holds, and the runner relays each message to the service's MCP URL
  * with the bearer from its own environment. Nothing listens on a port.
  *
- * The relay is JSON-RPC verbatim, since Fullspin's server is stateless and
+ * The relay is JSON-RPC verbatim, since our MCP server is stateless and
  * answers each POST with one JSON body (`luke-mcp/app.ts`): a request's
- * answer is handed back to the CLI as Fullspin wrote it, a notification's 202 is
- * nothing to hand back, and a request Fullspin did not answer is answered with
+ * answer is handed back to the CLI as the service wrote it, a notification's 202 is
+ * nothing to hand back, and a request the service did not answer is answered with
  * a JSON-RPC error, so the CLI's call fails rather than hangs.
  */
 
@@ -45,7 +45,7 @@ function requestId(message: JsonRpcMessage): string | number | undefined {
   return typeof id === "string" || typeof id === "number" ? id : undefined;
 }
 
-/** Whether Fullspin's body reads as a JSON-RPC message to hand the CLI. */
+/** Whether the service's body reads as a JSON-RPC message to hand the CLI. */
 function isJsonRpc(value: unknown): value is JsonRpcMessage {
   return Predicate.isObject(value) && "jsonrpc" in value && value.jsonrpc === "2.0";
 }
@@ -55,7 +55,7 @@ function deliver(transport: CliTransport, message: JsonRpcMessage) {
   return Effect.tryPromise(() => transport.send(message)).pipe(Effect.ignore);
 }
 
-/** One message from the CLI, posted to Fullspin under the bearer, and Fullspin's answer handed back. */
+/** One message from the CLI, posted to the service under the bearer, and its answer handed back. */
 function relay(
   client: HttpClient.HttpClient,
   target: string,
@@ -93,7 +93,7 @@ function relay(
 }
 
 /**
- * The Fullspin MCP server for the CLI's options, relaying to `target` for the
+ * Our MCP server for the CLI's options, relaying to `target` for the
  * rest of the scope. Every message is relayed at once, beside the others, so
  * a long tool call holds up none after it.
  */

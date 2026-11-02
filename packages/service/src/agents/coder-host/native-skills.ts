@@ -1,5 +1,5 @@
 /**
- * native-skills.ts -- the skills a member installed into Fullspin as a native harness finds them: whole skill folders, `SKILL.md` and its files, in one folder of the sandbox, written as it opens.
+ * native-skills.ts -- the skills a member installed into the app as a native harness finds them: whole skill folders, `SKILL.md` and its files, in one folder of the sandbox, written as it opens.
  *
  * eve is handed an installed skill through its resolver and writes the
  * files itself (`../agent-runtime/skills.ts`); Claude Code and Codex find
@@ -50,10 +50,10 @@ const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u;
 /** A top-level key's line. */
 const TOP_LEVEL_KEY = /^([A-Za-z0-9_-]+):/u;
 
-/** The keys Fullspin writes from what it keeps of the skill, over whatever the file says. */
+/** The keys we write from what we keep of the skill, over whatever the file says. */
 const KEPT_KEYS: ReadonlySet<string> = new Set([SKILL_KEY.NAME, SKILL_KEY.DESCRIPTION]);
 
-/** The frontmatter's lines less the keys Fullspin writes and the lines that continue them, every other key kept as written. */
+/** The frontmatter's lines less the keys we write and the lines that continue them, every other key kept as written. */
 function otherKeys(lines: readonly string[]): string[] {
   const kept: string[] = [];
   let dropping = false;
@@ -69,7 +69,7 @@ function otherKeys(lines: readonly string[]): string[] {
 
 /**
  * A skill's `SKILL.md` as the harness reads it: its body and every key of
- * its frontmatter as installed, under the name and description Fullspin keeps
+ * its frontmatter as installed, under the name and description we keep
  * of it, which both harnesses list it by. Note that the two are written
  * from the store rather than kept from the file, because a file may name
  * none or describe it in words an update has since replaced.

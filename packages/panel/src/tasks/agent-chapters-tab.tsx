@@ -73,7 +73,7 @@ import {
   Tooltip,
   VisuallyHidden,
 } from "@luke/ui";
-import { CheckIcon, GLYPH, RotateCwIcon, SparklesIcon } from "@luke/ui/icons";
+import { CheckIcon, GLYPH, RotateCwIcon } from "@luke/ui/icons";
 import { type ReactNode, type RefObject, useMemo, useRef, useState } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
 import { failureShown, unreadShown } from "../failure-report.js";
@@ -187,7 +187,6 @@ const CHAPTERS_WORDS = {
   /** Why no chapters can be generated, naming the page an API key is saved on by its link. */
   unavailable: (page: ReactNode) => <>Save an API key in {page} settings to generate chapters.</>,
   GENERATING: "Generating chapters",
-  ELSEWHERE: "Chapters are being generated",
   REFRESH: "Refresh",
   REFRESHING: "Refreshing",
   REGENERATE: "Regenerate",
@@ -366,7 +365,7 @@ function Generating({
   return (
     <EmptyState
       icon={<Spinner label={CHAPTERS_WORDS.GENERATING} size={SPINNER_SIZE.REGION} delay={false} />}
-      title={ours ? CHAPTERS_WORDS.GENERATING : CHAPTERS_WORDS.ELSEWHERE}
+      title={CHAPTERS_WORDS.GENERATING}
       action={
         ours
           ? undefined
@@ -809,7 +808,7 @@ function ChaptersReading({
         <TabNotice>
           <p>{CHAPTERS_WORDS.STALE}</p>
           {generatable ? (
-            <Button icon={<SparklesIcon aria-hidden="true" />} onClick={read.generate}>
+            <Button icon={<GLYPH.RETRY aria-hidden="true" />} onClick={read.generate}>
               {CHAPTERS_WORDS.REGENERATE}
             </Button>
           ) : null}
@@ -894,7 +893,7 @@ function ChaptersReading({
                       [
                         {
                           label: CHAPTERS_WORDS.REGENERATE_CHAPTERS,
-                          icon: <SparklesIcon aria-hidden="true" />,
+                          icon: <GLYPH.RETRY aria-hidden="true" />,
                           onSelect: read.generate,
                         },
                       ],

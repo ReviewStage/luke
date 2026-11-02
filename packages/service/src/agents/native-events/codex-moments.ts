@@ -26,8 +26,8 @@ import {
  * runner's own (`runner-moments.ts`) is read here for what the transcript
  * keeps. Codex names no model call, so its items stand in: an agent message
  * is a step, its deltas drafting the step's words and its completion
- * telling them whole; a command, a file change, an MCP call, a web search
- * and a subagent call each start a call as their item starts and settle it
+ * telling them whole; a command, a file change, an MCP call, a web search,
+ * a picture looked at, and a subagent call each start a call as their item starts and settle it
  * as it completes; a reasoning item's summary is the step's reasoning; the
  * turn's plan is its todo list, one call for each time Codex sets it.
  * `turn/completed` ends one model turn, failed where Codex says so, with
@@ -39,8 +39,8 @@ import {
  * on a thread of its own, which its subagent call stands for, so anything
  * of a thread other than the session's is passed over but the end of its
  * turn, which settles the spawn that started it: the spawn answers the
- * moment the thread starts, so it is kept open until then. A call to Fullspin's own
- * MCP server is named as Fullspin's tool and its answer read as the JSON that
+ * moment the thread starts, so it is kept open until then. A call to our own
+ * MCP server is named as our tool and its answer read as the JSON that
  * tool answers, a picture in it standing in for its bytes; a call to an
  * integration's own server is stored as eve's call of that integration's
  * tool is, so it draws with the service's mark and the tool's own name. Each shape is
@@ -71,6 +71,7 @@ const ITEM = {
   MCP_TOOL_CALL: "mcpToolCall",
   WEB_SEARCH: "webSearch",
   SUBAGENT: "collabAgentToolCall",
+  IMAGE_VIEW: "imageView",
   COMPACTION: "contextCompaction",
 } as const;
 
@@ -191,6 +192,9 @@ const readSubagent = Schema.decodeUnknownOption(
     agentsStates: Schema.optionalKey(WireValueSchema),
   }),
 );
+const readImageView = Schema.decodeUnknownOption(
+  Schema.Struct({ ...ITEM_FIELDS, path: Schema.String }),
+);
 const readTextBlock = Schema.decodeUnknownOption(
   Schema.Struct({ type: Schema.Literal("text"), text: Schema.String }),
 );
@@ -259,7 +263,7 @@ interface Answered extends Call {
 }
 
 /**
- * An MCP result's text blocks joined. A picture in a Fullspin tool's answer is
+ * An MCP result's text blocks joined. A picture in our own tool's answer is
  * left out, so the JSON the tool answered reads whole; in any other server's
  * a stand-in takes the place of its bytes.
  */
@@ -275,8 +279,8 @@ function mcpAnswerText(content: readonly WireValue[], lukeTool: boolean): string
 }
 
 /**
- * The name and input a call to an MCP server is stored under: Fullspin's tool's
- * own for Fullspin's server; for an integration's own server, its integration's
+ * The name and input a call to an MCP server is stored under: our tool's own
+ * for our own server; for an integration's own server, its integration's
  * fixed name and envelope, as eve's nested call of the tool is stored
  * (`storedServerCall`); `mcpToolCall` naming the server and tool otherwise.
  */
@@ -374,6 +378,15 @@ function callOf(type: string, item: unknown): Option.Option<Answered> {
           output: { status: call.status, agentsStates: call.agentsStates ?? {} },
         },
         failed: FAILED_STATUSES.has(call.status),
+      }));
+    // Note that Codex reports no status for a picture it looked at, and the model read the picture itself, which stands in as a CLI tool's does.
+    case ITEM.IMAGE_VIEW:
+      return Option.map(readImageView(item), (view) => ({
+        callId: view.id,
+        name: CODEX_TOOL.IMAGE_VIEW,
+        input: { path: view.path },
+        answer: { lukeTool: false, text: PICTURE_STAND_IN, output: PICTURE_STAND_IN },
+        failed: false,
       }));
     default:
       return Option.none();

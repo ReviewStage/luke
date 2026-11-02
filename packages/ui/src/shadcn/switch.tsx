@@ -2,10 +2,10 @@ import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
 import { cn } from "../cn.js";
 
 /**
- * switch.tsx -- shadcn/ui's switch (style `base-nova`, on Base UI), vendored and drawn in Fullspin's switch inks.
+ * switch.tsx -- shadcn/ui's switch (style `base-nova`, on Base UI), vendored and drawn in our switch inks.
  *
  * The component is shadcn's own source, kept as close to it as the window
- * allows, so a later `shadcn add switch` reads as a small diff: Fullspin's track
+ * allows, so a later `shadcn add switch` reads as a small diff: our track
  * and thumb sizes (a 34 by 20 pill, a 16px thumb), the switch's own inks
  * from the palette rather than `primary`, the track's ink changing on the
  * fade's easing, the thumb on the spring small elements ride, the one press cursor (`cursor-press`), and none of shadcn's outline

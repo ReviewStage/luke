@@ -19,7 +19,7 @@ import { titleAgent } from "./title.js";
 
 /**
  * title.test.ts -- an automation's run is named from the automation's prompt
- * alone, without the lines Vespin adds of the firing, and the subject of the
+ * alone, without the lines we add of the firing, and the subject of the
  * GitHub event that fired it; an agent started from another is named from
  * its brief and note, never the replay between them; the model's answer is
  * the agent's title, and the name of its task where that still stands
@@ -32,10 +32,10 @@ import { titleAgent } from "./title.js";
 /** The automation's prompt, long enough to fill the title model's excerpt by itself. */
 const PROMPT = `Find the flakiest test in CI this week and fix it. ${"Read every failed run. ".repeat(120)}`;
 
-/** What the agent was handed: the prompt, then what Vespin adds of the firing. */
+/** What the agent was handed: the prompt, then what we add of the firing. */
 const HANDED = `${PROMPT}\n\n---\n\nLuke started this run for the automation "Flaky-test sweep" because commits were pushed on GitHub.`;
 
-/** The deployment's environment, which holds no model key of Vespin's for a title to spend. */
+/** The deployment's environment, which holds no model key of ours for a title to spend. */
 const DEPLOYMENT_ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,

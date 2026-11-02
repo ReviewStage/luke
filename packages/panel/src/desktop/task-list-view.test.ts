@@ -14,14 +14,13 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, onTestFinished, test } from "vitest";
+import { afterEach, beforeEach, test } from "vitest";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { restOn } from "../testing/hint-rest.js";
-import { playListMotions } from "../testing/pane-motion.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -55,8 +54,8 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { userId: "user-maya", name: "Maya Okafor", email: "maya@acme.dev", role: "member" },
 ];
 
-/** The Tasks section. */
-const TASK_LIST = 'nav[aria-label="Tasks"]';
+/** The Tasks section, called whose tasks it holds. */
+const TASK_LIST = 'nav[aria-label$="tasks"]';
 
 const roots: Root[] = [];
 
@@ -318,17 +317,19 @@ async function mountRead(
   return sidebar;
 }
 
-/** The chip under the Tasks head, if one stands. */
-function chip(sidebar: HTMLElement): HTMLElement | null {
-  return sidebar.querySelector<HTMLElement>(".sidebar-view-chips > *");
+/** What the Tasks head says, which the list is called by too. */
+function headWords(sidebar: HTMLElement): string | undefined {
+  const list = sidebar.querySelector(TASK_LIST);
+  const said = list?.querySelector(".luke-group-header-lead")?.textContent ?? undefined;
+  assert.equal(
+    list?.getAttribute("aria-label") ?? undefined,
+    said,
+    "the list is called as its head says",
+  );
+  return said;
 }
 
-/** What the chip under the Tasks head says, its face left out. */
-function chipWords(sidebar: HTMLElement): string | undefined {
-  return chip(sidebar)?.querySelector(".luke-chip-name")?.textContent ?? undefined;
-}
-
-test("a shared workspace opens on your own tasks, those you are on and those no one is on that you made, by repository, newest updated first, with no chip and no dot", async () => {
+test("a shared workspace opens on your own tasks, those you are on and those no one is on that you made, by repository, newest updated first, with no dot", async () => {
   const sidebar = await mountRead(ACME, MINE_UNASSIGNED);
 
   assert.deepEqual(groupNames(sidebar), ["relay", "console"]);
@@ -336,7 +337,6 @@ test("a shared workspace opens on your own tasks, those you are on and those no 
     { name: "Fix flaky deploy", repository: undefined, face: false },
     { name: "Audit logs", repository: undefined, face: true },
   ]);
-  assert.equal(chip(sidebar), null);
   const options = sidebar.querySelector('button[aria-label="View options"]');
   assert.equal(options?.getAttribute("aria-description"), null);
 });
@@ -368,24 +368,18 @@ test("View options offers Group by, Repository or None, and Assigned to: Me, Any
   assert.equal(cardName(), "Charles Pan");
 });
 
-test("Assigned to › Anyone lists everyone's tasks, says so in a chip and a dot, is kept across launches, and the chip's × lists your own again", async () => {
-  choose(await mountRead(ACME, ASSIGNED), "Assigned to", "Anyone");
+test("the Tasks head says My tasks, then Everyone's tasks once Assigned to › Anyone lists everyone's, kept across launches, with a dot and no chip", async () => {
+  const mine = await mountRead(ACME, ASSIGNED);
+  assert.equal(headWords(mine), "My tasks");
+  choose(mine, "Assigned to", "Anyone");
   unmountAll();
 
   const sidebar = await mountRead(ACME, ASSIGNED);
   assert.equal(taskRows(sidebar).length, 3);
-  assert.equal(chipWords(sidebar), "Assigned to anyone");
+  assert.equal(headWords(sidebar), "Everyone's tasks");
+  assert.equal(sidebar.querySelector('button[aria-label="Show my tasks"]'), null, "no chip");
   const options = sidebar.querySelector('button[aria-label="View options"]');
   assert.equal(options?.getAttribute("aria-description"), "Filtered");
-
-  const clear = chip(sidebar)?.querySelector("button");
-  assert.ok(clear, "the chip offers its ×");
-  act(() => clear.click());
-  assert.equal(chip(sidebar), null);
-  assert.deepEqual(
-    taskRows(sidebar).map((row) => row.name),
-    ["Fix flaky deploy"],
-  );
 });
 
 test("grouped by none, the tasks run in one list, each row naming its repository and wearing who is on it", () => {
@@ -430,60 +424,13 @@ test("each workspace keeps its own view on this Mac across launches", () => {
 test("a workspace nobody shares lists every task and offers Group by alone", () => {
   const sidebar = mountSidebar(PERSONAL);
   assert.equal(taskRows(sidebar).length, 3);
-  assert.equal(chip(sidebar), null);
+  assert.equal(headWords(sidebar), "My tasks");
   const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   assert.ok(button, "the Tasks head offers View options");
   assert.equal(button.getAttribute("aria-description"), null);
   act(() => button.click());
   assert.deepEqual(lastMenuItems(), ["Group by"]);
 });
-
-test("a chip scales in as it is chosen and out as it is lifted, drawn on out of reach until its exit has played, the line standing hidden between", async () => {
-  const motions = playListMotions();
-  // Note that a row arriving rides the quick beat and the stagger, which the list's tokens leave out.
-  const tokens = { "--luke-duration-quick": "140ms", "--luke-row-stagger": "32ms" };
-  for (const [name, value] of Object.entries(tokens)) {
-    document.documentElement.style.setProperty(name, value);
-  }
-  onTestFinished(() => {
-    motions.remove();
-    for (const name of Object.keys(tokens)) document.documentElement.style.removeProperty(name);
-  });
-  const sidebar = await mountRead(ACME);
-  const line = () => sidebar.querySelector<HTMLElement>(".sidebar-view-chips")?.parentElement;
-  assert.equal(line()?.hidden, true, "the line stands ready, hidden");
-
-  choose(sidebar, "Assigned to", "Charles Pan");
-  const chosen = sidebar.querySelector("[data-motion-key='assignedTo']");
-  assert.equal(line()?.hidden, false);
-  assert.ok(scaled(motions.played, chosen), "the chip scales in");
-
-  const lift = chosen?.querySelector("button");
-  act(() => (lift ?? assert.fail("a way to lift it")).click());
-  const leaving = sidebar.querySelector("[data-motion-key='assignedTo']");
-  assert.equal(leaving?.hasAttribute("data-leaving"), true, "drawn on while it goes");
-  assert.equal(leaving?.hasAttribute("inert"), true, "out of reach");
-  assert.equal(leaving?.querySelector(".luke-chip-name")?.textContent, "Assigned to Charles Pan");
-  assert.ok(scaled(motions.played, leaving), "it scales out");
-
-  act(() => {
-    for (const each of motions.played.splice(0)) each.finish();
-  });
-  assert.equal(sidebar.querySelector("[data-motion-key='assignedTo']"), null);
-  assert.equal(line()?.hidden, true);
-});
-
-/** Whether a motion played on `element` scaled it. */
-function scaled(
-  played: readonly { element: Element; keyframes: Keyframe[] }[],
-  element: Element | null | undefined,
-): boolean {
-  return played.some(
-    (motion) =>
-      motion.element === element &&
-      motion.keyframes.some((frame) => String(frame.transform).includes("scale")),
-  );
-}
 
 test("a list of your own that holds nothing says so, and Show all lists everyone's", async () => {
   const theirs = TASKS.filter((each) => each.createdBy?.userId === CHARLES);
@@ -496,7 +443,7 @@ test("a list of your own that holds nothing says so, and Show all lists everyone
   assert.ok(showAll, "the note offers Show all");
   act(() => showAll.click());
   assert.equal(taskRows(sidebar).length, 2);
-  assert.equal(chipWords(sidebar), "Assigned to anyone");
+  assert.equal(headWords(sidebar), "Everyone's tasks");
 });
 
 test("with every task pinned, a filter still says it leaves nothing under Tasks, with Show all", async () => {
@@ -556,12 +503,12 @@ test("⌘K offers each view choice only while it would change the list, and runn
   act(() => {
     runAppCommand(APP_COMMAND.SHOW_EVERYONES_TASKS);
   });
-  assert.equal(chipWords(sidebar), "Assigned to anyone");
+  assert.equal(headWords(sidebar), "Everyone's tasks");
   assert.equal(appCommandOffered(APP_COMMAND.SHOW_EVERYONES_TASKS), false);
   act(() => {
     runAppCommand(APP_COMMAND.SHOW_MY_TASKS);
   });
-  assert.equal(chip(sidebar), null);
+  assert.equal(headWords(sidebar), "My tasks");
 });
 
 test("a workspace nobody shares offers ⌘K no filtering by person", async () => {
@@ -655,7 +602,7 @@ test("a one-off agent's row offers Copy link on a right-click, copying the agent
   });
   await act(async () => menuItem("Copy link").click());
 
-  assert.deepEqual(copied, ["https://tryluke.dev/acme/agent/a-1"]);
+  assert.deepEqual(copied, ["https://vespin.dev/acme/agent/a-1"]);
   assert.equal(newestToastSays(), "Link copied");
 });
 
@@ -865,7 +812,7 @@ test("Assigned to a teammate, with nothing of theirs, says so, and Show all list
   const sidebar = await mountRead(ACME, TASKS);
   choose(sidebar, "Assigned to", "Charles Pan");
 
-  assert.equal(chipWords(sidebar), "Assigned to Charles Pan");
+  assert.equal(headWords(sidebar), "Charles Pan's tasks");
   assert.equal(taskRows(sidebar).length, 0);
   const note = [...sidebar.querySelectorAll(".luke-note-line")].find((each) =>
     each.textContent?.startsWith("No tasks match this view."),
@@ -874,7 +821,7 @@ test("Assigned to a teammate, with nothing of theirs, says so, and Show all list
   assert.ok(showAll, "the note offers Show all");
   act(() => showAll.click());
   assert.equal(taskRows(sidebar).length, 3);
-  assert.equal(chipWords(sidebar), "Assigned to anyone");
+  assert.equal(headWords(sidebar), "Everyone's tasks");
 });
 
 test("Assigned to says the members could not be read, with Retry, after Me and Anyone, and Retry reads them again and leaves the menu standing", async () => {

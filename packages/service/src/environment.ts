@@ -32,9 +32,9 @@ export interface HostedEnvironmentValues {
   readonly cronSecret: Redacted.Redacted | undefined;
   /** The deployment's own bearer at eve's door, sent by every caller acting for an account and admitted by the eve service; absent, blank, or the cron's own value refuses every delegation. */
   readonly eveDeploymentSecret: Redacted.Redacted | undefined;
-  /** The secret GitHub signs the Fullspin GitHub App's webhook deliveries with; absent refuses every delivery. */
+  /** The secret GitHub signs our GitHub App's webhook deliveries with; absent refuses every delivery. */
   readonly githubWebhookSecret: Redacted.Redacted | undefined;
-  /** The versioned keys an account's own provider keys are sealed under (`provider-key-seal.ts`); absent refuses every save and leaves every model call unmade, since no key of Fullspin's stands in. */
+  /** The versioned keys an account's own provider keys are sealed under (`provider-key-seal.ts`); absent refuses every save and leaves every model call unmade, since no key of ours stands in. */
   readonly providerKeyEncryptionKeys: Redacted.Redacted | undefined;
 }
 

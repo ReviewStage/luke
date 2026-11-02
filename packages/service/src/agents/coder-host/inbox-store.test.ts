@@ -115,7 +115,7 @@ import { accountInboxPast, agentInboxPast, taskInboxPast } from "./inbox-page.js
  * workspace's members as one on a task does to its task's, a member writes
  * on an item's thread whatever its status, which moves the item's last
  * change and nothing else of it, and nothing of a workspace the account is
- * not in is read or written. On Vespin Sync, a task's, an agent's, and the account's held reads
+ * not in is read or written. Over the sync hub, a task's, an agent's, and the account's held reads
  * each answer an agent's post within a coalesce window.
  *
  * Synthetic accounts, tasks, and words throughout.

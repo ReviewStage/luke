@@ -38,7 +38,7 @@ import { turnRecordOf } from "./turn-record.js";
 /** How many of the newest messages the live window holds. */
 export const TRANSCRIPT_WINDOW = 100;
 
-/** The names a line is sent under where no member's account names it: Fullspin's, and a member's whose account is gone. */
+/** The names a line is sent under where no member's account names it: the app's, and a member's whose account is gone. */
 const SENDER_NAME = {
   LUKE: PRODUCT_NAME,
   FORMER_MEMBER: "Former member",

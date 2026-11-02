@@ -100,7 +100,7 @@ import { useHeldThroughExit } from "../use-held-through-exit.js";
  * default is the plan's `forAgents`: Subscription checked is on, API key
  * checked is off, and every agent Start makes on that provider's models
  * runs on the credential checked; there is no choice at Start. A radio is pressable only once its credential is saved; with
- * neither saved, no agent starts on that provider's models, since Fullspin's key
+ * neither saved, no agent starts on that provider's models, since our key
  * pays for no coding agent. Calls and dictation run on the OpenAI API key
  * alone, so every answer here is handed to the window too
  * (`../openai-key.tsx`), and removing that key says they stop.
@@ -116,7 +116,7 @@ import { useHeldThroughExit } from "../use-held-through-exit.js";
  * The ChatGPT sign-in runs through a loopback only the desktop can listen
  * on; elsewhere its card says so and stands unpressable until a sign-in
  * made on the desktop is there to pick or disconnect. The first sign-in on
- * this Mac is met with OpenAI's notice that Fullspin uses the ChatGPT plan
+ * this Mac is met with OpenAI's notice that the app uses the ChatGPT plan
  * (developers.openai.com/siwc/ui-ux-guidelines), drawn in its card under the
  * sign-in, dismissed with Got it and never shown again here, kept in the
  * renderer's own storage.
@@ -267,7 +267,7 @@ function keyStanding(status: ProviderKeyStatus): boolean {
   return status === PROVIDER_KEY_STATUS.VERIFIED || status === PROVIDER_KEY_STATUS.UNVERIFIED;
 }
 
-/** The credential the harness's new agents use: the plan where it is on for them, else the key, else neither (Fullspin's). */
+/** The credential the harness's new agents use: the plan where it is on for them, else the key, else neither (ours). */
 function defaultOf(
   plan: SubscriptionKeySummary | undefined,
   key: ProviderKeySummary | undefined,

@@ -145,7 +145,7 @@ it.layer(getTestDB())("show_page", (it) => {
           page: {
             id: page.id,
             version: 1,
-            mention: `[@Invite funnel](https://tryluke.dev/workspace-${task.workspaceId}/plan/${task.taskId}/page/${page.id})`,
+            mention: `[@Invite funnel](https://vespin.dev/workspace-${task.workspaceId}/plan/${task.taskId}/page/${page.id})`,
           },
         });
         assert.deepEqual(second, { id: page.id, version: 2 });
@@ -251,7 +251,7 @@ it.layer(getTestDB())("show_page", (it) => {
           page: {
             id: page.id,
             version: 1,
-            mention: `[@Funnel](https://tryluke.dev/workspace-${task.workspaceId}/agent/${agentId}/page/${page.id})`,
+            mention: `[@Funnel](https://vespin.dev/workspace-${task.workspaceId}/agent/${agentId}/page/${page.id})`,
           },
         });
         assert.deepEqual(again, { id: page.id, version: 2 });

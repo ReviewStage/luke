@@ -41,7 +41,11 @@ import {
   agentStatusOf,
 } from "../agents/coder-host/status.js";
 import { standingsOf } from "../agents/coder-host/stop.js";
-import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
+import {
+  recordServerEvent,
+  type SERVER_AUTOMATION_SOURCE,
+  SERVER_EVENT,
+} from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
 import {
@@ -395,11 +399,13 @@ export interface AutomationWritten {
 /**
  * An automation made for the account as the request asks, on a workspace
  * of its with the repositories its runs work in, under the id given where
- * the caller names one.
+ * the caller names one. Who made it, the member or one of their agents, is
+ * what its count says, so an agent's automation is not counted as theirs.
  */
 export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   made: typeof automationCreateRequestSchema.Type,
+  source: (typeof SERVER_AUTOMATION_SOURCE)[keyof typeof SERVER_AUTOMATION_SOURCE],
   id?: string,
 ): Effect.fn.Return<
   AutomationWritten,
@@ -450,6 +456,7 @@ export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   yield* recordServerEvent(SERVER_EVENT.AUTOMATION_CREATE, userId, {
     trigger_kind: made.trigger.kind,
+    source,
   });
   return {
     automation: yield* summaryOf(userId, created.value.automation),

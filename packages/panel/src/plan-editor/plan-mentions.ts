@@ -38,7 +38,7 @@ import { MENTION_NODE } from "./mention-node.js";
  * mention of a section renamed or whose anchor moved again, target by
  * target and under the section's new heading (`retarget`), in the same
  * change, since only it reads a target. A
- * heading laid in by Fullspin's merged answer replaces the block whole, so the
+ * heading laid in by the app's merged answer replaces the block whole, so the
  * section it opened is none the change kept.
  */
 

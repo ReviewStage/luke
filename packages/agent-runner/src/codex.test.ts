@@ -1,5 +1,5 @@
 /**
- * codex.test.ts -- one Codex launch of the runner against a scripted app-server playing P16's recorded notifications and a fake Vespin: the config line in, app-server started with the plan's provider, messages as turns and steers, Stop as an interrupt, a refreshed token as a restart between turns or, on the plan, the runner's token command run again mid-turn, every notification out in order, and the launch's end at the turn's.
+ * codex.test.ts -- one Codex launch of the runner against a scripted app-server playing P16's recorded notifications and a fake service: the config line in, app-server started with the plan's provider, messages as turns and steers, Stop as an interrupt, a refreshed token as a restart between turns or, on the plan, the runner's token command run again mid-turn, every notification out in order, and the launch's end at the turn's.
  */
 
 import assert from "node:assert/strict";
@@ -130,7 +130,7 @@ const CONFIG: CodexConfig = {
   tokenUrl: TOKEN_URL,
 };
 
-/** A message line of text alone, under Vespin's id for the line where one is given. */
+/** A message line of text alone, under the service's id for the line where one is given. */
 function message(text: string, uuid?: string): InputLine {
   const line = { type: INPUT_LINE.MESSAGE, content: [{ type: "text" as const, text }] };
   return uuid === undefined ? line : { ...line, uuid };
@@ -165,7 +165,7 @@ function notified(exchanges: readonly Exchange[]): string[] {
   );
 }
 
-/** Vespin's ids for the lines a test writes, as the service sends them. */
+/** The service's ids for the lines a test writes, as it sends them. */
 const LINE = {
   FIRST: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e01",
   STEERED: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e02",
@@ -183,7 +183,7 @@ function kinds(events: readonly RunnerEvent[]): string[] {
   return events.map(({ message: posted }) => ("method" in posted ? posted.method : posted.type));
 }
 
-/** One Codex launch over stdin lines the test writes, against scripted app-servers and a fake Vespin. */
+/** One Codex launch over stdin lines the test writes, against scripted app-servers and a fake service. */
 function launch(
   scripts: readonly Script[],
   luke: ReturnType<typeof makeFakeLuke>,
@@ -368,7 +368,7 @@ it.effect(
         kinds(luke.applied).filter((kind) => kind !== RUNNER_EVENT.ACCEPTED),
         [...notified(WORKFLOW.exchanges), RUNNER_EVENT.END],
       );
-      // Each line is said taken once, under Vespin's own id, which Codex is handed to echo.
+      // Each line is said taken once, under the service's own id, which Codex is handed to echo.
       assert.deepEqual(acceptedLines(luke.applied), [LINE.FIRST, LINE.STEERED]);
       assert.deepEqual(
         luke.applied.map(({ sequence }) => sequence),
@@ -757,7 +757,7 @@ function override(process: Spawned | undefined, key: string): string | undefined
 }
 
 /**
- * Vespin's token route as the runner's token command reaches it: each ask under
+ * The service's token route as the runner's token command reaches it: each ask under
  * the runner's bearer answers the next fresh token, `plan-token-1`, `-2`, ….
  */
 function fakeTokenRoute() {

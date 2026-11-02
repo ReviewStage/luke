@@ -20,7 +20,7 @@
  * set takes the capability to change it, which the sandbox's API grants
  * every command it starts, so the drop is applied once, at that start, and
  * a command that cannot apply it fails rather than running with the set.
- * Fullspin's own commands (the checkout, the image's preparation) keep the set.
+ * Our own commands (the checkout, the image's preparation) keep the set.
  *
  * A worker's commands (`coder-host/shell.ts`) run under the drop and, past
  * it, in a network namespace of their own, which bubblewrap opens

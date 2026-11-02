@@ -19,7 +19,7 @@
  *
  * A link is minted and served to a frame's load alone (`loadsAFrame`). In a
  * whole tab a page's script would answer to no `frame-src` of the app's and
- * could send the browser anywhere from a domain of Fullspin's own, and the link
+ * could send the browser anywhere from a domain of our own, and the link
  * would stand in the tab's history; so a load the browser names as anything
  * but a frame's, or names as nothing, is refused, never served.
  *

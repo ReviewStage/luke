@@ -709,7 +709,7 @@ test("with Channels on, the sidebar keeps the Tasks section and stands the chann
   const groups = [...sidebar.querySelectorAll("nav[aria-label]")].map((nav) =>
     nav.getAttribute("aria-label"),
   );
-  assert.ok(groups.includes("Tasks"), `the Tasks section stands: ${groups.join(", ")}`);
+  assert.ok(groups.includes("My tasks"), `the Tasks section stands: ${groups.join(", ")}`);
   assert.ok(!groups.includes("Channels"), "the channels head no section of their own");
   const inbox = () => placeRow(page, "Inbox") ?? assert.fail("the Inbox's row stands");
   assert.equal(
@@ -1269,7 +1269,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
 });
 
 test("a plan's chip in a plan's version history hangs the plan's card, as the plan's own words do", () => {
-  const body = `## Rollout\n\nAs in [@the plan](https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}).\n`;
+  const body = `## Rollout\n\nAs in [@the plan](https://vespin.dev/acme/plan/${DOCUMENT_TASK.id}).\n`;
   const control = tasksControl();
   const page = mount(false, false, {
     page: TASKS_PAGE.DOCUMENT,

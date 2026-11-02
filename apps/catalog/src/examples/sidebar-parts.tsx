@@ -29,7 +29,7 @@ import { CatalogSection } from "../section";
 
 /**
  * sidebar-parts.tsx -- the parts every surface drawing the app's sidebar
- * shares: Fullspin's head, and the same head naming the surface it stands on;
+ * shares: the app's head, and the same head naming the surface it stands on;
  * the places over their rule; a place and the rows that narrow it, which
  * its row folds, its ⋯ standing beside its chord under the pointer; and the
  * foot's account row.

@@ -105,6 +105,7 @@ import { FolderGitIcon, SquareKanbanIcon } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { unreadShown } from "../failure-report.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -326,7 +327,9 @@ function TaskBoardRepository({
  * where it has any, and the icon of
  * how its agents stand, rather than one card for the whole task, which
  * says nothing the card does not. Its ⋯ stands at the pills' end, dropping
- * the task's own menu, which a right-click opens too. One press, under its
+ * the task's own menu, which a right-click and a long press open too; a
+ * finger's card draws no ⋯ and keeps it no room, as a phone's mail list
+ * draws none, so its pills have the foot's whole width. One press, under its
  * pills, opens it. Renamed from that menu, its name is its field until the
  * edit ends.
  */
@@ -368,6 +371,7 @@ function TaskBoardCard({
     surface: TASK_MENU_SURFACE.ROW,
   });
   const press = useRef<HTMLButtonElement | null>(null);
+  const coarse = useCoarsePointer();
   const nameId = useId();
   const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
   const repository = task.repository === null ? undefined : repositoryLabel(task.repository, []);
@@ -382,7 +386,7 @@ function TaskBoardCard({
       : chosen === undefined
         ? own
         : chosenRowMenu(own.thing, chosen, tasks.shown),
-    { disabled: actions.deletion.busy, opener: press },
+    { disabled: actions.deletion.busy, opener: press, more: !coarse },
   );
   const drawn = (property: TaskProperty) => properties.includes(property);
   const endedByKey = useRefocusAfterEdit(rename.editing, press);
@@ -497,9 +501,11 @@ function TaskBoardCard({
             <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
           ) : null}
         </div>
-        <span className="tasks-board-card-more pointer-events-auto flex flex-none">
-          {menu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
-        </span>
+        {menu.moreDrawn ? (
+          <span className="tasks-board-card-more pointer-events-auto flex flex-none">
+            {menu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
+          </span>
+        ) : null}
       </div>
       {menu.popup}
       {actions.dialog}

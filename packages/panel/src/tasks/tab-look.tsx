@@ -148,7 +148,7 @@ export function openPlanStanding(
 /**
  * A coding agent's mark at rest: the mark of the harness its model runs
  * in, or the worker's robot in the muted ink (`AgentPlaceholderIcon`) until
- * Fullspin knows the harness. A place offering the agent wears it inside
+ * the app knows the harness. A place offering the agent wears it inside
  * `AgentGlyph`; one that knows nothing of where it stands, as a revision's
  * author, wears it bare.
  */
