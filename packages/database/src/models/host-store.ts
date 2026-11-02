@@ -16,6 +16,16 @@
  * floor, and removed alike. A host a pairing's approve made is listed and
  * removed as one from its approve, before its box collects its secret
  * (`listed`).
+ *
+ * One Mac stands as one host. A Mac that joins again, after a reinstall,
+ * a lost record, or a second sign-in's enroll, folds the account's other
+ * listed Macs on the same machine into its own row (`foldMachine`): their
+ * agents, the tasks that run on them, and the account's Runs on pick move
+ * to it, and they are removed as Settings' Remove removes a host, in one
+ * transaction. Only an own enroll and a host's first register fold, never
+ * a later register, so two hosts already running never remove each other;
+ * and only Macs, since a Linux image may ship one baked machine id to many
+ * boxes.
  */
 
 import {
@@ -28,14 +38,22 @@ import {
   deviceSetupSchema,
   hostUpdateSchema,
 } from "@luke/features/device-agent-wire";
-import { and, asc, eq, exists, isNotNull, isNull, or, sql } from "drizzle-orm";
-import { DateTime, Effect, type Option, Schema } from "effect";
-import { SqlSchema } from "effect/sql";
+import { and, asc, eq, exists, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { DateTime, Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { agentTable } from "../schemas/agent.js";
 import { device } from "../schemas/device.js";
 import { hostPairing } from "../schemas/host-pairing.js";
-import { MachineColumnsSchema, machineColumns } from "./device-store.js";
+import { accountPreference } from "../schemas/preferences.js";
+import { task } from "../schemas/task.js";
+import { runningTurnIds } from "./abandoned-turns.js";
+import {
+  type DeviceRegistration,
+  MachineColumnsSchema,
+  machineColumns,
+  registerDevice,
+} from "./device-store.js";
 
 type HostEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
@@ -245,6 +263,154 @@ const stampRemoved = SqlSchema.findAll({
     ),
 });
 
+/** The account's device of the id, where its host never registered: a register always writes its home, and nothing else does. */
+const findUnregistered = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, id: Schema.String }),
+  Result: KeptSchema,
+  execute: ({ userId, id }) =>
+    Database.use((db) =>
+      db
+        .select({ id: device.id })
+        .from(device)
+        .where(and(eq(device.id, id), eq(device.userId, userId), isNull(device.home))),
+    ),
+});
+
+/** The machine the account's standing Mac of the id runs on; nothing for a Linux box, and for a Mac whose host never said. */
+const findMacMachine = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, id: Schema.String }),
+  Result: Schema.Struct({ machineId: Schema.String }),
+  execute: ({ userId, id }) =>
+    Database.use((db) =>
+      db
+        .select({ machineId: device.machineId })
+        .from(device)
+        .where(
+          and(
+            eq(device.id, id),
+            eq(device.userId, userId),
+            eq(device.platform, DEVICE_PLATFORM.DARWIN),
+            isNotNull(device.machineId),
+            isNull(device.removedAt),
+          ),
+        ),
+    ),
+});
+
+/** The account's other listed Macs on the machine, removed as `stampRemoved` removes one; their ids. */
+const stampFolded = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    id: Schema.String,
+    machineId: Schema.String,
+    now: Schema.Date,
+  }),
+  Result: KeptSchema,
+  execute: ({ userId, id, machineId, now }) =>
+    Database.use((db) =>
+      db
+        .update(device)
+        .set({ removedAt: now, secretHash: null })
+        .where(
+          and(
+            eq(device.userId, userId),
+            eq(device.machineId, machineId),
+            eq(device.platform, DEVICE_PLATFORM.DARWIN),
+            ne(device.id, id),
+            listed(),
+          ),
+        )
+        .returning({ id: device.id }),
+    ),
+});
+
+const FoldSchema = Schema.Struct({
+  userId: Schema.String,
+  from: Schema.Array(Schema.String),
+  to: Schema.String,
+});
+
+/** The account's agents pinned to the devices folded, pinned to the one they fold into; their conversations. */
+const moveAgents = SqlSchema.findAll({
+  Request: FoldSchema,
+  Result: Schema.Struct({ conversationId: Schema.String }),
+  execute: ({ userId, from, to }) =>
+    Database.use((db) =>
+      db
+        .update(agentTable)
+        .set({ deviceId: to })
+        .where(and(eq(agentTable.userId, userId), inArray(agentTable.deviceId, [...from])))
+        .returning({ conversationId: agentTable.conversationId }),
+    ),
+});
+
+/**
+ * The tasks that run on the devices folded, run on the one they fold into.
+ * Note that a task is read by its device alone, whoever made it, because
+ * the devices are the account's own and a task names a device only of the
+ * member who set it.
+ */
+const moveTasks = SqlSchema.void({
+  Request: FoldSchema,
+  execute: ({ from, to }) =>
+    Database.use((db) =>
+      db
+        .update(task)
+        .set({ deviceId: to })
+        .where(inArray(task.deviceId, [...from])),
+    ),
+});
+
+/** The account's Runs on pick, where it names a device folded, naming the one they fold into. */
+const movePick = SqlSchema.void({
+  Request: FoldSchema,
+  execute: ({ userId, from, to }) =>
+    Database.use((db) =>
+      db
+        .update(accountPreference)
+        .set({ runsOnDeviceId: to })
+        .where(
+          and(
+            eq(accountPreference.userId, userId),
+            inArray(accountPreference.runsOnDeviceId, [...from]),
+          ),
+        ),
+    ),
+});
+
+/** One agent a fold moved: its conversation, and the turns it had running as it moved, which the removed host's runner can no longer end. */
+export interface FoldedAgent {
+  readonly conversationId: string;
+  readonly runningTurnIds: readonly string[];
+}
+
+/** The fold `foldMachine` names, on the transaction its caller holds. */
+const folded = (userId: string, id: string) =>
+  Effect.gen(function* () {
+    const machine = yield* findMacMachine({ userId, id });
+    if (Option.isNone(machine)) return [];
+    const now = yield* DateTime.nowAsDate;
+    const { machineId } = machine.value;
+    const removed = yield* stampFolded({ userId, id, machineId, now });
+    if (removed.length === 0) return [];
+    const fold = { userId, from: removed.map((row) => row.id), to: id };
+    const moved = yield* moveAgents(fold);
+    yield* moveTasks(fold);
+    yield* movePick(fold);
+    // Note that the running turns are read before the fold commits, so a turn the device begins once it does is never among them.
+    return yield* Effect.forEach(moved, ({ conversationId }) =>
+      Effect.map(runningTurnIds(conversationId), (ids) => ({
+        conversationId,
+        runningTurnIds: ids,
+      })),
+    );
+  });
+
+/** The effect given, in one transaction. */
+function transacted<A>(work: HostEffect<A>): HostEffect<A> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(work));
+}
+
 /** What a signed-in session enrolls its own machine with: its id, its daemon's version, its new secret's hash, which machine it is where it read it, and the machine as it names itself, which creates the device where the account never registered the id. */
 export interface OwnEnrollment extends DeviceMachine {
   readonly id: string;
@@ -281,6 +447,45 @@ export function enrollOwnDevice(userId: string, enrollment: OwnEnrollment): Host
           insertOwnDevice({ userId, ...key, ...machine, now }),
         );
   return Effect.map(kept, (rows) => rows.length > 0);
+}
+
+/**
+ * Folds the account's other listed Macs on the machine its standing Mac of
+ * the id runs on into that Mac, in one transaction: their agents, the
+ * tasks that run on them, and the account's Runs on pick move to it, and
+ * they are removed as `removeHost` removes one, their secret refused from
+ * now on. Never the Mac itself, so one enrolled again under its own id
+ * keeps its row, and never another account's device. Answers each agent
+ * moved, with the turns it had running; none where the device is no
+ * standing Mac of the account's, its host never said which machine it is,
+ * or no other host stands on it.
+ */
+export function foldMachine(userId: string, id: string): HostEffect<readonly FoldedAgent[]> {
+  return transacted(folded(userId, id));
+}
+
+/**
+ * Registers the account's host as `registerDevice` does, and where this is
+ * its first register, folds the account's other Macs on its machine into
+ * it as `foldMachine` does, in one transaction, so a register the fold
+ * failed under is a first register still when it is asked again. Note that
+ * only the first folds, a paired box's first word naming its machine,
+ * because a later one comes from a host already running, and two such on
+ * one machine must never remove each other. Answers the agents the fold
+ * moved; nothing where another account holds the id, and nothing was
+ * written.
+ */
+export function registerHost(
+  userId: string,
+  registered: { readonly id: string; readonly name: string } & DeviceRegistration,
+): HostEffect<Option.Option<readonly FoldedAgent[]>> {
+  return transacted(
+    Effect.gen(function* () {
+      const joining = (yield* findUnregistered({ userId, id: registered.id })).length > 0;
+      if (!(yield* registerDevice(userId, registered))) return Option.none();
+      return Option.some(joining ? yield* folded(userId, registered.id) : []);
+    }),
+  );
 }
 
 /** The standing machine a device secret's hash names, of any kind, its account, and the version it last called with; nothing for a removed machine, an old secret, or none. */
