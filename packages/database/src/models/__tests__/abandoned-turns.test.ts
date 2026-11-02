@@ -303,7 +303,6 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
             turnId,
             status: TURN_STATUS.FAILED,
             failure: TURN_FAILURE.ABANDONED,
-            stoppedBy: null,
             ranMs: TURN_ABANDON.AGENT_AFTER_MS + 1,
           },
         ]);

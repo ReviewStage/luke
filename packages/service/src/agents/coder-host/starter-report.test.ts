@@ -39,7 +39,7 @@ const T0 = new Date("2026-10-28T12:00:00Z").getTime();
 
 const REPORT = "Opened the pull request; the checks are green and auto-merge is armed.";
 
-/** A member of a fresh workspace, a pilot above, the orchestrating agent it started with its eve session recorded, an agent that one started, and an agent outside the chain. */
+/** A member of a fresh workspace, their orchestrating agent with its eve session recorded, and an agent it started. */
 const openStarted = () =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -49,19 +49,11 @@ const openStarted = () =>
     const organizationId = yield* openWorkspace(member);
     const start = { taskId: null, organizationId, planSnapshot: null, repository: null };
     const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
-    const unstarted = (prompt: string) =>
-      Effect.map(
-        createAgent(member, { ...start, prompt, idempotencyKey: randomUUID(), ...choice }),
-        (created) => Option.getOrThrow(created).agent,
-      );
-    const above = yield* unstarted("Pilot the whole tree.");
-    const outsider = yield* unstarted("Tidy the sidebar.");
     const starter = Option.getOrThrow(
       yield* createAgent(member, {
         ...start,
         prompt: "Orchestrate the rollout.",
         idempotencyKey: randomUUID(),
-        startedByAgentId: above.id,
         ...choice,
       }),
     ).agent;
@@ -81,7 +73,7 @@ const openStarted = () =>
       sessionId,
       new Date(T0 - 60_000),
     );
-    return { member, above, outsider, starter, agent, sessionId };
+    return { member, starter, agent, sessionId };
   });
 
 /** The writer told to hand each turn it settles to the agent's starter over the eve given, as the deployment's listener does. */
@@ -91,8 +83,8 @@ const reporting = (eve: ReturnType<typeof recordingEve>) =>
       reportToStarter(eve.eveFor, turn).pipe(Effect.provide(githubReaching([]).layer)),
   });
 
-/** One turn of the agent's, begun just before `at`, answered with the words given where some are, stopped by the agent `stoppedBy` names where it names one, and ended in the run status given at `at`; its id. */
-const endedAt = (agent: Agent, status: RunStatus, at: number, said?: string, stoppedBy?: string) =>
+/** One turn of the agent's, begun just before `at`, answered with the words given where some are, and ended in the run status given at `at`; its id. */
+const endedAt = (agent: Agent, status: RunStatus, at: number, said?: string) =>
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const target = { userId: agent.userId, conversationId: agent.conversationId };
@@ -119,9 +111,6 @@ const endedAt = (agent: Agent, status: RunStatus, at: number, said?: string, sto
         sequence: 2,
         message: answer.finish(randomUUID()),
       });
-    }
-    if (stoppedBy !== undefined) {
-      yield* writer.requestTurnCancel(target, { turnId, at: new Date(at - 1), by: stoppedBy });
     }
     yield* writer.consume(target, {
       ...turn,
@@ -163,50 +152,31 @@ it.layer(getTestDB())("a started agent's final message handed to its starter", (
           turnId,
           status: TURN_STATUS.SETTLED,
           failure: null,
-          stoppedBy: null,
           ranMs: 1,
         }).pipe(Effect.provide(githubReaching([]).layer));
         assert.equal(sentTo(eve, sessionId).length, 1);
       }),
   );
 
-  it.effect(
-    "a failed turn that said nothing hands its failure, one the developer or an agent outside the chain stopped that it was stopped, and one the pilot above stopped nothing",
-    () =>
-      Effect.gen(function* () {
-        const eve = recordingEve();
-        const { above, outsider, agent, sessionId } = yield* openStarted();
+  it.effect("a failed turn that said nothing hands its failure, and a stopped one nothing", () =>
+    Effect.gen(function* () {
+      const eve = recordingEve();
+      const { agent, sessionId } = yield* openStarted();
 
-        yield* endedAt(agent, RUN_STATUS.FAILED, T0).pipe(Effect.provide(reporting(eve)));
-        yield* endedAt(agent, RUN_STATUS.CANCELLED, T0 + 1_000, "Stopping.").pipe(
-          Effect.provide(reporting(eve)),
-        );
-        // The pilot above the starter stopping its tree made this Stop, so the starter is not woken to continue it.
-        yield* endedAt(agent, RUN_STATUS.CANCELLED, T0 + 2_000, "Stopped.", above.id).pipe(
-          Effect.provide(reporting(eve)),
-        );
-        // An agent outside the chain stopping it leaves the starter to hear of it.
-        yield* endedAt(agent, RUN_STATUS.CANCELLED, T0 + 3_000, "Halted.", outsider.id).pipe(
-          Effect.provide(reporting(eve)),
-        );
+      yield* endedAt(agent, RUN_STATUS.FAILED, T0).pipe(Effect.provide(reporting(eve)));
+      yield* endedAt(agent, RUN_STATUS.CANCELLED, T0 + 1_000, "Stopping.").pipe(
+        Effect.provide(reporting(eve)),
+      );
 
-        const [failed, stopped, halted, ...more] = sentTo(eve, sessionId);
-        assert.equal(more.length, 0, more.join("\n"));
-        assert.ok(
-          failed?.includes(
-            `failed its turn (${TURN_FAILURE.MODEL}). Its final message:\n\n(it said nothing)`,
-          ),
-          failed ?? "nothing was sent",
-        );
-        assert.ok(
-          stopped?.includes("was stopped before it finished. Its final message:\n\nStopping."),
-          stopped ?? "nothing was sent",
-        );
-        assert.ok(
-          halted?.includes("was stopped before it finished. Its final message:\n\nHalted."),
-          halted ?? "nothing was sent",
-        );
-      }),
+      const [failed, ...more] = sentTo(eve, sessionId);
+      assert.equal(more.length, 0, more.join("\n"));
+      assert.ok(
+        failed?.includes(
+          `failed its turn (${TURN_FAILURE.MODEL}). Its final message:\n\n(it said nothing)`,
+        ),
+        failed ?? "nothing was sent",
+      );
+    }),
   );
 
   it.effect("nothing is handed to a starter archived since", () =>

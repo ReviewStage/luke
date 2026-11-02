@@ -8,24 +8,17 @@
  * agent's turn (`@luke/database/models/writer`'s `SettledTurnListener`) hands
  * the turn's final words to the starter here, as the message the agent would
  * have sent (`agent-message.ts`): under the agent's own name, opening on
- * who sent it and how its turn ended, completed, failed with why, or
- * stopped, and closing on how to answer it. A failed turn that said nothing
+ * who sent it and how its turn ended, completed or failed with why, and
+ * closing on how to answer it. A stopped turn is reported to no one, whoever
+ * pressed Stop: whoever stopped it resumes it, and a starter woken by it
+ * would continue it, so a Stop would not hold; a starter that wants to know
+ * reads the agent. A failed turn that said nothing
  * hands its failure alone. The words are cut to fit one message.
  *
  * The line goes under the turn's own id as its key, so a settle heard again
  * sends nothing twice (`steerAgent`'s repeat); one the service could not
  * send is logged and not tried again, since the starter reads the agent
  * itself (`read_agent`). A starter archived or gone is told by no one.
- *
- * Neither is a turn the starter stopped, or an agent above it, the agent
- * that started it or one up the chain (`turns.cancel_requested_by`), since
- * that agent made the Stop and is the one to resume it: a pilot told by the
- * developer to stop stops every agent of its tree itself, and a pilot it
- * started, told nothing of the stop, would otherwise be woken by each of
- * its own agents' reports and continue them, so the developer's Stop would
- * not hold. A turn the developer stopped from its tab, or an agent outside
- * the starter's chain, is still reported, as the starter would otherwise
- * wait on it.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
@@ -75,7 +68,6 @@ function finalWords(journal: StoredUIMessage): string | undefined {
 
 /** How the turn ended, in the head's words. */
 function ended(turn: SettledAgentTurn): string {
-  if (turn.status === TURN_STATUS.CANCELLED) return "was stopped before it finished";
   if (turn.status === TURN_STATUS.FAILED) {
     return `failed its turn${turn.failure === null ? "" : ` (${turn.failure})`}`;
   }
@@ -93,30 +85,6 @@ function reportLine(
   return [head, words ?? NO_WORDS, agentMessageReplyLine(agent.id)].join("\n\n");
 }
 
-/** The most agents up a starter's chain read for the one that made a Stop, past any pilot tree's depth. */
-const MAX_CHAIN_AGENTS = 16;
-
-/**
- * Whether the turn ended on a Stop made by the starter or an agent up its
- * chain, which knows of the Stop and resumes it; a chain is read at most
- * `MAX_CHAIN_AGENTS` deep, and an agent met twice ends it.
- */
-const stoppedFromAbove = (turn: SettledAgentTurn, starter: Agent) =>
-  Effect.gen(function* () {
-    const stopper = turn.stoppedBy;
-    if (turn.status !== TURN_STATUS.CANCELLED || stopper === null) return false;
-    const seen = new Set<string>();
-    let above: Option.Option<Agent> = Option.some(starter);
-    while (Option.isSome(above) && seen.size < MAX_CHAIN_AGENTS) {
-      const { id, startedByAgentId, userId } = above.value;
-      if (id === stopper) return true;
-      if (startedByAgentId === null || seen.has(id)) return false;
-      seen.add(id);
-      above = yield* readAgent(userId, startedByAgentId);
-    }
-    return false;
-  });
-
 /**
  * The starter the agent reports to: the agent that started it, where it
  * stands unarchived; none otherwise. Note that a pilot a continue took over
@@ -132,8 +100,8 @@ const starterOf = (agent: Agent) =>
 
 /**
  * Hands the settled turn's final message to the agent's starter, as the
- * header says, or nothing where the agent has none to tell or its starter,
- * or an agent above it, stopped the turn; a failure to
+ * header says, or nothing where the turn was stopped or the agent has none
+ * to tell; a failure to
  * send is logged by its kind alone, never answered, so nothing of the agent
  * or its member rides the log line.
  */
@@ -141,12 +109,12 @@ export function reportToStarter(
   eveFor: EveForAccount,
   turn: SettledAgentTurn,
 ): Effect.Effect<void, never, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
+  if (turn.status === TURN_STATUS.CANCELLED) return Effect.void;
   return Effect.gen(function* () {
     const agent = yield* readAgentOfConversation(turn.userId, turn.conversationId);
     if (Option.isNone(agent)) return;
     const starter = yield* starterOf(agent.value);
     if (Option.isNone(starter)) return;
-    if (yield* stoppedFromAbove(turn, starter.value)) return;
     const journal = yield* readMessageByClientId(
       turn.userId,
       turn.conversationId,

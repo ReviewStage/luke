@@ -512,7 +512,7 @@ test("every agent on a task is told how to update its plan, one handed a prompt 
   assert.deepEqual(told(AGENT_BRIEF.PROMPT, null), [false, false, false]);
 });
 
-test("every agent on a task is told to keep its task's status with update_task, moving it back to in progress and on to done, a helper on its starter's task or a pilot's child task leaving it to the starter and one otherwise on a task of its own keeping that one's, and one on no task told of no status", () => {
+test("every agent on a task is told to keep its task's status with update_task, moving it back to in progress and on to done, a helper on its starter's task leaving it to the starter and one on a task of its own keeping that one's, and one on no task told of no status", () => {
   const STATUS = "## Your task's status";
   const told = (brief: AgentBrief, taskLink: string | null) => {
     const words = coderInstructions("Acme/Relay", brief, true, taskLink);
@@ -524,9 +524,9 @@ test("every agent on a task is told to keep its task's status with update_task, 
       section.includes(CODER_TOOL.UPDATE_TASK),
       section.includes("Mark it done"),
       section.includes(
-        "Where another agent started you on its task, or a pilot started you on one of its child tasks, leave the status to that agent",
+        "Where another agent started you on its task, leave the status to that agent",
       ),
-      section.includes("one started otherwise on a task of its own keeps that status itself"),
+      section.includes("one started on a task of its own keeps that status itself"),
     ];
   };
   for (const brief of Object.values(AGENT_BRIEF)) {
