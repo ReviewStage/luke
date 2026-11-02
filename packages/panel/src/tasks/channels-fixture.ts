@@ -1,5 +1,5 @@
 /**
- * channels-fixture.ts -- the synthetic workspace the `channels` fixture profiles draw: its channels, staged on the document as the host holds them, their threads, and the answers the Channels view's writes take in place of the service's (STAG-547).
+ * channels-fixture.ts -- the synthetic workspace the `channels` fixture profiles draw: its channels, staged on the document as the host holds them, their threads, and the answers the Channels view's writes take in place of the service's.
  *
  * The Inbox fixture's machinery (`inbox-fixture.ts`) over our own kind of
  * work: two people, a handful of tasks across the app, the service, and

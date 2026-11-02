@@ -25,9 +25,9 @@ function paletteGroups(close: () => void): CommandGroup[] {
           id: "task-41",
           lead: "LUKE-41",
           icon: <GLYPH.TASK />,
-          label: "Ship the voice window",
+          label: "Add a shortcut for new tasks",
           detail: "luke",
-          words: "LUKE-41 Ship the voice window luke",
+          words: "LUKE-41 Add a shortcut for new tasks luke",
           onSelect: close,
         },
         {

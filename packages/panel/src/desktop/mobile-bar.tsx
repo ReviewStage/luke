@@ -32,7 +32,7 @@ import { groupCount } from "./sidebar-fold.js";
  * (`places-waiting.ts`), so the two never disagree, and said in the
  * sidebar's words.
  *
- * With Channels on (STAG-547) the bar is the same: the channels are
+ * With Channels on the bar is the same: the channels are
  * listed in the drawer under the Inbox, as the sidebar lists them, and a
  * channel chosen there narrows the Inbox to it, which the bar stands over
  * with no place marked, since the drawer's row is the place it is.

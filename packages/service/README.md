@@ -1997,10 +1997,9 @@ the conversation row's observed-session, event-sequence, completion-sweep,
 and memory-flush columns. A child's `parent_conversation_id`, `label`,
 `title`, and `expects_completion` are live: a subagent's and an agent's worker's child conversation writes them.
 
-The conversation tables are the shape the LUKE-95 storage plan settled on,
-less the `prompts` table it drew and less the `tool_sets` table
-`0039_dead_tool_sets` dropped: a turn keeps the composed prompt's hash and the
-tool set's and nothing else of either, because nothing replays them, and the
+The conversation tables have no `prompts` table and no `tool_sets` table
+(`20260921141320_dead_tool_sets` dropped the second): a turn keeps the
+composed prompt's hash and the tool set's and nothing else of either, because nothing replays them, and the
 tool set is the build's own and read from the build that offered it. A
 conversation row names its kind (`coding_agent`, which
 `packages/database/src/models/agent-store.ts` opens, is the one any

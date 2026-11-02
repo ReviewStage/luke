@@ -16,9 +16,8 @@ import { ROOT_TASKS, TEST_TASK, turboInvocation, WORKSPACE_TASKS } from "./lib/t
 // Note that the tests run one task at a time beside the other checks rather
 // than as more tasks among them, because two vitest processes on one machine
 // starve each other's workers: a suite that passes alone times out in a hook
-// beside another (LUKE-187 was the whole suite in one process hitting the
-// same wall at its tail). Each run's output is held and printed whole when
-// it ends, so no two interleave.
+// beside another, as the whole suite in one process did at its tail. Each
+// run's output is held and printed whole when it ends, so no two interleave.
 //
 // CI runs the tests in its own jobs beside this one, so it asks for
 // everything but them with `--without test`. `--affected` runs a workspace's

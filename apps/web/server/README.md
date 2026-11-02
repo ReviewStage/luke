@@ -1,5 +1,7 @@
 # Vespin web server
 
+How `apps/web`'s server is built, deployed, and checked: its database, auth, `/api/` routes, and Vercel functions.
+
 ## Database and auth workflow
 
 Neon is provisioned through the Vercel integration. It supplies the pooled
@@ -10,11 +12,11 @@ builder reads it through, and `pnpm db:generate` writes the migration that
 builds it from that module. "The data layer" below is the rest.
 Better Auth is no exception, reaching its tables through its Drizzle adapter
 over `packages/database/src/schemas/auth.ts` (see below), which is in the same barrel as
-the eleven Vespin-owned modules, so a migration that changes an auth column's type
+the Vespin-owned modules, so a migration that changes an auth column's type
 changes that declaration too.
 
-Every instant column is `timestamp with time zone` (migration 0026 moved the
-last naive ones), so a JavaScript `Date` round-trips losslessly whatever zone
+Every instant column is `timestamp with time zone` (migration
+`20260912073820_instants_timestamptz` moved the last naive ones), so a JavaScript `Date` round-trips losslessly whatever zone
 the host or the session sits in; `bigint` epochs stand where a table already
 kept them, so a new table declares `timestamptz`.
 
@@ -282,7 +284,7 @@ resolve to an extensionless alias the Build Output emits, a rewrite of the
 table ahead of its fallback, or a procedure of the hosted oRPC contract, and a
 builder the check cannot read is refused by name rather than
 skipped, because a path constant that outlives its route otherwise fails
-nothing until production answers 404 (LUKE-186). The same derived list is
+nothing until production answers 404. The same derived list is
 what `scripts/preview-probe.ts` (`server/preview-probe.ts`) sends to a
 deployment: every caller path, the cron's, and the page, failing
 on any answer that is Vercel's own rather than a handler's — the
@@ -290,14 +292,14 @@ on any answer that is Vercel's own rather than a handler's — the
 function's own 404 never carries — with the requests `EXPECTED_STATUS` names
 held to their exact codes besides, an unknown `/api/` path to the router's
 JSON 404 body among them, because on 2026-09-11 five production deploys
-failed in a row while nothing in CI could see the deployed shape (LUKE-164).
+failed in a row while nothing in CI could see the deployed shape.
 Behind Deployment Protection it needs one of two doors, the bypass secret
 sent as a header or the OPTIONS allowlist, and names which it relies on.
 It runs by hand, against an address or a commit's preview found through its
 GitHub deployment record (`server/preview-deployment.ts`); CI does not run
 it, since a PR's preview could take twenty minutes to appear or never come. The
-table is its own file, and the root `vercel.json` is assembled from it
-(LUKE-183). `server/feedback.mjs` is the one
+table is its own file, and the root `vercel.json` is assembled from it.
+`server/feedback.mjs` is the one
 hand-written function, emitted into the tree at `api/feedback.mjs` as it
 stands.
 
@@ -479,7 +481,7 @@ migrates within seconds of its push and goes live up to an hour later, and the
 release before it serves the migrated database all that while. So the first
 deployment teaches every read to decode both the old shape and the new one,
 and the second, once the first is live, carries the migration that rewrites
-the rows. `0082_plan_template_teammate` shipped in one step, and the release
+the rows. `20261006072320_plan_template_teammate` shipped in one step, and the release
 still serving refused every task until its own build went live. Each read
 projects only the columns it answers (`task-store.ts`'s list reads no part of
 the document), so a rewrite reaches only the reads of what it rewrote.
@@ -740,8 +742,8 @@ exchanges the code, but Better Auth's Google provider refuses to build the
 authorization URL without a client secret, so a Preview without
 `GOOGLE_CLIENT_SECRET` answers 500 to every Google sign-in before the browser
 leaves for Google (found 2026-09-18); Better Auth's own oauth-proxy setup sets
-the provider secrets in every environment, and Charles chose on 2026-09-18 to
-follow it rather than hold them back from Preview; the preview then builds its own Google URL and production still exchanges the code. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
+the provider secrets in every environment, and Vespin follows it rather than
+holding them back from Preview; the preview then builds its own Google URL and production still exchanges the code. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
 ends, or the profile arrives undecryptable; without it Better Auth derives the
 proxy's keys from `BETTER_AUTH_SECRET`, which differs per deployment, so a
 proxied sign-in cannot complete.
@@ -753,7 +755,7 @@ answers the plugin's profile-return endpoint (`/callback/:id/oauth-proxy`),
 which creates a session from any profile encrypted with that secret, so the
 secret every Preview holds can mint production sessions; and production relays
 a profile and its provider tokens to whatever return the encrypted proxy state
-names. Both were accepted for the MVP on 2026-10-13 in favour of running the
+names. Both were accepted on 2026-10-13 in favour of running the
 plugin as Better Auth prescribes. Treat the proxy secret as sensitive everywhere
 it is stored, especially in Preview.
 
@@ -864,7 +866,7 @@ disabled. `VERCEL_ENV` names the environment, and the SDK reads
 maps, so a stack trace in Sentry reads as the minified bundle: uploading the
 client's, the functions', and the eve root's maps cost every production build
 60 to 75 seconds, and was dropped for it on 2026-10-27. Alert rules are set in
-Sentry, not here: a Slack `#alerts` message on more than ten events in five
+Sentry, not here: a Slack message on more than ten events in five
 minutes, and an email to the issue's owners on a high-priority issue.
 
 ## WebSocket functions

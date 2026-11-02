@@ -628,10 +628,10 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         }
         // The settings read once so the file is warm for the composers built
         // after this one, waited on by none of them. The read first drops the
-        // ciphertext of any key no build reads any more — the developer's own
-        // OpenAI key, until LUKE-205 — so a key nothing reads does not stay on
-        // disk. A failure holds nothing up and is written down, since a key
-        // that stayed on disk is worth a line.
+        // ciphertext of any provider key an earlier build stored, since no
+        // build reads one any more, so none stays on disk. A failure holds
+        // nothing up and is written down, since a key that stayed on disk is
+        // worth a line.
         yield* Effect.forkScoped(
           catchAllButInterrupt(
             Effect.andThen(store.retireStoredApiKeys(), store.snapshot()),

@@ -57,8 +57,7 @@
     white-space: nowrap;
   }
 
-  /* A diff's counts grow as an agent works; the digits keep their width
-     (`tokens/roles.test.ts` holds every count to it in its own sheet). */
+  /* A diff's counts grow as an agent works; the digits keep their width. */
   .luke-count-part {
     font-variant-numeric: tabular-nums;
   }

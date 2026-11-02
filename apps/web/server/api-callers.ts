@@ -14,7 +14,7 @@ import { ORPC_FALLBACK_SRC, type Rewrite, readApiRewritesTable } from "./functio
  * The caller side of the `/api/` routes. The route table is generated and
  * checked (`function-rewrites.ts`), but the constants clients build URLs from
  * were not, so a path constant could outlive its route and nothing failed
- * until production answered 404 (LUKE-186). This reads every `/api/` path a
+ * until production answered 404. This reads every `/api/` path a
  * client in the repository spells — the string and template literals of the
  * TypeScript, the paths in the shell scripts, and the exports of the hosted
  * paths module, evaluated — and

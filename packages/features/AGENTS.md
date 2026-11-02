@@ -1,9 +1,10 @@
 # `@luke/features`
 
-The desktop-to-service wire boundary: the hosted service paths, one wire module
-per domain, and the clients that speak them.
+The client-to-service wire boundary, for the desktop and the web app: the
+hosted service paths, one wire module per domain, and the clients that speak
+them.
 
-The view models a desktop surface is drawn from (`turn-rows.ts`,
+The view models a surface is drawn from (`turn-rows.ts`,
 `integration-health.ts`, `failure-remedy.ts`, the `*-model.ts` files) sit beside
 the wire and `*-view.ts` modules they shape, each at a subpath of its own. They
 import no React and no DOM, so another app could draw the same surface.

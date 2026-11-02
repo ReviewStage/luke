@@ -83,9 +83,8 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   unread row, the current page). Only a title carries tracking
   (`--luke-type-title-tracking`). A component's sheet names no weight, no
   tracking, and no pixel size of its own, and a utility reads a role's
-  (`font-label`, `font-tag`, `text-group`), which `tokens/roles.test.ts`
-  holds. Words that count or tell time (`Time`, `Badge`, a count part) draw
-  tabular figures themselves.
+  (`font-label`, `font-tag`, `text-group`). Words that count or tell time
+  (`Time`, `Badge`, a count part) draw tabular figures themselves.
 
   **Spacing is named by role.** A page's sections stand
   `--luke-page-section-gap` apart (`GAP.PAGE`), two groups in a pane or a
@@ -105,8 +104,8 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   its own. The style guard's `pointer-cursor` holds it.
 
   The settings-row, card, dialog, and menu roles beside them (`--luke-settings-row-*`,
-  `--luke-card-*`, `--luke-dialog-*`, `--luke-menu-*`) are set the same way. `tokens.test.ts`
-  holds both profiles to one set of names.
+  `--luke-card-*`, `--luke-dialog-*`, `--luke-menu-*`) are set the same way, both profiles setting
+  one set of names.
 - **Palette** (`palettes.css`): semantic colours, `--luke-color-*` (`text`,
   `text-muted`, `ground`, `surface`, `overlay`, `fill-*`, `border*`, `accent*`,
   `danger*`, `focus-ring`, …), set by both profiles in both themes. The

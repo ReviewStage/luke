@@ -1,64 +1,9 @@
-# Tasks: the voice journey and the Tasks tab
+# Tasks: how a task behaves
 
-This is the reference the Feature Planning MVP builds against (LUKE-331). It
-fixes what the developer sees and hears, in order, from picking a GitHub
-repository to copying the finished plan, and it names the existing piece of Vespin
-each part of the Tasks tab is built from. It is a design, not an
-implementation: the issues that build it (LUKE-334 document store, LUKE-337 the
-first Mac surface, LUKE-347 its move into the panel, LUKE-338 GitHub source
-tools, LUKE-340 GPT Live, LUKE-342 review and Copy) own the code and the
-tests.
-
-The product decisions behind it are settled in the project specification and
-are not reopened here. The two that shape everything below:
-
-- **One saved plan per named task**, one free Markdown text that starts
-  empty ("The plan's text" below), written by the
-  task's agents, which take notes into it with `edit_plan` on a call
-  or off one, and by the developer, whose editor is the document itself
-  ("Editing" below).
-  Every save that changes the plan is kept as a revision under the writer
-  who made it ("History" below); there is no stale-revision rejection, no
-  approval state, and no export record.
-- **The model drives the workflow.** Question choice, agreement, corrections,
-  and the final review live in the instructions an agent is handed on a call
-  (`packages/service/src/agents/coder-host/turn-context.ts`). The agent
-  writes the document itself, and a turn opens with the saved document
-  where it is new to the agent or someone else saved it since.
-  The tab decides nothing; it shows the saved document and the voice state,
-  and saves only the developer's own edits of the text.
-
-## What the tab is not
-
-A reviewer can hold the build to these as easily as to the layout:
-
-- No typed-chat composer and no typed fallback. The developer speaks; the only
-  text fields are ordinary setup fields (the task's name and the repository
-  filter), the editor the document opens in, and a comment thread's reply
-  field, and nothing typed into them reaches the model as conversation. An
-  edited section reaches it as the document it is handed, marked as the
-  developer's own words. The plan's open comment threads reach it the same
-  way, as data beside the document; a thread reaches an agent as a request
-  only when a member mentions that agent in it with \`@\`, and the agent
-  answers it in the thread. An \`@\` of Vespin hands the thread to no one.
-- No Approve button, no readiness meter, no progress or coverage score, and
-  no separate export or handoff screen. Earlier versions of the plan are
-  read and restored from its version history ("History" below), which is the
-  one place a version is compared with another.
-- An assumption is edited like any other line of the text, never confirmed or
-  accepted: there is no checkbox, no Accept, and nothing that moves one
-  elsewhere.
-- The document is the record. An agent's transcript is never a second
-  document: it is never copied, edited, or handed to an agent. The document
-  itself is what Start hands to an agent, as the Markdown Copy puts on
-  the clipboard ("From a plan to a pull request" below).
-- The work column is the agents'. Each agent started on the task stands in
-  a tab of its own; everything else, the plan's document and the task's Inbox, stands
-  in a side panel ("Side panel" below) that the developer opens and closes.
-  A task opens with the panel shown on its plan; only an Inbox item not yet
-  seen opens it on its own, and there are no second documents.
-- No window of its own. Tasks live in Vespin's one window (LUKE-347): there
-  is no separate task window, Dock tile, Cmd-Tab entry, or app menu for it.
+A task is a name, one saved plan, and the agents started on it. This file
+describes what the window shows and does for one, section by section: the
+list, the plan and how it is edited and kept, the agents, and Copy. Code
+comments cite it by section heading.
 
 ## The Tasks tab
 
@@ -83,8 +28,6 @@ sidebar, one page at a time:
  │  ## Assumptions                                              │
  │  - Members and admins can both invite.                       │
  │  - An invite expires after 7 days.                           │
- │ ──────────────────────────────────────────────────────────── │
- │  (●)  Listening                                              │
  └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -92,8 +35,8 @@ sidebar, one page at a time:
   sidebar does not list: the Inbox beside the task list. An account with
   nothing yet sees a welcome with New task's composer instead
   (`resting-page.ts`). There is no empty page in between.
-- **Document page**: the open task's saved document. Its header and its
-  microphone row hold still, and only the document scrolls between them.
+- **Document page**: the open task's saved document. Its header holds
+  still, and only the document scrolls beneath it.
 
 Escape unwinds one page at a time: the document page back to the
 resting page, which leaves the task, and the resting page closes nothing. Escape on the Settings tab's front page comes back to Tasks.
@@ -209,7 +152,6 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
   An agent's pin is the account's own too (`agent_pin`, through
   `PATCH /api/agents/{id}`), drawn at once and put back with a toast when the
   service refuses.
-- There is no search in this journey.
 
 ### New task
 
@@ -224,7 +166,7 @@ Dictate, and Start.
    listing the repositories the workspace's GitHub reaches. An agent needs a
    repository, so Start is held without one, and the card says so.
 2. **Start**, the round button; Return presses it. It starts the task with
-   an empty plan and no call, Untitled until the agent names it, and the
+   an empty plan, Untitled until the agent names it, and the
    agent on the words, the files,
    and the chosen model, in the one start, then opens the task on the
    agent's tab. ⌘Return on an empty box starts a bare task with no agent,
@@ -238,8 +180,7 @@ Dictate, and Start.
   borders are one line across the window.
 - The task's repository is the sidebar's to name: by the group it stands in,
   or on its row where the list's view groups by creator or not at all.
-  A task with none yet, the 13 tasks from before repositories among them,
-  shows a compact `Choose a repository` chip in the toolbar's actions row, left
+  A task with none yet shows a compact `Choose a repository` chip in the toolbar's actions row, left
   of Start, with the composer's menu: a pick is saved through
   `PATCH /api/plans/{id}`, and a refusal is said beside it. A task can be
   used without a repository.
@@ -253,7 +194,7 @@ Dictate, and Start.
   ⌘⌫ asks to delete it, from any of its tabs.
 - An archived task opened from Archived tasks reads and works as any other,
   under a quiet line, "This task is archived", with Unarchive beside it.
-- **Start**, a split button (`desktop/start-agent-button.tsx`), drawn
+- **Start**, a split button (`desktop/desktop-tasks.tsx`), drawn
   while the task's own tab is chosen, as the ⋯ is. Its main
   part starts an agent on the plan with the account's default model and
   effort; its chevron drops the searchable picker over the models the service
@@ -276,8 +217,7 @@ Dictate, and Start.
 ### Document
 
 - Above the text, one muted line says who last edited the plan, from its
-  newest revision ("History" below): "Edited by you · just now", or an agent by its row's name. A revision a task's own Vespin wrote, before tasks
-  lost him, still names him. The time moves on once a minute. A task whose
+  newest revision ("History" below): "Edited by you · just now", or an agent by its row's name. The time moves on once a minute. A task whose
   plan nobody has written since it started shows no line. A press on the
   line opens the plan's version history.
 - Each section says the same of the save that last changed it, in a quiet
@@ -331,7 +271,7 @@ Dictate, and Start.
 ### Side panel
 
 The open task's supporting views stand in a panel at the window's right,
-beside the document and its microphone row, the way a devtool's secondary
+beside the document, the way a devtool's secondary
 sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
 
 - **Tabs.** `Plan`, the task's document; `Inbox`, what its agents need of
@@ -352,8 +292,8 @@ sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
   read at the commit the agent named instead. File tabs are kept nowhere.
   The strip scrolls where the agents overflow it, and no tab closes.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
-  A closed panel opens on its own only for a page an agent shows on a call
-  (`tasks/use-panel-arrivals.ts`), and a subagent opened from an agent's
+  A closed panel opens on its own only for a page an agent shows
+  (`tasks/use-side-panel.ts`), and a subagent opened from an agent's
   transcript, whose tab it opens on; an open panel keeps its tab, and an arrival on another tab
   sets that tab's label in semibold until it is shown. Its left edge
   drags it between 280 and 720 pixels wide, and the arrow keys move it once
@@ -373,8 +313,7 @@ lands, and showing its transcript and its composer. The column's
 strip is the side panel's: tabs drag and step among themselves, close by ×,
 Delete, ⌘W, or Close and Close others, hang their cards, and pin to the
 sidebar. A column whose last tab closes is back on the plan. The tab each
-task last showed is kept, so a task opens as it was left; what an earlier
-version kept of the task's Call tab is let go. ⌘T and ⌘W answer the column
+task last showed is kept, so a task opens as it was left. ⌘T and ⌘W answer the column
 holding the focus, the side panel's once the pointer goes into it. A
 subagent's tab stays in the side panel.
 
@@ -401,9 +340,7 @@ subagent's tab stays in the side panel.
 - **The transcript.** The agent's stored `UIMessage`s, drawn with the AI
   Elements components: the plan or prompt it was handed, the developer's
   messages, and each of its turns with its text as Markdown, its reasoning
-  folded, and each tool call one row. The lines said on its past calls
-  (channel `voice`) stand among them in the order said, as ordinary lines:
-  the developer's in a bubble and the agent's as its messages.
+  folded, and each tool call one row.
 - **Live.** While the tab shows and the agent is starting or running, the
   window reads `GET /api/agents/{id}/messages?after=<cursor>` in a loop on
   the service's held long-poll (`tasks/use-agent-transcript.ts`), ending on
@@ -479,22 +416,21 @@ points to Settings › Skills.
 An agent's transcript is its conversation's rows ("Agent tabs" above),
 drawn with AI Elements, the AI SDK's chat components, copied into
 `packages/panel/src/ai-elements/` and restyled to the panel's tokens. A
-line said on a past call is a row with channel `voice`, drawn as an
-ordinary line.
+plan card and a reasoning row are closed until opened, so they never stand
+in the way of the agent's own words.
 
 ### Agents' notes
 
 An agent writes the task's plan with its `edit_plan` tool
 (`packages/service/src/agents/coder-host/plan-edit.ts`), whose every call
 names the task by its id, so it writes any other plan of its workspace too,
-as a pilot fixes a child task's plan: on a call as the talk
-settles it, and off one where it meets something the plan does not settle,
-finds a fact the plan has wrong, or makes a decision the plan left open. Its
-saves go through `saveNotes` (`packages/service/src/tasks/plan-notes.ts`),
+as a pilot fixes a child task's plan, where it meets something the plan
+does not settle, finds a fact the plan has wrong, or makes a decision the
+plan left open. Its saves go through `saveNotes` (`packages/service/src/tasks/plan-notes.ts`),
 the plan's one write.
 
-A call's notes are taken the way a person takes notes on a call, never the
-text written out again:
+An agent's notes are taken the way a person takes notes, never the text
+written out again:
 
 - `add` puts a new point at the end of a section, under the heading it
   names, or opens that section at the end of the text where it has none.
@@ -514,8 +450,7 @@ then stands.
 Each save is written into
 the task's journal (`plan.agent_edits`, the last fifty) as the agent's id,
 the instant, and the notes as taken, a deletion kept as a `remove` and a
-replaced text cut to 500 characters so the deployment before reads it; a call whose notes do not all land saves
-nothing and answers the plan as it stands, to retry from. The agent is named at read time from its
+replaced text cut to 500 characters. The agent is named at read time from its
 row, so the window's "Edited by" line over the document and the "recent
 edits by agents" every agent on the task is handed both say what
 the row says now.
@@ -593,9 +528,8 @@ Every save that changes the plan is kept as a revision
 (`packages/database/src/models/plan-revisions.ts`, table `plan_revision`): the
 plan's text as it stood after it, who wrote it (the
 developer, editing the text or restoring the earlier revision `restored_from`
-names; or an agent, by its row; a revision a task's own Vespin wrote,
-before tasks lost him, keeps the notetaker and the call it was written on),
-when its first and latest saves were, and how many notes it took. It is written in
+names; or an agent, by its row), when its first and latest saves were, and
+how many notes it took. It is written in
 the transaction that saves the plan, so the two never disagree. The same
 writer's saves one after another are one revision, an agent's or the
 developer's, while the revision's latest save is at most ten minutes old, so
@@ -608,18 +542,16 @@ is deleted, and there is no cap on how many a task keeps.
 
 The plan names its newest revision as its last edit, which the document's
 "Edited by" line reads ("Document" above), and each section the writer of the
-save that last changed it: the actor, the agent, and whether on a
-call, kept beside the revision by the same locked save, which each section's
-line reads.
+save that last changed it: the actor and the agent, kept beside the
+revision by the same locked save, which each section's line reads.
 
 Version history, in the task's ⋯ menu (the toolbar's and the sidebar row's
 right-click alike) and behind the "Edited by" line, takes the whole window
 the way Settings does (`desktop/desktop-version-history.tsx`): a column as
 wide as the sidebar, with Back at its head, "Version history", and the
 revisions newest first, fifty a page
-(`GET /api/plans/{id}/revisions`), each as who wrote it ("You", an agent by its row, or "Vespin" for a revision a task's own Vespin wrote before),
-whether on a call, how many changes it made, and
-how long ago; the newest is labelled "Current", and the plan from before
+(`GET /api/plans/{id}/revisions`), each as who wrote it ("You" or an agent by its row), how many changes it
+made, and how long ago; the newest is labelled "Current", and the plan from before
 history reads "Earlier". The list is read while the view stands and again
 whenever the plan is edited meanwhile. The chosen revision, the newest when
 the view opens, or, opened from a section's line, the revision that made the
@@ -653,7 +585,7 @@ revision's text back through the plan's one locked save
 `packages/service/src/tasks/plan-notes.ts`). The restore is a revision of the developer's
 ("You") naming the one it brought back, "Restored the version from Oct 11,
 2:14 PM"; it joins no revision and none joins it, so a restore is undone by
-restoring the revision before it, and it is allowed during a call. It takes
+restoring the revision before it, and it is allowed while an agent writes. It takes
 no base: a save that landed after the version was chosen is the revision
 before the restore, and restoring it brings it back. A restore that lands
 leaves the version history for the task, whose document the service's answer
@@ -694,19 +626,18 @@ not hold exactly once, the developer having rewritten it meanwhile among the
 reasons, nothing is saved, so a move never strikes without placing, and the
 agent's `edit_plan` answers the text as it stands, to retry from. Every plan
 the fixed template once kept as fields was carried
-over to its text by a one-time backfill (34 plans and 32 revisions in
-production), each field's words under its heading.
+over to its text by a one-time backfill, each field's words under its
+heading.
 
 ### Commands on the developer's Mac
 
 `run_on_mac` (`packages/service/src/agents/mac-command.ts`) runs one shell
 command on the developer's own Mac and answers its exit code and output, for
-agents and their workers alike, with
-no approval: Dean's ruling of 2026-10-13. The call is queued under the
-account; a signed-in Mac with Settings › This Mac's "Let agents run commands
-on this Mac" on (the default) holds `GET /api/mac-commands` open, takes it,
-runs it in the login shell from the home folder
-(`packages/host/src/mac-command-runner.ts`), and posts the result back. A
+agents and their workers alike. The call is queued under the account; a
+signed-in Mac whose Settings › This Mac mode is not Never holds
+`GET /api/mac-commands` open, takes it, and, by default (Ask every time),
+asks the developer before running it in the login shell from the home folder
+(`packages/host/src/mac-command-runner.ts`), then posts the result back. A
 call where no Mac read lately answers `not-run` at once, in one line the
 agent repeats. The output is not redacted (`PRIVACY.md`, "Commands agents run on
 your Mac").
@@ -758,10 +689,6 @@ Copy copies the new document.
 
 ## Failures the developer sees
 
-- **Microphone or connection.** The existing voice error and notice lines
-  appear on the panel's notice line, as for any call ("the microphone is not
-  allowed yet", "Voice is temporarily unavailable"). The microphone button
-  retries.
 - **Save.** An agent's `edit_plan` whose notes do not all land saves nothing
   and answers the plan as it stands, for the agent to retry from. The tab
   keeps showing the last saved document.
@@ -776,111 +703,3 @@ Copy copies the new document.
   `unavailable` where the agent's session could not be started; the reason is said
   beside the button until the next press. An agent that ends `failed` or
   `cancelled` says so in its tab's head, and anything it pushed stays.
-
-## What each part reuses
-
-This section records where each part comes from. The owning issue may choose
-the exact shape.
-
-| Part | Reuse | New |
-| --- | --- | --- |
-| The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@luke/wire/app-settings`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-tasks.tsx`) and its control (`use-tasks-tab.ts`) (LUKE-347). |
-| Acts | `ACT_KIND`, `@luke/host/act-port`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the takeover: the task list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a task, a workspace made, its pending invitations read, one made, and one canceled, its GitHub organization connected and disconnected, its members read and removed, its photo read and set or removed, and one left (`workspace.create`, `workspace.invitationsRead`, `workspace.invite`, `workspace.invitationCancel`, `workspace.githubConnect`, `workspace.githubDisconnect`, `workspace.membersRead`, `workspace.memberRemove`, `workspace.photoRead`, `workspace.photoSet`, `workspace.leave`), the repositories the account reaches, a task's repository, a page of GitHub's opened in the browser, the microphone, and a task's agents (`agents.models`, `agents.defaultRead`, `agents.defaultWrite`, `agents.list`, `agents.start`, `agents.messages`, `agents.stop`, `agents.pullRequest`). |
-| Task list and new-task page | `@luke/ui` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
-| Document body | `MarkdownMessage` (`packages/panel/src/markdown-message.tsx`) over `@luke/ui/markdown`'s note look (Streamdown, GitHub's dialect), raw HTML not rendered, only `http`/`https` links kept; `@luke/ui`'s `prose.css` | A document-scale style for it. |
-| Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: the task's name as a title over its text (`packages/features/src/plan-markdown.ts`). |
-| Start, agent tabs, Settings › Agents | The toolbar and the task's column's tabs (`desktop/main-tabs.tsx`, `tasks/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `@luke/ui/tab-strip-model`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`tasks/agent-tab.tsx`), their control (`tasks/use-agents.ts`) and the held transcript read (`tasks/use-agent-transcript.ts`), and the Settings page (`settings/agents-page.tsx`). |
-| The plan | Hosted storage; the account client (`packages/features`, `packages/credentials`) | The task record and its plan's one write, `saveNotes` (LUKE-334), research (LUKE-339), the notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and an agent's `edit_plan` (`packages/service/src/agents/coder-host/plan-edit.ts`). |
-
-Two existing rules carry over unchanged:
-
-- **Session replay.** The panel is the one surface that records
-  (`apps/desktop/src/renderer/session-replay.ts`, called from `App`), and the
-  Tasks tab is part of it: every word it draws is masked, as the rest of the
-  panel's are, so what leaves the machine is the tab's layout and never the
-  plan's words. It draws them with the panel's own text, fields, and
-  attributes, and no new way of drawing words. An agent's tab is also left
-  out of the recording (`ph-no-capture`), as a second line behind the
-  masking, since every word in it is the developer's or the agent's.
-- **Secrets.** No credential or account secret enters the document, the notice line,
-  a counted event, or a trace. The GitHub user token is sealed on the
-  `account` row and read only by `packages/service/src/github/github-app.ts`; the
-  installation tokens it mints are set at the sandbox's firewall and never
-  enter the sandbox; and the model is told to keep secrets out of the plan.
-  Nothing scans for this, so each owning issue holds it by construction.
-
-## Known limitations and validation
-
-This section records what the MVP was checked against when it was
-integrated (LUKE-346) and what it was not. It records results only. It
-changes when a check is run, not when one is planned.
-
-### Validated
-
-- `./scripts/check.sh` exits 0 on the integrated branch, on Linux. That run
-  covers repository checks, types, lint, the hermetic unit and store tests,
-  and the builds.
-- The tab's calls and agents are held by hermetic tests at the model and
-  transport boundaries (fake OpenAI, a fake of the agents' sessions, a scripted
-  GitHub and a sandbox double, PGlite):
-  - an agent's checkout of the task's repository, with the token at
-    the firewall for the clone alone, and every refusal checking nothing out
-    (`packages/service/src/agents/coder-host/checkout.test.ts`); and the
-    Start, list, messages, and Stop routes over a fake of the agents' sessions
-    (`packages/service/src/agents/agents-app.test.ts`);
-  - re-attaching and resuming on the same task;
-  - Copy's Markdown, at the store's largest document;
-- The Tasks tab (LUKE-347) is held by renderer tests: the tab bar's four
-  tabs, the list and document pages, Back leaving the task, the tasks read
-  again each time the tab shows, and the host keeping the open task through
-  the tab going away, with nothing read on a clock.
-  Its regions render as static markup: no composer and no approve controls,
-  a new task's empty plan, and the failed, missing, and
-  not-connected states.
-
-### Not validated
-
-- **A real Mac.** This Linux VM has no Mac, CI builds nothing for one, and
-  the integrated application has not been run on one. The
-  Tasks tab in the panel, the document's presentation, the
-  document scrolling inside the panel's ceiling,
-  and the microphone row
-  have never been seen running. `./scripts/evidence.sh` captures the window
-  on the Tasks tab over a synthetic task
-  (`app-smoke-tasks.png`, from `--profile tasks`), on its plan beside a call in the task's column
-  (`app-smoke-tasks-transcript.png` and `app-smoke-tasks-work.png`, from
-  `--profile tasks-transcript` and `--profile tasks-work`),
-  and over
-  the synthetic task list with none open (`app-smoke-expanded.png`, the
-  window opening on Tasks), but neither
-  capture has been taken yet.
-- **An agent.** No test runs an agent against a real provider, a
-  real checkout, a push, or a pull request: the tests reach a coding agent's
-  sessions through a fake of its harness.
-
-### Known limitations
-
-- **The GitHub App's user token can write.** GitHub sign-in is the Vespin
-  GitHub App's user authorization (`packages/service/src/auth/auth-policy.ts`,
-  `GITHUB_SIGN_IN` with `disableDefaultScope`): it names no OAuth scope, and
-  the token reaches the repositories the App is installed on and the
-  developer can reach, with the App's registered permissions, contents and
-  pull requests read and write among them. The server reads it only to list
-  installations and repositories and to confirm a task's repository is
-  reachable (`packages/service/src/github/github-app.ts`); an agent's
-  checkout runs on an installation token cut to contents and pull requests
-  write. An account that signed in
-  under the earlier OAuth App may still hold its classic `repo` token until
-  it signs in again. `PRIVACY.md` discloses it under "Your account".
-- **Signing in with GitHub on a Preview.** A Preview's sign-in goes through
-  production's registered callback on the OAuth proxy and lands on the
-  Preview's signed-in user (`apps/web/server/README.md`, the OAuth proxy); it
-  has not yet been exercised against a deployed Preview.
-- **`read_web_page` checks addresses without pinning them.** Every host the
-  read reaches, and every redirect hop, is resolved and refused unless all of
-  its addresses are public unicast. The check is a lookup ahead of the
-  request, though, and the socket is not pinned to the checked address. A
-  host whose DNS answer changes between the lookup and the connection (DNS
-  rebinding) is the one case it does not cover.
-- **The task list is read, not followed.** A task started on another Mac
-  appears in this Mac's list the next time its Tasks tab shows.
