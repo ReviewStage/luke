@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
 import type { TaskStoreFailure } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { asPictureList } from "@luke/features/agent-pictures-model";
 import {
   CONVERSATION_PICTURE_BOUNDS,
   type KeptPicture,
@@ -11,12 +12,7 @@ import { mediaDimensions, sniffMediaType } from "@luke/features/media-signature"
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Data, Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import {
-  ACTION_RESULT_STATUS,
-  isRecord,
-  type UnparsedWireValue,
-  type WireRecord,
-} from "../../core.js";
+import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "../../core.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
 import { type InboxSandboxDoor, readSandboxImage } from "./inbox-image.js";
@@ -160,18 +156,6 @@ function keepAll(
     Effect.map(Option.some),
     Effect.catchTag("SetPastBudget", () => Effect.succeed(Option.none())),
   );
-}
-
-/**
- * A call's input as a list of pictures: one given bare, a path with no list
- * around it, is read as a list of that one. Note that this is read here
- * rather than in the schema, because the schema is what the model is shown
- * and a list is what it should send.
- */
-function asPictureList(input: UnparsedWireValue): UnparsedWireValue {
-  return isRecord(input) && input.images === undefined && input.path !== undefined
-    ? { images: [input] }
-    : input;
 }
 
 /**
