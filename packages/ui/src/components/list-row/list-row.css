@@ -86,9 +86,11 @@
   }
 
   /* The press stands its words at the row's insets, which a variant, a
-     density, and the acts beside it set. */
+     density, and the acts beside it set, and takes the row's corners,
+     which a card squares at its end where acts stand beside it (below). */
   .luke-list-row-main {
     padding: var(--luke-list-row-inset-block) var(--luke-list-row-inset-inline);
+    border-radius: inherit;
   }
 
   /* A card holds its rows edge to edge on its ground (`list-row.tsx`), a
@@ -108,10 +110,38 @@
     --luke-list-row-inset-inline: var(--luke-space-16);
   }
 
-  /* Note that a card's row rings inside its press, because the card's
-     corner clips whatever stands past its edge. */
-  .luke-list[data-variant="card"] .luke-list-row-main:focus-visible {
-    outline-offset: calc(-1 * var(--luke-focus-ring-width));
+  /* Note that everything in a card rings inside itself, a row's press and
+     its acts alike, because the card's corner clips whatever stands past
+     its edge, as a flush `Card` does (`card.tsx`). */
+  .luke-list[data-variant="card"] {
+    --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+  }
+
+  /* A card's first and last rows take its corner where they meet it, its
+     round inside its hairline, so what is drawn on the row, its fill and an
+     open menu's ring, follows the card's round rather than cutting square
+     across it. */
+  .luke-list[data-variant="card"] > .luke-list-row {
+    --luke-list-row-card-corner: calc(var(--luke-control-radius) - 1px);
+  }
+
+  .luke-list[data-variant="card"] > .luke-list-row:first-child {
+    border-start-start-radius: var(--luke-list-row-card-corner);
+    border-start-end-radius: var(--luke-list-row-card-corner);
+  }
+
+  .luke-list[data-variant="card"] > .luke-list-row:last-child {
+    border-end-start-radius: var(--luke-list-row-card-corner);
+    border-end-end-radius: var(--luke-list-row-card-corner);
+  }
+
+  /* Note that the press's end meets the card only where no act or ⋯ stands
+     beside it, so there its ring stays square at its end, mid-row. */
+  .luke-list[data-variant="card"]
+    > .luke-list-row:has(> .luke-list-row-actions, > .luke-list-row-more)
+    > .luke-list-row-main {
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
   }
 
   /* A compact row keeps its words and gives up some of the room around them. */
