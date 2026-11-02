@@ -28,7 +28,7 @@ import {
  *   PREVIEW_PROBE_DOOR=<door> PREVIEW_PROBE_SHA=<head> GITHUB_TOKEN=… \
  *     pnpm --dir apps/web exec tsx scripts/preview-probe.ts
  *   PREVIEW_PROBE_DOOR=bypass-secret \
- *     pnpm --dir apps/web exec tsx scripts/preview-probe.ts --url https://fullspin.dev
+ *     pnpm --dir apps/web exec tsx scripts/preview-probe.ts --url https://vespin.dev
  *
  * Without `--url` it waits on the head's preview through the GitHub
  * deployment records, which is what CI does; with it, it probes the address

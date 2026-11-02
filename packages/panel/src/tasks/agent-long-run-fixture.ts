@@ -68,7 +68,7 @@ function startedAgent(turn: number): { readonly id: string; readonly name: strin
 /** A mention of the agent the run started at `turn`, as the run writes one. */
 function agentMention(turn: number): string {
   const agent = startedAgent(turn);
-  return `[@${agent.name}](https://fullspin.dev/stage/plan/${FIXTURE_IDS.TASK}/agent/${agent.id})`;
+  return `[@${agent.name}](https://vespin.dev/stage/plan/${FIXTURE_IDS.TASK}/agent/${agent.id})`;
 }
 
 /** A mention of a pull request the run's agents opened. */

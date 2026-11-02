@@ -559,7 +559,7 @@ test("a plan edit or a comment call opens the task it named, and one made before
 test("a look at a plan's picture says it looked and opens the task its address names, and one refused shows why and opens nothing", () => {
   const input = {
     address:
-      "https://fullspin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/9d2e4c61-7a3b-4f0e-8b1a-2c6d4e8f0a13",
+      "https://vespin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/9d2e4c61-7a3b-4f0e-8b1a-2c6d4e8f0a13",
   };
   const looked = { tool: "look_at_picture", callId: "call-1", input, output: { status: "looked" } };
   const refused = {
@@ -633,7 +633,7 @@ test("a task's change says it updated the task its answer names, an older transc
     task: {
       id: "task-2",
       name: "Seat billing",
-      mention: "[@Seat billing](https://fullspin.dev/acme/plan/task-2)",
+      mention: "[@Seat billing](https://vespin.dev/acme/plan/task-2)",
     },
     already: false,
   };

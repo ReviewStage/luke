@@ -170,7 +170,7 @@ test("a mention labelled with one task's key that links another says the task it
   const other = task(STAGE, 422, "").id;
   const container = await drawn(
     createElement(TranscriptWords, {
-      text: `See [@STAG-421](https://fullspin.dev/stage/plan/${other}).`,
+      text: `See [@STAG-421](https://vespin.dev/stage/plan/${other}).`,
     }),
   );
 

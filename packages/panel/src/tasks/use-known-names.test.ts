@@ -205,5 +205,5 @@ test("a channel the host holds is named by its name, and #name among words names
   await settle();
 
   assert.equal(names?.channels?.get(app.id), "app");
-  assert.equal(targets?.get("#app"), `https://fullspin.dev/acme/channel/${app.id}`);
+  assert.equal(targets?.get("#app"), `https://vespin.dev/acme/channel/${app.id}`);
 });

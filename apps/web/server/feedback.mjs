@@ -20,7 +20,7 @@
  */
 
 const RESEND_URL = "https://api.resend.com/emails";
-const DEFAULT_FROM = "Fullspin <feedback@fullspin.dev>";
+const DEFAULT_FROM = "Vespin <feedback@vespin.dev>";
 
 /**
  * A best-effort brake on abuse: the endpoint is public and each accepted

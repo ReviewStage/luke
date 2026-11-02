@@ -32,7 +32,7 @@ function service(answers: Array<() => Response>) {
 
 function client(options: Partial<ConstructorParameters<typeof AccountPreferencesClient>[0]> = {}) {
   return new AccountPreferencesClient({
-    serviceBaseUrl: "https://fullspin.dev",
+    serviceBaseUrl: "https://vespin.dev",
     credential: fixedBearer("token-1"),
     ...options,
   });
@@ -59,7 +59,7 @@ it.effect("writes account preferences as a full snapshot", () =>
     });
 
     const [request] = requests;
-    assert.equal(request?.url, "https://fullspin.dev/api/account/preferences");
+    assert.equal(request?.url, "https://vespin.dev/api/account/preferences");
     assert.equal(request?.init?.method, "PUT");
     assert.equal(new Headers(request?.init?.headers).get("content-type"), "application/json");
     assert.deepEqual(JSON.parse(String(request?.init?.body)), { preferences: {} });

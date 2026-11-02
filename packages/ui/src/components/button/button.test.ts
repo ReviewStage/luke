@@ -74,7 +74,7 @@ test("a press on a ButtonLink is heard, and the link is still followed", () => {
   const presses: boolean[] = [];
   const container = mount(
     createElement(ButtonLink, {
-      href: "fullspin://fullspin.dev/acme",
+      href: "vespin://vespin.dev/acme",
       onClick: (event) => presses.push(event.defaultPrevented),
       children: "Open in Vespin",
     }),

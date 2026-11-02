@@ -33,9 +33,9 @@ const CRASH_REPORT_FLUSH_MS = 2_000;
 
 declare const PACKAGED_SENTRY_DSN: string;
 /**
- * `Fullspin@X.Y.Z`, the release `build.mjs` uploads this bundle's source maps
+ * `Vespin@X.Y.Z`, the release `build.mjs` uploads this bundle's source maps
  * under, baked from that same string. Note that the SDK's own default is the
- * app's name, which is `Fullspin Dev` or `Fullspin Test` outside a Developer ID
+ * app's name, which is `Vespin Dev` or `Vespin Test` outside a Developer ID
  * build, so a report from one would name a release no map was uploaded to;
  * which build it was is the environment's to say instead.
  */
@@ -46,7 +46,7 @@ declare const PACKAGED_SENTRY_RELEASE: string;
  * spawns its GPU process during bootstrap, and the crash reporter has to
  * stand before a child process it is to file a minidump for. The one
  * ordering this owes is the paths' — the reporter writes its own state under
- * Fullspin's `userData` — so the entry calls this immediately after moving them
+ * Vespin's `userData` — so the entry calls this immediately after moving them
  * and before anything else of the composition exists.
  *
  * Main reports on behalf of every renderer, so what leaves goes through the
@@ -144,7 +144,7 @@ function noteWorkingSetCrossing(crossing: WorkingSetCrossing): void {
 export interface TelemetryService extends EffectDesktopService {
   /**
    * A counted event, whose name and every property value the allowlist in
-   * `@luke/features/analytics` fixed. It travels to Fullspin's own service through the
+   * `@luke/features/analytics` fixed. It travels to Vespin's own service through the
    * host, never to an analytics provider from here.
    */
   readonly recordProductEvent: RecordProductEvent;

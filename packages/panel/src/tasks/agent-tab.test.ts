@@ -122,7 +122,7 @@ const OPENING_CALLS: readonly {
     target: { kind: TOOL_TARGET.PAGE, page: "page-1" },
     verb: "Showed",
     made: "Pricing explorer",
-    opens: "https://fullspin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/page/page-1",
+    opens: "https://vespin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/page/page-1",
   },
   {
     name: "a read of an agent opens its tab",
@@ -167,7 +167,7 @@ const OPENING_CALLS: readonly {
     verb: "Posted",
     made: "Which currency?",
     opens:
-      "https://fullspin.dev/acme/agent/8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21/inbox/9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "https://vespin.dev/acme/agent/8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21/inbox/9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
   },
   {
     name: "a pull request opened, named by its number",
@@ -1013,7 +1013,7 @@ const AGENT_MESSAGE: AgentTranscriptMessage = {
     {
       type: "text",
       text: [
-        "Message · [@Invite emails](https://fullspin.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) to you:",
+        "Message · [@Invite emails](https://vespin.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) to you:",
         "Rebase before you push.",
         agentMessageReplyLine("7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f"),
       ].join("\n\n"),

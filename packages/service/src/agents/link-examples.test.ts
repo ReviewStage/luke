@@ -31,7 +31,7 @@ const FILLED: ReadonlyMap<string, string> = new Map([
 ]);
 
 /** The task the coding agent works on, whose link its instructions are handed. */
-const TASK_ADDRESS = "https://fullspin.dev/acme/plan/pl_1";
+const TASK_ADDRESS = "https://vespin.dev/acme/plan/pl_1";
 
 /** Every Markdown link to a web page the words show, its label and its target, the placeholders filled in as an author would. */
 function linksIn(words: string): { label: string; target: string }[] {

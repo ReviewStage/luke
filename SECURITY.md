@@ -2,8 +2,8 @@
 
 ## Scope
 
-This policy covers the Fullspin desktop app in this repository and the hosted
-service at fullspin.dev, which the app signs in to.
+This policy covers the Vespin desktop app in this repository and the hosted
+service at vespin.dev, which the app signs in to.
 
 ## Supported versions
 

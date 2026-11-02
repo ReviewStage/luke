@@ -85,7 +85,7 @@ export const LINUX_HOST: HostOs = {
  * desktop app, so its state is the app's own folder, which Electron puts
  * under Application Support by the app's name (`resolveAppName`, a
  * packaged build's), and the app's device ids and agent folders are where
- * it looks. Those folders stand in the member's own `~/.fullspin/agents`,
+ * it looks. Those folders stand in the member's own `~/.vespin/agents`,
  * which a standalone `luke-host` shares, so they are never its own alone.
  * Its runner is the app's own bundle, beside the release in
  * `Contents/Resources/agent-runner`.
@@ -121,7 +121,7 @@ export interface HostRuntime {
   readonly stateRoot: string;
 }
 
-/** The description and state folder of the OS given, as Node's `process.platform` names it, for a daemon run with the home given; none where Fullspin builds no host for it. */
+/** The description and state folder of the OS given, as Node's `process.platform` names it, for a daemon run with the home given; none where Vespin builds no host for it. */
 export function hostRuntime(input: {
   readonly platform: string;
   readonly home: string;

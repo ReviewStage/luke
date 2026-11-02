@@ -49,7 +49,7 @@ test("the account override is read in a development run and never in a packaged 
     initializeCrashReporting: () => undefined,
     appLinks: appLinkInbox(),
   });
-  assert.equal(packaged.hostedServiceBaseUrl, "https://fullspin.dev");
+  assert.equal(packaged.hostedServiceBaseUrl, "https://vespin.dev");
   assert.equal(packaged.runMode.sendsNetwork, true);
 });
 

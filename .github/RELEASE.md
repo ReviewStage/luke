@@ -1,4 +1,4 @@
-# Releasing Fullspin for macOS
+# Releasing Vespin for macOS
 
 Releases are cut by pushing a `vX.Y.Z` tag. GitHub Actions does the rest: the **Release**
 workflow builds, signs, notarizes, staples, and validates an arm64 macOS app with
@@ -19,23 +19,23 @@ Six assets, and every one of them is load-bearing:
 
 | Asset | Why it exists |
 | --- | --- |
-| `Fullspin-X.Y.Z-arm64.dmg` | The versioned, notarized, stapled disk image |
-| `Fullspin-X.Y.Z-arm64.dmg.sha256` | Its checksum |
-| `Fullspin.dmg` | A version-free copy of the same DMG — the asset the website's download button reaches through `releases/latest/download/Fullspin.dmg`, which is why its name must never change |
-| `Fullspin-X.Y.Z-macos-arm64.zip` | The archive electron-updater downloads |
-| `Fullspin-X.Y.Z-macos-arm64.zip.sha256` | Its checksum |
+| `Vespin-X.Y.Z-arm64.dmg` | The versioned, notarized, stapled disk image |
+| `Vespin-X.Y.Z-arm64.dmg.sha256` | Its checksum |
+| `Vespin.dmg` | A version-free copy of the same DMG — the asset the website's download button reaches through `releases/latest/download/Vespin.dmg`, which is why its name must never change |
+| `Vespin-X.Y.Z-macos-arm64.zip` | The archive electron-updater downloads |
+| `Vespin-X.Y.Z-macos-arm64.zip.sha256` | Its checksum |
 | `latest-mac.yml` | The electron-updater manifest the app updates from through `releases/latest/download/latest-mac.yml`; it names the zip beside it with a relative URL and carries its sha512, so its name must never change either |
 
-The workflow verifies all six before it publishes anything: `Fullspin.dmg` must be byte-identical
+The workflow verifies all six before it publishes anything: `Vespin.dmg` must be byte-identical
 to the versioned DMG, both checksums must verify, the DMG must pass `codesign`, `spctl`,
 `stapler validate`, and `hdiutil verify`, the app must be arm64-only, hardened-runtime,
 `Notarized Developer ID`, and carrying `LUKE-LICENSE.txt`, and `latest-mac.yml` must name
 the zip with a relative URL and carry both `sha512` and `size`.
 
-Every build's Sentry SDK reports under the release `Fullspin@X.Y.Z`, the name the
+Every build's Sentry SDK reports under the release `Vespin@X.Y.Z`, the name the
 build bakes into main beside the one it uploads maps under, and under the
-environment of the Fullspin it is: `production` for a Developer ID package, `test`
-for an ad-hoc `Fullspin Test` package, and `development` for `electron .`. When
+environment of the Vespin it is: `production` for a Developer ID package, `test`
+for an ad-hoc `Vespin Test` package, and `development` for `electron .`. When
 `SENTRY_AUTH_TOKEN` is present, the final esbuild plugin on the main, preload,
 and renderer JavaScript builds uploads their source maps to that release before
 electron-builder packages the app; a refused upload warns and the build goes on. The
@@ -78,7 +78,7 @@ value and upload nothing, and neither does a rehearsal (below).
 5. **Let Actions finish.** The run bootstraps the workspace, imports the Developer ID
    certificate into a throwaway keychain, builds the signed and
    notarized artifacts, validates them, and then creates a published, non-draft release
-   titled `Fullspin X.Y.Z` with generated notes and uploads all six assets. The keychain is
+   titled `Vespin X.Y.Z` with generated notes and uploads all six assets. The keychain is
    removed whether the run succeeds or fails. The run does not run the tests: the tagged
    commit already passed CI on Linux, and no workflow runs the tests on a Mac.
 
@@ -104,7 +104,7 @@ Confirm the three consumers see the build:
 
 ```sh
 curl -sI -o /dev/null -w '%{http_code}\n' \
-  https://github.com/ReviewStage/luke/releases/latest/download/Fullspin.dmg
+  https://github.com/ReviewStage/luke/releases/latest/download/Vespin.dmg
 curl -s https://api.github.com/repos/ReviewStage/luke/releases/latest | grep tag_name
 curl -sL https://github.com/ReviewStage/luke/releases/latest/download/latest-mac.yml
 ```
@@ -113,13 +113,13 @@ To check a downloaded build by hand, keep the zip and its checksum file in the s
 directory and verify the checksum:
 
 ```sh
-shasum -a 256 -c Fullspin-0.1.0-macos-arm64.zip.sha256
+shasum -a 256 -c Vespin-0.1.0-macos-arm64.zip.sha256
 ```
 
 After unzipping, ask Gatekeeper to assess the application:
 
 ```sh
-spctl -a -t exec -vv Fullspin.app
+spctl -a -t exec -vv Vespin.app
 ```
 
 A successful assessment identifies the source as `Notarized Developer ID`.
@@ -138,7 +138,7 @@ somewhere else; the workflow fails its secret check if any one is missing.
 | `APPLE_API_ISSUER_ID` | Identifies the App Store Connect API key issuer | App Store Connect, Users and Access, Integrations |
 | `POSTHOG_PROJECT_API_KEY` | PostHog project key, baked into the renderer at build time, and only into a build with `LUKE_CODESIGN_IDENTITY` set; a build without it records nothing at all, silently | PostHog, Project settings → Project API key |
 | `SENTRY_DSN` | Sentry project DSN, baked into main; a build without it sends no crash reports | Sentry, `luke-desktop` → Client Keys |
-| `SENTRY_AUTH_TOKEN` | Secret build token used only to upload source maps for `Fullspin@X.Y.Z` | Sentry, Organization Settings → Auth → Auth Tokens |
+| `SENTRY_AUTH_TOKEN` | Secret build token used only to upload source maps for `Vespin@X.Y.Z` | Sentry, Organization Settings → Auth → Auth Tokens |
 
 ### Export the signing certificate
 

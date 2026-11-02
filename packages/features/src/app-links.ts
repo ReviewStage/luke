@@ -2,16 +2,16 @@ import { readShownLink, type ShownLink } from "@luke/features/link-grammar";
 import { isAppLinkProtocol, LINK_HOME } from "@luke/features/link-home";
 
 /**
- * app-links.ts -- a Fullspin link the system hands the app: the place it names, and the links that arrive before a window can open them.
+ * app-links.ts -- a Vespin link the system hands the app: the place it names, and the links that arrive before a window can open them.
  *
- * A link to anything in Fullspin is the same address on the web and in the app
+ * A link to anything in Vespin is the same address on the web and in the app
  * (`@luke/features/link-grammar`); the web app, served at that address, hands
  * it to the app in the app's own scheme (`@luke/features/link-home`), which
  * the bundle registers with macOS (`scripts/electron-builder-config.mjs`'s
  * `protocols`). macOS delivers it as `open-url`, the link that launched the
  * app among them, which arrives before any window stands; a second launch
  * elsewhere carries it among its arguments. Either way it is read by the
- * one module that knows a link's form, only as a place in Fullspin, and anything
+ * one module that knows a link's form, only as a place in Vespin, and anything
  * else is refused. A link only opens a place: nothing it carries starts a
  * call, writes, or reaches the host, and whoever opens it is checked there,
  * as the place's own read checks them.
@@ -76,9 +76,9 @@ export type AppLinkClaim = (typeof APP_LINK_CLAIM)[keyof typeof APP_LINK_CLAIM];
  * the running bundle and drops the binary and arguments it is handed, so a
  * development run's claim lands on the stock Electron bundle every checkout
  * shares; it outlives the run, and the next link launches a bare Electron on
- * no app, its "To run a local app" page, rather than Fullspin. A live
+ * no app, its "To run a local app" page, rather than Vespin. A live
  * development run instead gives back a claim an earlier one left, so the
- * installed Fullspin answers links again. `pnpm package:dir`'s Fullspin.app declares
+ * installed Vespin answers links again. `pnpm package:dir`'s Vespin.app declares
  * the scheme and is the local build to try a link against. A fixture or
  * capture run leaves the scheme alone, so a deterministic run never touches
  * the developer's links.

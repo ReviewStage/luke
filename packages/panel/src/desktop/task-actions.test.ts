@@ -638,7 +638,7 @@ function installClipboard(): string[] {
   return copied;
 }
 
-test("Copy link copies the plan's address on fullspin.dev, alike from the Plan tab's ⋯, the Copy link button beside its title, and its sidebar row, and says Link copied", async () => {
+test("Copy link copies the plan's address on vespin.dev, alike from the Plan tab's ⋯, the Copy link button beside its title, and its sidebar row, and says Link copied", async () => {
   const copied = installClipboard();
   mount(createElement(ToastHost));
   const opened = openTab();
@@ -648,7 +648,7 @@ test("Copy link copies the plan's address on fullspin.dev, alike from the Plan t
     workspaces: [{ ...PERSONAL, slug: "dean" }],
     sidePanel: { ...opened.tasks.sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
   };
-  const link = `https://fullspin.dev/dean/plan/${TASK.id}`;
+  const link = `https://vespin.dev/dean/plan/${TASK.id}`;
   const copyFromMenu = async () => {
     const item = menuItems().find((candidate) => itemLabel(candidate) === "Copy link");
     assert.ok(item, "the menu offers Copy link");

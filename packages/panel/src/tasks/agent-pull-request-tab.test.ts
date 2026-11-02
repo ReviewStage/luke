@@ -5656,7 +5656,7 @@ test("Copy link in a thread's ⋯ copies its Vespin link in the view it is drawn
   await threadMenuItem(card ?? assert.fail("the thread is drawn"), "Copy link");
 
   assert.deepEqual(copied, [
-    `https://fullspin.dev/acme/agent/${AGENT.id}/changes/conversation/thread/${JUMPED}`,
+    `https://vespin.dev/acme/agent/${AGENT.id}/changes/conversation/thread/${JUMPED}`,
   ]);
 });
 

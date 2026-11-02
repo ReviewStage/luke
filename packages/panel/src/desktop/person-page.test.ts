@@ -720,7 +720,7 @@ test("Copy link copies their page's link under the slug of the workspace it stan
   act(() => button(document.body, "Copy link").click());
   await settle();
 
-  assert.deepEqual(copied, ["https://fullspin.dev/acme/person/user-charles"]);
+  assert.deepEqual(copied, ["https://vespin.dev/acme/person/user-charles"]);
 });
 
 test("a page whose workspace is not known offers no Copy link, rather than a link naming no workspace", async () => {
@@ -974,7 +974,7 @@ test("an agent's row offers Copy link and Archive, and Copy link copies its link
   act(() => button(document.body, "Copy link").click());
   await settle();
 
-  assert.deepEqual(copied, [`https://fullspin.dev/acme/agent/${CACHE_KEYS.id}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${CACHE_KEYS.id}`]);
 });
 
 test("an automation's row offers Copy link, copying its link under the page's workspace", async () => {
@@ -985,7 +985,7 @@ test("an automation's row offers Copy link, copying its link under the page's wo
   act(() => button(document.body, "Copy link").click());
   await settle();
 
-  assert.deepEqual(copied, [`https://fullspin.dev/acme/automation/${AUTOMATIONS[0]?.id}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/automation/${AUTOMATIONS[0]?.id}`]);
 });
 
 test("a waiting item's row offers Copy link, written under the page's workspace", async () => {

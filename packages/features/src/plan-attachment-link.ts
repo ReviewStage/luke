@@ -3,10 +3,10 @@ import { encodeMention, insideCode, MENTION_KIND } from "./mention-link.js";
 import { parsedUrl } from "./parsed-url.js";
 
 /**
- * plan-attachment-link.ts -- a plan's picture as its address on fullspin.dev: written, read back, and found in a plan's text.
+ * plan-attachment-link.ts -- a plan's picture as its address on vespin.dev: written, read back, and found in a plan's text.
  *
  * A picture stands in a plan's Markdown as `![alt](<address> "caption")`,
- * its address the plan's own, `https://fullspin.dev/<workspace>/plan/<plan>`
+ * its address the plan's own, `https://vespin.dev/<workspace>/plan/<plan>`
  * (`mention-link.ts`), with `/files/<picture>` after it. The address is a
  * real one on purpose: opened in a browser it lands on the web app, which
  * opens the plan to its readers alone, and pasted anywhere else it

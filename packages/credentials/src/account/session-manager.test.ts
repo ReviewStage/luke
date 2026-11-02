@@ -188,7 +188,7 @@ function refreshingClient(
     throw new Error(`unexpected request to ${request.url}`);
   };
   return new AccountClient({
-    baseUrl: "https://fullspin.dev/api/auth",
+    baseUrl: "https://vespin.dev/api/auth",
     clientId: "luke-desktop",
     httpClient: fakeHttpClientLayer(fetchStub),
   });

@@ -191,7 +191,7 @@ test("Open changelog is a link to the changelog page whose press sends the chang
     upToDate: true,
   });
   const open = link(page, "Open changelog");
-  assert.equal(open?.getAttribute("href"), "https://fullspin.dev/changelog");
+  assert.equal(open?.getAttribute("href"), "https://vespin.dev/changelog");
   assert.equal(link(page, "Open"), undefined, "the link names the page it opens");
 
   const leftFree = pressed(open);

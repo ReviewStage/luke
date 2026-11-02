@@ -18,7 +18,7 @@ import {
  */
 
 const client = new HostedIntegrationsClient({
-  serviceBaseUrl: "https://fullspin.dev",
+  serviceBaseUrl: "https://vespin.dev",
   credential: accountBearer({
     readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
@@ -145,7 +145,7 @@ it.effect(
 
 /** A browser tab's credential: no header at all, the cookie riding the request. */
 const cookieClient = new HostedIntegrationsClient({
-  serviceBaseUrl: "https://fullspin.dev",
+  serviceBaseUrl: "https://vespin.dev",
   credential: { holder: () => Effect.succeed("user-1") },
 });
 

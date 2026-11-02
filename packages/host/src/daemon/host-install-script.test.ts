@@ -59,7 +59,7 @@ const ABC_SHA256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f200
 const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 /** A Mac's LaunchAgent, by its label. */
-const LABEL = "dev.fullspin.host.standalone";
+const LABEL = "dev.vespin.host.standalone";
 
 const OS = { LINUX: "Linux", DARWIN: "Darwin" } as const;
 
@@ -351,7 +351,7 @@ describe("the host's install script", () => {
     { os: OS.LINUX, earlier: (root: string) => join(root, "opt/luke-host") },
     {
       os: OS.DARWIN,
-      earlier: (home: string) => join(home, "Library/Application Support/Fullspin Host"),
+      earlier: (home: string) => join(home, "Library/Application Support/Vespin Host"),
     },
   ])(
     "refuses to install over an install that came before on $os, naming that install's own uninstall command",
@@ -536,7 +536,7 @@ describe("the host's install script", () => {
   it("writes a LaunchAgent that runs the release through current at login, again a minute after any exit, logging where it is told", () => {
     const home = folder();
     const plist = join(folder(), "agent.plist");
-    const log = join(home, "Library/Logs/Fullspin Host/luke-host.log");
+    const log = join(home, "Library/Logs/Vespin Host/luke-host.log");
     const answer = sh(
       ["-c", `. "${SCRIPT}"; account_paths; write_launch_agent "$1" "$2"`, "sh", plist, log],
       { LUKE_HOST_INSTALL_LIBRARY: "1", HOME: home },
@@ -618,8 +618,8 @@ describe("the host's install script", () => {
       })) {
         writeFileSync(join(fakes, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
       }
-      const app = join(home, "Library/Application Support/Fullspin Host");
-      // Note that one smolvm store holds every Fullspin install's agents' machines for the user, this one's among them.
+      const app = join(home, "Library/Application Support/Vespin Host");
+      // Note that one smolvm store holds every Vespin install's agents' machines for the user, this one's among them.
       const smolvm = join(app, "state/agent-tools/smolvm/1/smolvm");
       mkdirSync(join(smolvm, ".."), { recursive: true });
       writeFileSync(
@@ -632,7 +632,7 @@ describe("the host's install script", () => {
       writeFileSync(join(app, "state/owned-agents/one"), "");
       for (const place of [home, rootHome]) {
         for (const each of ["agents/one", "agents/two", "clones/acme", "keep"]) {
-          mkdirSync(join(place, ".fullspin", each), { recursive: true });
+          mkdirSync(join(place, ".vespin", each), { recursive: true });
         }
       }
       writeFileSync(join(script, "luke-host"), readFileSync(UNINSTALL_SCRIPT), { mode: 0o755 });
@@ -646,12 +646,12 @@ describe("the host's install script", () => {
       expect(existsSync(deletes) ? readFileSync(deletes, "utf8").trim().split("\n") : []).toEqual(
         removed ? ["luke-one"] : [],
       );
-      expect(existsSync(join(home, ".fullspin/agents/one"))).toBe(!removed);
-      expect(existsSync(join(home, ".fullspin/agents/two"))).toBe(true);
-      expect(existsSync(join(home, ".fullspin/clones"))).toBe(true);
-      expect(existsSync(join(home, ".fullspin/keep"))).toBe(true);
-      expect(existsSync(join(rootHome, ".fullspin/agents/one"))).toBe(true);
-      expect(existsSync(join(rootHome, ".fullspin/clones"))).toBe(true);
+      expect(existsSync(join(home, ".vespin/agents/one"))).toBe(!removed);
+      expect(existsSync(join(home, ".vespin/agents/two"))).toBe(true);
+      expect(existsSync(join(home, ".vespin/clones"))).toBe(true);
+      expect(existsSync(join(home, ".vespin/keep"))).toBe(true);
+      expect(existsSync(join(rootHome, ".vespin/agents/one"))).toBe(true);
+      expect(existsSync(join(rootHome, ".vespin/clones"))).toBe(true);
     },
   );
 
@@ -691,12 +691,12 @@ describe("the host's install script", () => {
       writeFileSync(join(state, "device.json"), "{}");
       // Note that agent one is this install's, by its daemon's record, and agent two another Vespin install's.
       for (const each of ["agents/one", "agents/two", "clones/acme"]) {
-        mkdirSync(join(home, ".fullspin", each), { recursive: true });
+        mkdirSync(join(home, ".vespin", each), { recursive: true });
       }
       const service =
         os === "Linux"
           ? join(home, ".config/systemd/user/luke-host.service")
-          : join(home, "Library/LaunchAgents/dev.fullspin.host.standalone.plist");
+          : join(home, "Library/LaunchAgents/dev.vespin.host.standalone.plist");
       mkdirSync(join(service, ".."), { recursive: true });
       writeFileSync(service, `<string>${releases}/current/bin/luke-host</string>\n`);
 
@@ -713,12 +713,12 @@ describe("the host's install script", () => {
       expect(commands).toContain(
         os === "Linux"
           ? "--user disable --now luke-host.service"
-          : `bootout gui/${uid}/dev.fullspin.host.standalone`,
+          : `bootout gui/${uid}/dev.vespin.host.standalone`,
       );
       expect(answer.stdout.split("\n").filter((line) => line.startsWith("Removed "))).toEqual(
         stops
           ? [
-              `Removed ${join(home, ".fullspin/agents/one")}.`,
+              `Removed ${join(home, ".vespin/agents/one")}.`,
               `Removed ${state}.`,
               `Removed ${releases}.`,
               `Removed ${link}.`,
@@ -727,12 +727,12 @@ describe("the host's install script", () => {
       );
       for (const [place, kept] of [
         [service, !stops],
-        [join(home, ".fullspin/agents/one"), !stops],
+        [join(home, ".vespin/agents/one"), !stops],
         [state, !stops],
         [releases, !stops],
         [link, !stops],
-        [join(home, ".fullspin/agents/two"), true],
-        [join(home, ".fullspin/clones/acme"), true],
+        [join(home, ".vespin/agents/two"), true],
+        [join(home, ".vespin/clones/acme"), true],
       ] as const) {
         expect(existsSync(place)).toBe(kept);
       }

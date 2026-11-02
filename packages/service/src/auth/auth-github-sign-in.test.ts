@@ -19,7 +19,7 @@ import { ACCOUNT_TOKEN_STORAGE, DISABLED_AUTH_PATHS, GITHUB_SIGN_IN } from "./au
  * Synthetic accounts, secrets, and tokens throughout.
  */
 
-const BASE_URL = "https://fullspin.dev";
+const BASE_URL = "https://vespin.dev";
 const APP_CLIENT_ID = "Iv1.fixture-app-client";
 const APP_CLIENT_SECRET = "fixture-app-client-secret";
 const GITHUB_ACCOUNT_ID = "4242";

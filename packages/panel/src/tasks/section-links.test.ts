@@ -135,7 +135,7 @@ test("a section's Copy link button copies the section's link, its bare address, 
   assert.ok(more, "the Rollout section has a Copy link button");
   await act(async () => more.click());
 
-  assert.deepEqual(copied, [`https://fullspin.dev/acme/plan/${TASK_ID}#rollout`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/plan/${TASK_ID}#rollout`]);
 });
 
 test("an ask to show a section scrolls the document to it, and an ask for one it no longer holds to its top", () => {
@@ -172,7 +172,7 @@ test("no attribute of the plan's page carries what a mention names", () => {
   for (const element of container.querySelectorAll("*")) {
     for (const attribute of element.attributes) {
       if (["aria-label", "title"].includes(attribute.name)) continue;
-      assert.equal(/luke:|fullspin|github\.com/u.test(attribute.value), false, attribute.name);
+      assert.equal(/luke:|vespin|github\.com/u.test(attribute.value), false, attribute.name);
       if (attribute.name.startsWith("data-")) {
         assert.equal(/Rollout|Old plan/u.test(attribute.value), false, attribute.name);
       }
@@ -366,7 +366,7 @@ test("a heading the plan bears twice: a mention of the second opens the second, 
   const task: Task = {
     ...TASK,
     document: {
-      body: `## Notes\nfirst\n\n## Notes\nsecond, see [@Notes](https://fullspin.dev/acme/plan/${TASK_ID}#notes-1)`,
+      body: `## Notes\nfirst\n\n## Notes\nsecond, see [@Notes](https://vespin.dev/acme/plan/${TASK_ID}#notes-1)`,
       assumptions: [],
     },
   };
@@ -395,8 +395,8 @@ test("a heading the plan bears twice: a mention of the second opens the second, 
 
   assert.deepEqual(opened, [{ kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: "notes-1" }]);
   assert.deepEqual(copied, [
-    `https://fullspin.dev/acme/plan/${TASK_ID}#notes`,
-    `https://fullspin.dev/acme/plan/${TASK_ID}#notes-1`,
+    `https://vespin.dev/acme/plan/${TASK_ID}#notes`,
+    `https://vespin.dev/acme/plan/${TASK_ID}#notes-1`,
   ]);
 });
 
@@ -489,7 +489,7 @@ test("the title's Copy link button ends the title's line, shown while the keyboa
 
   await act(async () => more.click());
 
-  assert.deepEqual(copied, [`https://fullspin.dev/acme/plan/${TASK_ID}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/plan/${TASK_ID}`]);
 });
 
 test("on a plan that cannot be edited, the title's Copy link button is a Tab stop", () => {

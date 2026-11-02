@@ -14,14 +14,14 @@ const REQUEST = {
 };
 
 function pageSearch(returnTo: string): string {
-  return new URL(desktopSessionPageUrl("https://fullspin.dev", { ...REQUEST, returnTo })).search;
+  return new URL(desktopSessionPageUrl("https://vespin.dev", { ...REQUEST, returnTo })).search;
 }
 
 test("the hand-off page reads back the transfer the Mac asked for and the loopback it listens on", () => {
-  const page = new URL(desktopSessionPageUrl("https://fullspin.dev", REQUEST));
+  const page = new URL(desktopSessionPageUrl("https://vespin.dev", REQUEST));
   const query = desktopSessionPageQuery(page.search);
 
-  assert.equal(page.origin + page.pathname, "https://fullspin.dev/desktop-session.html");
+  assert.equal(page.origin + page.pathname, "https://vespin.dev/desktop-session.html");
   assert.deepEqual(query?.transfer, {
     client_id: DESKTOP_SESSION_CLIENT_ID,
     state: "state-1",

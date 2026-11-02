@@ -198,7 +198,7 @@ function mentionOf(
   title: string,
   itemId: string,
 ): string {
-  return `[@${title}](https://fullspin.dev/workspace-${agent.workspaceId}/agent/${agent.agentId}/inbox/${itemId})`;
+  return `[@${title}](https://vespin.dev/workspace-${agent.workspaceId}/agent/${agent.agentId}/inbox/${itemId})`;
 }
 
 /** The message whose ask the thread holds open. */

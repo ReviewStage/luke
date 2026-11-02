@@ -58,7 +58,7 @@ test("a reply whose mentioned agent could not take the thread posts, and its thr
       (await control?.act(THREAD.id, {
         action: PLAN_COMMENT_ACTION.REPLY,
         clientKey: "key-1",
-        words: "[@Agent](https://fullspin.dev/acme/plan/x/agent/agent-1) take a look",
+        words: "[@Agent](https://vespin.dev/acme/plan/x/agent/agent-1) take a look",
       })) ?? false;
   });
 

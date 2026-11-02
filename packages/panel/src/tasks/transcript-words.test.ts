@@ -53,7 +53,7 @@ const SAMPLES = {
     '<script>alert(1)</script>\n\n<img src="x" onerror="alert(2)">\n\n<iframe src="https://example.com"></iframe>\n\n<a href="javascript:alert(3)" onclick="alert(4)">link</a>',
   brokenHtml: "<div>open\n\nwords </span> and <p>unclosed\n\n<!-- a comment -->\n\nafter",
   htmlInCode: 'Inline `<div>` and:\n\n```html\n<div class="a">b</div>\n```',
-  mention: "Ask [@the plan](https://fullspin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b).",
+  mention: "Ask [@the plan](https://vespin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b).",
 } as const;
 
 // A reply is drawn once the parser has landed, as the panel lands it after its first paint, and a code block's file icon once the tree's bundle has.

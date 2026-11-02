@@ -171,7 +171,7 @@ test("a member's line handed behind the label naming them is matched by eve's re
     words,
     [],
     mentioned,
-    senderLabel("[@Dean](https://fullspin.dev/acme/person/user-1)"),
+    senderLabel("[@Dean](https://vespin.dev/acme/person/user-1)"),
   );
   assert.ok(Array.isArray(handed));
   const receipt = receivedMessage({

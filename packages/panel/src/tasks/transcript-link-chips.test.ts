@@ -38,7 +38,7 @@ const COMMIT = "0a1b2c3d";
 const ISSUE_URL = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
 
 const WORDS = [
-  `Read [the rollout](https://fullspin.dev/acme/plan/${TASK_ID}#rollout),`,
+  `Read [the rollout](https://vespin.dev/acme/plan/${TASK_ID}#rollout),`,
   `[the store](https://github.com/${REPOSITORY}/blob/${COMMIT}/apps/web/store.ts#L3-L5),`,
   `${ISSUE_URL}, and [the docs](https://example.com/docs).`,
   "Not `https://linear.app/acme/issue/LUKE-9` nor `[@x](https://linear.app/acme)`.",

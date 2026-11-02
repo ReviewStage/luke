@@ -8,7 +8,7 @@ import {
 import { resetBuilderReleaseArtifactDirectory } from "./release-config.mjs";
 
 if (process.platform !== "darwin") {
-  throw new Error("Preparing electron-builder assets for Fullspin requires macOS");
+  throw new Error("Preparing electron-builder assets for Vespin requires macOS");
 }
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));

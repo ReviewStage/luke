@@ -441,7 +441,7 @@ const STEP_START = "step-start";
 
 /** Another agent's message as `message_agent` steers one in: its words, which are no task of the developer's. */
 const AGENT_MESSAGE =
-  "Message · [@Invite emails](https://fullspin.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) to you:\n\nThe invite table is mine, leave it.";
+  "Message · [@Invite emails](https://vespin.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) to you:\n\nThe invite table is mine, leave it.";
 
 /** The agent that sends `AGENT_MESSAGE`, as its line's row keeps it. */
 const MESSAGE_SENDING_AGENT = {
@@ -1841,7 +1841,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           // The thread's id and mention are spelled out in `coder-inbox.test.ts`; here they are only carried.
           const [{ mention, id: _id, ...line } = { mention: undefined, id: undefined }] =
             "inbox" in read ? read.inbox : [];
-          assert.match(mention ?? "", /^\[@Which region\?\]\(https:\/\/fullspin\.dev\//u);
+          assert.match(mention ?? "", /^\[@Which region\?\]\(https:\/\/vespin\.dev\//u);
           assert.deepEqual(
             { ...read, inbox: [line] },
             {

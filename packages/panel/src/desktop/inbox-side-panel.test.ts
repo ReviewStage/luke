@@ -127,10 +127,10 @@ const FUNNEL: PageLine = {
 /** The item's words, naming a pull request, a page of its plan, a file of its repository, a page of another plan, and an agent of its plan. */
 const WORDS = [
   `Opened [@relay#42](${PULL}).`,
-  `See [@Invite funnel](https://fullspin.dev/acme/plan/${TASK.id}/page/${FUNNEL.id}).`,
+  `See [@Invite funnel](https://vespin.dev/acme/plan/${TASK.id}/page/${FUNNEL.id}).`,
   "The change is in [@invites.ts](https://github.com/acme/relay/blob/HEAD/src/invites.ts).",
-  `Compare [@Old funnel](https://fullspin.dev/acme/plan/${OTHER_TASK}/page/${FUNNEL.id}).`,
-  `Ask [@Batch the invitations](https://fullspin.dev/acme/plan/${TASK.id}/agent/${AGENT.id}).`,
+  `Compare [@Old funnel](https://vespin.dev/acme/plan/${OTHER_TASK}/page/${FUNNEL.id}).`,
+  `Ask [@Batch the invitations](https://vespin.dev/acme/plan/${TASK.id}/agent/${AGENT.id}).`,
 ].join(" ");
 
 const ITEM: InboxItem = {

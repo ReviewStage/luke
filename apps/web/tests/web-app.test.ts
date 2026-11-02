@@ -64,7 +64,7 @@ test("signed out, the panel draws its sign-in; a return after another tab signed
   const toMac = [...root.querySelectorAll("a")].find(
     (link) => link.textContent === "Open in the Mac app",
   );
-  assert.match(toMac?.getAttribute("href") ?? "", /^fullspin:/u);
+  assert.match(toMac?.getAttribute("href") ?? "", /^vespin:/u);
   await vi.waitFor(() =>
     assert.equal(nextFramePinsSidebar(), false, "signed out, the next frame stands no sidebar"),
   );

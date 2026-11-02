@@ -222,7 +222,7 @@ function viewerButton(words: string): HTMLButtonElement | undefined {
   );
 }
 
-const LINE = `![Members page](https://fullspin.dev/acme/plan/${TASK_ID}/files/${KEPT_ID})`;
+const LINE = `![Members page](https://vespin.dev/acme/plan/${TASK_ID}/files/${KEPT_ID})`;
 
 test("Add to plan keeps the picture on the plan and writes its line at the plan's end, and Undo takes it back out", async () => {
   await opened(await drawn(PAGE));
@@ -292,7 +292,7 @@ async function withBlobs(body: () => Promise<void>): Promise<void> {
   }
 }
 
-const VIDEO_LINE = `![Inviting a member](https://fullspin.dev/acme/plan/${TASK_ID}/files/${KEPT_ID})`;
+const VIDEO_LINE = `![Inviting a member](https://vespin.dev/acme/plan/${TASK_ID}/files/${KEPT_ID})`;
 
 test("Add to plan keeps a recording as it is, never re-encoded, and writes its line at the plan's end", () =>
   withBlobs(async () => {

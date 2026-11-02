@@ -33,10 +33,10 @@ const AGENT_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const ITEM_ID = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
 
 const WORDS = [
-  `See [the rollout](https://fullspin.dev/acme/plan/${TASK_ID}#rollout),`,
-  `[the plan](https://fullspin.dev/personal-u_1/plan/${TASK_ID}),`,
-  `[the agent](https://fullspin.dev/acme/plan/${TASK_ID}/agent/${AGENT_ID}),`,
-  `[its question](https://fullspin.dev/acme/agent/${AGENT_ID}/inbox/${ITEM_ID}),`,
+  `See [the rollout](https://vespin.dev/acme/plan/${TASK_ID}#rollout),`,
+  `[the plan](https://vespin.dev/personal-u_1/plan/${TASK_ID}),`,
+  `[the agent](https://vespin.dev/acme/plan/${TASK_ID}/agent/${AGENT_ID}),`,
+  `[its question](https://vespin.dev/acme/agent/${AGENT_ID}/inbox/${ITEM_ID}),`,
   "[the pull request](https://github.com/acme/relay/pull/12),",
   "and [the docs](https://example.com/docs).",
 ].join(" ");

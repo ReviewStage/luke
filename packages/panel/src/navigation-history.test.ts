@@ -751,7 +751,7 @@ test("the Admin place stands at its workspace's /admin though a task stands unde
     "/acme/admin/cost",
     "/acme/admin/user/user-ada",
   ]);
-  assert.deepEqual(copied, ["https://fullspin.dev/acme/admin/user/user-ada"]);
+  assert.deepEqual(copied, ["https://vespin.dev/acme/admin/user/user-ada"]);
 });
 
 test("with no workspace listed, a place in a workspace has no link, so it stands at /app as Copy link offers nothing", async () => {

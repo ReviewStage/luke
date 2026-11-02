@@ -138,6 +138,6 @@ test("a version's row offers Copy link, which copies its plan's address under th
   assert.ok(item, "the row's menu offers Copy link");
   await act(async () => item.click());
 
-  assert.deepEqual(copied, [`https://fullspin.dev/acme/plan/${DOCUMENT_TASK.id}/version/2`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/plan/${DOCUMENT_TASK.id}/version/2`]);
   assert.equal(newestToastSays(), "Link copied");
 });

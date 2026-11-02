@@ -23,9 +23,9 @@ const EARLIER = "5d7e8f90-1a2b-4c3d-9e4f-5a6b7c8d9e03";
 test("a picture's address is the plan's own with its id after it, and reads back by either scheme", () => {
   const address = planAttachmentAddress({ taskId: TASK_ID, attachmentId: PICTURE }, "acme");
 
-  assert.equal(address, `https://fullspin.dev/acme/plan/${TASK_ID}/files/${PICTURE}`);
+  assert.equal(address, `https://vespin.dev/acme/plan/${TASK_ID}/files/${PICTURE}`);
   assert.deepEqual(planAttachmentOf(address), { taskId: TASK_ID, attachmentId: PICTURE });
-  assert.deepEqual(planAttachmentOf(address.replace("https:", "fullspin:")), {
+  assert.deepEqual(planAttachmentOf(address.replace("https:", "vespin:")), {
     taskId: TASK_ID,
     attachmentId: PICTURE,
   });
@@ -33,12 +33,12 @@ test("a picture's address is the plan's own with its id after it, and reads back
 
 test("a plan's address, a section's, another host's, or a malformed id names no picture", () => {
   for (const address of [
-    `https://fullspin.dev/acme/plan/${TASK_ID}`,
-    `https://fullspin.dev/acme/plan/${TASK_ID}#rollout`,
+    `https://vespin.dev/acme/plan/${TASK_ID}`,
+    `https://vespin.dev/acme/plan/${TASK_ID}#rollout`,
     `https://example.com/acme/plan/${TASK_ID}/files/${PICTURE}`,
-    `https://fullspin.dev/acme/plan/${TASK_ID}/files/${PICTURE}#x`,
-    `https://fullspin.dev/acme/plan/${TASK_ID}/files/not-an-id`,
-    `https://fullspin.dev/acme/plan/${TASK_ID}/files/${PICTURE}/more`,
+    `https://vespin.dev/acme/plan/${TASK_ID}/files/${PICTURE}#x`,
+    `https://vespin.dev/acme/plan/${TASK_ID}/files/not-an-id`,
+    `https://vespin.dev/acme/plan/${TASK_ID}/files/${PICTURE}/more`,
   ]) {
     assert.equal(planAttachmentOf(address), undefined, address);
   }
@@ -46,12 +46,12 @@ test("a plan's address, a section's, another host's, or a malformed id names no 
 
 test("the pictures a text names are its plan's own, each once, in the order first named, one written under the earlier host among them", () => {
   const text = [
-    `![The mock](https://fullspin.dev/acme/plan/${TASK_ID}/files/${SECOND} "Mock")`,
-    `![Another plan's](https://fullspin.dev/acme/plan/${OTHER_TASK_ID}/files/${PICTURE})`,
-    `![The flow](fullspin://fullspin.dev/acme/plan/${TASK_ID}/files/${PICTURE})`,
-    `![The mock again](https://fullspin.dev/acme/plan/${TASK_ID}/files/${SECOND})`,
+    `![The mock](https://vespin.dev/acme/plan/${TASK_ID}/files/${SECOND} "Mock")`,
+    `![Another plan's](https://vespin.dev/acme/plan/${OTHER_TASK_ID}/files/${PICTURE})`,
+    `![The flow](vespin://vespin.dev/acme/plan/${TASK_ID}/files/${PICTURE})`,
+    `![The mock again](https://vespin.dev/acme/plan/${TASK_ID}/files/${SECOND})`,
     `![Before the rename](tryluke://tryluke.dev/acme/plan/${TASK_ID}/files/${EARLIER})`,
-    `![Broken](https://fullspin.dev/acme/plan/${TASK_ID}/files/${PICTURE.replace("a01", "a99")}-wrong)`,
+    `![Broken](https://vespin.dev/acme/plan/${TASK_ID}/files/${PICTURE.replace("a01", "a99")}-wrong)`,
   ].join("\n\n");
 
   assert.deepEqual(planAttachmentIdsIn(text, TASK_ID), [SECOND, PICTURE, EARLIER]);

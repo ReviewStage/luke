@@ -38,7 +38,7 @@ function client(
     readAccountKey: () => Effect.succeed("ada@example.com"),
   };
   return new HostedWorkspaceClient({
-    serviceBaseUrl: "https://fullspin.dev",
+    serviceBaseUrl: "https://vespin.dev",
     credential: accountBearer(token),
     sessionCredential: sessionBearer({ ...token, ...session }),
   });
@@ -473,7 +473,7 @@ it.effect("an account that changes during the hand-off sends nothing under the n
       readAccountKey: () => Effect.sync(() => holder),
     };
     const switched = new HostedWorkspaceClient({
-      serviceBaseUrl: "https://fullspin.dev",
+      serviceBaseUrl: "https://vespin.dev",
       credential: accountBearer(token),
       sessionCredential: sessionBearer({
         ...token,
@@ -516,7 +516,7 @@ const INVITATION = {
   email: "alan@example.com",
   role: WORKSPACE_ROLE.MEMBER,
   expiresAt: "2026-10-16T12:00:00.000Z",
-  acceptUrl: "https://fullspin.dev/accept-invitation.html?id=inv-1&email=alan%40example.com",
+  acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-1&email=alan%40example.com",
 };
 
 it.effect(

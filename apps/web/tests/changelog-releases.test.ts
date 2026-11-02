@@ -111,7 +111,7 @@ test("a release's head names its first feature, opens on its first paragraph, an
     route.head.description,
     "Each plan's calls read as one thread in the Call tab, with code kept as words.",
   );
-  assert.equal(route.head.url, "https://fullspin.dev/changelog/1.4.0");
+  assert.equal(route.head.url, "https://vespin.dev/changelog/1.4.0");
   assert.deepEqual(route.head.image, {
     src: "/changelog/1.4.0/the-call-tab.png",
     alt: "The Call tab, full screen.",

@@ -569,7 +569,7 @@ function fakeService(tasks: Task[]): FakeService {
         }),
       connect: () =>
         Effect.sync(() => {
-          const url = `https://fullspin.dev/connect-github.html?intent=intent-${service.connectPages.length + 1}`;
+          const url = `https://vespin.dev/connect-github.html?intent=intent-${service.connectPages.length + 1}`;
           service.connectPages.push(url);
           return { ok: true as const, answer: { url } };
         }),
@@ -765,7 +765,7 @@ function fakeService(tasks: Task[]): FakeService {
             email,
             role: role === WORKSPACE_ROLE.ADMIN ? WORKSPACE_ROLE.ADMIN : WORKSPACE_ROLE.MEMBER,
             expiresAt: "2026-10-16T12:00:00.000Z",
-            acceptUrl: `https://fullspin.dev/accept-invitation.html?id=inv-${email}`,
+            acceptUrl: `https://vespin.dev/accept-invitation.html?id=inv-${email}`,
           };
           service.invitations[workspaceId] = [...(service.invitations[workspaceId] ?? []), made];
           return { ok: true, answer: made } as const;
@@ -2718,7 +2718,7 @@ it.effect(
         email: "alan@example.com",
         role: WORKSPACE_ROLE.MEMBER,
         expiresAt: "2026-10-16T12:00:00.000Z",
-        acceptUrl: "https://fullspin.dev/accept-invitation.html?id=inv-alan@example.com",
+        acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-alan@example.com",
       };
       assert.deepEqual(made, { invitation });
       assert.deepEqual(pending, { invitations: [invitation] });

@@ -301,7 +301,7 @@ test("a link to any place in Vespin, a plan's, a section's, a picture's, and a b
     "/api/automations/x1/runs",
     "/api/agents/a1",
   ]) {
-    const served = new URL(servedFile(path) ?? "/", "https://fullspin.dev");
+    const served = new URL(servedFile(path) ?? "/", "https://vespin.dev");
     assert.equal(served.pathname, "/api/default.js", path);
     assert.equal(served.searchParams.get("route"), "orpc", path);
     assert.equal(served.searchParams.get("route-path"), path.slice("/api/".length), path);
@@ -310,7 +310,7 @@ test("a link to any place in Vespin, a plan's, a section's, a picture's, and a b
     ["/api/workspaces/w1/photo", "workspaces/photo"],
     ["/api/automations/x1/webhook", "automations/webhook"],
   ] as const) {
-    const served = new URL(servedFile(path) ?? "/", "https://fullspin.dev");
+    const served = new URL(servedFile(path) ?? "/", "https://vespin.dev");
     assert.equal(served.pathname, "/api/default.js", path);
     assert.equal(served.searchParams.get("route"), route, path);
     assert.equal(served.searchParams.get("id"), path.split("/")[3], path);

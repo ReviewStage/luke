@@ -11,8 +11,8 @@ import { LINK_PLACE, type ReadLink, type ShownLink } from "./link-grammar.js";
  */
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
-const SECTION_LINK = `fullspin://fullspin.dev/acme/plan/${TASK_ID}#rollout`;
-const TASK_LINK = `fullspin://fullspin.dev/acme/plan/${TASK_ID}`;
+const SECTION_LINK = `vespin://vespin.dev/acme/plan/${TASK_ID}#rollout`;
+const TASK_LINK = `vespin://vespin.dev/acme/plan/${TASK_ID}`;
 const AGENT_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 const SECTION: ReadLink = {
@@ -24,11 +24,11 @@ const TASK: ReadLink = { workspace: "acme", place: { kind: LINK_PLACE.TASK, plan
 test("a link in the app's own scheme names its place: a task, its section, an agent, an Inbox item", () => {
   assert.deepEqual(placeOfAppLink(SECTION_LINK), SECTION);
   assert.deepEqual(placeOfAppLink(TASK_LINK), TASK);
-  assert.deepEqual(placeOfAppLink(`fullspin://fullspin.dev/acme/agent/${AGENT_ID}`), {
+  assert.deepEqual(placeOfAppLink(`vespin://vespin.dev/acme/agent/${AGENT_ID}`), {
     workspace: "acme",
     place: { kind: LINK_PLACE.AGENT, agentId: AGENT_ID },
   });
-  assert.deepEqual(placeOfAppLink(`fullspin://fullspin.dev/acme/plan/${TASK_ID}/inbox/${AGENT_ID}`), {
+  assert.deepEqual(placeOfAppLink(`vespin://vespin.dev/acme/plan/${TASK_ID}/inbox/${AGENT_ID}`), {
     workspace: "acme",
     place: { kind: LINK_PLACE.INBOX_ITEM, planId: TASK_ID, itemId: AGENT_ID },
   });
@@ -36,12 +36,12 @@ test("a link in the app's own scheme names its place: a task, its section, an ag
 
 test("anything but a place's link in the app's own scheme names nothing", () => {
   for (const url of [
-    `https://fullspin.dev/acme/plan/${TASK_ID}`,
+    `https://vespin.dev/acme/plan/${TASK_ID}`,
     `luke://plan/${TASK_ID}`,
-    "fullspin://fullspin.dev/acme/settings/Coding%20agents",
-    `https://fullspin.dev/acme/agent/${AGENT_ID}`,
-    `fullspin://evil.example/acme/plan/${TASK_ID}`,
-    "fullspin://github.com/acme/relay/blob/HEAD/a.ts",
+    "vespin://vespin.dev/acme/settings/Coding%20agents",
+    `https://vespin.dev/acme/agent/${AGENT_ID}`,
+    `vespin://evil.example/acme/plan/${TASK_ID}`,
+    "vespin://github.com/acme/relay/blob/HEAD/a.ts",
     "javascript:alert(1)",
   ]) {
     assert.equal(placeOfAppLink(url), undefined, url);
@@ -49,11 +49,8 @@ test("anything but a place's link in the app's own scheme names nothing", () => 
 });
 
 test("a second launch's link is the last of its arguments in the app's own scheme", () => {
-  assert.equal(appLinkInArguments(["/Applications/Fullspin.app", "--flag", TASK_LINK]), TASK_LINK);
-  assert.equal(
-    appLinkInArguments(["/Applications/Fullspin.app", "https://fullspin.dev"]),
-    undefined,
-  );
+  assert.equal(appLinkInArguments(["/Applications/Vespin.app", "--flag", TASK_LINK]), TASK_LINK);
+  assert.equal(appLinkInArguments(["/Applications/Vespin.app", "https://vespin.dev"]), undefined);
 });
 
 test("links that arrive before a panel can open them open once it can, in order, and later ones as they come", () => {

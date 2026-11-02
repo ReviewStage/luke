@@ -27,7 +27,7 @@ test("the packaged app carries luke-host's release with its Node signed, and a l
   const shipped = (files, to) => files.find((file) => file.to === to)?.from;
   const release = shipped(config.extraResources, "luke-host");
   const command = shipped(config.extraFiles, "MacOS/luke-host");
-  const job = shipped(config.extraFiles, "Library/LaunchAgents/dev.fullspin.host.plist");
+  const job = shipped(config.extraFiles, "Library/LaunchAgents/dev.vespin.host.plist");
 
   expect(release).toMatch(/\.build\/luke-host$/);
   expect(config.mac.binaries).toEqual(

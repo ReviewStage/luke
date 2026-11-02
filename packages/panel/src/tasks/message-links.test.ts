@@ -161,7 +161,7 @@ test("a message offers Copy link beside its Copy, copying its link under the age
   assert.ok(copyLink, "the message offers Copy link");
   await act(async () => copyLink.click());
 
-  assert.deepEqual(copied, [`https://fullspin.dev/acme/agent/${AGENT.id}/message/msg-7`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${AGENT.id}/message/msg-7`]);
   assert.equal(newestToastSays(), "Link copied");
 });
 

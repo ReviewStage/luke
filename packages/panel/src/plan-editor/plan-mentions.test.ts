@@ -155,7 +155,7 @@ test("a mention in the text opens as its node, drawn by the panel, and writes ba
   task.typeAfter("says.", " Today.");
 
   assert.deepEqual(task.drawn, [
-    { name: "Rollout", target: `https://fullspin.dev/acme/plan/${TASK_ID}#rollout` },
+    { name: "Rollout", target: `https://vespin.dev/acme/plan/${TASK_ID}#rollout` },
   ]);
   assert.equal(
     task.last(),
@@ -170,7 +170,7 @@ test("an @ word the caret ends is reported with what follows it, and a pick writ
   const reported = task.triggers.at(-1);
   task.handle.chooseMention({
     name: "Goal",
-    target: `https://fullspin.dev/acme/plan/${TASK_ID}#goal`,
+    target: `https://vespin.dev/acme/plan/${TASK_ID}#goal`,
   });
 
   assert.equal(reported?.query, "go");
@@ -266,7 +266,7 @@ test("a pick with the caret inside the word replaces the word through its end", 
   task.back(2);
   task.handle.chooseMention({
     name: "Goal",
-    target: `https://fullspin.dev/acme/plan/${TASK_ID}#goal`,
+    target: `https://vespin.dev/acme/plan/${TASK_ID}#goal`,
   });
 
   assert.ok(task.last().endsWith(`Store first. See ${section("Goal")}\n`), task.last());
@@ -278,7 +278,7 @@ test("a pick right before a chip replaces the word alone, and the chip stays", (
   task.typeAfter("See ", "@go");
   task.handle.chooseMention({
     name: "Goal",
-    target: `https://fullspin.dev/acme/plan/${TASK_ID}#goal`,
+    target: `https://vespin.dev/acme/plan/${TASK_ID}#goal`,
   });
 
   assert.ok(task.last().includes(`See ${section("Goal")} ${section("Rollout")}`), task.last());

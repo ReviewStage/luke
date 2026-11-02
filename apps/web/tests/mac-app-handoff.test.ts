@@ -49,7 +49,7 @@ it.effect("an account that chose the Mac app hands a plan's link to the app, on 
   Effect.gen(function* () {
     const opened = yield* loaded(choosing(LINK_OPEN.MAC_APP), TASK_ADDRESS, LINK_PLATFORM.MAC);
     assert.equal(opened.length, 1);
-    assert.match(opened[0] ?? "", /^fullspin:/u);
+    assert.match(opened[0] ?? "", /^vespin:/u);
     assert.match(opened[0] ?? "", new RegExp(`/acme/plan/${TASK_ID}$`, "u"));
   }),
 );

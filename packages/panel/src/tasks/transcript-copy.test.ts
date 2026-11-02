@@ -139,7 +139,7 @@ test("another agent's message in its whole shape is copied as its words alone, w
       "message",
       MESSAGE_ROLE.USER,
       [
-        "Message · [@Invite emails](https://fullspin.dev/acme/agent/a1) to you:",
+        "Message · [@Invite emails](https://vespin.dev/acme/agent/a1) to you:",
         "Rebase before you push.",
         agentMessageReplyLine("5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f"),
       ].join("\n\n"),
