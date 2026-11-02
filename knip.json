@@ -58,6 +58,10 @@
       "project": ["src/**", "tests/**"],
       "ignoreDependencies": ["@anthropic-ai/claude-agent-sdk"]
     },
+    "tools/demo-postgres": {
+      "entry": ["demo-postgres.ts"],
+      "project": ["*.ts"]
+    },
     "tools/anti-slop": {
       "entry": ["index.ts"],
       "project": ["**/*.ts"]

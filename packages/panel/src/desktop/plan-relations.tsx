@@ -6,11 +6,6 @@ import {
 } from "@luke/features/task-wire";
 import {
   BUTTON_SIZE,
-  CHIP_LOOK,
-  CHIP_SIZE,
-  Chip,
-  ChipName,
-  type FootRow,
   GROUP_ACTIONS,
   GROUP_HEADING,
   GroupAction,
@@ -20,14 +15,13 @@ import {
   POPOVER_ALIGN,
   PROGRESS_COUNT_LOOK,
   ProgressCount,
-  SearchableMenu,
-  STATUS_TONE,
   Tooltip,
 } from "@luke/ui";
 import { GLYPH, NetworkIcon, PlusIcon } from "@luke/ui/icons";
 import { subTaskCount, subTasksOf, taskFinished } from "@luke/ui/task-list-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useId, useRef, useState } from "react";
+import { RelationKindPill } from "../tasks/relation-kind-pill.js";
 import {
   TASK_RELATION_ORDER,
   TASK_RELATION_WORDS,
@@ -93,9 +87,6 @@ const UNLISTED_TASK_NAME = "Task";
 /** The words a sub-task's fold is named by, before its name. */
 const SUB_TASKS_OF = "Sub-tasks of";
 
-/** The pill's pinned row's id, apart from every kind's. */
-const REMOVE_ROW_ID = "remove-relation";
-
 /** The four kinds as a menu's rows, each by its icon. */
 const KIND_ROWS: readonly MenuRow[] = TASK_RELATION_ORDER.map((kind) => ({
   id: kind,
@@ -153,87 +144,6 @@ function relationMenu(kind: TaskRelationKind, doors: RelationDoors): readonly Me
     if (picked !== undefined) doors.onChange(picked);
   });
   return [[change, { label: REMOVE_RELATION, icon: <GLYPH.CLOSE />, onSelect: doors.onRemove }]];
-}
-
-/**
- * A relation's kind leading its row: a compact pill by the kind's icon, its
- * words, and a chevron, in the attention tone for a blocker still open,
- * dropping from its start the four kinds, the current one checked, and
- * Remove relation pinned under them.
- */
-function RelationKindPill({
-  kind,
-  open: attention,
-  doors,
-}: {
-  kind: TaskRelationKind;
-  /** Whether the relation still asks for attention: a blocker not yet done. */
-  open: boolean;
-  doors: RelationDoors;
-}): React.JSX.Element {
-  const [open, setOpen] = useState(false);
-  const drawn = useDisclosure(open);
-  const menuId = useId();
-  const box = useRef<HTMLSpanElement>(null);
-  const chip = useRef<HTMLButtonElement>(null);
-  const words = TASK_RELATION_WORDS[kind];
-  // Note that we hand focus back to the pill, as a native menu returns it to its button, because closing takes the focused menu away.
-  const close = () => {
-    setOpen(false);
-    chip.current?.focus();
-  };
-  const foot: readonly FootRow[] = [
-    {
-      id: REMOVE_ROW_ID,
-      label: REMOVE_RELATION,
-      icon: <GLYPH.CLOSE />,
-      onPress: () => {
-        close();
-        doors.onRemove();
-      },
-    },
-  ];
-  return (
-    <span className="plan-relation-kind relative inline-flex items-center" ref={box}>
-      <Chip
-        ref={chip}
-        look={CHIP_LOOK.PILL}
-        size={CHIP_SIZE.COMPACT}
-        tone={attention ? STATUS_TONE.ATTENTION : undefined}
-        chevron
-        aria-label={`Relation: ${words}`}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        onClick={() => setOpen(!open)}
-      >
-        <TaskRelationIcon kind={kind} />
-        <ChipName>{words}</ChipName>
-      </Chip>
-      {drawn.mounted ? (
-        <SearchableMenu
-          leaving={drawn.leaving}
-          ref={drawn.ref}
-          id={menuId}
-          label={CHANGE_RELATION}
-          rows={KIND_ROWS}
-          value={kind}
-          foot={foot}
-          noMatch="No kinds match"
-          align={POPOVER_ALIGN.START}
-          onPick={(id) => {
-            close();
-            const picked = kindOf(id);
-            if (picked !== undefined) doors.onChange(picked);
-          }}
-          onClose={close}
-          onLeave={(left) => {
-            if (!(left instanceof Node && box.current?.contains(left))) setOpen(false);
-          }}
-        />
-      ) : null}
-    </span>
-  );
 }
 
 /**
@@ -415,7 +325,17 @@ export function PlanRelations({
       const doors = doorsOf(other, kind);
       return {
         task: other,
-        relation: <RelationKindPill kind={kind} open={blocker && !settled} doors={doors} />,
+        relation: (
+          <RelationKindPill
+            kind={kind}
+            kinds={TASK_RELATION_ORDER}
+            words={TASK_RELATION_WORDS}
+            icon={(each) => <TaskRelationIcon kind={each} />}
+            attention={blocker && !settled}
+            onChange={doors.onChange}
+            onRemove={doors.onRemove}
+          />
+        ),
         settled: blocker && settled,
         menu: relationMenu(kind, doors),
         unlisted: !listed,

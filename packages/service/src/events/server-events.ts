@@ -14,6 +14,7 @@ import type { INVITATION_ROLE } from "@luke/features/workspace-invitation-wire";
 import { TURN_STATUS } from "@luke/wire";
 import { Clock, Context, Effect, Layer, Option, Redacted } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
+import { readAccountPerson } from "../accounts/account-person.js";
 import { PRODUCT_PLATFORM } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import { afterResponse } from "../http/after-response.js";
@@ -60,7 +61,11 @@ import { DEPLOYMENT_VARIABLE, deploymentNamed } from "./events.js";
  * The events are joined to the same person the desktop's are, by the account's
  * own user id, so PostHog's funnels run from the site's sign-in through the
  * desktop's counts to the work itself; and erased with them on account
- * deletion, which deletes by that id.
+ * deletion, which deletes by that id. Since a capture runs after its request
+ * has answered, or with no request at all (a settled turn, the sweep, an
+ * automation's run), it reads the account's row first and posts nothing for
+ * one no longer there, so a late event does not bring back the person a
+ * deletion erased; one that slips in during the deletion itself is accepted.
  */
 
 export const SERVER_EVENT = {
@@ -504,7 +509,8 @@ class ProductAnalytics extends Context.Service<ProductAnalytics, ProductAnalytic
  * named beside the first of its events this instance posts and once a day
  * after (`WORKSPACE_GROUP_REFRESH_MS`), from the workspace's own row; an
  * instance keeps only when it last named each, and a read or a post that
- * fails leaves it to name the group again with the next event.
+ * fails leaves it to name the group again with the next event. An event of
+ * an account whose row is gone, or cannot be read, is not posted.
  */
 const productAnalyticsOfEnvironment = Layer.effect(
   ProductAnalytics,
@@ -552,9 +558,16 @@ const productAnalyticsOfEnvironment = Layer.effect(
       const last = named.get(workspaceId);
       return last === undefined || now - last >= WORKSPACE_GROUP_REFRESH_MS;
     };
+    // Whether the account still stands; a deleted one's person must not be posted back.
+    const stands = (userId: string) =>
+      readAccountPerson(userId).pipe(
+        Effect.provideContext(database),
+        Effect.map((person) => person !== undefined),
+      );
     return {
       capture: (event: ServerEvent) =>
         Effect.gen(function* () {
+          if (!(yield* stands(event.userId))) return;
           const now = yield* Clock.currentTimeMillis;
           const item = serverEventItem(event, now, deployment);
           const workspaceId = event.workspaceId;

@@ -3,12 +3,17 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, matchesGlob, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PAGE_SANDBOX_ORIGIN } from "@luke/features/page-frame";
+import { POSTHOG_PROXY } from "@luke/features/posthog-proxy";
 import { RESERVED_WORKSPACE_SLUGS } from "@luke/features/workspace-wire";
 import { temporaryDirectory } from "@luke/runtime/testing";
 import { PAGE_LINK_ROUTE } from "@luke/service/pages/page-links";
 import { test } from "vitest";
 import { functionPublicPath, webFunctions } from "../server/function-layout";
-import { apiRewrites, readVercelConfig, vercelConfigSource } from "../server/function-rewrites";
+import {
+  generatedRewrites,
+  readVercelConfig,
+  vercelConfigSource,
+} from "../server/function-rewrites";
 import { changelogRoutes } from "../src/changelog-releases";
 import { parseReleases } from "../src/site-markdown";
 
@@ -27,7 +32,7 @@ const vercel = await readVercelConfig(WEB);
 const heldToAHost = (route: object) => "has" in route;
 
 test("the /api/ rewrites are generated into the web service's routes, ahead of its other routes but the sandbox host's", async () => {
-  const generated = apiRewrites(await webFunctions(WEB));
+  const generated = generatedRewrites(await webFunctions(WEB));
   const { routes } = vercel.services[SERVICE.WEB];
   const locked = routes.filter(heldToAHost);
   const rest = routes.slice(locked.length);
@@ -118,9 +123,9 @@ interface HostCondition {
 /**
  * A route of the web service as the platform reads it: a rewrite to a file
  * of the build and the headers sent beside it, held to one host where it
- * names one, with the status it is answered with where it names one; a
- * redirect's status and `Location`; or headers alone that routing carries on
- * past (`continue`).
+ * names one, with the status it is answered with where it names one, or the
+ * request headers it takes off; a redirect's status and `Location`; or
+ * headers alone that routing carries on past (`continue`).
  */
 interface WebRoute {
   readonly src: string;
@@ -128,6 +133,11 @@ interface WebRoute {
   readonly dest?: string;
   readonly status?: number;
   readonly headers?: Readonly<Record<string, string>>;
+  readonly transforms?: readonly {
+    readonly type: string;
+    readonly op: string;
+    readonly target: { readonly key: string };
+  }[];
   readonly continue?: true;
 }
 
@@ -420,16 +430,12 @@ test("every path the web app is served at sends its own Content Security Policy 
     // The installed app's manifest and its icons are the site's own files.
     assert.deepEqual(directives.get("manifest-src"), ["'self'"], path);
     assert.ok(directives.get("img-src")?.includes("'self'"), path);
-    // The tab reaches the processor for session replay, its configuration's host among it,
-    // and Sentry's ingest in the organization's region, and no other address.
+    // The tab reaches the processor for session replay through its own origin
+    // (`@luke/features/posthog-proxy`), and Sentry's ingest in the organization's region,
+    // and no other address.
     assert.deepEqual(
       directives.get("connect-src"),
-      [
-        "'self'",
-        "https://us.i.posthog.com",
-        "https://us-assets.i.posthog.com",
-        "https://*.ingest.us.sentry.io",
-      ],
+      ["'self'", "https://*.ingest.us.sentry.io"],
       path,
     );
     assert.equal(headers.get("x-frame-options"), "DENY", path);
@@ -451,6 +457,38 @@ test("every path the web app is served at sends its own Content Security Policy 
     "/api/auth/get-session",
   ]) {
     assert.equal(answeredHeaders(path).headers.size, 0, path);
+  }
+});
+
+test("PostHog's path passes what the browser sends on to PostHog, without this origin's cookies or a page's headers", () => {
+  for (const [path, upstream] of [
+    [`${POSTHOG_PROXY.PATH}/i/v0/e/`, "https://us.i.posthog.com/i/v0/e/"],
+    [`${POSTHOG_PROXY.PATH}/s/`, "https://us.i.posthog.com/s/"],
+    [
+      `${POSTHOG_PROXY.PATH}/static/recorder.js`,
+      "https://us-assets.i.posthog.com/static/recorder.js",
+    ],
+    [
+      `${POSTHOG_PROXY.PATH}/array/phc_test/config.js`,
+      "https://us-assets.i.posthog.com/array/phc_test/config.js",
+    ],
+  ] as const) {
+    assert.equal(servedFile(path), upstream, path);
+    assert.equal(answeredHeaders(path).headers.size, 0, path);
+    const route = WEB_ROUTES.find(
+      (each) =>
+        !each.continue && heldTo(each, APP_HOST) && new RegExp(`^${each.src}$`, "iu").test(path),
+    );
+    // The session cookie is this origin's, and Vercel passes on every header a rewrite does not take off.
+    assert.ok(
+      route?.transforms?.some(
+        (transform) =>
+          transform.type === "request.headers" &&
+          transform.op === "delete" &&
+          transform.target.key === "cookie",
+      ),
+      path,
+    );
   }
 });
 
@@ -564,7 +602,7 @@ test("every HTML page the build emits is served at every address under one Conte
   }
 });
 
-test("the site's pages run scripts from this origin and PostHog's assets alone, connect to this origin and PostHog alone, and draw no inline style", () => {
+test("the site's pages run scripts from this origin alone, connect to it alone, and draw no inline style", () => {
   const site = pageAnswers().filter(
     ({ file }) => file !== "app.html" && file !== ADMIN_PAGE && !FRAMED_BY_THE_APP.has(file),
   );
@@ -572,18 +610,11 @@ test("the site's pages run scripts from this origin and PostHog's assets alone, 
   for (const { address, answer } of site) {
     const directives = directivesOf(answer.headers.get("content-security-policy") ?? "");
     assert.deepEqual(directives.get("default-src"), ["'self'"], address);
-    // The analytics client (`src/analytics.ts`) loads its configuration and its recorder from PostHog's assets.
-    assert.deepEqual(
-      directives.get("script-src"),
-      ["'self'", "https://us-assets.i.posthog.com"],
-      address,
-    );
+    // The analytics client (`src/analytics.ts`) loads its configuration and its recorder,
+    // and posts what it counts, through this origin (`@luke/features/posthog-proxy`).
+    assert.deepEqual(directives.get("script-src"), ["'self'"], address);
     assert.deepEqual(directives.get("style-src"), ["'self'"], address);
-    assert.deepEqual(
-      directives.get("connect-src"),
-      ["'self'", "https://us.i.posthog.com", "https://us-assets.i.posthog.com"],
-      address,
-    );
+    assert.deepEqual(directives.get("connect-src"), ["'self'"], address);
     assert.deepEqual(directives.get("img-src"), ["'self'", "data:"], address);
     // Only the app frames the sandbox's site.
     assert.equal(directives.get("frame-src"), undefined, address);

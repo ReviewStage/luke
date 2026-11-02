@@ -16,6 +16,7 @@ test("the installed bundles still know every name the masking and the recorder r
     "maskTextSelector",
     "maskAttributeFn",
     "maskAllInputs",
+    "slimDOMOptions",
     "recordHeaders",
     "recordBody",
     "ph-no-capture",

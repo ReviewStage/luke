@@ -192,7 +192,8 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * the chosen repository's skills to its `@` and `/` lists, and hands the
  * MCP servers' switches its first agent starts with, which its "+" menu
  * opens as an agent's does, with no Built in section, since no agent has
- * started yet.
+ * started yet, and after them Task relation, which its owner hands the
+ * menu (`plus`).
  */
 
 /** What the box's note says while the editor bundle could not be loaded. */
@@ -439,6 +440,7 @@ export function AgentComposer({
   usage,
   payer,
   servers,
+  plus = [],
   context,
   brief,
   published,
@@ -481,6 +483,8 @@ export function AgentComposer({
   payer?: AgentPayer | undefined;
   /** The MCP servers the agent is handed and their switches, which the + menu opens; none where the box offers none, whose + opens the file picker itself. */
   servers: AgentServersControl | undefined;
+  /** Rows the + menu offers after MCP servers, its owner's: New task's Task relation. */
+  plus?: readonly PanelMenuEntry[] | undefined;
   /** What the agent's model's context holds, which the ring draws; nothing before a step ended, which draws no ring. */
   context?: AgentContext | undefined;
   /** What the agent was handed, which names the brief's part of the context. */
@@ -799,9 +803,11 @@ export function AgentComposer({
     }
   };
 
-  // What the + offers beside files, its menu's rows after Attachment: the servers' popover, where the box hands servers.
-  const plusRows: readonly PanelMenuEntry[] =
-    servers === undefined ? [] : [serversMenuPanel(servers, statuses)];
+  // What the + offers beside files, its menu's rows after Attachment: the servers' popover, where the box hands servers, then its owner's.
+  const plusRows: readonly PanelMenuEntry[] = [
+    ...(servers === undefined ? [] : [serversMenuPanel(servers, statuses)]),
+    ...plus,
+  ];
   const openPicker = () => picker.current?.open();
   const offers: OverflowOffer[] = [
     {

@@ -30,7 +30,7 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * and opens as the host's open task.
  *
  * The add menu's New task, and a task's menu and ⌘K's New sub-task, open
- * this same card with its Relation pill filled (New task's preset's
+ * this same card with that task's relation as a row over it (New task's preset's
  * `relation`), started in that task's workspace rather than the one listed.
  *
  * The Automations page's Create with an agent opens this same card for the
@@ -62,8 +62,9 @@ function NewTaskCard({
   const [starting, setStarting] = useState(false);
   // The Automations page's Create with an agent opens this card for an automation's agent, and a refusal opens it again for the same.
   const purpose = newTask.preset?.purpose ?? NEW_TASK_PURPOSE.TASK;
-  // A relation's New task opens it related to a task, whose workspace the new task starts in.
-  const workspaceId = newTask.preset?.relation?.task.workspaceId ?? newTask.workspaceId;
+  // A relation's New task opens it related to a task, whose workspace the new task starts in, as does a refused card opened again on its relations.
+  const related = newTask.preset?.relation ?? newTask.preset?.refused?.card.relations[0];
+  const workspaceId = related?.task.workspaceId ?? newTask.workspaceId;
   const dialog = useRef<DialogHandle>(null);
   const titleId = useId();
   const body = useRef<HTMLDivElement>(null);

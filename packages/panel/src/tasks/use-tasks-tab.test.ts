@@ -3141,8 +3141,9 @@ test("New task's agent start refused after its page opened opens the card again 
     choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
     press: {
       key: AGENT_KEY,
-      ask: { repository: "acme/web", workspaceId: undefined, agent: handed },
+      ask: { repository: "acme/web", workspaceId: undefined, relations: [], agent: handed },
     },
+    relations: [],
     words: handed.prompt,
   };
   act(() => tab.control().onNewTask());
@@ -3189,8 +3190,9 @@ test("Create with an agent opens New task's card for an automation's agent over 
     choice: undefined,
     press: {
       key: AGENT_KEY,
-      ask: { repository: "acme/web", workspaceId: undefined, agent: handed },
+      ask: { repository: "acme/web", workspaceId: undefined, relations: [], agent: handed },
     },
+    relations: [],
     words: handed.prompt,
   };
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);

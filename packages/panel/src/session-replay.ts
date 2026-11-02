@@ -3,10 +3,11 @@
  *
  * This is not the counted-event stream and does not share its guarantee. A
  * counted event can only say what `packages/features/src/analytics/product-events.ts`
- * declared; this client is the analytics library posting straight to the
- * processor, and a recording is the rendered panel. What keeps a session
- * title, a branch, an error line, a caption, or the account's own name out of
- * it is `SESSION_REPLAY_MASKING` below, not a declared list of events: every
+ * declared; this client is the analytics library posting to the processor,
+ * directly or through the web's own origin, which passes on what it is sent,
+ * and a recording is the rendered panel. What keeps a session title, a
+ * branch, an error line, a caption, or the account's own name out of it is
+ * `SESSION_REPLAY_MASKING` below, not a declared list of events: every
  * text node and every input is masked, every attribute but the few the replay
  * lays out by is asterisked, and autocapture is off; and the stylesheets the
  * panel builds from a person's words are emptied before a recording leaves
@@ -34,10 +35,10 @@
  * record under any other.
  *
  * What a shell decides is only what is its own: the platform it is, the
- * project key its build carries (none, and nothing records), the address its
- * window says it has in place of the one it has, and where its recorder's
- * bundle is. Whether a run may record at all is the host's word
- * (`SessionReplayBootstrap`): there is no switch. Where it may, recording
+ * project key its build carries (none, and nothing records), where its
+ * recording posts, the address its window says it has in place of the one it
+ * has, and where its recorder's bundle is. Whether a run may record at all is
+ * the host's word (`SessionReplayBootstrap`): there is no switch. Where it may, recording
  * waits for an account: nothing loads and nothing records while signed out,
  * so a visit that never signs in sends nothing, and every recording is filed
  * under a person, named by the account's name and email, from its first
@@ -51,14 +52,6 @@ import { isRecord, text, type UnparsedWireValue, type WireValue } from "@luke/wi
 import type { PostHog, Properties } from "posthog-js/dist/module.no-external";
 import type { BundleImporter } from "./bundle-loader.js";
 import { sessionRecorderLoaded } from "./session-recorder/contract.js";
-
-/**
- * Where everything here posts. The processor's own address rather than our
- * origin: nothing forwards on the user's behalf, so the processor sees the
- * address a request arrives from. Each shell's connect policy names it, and
- * the assets host beside it.
- */
-const POSTHOG_HOST = "https://us.i.posthog.com";
 
 /**
  * The panel's own `data-*` attributes its styles select on by their value,
@@ -247,9 +240,11 @@ function laysOut(name: string, value: string, element: Element | undefined): boo
  * no `maskAllText` for recordings, and the recorder drops an option it does
  * not know without a word, so the names are asserted against the installed
  * bundle), every input masked, every attribute but those the replay lays out
- * by (`LAYOUT`) asterisked, autocapture off, since a click event carries the
- * text of what was clicked, and canvas recording off, since a canvas carries
- * its words as pixels.
+ * by (`LAYOUT`) asterisked, every comment in the markup left out, since the
+ * recorder copies a comment's words as they stand and no masking reaches
+ * one, autocapture off, since a click event carries the text of what was
+ * clicked, and canvas recording off, since a canvas carries its words as
+ * pixels.
  *
  * An allowlist rather than a list of the attributes that carry words,
  * because that list kept missing one: an element's `id` and the ids that
@@ -289,6 +284,7 @@ const SESSION_REPLAY_MASKING = {
     maskTextSelector: "*",
     maskAttributeFn: (name: string, value: string, element?: Element): string =>
       laysOut(name.toLowerCase(), value, element) ? value : "*".repeat(value.length),
+    slimDOMOptions: { comment: true },
     recordHeaders: false,
     recordBody: false,
   },
@@ -327,6 +323,14 @@ export interface SessionReplayShell {
    * empty for a build that records nothing, such as a development one.
    */
   readonly projectApiKey: () => string;
+  /**
+   * Where the recording posts, the client's `api_host`, which the shell's
+   * connect policy must allow, and the processor's own app, its `ui_host`:
+   * the processor's address on the desktop, whose `file://` page no blocker
+   * sees, and a path of the tab's own origin on the web, which the web
+   * service passes on (`@luke/features/posthog-proxy`).
+   */
+  readonly host: { readonly api: string; readonly ui: string };
   /** The address the window says it has, in place of the one it has, which may name a person or carry their words. */
   readonly address: string;
   /**
@@ -595,7 +599,8 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
     initialized = true;
     preloadRemoteConfig(key);
     posthog.init(key, {
-      api_host: POSTHOG_HOST,
+      api_host: shell.host.api,
+      ui_host: shell.host.ui,
       defaults: "2025-11-30",
       // Both of these carry the window's own address, which is the shell's to
       // replace. Switching them off is only half of it — see `before_send`,

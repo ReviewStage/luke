@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { afterEach, expect, it, vi } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { organization } from "@luke/database/schemas/auth";
+import { deleteAccount } from "@luke/database/models/account-store";
+import { organization, user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import { AGENT_KIND } from "@luke/features/agent-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
@@ -58,11 +60,19 @@ function analytics(environment: Partial<HostedEnvironmentValues>, status = 200) 
   return { layer, posted };
 }
 
-/** An agent's start counted in the workspace, which no row of the test's holds unless it opened one. */
-const agentStartIn = (workspaceId: string) =>
+/** An account the service holds, answering its id. */
+const openUser = Effect.gen(function* () {
+  const db = yield* Database;
+  const userId = `user-${randomUUID()}`;
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  return userId;
+});
+
+/** An agent's start counted by the account in the workspace, which no row of the test's holds unless it opened one. */
+const agentStartIn = (userId: string, workspaceId: string) =>
   recordServerEvent(
     SERVER_EVENT.AGENT_START,
-    { userId: "user-1", workspaceId },
+    { userId, workspaceId },
     {
       model: "anthropic/claude-opus-5.5",
       effort: "high",
@@ -74,7 +84,7 @@ const agentStartIn = (workspaceId: string) =>
     },
   );
 
-const agentStart = agentStartIn("workspace-1");
+const agentStart = (userId: string) => agentStartIn(userId, "workspace-1");
 
 /** Every item the processor was posted, across its batches, in order. */
 const itemsOf = (posted: readonly Posted[]): PosthogBatchItem[] =>
@@ -106,7 +116,8 @@ it.layer(getTestDB())("server events", (it) => {
       });
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
-        yield* agentStart;
+        const userId = yield* openUser;
+        yield* agentStart(userId);
         expect(processor.posted).toEqual([
           {
             url: "https://eu.i.posthog.com/batch/",
@@ -116,7 +127,7 @@ it.layer(getTestDB())("server events", (it) => {
               batch: [
                 {
                   event: "agent:start",
-                  distinct_id: "user-1",
+                  distinct_id: userId,
                   timestamp: "2026-08-19T12:00:00.000Z",
                   properties: {
                     model: "anthropic/claude-opus-5.5",
@@ -146,7 +157,7 @@ it.layer(getTestDB())("server events", (it) => {
     return Effect.gen(function* () {
       yield* recordServerEvent(
         SERVER_EVENT.ACCOUNT_SIGN_UP,
-        { userId: "user-1" },
+        { userId: yield* openUser },
         { method: SERVER_SIGN_IN_METHOD.GITHUB },
       );
       const items = itemsOf(processor.posted);
@@ -168,15 +179,16 @@ it.layer(getTestDB())("server events", (it) => {
             set: item.properties["$group_set"],
           }));
       return Effect.gen(function* () {
+        const userId = yield* openUser;
         const workspaceId = yield* openWorkspaceNamed("workspace-acme", "Acme");
-        yield* agentStartIn(workspaceId);
-        yield* agentStartIn(workspaceId);
+        yield* agentStartIn(userId, workspaceId);
+        yield* agentStartIn(userId, workspaceId);
         const db = yield* Database;
         yield* db
           .update(organization)
           .set({ name: "Acme Labs" })
           .where(eq(organization.id, workspaceId));
-        yield* workspaceRenamed("user-1", workspaceId);
+        yield* workspaceRenamed(userId, workspaceId);
         const created_at = new Date(CREATED).toISOString();
         expect(named()).toEqual([
           { type: "workspace", key: workspaceId, set: { name: "Acme", created_at } },
@@ -189,7 +201,7 @@ it.layer(getTestDB())("server events", (it) => {
   it.effect("records nothing on a deployment without a project key", () => {
     const processor = analytics({});
     return Effect.gen(function* () {
-      yield* agentStart;
+      yield* agentStart(yield* openUser);
       expect(processor.posted).toEqual([]);
     }).pipe(Effect.provide(processor.layer));
   });
@@ -197,15 +209,25 @@ it.layer(getTestDB())("server events", (it) => {
   it.effect("a refusing processor costs the count, never the caller", () => {
     const processor = analytics({ posthogProjectApiKey: Redacted.make("phc_project") }, 500);
     return Effect.gen(function* () {
-      const settled = yield* Effect.exit(agentStart);
+      const settled = yield* Effect.exit(agentStart(yield* openUser));
       expect(settled._tag).toBe("Success");
       expect(processor.posted).toHaveLength(1);
     }).pipe(Effect.provide(processor.layer));
   });
 
+  it.effect("posts nothing for an account deleted before its event is captured", () => {
+    const processor = analytics({ posthogProjectApiKey: Redacted.make("phc_project") });
+    return Effect.gen(function* () {
+      const userId = yield* openUser;
+      yield* deleteAccount(userId);
+      yield* agentStart(userId);
+      expect(processor.posted).toEqual([]);
+    }).pipe(Effect.provide(processor.layer));
+  });
+
   it.effect("a runtime that provides no analytics records nothing and still succeeds", () =>
     Effect.gen(function* () {
-      const settled = yield* Effect.exit(agentStart);
+      const settled = yield* Effect.exit(agentStart("user-1"));
       expect(settled._tag).toBe("Success");
     }),
   );

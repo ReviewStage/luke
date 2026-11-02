@@ -75,6 +75,8 @@ const WORDS = [
   // A diagram's class and a thread's id, in the sheets built from them.
   "launch-review",
   "thread-04aa",
+  // A comment in the page's markup, which no text masking reaches.
+  "standup-notes",
 ];
 
 /** The gzip magic the library opens a compressed snapshot field with, as the binary string it sends. */
@@ -95,6 +97,7 @@ function signedOut(permitted: boolean): SessionReplayBootstrap {
 function drawPage(): void {
   document.body.innerHTML = `
     <link rel="stylesheet" href="styles.css" />
+    <!-- standup-notes -->
     <main>
       <h1>Quarterly roadmap</h1>
       <a href="https://example.test/invite?token=private-token">roadmap</a>

@@ -56,6 +56,17 @@ ignoredBuiltDependencies:
   - electron-winstaller
   - esbuild
 
+# The one build this repository runs: `embedded-postgres` ships each
+# platform's Postgres in a package whose install script restores the
+# library symlinks its tarball cannot carry, without which the binaries
+# do not load. The demo's throwaway database (`tools/demo-postgres`) runs
+# them; only the package for the machine's own platform is installed.
+onlyBuiltDependencies:
+  - "@embedded-postgres/darwin-arm64"
+  - "@embedded-postgres/darwin-x64"
+  - "@embedded-postgres/linux-arm64"
+  - "@embedded-postgres/linux-x64"
+
 # The Agent SDK's native `claude` binaries, one optional package per platform
 # at about 290 MB each. Nothing here runs the CLI: `@luke/agent-runner` bundles
 # the SDK alone and runs the binary the agent's sandbox image installs, which

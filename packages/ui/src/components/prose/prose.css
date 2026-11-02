@@ -119,6 +119,12 @@
     letter-spacing: 0;
   }
 
+  /* A link is drawn in the links' own ink, as a text link is, rather than
+     the browser's blue, which follows no theme. */
+  .luke-markdown a {
+    color: var(--luke-color-accent-text);
+  }
+
   /* Code keeps each source line whole and scrolls only sideways: a wrapped
      identifier reads as one the author never wrote. Left-aligned even inside
      the centred caption, because indentation is part of what code says. */

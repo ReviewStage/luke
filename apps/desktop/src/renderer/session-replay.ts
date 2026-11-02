@@ -15,6 +15,7 @@
  */
 
 import { PRODUCT_PLATFORM } from "@luke/features/analytics";
+import { POSTHOG_PROXY } from "@luke/features/posthog-proxy";
 import type { BundleImporter } from "@luke/panel/bundle-loader";
 import {
   type ApplySessionReplay,
@@ -110,10 +111,19 @@ function projectApiKey(): string {
 /** The recorder's bundle, imported where the bundler put it; it registers itself as it runs. */
 const importSessionRecorder: BundleImporter<unknown> = () => import("./session-recorder/index");
 
+/**
+ * Where the recording posts: PostHog's own hosts, which the window's connect
+ * policy names (`index.html`), rather than the web's path on its own origin,
+ * because a `file://` page has no origin to proxy through and no ad blocker
+ * sees what it sends.
+ */
+const POSTHOG_HOST = { api: POSTHOG_PROXY.INGEST_ORIGIN, ui: POSTHOG_PROXY.UI_ORIGIN } as const;
+
 /** The panel window's recording, which `desktop-platform.ts` answers the panel's platform with. */
 export const applySessionReplay: ApplySessionReplay = sessionReplay({
   platform: PRODUCT_PLATFORM.DESKTOP,
   projectApiKey,
+  host: POSTHOG_HOST,
   ...ADDRESS,
   importRecorder: importSessionRecorder,
 });

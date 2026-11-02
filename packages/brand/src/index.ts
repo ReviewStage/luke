@@ -1,3 +1,4 @@
+export { BRAND_PALETTE } from "./generated/brand-palette.js";
 export {
   FACE_ART,
   FACE_MOTION,

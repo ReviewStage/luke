@@ -35,7 +35,6 @@ import {
   setTaskParent,
   type TaskArchivedAgent,
   type TaskChanges,
-  taskHoldsOpenQuestion,
   updateTaskCommitted,
 } from "@luke/database/models/task-store";
 import type { StoreWriter } from "@luke/database/models/writer";
@@ -319,12 +318,6 @@ export const UPDATE_TASK_REFUSAL = {
   NO_TASK:
     "Not run: no task of your workspace has that id, so it is none you can change; " +
     `${AGENT_TOOL.LIST_TASKS} names them.`,
-  OPEN_ASK:
-    "Not run: a thread of that task still holds an ask open for the developer, which marking " +
-    `it done would withdraw. Withdraw each ask of yours it no longer needs with ${AGENT_TOOL.WITHDRAW_ASK} ` +
-    `(${AGENT_TOOL.READ_THREADS} lists them), then mark it done; or leave it as it stands until ` +
-    `they are answered: ${PRODUCT_NAME} then marks a task whose pull request merged done by itself, and ` +
-    "you mark any other done once the answer reaches you.",
   NOT_MEMBER:
     "Not run: that assignee is no member of the task's workspace, or names no person; name a " +
     `member by the mention link ${AGENT_TOOL.LIST_TASKS} hands you, or null for no one.`,
@@ -890,8 +883,8 @@ export const UPDATE_TASK_TOOL = {
     "it is blocked by and the tasks it blocks; name at least one change, " +
     "and several go in one call. Mark a task whose work is " +
     "done Done, with status done, as the menu's Mark done does, such as one whose pull requests " +
-    "merged, or one the developer asked you to clean up; it is refused while a thread of the task " +
-    `holds an ask open, so withdraw those you no longer need with ${AGENT_TOOL.WITHDRAW_ASK} first; never a teammate's ` +
+    "merged, or one the developer asked you to clean up; that withdraws every ask still open on its " +
+    "threads, so mark it done only once you no longer need them; never a teammate's " +
     "task still in use unless the developer asked for it. A task is never archived: a settled " +
     `one stands Done or Canceled, which ${AGENT_TOOL.LIST_TASKS} lists by status. A block is ` +
     "Linear's: the blocker's work comes first and the task it blocks waits on it, as one child " +
@@ -2162,14 +2155,6 @@ export function runUpdateTask(
               read.value.task.status ?? TASK_STATUS.TODO,
               archived,
             );
-      // Note that an agent's Done waits on the task's open asks, as the app's own finish does, because a Done withdraws them (`inbox-settle.ts`).
-      if (
-        status === TASK_STATUS.DONE &&
-        read.value.task.status !== TASK_STATUS.DONE &&
-        (yield* taskHoldsOpenQuestion(taskId))
-      ) {
-        return agentToolRejected(UPDATE_TASK_REFUSAL.OPEN_ASK);
-      }
       // A repository is compared as GitHub spells it, which is how the task holds it.
       const asWritten = {
         ...changes,
