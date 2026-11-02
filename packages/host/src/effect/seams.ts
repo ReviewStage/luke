@@ -11,6 +11,7 @@ import type {
   DeviceArch,
   DeviceCapability,
   DeviceIsolation,
+  DeviceMachine,
   DevicePlatform,
 } from "@luke/features/device-agent-wire";
 import {
@@ -205,6 +206,8 @@ export interface LocalAgentPlatformSeam {
   readonly runnerBundle: string;
   readonly runnerEnv: Readonly<Record<string, string>>;
   readonly deviceName: string;
+  /** Which machine the device runs on, as it registers (`DeviceMachine`), each part absent where it could not be read. */
+  readonly deviceMachine: DeviceMachine;
   /** The platform and architecture the device registers as. */
   readonly devicePlatform: DevicePlatform;
   readonly deviceArch: DeviceArch;
@@ -301,12 +304,14 @@ export interface ThisMacHostSeam {
     never,
     ChildProcessSpawner.ChildProcessSpawner
   >;
-  /** The Mac as its `luke-host` registers it, which its enroll names so the service creates the device where it never saw this Mac. */
-  readonly machine: Effect.Effect<{
-    readonly name: string;
-    readonly platform: DevicePlatform;
-    readonly arch: DeviceArch;
-  }>;
+  /** The Mac as its `luke-host` registers it, which its enroll names so the service creates the device where it never saw this Mac, and which machine it is where it was read. */
+  readonly machine: Effect.Effect<
+    {
+      readonly name: string;
+      readonly platform: DevicePlatform;
+      readonly arch: DeviceArch;
+    } & DeviceMachine
+  >;
 }
 
 export class ThisMacHost extends Context.Service<ThisMacHost, ThisMacHostSeam>()(

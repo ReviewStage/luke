@@ -69,8 +69,13 @@ const HTTP = {
   SERVER_ERROR: 500,
 } as const;
 
+/** Which machine fra-01 is, as its host reports it: a Linux box names no model. */
+const FRA_01_MACHINE = { machineId: "e".repeat(64) } as const;
+/** Which machine Studio is, as its host reports it. */
+const STUDIO_MACHINE = { machineId: "f".repeat(64), model: "Mac Studio (2023)" } as const;
+
 /** A Linux box named fra-01. */
-const FRA_01: HostOs = { ...LINUX_HOST, deviceName: () => "fra-01" };
+const FRA_01: HostOs = { ...LINUX_HOST, deviceName: () => "fra-01", machine: () => FRA_01_MACHINE };
 
 /** A box's platform on the OS given, as its daemon builds it, running as the user given. */
 const platformOn = (os: HostOs, stateRoot: string, uid = 990) =>
@@ -126,8 +131,9 @@ const world = (home: string, reports: string[]) => {
 describe("a host's daemon", () => {
   it.effect.each([
     {
-      os: { ...LINUX_HOST, deviceName: () => "fra-01" },
+      os: FRA_01,
       name: "fra-01",
+      machine: FRA_01_MACHINE,
       platform: "linux",
       uid: 0,
       sandboxed: "1",
@@ -135,8 +141,9 @@ describe("a host's daemon", () => {
       pnpmConfig: ".config/pnpm",
     },
     {
-      os: { ...DARWIN_HOST, deviceName: () => "Studio" },
+      os: { ...DARWIN_HOST, deviceName: () => "Studio", machine: () => STUDIO_MACHINE },
       name: "Studio",
+      machine: STUDIO_MACHINE,
       platform: "darwin",
       uid: 501,
       sandboxed: undefined,
@@ -144,8 +151,8 @@ describe("a host's daemon", () => {
       pnpmConfig: "Library/Preferences/pnpm",
     },
   ])(
-    "registers as its OS ($platform) on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets and the box's one pnpm store and npm cache named in its agent's home, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group and ends once Vespin refuses its secret",
-    ({ os, name, platform: devicePlatform, uid, sandboxed, runnerBundle, pnpmConfig }) =>
+    "registers as its OS ($platform) and machine on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets and the box's one pnpm store and npm cache named in its agent's home, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group and ends once Vespin refuses its secret",
+    ({ os, name, machine, platform: devicePlatform, uid, sandboxed, runnerBundle, pnpmConfig }) =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
         const reports: string[] = [];
@@ -213,6 +220,7 @@ describe("a host's daemon", () => {
           name,
           platform: devicePlatform,
           arch: "x64",
+          ...machine,
           home: home,
           isolation: "direct",
           claudeExecutable: fakeClis().paths.claude,
@@ -337,6 +345,7 @@ describe("a host's connect with a code", () => {
       name: "fra-01",
       platform: LINUX_HOST.platform,
       arch: DEVICE_ARCH.X64,
+      machine: FRA_01_MACHINE,
       version: VERSION,
       shown: (code) => Effect.sync(() => shown.push(code)),
     }).pipe(Effect.provide(http.layer));
@@ -384,6 +393,7 @@ describe("a host's connect with a code", () => {
           name: "fra-01",
           platform: "linux",
           arch: "x64",
+          ...FRA_01_MACHINE,
         });
         expect(new Set(polls().map((poll) => poll.authorization))).toEqual(
           new Set([`Bearer ${POLL_SECRET}`]),

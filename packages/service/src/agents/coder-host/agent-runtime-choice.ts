@@ -366,6 +366,8 @@ export const macOffers = /* @__PURE__ */ Effect.fnUntraced(function* (
     seenAt: device.lastSeenAt.getTime(),
     ...(device.setup === null ? undefined : { setup: device.setup }),
     ...(device.setupFailure === null ? undefined : { setupFailure: device.setupFailure }),
+    ...(device.machineId === null ? undefined : { machineId: device.machineId }),
+    ...(device.model === null ? undefined : { model: device.model }),
   }));
 });
 

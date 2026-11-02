@@ -3,6 +3,7 @@ import {
   DEVICE_ARCH,
   DEVICE_PLATFORM,
   DEVICE_SETUP_FAILURE_MAX_CHARS,
+  deviceMachineFields,
   deviceSetupSchema,
   HOST_UPDATE_FAILURE_MAX_CHARS,
   hostUpdateSchema,
@@ -164,7 +165,8 @@ export type HostEnrollAnswer = typeof hostEnrollAnswerSchema.Type;
  * An own device's enroll: the id of the member's machine, a Mac its desktop
  * signed in on, and its name, platform and architecture, which create the
  * device under the account where the account never registered the id; all
- * three or none, since a device the account already has needs none. The
+ * three or none, since a device the account already has needs none; and
+ * the machine it runs on where it read it (`deviceMachineFields`). The
  * desktop's own sign-in is its credential, as its bearer and never a
  * browser's session, and the version of the host program it enrolls for
  * rides in `HOST_WIRE.VERSION_HEADER`. It answers the device's id and its
@@ -177,17 +179,25 @@ export const ownDeviceEnrollRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(enrollingMachineFields.name),
   platform: EffectSchema.optionalKey(enrollingMachineFields.platform),
   arch: EffectSchema.optionalKey(enrollingMachineFields.arch),
+  ...deviceMachineFields,
 });
 
 export type OwnDeviceEnrollRequest = typeof ownDeviceEnrollRequestSchema.Type;
 
 /**
  * A pairing started (POST), with no credential: the box's name (its
- * hostname), platform, and architecture, its daemon's version riding in
+ * hostname), platform, and architecture, and the machine it runs on where
+ * it read it (`deviceMachineFields`), its daemon's version riding in
  * `HOST_WIRE.VERSION_HEADER` as on every call of a host's. The service
  * mints the device's id once a member approves; the box never names one.
+ * Note that the service keeps no machine of the start's yet, since the
+ * box's first register follows its approve at once and names it again; it
+ * rides here so a service that does keep it needs no newer host.
  */
-export const hostPairingStartRequestSchema = EffectSchema.Struct(enrollingMachineFields);
+export const hostPairingStartRequestSchema = EffectSchema.Struct({
+  ...enrollingMachineFields,
+  ...deviceMachineFields,
+});
 
 export type HostPairingStartRequest = typeof hostPairingStartRequestSchema.Type;
 
@@ -310,7 +320,9 @@ export const hostUpgradeNeededDataSchema = EffectSchema.Struct({
  * machine updating itself to a newer release says where that stands
  * (`HOST_UPDATE`), and why for one that failed, as its last beat said; both
  * are absent while no update is under way, and from a service older than
- * them.
+ * them. A machine says which machine it runs on, and its model, as its host
+ * last reported them (`deviceMachineFields`); each is absent where it never
+ * did, and from a service older than them.
  */
 const hostSchema = EffectSchema.Struct({
   id: wireUuidSchema,
@@ -328,6 +340,8 @@ const hostSchema = EffectSchema.Struct({
   updateFailure: EffectSchema.optionalKey(
     EffectSchema.String.check(EffectSchema.isMaxLength(HOST_UPDATE_FAILURE_MAX_CHARS)),
   ),
+  machineId: EffectSchema.optionalKey(EffectSchema.String),
+  model: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type Host = typeof hostSchema.Type;

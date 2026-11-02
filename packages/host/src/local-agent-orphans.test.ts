@@ -229,6 +229,7 @@ const following = (input: {
         formerlyDirect: input.mac === true,
         storesOwned: input.storesOwned === true,
         deviceName: "rack-1",
+        deviceMachine: {},
         devicePlatform: input.mac === true ? DEVICE_PLATFORM.DARWIN : DEVICE_PLATFORM.LINUX,
         deviceArch: input.mac === true ? DEVICE_ARCH.ARM64 : DEVICE_ARCH.X64,
         deviceIsolation: DEVICE_ISOLATION.DIRECT,

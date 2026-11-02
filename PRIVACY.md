@@ -526,6 +526,24 @@ secret, or within a few minutes of the code lapsing. To stop codes being
 guessed, our service also counts, for 15 minutes at a time, how many codes
 your account named that matched none.
 
+**Which machine a host is.** This Mac and every host tell our service which
+machine they run on, so that two of your machines with one name can be told
+apart, and two installs on one machine known as one. A Mac reads its hardware
+UUID (`IOPlatformUUID`) and a Linux box its machine id (`/etc/machine-id`),
+asking nothing of you; that id never leaves the machine and is never logged.
+What is sent in its place is a keyed SHA-256 hash (HMAC) of it under a fixed
+key of Vespin's own, which the id cannot be worked back from and no other
+app's hash of it matches, but which stays the same for as long as the
+machine's id does: for a Mac's life, and on a Linux box until its machine id
+is made anew. A Mac also sends its model as macOS names it, such as "MacBook
+Air (M2, 2022)"; a Linux box sends none. Nothing else the system reports beside
+them, its serial number among it, is kept or sent. They go with This Mac's
+enroll as you turn it on, with a box's ask for its code, and each time the
+host program starts; our service keeps them with the host from its enroll or
+its first call after you approve it, keeping none from the ask for a code,
+lists them only to your own account's apps, and keeps them for as long as it
+keeps the host, which goes with your account.
+
 **An agent that runs on Claude Code.** For the accounts in the early
 test of Claude plans, an agent your Claude plan pays for runs on
 Anthropic's Claude Code, and so does a Claude agent your own Anthropic

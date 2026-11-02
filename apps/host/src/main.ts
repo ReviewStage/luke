@@ -305,6 +305,7 @@ const connect = (runtime: HostRuntime, name: string, origin: string) =>
       name,
       platform: runtime.os.platform,
       arch: yield* arch(runtime),
+      machine: runtime.os.machine(),
       version: VERSION,
       shown: showCode,
     });

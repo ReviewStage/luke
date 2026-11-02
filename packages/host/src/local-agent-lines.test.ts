@@ -97,6 +97,7 @@ const directMac = (unsavedWork: Script | undefined) => ({
   runnerBundle: "/opt/luke/agent-runner.mjs",
   runnerEnv: {},
   deviceName: "Studio",
+  deviceMachine: {},
   devicePlatform: DEVICE_PLATFORM.DARWIN,
   deviceArch: DEVICE_ARCH.ARM64,
   deviceIsolation: DEVICE_ISOLATION.DIRECT,
