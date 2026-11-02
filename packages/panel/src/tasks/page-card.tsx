@@ -25,8 +25,8 @@ import { useOpenPlace } from "./use-open-link.js";
  * its tile and the name the window holds for it now, which a press opens.
  * Then the page
  * itself, small: its newest version drawn in a frame as its tab draws it
- * (`page-pane.tsx`), under the same sandbox and from the same `luke-page:`
- * address, laid out four times the card's width, a desktop window's, and
+ * (`page-pane.tsx`), under the same sandbox and from the same address,
+ * laid out four times the card's width, a desktop window's, and
  * scaled down to the card's (tasks.css), so the developer sees what a page is before opening it. The frame
  * is the pointer's preview and nothing more: it takes no pointer, so the
  * card stays standing while the pointer crosses it, no focus, and no part

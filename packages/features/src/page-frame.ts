@@ -68,6 +68,18 @@ export function pageFrameUrl(page: FramedPage): string {
   return `${PAGE_SCHEME}://${PAGE_HOST}/${owner}/${page.pageId}/${page.version}`;
 }
 
+/**
+ * The path a browser's frame loads one version of one page through, on the
+ * app's own origin: the service's frame of the version, which answers with
+ * where the page is drawn from, so the frame's address holds no link of its
+ * own and every load asks for a fresh one.
+ */
+export function hostedPageFramePath(page: FramedPage): string {
+  return "agentId" in page
+    ? `/api/agents/${page.agentId}/pages/${page.pageId}/versions/${page.version}/frame`
+    : `/api/plans/${page.taskId}/pages/${page.pageId}/versions/${page.version}/frame`;
+}
+
 /** The version a frame's address spells, read only as `pageFrameUrl` spells it, so `02` or `2e0` names nothing. */
 function versionOf(spelled: string | undefined): number | undefined {
   const number = Number(spelled);

@@ -683,13 +683,22 @@ characters of it, is then sent to that agent's model as part of its
 conversation. Fullspin
 on your Mac reads a page's HTML from our service only to draw it, in its tab
 or in the card over its tab, its row, or a chip naming it, holds it in
-memory only, and never passes it to the rest of the panel. A page runs sealed
+memory only, and never passes it to the rest of the panel. Fullspin in a
+browser draws a page in the same places, loading it from fullspin.page, a
+domain of ours kept apart from the app's own so that a page never shares a
+site with your account. As the page loads, our service makes a link to it for
+your account: the link names your account's id, the page, and its version,
+works for one minute, and is signed so that nothing but our service can make
+one. Our service keeps no record of the link; Vercel's request log records its
+address, as it records every request's. Nothing on fullspin.page sets or
+reads a cookie. A page runs sealed
 off from Fullspin: it cannot read the panel, your account, or another page, and
 cannot store anything, open a window, or send anything anywhere but the
 requests it makes to the one place it may load from, cdnjs.cloudflare.com, for
 code libraries such as charts and diagrams, which Cloudflare's CDN then sees
-requested from your Mac's address. A link inside a page does not open. A page
-is never shared or published: only you can open it, from Fullspin.
+requested from your Mac's or your browser's address. A link inside a page does
+not open. A page is never shared or published: only you can open it, from
+Fullspin.
 
 **Agents' working memory.** Each agent works
 from a session history of its own turns — the model's record of what it read,
