@@ -331,8 +331,8 @@ function wordsOf(node: WordsNode): string {
 }
 
 /**
- * Marks every link in the words whose target may name a mention, or is a
- * Fullspin link to any place (`readLink`), to be drawn as its own element,
+ * Marks every link in the words whose target may name a mention, or is an
+ * app link to any place (`readLink`), to be drawn as its own element,
  * which reads what it names against the plan its page is of (`linkChip`):
  * the same rule for a developer's `@`
  * mention, an agent's link, a reference link, and a bare address. A target
@@ -1677,7 +1677,7 @@ export type TranscriptSubagentProps = {
   /**
    * The task and the answer, for a row that opens no tab, which folds them
    * open under its line as a call's row does: a native harness's subagent,
-   * whose own work Fullspin keeps no transcript of.
+   * whose own work we keep no transcript of.
    */
   body?: { readonly input: ToolBlock; readonly output: ToolBlock | undefined } | undefined;
 };

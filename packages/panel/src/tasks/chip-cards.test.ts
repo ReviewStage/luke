@@ -51,7 +51,7 @@ import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
- * chip-cards.test.ts -- a chip of a place in Vespin hangs the card the window
+ * chip-cards.test.ts -- a chip of a place in the app hangs the card the window
  * hangs for that place wherever it names it: a plan's card for a plan, the
  * same card's head and the section's heading for a section, or the
  * version for a version; a page's title, version, and when it moved; a

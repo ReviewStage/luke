@@ -50,7 +50,7 @@
  * root element of their own and keep a disabled tab focusable, and a radio
  * stands a hidden input beside each option, each of which would change
  * what the bar is; the bar says it is a tablist or a radio group, and each
- * option a tab or a radio, over the group's own words. Its keys are Fullspin's
+ * option a tab or a radio, over the group's own words. Its keys are our own
  * (`useRovingKeys`), Base UI's own composite keys refused, because a
  * tablist steps by ← and → alone where a radio group takes ↑ and ↓ too, and
  * an arrow chooses as it moves. The bar is one Tab stop, on the chosen

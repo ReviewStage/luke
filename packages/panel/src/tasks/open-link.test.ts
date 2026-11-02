@@ -20,11 +20,11 @@ import { TranscriptWords } from "./transcript-blocks.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
 /**
- * A link pressed in written words: a Vespin link, a task's drawn as its chip,
+ * A link pressed in written words: an app link, a task's drawn as its chip,
  * opens its place in the window, a task at its section, an agent, an Inbox
  * item, and never the browser, while a GitHub page, drawn as GitHub's chip,
  * and any other web page open in the browser over their acts; off the
- * window, where no opener for a place is handed down, a Vespin link opens
+ * window, where no opener for a place is handed down, an app link opens
  * nothing in it. Synthetic ids.
  */
 

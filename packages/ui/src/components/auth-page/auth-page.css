@@ -19,7 +19,7 @@
     }
   }
 
-  /* The ring's mark, a provider's or Fullspin's, at about two thirds of it. */
+  /* The ring's mark, a provider's or the app's, at about two thirds of it. */
   .luke-auth-ring > svg {
     width: 36px;
     height: 36px;

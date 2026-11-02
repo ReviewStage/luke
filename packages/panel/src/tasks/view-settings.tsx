@@ -47,7 +47,7 @@ import {
 } from "./file-view-settings.js";
 
 /**
- * view-settings.tsx -- the View options button in a bar over lines, and the popover under it: on Files changed every diff setting stage-cli offers, in Fullspin's own controls, grouped by what a reader changes; over a File tab's or a page's source only those its lines follow.
+ * view-settings.tsx -- the View options button in a bar over lines, and the popover under it: on Files changed every diff setting stage-cli offers, in our own controls, grouped by what a reader changes; over a File tab's or a page's source only those its lines follow.
  *
  * The popover sets what every diff follows (`file-view-settings.ts`), the
  * Files changed view's and a review thread's alike, drawn again as each

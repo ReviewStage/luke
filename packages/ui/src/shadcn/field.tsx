@@ -3,7 +3,7 @@ import { cn } from "../cn.js";
 import { Label } from "./label.js";
 
 /**
- * field.tsx -- shadcn/ui's field (style `base-nova`), vendored and drawn as Fullspin's form field.
+ * field.tsx -- shadcn/ui's field (style `base-nova`), vendored and drawn as our form field.
  *
  * The parts are shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add field` reads as a small diff. The local
@@ -14,7 +14,7 @@ import { Label } from "./label.js";
  * only add to a reader's tree; and `FieldError` always stands, with no
  * `role="alert"`, empty until it says something, its words what the caller
  * says rather than a list of validation errors, which `ErrorLine` says
- * through the window's `Announcer` rather than a live region of its own. The classes are Fullspin's: the parts six
+ * through the window's `Announcer` rather than a live region of its own. The classes are our own: the parts six
  * apart, the description in the muted caption, and the error in the danger
  * ink, dropping into its line as it arrives, fading out where its caller
  * holds it leaving (`data-leaving`), and, while empty, standing out of the

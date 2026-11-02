@@ -1389,7 +1389,7 @@ export const DesktopTasks = memo(function DesktopTasks({
         <SkillFiles
           source={tasks.agents.readSkills}
           // Note that a skill's file opens as a file the palette finds does, whole,
-          // so its tab stands on this task though Fullspin never showed it.
+          // so its tab stands on this task though the app never showed it.
           onOpen={(skill) => tasks.sidePanel.onOpenFile({ path: skill.path })}
         >
           <PlanDocument

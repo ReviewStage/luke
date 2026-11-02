@@ -81,7 +81,7 @@ import { useOpenWorkspaceGitHub } from "./repository-remedy.js";
  *
  * Every change is one act (`AGENTS_PULL_REQUEST_ACTION`), which the
  * service makes on GitHub as the member pressing it, on their own GitHub
- * sign-in and never as the Fullspin GitHub App (`pull-request-write-wire.ts`).
+ * sign-in and never as our GitHub App (`pull-request-write-wire.ts`).
  * One is out at a time; while it is, the controls that would send another
  * stand disabled. Once GitHub took it, or refused it, the tab's reads are
  * asked again (`onWritten`), so the header and the page say where the pull
@@ -90,7 +90,7 @@ import { useOpenWorkspaceGitHub } from "./repository-remedy.js";
  * is sent: our sentence where GitHub refused the change, with GitHub's own
  * words quoted on a line of their own under it, naming GitHub, never inside
  * our sentence; an offer to sign in with GitHub again where it would not
- * take the member's sign-in; and Fullspin's own words where the change never
+ * take the member's sign-in; and our own words where the change never
  * reached GitHub.
  *
  * The pill is `@luke/ui`'s pill chip in the tone of where the pull request
@@ -153,7 +153,7 @@ const WRITE_WORDS = {
   UNREACHED: `${REPOSITORY_UNREACHED_NOTE} Choose which repositories ${PRODUCT_NAME} can see.`,
 } as const;
 
-/** Fullspin's own words where a change never reached GitHub, by why. */
+/** Our own words where a change never reached GitHub, by why. */
 function failureWords(failure: AgentCallFailure): string {
   switch (failure) {
     case AGENT_CALL_FAILURE.NOT_FOUND:

@@ -3,7 +3,7 @@
  *
  * The choice is the window's own and nobody else's: no other window draws the
  * sidebar and main never acts on it, so it is kept in the renderer's storage,
- * which lives under Fullspin's state root and outlives a relaunch, rather than
+ * which lives under the app's state root and outlives a relaunch, rather than
  * crossing to the settings file as a setting nobody else reads.
  *
  * A stage narrower than {@link SIDEBAR_COMPACT} folds the sidebar whatever

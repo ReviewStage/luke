@@ -25,8 +25,8 @@ import { markdownHtmlParserAtom } from "../markdown-html-parser.js";
  * message.tsx -- AI Elements' Message: one turn of a conversation, by who said it, and the markdown of a reply.
  *
  * Copied from the AI Elements registry (https://elements.ai-sdk.dev) and
- * restyled to Fullspin's tokens: the developer's turn stands at the right in a
- * raised bubble, Fullspin's at the left in plain text across the whole column,
+ * restyled to our tokens: the developer's turn stands at the right in a
+ * raised bubble, the app's at the left in plain text across the whole column,
  * as a chat app draws them. The actions on a message are the
  * registry's, each one a quiet icon button in `@luke/ui`'s `MessageActions`,
  * which shows while the pointer or the keyboard is on the message, in the
@@ -74,7 +74,7 @@ export function Message({ className, from, ...props }: MessageProps): ReactNode 
 }
 
 /**
- * A line the other side sent, Fullspin's, GitHub's, or another agent's, at the
+ * A line the other side sent, the app's, GitHub's, or another agent's, at the
  * column's left, the other side of the conversation, its line under it starting at its left edge: the same
  * bubble as the developer's own, which stands at the right.
  */

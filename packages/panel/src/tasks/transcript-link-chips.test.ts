@@ -22,7 +22,7 @@ import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptTool, TranscriptWords } from "./transcript-blocks.js";
 
 /**
- * transcript-link-chips.test.ts -- a link an agent or Vespin writes in its
+ * transcript-link-chips.test.ts -- a link an agent or the app writes in its
  * words, labelled as it likes or bare, is drawn as the chip of what it
  * names wherever a transcript's words are drawn: an agent's reply, a
  * subagent's, and an Inbox item's Markdown, which all draw

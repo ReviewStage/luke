@@ -120,11 +120,11 @@ import { ServerCard } from "./server-card.js";
  * opens a popover from the button's trailing edge, as the model menu and
  * the context popover hang from theirs (`@luke/ui`'s `AnchoredPopover` and
  * `PopoverPanel`, a menu's), drawn as the searchable menu is: a search field first, then, for a
- * started agent, Fullspin's own tools under Built in, then the servers under
+ * started agent, our own tools under Built in, then the servers under
  * Connected, which counts how many this agent has on, and Not connected
  * (`agent-servers-model.ts`), each section under `@luke/ui`'s `MenuSection`,
- * and Manage in Settings pinned at the foot. Fullspin's row is its face, its
- * name, how many of his tools the agent is offered (`agent-luke-tools.ts`),
+ * and Manage in Settings pinned at the foot. The app's row is its face, its
+ * name, how many of its tools the agent is offered (`agent-luke-tools.ts`),
  * `run_on_mac off` in the attention tone where it is, and Always on in a
  * switch's place, since his tools cannot be turned off; pressing it turns
  * the popover into his page, his tools under their groups, each its name and
@@ -176,7 +176,7 @@ export interface AgentServersControl {
   readonly onSwitch: (next: readonly string[]) => void;
   /** Opens Settings on its Integrations page, where a server is disconnected. */
   readonly onOpenSettings: () => void;
-  /** The started agent whose own tools, Fullspin's, head the popover; none where no agent is started yet, as a draft's or an automation's. */
+  /** The started agent whose own tools, the app's, head the popover; none where no agent is started yet, as a draft's or an automation's. */
   readonly luke?: LukeToolsDoor | undefined;
 }
 
@@ -224,7 +224,7 @@ const PAGE = {
   NONE: "No tools match",
 } as const;
 
-/** What Fullspin's own row and pages say. */
+/** What the app's own row and pages say. */
 const LUKE_WORDS = {
   SECTION: "Built in",
   ALWAYS_ON: "Always on",
@@ -236,7 +236,7 @@ const LUKE_WORDS = {
   RUN_ON_MAC_OFF: `${AGENT_TOOL.RUN_ON_MAC} off`,
 } as const;
 
-/** Where the home's highlight stands while Fullspin's row heads it: before every server's row. */
+/** Where the home's highlight stands while the app's row heads it: before every server's row. */
 const LUKE_PICK = 0;
 
 /** What a row's buttons can be waiting on: the browser sign-in begun, or the one under way ended. */
@@ -298,7 +298,7 @@ function ServerPageTitle({ name }: { name: string }): React.JSX.Element {
  * The hint over a row's problem: its whole words where the row cut them,
  * and where the server or the sign-in said words of its own, those after
  * ours, quoted and named, whether cut or not. Note that the row's one line
- * holds our sentence alone, because their words are no sentence of Fullspin's.
+ * holds our sentence alone, because their words are no sentence of ours.
  */
 function problemHint(problem: string, said: string | undefined): OneLineHint {
   if (said === undefined) return wholeWordsHint(problem);
@@ -399,7 +399,7 @@ interface PageKeys {
 }
 
 /**
- * What a key in a page's field does, a server's or Fullspin's: Left or
+ * What a key in a page's field does, a server's or the app's: Left or
  * Backspace on an empty filter goes back, the arrows step the highlight,
  * and Enter, or Right with the caret at the end, opens the highlighted row.
  */
@@ -463,7 +463,7 @@ function ServersNote({ words }: { words: string }): React.JSX.Element {
   );
 }
 
-/** Fullspin's face, at a provider mark's seat. */
+/** The app's face, at a provider mark's seat. */
 function LukeMark(): React.JSX.Element {
   return (
     <GlyphSlot ink={GLYPH_INK.TEXT} size={ICON_SIZE.MEDIUM}>
@@ -472,7 +472,7 @@ function LukeMark(): React.JSX.Element {
   );
 }
 
-/** What stands at the end of Fullspin's row and its page's head in a switch's place: its tools cannot be turned off. */
+/** What stands at the end of the app's row and its page's head in a switch's place: its tools cannot be turned off. */
 function AlwaysOn(): React.JSX.Element {
   return (
     <span className={SERVER_END_CLASS}>
@@ -481,7 +481,7 @@ function AlwaysOn(): React.JSX.Element {
   );
 }
 
-/** What Fullspin's row says between its face and its end: its name, how many tools it offers once read, and whether `run_on_mac` is off. */
+/** What the app's row says between its face and its end: its name, how many tools it offers once read, and whether `run_on_mac` is off. */
 function LukeRowWords({ luke }: { luke: LukeToolsRead }): React.JSX.Element {
   return (
     <span className="flex min-w-0 flex-auto items-center gap-icon-gap">
@@ -517,12 +517,12 @@ function RunOnMacBadge({ luke }: { luke: LukeToolsRead }): React.JSX.Element | n
   return <Badge tone={STATUS_TONE.COMPLETE}>{LUKE_WORDS.ON}</Badge>;
 }
 
-/** Whether a row of Fullspin's page opens a page of its own: `run_on_mac` alone, whose page says why it is off. */
+/** Whether a row of the app's page opens a page of its own: `run_on_mac` alone, whose page says why it is off. */
 function opensLukeTool(tool: LukeToolRow): boolean {
   return tool.name === AGENT_TOOL.RUN_ON_MAC;
 }
 
-/** Whether a search finds Fullspin: by its name, or by a tool's name or what it does. */
+/** Whether a search finds the app's row: by its name, or by a tool's name or what it does. */
 function lukeFound(names: readonly string[], tokens: readonly string[]): boolean {
   return (
     matchesTokens([PRODUCT_NAME], tokens) ||
@@ -596,7 +596,7 @@ function ServersPopover({
   const [lukeFilter, setLukeFilter] = useState("");
   const [lukeHighlight, setLukeHighlight] = useState(0);
 
-  // Fullspin's page stands only while the popover draws an agent's; its tool's page only over its.
+  // The app's page stands only while the popover draws an agent's; its tool's page only over its.
   const lukeNames = luke.answer?.tools ?? [];
   const onLuke = servers.luke !== undefined && lukeOpen;
   const onRunOnMac = onLuke && lukeTool === AGENT_TOOL.RUN_ON_MAC;
@@ -631,7 +631,7 @@ function ServersPopover({
     ...groups.flatMap((group) => group.rows).filter((row) => row.kind !== SERVER_ROW.QUIET),
     ...found.tools,
   ].map((each) => ("tool" in each ? each : { row: each }));
-  // Fullspin's row heads the home's picks while it stands: for an agent, and found by the search.
+  // The app's row heads the home's picks while it stands: for an agent, and found by the search.
   const homeTokens = searchTokens(query);
   const lukeShown = servers.luke !== undefined && lukeFound(lukeNames, homeTokens);
   const lukeOffset = lukeShown ? 1 : 0;
@@ -720,7 +720,7 @@ function ServersPopover({
     setLukeTool(name);
   };
 
-  /** Back from a tool's page to Fullspin's, the filter and the highlight as they were. */
+  /** Back from a tool's page to the app's, the filter and the highlight as they were. */
   const closeLukeTool = () => setLukeTool(undefined);
 
   /**
@@ -902,7 +902,7 @@ function ServersPopover({
     }
   };
 
-  /** A row's place among the home's picks, after Fullspin's where it stands, which names its id and its highlight; a quiet row is none. */
+  /** A row's place among the home's picks, after the app's where it stands, which names its id and its highlight; a quiet row is none. */
   const pickIndex = (row: ServerRow, tool?: IntegrationTool) => {
     const index = picks.findIndex((pick) => pick.row === row && pick.tool === tool);
     return index < 0 ? index : index + lukeOffset;
@@ -990,7 +990,7 @@ function ServersPopover({
       onPress: () => open(row, query),
     });
 
-  /** Fullspin's own row, heading the home: its face, its name, its count, `run_on_mac` where it is off, and Always on, opening its page. */
+  /** The app's own row, heading the home: its face, its name, its count, `run_on_mac` where it is off, and Always on, opening its page. */
   const lukeRow = (
     <RowHighlight.Provider value={at === LUKE_PICK ? undefined : () => setHighlight(LUKE_PICK)}>
       <ListRow
@@ -1118,7 +1118,7 @@ function ServersPopover({
     );
   };
 
-  /** One of Fullspin's tools on its page: its name in mono and what it does, `run_on_mac` with whether it is on and, where it is off, why. */
+  /** One of the app's tools on its page: its name in mono and what it does, `run_on_mac` with whether it is on and, where it is off, why. */
   const lukeToolRow = (shown: LukeToolRow) => {
     const index = lukeRows.indexOf(shown);
     const runOnMac = shown.name === AGENT_TOOL.RUN_ON_MAC;
@@ -1158,7 +1158,7 @@ function ServersPopover({
     );
   };
 
-  /** Fullspin's page in the popover's place: back, its face and name, its count, Always on, a filter, and its tools under their groups. */
+  /** The app's page in the popover's place: back, its face and name, its count, Always on, a filter, and its tools under their groups. */
   const lukePage = (
     <>
       <div className={SERVER_PAGE_HEAD_CLASS}>
@@ -1210,7 +1210,7 @@ function ServersPopover({
     </>
   );
 
-  /** `run_on_mac`'s page over Fullspin's: back, its name, whether it is on, what it does, and where it is off, why, and the fix where there is one. */
+  /** `run_on_mac`'s page over the app's: back, its name, whether it is on, what it does, and where it is off, why, and the fix where there is one. */
   const runOnMacPage = (reason: RunOnMacReason | undefined) => {
     const detail = reason === undefined ? undefined : runOnMacDetail(reason, luke.answer?.runOnMac);
     return (
