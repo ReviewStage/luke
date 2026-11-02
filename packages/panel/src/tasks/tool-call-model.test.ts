@@ -860,6 +860,10 @@ test("what a start or a message sent another agent is read whole: a message's wo
     words: long,
     note: undefined,
   });
+  assert.deepEqual(sentWords("message_agent", { agentId: "a", message: long }), {
+    words: long,
+    note: undefined,
+  });
   assert.deepEqual(sentWords("start_agent", { prompt: "Fix it.", note: "Rebase first." }), {
     words: "Fix it.",
     note: "Rebase first.",
