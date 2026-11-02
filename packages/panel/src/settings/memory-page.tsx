@@ -30,6 +30,8 @@ import {
   GAP,
   IconButton,
   Inline,
+  LIST_MOTION_WAY,
+  ListMotion,
   MoreButton,
   SELECT_BOX_PLACE,
   SETTINGS_SECTION_FRAME,
@@ -49,6 +51,7 @@ import {
   Tooltip,
   TrashIcon,
   useConfirmDialog,
+  useLeaving,
   useMenu,
   VisuallyHidden,
 } from "@luke/ui";
@@ -418,36 +421,68 @@ function KeptByFilter({
   );
 }
 
-/** What the filter keeps, a chip for each keeper, its × lifting them, and Clear. */
-function KeptByChips({
+/** The keeper a chip stands for, by which its chip leaves. */
+const keeperChipKey = (keeper: Keeper): string => keeper.key;
+
+/** The filter's chips and Clear, a chip lifted scaling out where it stood. */
+function KeptByLine({
+  line,
   keepers,
   kept,
   onKept,
 }: {
+  line: React.RefObject<HTMLElement | null>;
   keepers: readonly Keeper[];
   kept: ReadonlySet<string>;
   onKept: (kept: ReadonlySet<string>) => void;
 }): React.JSX.Element | null {
-  if (kept.size === 0) return null;
+  // Note that the keepers are read again on every render, so the list the chips leave by is kept until another keeper is kept.
+  const listed = keepers.filter((keeper) => kept.has(keeper.key));
+  const [stable, setStable] = useState(listed);
+  const same =
+    stable.length === listed.length &&
+    stable.every(
+      (keeper, at) => keeper.key === listed[at]?.key && keeper.label === listed[at]?.label,
+    );
+  if (!same) setStable(listed);
+  const drawn = useLeaving(same ? stable : listed, keeperChipKey);
+  if (drawn.length === 0) return null;
   return (
-    <Inline gap={GAP.TIGHT}>
-      {keepers
-        .filter((keeper) => kept.has(keeper.key))
-        .map((keeper) => (
-          <Chip
-            key={keeper.key}
-            look={CHIP_LOOK.FILTER}
-            removeLabel={`Show memories kept by anyone, not only ${keeper.label}`}
-            onRemove={() => onKept(toggled(kept, keeper.key))}
-          >
-            {keeper.face}
-            <ChipName>{`${KEPT_BY} ${keeper.label === PEOPLE_FILTER_WORDS.ME ? "me" : keeper.label}`}</ChipName>
-          </Chip>
-        ))}
-      <Button variant={BUTTON_VARIANT.QUIET} onClick={() => onKept(new Set())}>
-        Clear
-      </Button>
+    <Inline gap={GAP.TIGHT} ref={line} moves>
+      {drawn.map(({ key, value: keeper, leaving }) => (
+        <Chip
+          key={key}
+          look={CHIP_LOOK.FILTER}
+          motionKey={key}
+          removeLabel={`Show memories kept by anyone, not only ${keeper.label}`}
+          onRemove={() => {
+            if (!leaving) onKept(toggled(kept, keeper.key));
+          }}
+        >
+          {keeper.face}
+          <ChipName>{`${KEPT_BY} ${keeper.label === PEOPLE_FILTER_WORDS.ME ? "me" : keeper.label}`}</ChipName>
+        </Chip>
+      ))}
+      {kept.size === 0 ? null : (
+        <Button variant={BUTTON_VARIANT.QUIET} onClick={() => onKept(new Set())}>
+          Clear
+        </Button>
+      )}
     </Inline>
+  );
+}
+
+/** What the filter keeps, a chip for each keeper, its × lifting them, and Clear, under a motion that scales a chip in and out (`ListMotion`). */
+function KeptByChips(props: {
+  keepers: readonly Keeper[];
+  kept: ReadonlySet<string>;
+  onKept: (kept: ReadonlySet<string>) => void;
+}): React.JSX.Element {
+  const line = useRef<HTMLElement | null>(null);
+  return (
+    <ListMotion root={line} way={LIST_MOTION_WAY.SCALE}>
+      <KeptByLine line={line} {...props} />
+    </ListMotion>
   );
 }
 

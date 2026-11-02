@@ -11,8 +11,10 @@ import { CheckIcon } from "../face/glyphs.js";
  * field's ground inside a chosen row's edge, filled in the accent while
  * checked or mixed; Luke's check glyph rather than lucide's, and a dash for
  * a mixed box (`indeterminate`), which shadcn draws as a check; the tick
- * springing in from a little smaller as it lands, and the box giving under
- * a press held on an enabled one, on the spring small elements ride; the
+ * springing in from a little smaller as it fades in, and leaving the same
+ * way on the exit's tokens, which Base UI holds it drawn through, the box's
+ * fill settling as a hover does, and the box giving under a press held on
+ * an enabled one, on the spring small elements ride; the
  * one press cursor (`cursor-press`); none of shadcn's field-group, invalid, or dark
  * utilities, which no Luke surface sets; and none of its outline or ring
  * utilities, because the window's own focus ring (`@luke/panel`'s base.css)
@@ -27,14 +29,14 @@ function Checkbox({ className, indeterminate, ...props }: CheckboxPrimitive.Root
       data-slot="checkbox"
       indeterminate={indeterminate}
       className={cn(
-        "peer relative flex size-[14px] shrink-0 items-center justify-center rounded-[4px] border border-control-edge bg-field text-on-accent transition-transform duration-(--luke-duration-fast) ease-spring-fast data-checked:border-accent-fill data-checked:bg-accent-fill data-indeterminate:border-accent-fill data-indeterminate:bg-accent-fill data-disabled:opacity-disabled active:not-data-disabled:not-data-readonly:scale-85 cursor-press data-disabled:cursor-default data-readonly:cursor-default",
+        "peer relative flex size-[14px] shrink-0 items-center justify-center rounded-[4px] border border-control-edge bg-field text-on-accent [transition:transform_var(--luke-duration-fast)_var(--luke-spring-fast),background-color_var(--luke-duration-hover)_var(--luke-motion-exit),border-color_var(--luke-duration-hover)_var(--luke-motion-exit)] data-checked:border-accent-fill data-checked:bg-accent-fill data-indeterminate:border-accent-fill data-indeterminate:bg-accent-fill data-disabled:opacity-disabled active:not-data-disabled:not-data-readonly:scale-85 cursor-press data-disabled:cursor-default data-readonly:cursor-default",
         className,
       )}
       {...props}
     >
       <CheckboxPrimitive.Indicator
         data-slot="checkbox-indicator"
-        className="grid place-content-center text-current transition-transform duration-(--luke-duration-fast) ease-spring-fast data-starting-style:scale-70 [&>svg]:size-3 [&>svg]:text-current [&>svg]:stroke-3"
+        className="grid place-content-center text-current [transition:transform_var(--luke-duration-fast)_var(--luke-spring-fast),opacity_var(--luke-duration-quick)_var(--luke-motion-exit)] data-starting-style:scale-70 data-starting-style:opacity-0 data-ending-style:scale-70 data-ending-style:opacity-0 data-ending-style:[transition:transform_var(--luke-duration-exit)_var(--luke-motion-exit),opacity_var(--luke-duration-exit)_var(--luke-motion-exit)] [&>svg]:size-3 [&>svg]:text-current [&>svg]:stroke-3"
       >
         {indeterminate === true ? (
           <span className="block h-0.5 w-2 rounded-luke-full bg-current" />

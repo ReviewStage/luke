@@ -383,7 +383,7 @@
      there, only without its spring. */
   .luke-button-done[data-hold="true"] {
     animation:
-      luke-button-done-hold var(--luke-confirm-delay) linear,
+      luke-button-done-hold var(--luke-confirm-delay) var(--luke-motion-exit),
       luke-button-done-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-button-done-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }

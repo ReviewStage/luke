@@ -230,7 +230,7 @@ const FILL_TIGHT_OPTION = "fold-tight:[[data-fold]_&]:gap-1 fold-tight:[[data-fo
 const OPTION = cn(
   "luke-choice-bar-option relative inline-flex items-center justify-center m-0 [border:0] [background:none]",
   "outline-offset-[var(--luke-focus-ring-inset)] text-muted-foreground font-ui font-label whitespace-nowrap",
-  "[transition:background-color_var(--luke-duration-hover)_ease,color_var(--luke-duration-hover)_ease]",
+  "[transition:background-color_var(--luke-duration-hover)_var(--luke-motion-exit),color_var(--luke-duration-hover)_var(--luke-motion-exit)]",
   "cursor-press disabled:cursor-default disabled:opacity-disabled",
   "[&:hover:not(:disabled)]:text-foreground aria-selected:text-foreground aria-checked:text-foreground",
 );

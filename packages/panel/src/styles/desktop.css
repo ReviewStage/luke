@@ -432,7 +432,8 @@ body,
   display: none;
 }
 
-.desktop-shell[data-sidebar-collapsed="true"][data-offline="true"] {
+/* Note that the room follows the pill drawn, not the network, so it stands until the pill has faded out. */
+.desktop-shell[data-sidebar-collapsed="true"]:has(.title-bar-controls .offline-mark) {
   --sidebar-toggle-clearance: calc(
     var(--title-bar-left) +
     3 *
@@ -1246,7 +1247,6 @@ body,
 .task-summary-archived-agent[data-menu-open="true"] > .task-summary-marks {
   opacity: 1;
   pointer-events: auto;
-  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .task-summary-archived-agent:has(:focus-visible) .failed-mark,
@@ -1262,7 +1262,6 @@ body,
   .task-summary-archived-agent:hover > .task-summary-marks {
     opacity: 1;
     pointer-events: auto;
-    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .task-summary-archived-agent:hover .failed-mark {

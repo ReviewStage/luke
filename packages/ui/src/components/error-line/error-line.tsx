@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { isReported, type ShownError } from "../../reported-failure.js";
 import { FieldError } from "../../shadcn/field.js";
+import { useDisclosure } from "../../use-disclosure.js";
 import { ANNOUNCE, type Announce, announce, type Retire } from "../announcer/announcer.js";
 import { BUTTON_SIZE } from "../button/button.js";
 import { FailureCopy } from "../failure-copy/failure-copy.js";
@@ -13,9 +14,10 @@ import { FailureCopy } from "../failure-copy/failure-copy.js";
  * `ConfirmDialog` each draw theirs with it. It stands from the first render,
  * empty until it says something; empty, it takes no room, so the gap before
  * it goes too. What it says is set in the caption's type in the danger ink
- * and drops into its line as it arrives, and is said through the window's
- * `Announcer` as it changes, politely unless `level` asks for an alert, as
- * a Settings row's refused write does. A control it is about names it by its
+ * and drops into its line as it arrives; once nothing is wrong, the last
+ * words fade out before the line gives back its room. It is said through
+ * the window's `Announcer` as it changes, politely unless `level` asks for
+ * an alert, as a Settings row's refused write does. A control it is about names it by its
  * `id` (`aria-describedby`). It is drawn by shadcn/ui's field error
  * (`../../shadcn/field.tsx`).
  *
@@ -55,16 +57,26 @@ export function ErrorLine({
     if (!first) taken.current = announce(level, now);
   });
   useEffect(() => () => taken.current(), []);
+  // Note that the last words are held drawn through their fade, as anything leaving is.
+  const shown = useDisclosure(error !== undefined);
+  const last = useRef(error);
+  if (error !== undefined) last.current = error;
+  const drawn = shown.mounted ? (error ?? last.current) : undefined;
   return (
-    <FieldError id={id}>
-      {error === undefined ? null : (
+    <FieldError
+      id={id}
+      ref={shown.ref}
+      data-leaving={shown.leaving ? "true" : undefined}
+      inert={shown.leaving}
+    >
+      {drawn === undefined ? null : (
         <span className="luke-error-line-said flex min-w-0 items-center gap-luke-4">
           <span ref={words} className="luke-error-line-words min-w-0">
-            {error.words}
+            {drawn.words}
           </span>
-          {isReported(error.failure) ? (
+          {isReported(drawn.failure) ? (
             <span className="luke-error-line-copy flex flex-none">
-              <FailureCopy failure={error.failure} size={BUTTON_SIZE.COMPACT} />
+              <FailureCopy failure={drawn.failure} size={BUTTON_SIZE.COMPACT} />
             </span>
           ) : null}
         </span>

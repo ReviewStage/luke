@@ -2458,6 +2458,12 @@ svg.lucide {
   animation: luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards;
 }
 
+/* A card leaving fades out where it last stood, out of reach, as the cards below take its room. */
+.comment-slot[data-leaving="true"] {
+  animation: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  pointer-events: none;
+}
+
 /* The button stands in the gutter past the column's end, centred on its
    block's first line as a folded line's count is on its words' first line,
    which stands in its place on a line holding threads. */

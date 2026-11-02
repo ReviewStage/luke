@@ -198,19 +198,23 @@ function drawn(
         });
   // Note that every page draws on a registry of its own, so the editor bundle installed for one is read afresh and no draft another left is held.
   const registry = AtomRegistry.make();
-  const tree = createElement(
-    PlanCommentsProvider,
-    { value: control },
-    createElement(CommentFocusScope, {
-      reveal,
-      children:
-        mentions === undefined
-          ? page
-          : createElement(TaskMentions, { value: mentions, children: page }),
-    }),
-  );
-  act(() => root.render(onRegistry(registry, tree)));
-  return { container, asked, started, documentsShown, notes };
+  const treeOf = (value: PlanCommentsControl) =>
+    createElement(
+      PlanCommentsProvider,
+      { value },
+      createElement(CommentFocusScope, {
+        reveal,
+        children:
+          mentions === undefined
+            ? page
+            : createElement(TaskMentions, { value: mentions, children: page }),
+      }),
+    );
+  act(() => root.render(onRegistry(registry, treeOf(control))));
+  /** Draws the page again on the threads the service now lists. */
+  const rethread = (next: readonly PlanCommentThread[]) =>
+    act(() => root.render(onRegistry(registry, treeOf({ ...control, threads: next }))));
+  return { container, asked, started, documentsShown, notes, rethread };
 }
 
 /** What `draw` drew with the column stood wide enough for its margin, since jsdom lays nothing out. */
@@ -288,6 +292,41 @@ test("a press on a thread's words opens it beside them, its ✓ resolving it and
       [ID.OPEN, PLAN_COMMENT_ACTION.RESOLVE, undefined],
     ],
   );
+});
+
+test("a thread resolved fades out of the margin where its card stood, out of reach, and goes once its fade has played", () => {
+  const motion = new EventTarget();
+  Object.defineProperty(HTMLElement.prototype, "getAnimations", {
+    configurable: true,
+    value(this: HTMLElement) {
+      return this.dataset.leaving === "true" ? [motion] : [];
+    },
+  });
+  try {
+    const { container, rethread } = wide(() => drawn("page"));
+    const slot = () =>
+      container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`)?.closest(".comment-slot");
+    const standing = slot();
+    assert.ok(standing);
+
+    wide(() =>
+      rethread(
+        THREADS.map((thread) =>
+          thread.id === ID.OPEN ? { ...thread, status: PLAN_COMMENT_STATUS.RESOLVED } : thread,
+        ),
+      ),
+    );
+
+    assert.equal(slot(), standing, "the card it had fades, rather than going at once");
+    assert.equal(standing.getAttribute("data-leaving"), "true");
+    assert.equal(standing.hasAttribute("inert"), true);
+    act(() => {
+      motion.dispatchEvent(new Event("finish"));
+    });
+    assert.equal(standing.isConnected, false, "and goes once its fade has played");
+  } finally {
+    Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
+  }
 });
 
 test("a thread whose words were deleted stays in the margin, saying so over its quote", () => {
