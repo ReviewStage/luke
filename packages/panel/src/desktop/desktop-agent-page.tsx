@@ -266,12 +266,7 @@ function AgentPageBar({
       }
     : undefined;
   const section = own
-    ? moveToSectionEntry(
-        tasks,
-        { agent: true, id: agent.id },
-        listed.workspaceId,
-        sectionDialogs.askNew,
-      )
+    ? moveToSectionEntry(tasks, { agent: true, id: agent.id }, listed.workspaceId, sectionDialogs)
     : undefined;
   const groups = agentMenuGroups({ chosen: true, ...actions.doors, read, agentPin, section });
   const { rename } = actions;
