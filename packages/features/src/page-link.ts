@@ -40,9 +40,10 @@ export const pageLinkPressSchema = EffectSchema.Struct({
  * running after this one, so a press the page took for itself
  * (`preventDefault`), on an element or on the window, stays the page's, and
  * the link found as the press set out is read as the page left it, where the
- * page rewrote it, or took what was pressed in it away, as it was pressed. The listener goes once that press reaches it, so a press the page
- * starts inside it is let by, and in any case once the press is done, so one
- * the page stopped short of the window leaves none behind.
+ * page rewrote it, or took what was pressed in it away, as it was pressed.
+ * The listener goes once that press reaches it, so a press the page starts
+ * inside it is let by, and in any case once the press is done, so one the
+ * page stopped short of the window leaves none behind.
  * A link out is one to a web address on another site than the one the page's
  * links are read against, its own, since its policy refuses it a `<base>`;
  * any other link is left to the frame.
