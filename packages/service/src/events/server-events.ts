@@ -234,6 +234,8 @@ export type ServerTaskFinishStatus = typeof TASK_STATUS.DONE | typeof TASK_STATU
 
 export type ServerAgentStartFailure = Values<typeof SERVER_AGENT_START_FAILURE>;
 
+export type ServerAgentStarter = Values<typeof SERVER_AGENT_STARTER>;
+
 /**
  * Exactly what each event carries. A model and an effort are catalog ids the
  * start already checked against the catalog it offers, and a provider is the
@@ -320,6 +322,7 @@ export interface ServerEventProperties {
   /** A Start whose agent was made and then discarded because its session never opened. */
   [SERVER_EVENT.AGENT_START_FAIL]: {
     failure: ServerAgentStartFailure;
+    started_by: Values<typeof SERVER_AGENT_STARTER>;
     agent_kind: AgentKind;
   };
   /** A GitHub account linked to a signed-in account, a sign-up through GitHub left out. */

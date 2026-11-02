@@ -520,7 +520,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(opened.status, HOSTED_HTTP_STATUS.OK);
         // The Start that failed is counted under the member as a failure of its own, and not as a start.
         assert.deepEqual(countedWith(owner, SERVER_EVENT.AGENT_START_FAIL), [
-          { failure: "unreachable", agent_kind: "coder" },
+          { failure: "unreachable", started_by: "member", agent_kind: "coder" },
         ]);
         assert.deepEqual(countedWith(owner, SERVER_EVENT.AGENT_START), []);
       }),
