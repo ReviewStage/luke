@@ -2075,12 +2075,13 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
 /* A picture or a video fits the room under the viewer's header edge to
    edge at its own shape, and grows past its own pixels to fill it at most
    twice over (`@luke/ui`'s ZoomImage and VideoPlayer say their pixels once
-   they are read). Where the card hugs it (`DialogCard`), the room is the
-   room between the arrows, less the card's edge and its header, so the card
-   takes its shape, and it waits at a screenshot's shape until its pixels are
-   read. Where the card fills its room, as on a phone or for a picture opened
-   at its own pixels, which says none, the room is the body under the header,
-   one track its own size. */
+   they are read). Where the card hugs it (`DialogCard`), as a video's does
+   off a phone, the room is the room between the arrows, less the card's edge
+   and its header, so the card takes its shape, and it waits at a
+   screenshot's shape until its pixels are read. Where the card fills its
+   room, as a picture's always does and a phone's video's does, the room is
+   the body under the header, one track its own size; a picture opened at its
+   own pixels says none. */
 .attachment-viewer-room {
   container-type: size;
 }
@@ -2097,18 +2098,6 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
 .attachment-viewer[data-luke-page-swipe] .attachment-viewer-body {
   translate: var(--luke-page-swipe-offset, 0) 0;
   transition: none;
-}
-
-.attachment-viewer[data-hug="true"] .attachment-viewer-body > .luke-zoom-image {
-  width: min(
-    100cqw -
-    2px,
-    (100cqh - var(--luke-control-height) - 2 * var(--luke-space-4) - 3px) *
-    var(--luke-zoom-natural-width, 16) /
-    var(--luke-zoom-natural-height, 10),
-    var(--luke-zoom-natural-width, 1600) *
-    2px
-  );
 }
 
 .attachment-viewer[data-hug="true"] .attachment-viewer-body > .luke-video-player {
