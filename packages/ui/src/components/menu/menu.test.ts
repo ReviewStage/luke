@@ -30,10 +30,11 @@ import {
  * once, and its release makes no click; a touch that moves or lets go
  * first, and a mouse held down, open nothing. An item hangs its card beside
  * itself on rest, which leaves the menu its focus, its arrows, and a press on
- * the card. In a phone's layout the same menu rises as a sheet, a dialog
- * holding its rows, a submenu opening in its place with a way back, and
- * Escape or a press on the dimmed window putting it away with focus handed
- * back.
+ * the card. An item may open a panel its owner draws beside the menu,
+ * which takes the keyboard in and goes back to its item. In a phone's
+ * layout the same menu rises as a sheet, a dialog holding its rows, a
+ * submenu or a panel opening in its place with a way back, and Escape or a
+ * press on the dimmed window putting it away with focus handed back.
  */
 
 declare global {
@@ -103,6 +104,45 @@ function viewGroups(chosen: Chosen): readonly (readonly MenuEntry[])[] {
       { label: "Order by", items: [choice("Last updated"), choice("Name")] },
     ],
   ];
+}
+
+/** A menu of Attachment over MCP servers, whose panel is a search field over Manage, as the agent box's + is. */
+function plusGroups(chosen: Chosen): readonly (readonly MenuEntry[])[] {
+  return [
+    [
+      action("Attachment", chosen),
+      {
+        label: "MCP servers",
+        panel: ({ close }) =>
+          createElement(
+            "div",
+            { role: "dialog", "aria-label": "Servers" },
+            createElement("input", { "aria-label": "Search servers" }),
+            createElement(
+              "button",
+              {
+                type: "button",
+                onClick: () => {
+                  chosen.push("Manage");
+                  close();
+                },
+              },
+              "Manage",
+            ),
+          ),
+      },
+    ],
+  ];
+}
+
+/** The servers' panel standing, if it is. */
+function serversPanel(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[role="dialog"][aria-label="Servers"]');
+}
+
+/** Whether the servers' search field holds the keyboard. */
+function searching(): boolean {
+  return document.activeElement?.getAttribute("aria-label") === "Search servers";
 }
 
 function mount(element: React.ReactElement): void {
@@ -597,6 +637,56 @@ test("a finger's arrival on a submenu's item opens nothing, so iOS spends no tap
   press(item);
   expect(openMenu("Group by")).not.toBeNull();
   expect(focused()).toBe("Repository");
+});
+
+test("an item that opens a panel opens it beside the standing menu with its field taking the keyboard, Left on the empty field or Escape goes back to the item, and Escape there closes the menu", () => {
+  const chosen: Chosen = [];
+  mount(createElement(Harness, { groups: plusGroups(chosen) }));
+  const more = button("More");
+  press(more);
+  key("ArrowDown");
+  const item = button("MCP servers");
+  key("ArrowRight");
+  expect(serversPanel()).not.toBeNull();
+  expect(openMenu()).not.toBeNull();
+  expect(item.hasAttribute("data-popup-open")).toBe(true);
+  expect(item.getAttribute("aria-expanded")).toBe("true");
+  expect(searching()).toBe(true);
+
+  key("ArrowLeft");
+  expect(serversPanel()).toBeNull();
+  expect(document.activeElement).toBe(item);
+
+  pressFocused();
+  expect(searching()).toBe(true);
+  const field = document.activeElement as HTMLInputElement;
+  field.value = "lin";
+  key("ArrowLeft");
+  expect(serversPanel()).not.toBeNull();
+  key("Escape");
+  expect(serversPanel()).toBeNull();
+  expect(openMenu()).not.toBeNull();
+  expect(document.activeElement).toBe(item);
+  key("Escape");
+  expect(openMenu()).toBeNull();
+  expect(document.activeElement).toBe(more);
+
+  press(more);
+  press(button("MCP servers"));
+  press(button("Manage"));
+  expect(chosen).toEqual(["Manage"]);
+  expect(openMenu()).toBeNull();
+  expect(document.activeElement).toBe(more);
+});
+
+test("the mouse resting on an item that opens a panel opens it, and resting on another item closes it", () => {
+  mount(createElement(Harness, { groups: plusGroups([]) }));
+  press(button("More"));
+  const resting = mouseMove(null, button("MCP servers"), { clientX: 50, clientY: 50 });
+  expect(serversPanel()).not.toBeNull();
+  expect(openMenu()).not.toBeNull();
+  mouseMove(resting, button("Attachment"), { clientX: 50, clientY: 20 });
+  expect(serversPanel()).toBeNull();
 });
 
 /** A menu of one submenu whose choice its owner holds: Group by, `chosen` checked. */
@@ -1188,6 +1278,20 @@ test("in a sheet a submenu opens in its place with a way back, which lands on it
   expect(chosen).toEqual(["None"]);
   expect(sheet()).toBeNull();
   expect(document.activeElement).toBe(more);
+});
+
+test("in a sheet a panel opens in its place with its field taking the keyboard, and its way back lands on its row again", () => {
+  vi.stubGlobal("ResizeObserver", StandInResizeObserver);
+  inPhoneLayout();
+  mount(createElement(Harness, { groups: plusGroups([]) }));
+  press(button("More"));
+  press(button("MCP servers"));
+  expect(sheet()?.contains(serversPanel())).toBe(true);
+  expect(openMenu()).toBeNull();
+  expect(searching()).toBe(true);
+  press(button("Plan actions"));
+  expect(serversPanel()).toBeNull();
+  expect(focused()).toBe("MCP servers");
 });
 
 test("Escape or a press on the dimmed window puts a sheet away and hands focus back to what opened it", () => {
