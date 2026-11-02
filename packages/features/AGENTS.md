@@ -24,7 +24,7 @@ service added.** Every wire module here keeps that rule.
 
 ## One call stands behind all of them
 
-`account-call.ts` is the request every caller to Luke's own service makes. It owns
+`account-call.ts` is the request every caller to Fullspin's own service makes. It owns
 the base address, the bearer header, the deadline, and **the one reading of a
 401 — renew the credential, retry exactly once, only on a credential that changed,
 and only while it still answers for the same holder.**

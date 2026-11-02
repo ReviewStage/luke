@@ -96,7 +96,7 @@ import {
  *
  * The runner (`@luke/agent-runner`) posts every message its harness emits,
  * numbered in order, in batches, under the bearer it was launched with, and
- * posts a batch again until Luke takes it. A bearer no standing coding
+ * posts a batch again until Fullspin takes it. A bearer no standing coding
  * agent's conversation holds, a retired one's among them, is refused before
  * the body is read (`../luke-mcp/bearer.ts`). The batch is read as moments
  * by the reader of the harness the conversation runs on
@@ -410,7 +410,7 @@ class NativeTurnFailed extends Data.TaggedError("NativeTurnFailed")<{
 /** A failed turn of the batch, which it says once its row is written. */
 type FailedTurn = Extract<NativeWrite, { kind: typeof NATIVE_WRITE.FAILED }>;
 
-/** Whether the payer is the starter's own credential, whose refusal is theirs to mend rather than Luke's. */
+/** Whether the payer is the starter's own credential, whose refusal is theirs to mend rather than Fullspin's. */
 function paysOwnCredential(payer: AgentPayer | undefined): boolean {
   return payer === AGENT_PAYER.API_KEY || (payer !== undefined && PLAN_ROW[payer] !== undefined);
 }
@@ -504,7 +504,7 @@ function landWrite(
         compactNativeTurnHanded(target),
       );
     case NATIVE_WRITE.CONTEXT:
-      // Note that the harness's own instructions and tools are no text Luke composed, so they are
+      // Note that the harness's own instructions and tools are no text Fullspin composed, so they are
       // told as the conversation's share rather than estimated, and the brief alone is estimated.
       return recordAgentStep(target.userId, applying.agentId, {
         ...write.usage,
@@ -596,7 +596,7 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
       state = projected.state;
       writes.push(...projected.writes);
       // A turn starting takes the servers mentioned to the agent since its last turn started, as
-      // eve's turn start does (`agent-runtime/servers.ts`), and keeps them for its calls at Luke's
+      // eve's turn start does (`agent-runtime/servers.ts`), and keeps them for its calls at Fullspin's
       // MCP server, which hands them whatever the switches say (`integrations/connection-door.ts`).
       // They are taken event by event, so a turn that starts and ends within one batch takes its
       // own, never the next turn's.

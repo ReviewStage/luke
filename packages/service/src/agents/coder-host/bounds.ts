@@ -67,7 +67,7 @@ export const CODER = {
   /**
    * The repositories whose agents' sandboxes open larger than
    * `SANDBOX_VCPUS`, by `owner/name` lowercased, as `sandboxVcpus` reads
-   * them; a repository asks for more by a row here. Luke's own is four,
+   * them; a repository asks for more by a row here. Fullspin's own is four,
    * because its typecheck needs about 5 GB of real memory. Measured on a
    * fresh checkout: `pnpm typecheck` takes 83 seconds at four vCPUs and peaks
    * near 5.2 GB, and at two vCPUs (4 GB) it is killed out of memory at a
@@ -218,7 +218,7 @@ export const CODER = {
    * than launched to end on its own, because a runner ending by itself stops
    * reading its stdin while its END is still posted, and a message written
    * then would be taken as delivered and never run; a runner that reads its
-   * lines from Luke leaves such a message waiting instead, and its END hands
+   * lines from Fullspin leaves such a message waiting instead, and its END hands
    * it on (`runner-sessions.ts`'s `LINES_WAITING`). A window is one line
    * here: raise it, and its sweep retires runners past it.
    */
@@ -280,13 +280,13 @@ export const CODER_MODEL_FIXTURE = {
 export const CODER_REFUSAL = {
   NO_AGENT: "Not run: this conversation is no agent's.",
   NO_REPOSITORY: "Not run: the agent works in no repository.",
-  UNKNOWN_PROVIDER: "Not run: the agent's model is outside the providers Luke runs agents on.",
+  UNKNOWN_PROVIDER: "Not run: the agent's model is outside the providers Fullspin runs agents on.",
   NO_PROVIDER_KEY: "Not run: the account saved no API key for the agent's model provider.",
   NO_FAST_VERSION:
-    "Not run: Luke cannot run the fast version of the agent's model at its provider. Choose the model with Fast off.",
+    "Not run: Fullspin cannot run the fast version of the agent's model at its provider. Choose the model with Fast off.",
   /** No step is refused this way since Fast runs on an account's own key; kept for the turns that were refused so before, which still read as this. */
   FAST_ON_OWN_KEY:
-    "Not run: Fast isn't available on your own API key; Luke runs Fast on its own Anthropic key alone. Choose the model with Fast off.",
+    "Not run: Fast isn't available on your own API key; Fullspin runs Fast on its own Anthropic key alone. Choose the model with Fast off.",
   /** No step fails this way since a refused fast call runs at standard speed; kept for the turns that failed so before, which still read as this. */
   FAST_NOT_ENABLED:
     "Not run: Fast mode isn't enabled for this Anthropic organization. Choose the model with Fast off.",

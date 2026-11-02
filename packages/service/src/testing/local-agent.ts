@@ -108,7 +108,7 @@ export const localAgentSessions = (userId: string) =>
     linesUrl: "https://luke.test/api/agents/runner-lines",
     mcpUrl: "https://luke.test/api/agents/mcp",
     integrations: () => Effect.succeed([]),
-    instructions: () => Effect.succeed("You are a Luke coding agent."),
+    instructions: () => Effect.succeed("You are a Fullspin coding agent."),
     nextSequence: () => Effect.succeed(0),
   }).pipe(Effect.provide(LOCAL_AGENT_SERVICES)) satisfies Effect.Effect<
     unknown,

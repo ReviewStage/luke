@@ -170,7 +170,7 @@ export function ChangelogPage({ view }: { readonly view: ChangelogView }): React
       banner={<SiteNavigation current={place} />}
       footer={<SiteFooterLinks current={place} />}
       back={page ? undefined : { href: CHANGELOG_PATH, label: "Changelog" }}
-      title={page ? "Changelog" : `Luke ${view.release.version}`}
+      title={page ? "Changelog" : `Fullspin ${view.release.version}`}
       lead={
         page ? (
           <GitHubDoor href={`${REPOSITORY_URL}/releases`}>View releases on GitHub</GitHubDoor>

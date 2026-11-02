@@ -1,6 +1,6 @@
 # `@luke/ui`
 
-Luke's design system: the tokens, components, and page patterns the desktop
+Fullspin's design system: the tokens, components, and page patterns the desktop
 window and the site both draw with, plus the face, glyphs, provider marks, and
 the DOM-free view models more than one app reads. `CLAUDE.md` beside this file
 holds the package's rules; this file is the reference for what it ships.

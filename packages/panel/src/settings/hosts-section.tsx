@@ -95,7 +95,7 @@ import {
  * install command's update, this Mac's app updated, or, for another Mac,
  * either, since the service lists no word of how a Mac joined. Remove,
  * behind the row's ⋯, refuses that machine at once, after asking with the
- * command that takes Luke off the machine itself where the install command
+ * command that takes Fullspin off the machine itself where the install command
  * may have set it up. Adding takes a Linux server and a Mac alike, through
  * one command.
  *
@@ -145,8 +145,8 @@ const WORDS = {
   CHECKING: "Checking",
   UPGRADE_NEEDED: "Update needed",
   UPGRADE_TITLE: "Run this on the host to update it",
-  MAC_UPGRADE: "Update the Luke app on this Mac.",
-  OTHER_MAC_UPGRADE: "If you added it from the Luke app on it, update the app there.",
+  MAC_UPGRADE: "Update the Fullspin app on this Mac.",
+  OTHER_MAC_UPGRADE: "If you added it from the Fullspin app on it, update the app there.",
   OTHER_MAC_UPGRADE_TITLE: "If you used the install command, run this on it",
   INSTALL_TITLE: "Run this on each host",
   INSTALL_NEXT: "Then open the link it prints, and approve its code.",
@@ -169,7 +169,7 @@ const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 /** A remove the service did not take, said in the dialog that asked. */
 const REFUSED: ActionResult = {
   status: ACTION_RESULT_STATUS.REJECTED,
-  reason: "Luke could not reach the service. Try again.",
+  reason: "Fullspin could not reach the service. Try again.",
 };
 
 /** Where a host stands now; one the read does not name, though it is the account's own, is gone. */
@@ -281,7 +281,7 @@ function UpgradeHow({
 
 /** What Remove says goes, whatever the machine. */
 const REMOVED =
-  "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke.";
+  "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Fullspin.";
 
 /**
  * What Remove says, and the title of the uninstall command it shows, by what
@@ -290,13 +290,13 @@ const REMOVED =
  * Mac may be either, since the service lists no word of how a Mac joined.
  */
 const REMOVE_WORDS = {
-  SERVER: { body: REMOVED, uninstall: "Run this on the host to remove Luke from it" },
+  SERVER: { body: REMOVED, uninstall: "Run this on the host to remove Fullspin from it" },
   THIS_MAC: {
     body: `${REMOVED} To use it again, choose Turn on again under This Mac.`,
     uninstall: undefined,
   },
   MAC: {
-    body: `${REMOVED} If you added it from the Luke app on it, choose Turn on again under This Mac there to use it again.`,
+    body: `${REMOVED} If you added it from the Fullspin app on it, choose Turn on again under This Mac there to use it again.`,
     uninstall: "If you used the install command, run this on it",
   },
 } as const;

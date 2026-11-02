@@ -14,7 +14,7 @@ const FEEDBACK_ENVIRONMENT = {
 
 const FEEDBACK_DEFAULTS = {
   /**
-   * The one place a submission goes: a small endpoint on Luke's own site that
+   * The one place a submission goes: a small endpoint on Fullspin's own site that
    * forwards it as email to the founders. Fixed here rather than passed in, so
    * the renderer names an intent and never an address.
    */

@@ -1,5 +1,5 @@
 /**
- * connect-return.ts -- the way back to Luke from a connect's landing page: the web app's tab that started it answering and the page closing, the address a same-tab connect left from offered, or the Mac app opened.
+ * connect-return.ts -- the way back to Fullspin from a connect's landing page: the web app's tab that started it answering and the page closing, the address a same-tab connect left from offered, or the Mac app opened.
  *
  * A connect started in the web app opens its provider in a tab the app
  * opened itself and cut from it (`app/connect-tab.ts`), so no provider page
@@ -16,7 +16,7 @@
  * lands with no mark, no tab to answer, and no address left, and the page
  * offers to open the Mac app, where the browser is on a Mac, and on any
  * other platform says its words alone. Every way back is offered in the
- * same words, Open Luke.
+ * same words, Open Fullspin.
  */
 
 import { LANDING_CLOSE_TAB, LANDING_TONE, type LandingWords } from "@luke/features/landing-outcome";
@@ -52,7 +52,7 @@ export const CONNECT_BOUND_MS = 30 * 60 * 1000;
  */
 const LANDING = crypto.randomUUID();
 
-/** How a landing page goes back to Luke. */
+/** How a landing page goes back to Fullspin. */
 export const CONNECT_RETURN = {
   /** The app's tab that started the connect answered: this tab is its, and goes. */
   APP: "app",
@@ -132,7 +132,7 @@ export function rememberReturn(address: string): void {
  * Marks a tab the app opened for a connect as the hand-off given, in the
  * tab's own session storage, while the tab is still this origin's empty
  * page. A tab whose storage the browser refuses goes unmarked, so its
- * landing is answered by no tab and says to return to Luke.
+ * landing is answered by no tab and says to return to Fullspin.
  */
 export function markHandoff(
   tab: { readonly sessionStorage: Pick<Storage, "setItem"> },
@@ -141,7 +141,9 @@ export function markHandoff(
   try {
     tab.sessionStorage.setItem(HANDOFF_KEY, handoff);
   } catch {
-    console.warn("A connect's tab could not be marked; its landing will say to return to Luke.");
+    console.warn(
+      "A connect's tab could not be marked; its landing will say to return to Fullspin.",
+    );
   }
 }
 
@@ -152,7 +154,7 @@ export function forgetReturn(): void {
   session?.removeItem(HANDOFF_KEY);
 }
 
-/** How this landing page goes back to Luke before any tab has answered. */
+/** How this landing page goes back to Fullspin before any tab has answered. */
 export function connectReturn(): ConnectReturn {
   const left = leftAddress();
   return left === undefined
@@ -161,7 +163,7 @@ export function connectReturn(): ConnectReturn {
 }
 
 /**
- * Open Luke pressed in a tab the app opened: the tab closes, the app's
+ * Open Fullspin pressed in a tab the app opened: the tab closes, the app's
  * own standing behind it; where the browser keeps it open, the link opens
  * the app here.
  */
@@ -171,7 +173,7 @@ function closeToApp(event: MouseEvent<HTMLAnchorElement>): void {
 }
 
 /**
- * Open Luke as a page offers it on `platform`: closing this tab back to the
+ * Open Fullspin as a page offers it on `platform`: closing this tab back to the
  * app's where that tab answered, the address a same-tab connect left from,
  * or, where neither, the Mac app at its home, on a Mac; nothing on any other
  * platform, where there is no app to open and the page's words stand alone.
@@ -200,7 +202,7 @@ export function landingDescription(words: LandingWords, back: ConnectReturn): st
   return said.length === 0 ? undefined : said.join(" ");
 }
 
-/** The way back as a landing page offers it: where it came from, and Open Luke, where there is one. */
+/** The way back as a landing page offers it: where it came from, and Open Fullspin, where there is one. */
 export interface LandingReturn {
   readonly back: ConnectReturn;
   readonly open: AuthAction | undefined;

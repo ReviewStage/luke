@@ -102,7 +102,7 @@ import { useAnnounceShown } from "../use-announce-shown.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
- * integrations-page.tsx -- Settings › Integrations: the services the account connects so Luke's agents can use them.
+ * integrations-page.tsx -- Settings › Integrations: the services the account connects so Fullspin's agents can use them.
  *
  * One row per account at a provider (two Notion workspaces are two rows,
  * "Notion · Acme" and "Notion · Personal", each its own grant), and one for

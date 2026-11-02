@@ -3,7 +3,7 @@ import { createdAt, timestamptz } from "./_helpers.js";
 import { agentTable } from "./agent.js";
 
 /**
- * agent-wakeup.ts -- the wakeups a native agent's released wait left for Luke to deliver.
+ * agent-wakeup.ts -- the wakeups a native agent's released wait left for Fullspin to deliver.
  *
  * A Claude Code agent waiting on nothing but one-shot wakeups is released:
  * its runner ends the launch so the sandbox stops, and names each wakeup,

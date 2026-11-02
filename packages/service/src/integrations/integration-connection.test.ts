@@ -61,7 +61,7 @@ import {
  * Every token a test reads back names the account it was issued for, so a
  * read that reached another account's grant fails by its value. Every
  * provider's connection offers the agents every tool its server lists, the
- * ones that write among them, with no filter of Luke's.
+ * ones that write among them, with no filter of Fullspin's.
  */
 
 const NOW = 1_800_000_000_000;

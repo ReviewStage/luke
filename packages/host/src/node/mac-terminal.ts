@@ -5,15 +5,15 @@ import path from "node:path";
 import { Deferred, Effect } from "effect";
 
 /**
- * mac-terminal.ts -- a terminal of this Mac that Luke draws in a tab of its own: a real pseudo-terminal running a script, its output handed out and its input taken in.
+ * mac-terminal.ts -- a terminal of this Mac that Fullspin draws in a tab of its own: a real pseudo-terminal running a script, its output handed out and its input taken in.
  *
  * The pseudo-terminal is the system's own `script`, so the shell sees a real
- * terminal (colours, prompts, line editing, Ctrl-C) and Luke links no native
+ * terminal (colours, prompts, line editing, Ctrl-C) and Fullspin links no native
  * code. The script is written to a folder only this user may open, and its
  * first line writes the terminal's device there, which a resize sets the
  * size of with `stty`. Closing a terminal hangs up every process on its
  * device and ends the `script` around them, and kills what is still
- * running five seconds later; quitting Luke closes every
+ * running five seconds later; quitting Fullspin closes every
  * terminal still open. A close is an Effect whose reads and hang-up are
  * processes it waits on rather than blocks for, so the process that serves
  * every window goes on answering while a terminal closes. What the terminal prints is handed to `onOutput` and
@@ -37,7 +37,7 @@ export interface MacTerminalTools {
 }
 
 /**
- * How macOS's `script` is started under Luke. Note that it refuses a socket
+ * How macOS's `script` is started under Fullspin. Note that it refuses a socket
  * for its input ("tcgetattr/ioctl: Operation not supported on socket"), and
  * Node hands a child's input over a socket on macOS, a FIFO's included, so
  * `cat` relays it through a real pipe; once `script` ends, its `cat` is ended
@@ -129,7 +129,7 @@ export function openMacTerminals(): number {
   return standing.size;
 }
 
-/** Closes every terminal still open, as Luke quits, all at once, so the quit waits on the slowest close rather than their sum. */
+/** Closes every terminal still open, as Fullspin quits, all at once, so the quit waits on the slowest close rather than their sum. */
 export const closeEveryMacTerminal: Effect.Effect<void> = Effect.suspend(() =>
   Effect.forEach([...standing], (terminal) => terminal.close(), {
     concurrency: "unbounded",
@@ -223,7 +223,7 @@ export function startMacTerminal(options: {
     } catch {
       // The terminal ended on its own between the check and the signal.
     }
-    // Note that a process that ignores the hang-up and the terminate, as a dev server shutting down slowly may, is killed after the grace; the kill is left to a process of its own, so it reaches a job that ignored the hang-up and outlived the `script` around it, and is done even when Luke quits within the grace.
+    // Note that a process that ignores the hang-up and the terminate, as a dev server shutting down slowly may, is killed after the grace; the kill is left to a process of its own, so it reaches a job that ignored the hang-up and outlived the `script` around it, and is done even when Fullspin quits within the grace.
     spawn(
       "/bin/sh",
       [

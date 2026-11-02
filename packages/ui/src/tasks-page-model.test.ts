@@ -501,7 +501,7 @@ test("a display kept before the completed window reads its Done and Canceled swi
     ).completed,
   ).toBe(COMPLETED_WINDOW.ALL);
 });
-test("Made by keeps the tasks a person made by hand, those a coding agent made, or those Luke made on a call, a task from before origins as made by hand", () => {
+test("Made by keeps the tasks a person made by hand, those a coding agent made, or those Fullspin made on a call, a task from before origins as made by hand", () => {
   const tasks = [
     task("By hand"),
     { ...task("By an agent"), origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-1" } },

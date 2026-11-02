@@ -74,7 +74,7 @@ export class AppServerSession {
         if (message.kind === "request") {
           await this.send({
             id: message.id,
-            error: { code: -32601, message: "declined by Luke's probe" },
+            error: { code: -32601, message: "declined by Fullspin's probe" },
           });
           continue;
         }

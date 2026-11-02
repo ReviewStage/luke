@@ -48,7 +48,7 @@ test("a note about an experiment is mailed under a subject naming it", async () 
   assert.equal(answered.status, 200);
   assert.deepEqual(
     mailed.map((mail) => mail.subject),
-    ["Luke feedback on the browser experiment"],
+    ["Fullspin feedback on the browser experiment"],
   );
 });
 

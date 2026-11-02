@@ -205,7 +205,7 @@ export function readGitHubTokenRow(userId: string): TaskStoreEffect<GitHubTokenR
   return Effect.map(findRow(userId), Option.getOrUndefined);
 }
 
-/** The GitHub ids of every GitHub account the member linked to Luke, newest first; empty where they linked none. */
+/** The GitHub ids of every GitHub account the member linked to Fullspin, newest first; empty where they linked none. */
 export function linkedGitHubUserIds(userId: string): TaskStoreEffect<readonly string[]> {
   return Effect.map(findLinkedGitHubIds(userId), (rows) => rows.map((row) => row.githubUserId));
 }

@@ -1,5 +1,5 @@
 /**
- * github-app.ts -- the Luke GitHub App as the server speaks for it: its own JWT, the installations a workspace connected, and the tokens it mints there.
+ * github-app.ts -- the Fullspin GitHub App as the server speaks for it: its own JWT, the installations a workspace connected, and the tokens it mints there.
  *
  * A workspace's repositories are the repositories of the installations of
  * the App connected to it (`@luke/service/github/github-installations`), one
@@ -277,7 +277,7 @@ export interface GitHubAppSettings {
   readonly sessionSecret: Redacted.Redacted;
 }
 
-/** One installation of the App, as much of it as Luke reads. */
+/** One installation of the App, as much of it as Fullspin reads. */
 interface GitHubInstallation {
   readonly id: number;
   /** The user or organization the App is installed on; absent for an enterprise install, which has no login. */
@@ -501,7 +501,7 @@ export interface GitHubAuthorizeReturn {
 export interface GitHubAppService {
   /** Where a user installs the App, or changes which repositories it sees; GitHub returns them to the App's Setup URL. */
   readonly installUrl: Effect.Effect<string, GitHubAppNotConfigured>;
-  /** The login the App's own bot acts under on GitHub, `<slug>[bot]`: who Luke's agents are in a delivery. */
+  /** The login the App's own bot acts under on GitHub, `<slug>[bot]`: who Fullspin's agents are in a delivery. */
   readonly botLogin: Effect.Effect<string, GitHubAppNotConfigured>;
   /** A JWT the App speaks as itself with, good for a few minutes from now. */
   readonly appJwt: Effect.Effect<Redacted.Redacted, GitHubAppNotConfigured>;
@@ -892,12 +892,12 @@ const writeSealedTokens = SqlSchema.void({
 
 /**
  * Clears the tokens on every GitHub row of the GitHub user given, whichever
- * Luke account holds it, at the instant given, and keeps the row. Note that
- * Luke writes Better Auth's own `account` table here, because a webhook
+ * Fullspin account holds it, at the instant given, and keeps the row. Note that
+ * Fullspin writes Better Auth's own `account` table here, because a webhook
  * carries no session and Better Auth documents no server call that clears a
  * provider account's tokens for a user who is not the one asking
  * (https://www.better-auth.com/docs/concepts/users-accounts). The row is kept
- * because it is the one link from the GitHub user to the Luke account that
+ * because it is the one link from the GitHub user to the Fullspin account that
  * survives GitHub's address changing: Better Auth finds a signing-in user by
  * this row first and by address second.
  */
@@ -986,7 +986,7 @@ function userOf(record: UserRecord): GitHubUser {
  * (https://docs.github.com/en/webhooks/webhook-events-and-payloads#github_app_authorization):
  * the sealed tokens that no longer reach anything go, and the account row
  * stays without them, so every read on the user's token asks for a new
- * sign-in. The Luke account keeps every way it signs in; the next GitHub
+ * sign-in. The Fullspin account keeps every way it signs in; the next GitHub
  * sign-in finds it through the kept row, whatever address GitHub then holds,
  * and writes fresh tokens onto it.
  */

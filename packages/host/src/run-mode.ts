@@ -7,7 +7,7 @@
  * two booleans, so a third launch mode cannot silently inherit the wrong half.
  */
 export interface RunMode {
-  /** Require a stored Luke account before live capabilities start. */
+  /** Require a stored Fullspin account before live capabilities start. */
   readonly requiresAccount: boolean;
   /** Watch session providers and the machine's own output. */
   readonly observesProviders: boolean;

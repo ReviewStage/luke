@@ -1,5 +1,5 @@
 /**
- * vercel-machine.ts -- the agent machine over Vercel Sandbox: a sandbox opened from the coding agent's image, the runner launched in it as a detached command, and Luke's doors read through it with every capability dropped.
+ * vercel-machine.ts -- the agent machine over Vercel Sandbox: a sandbox opened from the coding agent's image, the runner launched in it as a detached command, and Fullspin's doors read through it with every capability dropped.
  *
  * `open` opens a sandbox from the coding agent's image
  * (`../agent-sandbox-image.ts`), waiting while the image is prepared where
@@ -20,7 +20,7 @@
  * and the bearer are in that command's environment and nowhere else: never
  * in its argv, its config line, a file, or a tag. Its config line is
  * written to its stdin, which carries nothing more: the runner reads every
- * later line from Luke (`../coder-host/runner-sessions.ts`), so this machine
+ * later line from Fullspin (`../coder-host/runner-sessions.ts`), so this machine
  * writes no line to it.
  *
  * The doors read the sandbox carrying the agent's session id as its tag, as
@@ -34,7 +34,7 @@
  * otherwise hand its harness's token to a page, a picture, or the inbox.
  * Under the drop such a path reads as no file. A repository's command is
  * run in the running session and waited on, its environment named by `env`
- * on the command line rather than by the API, as Luke's other commands are
+ * on the command line rather than by the API, as Fullspin's other commands are
  * run (`../vercel-sandbox-api.ts`).
  *
  * A place is found again by the session's tag, and its runner by the tags a
@@ -119,7 +119,7 @@ import {
 } from "./agent-machine.js";
 
 /**
- * The tags a sandbox Luke opens carries beside its session's: its agent, and
+ * The tags a sandbox Fullspin opens carries beside its session's: its agent, and
  * the runner it runs, so a later call finds both. Note that Vercel refuses a
  * sandbox more than five tags, the session's among them, so a launch's
  * fingerprint rides in its launch tag rather than a tag of its own.
@@ -132,7 +132,7 @@ export const RUNNER_TAG = {
    * The launch's first event number, then `LAUNCH_FINGERPRINT_MARK` and what
    * the launch was started with that a warm runner cannot take up later
    * (`launchFingerprint`), then the mark again and `LINES_READ_MARK`, since
-   * every launch reads its lines from Luke. Note that the read mark is
+   * every launch reads its lines from Fullspin. Note that the read mark is
    * written for a deployment from before this one, which reads a launch
    * without it as one whose stdin it writes, and is read here by no one:
    * no launch from before the read still ran as this deployment went out.
@@ -143,7 +143,7 @@ export const RUNNER_TAG = {
 /** What parts a launch tag's first event number from its fingerprint, and its fingerprint from whether it reads its lines. */
 const LAUNCH_FINGERPRINT_MARK = "-";
 
-/** What a launch tag's last part reads for a launch that reads its lines from Luke. */
+/** What a launch tag's last part reads for a launch that reads its lines from Fullspin. */
 const LINES_READ_MARK = "lines";
 
 /**
@@ -169,7 +169,7 @@ const SANDBOX_LAYOUT: MachineLayout = {
   linesRead: true,
 };
 
-/** What a sandbox Luke opens is named as, beside a fresh UUID; the sweep tells a native sandbox from eve's by it. */
+/** What a sandbox Fullspin opens is named as, beside a fresh UUID; the sweep tells a native sandbox from eve's by it. */
 export const SANDBOX_NAME = "luke-agent-";
 
 /**
@@ -188,12 +188,12 @@ const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const
 
 /**
  * The launch, run by bash as root: the uploaded bundle installed where only
- * root writes and checked against the digest Luke computed, the member's
+ * root writes and checked against the digest Fullspin computed, the member's
  * installed skills, where the sandbox's opening uploaded them, moved where
  * only root writes and every user reads (`native-skills.ts`), the checkout
  * marked safe for git and shared with `agent`'s group, the folder an agent
- * saves what Luke reads back in made `agent`'s and readable by the default
- * user Luke reads as (`SHARED_FILES_DIRECTORY`), then the runner in
+ * saves what Fullspin reads back in made `agent`'s and readable by the default
+ * user Fullspin reads as (`SHARED_FILES_DIRECTORY`), then the runner in
  * place of the shell as `agent`, every capability dropped. `$1` is the
  * digest; the secrets are in the environment the API hands the command, and
  * `exec` hands them on to the runner alone. Note that the checkout's git
@@ -223,7 +223,7 @@ const READ_EXIT = { NO_FILE: 3 } as const;
 
 /**
  * The read, run by bash: the file named as `$1`, at most `$2` bytes of it,
- * printed in base64 on one line, since a command's output reaches Luke as
+ * printed in base64 on one line, since a command's output reaches Fullspin as
  * text. A path that is no regular file the sandbox's user may read exits
  * apart, before anything is printed.
  */
@@ -266,7 +266,7 @@ export interface VercelMachineOptions {
 const runningOfSession = Brand.nominal<MachineRunning>();
 const nameOfSandbox = Brand.nominal<MachineName>();
 
-/** The place a sandbox's running session stands for, under Luke's session given. */
+/** The place a sandbox's running session stands for, under Fullspin's session given. */
 function vercelPlace(session: string, sandboxSessionId: string): MachinePlace {
   return {
     machine: AGENT_MACHINE.VERCEL,
@@ -347,7 +347,7 @@ function runnerInSession(session: string, sandbox: ListedSandbox) {
   };
 }
 
-/** A listed sandbox as the place a later call finds, under Luke's session given. */
+/** A listed sandbox as the place a later call finds, under Fullspin's session given. */
 function foundOf(session: string, sandbox: ListedSandbox): FoundPlace {
   const tags = sandbox.tags ?? {};
   const running =
@@ -507,9 +507,9 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
 
     writeFiles: (place, files) => api.writeFiles(place.running, files),
 
-    // Note that a sandbox's runner reads every line past its config from Luke, so a line written
+    // Note that a sandbox's runner reads every line past its config from Fullspin, so a line written
     // here is a caller's mistake, refused loudly rather than written where nothing reads it.
-    writeLine: () => Effect.die(new Error("a sandbox's runner reads its lines from Luke")),
+    writeLine: () => Effect.die(new Error("a sandbox's runner reads its lines from Fullspin")),
 
     runnerExit: (handle, within) => api.commandExit(handle.running, handle.command, within),
 

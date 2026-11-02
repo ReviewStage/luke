@@ -62,7 +62,7 @@ export function routeFromWebServices(
  * request the handler answers.
  *
  * The router's own request logger is disabled: a function's request line is
- * already the platform's to record, and a URL Luke wrote to its own output is
+ * already the platform's to record, and a URL Fullspin wrote to its own output is
  * a place a token in a query could land. Every line a route writes carries
  * its request's trace id (`traceIdAnnotated`), the caller's where its
  * `traceparent` named one.

@@ -1069,7 +1069,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The one follow of the account's sidebar sections and pinned repositories, from the first refresh after a launch or a sign-in until a sign-out. */
   const sidebarFollow = yield* FiberHandle.make<void>();
-  /** The sidebar follow's wait for a write's transaction once Luke Sync woke it; none while it polls or is let go. */
+  /** The sidebar follow's wait for a write's transaction once Fullspin Sync woke it; none while it polls or is let go. */
   let sidebarTxWait: TxWait | undefined;
 
   /**

@@ -215,7 +215,7 @@ interface FakeService extends TasksClient {
   sectionRefused: TaskSectionWrite["kind"] | undefined;
   /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
-  /** The Luke GitHub App install address a connection answers. */
+  /** The Fullspin GitHub App install address a connection answers. */
   installUrl: string;
   /** Whether the workspaces are not sealed, as a service that did not answer. */
   workspacesFail: boolean;
@@ -1376,7 +1376,7 @@ it.effect(
       const listedIds = () => last()?.tasks.map((row) => row.id);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      // An answer Luke Sync woke hands the follow its wait for a write's transaction.
+      // An answer Fullspin Sync woke hands the follow its wait for a write's transaction.
       service.live.list.set({ plans: [rowOfTask(billing)] }, ["tx-earlier"]);
       yield* nextPoll(settled);
       const made: Task = {
@@ -1959,7 +1959,7 @@ it.effect(
         view?.repositoryPins?.map((pin) => pin.repository) ?? [];
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
-      // An answer Luke Sync woke hands the follow its wait for a write's transaction.
+      // An answer Fullspin Sync woke hands the follow its wait for a write's transaction.
       service.live.sidebar.set({}, ["tx-earlier"]);
       yield* nextPoll(settled);
 
@@ -2040,7 +2040,7 @@ it.effect(
         view?.tasks.find((row) => row.id === INVITES)?.pinnedAt !== undefined;
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      // An answer Luke Sync woke hands the follow its wait for a write's transaction.
+      // An answer Fullspin Sync woke hands the follow its wait for a write's transaction.
       service.live.list.set({}, ["tx-earlier"]);
       yield* nextPoll(settled);
 
@@ -2092,7 +2092,7 @@ it.effect(
       const repositoryOf = () => last()?.tasks.find((row) => row.id === INVITES)?.repository;
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      // An answer Luke Sync woke hands the follow its wait for a write's transaction.
+      // An answer Fullspin Sync woke hands the follow its wait for a write's transaction.
       service.live.list.set({}, ["tx-earlier"]);
       yield* nextPoll(settled);
 

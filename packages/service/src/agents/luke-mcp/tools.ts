@@ -1,8 +1,8 @@
 /**
- * tools.ts -- the Luke tools a native harness's agent is served over MCP, each by its eve tool's own schema and door.
+ * tools.ts -- the Fullspin tools a native harness's agent is served over MCP, each by its eve tool's own schema and door.
  *
  * A Claude Code or Codex agent keeps its harness's own shell, files, todos,
- * and subagents; what touches Luke reaches it as an MCP tool of Luke's own
+ * and subagents; what touches Fullspin reaches it as an MCP tool of Fullspin's own
  * server (`app.ts`). Each tool here is the one the agent's eve tool file
  * declares (`apps/dev/tools/<name>.ts`): the same name, the same description,
  * the same input schema, and the same door the coder host's method for it
@@ -246,7 +246,7 @@ const isLooked = Schema.is(
 
 /**
  * A look's text block where it looked: its status alone, as JSON. Note that
- * the transcript keeps a Luke tool's text blocks alone
+ * the transcript keeps a Fullspin tool's text blocks alone
  * (`../native-events/claude-code-moments.ts`), so this is what a look is
  * stored as, the same as eve's relay stores one (`storedPictureLookOutput`).
  */
@@ -269,7 +269,7 @@ function lookedPictureContent(result: LukeMcpToolResult): readonly McpContent[] 
  * (`storedBrowserOutput`) as one text block, then each screenshot's
  * bounded copy as an image, in the order its steps name them. Note
  * that no caption stands between them, because the native transcript joins
- * a Luke tool's text blocks and reads them as one JSON value
+ * a Fullspin tool's text blocks and reads them as one JSON value
  * (`../native-events/runner-moments.ts`), so the one block keeps the result
  * whole there, the kept copies' ids among it for the window to draw.
  */

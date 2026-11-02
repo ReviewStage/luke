@@ -3,7 +3,7 @@
  *
  * `sandbox.ts` hands this preparation to eve, which prepares its own
  * snapshot from it at build time, and `native-sandbox-template.ts` prepares
- * Luke's own template from it for a native harness's sandbox. It lives
+ * Fullspin's own template from it for a native harness's sandbox. It lives
  * apart from `sandbox.ts` because that module reaches eve's sandbox runtime,
  * which a web function cannot bundle, while this one reaches only the code
  * extension's tooling installer, a few self-contained modules.
@@ -214,7 +214,7 @@ function stage(lines: readonly string[]): string {
  * What the system gives the image, which changes rarely: its packages,
  * Playwright's browser and the libraries it needs, the `agent` user, the
  * runner's directory, and sudo's contract. The code extension's tooling
- * follows it, then the tools Luke pins, which change often
+ * follows it, then the tools Fullspin pins, which change often
  * (`PREPARE_STAGES`).
  */
 const SYSTEM_STAGE = stage([

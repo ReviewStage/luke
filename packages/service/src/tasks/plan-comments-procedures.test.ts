@@ -29,7 +29,7 @@ import { announcingClock, driven } from "../testing/clock-driven.js";
 import { planCommentsProcedures } from "./plan-comments-procedures.js";
 
 /**
- * A plan's comments read held on Luke Sync, through the route a desktop
+ * A plan's comments read held on Fullspin Sync, through the route a desktop
  * holds: a read at the current cursor answers within a coalesce window of
  * a thread started, answered, or deleted on the plan, and of the reader
  * leaving the plan's workspace, which it then answers as not found. A hold
@@ -175,7 +175,7 @@ const heldThrough = <A, E, R>(
     return { value, answered };
   });
 
-it.layer(getTestDB())("a plan's comments read held on Luke Sync", (it) => {
+it.layer(getTestDB())("a plan's comments read held on Fullspin Sync", (it) => {
   it.effect(
     "a teammate's thread started, answered, and deleted each wake a member's held read at once",
     () =>

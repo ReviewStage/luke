@@ -144,7 +144,7 @@ describe("a host's daemon", () => {
       pnpmConfig: "Library/Preferences/pnpm",
     },
   ])(
-    "registers as its OS ($platform) on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets and the box's one pnpm store and npm cache named in its agent's home, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group and ends once Luke refuses its secret",
+    "registers as its OS ($platform) on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets and the box's one pnpm store and npm cache named in its agent's home, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group and ends once Fullspin refuses its secret",
     ({ os, name, platform: devicePlatform, uid, sandboxed, runnerBundle, pnpmConfig }) =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
@@ -254,7 +254,7 @@ describe("a host's daemon", () => {
         expect(yield* fileSystem.readFileString(`${folder}/home/.npmrc`)).toBe(
           `cache="${stateRoot}/agent-packages/npm-cache"\n`,
         );
-        expect(reports).toContain("Luke host: Connected to Luke.");
+        expect(reports).toContain("Fullspin host: Connected to Fullspin.");
 
         removed = true;
         yield* TestClock.adjust(Duration.seconds(20));
@@ -274,7 +274,7 @@ describe("a host's daemon", () => {
   );
 
   it.effect(
-    "refused as needing an upgrade, says so once with the command to run and asks Luke nothing until its quiet spell has passed",
+    "refused as needing an upgrade, says so once with the command to run and asks Fullspin nothing until its quiet spell has passed",
     () =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
@@ -305,7 +305,7 @@ describe("a host's daemon", () => {
 
         const upgrade = reports.filter((line) => line.includes("upgrade needed"));
         expect(upgrade).toEqual([
-          `Luke host: upgrade needed: Luke no longer accepts this version. Rerun the install command to upgrade in place: curl -fsSL ${SERVICE}/install.sh | sh`,
+          `Fullspin host: upgrade needed: Fullspin no longer accepts this version. Rerun the install command to upgrade in place: curl -fsSL ${SERVICE}/install.sh | sh`,
         ]);
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );

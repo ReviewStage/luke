@@ -54,7 +54,7 @@ const gatedGitHubClient = githubRateGate.pipe(
   Layer.provide(Layer.merge(FetchHttpClient.layer, webSqlClient)),
 );
 
-/** The Luke GitHub App as the environment names it, named once so every layer that reaches it shares one. */
+/** The Fullspin GitHub App as the environment names it, named once so every layer that reaches it shares one. */
 const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment));
 
 /**
@@ -66,7 +66,7 @@ const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)
  * too, once per instance rather than at each invocation: `HostedEnvironment`
  * is the one place the brain model override, the accounts' key ring, and the
  * analytics processor's own deletion key and project are read, and
- * `GitHubApp` the one place the Luke GitHub App's id, slug, client, and
+ * `GitHubApp` the one place the Fullspin GitHub App's id, slug, client, and
  * private key are.
  *
  * `IntegrationConnect` is the one place each integration's connector UID and
@@ -92,7 +92,7 @@ const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)
  * which a build of this layer builds once however many name it, so the gate
  * holds no pool of its own.
  *
- * `Sync` is here for the same reason: Luke Sync's hub holds one `LISTEN`
+ * `Sync` is here for the same reason: Fullspin Sync's hub holds one `LISTEN`
  * per instance, shared by every held read and wait on it (`sync/hub.ts`),
  * over `DATABASE_URL_UNPOOLED`, and its heartbeat notifies over that same
  * connection. Without that URL its listener stays down, and every wait

@@ -71,7 +71,7 @@ import {
  * its `CheckboxGroup` of `Checkbox`es, each row a native button
  * (`nativeButton`) holding its words, so the roles, the checked state, and
  * the `data-checked` a row is drawn by are Base UI's. What a press and a
- * key do stays Luke's: Base UI checks a radio as focus lands on it, refuses
+ * key do stays Fullspin's: Base UI checks a radio as focus lands on it, refuses
  * Enter on a row, and has no press that takes a choice back or hears the
  * checked row again, so the list answers its rows' presses and its arrows
  * itself and stops Base UI's own handling of them

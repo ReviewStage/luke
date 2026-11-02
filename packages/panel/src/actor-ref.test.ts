@@ -18,7 +18,7 @@ import { restOn } from "./testing/hint-rest.js";
 
 /**
  * Whoever did something is drawn one way: a person by their picture once it
- * loads and their letter until then, Luke, an agent, and an automation each
+ * loads and their letter until then, Fullspin, an agent, and an automation each
  * by their own mark, someone unnamed by an outline; named in a line, an
  * actor with a page is a press that opens it and a person is not; a
  * facepile counts the rest only where asked. Synthetic people.
@@ -245,7 +245,7 @@ test("an App's bot on GitHub stands by its App's avatar and wears a quiet bot ba
   assert.equal(bot?.querySelector(".luke-inline-ref-label")?.textContent, "dependabot");
   assert.equal(bot?.querySelector(".actor-bot")?.textContent, "bot");
   assert.equal(person?.querySelector(".actor-bot"), null, "a person wears no badge");
-  assert.equal(luke?.querySelector(".actor-bot"), null, "Luke reads as Luke");
+  assert.equal(luke?.querySelector(".actor-bot"), null, "Fullspin reads as Fullspin");
 
   act(() => root?.unmount());
   document.body.innerHTML = "";

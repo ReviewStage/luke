@@ -1,12 +1,12 @@
 import { cn } from "../cn.js";
 
 /**
- * spinner.tsx -- shadcn/ui's spinner (style `base-nova`), vendored and drawn as Luke's own ring.
+ * spinner.tsx -- shadcn/ui's spinner (style `base-nova`), vendored and drawn as Fullspin's own ring.
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add spinner` reads as a small diff. Its local
  * changes: lucide's `Loader2Icon`, a dependency the repository refuses, is
- * swapped for Luke's ring, a `span` drawn as an arc in the ink around it
+ * swapped for Fullspin's ring, a `span` drawn as an arc in the ink around it
  * (`border-t-current`) over a faint track of that ink, its stroke the one
  * `spinner.css` reads from `--luke-spinner-stroke`; the ring fills the box it stands in (`size-full`)
  * rather than taking shadcn's `size-4`, because `@luke/ui`'s `Spinner` sizes

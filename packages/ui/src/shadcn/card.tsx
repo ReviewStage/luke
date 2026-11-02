@@ -2,7 +2,7 @@ import { createElement, type HTMLAttributes, type Ref } from "react";
 import { cn } from "../cn.js";
 
 /**
- * card.tsx -- shadcn/ui's card (style `base-nova`), vendored and drawn as Luke's card frame.
+ * card.tsx -- shadcn/ui's card (style `base-nova`), vendored and drawn as Fullspin's card frame.
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add card` reads as a small diff. Its local

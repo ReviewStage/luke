@@ -27,25 +27,25 @@ export const LANDING_OUTCOME = {
   CONNECTED: "connected",
   /** The provider is connected to the workspace, for everyone in it. */
   WORKSPACE_CONNECTED: "workspace-connected",
-  /** The provider's app was installed and Luke reaches its repositories. */
+  /** The provider's app was installed and Fullspin reaches its repositories. */
   INSTALLED: "installed",
-  /** An installation changed which repositories Luke reaches. */
+  /** An installation changed which repositories Fullspin reaches. */
   UPDATED: "updated",
   /** The developer asked an organization's owner to install the app. */
   REQUESTED: "requested",
-  /** The provider named no installation Luke could confirm. */
+  /** The provider named no installation Fullspin could confirm. */
   NOT_CONFIRMED: "not-confirmed",
-  /** The sign-in gave Luke no grant: declined, cancelled, or refused. */
+  /** The sign-in gave Fullspin no grant: declined, cancelled, or refused. */
   NOT_COMPLETED: "not-completed",
-  /** Luke could not reach the provider, or the service between them. */
+  /** Fullspin could not reach the provider, or the service between them. */
   UNAVAILABLE: "unavailable",
-  /** The connect's link is too old, already used, or not Luke's. */
+  /** The connect's link is too old, already used, or not Fullspin's. */
   EXPIRED: "expired",
   /** The provider's account already stands for another workspace. */
   ALREADY_CONNECTED: "already-connected",
   /** The page was opened with no connect to carry out. */
   NOTHING_TO_CONNECT: "nothing-to-connect",
-  /** Luke's own service gave no answer. */
+  /** Fullspin's own service gave no answer. */
   LUKE_UNREACHABLE: "luke-unreachable",
 } as const;
 
@@ -65,14 +65,14 @@ export const LANDING_CLOSE_TAB = "You can close this tab.";
 
 /** How to go on from an outcome a fresh connect fixes. */
 function connectAgain(name: string | undefined): string {
-  return `Connect ${name ?? "it"} again from Luke.`;
+  return `Connect ${name ?? "it"} again from Fullspin.`;
 }
 
 /** Each outcome's words, for the provider `name`, or none where the page does not know it. */
 const LANDING_WORDS = {
   [LANDING_OUTCOME.CONNECTED]: (name) => ({
     tone: LANDING_TONE.COMPLETE,
-    title: name === undefined ? "Connected to Luke" : `${name} is connected`,
+    title: name === undefined ? "Connected to Fullspin" : `${name} is connected`,
     line: undefined,
   }),
   [LANDING_OUTCOME.WORKSPACE_CONNECTED]: (name) => ({
@@ -84,16 +84,16 @@ const LANDING_WORDS = {
     tone: LANDING_TONE.COMPLETE,
     title:
       name === undefined
-        ? "Luke can see your repositories"
-        : `Luke can see your ${name} repositories`,
+        ? "Fullspin can see your repositories"
+        : `Fullspin can see your ${name} repositories`,
     line: undefined,
   }),
   [LANDING_OUTCOME.UPDATED]: (name) => ({
     tone: LANDING_TONE.COMPLETE,
     title:
       name === undefined
-        ? "Luke's repositories were updated"
-        : `Luke's ${name} repositories were updated`,
+        ? "Fullspin's repositories were updated"
+        : `Fullspin's ${name} repositories were updated`,
     line: undefined,
   }),
   [LANDING_OUTCOME.REQUESTED]: () => ({
@@ -106,8 +106,8 @@ const LANDING_WORDS = {
     tone: LANDING_TONE.DANGER,
     title:
       name === undefined
-        ? "Luke could not confirm the installation"
-        : `Luke could not confirm the ${name} installation`,
+        ? "Fullspin could not confirm the installation"
+        : `Fullspin could not confirm the ${name} installation`,
     line: connectAgain(name),
   }),
   [LANDING_OUTCOME.NOT_COMPLETED]: (name) => ({
@@ -117,7 +117,10 @@ const LANDING_WORDS = {
   }),
   [LANDING_OUTCOME.UNAVAILABLE]: (name) => ({
     tone: LANDING_TONE.DANGER,
-    title: name === undefined ? "Luke could not finish connecting" : `Luke could not reach ${name}`,
+    title:
+      name === undefined
+        ? "Fullspin could not finish connecting"
+        : `Fullspin could not reach ${name}`,
     line: "Try again in a moment.",
   }),
   [LANDING_OUTCOME.EXPIRED]: (name) => ({
@@ -139,11 +142,11 @@ const LANDING_WORDS = {
   [LANDING_OUTCOME.NOTHING_TO_CONNECT]: (name) => ({
     tone: LANDING_TONE.DANGER,
     title: name === undefined ? "Nothing to connect" : `No ${name} connection to finish`,
-    line: `Connect ${name ?? "it"} from Luke.`,
+    line: `Connect ${name ?? "it"} from Fullspin.`,
   }),
   [LANDING_OUTCOME.LUKE_UNREACHABLE]: () => ({
     tone: LANDING_TONE.DANGER,
-    title: "Luke could not be reached",
+    title: "Fullspin could not be reached",
     line: "Reload this page to try again.",
   }),
 } as const satisfies Record<LandingOutcome, (name: string | undefined) => LandingWords>;

@@ -8,7 +8,7 @@ import type { CapturedNetworkRequest, PostHog } from "posthog-js";
  *
  * The browser talks to the analytics processor directly, so the processor
  * sees the visitor's address and user agent. Nothing forwards on their behalf
- * — where the desktop's *counted* events still reach it through Luke's own
+ * — where the desktop's *counted* events still reach it through Fullspin's own
  * service, and its recorder now posts here directly too. Say so in
  * `PRIVACY.md` rather than letting the counted events' stronger claim bleed
  * onto either.
@@ -207,7 +207,7 @@ export function startSiteAnalytics(): void {
       capture_pageview: true,
       capture_pageleave: false,
       // Visitors stay personless until they sign in, which is both cheaper
-      // and the honest shape: an anonymous visitor is not a person Luke
+      // and the honest shape: an anonymous visitor is not a person Fullspin
       // knows. The identify where a sign-in completes (`completeSiteSignIn`)
       // is what links their earlier page views to the account, so no aliasing
       // is needed.

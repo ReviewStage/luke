@@ -16,7 +16,7 @@ import { APP_SLICE, appStateDerivedAtom } from "../use-app-state.js";
 import { useHeldChannels } from "./use-channels.js";
 
 /**
- * use-known-names.ts -- the names the window already holds for places in Luke, by id, for a chip to call a Luke link by.
+ * use-known-names.ts -- the names the window already holds for places in Fullspin, by id, for a chip to call a Fullspin link by.
  *
  * Read from main's document, which every window holds: every task's title,
  * the agents each task's row names, as their tabs name them

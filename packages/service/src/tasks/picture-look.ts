@@ -45,7 +45,7 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  * plan, and the plan keeps the picture already.
  *
  * The result and its two views name a picture and nothing of a plan, so a
- * look at any other picture Luke keeps answers in the same words.
+ * look at any other picture Fullspin keeps answers in the same words.
  */
 
 const PICTURE_LOOK = {

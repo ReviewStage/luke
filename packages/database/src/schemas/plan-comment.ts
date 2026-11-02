@@ -24,9 +24,9 @@ import { task } from "./task.js";
  * with the plan.
  *
  * An entry is a comment, or a line of what happened to the thread: an ask of
- * Luke or a coding agent, a resolve, a reopen. Who wrote it is its actor: a
- * member, Luke, or a coding agent, with the member whose turn it was kept
- * beside Luke and an agent; an entry stays when its member's account or its
+ * Fullspin or a coding agent, a resolve, a reopen. Who wrote it is its actor: a
+ * member, Fullspin, or a coding agent, with the member whose turn it was kept
+ * beside Fullspin and an agent; an entry stays when its member's account or its
  * agent is gone, naming nobody. The key a member's client wrote it under is
  * unique on the plan, so a write sent again after a lost answer is taken
  * once.
@@ -70,13 +70,13 @@ export const planComment = pgTable(
     seq: integer("seq").notNull(),
     kind: text("kind").$type<PlanCommentEntryKind>().notNull(),
     actor: text("actor").$type<PlanCommentActor>().notNull(),
-    /** The member who wrote it, or whose turn Luke or the agent wrote it on; null once their account is gone. */
+    /** The member who wrote it, or whose turn Fullspin or the agent wrote it on; null once their account is gone. */
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
-    /** The coding agent that wrote it; null for a member's or Luke's, and once the agent is gone. */
+    /** The coding agent that wrote it; null for a member's or Fullspin's, and once the agent is gone. */
     agentId: uuid("agent_id").references(() => agentTable.id, { onDelete: "set null" }),
     /** A comment's words; null for a line of what happened. */
     words: text("words"),
-    /** Who an ask sent the thread to, Luke or a coding agent; null for any other entry. */
+    /** Who an ask sent the thread to, Fullspin or a coding agent; null for any other entry. */
     askedActor: text("asked_actor").$type<PlanCommentActor>(),
     askedAgentId: uuid("asked_agent_id").references(() => agentTable.id, {
       onDelete: "set null",

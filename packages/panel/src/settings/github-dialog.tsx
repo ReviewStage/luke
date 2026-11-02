@@ -78,13 +78,13 @@ function rejectionLabel(rejection: GitHubTokenRejection): ReactNode {
     case GITHUB_TOKEN_REJECTION.NO_GITHUB_ACCOUNT:
       return (
         <>
-          No GitHub account is connected to your Luke account. Connect GitHub in{" "}
+          No GitHub account is connected to your Fullspin account. Connect GitHub in{" "}
           <SettingsPageLink page={SETTINGS_VIEW.INTEGRATIONS} /> settings, then save the token
           again.
         </>
       );
     case GITHUB_TOKEN_REJECTION.OTHER_USER:
-      return "This token belongs to a different GitHub account than the one connected to Luke. Create it while signed in to the connected account.";
+      return "This token belongs to a different GitHub account than the one connected to Fullspin. Create it while signed in to the connected account.";
     case GITHUB_TOKEN_REJECTION.UNREACHABLE:
       return "GitHub could not be reached. Try again.";
     case GITHUB_TOKEN_REJECTION.TOO_MANY_TRIES:
@@ -180,7 +180,7 @@ function SavedToken({
         confirm={removal}
         question={{
           title: "Remove your GitHub token?",
-          body: "Luke deletes the token he holds, and your pull requests stop using it until you add one again.",
+          body: "Fullspin deletes the token it holds, and your pull requests stop using it until you add one again.",
           verb: "Remove",
           running: "Removing",
           loss: CONFIRM_LOSS.IRREVERSIBLE,

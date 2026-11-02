@@ -100,7 +100,7 @@ export type InboxTitleModelOf = (
 export type InboxProcedureSeams = AccountResolving &
   EveReach & { readonly titleModel?: InboxTitleModelOf | undefined };
 
-/** The agent-title model on the sender's own key (`../agents/coder-host/model.ts`), as an agent's own title is generated, Luke's key never paying for one; none where they saved no key, or it could not be read. */
+/** The agent-title model on the sender's own key (`../agents/coder-host/model.ts`), as an agent's own title is generated, Fullspin's key never paying for one; none where they saved no key, or it could not be read. */
 const productionTitleModel: InboxTitleModelOf = (userId, preferred) =>
   Effect.gen(function* () {
     const environment = yield* HostedEnvironment;

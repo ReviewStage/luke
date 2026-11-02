@@ -43,7 +43,8 @@ const FILE_REFUSAL_LINE = {
   [TASK_FILE_REFUSAL.MISSING]: "There is no file at this path in the repository.",
   [TASK_FILE_REFUSAL.NOT_TEXT]: "This file is too large to show, or is not text.",
   [TASK_FILE_REFUSAL.NO_REPOSITORY]: "This task has no repository.",
-  [TASK_FILE_REFUSAL.NOT_REACHABLE]: "Luke's GitHub App no longer reaches this task's repository.",
+  [TASK_FILE_REFUSAL.NOT_REACHABLE]:
+    "Fullspin's GitHub App no longer reaches this task's repository.",
   [TASK_FILE_REFUSAL.UNAVAILABLE]: "GitHub could not be read.",
 } as const satisfies Record<TaskFileRefusal, string>;
 
@@ -70,7 +71,7 @@ export function refusalLine(
     return `This file is not at commit ${shortCommit(commit)} on GitHub, or the commit was never pushed.`;
   }
   if (refusal === TASK_FILE_REFUSAL.MISSING && branch !== undefined) {
-    return `This file is not on ${branch}, the branch Luke reads from GitHub.`;
+    return `This file is not on ${branch}, the branch Fullspin reads from GitHub.`;
   }
   return FILE_REFUSAL_LINE[refusal];
 }

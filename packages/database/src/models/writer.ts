@@ -290,7 +290,7 @@ interface TurnCancelRequest {
   readonly at: Date;
   /** eve's id for the tool call the Stop is made under, where an agent's `stop_agent` made it, written beside the instant. */
   readonly key?: string;
-  /** The coding agent whose `stop_agent`, or whose Start continuing the turn's agent, made the Stop; none for the developer's or Luke's. */
+  /** The coding agent whose `stop_agent`, or whose Start continuing the turn's agent, made the Stop; none for the developer's or Fullspin's. */
   readonly by?: string;
 }
 
@@ -303,7 +303,7 @@ type TurnEnqueueResult = Result.Result<
 
 /**
  * What sent a line to a coding agent, as its row keeps it: the member by
- * their account, Luke, an automation by its name as it stands at the send,
+ * their account, Fullspin, an automation by its name as it stands at the send,
  * GitHub by the login of who caused what it tells of, or another coding
  * agent by its name, its id, and the model it runs on, as they stand at the
  * send.
@@ -339,7 +339,7 @@ function senderNameOf(sender: LineSender | undefined): string | null {
  * kept of it, the client's key for the send, what sent it, and what the row
  * says carried it: the developer's typed ask where it names nothing else,
  * or another coding agent's message, a thread, a plan comment, a Start's
- * brief, GitHub, Luke, or an
+ * brief, GitHub, Fullspin, or an
  * automation's run.
  */
 interface AwaitingLineWrite {
@@ -368,7 +368,7 @@ const TYPED_LINE_METADATA: TypedAskMetadata = {
   channel: MESSAGE_CHANNEL.TYPED,
 };
 
-/** A line Luke sent the agent on its own. */
+/** A line Fullspin sent the agent on its own. */
 export const LUKE_LINE_METADATA: LukeLineMetadata = { channel: MESSAGE_CHANNEL.LUKE };
 
 /**
@@ -1577,7 +1577,7 @@ const textDrafted = /* @__PURE__ */ Effect.fnUntraced(function* (
  * turn's answer closes the turn's journal, its parts replaced whole by the
  * projection the turn told, since the projection is the message as the
  * runtime's own record has it and the journal was the record of it in flight.
- * A journal anything followed while the turn ran — Luke's words said around
+ * A journal anything followed while the turn ran — Fullspin's words said around
  * the ask as the brain worked, an aside, a second line of the developer's —
  * closes at a fresh position behind them, so the thread reads as it was
  * heard: what was said while he worked, then what he did and thought, then

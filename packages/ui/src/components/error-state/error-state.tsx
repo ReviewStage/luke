@@ -52,7 +52,7 @@
  *
  * A line is drawn in Tailwind utilities over the theme with no shadcn base,
  * each placement's classes picked here (`LINE`): shadcn's alert is a block
- * of its own, Luke's `Banner`, where a failure among rows is laid out as a
+ * of its own, Fullspin's `Banner`, where a failure among rows is laid out as a
  * row, and alone in its region it is `EmptyState`, which stands on shadcn's
  * empty. Every part stands on the row's first line, a control tall, so the
  * glyph, the words, and Retry share one middle; a sentence too long for its

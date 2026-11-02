@@ -1,5 +1,5 @@
 /**
- * feedback-dialog.tsx -- a note to the people who make Luke, written in a modal over the window: words, screenshots, and whether to sign it.
+ * feedback-dialog.tsx -- a note to the people who make Fullspin, written in a modal over the window: words, screenshots, and whether to sign it.
  *
  * The window asks the way every desktop app's "Send feedback" asks: it dims,
  * a card holds one field and the few things that go with it, and Cancel and
@@ -77,7 +77,7 @@ import { DROP_LEAVE, useFileDrop } from "./use-file-drop.js";
  * Each kind in its own words: the title its dialog carries, the field's
  * name, and the hint the empty field shows. The wire still
  * calls the second kind a prompt; to the person writing it, it is a feature
- * they would like Luke to have.
+ * they would like Fullspin to have.
  */
 const FEEDBACK_COPY = {
   [FEEDBACK_KIND.FEEDBACK]: {
@@ -88,7 +88,7 @@ const FEEDBACK_COPY = {
   [FEEDBACK_KIND.PROMPT]: {
     title: "Suggest a feature",
     field: "Feature suggestion",
-    placeholder: "What would you want Luke to do?",
+    placeholder: "What would you want Fullspin to do?",
   },
 } as const;
 

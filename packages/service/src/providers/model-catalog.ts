@@ -15,7 +15,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 /**
  * model-catalog.ts -- the models a coding agent may run on, read from AI Gateway's public catalog.
  *
- * AI Gateway publishes its catalog at one unauthenticated URL. Luke keeps
+ * AI Gateway publishes its catalog at one unauthenticated URL. Fullspin keeps
  * the Anthropic and OpenAI models tagged for both tool use and reasoning,
  * and for each the efforts its `reasoning_options` list under the `effort`
  * entry; a model that lists no effort can satisfy no Start, so it is left
@@ -294,7 +294,7 @@ function contextWindowsOf(
   };
 }
 
-/** The entry as an offered model, or nothing for one Luke does not offer: a fast slug among them where its provider's fast option is not confirmed. */
+/** The entry as an offered model, or nothing for one Fullspin does not offer: a fast slug among them where its provider's fast option is not confirmed. */
 function offeredModel(entry: CatalogEntry): OfferedModel | undefined {
   const named = providerModelOf(entry.id);
   if (named === undefined) return undefined;
@@ -338,7 +338,7 @@ export function tokensCostUsd(pricing: ModelPricing, tokens: PricedTokens): numb
   );
 }
 
-/** The catalog's answer filtered to what Luke offers, in the catalog's own order. */
+/** The catalog's answer filtered to what Fullspin offers, in the catalog's own order. */
 function offeredModels(answer: typeof CatalogAnswerSchema.Type): readonly OfferedModel[] {
   const offered: OfferedModel[] = [];
   for (const entry of answer.data) {

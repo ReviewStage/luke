@@ -644,7 +644,7 @@ function TasksPageRow({
             <OneLine>{repositoryName}</OneLine>
           </>
         ),
-        // Note that a task Luke or an agent made names its maker before their square, the member it was made for worn on it, as every task surface does.
+        // Note that a task Fullspin or an agent made names its maker before their square, the member it was made for worn on it, as every task surface does.
         [TASK_PROPERTY.CREATOR]: (
           <>
             {maker === undefined ? null : (

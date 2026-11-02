@@ -21,7 +21,7 @@ import { useOpenPlace } from "./use-open-link.js";
  * The head is the page as its tab names it: the tab's glyph, its title
  * wrapped to two lines, the version it stands at where it has more than
  * one, and how long ago that version was written. Under it, who showed it,
- * where the version says, as a provenance row: Luke, or a coding agent by
+ * where the version says, as a provenance row: Fullspin, or a coding agent by
  * its tile and the name the window holds for it now, which a press opens.
  * Then the page
  * itself, small: its newest version drawn in a frame as its tab draws it
@@ -55,7 +55,7 @@ function PagePreview({ place, page }: CardPage): React.JSX.Element {
 }
 
 /**
- * Who showed a page's version: Luke, or a coding agent by the name the
+ * Who showed a page's version: Fullspin, or a coding agent by the name the
  * window holds now, its tile at rest since its model is not known here,
  * hanging its own card on the task it works on; nothing for one shown
  * before who showed it was kept.
@@ -77,7 +77,7 @@ function showerActor(
   };
 }
 
-/** A press on the agent who showed a page, opening its tab, where the window opens places; none for Luke. */
+/** A press on the agent who showed a page, opening its tab, where the window opens places; none for Fullspin. */
 function useShowerDoor(shower: Actor | undefined): (() => void) | undefined {
   const openPlace = useOpenPlace();
   if (openPlace === undefined || shower?.kind !== ACTOR_KIND.AGENT) return undefined;

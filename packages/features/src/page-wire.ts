@@ -51,14 +51,14 @@ export const pageWriteSchema = EffectSchema.Struct({
 
 export type PageWrite = typeof pageWriteSchema.Type;
 
-/** Who showed a version of a page: Luke, from a call, or one of the plan's coding agents. */
+/** Who showed a version of a page: Fullspin, from a call, or one of the plan's coding agents. */
 export const PAGE_SHOWER = {
   LUKE: "luke",
   AGENT: "agent",
 } as const;
 
 /**
- * Who showed a version of a page: Luke, or a coding agent by its id alone,
+ * Who showed a version of a page: Fullspin, or a coding agent by its id alone,
  * so whoever reads it names the agent by what its row says now, as a plan's
  * agent edits are named (`plan-template.ts`'s `planAgentEditSchema`).
  */
@@ -109,7 +109,7 @@ export const PAGE_OWNER = {
 
 /**
  * What a page stands on, by its id: a task, whose pages every agent on it
- * and Luke show and revise, or a coding agent on no task, whose pages are
+ * and Fullspin show and revise, or a coding agent on no task, whose pages are
  * its own. Its rule of who may read the page is the owner's.
  */
 export type PageOwner =

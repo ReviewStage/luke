@@ -128,8 +128,8 @@ const STARTED_BY_AUTOMATION = agentAutomationRunSql(agentTable);
  * took it and when. This is the one definition of "active" on the Overview:
  * the active-developer tiles, feature reach's base, the most active accounts,
  * and the meaningful retention grid all count through it. A plan revision
- * counts only as the developer's own, under their user id; Luke's notes are
- * Luke's, and an agent's revisions are the agent.
+ * counts only as the developer's own, under their user id; Fullspin's notes are
+ * Fullspin's, and an agent's revisions are the agent.
  */
 function meaningfulActions(since: Date) {
   return unionAll(

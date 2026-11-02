@@ -90,7 +90,7 @@ export function turnKindWords(handed: TurnHanded): string | undefined {
 /**
  * Whether a revision of the plan someone other than the agent wrote was
  * saved after the instant given, the start of the agent's previous turn:
- * a member's, Luke's, or another agent's. Note that each revision is read,
+ * a member's, Fullspin's, or another agent's. Note that each revision is read,
  * not who last wrote each section, because the agent writing over a
  * section another just changed leaves the agent its last writer though it
  * never read the change; and that a revision of the agent's own is left

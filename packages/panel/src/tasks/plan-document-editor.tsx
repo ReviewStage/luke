@@ -64,7 +64,7 @@ import {
  * is left, so the name never enters the text; meanwhile its words are drawn
  * as the task's name wherever the window names it. The words save as the
  * developer pauses (`use-plan-editing.ts`), and the service merges them with
- * what Luke writes.
+ * what Fullspin writes.
  * A save's merged answer is taken into the open editor block by block, and
  * the notetaker's drafts never redraw it. The editor is every Markdown
  * document's (`./markdown-editor.tsx`), with every option a plan takes: its
@@ -728,7 +728,7 @@ function useDraftHandOver(
  * save is the developer's, and newer than the one last taken, holds the
  * merged text, whose other part is laid in and the model's base becomes
  * what the service holds. A save someone else made, a teammate's, an
- * agent's, or Luke's, reaching an editor holding nothing unsaved: their text
+ * agent's, or Fullspin's, reaching an editor holding nothing unsaved: their text
  * is laid in and becomes the base. An editor holding words not yet saved
  * keeps them instead, and its next save is laid over the service's text,
  * whose merged answer then reaches it as the first kind. And words the

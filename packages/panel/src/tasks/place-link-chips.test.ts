@@ -28,7 +28,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
 /**
- * place-link-chips.test.ts -- a link to a place in Luke written in words,
+ * place-link-chips.test.ts -- a link to a place in Fullspin written in words,
  * an agent's, a page's, an Inbox item's, a member's, is drawn as a chip
  * called by the name the window already holds for the place: the task's
  * title for a bare task link, the agent's, the page's, the item's, the

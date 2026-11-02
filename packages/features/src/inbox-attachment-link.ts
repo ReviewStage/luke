@@ -59,7 +59,7 @@ const MAX_ADDRESS_CHARS = 1_024;
 export const INBOX_PICTURE_IN_WORDS =
   /(?<!\\)!\[((?:\\.|[^[\]\\\n]){0,1000})\]\([ \t]*(<[^<>\n]{1,1024}>|[^\s()<>]{1,1024})/gu;
 
-/** A destination that names a scheme, `https:`, `data:`, or Luke's own, and so no file in the agent's sandbox. */
+/** A destination that names a scheme, `https:`, `data:`, or Fullspin's own, and so no file in the agent's sandbox. */
 const SCHEMED = /^[A-Za-z][A-Za-z0-9+.-]*:/u;
 
 /** An item of the Inbox as its link names it: under its task, or under its agent with no task. */

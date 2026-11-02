@@ -277,7 +277,7 @@ const FORKED_FIRST = firstMessageText(
     messageId: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
     preamble: "This is the work you continue from.",
     steps: [
-      { kind: REPLAY_STEP_KIND.LINE, summary: "Luke: Make it round.", words: "Make it round." },
+      { kind: REPLAY_STEP_KIND.LINE, summary: "Fullspin: Make it round.", words: "Make it round." },
       {
         kind: REPLAY_STEP_KIND.TOOL,
         summary: "Ran: pnpm test",
@@ -307,7 +307,7 @@ test("an agent started from another is copied as its brief, the source's steps i
       "Fix the tile.",
       "## Forked from an earlier agent · 2 of 3 steps",
       "_1 earlier step was left out to keep the replay within its size limit._",
-      "- **Luke:** Make it round.\n- **Agent:** Ran: pnpm test",
+      "- **Fullspin:** Make it round.\n- **Agent:** Ran: pnpm test",
       "## Developer",
       "Try a square instead.",
       "## Agent",
@@ -336,7 +336,7 @@ test("an agent started from another that has done nothing yet previews no step, 
   assert.equal(latestActivity(copied), undefined);
 });
 
-test("a summary Luke wrote of the source's oldest steps is copied under its line, as his words, and its steps are not counted as left out", () => {
+test("a summary Fullspin wrote of the source's oldest steps is copied under its line, as its words, and its steps are not counted as left out", () => {
   const first = firstMessageText(
     "Fix the tile.",
     {
@@ -360,7 +360,7 @@ test("a summary Luke wrote of the source's oldest steps is copied under its line
       "## Prompt",
       "Fix the tile.",
       "## Continued from an earlier agent · 1 of 41 steps",
-      "**Summary of 40 earlier steps (written by Luke)**",
+      "**Summary of 40 earlier steps (written by Fullspin)**",
       "> Read the tile code.\n>\n> Found the radius bug.",
       "- **Agent:** Fixed.",
     ].join("\n\n") + "\n",

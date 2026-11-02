@@ -1929,7 +1929,7 @@ test("a person's page pasted into the box becomes their chip called by their nam
   assert.deepEqual(sent, [`Ask [@Dana Reyes](${here}) not ${elsewhere}`]);
 });
 
-test("an old Luke issue page's link pasted into the box stays the words it is, since Luke keeps no issues of its own", async () => {
+test("an old Fullspin issue page's link pasted into the box stays the words it is, since Fullspin keeps no issues of its own", async () => {
   const { container, sent } = await box(taskPage());
   const old = "https://tryluke.dev/acme/issue/3f0e6f5c-7d1a-4f6e-9a55-000000000007";
 

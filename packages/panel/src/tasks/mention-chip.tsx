@@ -112,14 +112,14 @@ import { useWordsDates } from "./words-dates.js";
  * place knows no agents, the mark of the harness the window last read it
  * running on (`useKnownNames`), or, for one the window lists not, an
  * archived agent say, the harness read for it (`mentioned-agent-card.tsx`); either
- * opens its tab through the window's opener for a Luke link, as a link
+ * opens its tab through the window's opener for a Fullspin link, as a link
  * copied to it does, and an agent hangs its tab's own card where the place
  * has one, and otherwise the same card read as it is hung, on any task of
  * the workspace or on none (`mentioned-agent-card.tsx`). A person wears
  * their picture and hangs their card, their email and role, or grayed as
  * having left, as the workspace's members around the chip say
  * (`../member-directory.tsx`), and opens their page in the workspace. A
- * link to any other place in Luke, an Inbox item, an
+ * link to any other place in Fullspin, an Inbox item, an
  * automation, an agent's message (`@luke/features/link-grammar`), is drawn as
  * the same chip, wearing the place's glyph and named as the window already
  * knows it (`@luke/features/place-chip-model`): the words it was labelled
@@ -127,13 +127,13 @@ import { useWordsDates } from "./words-dates.js";
  * page, an agent, a person, or an Inbox item is called by its name now
  * wherever the window holds it, whatever words its link was written with:
  * the task's, the heading the section's anchor names, the page's, the
- * agent's as its tab names it, Luke for Luke, the member's, the item's, so
+ * agent's as its tab names it, Fullspin for Fullspin, the member's, the item's, so
  * a chip never keeps a name its card no longer says. What it was written
  * with stands in only where the window cannot read it, a task deleted, of
  * another workspace, or not the reader's; and a task named before the
  * window ever read its task list has the list followed, once between every
  * chip, so its name lands (`useTaskNameCatchUp`). A press opens the
- * place as any Luke link opens, in the window. Its card, hung while the pointer rests
+ * place as any Fullspin link opens, in the window. Its card, hung while the pointer rests
  * on it, names it whole: a file's is the card every place naming the file
  * hangs, and a file's lines open at the commit the mention pins them to.
  *
@@ -275,13 +275,13 @@ function pressOf(
             ? mention
             : { kind: MENTION_KIND.TASK, taskId: mention.taskId },
         );
-    // A page, an agent, a person, or a channel opens as its Luke link does, through the window's opener, under the workspace it was written in.
+    // A page, an agent, a person, or a channel opens as its Fullspin link does, through the window's opener, under the workspace it was written in.
     case MENTION_KIND.PAGE:
     case MENTION_KIND.AGENT:
     case MENTION_KIND.PERSON:
     case MENTION_KIND.CHANNEL:
       return () => openLink(target);
-    // Luke has no tab of his own on a task, so his chip opens the task he thinks about.
+    // Fullspin has no tab of its own on a task, so its chip opens the task it thinks about.
     case MENTION_KIND.LUKE:
       return () => doors.onOpenTask({ kind: MENTION_KIND.TASK, taskId: mention.taskId });
   }
@@ -290,7 +290,7 @@ function pressOf(
 /**
  * Whether a press on the chip leaves the app for its address, so it is drawn
  * as a link to it: a page on the web its link names, or a file's or a
- * folder's GitHub page where no File tab opens it. Note that a Luke link,
+ * folder's GitHub page where no File tab opens it. Note that a Fullspin link,
  * and anything else the window opens in place, is a press, never a link.
  */
 function leavesFor(mention: Mention, target: string, doors: MentionDoors): boolean {
@@ -478,7 +478,7 @@ export function MentionChipCard({
 /**
  * What a chip calls a mention: the name of what it names as the window
  * holds it now (`THING_NAME`), the plan's, the section's heading, the
- * page's, the agent's as its tab names it, the person's, Luke, whatever
+ * page's, the agent's as its tab names it, the person's, Fullspin, whatever
  * words it was written with; else the name it was written with; and a
  * provider's page written as its bare address, by the key and title its
  * provider answered for it, and a pull request or an issue by its key alone,
@@ -693,12 +693,12 @@ function WrittenDateChip({
   );
 }
 
-/** The task a place in Luke names, where it names one. */
+/** The task a place in Fullspin names, where it names one. */
 function placeTaskId(place: LinkPlace): string | undefined {
   return "planId" in place ? place.planId : undefined;
 }
 
-/** The mark a place in Luke leads with: its thing's (`thing-mark.tsx`), as a mention of the same thing leads with it. */
+/** The mark a place in Fullspin leads with: its thing's (`thing-mark.tsx`), as a mention of the same thing leads with it. */
 function PlaceGlyph({
   place,
   name,
@@ -724,7 +724,7 @@ function PlaceGlyph({
 }
 
 /**
- * A link to a place in Luke that no mention names, an agent's or a page's
+ * A link to a place in Fullspin that no mention names, an agent's or a page's
  * say: its chip, the place's glyph and its name as the window knows it
  * (`placeChipLook`), a button that opens the place in the window, hanging a
  * card naming it and the task it stands under.
@@ -786,7 +786,7 @@ function PlaceChip({
 }
 
 /**
- * The card a place in Luke hangs, as the window hangs it wherever it names
+ * The card a place in Fullspin hangs, as the window hangs it wherever it names
  * the place, by its thing's kind (`thing-card.tsx`): a plan's, a section's,
  * a version's, a page's, an agent's, a member's, an Inbox item's, or an
  * automation's; `fallback`, the chip's glyph and name, for any other, and
@@ -843,7 +843,7 @@ function InboxItemChip({
   return <PlaceChip place={place} read={read} {...chip} />;
 }
 
-/** The kind a chip of a place in Luke carries beside a mention's kinds, for its styles and a test. */
+/** The kind a chip of a place in Fullspin carries beside a mention's kinds, for its styles and a test. */
 const MENTION_KIND_PLACE = "place";
 
 /**
@@ -861,8 +861,8 @@ function pageDoors(doors: MentionDoors, href: string): MentionDoors {
 
 /**
  * A link in words as its chip, through the doors given: a mention's where
- * its target names one (`linkMention`), a place's in Luke where it is a
- * Luke link no mention names (`readLink`); nothing where it is neither, and
+ * its target names one (`linkMention`), a place's in Fullspin where it is a
+ * Fullspin link no mention names (`readLink`); nothing where it is neither, and
  * it stays a link. `at` is where the link is written in the words drawn,
  * which a date's chip names to its picker in words that take a change.
  */
@@ -1014,7 +1014,7 @@ function pastedName(
 }
 
 /**
- * The mention node words pasted whole stand for: an address of Luke's own,
+ * The mention node words pasted whole stand for: an address of Fullspin's own,
  * a plan's, a section's, a page's, or an agent's, by the scheme of the web
  * or the app's own, named as its bare link's chip is (`pastedName`); or a
  * page of an integration's, named by its address's readable form; nothing
@@ -1070,7 +1070,7 @@ function datePicked(
   else if (keyed) node.focusAfter();
 }
 
-/** A mention an editor holds, as its node names it: its chip where its target names a mention, a place's in Luke where it names a place no mention does (an Inbox thread, `linkChip`), and its words where it names neither; a date's opens its picker where the editor hands what changes it. */
+/** A mention an editor holds, as its node names it: its chip where its target names a mention, a place's in Fullspin where it names a place no mention does (an Inbox thread, `linkChip`), and its words where it names neither; a date's opens its picker where the editor hands what changes it. */
 export function MentionNodeChip({
   mention,
   doors,

@@ -60,7 +60,7 @@ const AGENT_WORD = "Agent";
 /** What a line's row names its sender by where its summary names none. */
 const SENDER_WORD = "Developer";
 
-/** What stands between who a summary is of and what they did, as the service writes a line's and the agent's words' summaries ("Luke: Check the tests", "Said: Done."). */
+/** What stands between who a summary is of and what they did, as the service writes a line's and the agent's words' summaries ("Fullspin: Check the tests", "Said: Done."). */
 const SPEAKER_SEPARATOR = ": ";
 
 /** The word the service leads the agent's words' summary with, which the row's "Agent" already says. */
@@ -247,18 +247,18 @@ export function replayCount(replay: Replay): string {
 
 /** The line saying how many of the source's earliest steps the replay left out; none where it kept them all. */
 export function leftOutLine(replay: Replay): string | undefined {
-  // Note that steps Luke summarized are no steps left out: the summary stands for them.
+  // Note that steps Fullspin summarized are no steps left out: the summary stands for them.
   const left = replay.totalSteps - replay.steps.length - (replay.summary?.steps ?? 0);
   if (left <= 0) return undefined;
   const steps = left === 1 ? "1 earlier step was" : `${left} earlier steps were`;
   return `${steps} left out to keep the replay within its size limit.`;
 }
 
-/** What the summary's row says: how many of the oldest steps it stands for, and that Luke wrote it rather than the agent; none where the replay holds no summary. */
+/** What the summary's row says: how many of the oldest steps it stands for, and that Fullspin wrote it rather than the agent; none where the replay holds no summary. */
 export function summaryLine(replay: Replay): string | undefined {
   const steps = replay.summary?.steps;
   if (steps === undefined) return undefined;
-  return `Summary of ${steps === 1 ? "1 earlier step" : `${steps} earlier steps`} (written by Luke)`;
+  return `Summary of ${steps === 1 ? "1 earlier step" : `${steps} earlier steps`} (written by Fullspin)`;
 }
 
 /** The steps drawn of `kept` once `shown` of the newest are: never fewer than one page, nor more than are kept. */
@@ -294,7 +294,7 @@ function lineSplit(step: ReplayStep): number {
 
 /**
  * A step's row: a line under whoever sent it, as its summary names them
- * (a member, Luke, an automation, GitHub, another agent), and the agent's
+ * (a member, Fullspin, an automation, GitHub, another agent), and the agent's
  * words and calls under the agent, the words without the summary's own
  * "Said" since the row names the agent.
  */
@@ -533,7 +533,7 @@ function callView(step: ReplayStep, todos: Todos | undefined): StepView {
 /**
  * A line's sender as a transcript's line names one (`lineSender`), from the
  * kind its marker names and the name its summary gives: a member by their
- * account, Luke, an automation, GitHub's login, or another agent; none for
+ * account, Fullspin, an automation, GitHub's login, or another agent; none for
  * the developer's own line and for a step whose marker names no sender.
  */
 function sentByOf(step: ReplayStep, name: string): AgentSender | undefined {
@@ -594,7 +594,7 @@ function stepWords(step: ReplayStep): string {
   }
 }
 
-/** The replay as its card's Copy copies it, as the agent was handed it: Luke's summary of the oldest steps where he wrote one, then each step. */
+/** The replay as its card's Copy copies it, as the agent was handed it: Fullspin's summary of the oldest steps where it wrote one, then each step. */
 export function replayWords(replay: Replay): string {
   const summary = replay.summary === undefined ? [] : [replay.summary.text];
   return [...summary, ...replay.steps.map(stepWords)].join("\n\n");

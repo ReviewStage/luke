@@ -3,11 +3,11 @@ import type * as React from "react";
 import { cn } from "../cn.js";
 
 /**
- * input.tsx -- shadcn/ui's input (style `base-nova`, on Base UI), vendored and drawn as Luke's text field.
+ * input.tsx -- shadcn/ui's input (style `base-nova`, on Base UI), vendored and drawn as Fullspin's text field.
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add input` reads as a small diff. Its classes
- * are Luke's field rather than shadcn's: a control's height, inset, and
+ * are Fullspin's field rather than shadcn's: a control's height, inset, and
  * corner, the field's ground inside the strong hairline, the body's type,
  * a placeholder in the muted ink, the focus ground, the danger edge and one
  * shake while invalid, and the disabled field's arrow and the one fade

@@ -1,12 +1,12 @@
 /**
  * native-sandbox-sweep.ts -- the scheduled sweep's stop of a native agent's sandbox whose run ended and which no Terminal holds.
  *
- * A native harness's sandbox (Claude Code's or Codex's, which Luke opens
+ * A native harness's sandbox (Claude Code's or Codex's, which Fullspin opens
  * itself, `coder-host/runner-sessions.ts`) is stopped when its runner
  * ends: the events route calls `runnerEnded` on the runner's END. A stop
  * that failed there is logged and not retried, so the sandbox would idle
  * until its timeout. This sweep retries it: it pages through the project's
- * running sandboxes, from the oldest and the newest on alternate minutes, keeps the ones named as Luke names a
+ * running sandboxes, from the oldest and the newest on alternate minutes, keeps the ones named as Fullspin names a
  * native sandbox and carrying an agent's tag, reads a window of them that
  * moves along the list from one sweep to the next, and stops each whose
  * conversation is native, whose newest turn ended longer ago than a short
@@ -24,7 +24,7 @@
  * credential would not come off, the sandbox is left for the next sweep.
  *
  * A runner that exited while its run's turn still runs died without its END
- * (it drains its END to Luke before it exits): the sweep settles that turn
+ * (it drains its END to Fullspin before it exits): the sweep settles that turn
  * as failed (`settleRunnerLostTurns`), so the agent offers Continue rather
  * than running for a day, and its sandbox is stopped once the grace passes,
  * as any ended run's is. The turn keeps how the runner ended, its exit code
@@ -127,7 +127,7 @@ const SANDBOX_ENDING = {
 
 type SandboxEnding = (typeof SANDBOX_ENDING)[keyof typeof SANDBOX_ENDING];
 
-/** A running sandbox Luke opened for a native agent: the session Luke minted for it, the sandbox session it runs, and the agent its tag names. */
+/** A running sandbox Fullspin opened for a native agent: the session Fullspin minted for it, the sandbox session it runs, and the agent its tag names. */
 interface NativeSandbox {
   readonly sessionId: string;
   readonly running: string;

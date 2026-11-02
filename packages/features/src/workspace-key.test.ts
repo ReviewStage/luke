@@ -4,7 +4,7 @@ import { keySpansIn, namesTaskKey, taskKey } from "./workspace-key.js";
 describe("taskKey", () => {
   it("names a task by its workspace's prefix and its number", () => {
     expect(taskKey("Acme", 42)).toBe("ACME-42");
-    expect(taskKey("Luke Labs", 7)).toBe("LL-7");
+    expect(taskKey("Fullspin Labs", 7)).toBe("FL-7");
     expect(taskKey("Charles's workspace", 1)).toBe("CW-1");
     expect(taskKey("Initech", 3)).toBe("INIT-3");
   });

@@ -82,7 +82,7 @@ import {
 import type { WorkspaceSettingsControl } from "./workspace-page.js";
 
 /**
- * skills-page.tsx -- Settings › Skills: the skills the account installs into Luke for its agents, the listed workspace's and its own, and Add skill.
+ * skills-page.tsx -- Settings › Skills: the skills the account installs into Fullspin for its agents, the listed workspace's and its own, and Add skill.
  *
  * The page lists the workspace the sidebar lists, its skills first under
  * its name, then the account's own under Personal, as the Automations list

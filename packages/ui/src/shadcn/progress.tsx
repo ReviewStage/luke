@@ -2,15 +2,15 @@ import { Progress as ProgressPrimitive } from "@base-ui/react/progress";
 import { cn } from "../cn.js";
 
 /**
- * progress.tsx -- shadcn/ui's progress (style `base-nova`, on Base UI), vendored and drawn as Luke's hairline meter.
+ * progress.tsx -- shadcn/ui's progress (style `base-nova`, on Base UI), vendored and drawn as Fullspin's hairline meter.
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add progress` reads as a small diff. Its local
  * changes: every part renders a `span` rather than Base UI's `div`, because
  * a meter stands inside a line of words, a `<p>`'s among them; the root is a
  * block as long as a short line of words (`max-w-progress`) rather than
- * shadcn's wrapping flex row, which held a label and a value Luke never
- * draws; the track is Luke's hairline (`h-progress-height`) in the strong fill
+ * shadcn's wrapping flex row, which held a label and a value Fullspin never
+ * draws; the track is Fullspin's hairline (`h-progress-height`) in the strong fill
  * (`bg-secondary`), clipped on both axes (`overflow-hidden` rather than
  * `overflow-x-hidden`, whose scroller rounds a full bar's start a shade
  * differently), and the indicator fills in the working ink rather than

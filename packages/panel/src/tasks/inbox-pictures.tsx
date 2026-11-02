@@ -41,7 +41,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * picture a comment carried that its words do not draw, a member's file,
  * is drawn after them by the same `InboxPicture` and walked with the rest. A
  * picture of another item, one copied across, is that item's to read, and
- * stands as its link here; a picture from outside Luke is never fetched.
+ * stands as its link here; a picture from outside Fullspin is never fetched.
  * Every picture is left out of the session recording (`picture-block.tsx`).
  */
 

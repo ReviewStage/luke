@@ -1,5 +1,5 @@
 /**
- * chatgpt-credentials.ts -- an account's ChatGPT sign-in for Luke's hosted runtime: kept sealed, its access renewed under the row's lock, and its renewable session revoked before it is removed.
+ * chatgpt-credentials.ts -- an account's ChatGPT sign-in for Fullspin's hosted runtime: kept sealed, its access renewed under the row's lock, and its renewable session revoked before it is removed.
  *
  * The desktop completes OpenAI's open-source Sign in with ChatGPT for the
  * service (OpenAI's self-hosted VM recipe) under the account's host id, and
@@ -39,7 +39,7 @@
  * endpoint, which must be on OpenAI's own authorization server, first, under the same lock, retrying a failure to connect or a
  * server error a few times, and removes the row whether or not OpenAI
  * confirmed it, answering which, so the account can be told to disconnect
- * Luke in ChatGPT's settings.
+ * Fullspin in ChatGPT's settings.
  *
  * No token, code, or OpenAI's words of a refusal are ever logged or
  * answered: a refusal is read for its OAuth error code alone.

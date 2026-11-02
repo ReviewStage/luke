@@ -4,7 +4,7 @@
  * An open asks nothing of the developer first. It reads the repository's
  * run command from this Mac's settings, where it has one, and starts the
  * terminal (`startMacTerminal` in `@luke/host/node`), whose script clones the repository
- * into Luke's own folder the first time, brings the branch into a worktree
+ * into Fullspin's own folder the first time, brings the branch into a worktree
  * of that clone, and runs the command there (`openOnMacScript`, beside it).
  * Stop ends the run and keeps its port, so the tab hears it end; Open in
  * Terminal opens the Mac's own Terminal in the branch's worktree, and a
@@ -55,11 +55,11 @@ interface MainMacTerminalPort {
 
 export interface MacTerminalActsDependencies {
   host: Pick<HostOperator, "macRepositories" | "setMacRepository">;
-  /** Where every Luke install keeps its clones and worktrees (`worktreesRoot`). */
+  /** Where every Fullspin install keeps its clones and worktrees (`worktreesRoot`). */
   worktreesRoot: string;
   /** This Mac's home folder, under which a local agent's worktree stands (`deviceAgentLayout`). */
   home: string;
-  /** Where Luke keeps its application data, which an earlier Luke kept its clones and worktrees under. */
+  /** Where Fullspin keeps its application data, which an earlier Fullspin kept its clones and worktrees under. */
   stateRoot: string;
   ports: {
     /** A fresh channel: main's end, with the other end already posted to the panel under the agent's id. */

@@ -7,7 +7,7 @@ import {
 } from "@luke/settings/settings-views";
 
 /**
- * link-route.ts -- where in the window a Luke link opens: Settings, the Plans tab, or nowhere for a place the reader may not open.
+ * link-route.ts -- where in the window a Fullspin link opens: Settings, the Plans tab, or nowhere for a place the reader may not open.
  *
  * A page of Settings opens in Settings, on the workspace the link's slug
  * names where the account is in it, so a teammate's link to their

@@ -369,7 +369,7 @@ export const TASK_CALL_FAILURE = {
   UNANSWERED: "unanswered",
   /** The task is not one the account holds: deleted, or never the caller's. */
   NOT_FOUND: "not-found",
-  /** The repository named is not one the Luke GitHub App reaches for the account. */
+  /** The repository named is not one the Fullspin GitHub App reaches for the account. */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
   /** The device a start named for the task's agents would not take them, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). Nothing was written. */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
@@ -903,7 +903,7 @@ export const tasksWorkspaceAnswerSchema = EffectSchema.Union([
 
 export type TasksWorkspaceAnswer = typeof tasksWorkspaceAnswerSchema.Type;
 
-/** A GitHub organization's connection begun, as the window's process hears it: the Luke GitHub App's install address to open, or why there is none. */
+/** A GitHub organization's connection begun, as the window's process hears it: the Fullspin GitHub App's install address to open, or why there is none. */
 export const tasksWorkspaceGitHubConnectAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ url: EffectSchema.String }),
   workspaceCallFailureSchema,

@@ -32,7 +32,7 @@ function MenuSections(): React.JSX.Element {
                   <WingFace />
                 </GlyphSlot>
               }
-              title="Luke"
+              title="Fullspin"
               meta="Always on"
             />
           </List>

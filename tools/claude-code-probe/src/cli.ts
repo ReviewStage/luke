@@ -716,7 +716,7 @@ const main = Effect.gen(function* () {
     failure: undefined,
   };
   yield* say(
-    `Luke's Claude Code probe ${recording.nonce}: Agent SDK ${PINS.AGENT_SDK}, claude ${PINS.CLAUDE_CODE}`,
+    `Fullspin's Claude Code probe ${recording.nonce}: Agent SDK ${PINS.AGENT_SDK}, claude ${PINS.CLAUDE_CODE}`,
   );
   const sandbox = yield* attempt(scrub, "open the sandbox", () =>
     Sandbox.create({

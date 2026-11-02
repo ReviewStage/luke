@@ -89,7 +89,7 @@ export interface LoopbackConsentOptions<Grant> {
    * back off the state it issued. The entropy after it is unreduced.
    */
   statePrefix?: string;
-  /** Whose mark the landing card carries; omitted draws Luke's alone. */
+  /** Whose mark the landing card carries; omitted draws Fullspin's alone. */
   source?: LoopbackConnectionSource | undefined;
   pages: LoopbackConsentPages;
   reasons: LoopbackConsentReasons;
@@ -128,7 +128,7 @@ export interface LoopbackConsent<Grant> {
   signInEffect(): Effect.Effect<LoopbackConsentOutcome<Grant>, never, Scope.Scope>;
   /**
    * Ends the trip now waiting, if any. The browser tab is left where it is —
-   * closing another app's window is not Luke's to do — but the loopback stops
+   * closing another app's window is not Fullspin's to do — but the loopback stops
    * listening, so a grant given after this lands nowhere. A callback already
    * claimed is left to finish: that is a code in hand, not an open door.
    */

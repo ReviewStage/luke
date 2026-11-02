@@ -64,7 +64,7 @@
     margin-left: 0.3em;
   }
 
-  /* A note's Markdown, drawn wherever Luke's or the developer's words are:
+  /* A note's Markdown, drawn wherever Fullspin's or the developer's words are:
      the plan, a comment, a file's note, and the caption bar. Every measure is
      in `em` so the same rules read at the caption's ten pixels and the
      thread's twelve and a half, and every tint is mixed from `currentColor`,

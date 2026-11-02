@@ -68,7 +68,7 @@ interface ServiceState {
   /** The preferences the account saved, and when; none for an account that saved none. */
   preferences: Record<string, string>;
   updatedAt?: number;
-  /** Where the account's Luke links open, a part of its own; none where it never chose. */
+  /** Where the account's Fullspin links open, a part of its own; none where it never chose. */
   linkOpen?: string;
   /** Whether the service's sign-out is unreachable. */
   signOutDown?: boolean;
@@ -78,7 +78,7 @@ interface ServiceState {
   heldSignIn?: Promise<void> | undefined;
 }
 
-/** The service's routes over `state`, answered as Better Auth and Luke's routes answer them. */
+/** The service's routes over `state`, answered as Better Auth and Fullspin's routes answer them. */
 function respond(
   state: ServiceState,
   request: Pick<RecordedRequest, "method" | "pathname" | "body">,

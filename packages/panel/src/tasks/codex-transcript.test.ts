@@ -13,10 +13,10 @@ import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 /**
  * codex-transcript.test.ts -- a coding agent on Codex stores its items under
  * Codex's own names, with the shapes `codex-moments.ts` keeps of them, and
- * its tab draws each on the renderer Luke's own tool of that kind draws on:
+ * its tab draws each on the renderer Fullspin's own tool of that kind draws on:
  * its row's verb and subject, and its input and answer once opened. A call to
- * Luke's own MCP server is stored under Luke's tool's name and its answer as
- * that tool's JSON, and is drawn as Luke's tool always is. The shapes are
+ * Fullspin's own MCP server is stored under Fullspin's tool's name and its answer as
+ * that tool's JSON, and is drawn as Fullspin's tool always is. The shapes are
  * those P16's recording (`tools/codex-probe/fixtures/hermetic`) carries;
  * synthetic paths and words.
  */
@@ -136,7 +136,7 @@ const CODEX_ITEMS: readonly {
 ];
 
 for (const item of CODEX_ITEMS) {
-  test(`Codex's ${item.name} is drawn on the renderer of Luke's tool of its kind`, () => {
+  test(`Codex's ${item.name} is drawn on the renderer of Fullspin's tool of its kind`, () => {
     const { line, body } = opened(storedPart(item.tool, item.input, item.output));
     for (const words of item.line) assert.ok(line.includes(words), `${line} says ${words}`);
     for (const words of item.body) assert.ok(body.includes(words), `${body} shows ${words}`);
@@ -250,7 +250,7 @@ test("Codex's reasoning summary is drawn as the agent's reasoning", () => {
   );
 });
 
-test("Luke's read_agent, called over its MCP server and stored under its own name, opens the agent", () => {
+test("Fullspin's read_agent, called over its MCP server and stored under its own name, opens the agent", () => {
   const { container, opened: targets } = drawn(
     storedPart("read_agent", { agentId: "agent-7" }, { status: "running" }),
   );

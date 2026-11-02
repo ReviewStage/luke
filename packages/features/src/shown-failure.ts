@@ -387,7 +387,8 @@ const DETAIL_KEY = {
 } as const;
 
 /** The line a failure's copied details open with, saying what the rest is for. */
-const DETAILS_HEADING = "Luke showed an error. Find it in Sentry and the logs by these details:";
+const DETAILS_HEADING =
+  "Fullspin showed an error. Find it in Sentry and the logs by these details:";
 
 /** The issue's context its attributes travel under. */
 const SHOWN_FAILURE_CONTEXT = "shown_failure";

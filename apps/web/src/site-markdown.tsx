@@ -1,5 +1,5 @@
 /**
- * site-markdown.tsx -- the site's two Markdown documents drawn as HTML when it is built: CHANGELOG.md read as releases and PRIVACY.md as a policy, both by `@luke/ui/markdown`, the renderer every Markdown in Luke is drawn with.
+ * site-markdown.tsx -- the site's two Markdown documents drawn as HTML when it is built: CHANGELOG.md read as releases and PRIVACY.md as a policy, both by `@luke/ui/markdown`, the renderer every Markdown in Fullspin is drawn with.
  *
  * Only the build reads this module (`scripts/site-markdown.ts`, which hands
  * a page what it answers as a module of finished values), so the pages

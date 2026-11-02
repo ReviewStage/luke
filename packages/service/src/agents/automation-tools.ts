@@ -130,10 +130,10 @@ export const AUTOMATION_TOOL_REFUSAL = {
     "Not run: the schedule's time zone is not one the IANA database names, such as Europe/London.",
   TOO_FREQUENT: "Not run: a schedule may fire at most once every fifteen minutes.",
   SENTRY_UNCONFIGURED:
-    "Not run: this deployment of Luke has no Sentry integration configured, so no automation " +
+    "Not run: this deployment of Fullspin has no Sentry integration configured, so no automation " +
     "here may fire on Sentry's events; use a schedule or a GitHub event instead.",
   SENTRY_NOT_INSTALLED:
-    "Not run: the workspace has not installed Luke's Sentry integration, so no Sentry event " +
+    "Not run: the workspace has not installed Fullspin's Sentry integration, so no Sentry event " +
     "would fire it. A workspace owner or admin installs it in Workspace settings › " +
     "Integrations › Sentry; make it once that is done.",
   NO_AGENT:
@@ -143,7 +143,7 @@ export const AUTOMATION_TOOL_REFUSAL = {
     "Not run: this is the developer's personal workspace, where every automation is theirs " +
     "alone; leave scope out or name personal.",
   INVALID:
-    "Not run: Luke does not take the automation as asked. Check the trigger, the repositories, " +
+    "Not run: Fullspin does not take the automation as asked. Check the trigger, the repositories, " +
     "the scope, and the agentId, and that the guards are whole numbers within their bounds.",
   UNKNOWN_SERVERS:
     "Not run: name each connection in disabledServers as your connections are named in your " +
@@ -170,7 +170,7 @@ const PROMPT = describeWire(
   automationActionSchema.fields.prompt,
   "What each run's new agent is told to do, as its first message, at most " +
     `${AUTOMATION_BOUNDS.MAX_PROMPT_CHARS} characters: whole and standing alone, since no one ` +
-    "watches a run and, unless agentId is set, it remembers no run before it. Luke adds a line beneath it saying what " +
+    "watches a run and, unless agentId is set, it remembers no run before it. Fullspin adds a line beneath it saying what " +
     "fired the run.",
 );
 
@@ -178,14 +178,14 @@ const TRIGGER = describeWire(
   Schema.Union([scheduleTriggerSchema, githubTriggerSchema, sentryTriggerSchema]),
   "What fires it: a schedule, five-field cron read in an IANA time zone, at most once every " +
     'fifteen minutes, such as {"kind":"schedule","cron":"0 9 * * 1","timezone":"Europe/London"}; ' +
-    "an event of its repositories the Luke GitHub App hears, such as " +
+    "an event of its repositories the Fullspin GitHub App hears, such as " +
     '{"kind":"github","event":"pull-request-opened"}, narrowed by labels, branches, senders ' +
     "(people alone where left out), moments, drafts, and forks; or an event of the Sentry " +
-    "organization that installed Luke's Sentry integration on the workspace (Workspace settings " +
+    "organization that installed Fullspin's Sentry integration on the workspace (Workspace settings " +
     '› Integrations › Sentry), such as {"kind":"integration","provider":"sentry",' +
     '"event":"alert-triggered","filters":{"project":["web"],"level":["error","fatal"]}}. ' +
     "alert-triggered, the one to prefer, fires when a Sentry issue alert rule whose action is " +
-    '"Send a notification via Luke" fires; issue-created fires on every new issue in that ' +
+    '"Send a notification via Fullspin" fires; issue-created fires on every new issue in that ' +
     "organization. Its filters keep it to the projects (by slug), environments, and levels " +
     "named: any value within a field matches, every field named must, case aside. A webhook is " +
     "made only on the automations page, which shows its secret once.",
@@ -334,10 +334,10 @@ export const CREATE_AUTOMATION_TOOL = {
   name: AGENT_TOOL.CREATE_AUTOMATION,
   description:
     "Make an automation in your workspace for the developer you work for, as the automations " +
-    "page would: each time its trigger fires, Luke starts an agent on its prompt, in its " +
+    "page would: each time its trigger fires, Fullspin starts an agent on its prompt, in its " +
     "repositories, on its creator's keys and connections, with no task and no one watching, or " +
     "hands the run to the one agent named. It is on as it is made, and runs as the developer. " +
-    "One fired by Sentry needs Luke's Sentry integration installed on the workspace first. " +
+    "One fired by Sentry needs Fullspin's Sentry integration installed on the workspace first. " +
     "Make one when the developer asks for it, never otherwise on your own, and read " +
     `${AGENT_TOOL.LIST_AUTOMATIONS} first so you make none they already have. Answers ` +
     "`accepted` with the automation as it stands, or `rejected` and why.",
@@ -352,7 +352,7 @@ export const UPDATE_AUTOMATION_TOOL = {
     "pause or resume it, rename it, or give it a new prompt, trigger, repositories, model and " +
     "effort, switched-off connections, the agent its runs land on, guards, scope, or archiving; " +
     "what you leave out stands, and a trigger given replaces the one standing whole, a switch " +
-    "to Sentry needing Luke's Sentry integration installed on the workspace. Change one only " +
+    "to Sentry needing Fullspin's Sentry integration installed on the workspace. Change one only " +
     "where the developer asked for it. Answers `accepted` with the automation as it now " +
     "stands, or `rejected` and why.",
   inputSchema: UPDATE_AUTOMATION_INPUT,
@@ -382,7 +382,7 @@ export const RUN_AUTOMATION_TOOL = {
   inputSchema: RUN_AUTOMATION_INPUT,
 } as const;
 
-/** What the automation tools reach: the store, the catalog a model is checked against, GitHub through the workspace's installation, and Luke's Sentry integration. */
+/** What the automation tools reach: the store, the catalog a model is checked against, GitHub through the workspace's installation, and Fullspin's Sentry integration. */
 type AutomationToolServices =
   | DatabaseServices
   | ModelCatalog

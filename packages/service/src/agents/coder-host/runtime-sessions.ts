@@ -1,5 +1,5 @@
 /**
- * runtime-sessions.ts -- a coding agent's sessions answered by the runtime its conversation runs on: eve as today, or a native harness Luke launches.
+ * runtime-sessions.ts -- a coding agent's sessions answered by the runtime its conversation runs on: eve as today, or a native harness Fullspin launches.
  *
  * Every place that reaches a coding agent's session holds one
  * `AgentSessions`: the composer, an Inbox answer, another agent's message, a GitHub
@@ -125,7 +125,7 @@ function preparingNamed<Outcome extends { readonly outcome: string }>(answered: 
     : answered;
 }
 
-/** The message as eve is handed it, as it always was: Luke's own id for its line is a native runner's alone. */
+/** The message as eve is handed it, as it always was: Fullspin's own id for its line is a native runner's alone. */
 function forEve<Turn extends EveHostTurn>(message: EveMessage<Turn>): EveMessage<Turn> {
   if (message.lineId === undefined) return message;
   const { lineId: _native, ...rest } = message;

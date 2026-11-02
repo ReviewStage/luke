@@ -41,7 +41,7 @@
  * so the two read as one list's notes.
  *
  * It is drawn in Tailwind utilities over the theme with no shadcn base:
- * shadcn's alert is a block of its own, a titled card or strip (Luke's
+ * shadcn's alert is a block of its own, a titled card or strip (Fullspin's
  * `Banner`), where a failure note is one line among the words of what it
  * failed in. The line's first row is a caption's leading tall, or a
  * control's where a press stands in it, and the mark and the words' first

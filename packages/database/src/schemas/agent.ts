@@ -94,18 +94,18 @@ import { task } from "./task.js";
  * after it.
  * `started_by_agent_id` is the coding agent whose `start_agent` started this
  * one, always an agent of the same account, which is told when this one's
- * run ends without finishing; null for an agent a member, Luke, or an
+ * run ends without finishing; null for an agent a member, Fullspin, or an
  * automation started, and once the starter's row is gone. A Continue or a
  * Fork by hand names none, whoever started its source, but for a Continue
  * by hand of an agent a pilot started, which names that pilot, so a
  * continued sub-pilot still reports up to its parent.
  * `author` is who the agent's commits are by and its pull request is opened
- * as, the developer or the Luke GitHub App with why (`AGENT_AUTHOR`),
+ * as, the developer or the Fullspin GitHub App with why (`AGENT_AUTHOR`),
  * settled once as its first session starts and never moved after, so its
  * instructions and its checkout agree; null before then, and for an agent
  * from before the column, which writes as the App.
  * `payer` is who pays for the agent's model calls (`AGENT_PAYER`),
- * the starter's Claude or ChatGPT plan, their own API key, or Luke's,
+ * the starter's Claude or ChatGPT plan, their own API key, or Fullspin's,
  * recorded as it starts and never moved after; null for an agent from
  * before the column. What answers its conversation is the conversation's
  * own `runtime`.
@@ -152,7 +152,7 @@ export interface StoredAgentStep {
 /**
  * The run of an automation that started an agent, as the run started it: the
  * automation's name, what fired the run, the automation's prompt alone,
- * without the lines Luke adds of the firing, and a webhook call's body as
+ * without the lines Fullspin adds of the firing, and a webhook call's body as
  * its caller sent it, cut as the agent was handed it, where the firing was
  * one. The body is the agent's task already, so it is kept nowhere the task
  * is not.
@@ -186,7 +186,7 @@ export interface StoredStartedFrom {
 }
 
 /**
- * Who archived an agent, and why: a member from the window, or Luke or
+ * Who archived an agent, and why: a member from the window, or Fullspin or
  * another coding agent acting for one, the member always, the agent by its
  * id and its title as it stood, and the reason where one was given.
  * `withTask` marks an agent archived along with its task, by the member who
@@ -301,7 +301,7 @@ export const agentTable = pgTable(
     /** Who pays for the agent's model calls, recorded as it starts and never moved; null for an agent from before the column. */
     payer: text("payer").$type<AgentPayer>(),
     /**
-     * The digest of the bearer the agent's runner presents at Luke's MCP server and its events
+     * The digest of the bearer the agent's runner presents at Fullspin's MCP server and its events
      * route, never the bearer itself; null where no runner holds one. Kept on the agent's row rather
      * than its conversation's, because a launch writes it while a message's hand-over holds the
      * conversation's lock (`steer.ts`), from another function's connection where the eve apps relay.
@@ -321,7 +321,7 @@ export const agentTable = pgTable(
     uniqueIndex("agent_user_idempotency").on(table.userId, table.idempotencyKey),
     // The tabs read one task's agents in the order they were started.
     index("agent_task_created").on(table.taskId, table.createdAt),
-    // Every Luke tool call, runner event, and session route finds the agent its conversation is;
+    // Every Fullspin tool call, runner event, and session route finds the agent its conversation is;
     // one agent per conversation, since an agent is started on a conversation of its own.
     uniqueIndex("agent_conversation").on(table.conversationId),
     // A workspace's agents with no task are read newest first.
@@ -333,7 +333,7 @@ export const agentTable = pgTable(
       .where(sql`${table.taskId} is null`),
     // An agent's summary names the agents started from it, read by the source's id.
     index("agent_started_from_agent").on(sql`(${table.startedFrom}->>'agentId')`),
-    // Luke's MCP server and the events route find the agent a runner's bearer stands for by the
+    // Fullspin's MCP server and the events route find the agent a runner's bearer stands for by the
     // bearer's digest, on every call; one digest names one agent.
     uniqueIndex("agent_runner_token_hash")
       .on(table.runnerTokenHash)

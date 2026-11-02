@@ -15,7 +15,7 @@ import { Fold, FoldBody, type FoldProps } from "./fold.js";
  * reasoning.tsx -- AI Elements' Reasoning: a model's thinking, folded under one quiet line until the reader opens it.
  *
  * After the AI Elements registry (https://elements.ai-sdk.dev), restyled
- * to Luke's tokens and folded on `fold.tsx` rather than the registry's
+ * to Fullspin's tokens and folded on `fold.tsx` rather than the registry's
  * collapsible. Closed by default, as docs/TASKS.md's rule for an
  * agent's transcript asks: the reasoning is there to be read, never in
  * the way. The line leads with a brain in the 16px seat a call's icon

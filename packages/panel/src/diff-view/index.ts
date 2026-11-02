@@ -152,7 +152,7 @@ import { wholeOf } from "./whole-diff.js";
  * and each note under its line drawn in the element the view keeps for it,
  * as a list's are. Pierre numbers a file from its first line, so the file
  * is handed whole. One patch alone takes notes under its lines the same way
- * (\`mount\`), as a Code card's snippet, an excerpt of a file, carries Luke's;
+ * (\`mount\`), as a Code card's snippet, an excerpt of a file, carries Fullspin's;
  * a feed of such cards colours each in the same pool (\`pooled\`), so many
  * landing at once never hold the window's thread.
  *
@@ -399,7 +399,7 @@ const FILL_CSS = `
   pre {
     min-height: 100%;
   }
-  /* A note under one patch's lines, Luke's under a Code card's snippet,
+  /* A note under one patch's lines, Fullspin's under a Code card's snippet,
      stands on the code's own ground, its numbers' column too, rather than
      Pierre's context ground, which sets a comment's row apart in a diff:
      a snippet's lines are a file's, so none of them stands apart. */

@@ -23,4 +23,4 @@ ask whose connection closed before it answered is unknown: it may have happened.
 
 **The two must never collapse into one**, because the action journal records the
 first as a refusal and the second as an action whose effect is uncertain and which
-Luke never retries on his own initiative.
+Fullspin never retries on its own initiative.

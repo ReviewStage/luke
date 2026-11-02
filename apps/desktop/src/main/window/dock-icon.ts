@@ -13,7 +13,7 @@ const DOCK_ICON_FILES = {
 } as const;
 
 /**
- * Draws Luke's own face in the Dock, matched to the theme. Artwork missing
+ * Draws Fullspin's own face in the Dock, matched to the theme. Artwork missing
  * from a build draws nothing, leaving the bundle icon (or the stock one) in
  * place rather than an empty tile.
  */
@@ -25,7 +25,7 @@ function drawDockIcon(iconDirectory: string): void {
 }
 
 /**
- * Luke always stands in the Dock, as an ordinary app does; this keeps his
+ * Fullspin always stands in the Dock, as an ordinary app does; this keeps its
  * tile matched to the theme, drawn now and again as the desktop changes mode.
  */
 export function followDockIcon(iconDirectory: string): void {

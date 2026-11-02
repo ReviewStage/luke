@@ -86,7 +86,7 @@ function listed() {
 
 /**
  * The account's own device keyed with a new secret, inserted where no row
- * holds the id, so a machine whose first word to Luke is its enroll is
+ * holds the id, so a machine whose first word to Fullspin is its enroll is
  * created under the account.
  */
 const insertOwnDevice = SqlSchema.findAll({

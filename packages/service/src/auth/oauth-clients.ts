@@ -1,11 +1,11 @@
 /**
- * Luke's own native client, and the record shape it is provisioned under: a
+ * Fullspin's own native client, and the record shape it is provisioned under: a
  * public PKCE client with no secret.
  */
 
 export const DESKTOP_OAUTH_CLIENT = {
   id: "luke-desktop",
-  name: "Luke for macOS",
+  name: "Fullspin for macOS",
   scopes: ["openid", "profile", "email", "offline_access"],
   redirectUris: ["http://127.0.0.1/callback"],
   tokenEndpointAuthMethod: "none",

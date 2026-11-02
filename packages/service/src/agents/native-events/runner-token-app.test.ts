@@ -607,7 +607,7 @@ it.layer(getTestDB())("a Mac's GitHub token", (it) => {
   );
 
   it.effect(
-    "refuses an agent on a Mac running its agents on its own logins, and mints for one running them on the box on Luke's",
+    "refuses an agent on a Mac running its agents on its own logins, and mints for one running them on the box on Fullspin's",
     () =>
       Effect.gen(function* () {
         const { ask } = yield* hostStanding;

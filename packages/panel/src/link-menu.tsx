@@ -83,7 +83,7 @@ function placementOf(event: MouseEvent, element: HTMLElement): MenuPlacement {
 /**
  * The window's one link menu, drawn wherever a right-click on a link hangs
  * it. It is mounted once, at the window's root, under the window's opener
- * for a place in Luke and its toast.
+ * for a place in Fullspin and its toast.
  */
 export function LinkMenu(): React.JSX.Element | null {
   const { drawn, show, close } = useMenu(true);

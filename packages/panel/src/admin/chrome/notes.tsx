@@ -50,9 +50,9 @@ export function ActivityNote(): React.JSX.Element {
   return (
     <SectionNote>
       An active developer created a task, wrote a plan revision, or started an agent in the last 7
-      UTC days. Plan revisions count the developer's own and Luke's notes; automation runs leave out
-      the ones a guard held back. A deleted task leaves no row, and takes its agents and revisions
-      with it, so past counts can shrink.
+      UTC days. Plan revisions count the developer's own and Fullspin's notes; automation runs leave
+      out the ones a guard held back. A deleted task leaves no row, and takes its agents and
+      revisions with it, so past counts can shrink.
     </SectionNote>
   );
 }

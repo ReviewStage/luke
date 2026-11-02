@@ -1,5 +1,5 @@
 /**
- * quit-dialog.ts -- the sheet a way out of Luke asks with while something would be lost: leave, or stay.
+ * quit-dialog.ts -- the sheet a way out of Fullspin asks with while something would be lost: leave, or stay.
  */
 
 import { LEAVE_ANSWER, type LeaveQuestion } from "@luke/host/quit";

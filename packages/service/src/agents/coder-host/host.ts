@@ -238,7 +238,7 @@ export interface CoderHost extends HostAdmission {
    * a session opened afresh after its last one retired remembers what was
    * said. A line awaiting its turn is left out, since it is the message the
    * session opens with; nothing for a conversation with nothing else said.
-   * No compaction summary leads it, since Luke keeps
+   * No compaction summary leads it, since Fullspin keeps
    * none of a coding agent's history.
    */
   seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
@@ -716,7 +716,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         );
         const records = read.ok ? read.value.filter((record) => !awaitsTurn(record)) : [];
         const speakers = yield* teammateSpeakers(admitted.target, records);
-        // Note that Luke keeps no compaction summary of a coding agent's history, so none leads it.
+        // Note that Fullspin keeps no compaction summary of a coding agent's history, so none leads it.
         return rotationSeedText(records.map(messageOf), seams.now(), speakers);
       }),
 

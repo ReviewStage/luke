@@ -4,10 +4,10 @@ import { openTargetOf } from "./open-address.js";
 import { parsedUrl } from "./parsed-url.js";
 
 /**
- * link-open.ts -- where the account opens a Luke link, and whether a web page showing one hands it to the Mac app.
+ * link-open.ts -- where the account opens a Fullspin link, and whether a web page showing one hands it to the Mac app.
  *
  * As Linear's "Open links in the desktop app" does, an account chooses
- * whether a Luke link opened in a browser stays there or goes to Luke for
+ * whether a Fullspin link opened in a browser stays there or goes to Fullspin for
  * Mac. The choice is the account's (`@luke/settings`' `linkOpen`, its own
  * part of the preferences snapshot), so the web reads it on a signed-in
  * load and decides here. The hand-off is the web app's "Open in the Mac
@@ -16,11 +16,11 @@ import { parsedUrl } from "./parsed-url.js";
  * The browser is the default, because it works without the app.
  */
 
-/** Where an account opens a Luke link. */
+/** Where an account opens a Fullspin link. */
 export const LINK_OPEN = {
   /** Stay on the web, which works wherever there is a browser. */
   BROWSER: "browser",
-  /** Hand the link to Luke for Mac through its own scheme. */
+  /** Hand the link to Fullspin for Mac through its own scheme. */
   MAC_APP: "mac-app",
 } as const;
 
@@ -32,7 +32,7 @@ export const LINK_OPEN_LIST: readonly LinkOpen[] = [LINK_OPEN.BROWSER, LINK_OPEN
 /** What a choice reads as on a control. */
 export const LINK_OPEN_LABEL = {
   [LINK_OPEN.BROWSER]: "Browser",
-  [LINK_OPEN.MAC_APP]: "Luke for Mac",
+  [LINK_OPEN.MAC_APP]: "Fullspin for Mac",
 } as const satisfies Record<LinkOpen, string>;
 
 /** The platform a browser runs on, as far as a hand-off cares: the app is a Mac's alone. */
@@ -54,7 +54,7 @@ export function isLinkOpen(value: UnparsedWireValue): value is LinkOpen {
  * The link a web page showing `address` hands to the Mac app, or nothing
  * where it stays on the web: the account chose the browser, the browser is
  * on no Mac, or the address names no place in a workspace. The address is
- * the page's own, on Luke's home or a preview alike, read as
+ * the page's own, on Fullspin's home or a preview alike, read as
  * `open-address.ts` reads it.
  */
 export function linkOpenTarget(

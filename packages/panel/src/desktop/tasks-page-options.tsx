@@ -161,14 +161,14 @@ const COMPLETED_WORDS = {
 
 /**
  * What each maker is called in Made by, and the mark it wears there: a
- * person's glyph, a coding agent's square on no harness, and Luke's face.
+ * person's glyph, a coding agent's square on no harness, and Fullspin's face.
  * Note that an agent an automation's run started makes its tasks as an
  * agent, which the task names by the automation, so Agents says both.
  */
 const MAKER_WORDS = {
   [TASK_MAKER.PERSON]: "People",
   [TASK_MAKER.AGENT]: "Agents and automations",
-  [TASK_MAKER.LUKE]: "Luke",
+  [TASK_MAKER.LUKE]: "Fullspin",
 } as const satisfies Record<TaskMaker, string>;
 
 const MAKER_ACTOR = {

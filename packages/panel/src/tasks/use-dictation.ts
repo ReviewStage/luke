@@ -17,13 +17,13 @@ import { base64Of } from "./attached-files.js";
 import { openPreferredMicrophone } from "./microphone-choice.js";
 
 /**
- * use-dictation.ts -- a message box's dictation: the microphone recorded in this panel, heard as words by Luke's service, and the words put at the caret.
+ * use-dictation.ts -- a message box's dictation: the microphone recorded in this panel, heard as words by Fullspin's service, and the words put at the caret.
  *
  * The press opens the preferred microphone (the Mac's own over a
  * Bluetooth headset's, `./microphone-choice.ts`), after
  * asking macOS where it has not been asked, and records it as Opus in
  * WebM at the wire's bitrate, measured by an analyser the strip draws.
- * Finishing hands the clip to main in one act, and main to Luke's service,
+ * Finishing hands the clip to main in one act, and main to Fullspin's service,
  * which has OpenAI hear it and answers the words; the renderer never
  * reaches OpenAI. The words go in at the caret the press found, carried
  * through whatever changed the words since as a mark the box's editor keeps
@@ -55,7 +55,7 @@ type DictationPhase = (typeof DICTATION_PHASE)[keyof typeof DICTATION_PHASE];
 /** Why a dictation left nothing, in the words the box's note says. */
 const DICTATION_NOTE = {
   MICROPHONE_DENIED:
-    "Luke cannot use the microphone. Allow it in System Settings › Privacy & Security › Microphone.",
+    "Fullspin cannot use the microphone. Allow it in System Settings › Privacy & Security › Microphone.",
   MICROPHONE_FAILED: "The microphone could not be opened.",
   BOX_FULL: "There is no room for the dictated words.",
   NO_WORDS: "No words were heard.",

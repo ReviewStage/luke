@@ -40,7 +40,7 @@ const COST_ERROR = readFailedWords("cost");
 
 /** What every figure on the screen is, said once at the top of the page. */
 const COST_DESCRIPTION =
-  "Every model token and metered second at its public list price: a list-price equivalent, not what Luke pays.";
+  "Every model token and metered second at its public list price: a list-price equivalent, not what Fullspin pays.";
 
 /** The screen's dollar measure, named once so every label says the same thing. */
 const LIST_PRICE = "List-price equivalent";
@@ -57,7 +57,7 @@ function usdOrNone(value: number | null): string {
 
 /**
  * What every dollar on the screen is and is not, said once under the
- * headline: a comparison and a trend at public prices, never Luke's bill.
+ * headline: a comparison and a trend at public prices, never Fullspin's bill.
  */
 function ListPriceNote(): React.JSX.Element {
   return (

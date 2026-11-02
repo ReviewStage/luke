@@ -28,24 +28,24 @@ export const GITHUB_TOKEN_STATUS = {
 export type GitHubTokenStatus = (typeof GITHUB_TOKEN_STATUS)[keyof typeof GITHUB_TOKEN_STATUS];
 
 /**
- * GitHub's page for a new classic token, opened with the scopes Luke asks
- * for checked and Luke as its note. Creating one, in GitHub's docs:
+ * GitHub's page for a new classic token, opened with the scopes Fullspin asks
+ * for checked and Fullspin as its note. Creating one, in GitHub's docs:
  * https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic
  */
 export const GITHUB_TOKEN_CREATE_URL =
-  "https://github.com/settings/tokens/new?scopes=repo,read:org,workflow,read:user&description=Luke";
+  "https://github.com/settings/tokens/new?scopes=repo,read:org,workflow,read:user&description=Fullspin";
 
 /** Why a save kept nothing. */
 export const GITHUB_TOKEN_REJECTION = {
-  /** A fine-grained token (`github_pat_…`), which Luke does not take; nothing was sent to GitHub. */
+  /** A fine-grained token (`github_pat_…`), which Fullspin does not take; nothing was sent to GitHub. */
   FINE_GRAINED: "fine_grained",
   /** GitHub refused the token. */
   INVALID: "invalid",
   /** GitHub accepted the token, but it lacks the `repo` scope. */
   NO_REPO_SCOPE: "no_repo_scope",
-  /** The member has no GitHub account linked to Luke to match the token against; nothing was sent to GitHub. */
+  /** The member has no GitHub account linked to Fullspin to match the token against; nothing was sent to GitHub. */
   NO_GITHUB_ACCOUNT: "no_github_account",
-  /** The token belongs to another GitHub user than the one the member linked to Luke. */
+  /** The token belongs to another GitHub user than the one the member linked to Fullspin. */
   OTHER_USER: "other_user",
   /** GitHub could not be asked, or did not answer; the same token may be tried again. */
   UNREACHABLE: "unreachable",

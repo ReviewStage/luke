@@ -149,7 +149,7 @@ import { cancelledTurn, summaryOf } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
- * start.ts -- an agent started on a task, or in a workspace with no task: the one path a Start takes, from the Start button, from Luke's voice, or from an automation's run.
+ * start.ts -- an agent started on a task, or in a workspace with no task: the one path a Start takes, from the Start button, from Fullspin's voice, or from an automation's run.
  *
  * The model, effort, and context window are the ask's own where it names a
  * model, the account's stored default otherwise, either checked against the
@@ -157,7 +157,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * refuses a stored default that has since left it; a refused choice is
  * answered as the catalog's own refusal, so the route can say invalid and
  * the voice tool can say which choices there are. The task must name a
- * repository the account still reaches through the Luke GitHub App, and
+ * repository the account still reaches through the Fullspin GitHub App, and
  * through its workspace's installation where it has one, read now rather
  * than when the task named it (`packages/service/src/github/workspace-repository.ts`). The
  * agent and its conversation are made under the ask's key, and a retry

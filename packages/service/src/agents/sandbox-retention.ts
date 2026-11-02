@@ -14,7 +14,7 @@
  * scheduled sweep (`maintenance/sandbox-retention-sweep.ts`).
  *
  * Note what Vercel's pages leave unsaid, and what was observed of it on a
- * throwaway sandbox of Luke's own on 2026-10-22: the update evicts at once,
+ * throwaway sandbox of Fullspin's own on 2026-10-22: the update evicts at once,
  * keeping the newest snapshots by when they were made and deleting the rest,
  * whichever one the sandbox resumes from (`currentSnapshotId`); and it leaves
  * the expiry of each snapshot it keeps as it was, so the bound applies from

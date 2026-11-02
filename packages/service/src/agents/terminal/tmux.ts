@@ -6,7 +6,7 @@
  * sleeping laptop reattaches to the same process. A session's name carries
  * the id alone, its developer-given name rides as a session option, and
  * every command names its session exactly (`=`), since tmux would otherwise
- * take a prefix of one for another. Every command is a script Luke writes,
+ * take a prefix of one for another. Every command is a script Fullspin writes,
  * and what a developer typed reaches it only as a positional argument, never
  * spliced into its text. tmux and its settings come with the image
  * (`agent-runtime/sandbox.ts`), and nothing here installs them, since a

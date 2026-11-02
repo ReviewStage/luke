@@ -171,7 +171,7 @@ export type DraftPlace = typeof draftPlaceSchema.Type;
 
 /**
  * New task's words on one of the workspace's own issues, as a build from
- * before Luke kept no issues stored them. No card opens on an issue now, so
+ * before Fullspin kept no issues stored them. No card opens on an issue now, so
  * such an entry is read past rather than taken for the workspace's own
  * draft, which it would displace, and goes once its account writes again.
  */

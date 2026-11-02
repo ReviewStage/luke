@@ -1,5 +1,5 @@
 /**
- * sentry-account.ts -- the Luke account a desktop window's or a web tab's report names: its id alone, as Sentry's user, never an email, a name, or a login.
+ * sentry-account.ts -- the Fullspin account a desktop window's or a web tab's report names: its id alone, as Sentry's user, never an email, a name, or a login.
  *
  * Main sets the account as its SDK's user, which every window's event takes
  * as it passes through main (`telemetry-service.ts`). A window's log line

@@ -7,7 +7,7 @@
  * ones a developer may choose to offer them. The repository's are read
  * exactly where and as the File tab reads a file (`task-file.ts`): the task
  * is read under the account first, so a task another account owns reads as
- * no task, then the Luke GitHub App confirms the account reaches the task's
+ * no task, then the Fullspin GitHub App confirms the account reaches the task's
  * repository and mints a token for that one repository, used for the one
  * read and going nowhere else; the read is of the head of the repository's
  * default branch, and names it. The installed ones are the store's

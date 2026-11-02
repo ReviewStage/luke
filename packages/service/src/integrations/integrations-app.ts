@@ -7,7 +7,7 @@
  * on to the landing page with the provider and one word. A browser back
  * without a grant ends the sign-in, so the provider no longer stands
  * pending. Connect sends nothing back on the address, no error and no
- * reason, and Luke asks Connect for none, because Connect documents no way
+ * reason, and Fullspin asks Connect for none, because Connect documents no way
  * to read why a sign-in ended.
  *
  * Everything else about the account's integrations is a hosted procedure
@@ -51,7 +51,7 @@ import type {
 /** How long a sign-in may stay under way before its state no longer settles it: Connect's own requests last about as long. */
 const INTEGRATION_SIGN_IN_WINDOW_MS = 15 * 60 * 1000;
 
-/** The query Connect returns the browser with, which is the one Luke put on the callback. */
+/** The query Connect returns the browser with, which is the one Fullspin put on the callback. */
 export const INTEGRATION_CALLBACK_QUERY = { STATE: "state" } as const;
 
 /** A sign-in's state as one is minted: 32 random bytes, url-safe. */
@@ -111,7 +111,7 @@ export function mintIntegrationState(): string {
   return randomBytes(STATE_BYTES).toString("base64url");
 }
 
-/** A subject for another account's grant as production mints it: 24 random bytes, url-safe, prefixed so it reads as Luke's own. */
+/** A subject for another account's grant as production mints it: 24 random bytes, url-safe, prefixed so it reads as Fullspin's own. */
 export function mintIntegrationSubject(): string {
   return `luke_acct_${randomBytes(SUBJECT_BYTES).toString("base64url")}`;
 }

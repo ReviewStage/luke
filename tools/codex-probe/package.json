@@ -3,7 +3,7 @@
   "version": "0.24.0",
   "private": true,
   "type": "module",
-  "description": "The P16 probe: Codex app-server on a ChatGPT plan inside a Luke sandbox, signed in through OpenAI's open-source flow",
+  "description": "The P16 probe: Codex app-server on a ChatGPT plan inside a Fullspin sandbox, signed in through OpenAI's open-source flow",
   "scripts": {
     "test:vitest": "vitest run",
     "typecheck": "tsc --project tsconfig.json"

@@ -4,7 +4,7 @@
  * `POST /api/dictation` takes one clip (`@luke/features/dictation-wire`),
  * holds it to two minutes and a megabyte, hands it to OpenAI's transcription
  * model on the caller's own OpenAI API key (`../accounts/own-api-key.ts`),
- * never Luke's, with the words the desktop says it is likely to hold
+ * never Fullspin's, with the words the desktop says it is likely to hold
  * (`dictation/transcription.ts`), and answers the text. Nothing of the clip or
  * the text is stored, logged, traced, or counted as an event: the clip lives
  * in this request's memory and goes when it ends.

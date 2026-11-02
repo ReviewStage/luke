@@ -41,11 +41,11 @@ function AllowMicrophone({ microphone }: { microphone: MicrophoneControl }): Rea
 }
 
 /**
- * microphone-section.tsx -- the This Mac page's Dictation group: whether Luke may open the microphone, and which one it prefers.
+ * microphone-section.tsx -- the This Mac page's Dictation group: whether Fullspin may open the microphone, and which one it prefers.
  *
  * Dictation records the microphone in the window it is pressed in, so the
- * group stands only on a platform whose microphone Luke asks for itself.
- * Its first row answers access, not use: whether macOS lets Luke at the
+ * group stands only on a platform whose microphone Fullspin asks for itself.
+ * Its first row answers access, not use: whether macOS lets Fullspin at the
  * microphone, a check once it does, Allow while macOS has not been asked,
  * and the door to System Settings once it has answered, the one place its
  * answer can be changed. Under it stand the microphone's own settings, the

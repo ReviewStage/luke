@@ -11,9 +11,9 @@ import { mountPrerenderedPage } from "./mount-page";
 const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
 
 /**
- * The page opens on Luke's mark, unbadged while the consent goes through,
+ * The page opens on Fullspin's mark, unbadged while the consent goes through,
  * badged as failed where it could not, when the title says so and Open
- * Luke goes back to start again.
+ * Fullspin goes back to start again.
  */
 function Consent(): React.JSX.Element {
   const [failure, setFailure] = useState(false);
@@ -36,7 +36,7 @@ function Consent(): React.JSX.Element {
   return (
     <AuthPage
       mark={<AuthMark tone={failure ? LANDING_TONE.DANGER : undefined} />}
-      title={failure ? "Luke could not continue" : "Continuing to Luke…"}
+      title={failure ? "Fullspin could not continue" : "Continuing to Fullspin…"}
       description={failure ? "Start sign-in again." : undefined}
       action={failure ? openLukeFromMac() : undefined}
     />

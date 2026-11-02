@@ -4,13 +4,13 @@
  * Composed by the web functions that ship the runner's bundle
  * (`apps/web/server/native-agents.ts`): each harness's sessions acting for
  * an account, over the function's own services. A launch's runner posts
- * its events to the events route and calls Luke's tools at the MCP server,
+ * its events to the events route and calls Fullspin's tools at the MCP server,
  * both under the deployment's own origin; numbers its events from one past
  * the last the store applied of its conversation (`readNativeSequence`);
  * asks the token route for the plan's token, on Codex; is handed each
  * integration its starter's conversation is handed, as an MCP server of its
- * own beside Luke's (`../luke-mcp/app.ts`);
- * and runs under Luke's coder instructions, worded for the harness, which
+ * own beside Fullspin's (`../luke-mcp/app.ts`);
+ * and runs under Fullspin's coder instructions, worded for the harness, which
  * names the tools it owns by its own names (`instructions.ts`): Claude
  * Code's appended to its prompt, Codex's as its `developer_instructions`.
  */
@@ -45,12 +45,12 @@ import { NativeAgentSessions } from "./runtime-sessions.js";
 export interface NativeAgentSessionsOptions {
   /** Runs one effect on the function's runtime, which the checkout reaches the agent's machine through. */
   readonly run: SandboxRunner;
-  /** The deployment's own origin, which the runner reaches Luke at; none opens no harness. */
+  /** The deployment's own origin, which the runner reaches Fullspin at; none opens no harness. */
   readonly origin?: () => string | undefined;
 }
 
 /**
- * Luke's coder instructions for an agent on the harness given, composed on
+ * Fullspin's coder instructions for an agent on the harness given, composed on
  * what its row names as an eve session's are (`host.ts`'s `prompt`): whether
  * its token reads the repository's CI, the co-author trailer where it writes
  * as its developer, the workspace its links are written under, and whether
@@ -81,7 +81,7 @@ const nativeCoderInstructions = (
     });
   });
 
-/** The integrations an agent is handed as its launch starts, each an MCP server of its own at Luke, read as its starter's conversation reads them. */
+/** The integrations an agent is handed as its launch starts, each an MCP server of its own at Fullspin, read as its starter's conversation reads them. */
 const nativeIntegrations = (userId: string, agent: Agent, origin: string) =>
   Effect.map(
     nativeAgentConnections({

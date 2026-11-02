@@ -46,7 +46,7 @@ export const PRELOAD_ERROR = "vite:preloadError";
 const RELOADED_FROM_KEY = "luke.staleBuild.reloadedFrom";
 
 /** What the toast says where the tab holds work a reload would lose. */
-const NEW_VERSION_READY = "A new version of Luke is ready";
+const NEW_VERSION_READY = "A new version of Fullspin is ready";
 
 /** The entry script a page names, whose hashed address names the build it is from. */
 const ENTRY_SCRIPT = /<script\b(?=[^>]*\btype=["']module["'])[^>]*\bsrc=["']([^"']+)["']/iu;

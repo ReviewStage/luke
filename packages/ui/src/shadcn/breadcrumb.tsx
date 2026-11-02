@@ -4,7 +4,7 @@ import type * as React from "react";
 import { cn } from "../cn.js";
 
 /**
- * breadcrumb.tsx -- shadcn/ui's breadcrumb (style `base-nova`, on Base UI), vendored and drawn in Luke's path.
+ * breadcrumb.tsx -- shadcn/ui's breadcrumb (style `base-nova`, on Base UI), vendored and drawn in Fullspin's path.
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add breadcrumb` reads as a small diff. Its

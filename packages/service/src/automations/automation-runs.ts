@@ -303,7 +303,7 @@ function automationStart(automation: Automation, run: ActedRun): AutomationStart
   const lines = [
     automation.action.prompt,
     "---",
-    `Luke started this run for the automation "${automation.name}" because ${firingSentence(automation, run)}. No one is watching it as it runs: decide on your own, and post a thread only for what needs the developer.`,
+    `Fullspin started this run for the automation "${automation.name}" because ${firingSentence(automation, run)}. No one is watching it as it runs: decide on your own, and post a thread only for what needs the developer.`,
     ...githubEventLines(run),
     ...missingEventLines(automation, run),
   ];

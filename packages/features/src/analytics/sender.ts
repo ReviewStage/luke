@@ -118,7 +118,7 @@ export interface ProductEventSenderOptions {
 }
 
 /**
- * Counts how Luke's own features are used, and sends nothing else. The
+ * Counts how Fullspin's own features are used, and sends nothing else. The
  * vocabulary is core's: every event is run through the same reader the service
  * runs before it is even queued, so a bad emitter is dropped on this machine
  * rather than becoming a refusal over the wire, and nothing observed can reach
@@ -126,7 +126,7 @@ export interface ProductEventSenderOptions {
  *
  * The pipeline is lossy on purpose. Any outcome — accepted, refused,
  * unreachable — drops the batch, and nothing is ever retried: counts undercount
- * on a flaky network in exchange for never retry-storming Luke's own service
+ * on a flaky network in exchange for never retry-storming Fullspin's own service
  * and never double-counting a day. {@link ProductEventSender.drop} clears the
  * queue rather than flushing it, because a request in `will-quit` either
  * delays the quit or is killed mid-flight, and an instant quit is worth a
@@ -241,7 +241,7 @@ export class ProductEventSender {
     return Effect.gen(function* () {
       const sender = new ProductEventSender(options);
       // The day is marked on the tick rather than at launch alone, because a
-      // Luke left running crosses midnight without relaunching — which is the
+      // Fullspin left running crosses midnight without relaunching — which is the
       // whole case this event exists for, and marking it only at launch would
       // make it a second, worse copy of `app:launch`.
       if (options.sends) {
@@ -270,7 +270,7 @@ export class ProductEventSender {
 
   /**
    * Marks today active, at most once per account per UTC day, across
-   * launches. Luke can run for a week on one launch, so launches alone would
+   * launches. Fullspin can run for a week on one launch, so launches alone would
    * undercount the days he was used, and relaunching must not count one day
    * twice.
    */

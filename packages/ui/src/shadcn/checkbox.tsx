@@ -3,20 +3,20 @@ import { cn } from "../cn.js";
 import { CheckIcon } from "../face/glyphs.js";
 
 /**
- * checkbox.tsx -- shadcn/ui's checkbox (style `base-nova`, on Base UI), vendored and drawn in Luke's field and accent inks.
+ * checkbox.tsx -- shadcn/ui's checkbox (style `base-nova`, on Base UI), vendored and drawn in Fullspin's field and accent inks.
  *
  * The component is shadcn's own source, kept as close to it as the window
- * allows, so a later `shadcn add checkbox` reads as a small diff. Luke's
+ * allows, so a later `shadcn add checkbox` reads as a small diff. Fullspin's
  * changes: a 14px box, the size of the platform's own it replaces, in a
  * field's ground inside a chosen row's edge, filled in the accent while
- * checked or mixed; Luke's check glyph rather than lucide's, and a dash for
+ * checked or mixed; Fullspin's check glyph rather than lucide's, and a dash for
  * a mixed box (`indeterminate`), which shadcn draws as a check; the tick
  * springing in from a little smaller as it fades in, and leaving the same
  * way on the exit's tokens, which Base UI holds it drawn through, the box's
  * fill settling as a hover does, and the box giving under a press held on
  * an enabled one, on the spring small elements ride; the
  * one press cursor (`cursor-press`); none of shadcn's field-group, invalid, or dark
- * utilities, which no Luke surface sets; and none of its outline or ring
+ * utilities, which no Fullspin surface sets; and none of its outline or ring
  * utilities, because the window's own focus ring (`@luke/panel`'s base.css)
  * draws the keyboard's ring and a utility would outrank it
  * (`anti-slop/no-shadcn-focus-ring`). `@luke/ui`'s `Checkbox`

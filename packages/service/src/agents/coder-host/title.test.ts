@@ -19,7 +19,7 @@ import { titleAgent } from "./title.js";
 
 /**
  * title.test.ts -- an automation's run is named from the automation's prompt
- * alone, without the lines Luke adds of the firing, and the subject of the
+ * alone, without the lines Fullspin adds of the firing, and the subject of the
  * GitHub event that fired it; an agent started from another is named from
  * its brief and note, never the replay between them; the model's answer is
  * the agent's title, and the name of its task where that still stands
@@ -32,10 +32,10 @@ import { titleAgent } from "./title.js";
 /** The automation's prompt, long enough to fill the title model's excerpt by itself. */
 const PROMPT = `Find the flakiest test in CI this week and fix it. ${"Read every failed run. ".repeat(120)}`;
 
-/** What the agent was handed: the prompt, then what Luke adds of the firing. */
+/** What the agent was handed: the prompt, then what Fullspin adds of the firing. */
 const HANDED = `${PROMPT}\n\n---\n\nLuke started this run for the automation "Flaky-test sweep" because commits were pushed on GitHub.`;
 
-/** The deployment's environment, which holds no model key of Luke's for a title to spend. */
+/** The deployment's environment, which holds no model key of Fullspin's for a title to spend. */
 const DEPLOYMENT_ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -221,7 +221,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
   );
 
   it.effect(
-    "a native agent of an account that saved no API key is titled from its opening's first words, never on Luke's key",
+    "a native agent of an account that saved no API key is titled from its opening's first words, never on Fullspin's key",
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
@@ -244,7 +244,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
   );
 
   it.effect(
-    "an automation's run is named from the automation's prompt alone and the event's subject, never Luke's lines",
+    "an automation's run is named from the automation's prompt alone and the event's subject, never Fullspin's lines",
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
@@ -294,7 +294,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
 
         assert.match(asked[0] ?? "", /Find the flakiest test in CI this week/u);
         assert.match(asked[0] ?? "", /release\/2\.4/u, "the subject survives a long prompt");
-        assert.doesNotMatch(asked[0] ?? "", /Luke started this run/u);
+        assert.doesNotMatch(asked[0] ?? "", /Fullspin started this run/u);
         assert.equal(titled.title, "Fix the flakiest CI test");
       }),
   );

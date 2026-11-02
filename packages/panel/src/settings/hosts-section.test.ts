@@ -404,7 +404,7 @@ test.each([
   {
     case: "removed",
     standing: THIS_MAC_HOST_STANDING.REMOVED,
-    says: "Removed from Luke.",
+    says: "Removed from Fullspin.",
     offers: "Turn on again",
   },
   {

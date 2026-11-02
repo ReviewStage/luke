@@ -10,9 +10,9 @@ const RELOAD_ANSWER = 0;
 
 const RELOAD_OR_QUIT: MessageBoxOptions = {
   type: "error",
-  message: "Luke's window stopped working",
+  message: "Fullspin's window stopped working",
   detail: `It reloaded ${MAXIMUM_REVIVALS_PER_LOAD} times and still couldn't load.`,
-  buttons: ["Reload", "Quit Luke"],
+  buttons: ["Reload", "Quit Fullspin"],
   defaultId: RELOAD_ANSWER,
   cancelId: RELOAD_ANSWER,
 };

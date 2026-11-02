@@ -2640,12 +2640,12 @@ test("a new automation set to a GitHub event takes its settings as switches in t
     pickerDetail(page, "Type"),
     "When a pull request by people is opened, marked ready, or pushed to in acme/ledger",
   );
-  act(() => switchNamed("From Luke's agents").click());
+  act(() => switchNamed("From Fullspin's agents").click());
   assert.equal(isOn("Skip drafts"), true);
   assert.equal(isOn("Include forks"), false);
   assert.equal(
     pickerDetail(page, "Type"),
-    "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
+    "When a pull request by people or Fullspin's agents is opened, marked ready, or pushed to in acme/ledger",
   );
   type(page.querySelector("input[aria-label='Automation name']"), "Code review");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Review this pull request.");
@@ -2665,12 +2665,12 @@ test("a new automation set to a GitHub event takes its settings as switches in t
   assert.ok(
     says(
       rowOf(page, "Code review"),
-      "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
+      "When a pull request by people or Fullspin's agents is opened, marked ready, or pushed to in acme/ledger",
     ),
   );
 });
 
-test("a schedule Luke cannot read is not created, and the refusal is announced under its row", async () => {
+test("a schedule Fullspin cannot read is not created, and the refusal is announced under its row", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
 
@@ -2682,16 +2682,17 @@ test("a schedule Luke cannot read is not created, and the refusal is announced u
   await settle();
 
   assert.deepEqual(creates, []);
-  assert.ok(announced("That isn't a schedule Luke can read."), "the refusal is announced");
+  assert.ok(announced("That isn't a schedule Fullspin can read."), "the refusal is announced");
   assert.ok(
-    !pickerDescription(page, "Type").includes("That isn't a schedule Luke can read."),
+    !pickerDescription(page, "Type").includes("That isn't a schedule Fullspin can read."),
     "the refusal stands under the cron's row, not the trigger's",
   );
   const cron = page.querySelector("input[aria-label='Cron']");
   const describedBy = cron?.getAttribute("aria-describedby")?.split(" ") ?? [];
   assert.ok(
     describedBy.some(
-      (id) => document.getElementById(id)?.textContent === "That isn't a schedule Luke can read.",
+      (id) =>
+        document.getElementById(id)?.textContent === "That isn't a schedule Fullspin can read.",
     ),
     "the refusal describes the Cron field it is about",
   );
@@ -2699,7 +2700,7 @@ test("a schedule Luke cannot read is not created, and the refusal is announced u
 
   type(page.querySelector("input[aria-label='Cron']"), "0 2 * * *");
   await settle();
-  assert.ok(!announced("That isn't a schedule Luke can read."), "the refusal is gone");
+  assert.ok(!announced("That isn't a schedule Fullspin can read."), "the refusal is gone");
   assert.equal(
     page.querySelector("input[aria-label='Cron']")?.getAttribute("aria-invalid"),
     null,
@@ -3466,7 +3467,7 @@ test("Sentry chosen before the read says the deployment holds no Sentry integrat
   act(() => button("Create automation").click());
   await settle();
   assert.equal(creates.length, 0);
-  assert.match(page.textContent ?? "", /Luke cannot receive Sentry events here/u);
+  assert.match(page.textContent ?? "", /Fullspin cannot receive Sentry events here/u);
 });
 
 test("on a phone the list is headed by New automation and one ⋯ holding Create with an agent, its title centred between them", async () => {

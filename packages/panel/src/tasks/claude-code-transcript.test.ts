@@ -16,10 +16,10 @@ import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
  * claude-code-transcript.test.ts -- a coding agent on Claude Code stores its
  * calls under the CLI's own tool names, with the CLI's own input and the text
  * the model read as the answer (`claude-code-moments.ts`), and its tab draws
- * each on the renderer Luke's own tool of that kind draws on: its row's verb
- * and subject, and its input and answer once opened. A call to Luke's own MCP
- * server is stored under Luke's tool's name and its answer as that tool's
- * JSON, and is drawn as Luke's tool always is. Synthetic paths and words.
+ * each on the renderer Fullspin's own tool of that kind draws on: its row's verb
+ * and subject, and its input and answer once opened. A call to Fullspin's own MCP
+ * server is stored under Fullspin's tool's name and its answer as that tool's
+ * JSON, and is drawn as Fullspin's tool always is. Synthetic paths and words.
  */
 
 const ESCAPE = String.fromCharCode(27);
@@ -197,7 +197,7 @@ const CLI_CALLS: readonly {
 ];
 
 for (const call of CLI_CALLS) {
-  test(`Claude Code's ${call.tool} is drawn on the renderer of Luke's tool of its kind`, () => {
+  test(`Claude Code's ${call.tool} is drawn on the renderer of Fullspin's tool of its kind`, () => {
     const { line, body } = opened(storedPart(call.tool, call.input, call.output));
     for (const words of call.line) assert.ok(line.includes(words), `${line} says ${words}`);
     for (const words of call.body) assert.ok(body.includes(words), `${body} shows ${words}`);
@@ -321,7 +321,7 @@ test("Claude Code's task calls are drawn as the agent's to-do list as it stood a
   }
 });
 
-test("Luke's read_agent, called over its MCP server and stored under its own name, opens what it always opens", () => {
+test("Fullspin's read_agent, called over its MCP server and stored under its own name, opens what it always opens", () => {
   const { container, opened } = drawn(
     storedPart("read_agent", { agentId: "agent-7" }, { status: "running" }),
   );

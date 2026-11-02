@@ -327,7 +327,7 @@
      List, a column's width, a row's height, a maker's name's measure, and the
      List's columns as the view draws them. */
   --spacing-welcome-tile: 56px; /* off-scale: the welcome's tile, a masthead's size */
-  --spacing-welcome-face: 34px; /* off-scale: Luke's face on the welcome's tile */
+  --spacing-welcome-face: 34px; /* off-scale: Fullspin's face on the welcome's tile */
   --spacing-welcome-composer: min(var(--luke-page-measure), 100%);
   --spacing-page-measure: var(--luke-page-measure);
   --spacing-row-context: 20ch; /* off-scale: a row's context, bounded in letters */
@@ -747,7 +747,7 @@
   /* An actor's mark (`@luke/panel`'s `actor-ref.tsx`): the opaque tile a
      member who left, and a pile's count, stand on, a step of ink over the
      ground, so the face a square overlaps never shows through it; the ground
-     a pile's ring cuts each face from; someone unnamed's outline; Luke's
+     a pile's ring cuts each face from; someone unnamed's outline; Fullspin's
      face's share of his square; the member an agent acted for, at the
      corner; a pile's badge; and how far each face overlaps the one before. */
   --color-actor-tile: color-mix(in srgb, var(--luke-color-ink) 10%, var(--luke-color-ground));
@@ -758,7 +758,7 @@
     inset 0 0 0 1px var(--luke-color-border-strong),
     0 0 0 2px var(--actor-stack-ground, var(--luke-color-ground));
   --shadow-actor-for-ring: 0 0 0 1.5px var(--actor-stack-ground, var(--luke-color-ground));
-  --spacing-actor-face-share: 80%; /* off-scale: Luke's face, a share of his square */
+  --spacing-actor-face-share: 80%; /* off-scale: Fullspin's face, a share of its square */
   --spacing-actor-for-x: 22%; /* off-scale: how far the face acted for stands past the mark's end */
   --spacing-actor-for-y: 18%; /* off-scale: and past its foot */
   --spacing-actor-for-near: 8%; /* off-scale: both, at a card's and a page's size */
@@ -1060,7 +1060,7 @@
      face and a short date, and the row it shares with the ⋯, which hangs a
      step past the column (both measured on `.plan-body`, tasks.css, where the
      heading's room reads them too); the line under "Edited by" that Dismiss
-     overhangs; and the still wash of Luke's accent on a section changed since
+     overhangs; and the still wash of Fullspin's accent on a section changed since
      the last look. */
   --spacing-plan-byline-room: var(--plan-byline-room);
   --spacing-plan-unit-row: calc(var(--plan-unit-row-room) + var(--luke-space-6));
@@ -1093,7 +1093,7 @@
      page's version steps, a control's gap less its own edge; a changed
      image's side, two to a row where they fit; a snippet's height before it
      is drawn, from its rows; a file's status letter's tint of its own ink;
-     and Luke's own colour, which his name is said in. */
+     and Fullspin's own colour, which its name is said in. */
   --spacing-file-tree: min(
     var(--file-tree-width, 264px),
     40%
@@ -1183,7 +1183,7 @@
      screenful's worth, a screenshot's shape at a stand-in's width while its
      bytes are read, a caption a step under the words around it, a field
      under it that describes it anew, and the glyph a picture from outside
-     Luke is marked by. */
+     Fullspin is marked by. */
   --spacing-picture-most: 520px; /* off-scale: a screenful's worth */
   --spacing-picture-stand-in: 480px; /* off-scale: a picture's width before its bytes are read */
   --aspect-screenshot: 16 / 10;

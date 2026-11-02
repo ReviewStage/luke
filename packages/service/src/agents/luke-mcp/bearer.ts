@@ -1,5 +1,5 @@
 /**
- * bearer.ts -- the runner's bearer at Luke's MCP server: kept as its digest, and admitting the agent's conversation the digest names.
+ * bearer.ts -- the runner's bearer at Fullspin's MCP server: kept as its digest, and admitting the agent's conversation the digest names.
  *
  * A native harness's runner is handed one bearer for its agent's session,
  * which it presents as `Authorization: Bearer` on every call to the server.

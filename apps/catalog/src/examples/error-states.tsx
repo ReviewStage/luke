@@ -113,7 +113,7 @@ function ErrorStates(): React.JSX.Element {
             remedy={{ label: "Connect GitHub", onClick: stay }}
             onRetry={stay}
           >
-            Luke on GitHub doesn't have access to acme/a-very-long-repository-name.
+            Fullspin on GitHub doesn't have access to acme/a-very-long-repository-name.
           </ErrorState>
         </div>
       </CatalogSection>
@@ -122,12 +122,12 @@ function ErrorStates(): React.JSX.Element {
           <ErrorState
             failure={CATALOG_FAILURE}
             remedy={{
-              label: "Add acme/a-very-long-repository-name to Luke on GitHub",
+              label: "Add acme/a-very-long-repository-name to Fullspin on GitHub",
               onClick: stay,
             }}
             onRetry={stay}
           >
-            Luke on GitHub doesn't have access to this repository.
+            Fullspin on GitHub doesn't have access to this repository.
           </ErrorState>
         </div>
       </CatalogSection>

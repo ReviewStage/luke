@@ -5,7 +5,7 @@ import { type CatalogModel, MODEL_PROVIDER } from "./models-wire.js";
  *
  * Shared by the panel, which draws the tabs and the Start menu, the main
  * process, which posts the notification an agent's end is announced in, and
- * the brain's coding-agent tools, whose answers Luke says aloud, so
+ * the brain's coding-agent tools, whose answers Fullspin says aloud, so
  * no two of them name one model two ways; and the service, which names
  * every model it records by the catalog's id before it sends one.
  */
@@ -22,12 +22,12 @@ const GPT = "gpt";
 /**
  * The maker's word Anthropic's names lead with, which a label leaves off:
  * the harness mark beside a model already says whose it is, so "Claude Opus
- * 5.5" reads "Opus 5.5", and Luke says it the way the screen shows it. OpenAI's names carry no such word and stay whole.
+ * 5.5" reads "Opus 5.5", and Fullspin says it the way the screen shows it. OpenAI's names carry no such word and stay whole.
  */
 const MAKER_WORD = "Claude ";
 
 /**
- * A recorded model as the catalog names it. Note that what Luke ran on its
+ * A recorded model as the catalog names it. Note that what Fullspin ran on its
  * own OpenAI key recorded OpenAI's own id where it named no catalog id: the
  * brain's turn rows written before it named its model by the catalog's id. The catalog names those under their
  * provider, which is how a card reads whose mark the model wears; an id that
@@ -68,7 +68,7 @@ export function modelLabel(modelId: string, models?: readonly CatalogModel[]): s
 }
 
 /** The product's own name, as its tools, its own messages, and a mention of it are named. */
-export const PRODUCT_NAME = "Luke";
+export const PRODUCT_NAME = "Fullspin";
 
 /** What names an agent: its title, the automation whose run started it, and the model it runs on. */
 interface NamedAgent {
@@ -82,7 +82,7 @@ interface NamedAgent {
 
 /**
  * An agent as every place names it, the window's and the service's alike:
- * its tab, a sidebar row, a card, a notification, a mention Luke or an
+ * its tab, a sidebar row, a card, a notification, a mention Fullspin or an
  * agent writes, and the name one agent is introduced to another by. Its
  * title, or until it has one the
  * name of the automation whose run started it, or else its model's name

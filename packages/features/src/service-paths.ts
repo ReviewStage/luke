@@ -1,5 +1,5 @@
 /**
- * Where Luke's hosted service answers, rooted at the service origin. The
+ * Where Fullspin's hosted service answers, rooted at the service origin. The
  * addresses alone: what each endpoint takes and answers with is declared in
  * the wire module for its own domain, and a client that only needs to know
  * where to knock imports nothing else.
@@ -26,15 +26,15 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
   /**
-   * The account's ChatGPT sign-in for Luke's hosted runtime, as the desktop
+   * The account's ChatGPT sign-in for Fullspin's hosted runtime, as the desktop
    * hands it over (PUT); its removal is `ACCOUNT_PROVIDER_KEYS`'s DELETE with
    * its kind. The answer is the provider keys' and never carries a token.
    */
   ACCOUNT_CHATGPT_CREDENTIALS: "/api/account/chatgpt/credentials",
-  /** The `ext_agent_host_id` the desktop signs in to ChatGPT for Luke's hosted runtime under (GET). */
+  /** The `ext_agent_host_id` the desktop signs in to ChatGPT for Fullspin's hosted runtime under (GET). */
   ACCOUNT_CHATGPT_HOST: "/api/account/chatgpt/host",
   /**
-   * The memories Luke's agents kept in a workspace the account is a member
+   * The memories Fullspin's agents kept in a workspace the account is a member
    * of, named in the query: read them (GET), or forget one by its id (DELETE).
    * `memory-wire.ts` declares both.
    */
@@ -195,7 +195,7 @@ export const HOSTED_SERVICE_PATH = {
    */
   AUTOMATIONS: "/api/automations",
   /**
-   * The skills members install into Luke: the ones the account sees in a
+   * The skills members install into Fullspin: the ones the account sees in a
    * workspace under `?workspaceId=` (GET), or skills installed from a
    * paste (POST); `/preview` reads a paste as an install would (POST), and
    * `/{id}` turns one on or off (PATCH) or removes it (DELETE), and its
@@ -245,7 +245,7 @@ export const HOSTED_SERVICE_PATH = {
   /** A page of a channel's threads the reader may read (GET), each with its channel, older ones before the thread `?before=` names. */
   CHANNELS_THREADS: "/api/channels/threads",
   /**
-   * The repositories the signed-in account reaches through the Luke GitHub
+   * The repositories the signed-in account reaches through the Fullspin GitHub
    * App, most recently updated first (GET), with whether the App is
    * installed anywhere for them and where to install it.
    * `github-repositories-wire.ts` declares the answer, and the
@@ -290,7 +290,7 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_REPOSITORY_ISSUE: "/api/github/repositories/issue",
   /**
-   * Sends the browser to GitHub to install the Luke GitHub App, or to change
+   * Sends the browser to GitHub to install the Fullspin GitHub App, or to change
    * which repositories it reaches (GET). GitHub returns the browser to
    * `GITHUB_INSTALLED` afterwards.
    */
@@ -353,20 +353,20 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACES: "/api/workspaces",
   /**
    * Where an owner or admin connects a GitHub organization to a workspace
-   * (POST): answers the Luke GitHub App's install address, carrying a
+   * (POST): answers the Fullspin GitHub App's install address, carrying a
    * single-use intent GitHub returns to `GITHUB_INSTALLED` with.
    */
   WORKSPACE_GITHUB_CONNECT: "/api/workspaces/github/connect",
   /** A workspace's GitHub organization disconnected by an owner or admin (POST), answering the workspace. */
   WORKSPACE_GITHUB_DISCONNECT: "/api/workspaces/github/disconnect",
   /**
-   * Where an owner or admin installs Luke's Sentry integration for a
+   * Where an owner or admin installs Fullspin's Sentry integration for a
    * workspace (POST): answers Sentry's install address, carrying a
    * single-use intent Sentry returns to `SENTRY_INSTALLED` with
    * (`sentry-install-wire.ts`).
    */
   WORKSPACE_SENTRY_INSTALL: "/api/workspaces/sentry/install",
-  /** Whether the deployment holds Luke's Sentry integration, and a workspace's active installations of it, to a member (GET, `WORKSPACE_SENTRY_QUERY`). */
+  /** Whether the deployment holds Fullspin's Sentry integration, and a workspace's active installations of it, to a member (GET, `WORKSPACE_SENTRY_QUERY`). */
   WORKSPACE_SENTRY_INSTALLATIONS: "/api/workspaces/sentry/installations",
   /** One of a workspace's Sentry installations disconnected by an owner or admin (POST), answering the installations as they then stand. */
   WORKSPACE_SENTRY_DISCONNECT: "/api/workspaces/sentry/disconnect",

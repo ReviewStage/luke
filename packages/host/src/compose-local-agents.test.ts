@@ -1,5 +1,5 @@
 /**
- * compose-local-agents.test.ts -- the follower as the operating system sees it run agents straight on the box: a device registered as direct, signed in to nothing, getting ready while it fetches its CLIs and ready to take an agent only once it has them, or why it could not have them, an agent launched on the box with a GitHub token from Luke in gh's config in its home, a launch whose claim's answer was lost claimed again and launched once, and, on This Mac alone, an agent that ran on the developer's own logins before refused with why.
+ * compose-local-agents.test.ts -- the follower as the operating system sees it run agents straight on the box: a device registered as direct, signed in to nothing, getting ready while it fetches its CLIs and ready to take an agent only once it has them, or why it could not have them, an agent launched on the box with a GitHub token from Fullspin in gh's config in its home, a launch whose claim's answer was lost claimed again and launched once, and, on This Mac alone, an agent that ran on the developer's own logins before refused with why.
  *
  * The follower runs over a scripted spawner, a file system that holds
  * nothing but what a test names, and a fake service that hands one launch line and a new GitHub
@@ -65,7 +65,7 @@ const USER_ID = "user-fixture";
 /** A launch the service holds the device to that this run of the follower never claimed. */
 const GONE_LINE_ID = "3c5d7e9f-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
 const GONE_AGENT_ID = "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d";
-const STATE_ROOT = "/Users/dev/Library/Application Support/Luke";
+const STATE_ROOT = "/Users/dev/Library/Application Support/Fullspin";
 const LAYOUT = deviceAgentLayout(HOME, AGENT_ID);
 const SECRET_ENV = { LUKE_RUNNER_TOKEN: "runner-secret" };
 /** The runner's own start on the box, as the platform launches it. */
@@ -346,14 +346,14 @@ const followingDevice = (
   });
 
 it.effect(
-  "a device registers as direct on the CLIs it keeps, signed in to nothing, and launches its agent on the box with a GitHub token from Luke in gh's config, its commit identity and gh's helper set in its repository first, keeping the agent as one it made",
+  "a device registers as direct on the CLIs it keeps, signed in to nothing, and launches its agent on the box with a GitHub token from Fullspin in gh's config, its commit identity and gh's helper set in its repository first, keeping the agent as one it made",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const { registered, spawned, asked, files } = yield* followingDevice(() => Effect.void);
         yield* until(() => spawned.some((each) => each.program === RUNNER));
 
-        // Note that no login of the device's is what its agents run on, so the service pays with the sign-in saved in Luke, or refuses.
+        // Note that no login of the device's is what its agents run on, so the service pays with the sign-in saved in Fullspin, or refuses.
         assert.deepEqual(
           registered.map((each) => ({
             isolation: each.isolation,
@@ -372,7 +372,7 @@ it.effect(
         );
         assert.deepEqual(asked, [AGENT_ID]);
         assert.ok(files.get(GH_HOSTS)?.includes('oauth_token: "ghs_fixture_1"'));
-        // Note that the uninstall removes the agents this record names, and no other Luke install's.
+        // Note that the uninstall removes the agents this record names, and no other Fullspin install's.
         assert.ok(
           files.has(`${STATE_ROOT}/owned-agents/${AGENT_ID}`),
           "the launch keeps the agent in the device's record of the agents it made",
@@ -912,7 +912,7 @@ const NODE = NodeChildProcessSpawner.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
 );
 
-/** The version a host runs, and the newer one Luke names. */
+/** The version a host runs, and the newer one Fullspin names. */
 const RUNNING = "0.3.0";
 const NEWER = "0.4.0";
 

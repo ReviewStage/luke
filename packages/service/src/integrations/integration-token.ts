@@ -3,7 +3,7 @@
  *
  * Every runtime reads an integration's credential here: eve's connection
  * (`integration-connection.ts`) and the door a native harness reaches over
- * Luke's MCP server (`connection-door.ts`) alike, so nothing here imports
+ * Fullspin's MCP server (`connection-door.ts`) alike, so nothing here imports
  * eve. The credential is the account's, read from Vercel Connect under the
  * user id the admission names as the caller, never a session's principal.
  *
@@ -55,11 +55,11 @@ export function integrationUnavailable(provider: IntegrationProvider): Unavailab
   const signedIn = INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN;
   return {
     NOT_CONNECTED: signedIn
-      ? `${name} is not connected for this account. The developer can sign in with GitHub in Luke's Settings › Integrations; carry on without it.`
-      : `${name} is not connected for this account. The developer can connect it in Luke's Settings › Integrations; carry on without it.`,
-    EXPIRED: `${name}'s sign-in for this account has expired. The developer can connect it again in Luke's Settings › Integrations; carry on without it.`,
-    NOT_CONFIGURED: `${name} is not set up on this deployment of Luke; carry on without it.`,
-    UNREACHABLE: `Luke could not reach ${name}'s sign-in service just now. Try once more later, or carry on without it.`,
+      ? `${name} is not connected for this account. The developer can sign in with GitHub in Fullspin's Settings › Integrations; carry on without it.`
+      : `${name} is not connected for this account. The developer can connect it in Fullspin's Settings › Integrations; carry on without it.`,
+    EXPIRED: `${name}'s sign-in for this account has expired. The developer can connect it again in Fullspin's Settings › Integrations; carry on without it.`,
+    NOT_CONFIGURED: `${name} is not set up on this deployment of Fullspin; carry on without it.`,
+    UNREACHABLE: `Fullspin could not reach ${name}'s sign-in service just now. Try once more later, or carry on without it.`,
     NO_ACCOUNT: `This session stands for no account that can use ${name}.`,
   };
 }
@@ -245,9 +245,9 @@ function orUnreachable<A>(
 }
 
 /**
- * The grant one account's token would be read on for the Luke account the
+ * The grant one account's token would be read on for the Fullspin account the
  * session was admitted for, or the sentence saying why there is none, read
- * from the store alone so it asks Connect nothing. The Luke account is the
+ * from the store alone so it asks Connect nothing. The Fullspin account is the
  * admitted caller, the member acting in the conversation, whoever opened
  * it, so a teammate's call runs on the teammate's own grant under the same
  * connection name, never the opener's.
@@ -306,7 +306,7 @@ export function evictGrantToken(
 }
 
 /**
- * One account's token for the Luke account the session was admitted for,
+ * One account's token for the Fullspin account the session was admitted for,
  * or the sentence saying why there is none: its grant
  * (`integrationGrant`), then the token on it.
  */

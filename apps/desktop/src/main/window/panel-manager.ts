@@ -72,7 +72,7 @@ interface PanelManagerOptions {
 /**
  * Checklist: scripts/evidence.sh validates every capture at WIDTH by HEIGHT.
  *
- * The window Luke first opens in: large enough to read a plan beside its
+ * The window Fullspin first opens in: large enough to read a plan beside its
  * questions, and never past the display's work area less a margin, so a
  * small display still shows the whole window with the Dock and the menu bar
  * clear of it.
@@ -132,7 +132,7 @@ function desktopBounds(display: Display): Rectangle {
 }
 
 /**
- * Luke's one window: an ordinary, resizable app window, opened where it was
+ * Fullspin's one window: an ordinary, resizable app window, opened where it was
  * last left (`window-placement.ts`) and always showing the panel. It is kept
  * under the panel's old name and shape because every caller — the IPC
  * handlers, the tray, the talk key — addresses a panel by display, and the
@@ -361,7 +361,7 @@ export class PanelManager {
       ...(placement.fullScreen ? { fullscreen: true } : undefined),
       minWidth: DESKTOP_WINDOW.MIN_WIDTH,
       minHeight: DESKTOP_WINDOW.MIN_HEIGHT,
-      title: this.#instance === undefined ? "Luke" : `Luke (${this.#instance})`,
+      title: this.#instance === undefined ? "Fullspin" : `Fullspin (${this.#instance})`,
       show: false,
       backgroundColor: DESKTOP_WINDOW.CLEAR,
       // On Tahoe the window is clear for the Liquid Glass laid behind its

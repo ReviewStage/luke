@@ -1,5 +1,5 @@
 /**
- * device-machine.test.ts -- a local agent's machine over a real dialect: its launch's secrets sealed in the row and handed over open once, a read that waits for its Mac's answer or is unavailable while the Mac is away, a launch or a message refused while it is away, a turn whose runner the Mac settled as gone settled lost, a run taken from a Mac quiet past its lease, and, on Luke Sync, every write to the agent's lines and requests notifying its account, which wakes the Mac's held reads and the machine's waits within a coalesce window.
+ * device-machine.test.ts -- a local agent's machine over a real dialect: its launch's secrets sealed in the row and handed over open once, a read that waits for its Mac's answer or is unavailable while the Mac is away, a launch or a message refused while it is away, a turn whose runner the Mac settled as gone settled lost, a run taken from a Mac quiet past its lease, and, on Fullspin Sync, every write to the agent's lines and requests notifying its account, which wakes the Mac's held reads and the machine's waits within a coalesce window.
  *
  * Synthetic accounts, agents, Macs, bearers, and keys throughout.
  */
@@ -294,7 +294,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
     );
 
     it.effect(
-      "on Luke Sync, the Mac's held reads, a read's wait for its answer, and a wait for a runner's exit each answer within a coalesce window of the write that settles them",
+      "on Fullspin Sync, the Mac's held reads, a read's wait for its answer, and a wait for a runner's exit each answer within a coalesce window of the write that settles them",
       () =>
         Effect.scoped(
           Effect.gen(function* () {

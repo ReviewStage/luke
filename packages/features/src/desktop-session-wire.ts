@@ -1,7 +1,7 @@
 /**
  * desktop-session-wire.ts -- the hand-off page that gives the Mac a Better Auth session of its own, and the query it reads and writes.
  *
- * The Mac signs in as an OAuth client and holds an access token for Luke's
+ * The Mac signs in as an OAuth client and holds an access token for Fullspin's
  * own routes, but Better Auth's organization endpoints take a session. So
  * once the browser is signed in, the Mac sends it to this page with a PKCE
  * challenge and a state of its own; the page asks Better Auth's Electron

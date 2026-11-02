@@ -169,7 +169,7 @@ test("a signed-out browser is offered the sign-in", async () => {
   serve(seams(null, []), []);
   const page = await mount();
 
-  await vi.waitFor(() => expect(page.textContent).toContain("Luke admin"));
+  await vi.waitFor(() => expect(page.textContent).toContain("Fullspin admin"));
   expect(page.querySelector("table")).toBeNull();
 });
 

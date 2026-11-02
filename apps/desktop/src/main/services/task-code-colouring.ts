@@ -16,7 +16,7 @@ import { utilityProcess } from "electron";
 const ENTRY = "task-code.js";
 
 /** What Activity Monitor names the process. */
-const SERVICE_NAME = "Luke Code Colouring";
+const SERVICE_NAME = "Fullspin Code Colouring";
 
 /** The colouring the act port asks for, through a process forked from `resourceDirectory`'s bundle. */
 export function colourCodeInUtilityProcess(

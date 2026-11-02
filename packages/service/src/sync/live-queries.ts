@@ -1,7 +1,7 @@
 /**
- * live-queries.ts -- every live read Luke Sync wakes, by its name, as one registry the registry test reads.
+ * live-queries.ts -- every live read Fullspin Sync wakes, by its name, as one registry the registry test reads.
  *
- * A read is moved onto Luke Sync by defining it (`defineLiveQuery`), adding
+ * A read is moved onto Fullspin Sync by defining it (`defineLiveQuery`), adding
  * it here, and answering its procedure from the definition
  * (`liveQueryParts`). Each view's own change defines its read, and a read
  * with no definition is looked at on its clock.

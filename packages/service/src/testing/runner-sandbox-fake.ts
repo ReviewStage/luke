@@ -4,7 +4,7 @@
  * It keeps every sandbox, command, stdin, upload, network policy, and run it
  * was asked for, opens and resumes sandboxes as Vercel does, and answers a
  * list and a stop only where Vercel would (`vercel-sandbox-fake.ts`).
- * Beside it, the lines a launch reads from Luke's store (`runner_line`),
+ * Beside it, the lines a launch reads from Fullspin's store (`runner_line`),
  * read back the way a test reads a command's stdin, and stamped taken as a
  * runner's ACCEPTED would, which no fake runner posts. Synthetic team,
  * project, and tokens throughout.

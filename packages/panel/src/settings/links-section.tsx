@@ -8,7 +8,7 @@ import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
 /**
- * links-section.tsx -- where the account's Luke links open, the Profile page's Links group under who is signed in.
+ * links-section.tsx -- where the account's Fullspin links open, the Profile page's Links group under who is signed in.
  *
  * The account's own choice, carried to every device and read by the web as
  * a link loads (`@luke/features/link-open`), so it stands on Profile, among

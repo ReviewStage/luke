@@ -19,7 +19,7 @@ import { mountPrerenderedPage } from "./mount-page";
  * accept-invitation.tsx -- the page an invitee joins a workspace on, on the browser's own session.
  *
  * The invite page hands out this page's address with the invitation's id.
- * Signed in, the page reads the invitation through Luke's own route, which
+ * Signed in, the page reads the invitation through Fullspin's own route, which
  * makes the organization plugin's checks but holds an invitation to be the
  * workspace's rather than its inviter's, so a link outlives whoever made it
  * and names them only while they are still a member; it then accepts it
@@ -72,10 +72,10 @@ type View =
 const WORKING: View = { kind: VIEW.WORKING };
 
 /** What the joined page says beneath its title, which keeps the way back to the Mac app. */
-const JOINED_BODY = "Return to Luke. You can close this tab.";
+const JOINED_BODY = "Return to Fullspin. You can close this tab.";
 
 /** The way on the joined page offers to a reader with no Mac app to return to. */
-const OPEN_ON_THE_WEB = { label: "Open Luke on the web", href: WEB_APP_URL } as const;
+const OPEN_ON_THE_WEB = { label: "Open Fullspin on the web", href: WEB_APP_URL } as const;
 
 const SPENT: View = said(
   "This invitation is no longer valid",
@@ -123,7 +123,7 @@ function unverified(email: string): View {
   );
 }
 
-const UNREACHED: View = said("Luke could not be reached", "Reload this page to try again.");
+const UNREACHED: View = said("Fullspin could not be reached", "Reload this page to try again.");
 
 /** A refusal of the plugin's accept in words: a sign-in where another account would do, else what went wrong. */
 function refused(
@@ -136,7 +136,7 @@ function refused(
   return UNREACHED;
 }
 
-/** The invitation the address names, read on the signed-in session through Luke's own route. */
+/** The invitation the address names, read on the signed-in session through Fullspin's own route. */
 async function readInvitation(query: InvitationAcceptQuery, signedIn: string): Promise<View> {
   const { id } = query;
   if (id === undefined) return said("Nothing to accept", "Open the invitation link you were sent.");
@@ -176,9 +176,9 @@ function descriptionOf(view: View): string | undefined {
   if (view.kind === VIEW.WORKING) return undefined;
   if (view.kind !== VIEW.OFFER) return view.body;
   if (view.inviter === undefined) {
-    return `You're invited to plan in ${view.name} on Luke, as ${view.role}.`;
+    return `You're invited to plan in ${view.name} on Fullspin, as ${view.role}.`;
   }
-  return `${view.inviter} invited you to plan in ${view.name} on Luke, as ${view.role}.`;
+  return `${view.inviter} invited you to plan in ${view.name} on Fullspin, as ${view.role}.`;
 }
 
 /**

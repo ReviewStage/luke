@@ -4,7 +4,7 @@ import { appLinkClaim, appLinkInArguments, appLinkInbox, placeOfAppLink } from "
 import { LINK_PLACE, type ReadLink, type ShownLink } from "./link-grammar.js";
 
 /**
- * A Luke link the system hands the app: read only as a place in Luke, in
+ * A Fullspin link the system hands the app: read only as a place in Fullspin, in
  * the app's own scheme; held until a panel can open it, then
  * opened in the order it came, and each later one as it comes; let go once
  * the launch is torn down. Synthetic ids.
@@ -49,8 +49,11 @@ test("anything but a place's link in the app's own scheme names nothing", () => 
 });
 
 test("a second launch's link is the last of its arguments in the app's own scheme", () => {
-  assert.equal(appLinkInArguments(["/Applications/Luke.app", "--flag", TASK_LINK]), TASK_LINK);
-  assert.equal(appLinkInArguments(["/Applications/Luke.app", "https://tryluke.dev"]), undefined);
+  assert.equal(appLinkInArguments(["/Applications/Fullspin.app", "--flag", TASK_LINK]), TASK_LINK);
+  assert.equal(
+    appLinkInArguments(["/Applications/Fullspin.app", "https://tryluke.dev"]),
+    undefined,
+  );
 });
 
 test("links that arrive before a panel can open them open once it can, in order, and later ones as they come", () => {

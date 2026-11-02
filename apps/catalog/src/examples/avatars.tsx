@@ -67,7 +67,7 @@ function Avatars(): React.JSX.Element {
                 size={size}
               />
               <Avatar
-                name="Luke"
+                name="Fullspin"
                 glyph={<WingFace />}
                 shape={AVATAR_SHAPE.SQUARE}
                 size={size}

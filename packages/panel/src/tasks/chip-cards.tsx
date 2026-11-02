@@ -26,7 +26,7 @@ import { PageCard } from "./page-card.js";
 import { useTaskMentions } from "./task-mentions.js";
 
 /**
- * chip-cards.tsx -- the cards the chips of places in Luke hang, each the card the window already hangs for what the chip names, read from what the window holds.
+ * chip-cards.tsx -- the cards the chips of places in Fullspin hang, each the card the window already hangs for what the chip names, read from what the window holds.
  *
  * A chip names a place (`mention-chip.tsx`), and its card is the one every
  * other place naming the same thing hangs, so a plan reads alike from its
@@ -78,7 +78,7 @@ function versionWords(revision: number): string {
 const OPEN_NOTHING = (): void => undefined;
 
 /** What a page's card says where its page cannot be read: deleted, or on a plan or an agent the reader cannot reach. */
-const PAGE_UNREAD = "Luke can't read this page.";
+const PAGE_UNREAD = "Fullspin can't read this page.";
 
 /** A page's card where its page cannot be read: the chip's glyph and name, and a note saying so. */
 export function UnreadPageCard({ glyph, name }: { glyph: ReactNode; name: string }): ReactNode {

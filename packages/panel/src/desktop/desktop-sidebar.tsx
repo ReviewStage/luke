@@ -1688,7 +1688,7 @@ function useFirstUsableSpan(tasks: TasksControl): void {
 /**
  * The window's left column: at its head the workspace chosen, by its tile
  * and name and who shares it, with the menu that chooses another
- * (`workspace-switcher.tsx`), or Luke while no workspace is read; the way to
+ * (`workspace-switcher.tsx`), or Fullspin while no workspace is read; the way to
  * a new task, Search, which opens the command palette, every task of the
  * workspace chosen, and the account's
  * row, whose menu and gear lead to Settings and the rest. The Inbox's row
@@ -1710,7 +1710,7 @@ function useFirstUsableSpan(tasks: TasksControl): void {
  * The open task's row is marked, or, where the task was opened from a pin,
  * that pin's row, while the task stays open.
  * A task's actions are a right-click on it away, whether or not it is open.
- * The strip above Luke is the window's drag handle and the traffic lights'
+ * The strip above Fullspin is the window's drag handle and the traffic lights'
  * room, with back and forward at its right. Its right edge resizes it, and a drag well past its least width
  * folds it away. Folded away, it is inert as well as out of sight, so no key
  * reaches a row nobody can see, until it floats open over the work
@@ -1742,7 +1742,7 @@ function SidebarColumn({
   const overlay = useFloatingSidebar(sidebar);
   useFirstUsableSpan(tasks);
   const body = useRef<HTMLDivElement>(null);
-  // The column's rows, Luke's, the pins', and every group's tasks and agents, are one Tab stop that ↑↓ walk, a folded group's passed by.
+  // The column's rows, Fullspin's, the pins', and every group's tasks and agents, are one Tab stop that ↑↓ walk, a folded group's passed by.
   const roving = useRovingKeys<HTMLDivElement>();
   const bodyRef = useMemo(() => joinRefs(body, roving.ref), [roving.ref]);
   // The window's Inbox, an agent's page, the Automations page, the Board, and Admin stand in the task's place, so while one does no task is the place shown.
@@ -2210,7 +2210,7 @@ function SidebarColumn({
       <div className="desktop-drag-strip" />
       <HistoryButtons history={history} room={room} />
       {/* The workspace heads the sidebar once one is read, as everything under it is that
-          workspace's; Luke's own head stands until then. */}
+          workspace's; Fullspin's own head stands until then. */}
       {tasks.signedIn && tasks.workspace !== undefined ? (
         <WorkspaceSwitcher tasks={tasks} inSight={overlay.inSight} />
       ) : (
@@ -2422,7 +2422,7 @@ function SidebarColumn({
       />
       {sectionDialogs.dialog}
       {selection.dialog}
-      {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
+      {/* Last, so the drag strip above Fullspin does not take the edge's top from it. */}
       {sidebar.collapsed ? null : <ResizeEdge edge={edge} />}
     </PanePin>
   );

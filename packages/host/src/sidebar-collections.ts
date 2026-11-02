@@ -13,7 +13,7 @@
  * service will keep it (`@luke/features/task-section-writes`), and stands
  * while it is written: kept once the followed sidebar has its transaction,
  * and taken back where the service refused it. Where the follow hands no
- * wait yet, as before Luke Sync first woke it, the service's own answer is
+ * wait yet, as before Fullspin Sync first woke it, the service's own answer is
  * taken in the read's place. Either lands with the drop of what was drawn,
  * so nothing flickers back between the two. A drag's writes go to the
  * service one after another, and after every drag's asked before it, since

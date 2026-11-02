@@ -93,7 +93,7 @@ const UPLOAD_POLICY = {
  * tuple, authenticator, type, and id, and the record says the deployment
  * carried it in the `luke:carrier` attribute rather than in the principal;
  * the opening is minted the same way, so the agent's session runs as the
- * developer whether the developer or Luke started it. A caller of another role
+ * developer whether the developer or Fullspin started it. A caller of another role
  * adds its row here and nowhere else.
  * Note that the table holds no row for a cancel or a reset, and needs none:
  * neither opens a turn, so the deployment's authenticator admits both on

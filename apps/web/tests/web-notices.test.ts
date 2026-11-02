@@ -58,10 +58,10 @@ test("the tab is said shown as the listener stands, and hidden as it goes behind
 
 test("the count stands before the tab's title as the panel renames it, and leaves at none", async () => {
   const doors = webNoticeDoors();
-  document.title = "Luke";
+  document.title = "Fullspin";
 
   doors.badge(2);
-  assert.equal(document.title, "(2) Luke");
+  assert.equal(document.title, "(2) Fullspin");
 
   document.title = "Inbox — Acme";
   await vi.waitFor(() => assert.equal(document.title, "(2) Inbox — Acme"));
@@ -74,11 +74,11 @@ test("the count stands before the tab's title as the panel renames it, and leave
 test("an uninstalled tab counts before its title, though the browser names an app badge", () => {
   const appBadge = fakeAppBadge("browser");
   const doors = webNoticeDoors();
-  document.title = "Luke";
+  document.title = "Fullspin";
 
   doors.badge(2);
 
-  assert.equal(document.title, "(2) Luke");
+  assert.equal(document.title, "(2) Fullspin");
   assert.deepEqual(appBadge, []);
   doors.close();
 });
@@ -86,11 +86,11 @@ test("an uninstalled tab counts before its title, though the browser names an ap
 test("the installed app counts on its own badge, and leaves the title alone", () => {
   const appBadge = fakeAppBadge("standalone");
   const doors = webNoticeDoors();
-  document.title = "Luke";
+  document.title = "Fullspin";
 
   doors.badge(2);
   doors.close();
 
-  assert.equal(document.title, "Luke");
+  assert.equal(document.title, "Fullspin");
   assert.deepEqual(appBadge, [2, 0]);
 });

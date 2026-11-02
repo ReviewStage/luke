@@ -211,7 +211,7 @@ export interface FileLineRange {
   readonly endLine: number;
 }
 
-/** A note drawn under a line of a whole file, one of Luke's: its key, and the line it stands under. */
+/** A note drawn under a line of a whole file, one of Fullspin's: its key, and the line it stands under. */
 export interface FileAnnotation {
   readonly key: string;
   readonly line: number;

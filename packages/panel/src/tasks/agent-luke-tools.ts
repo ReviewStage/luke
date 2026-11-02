@@ -9,25 +9,25 @@ import { useAct } from "../act.js";
 import { APP_SLICE, useAppSlice, useCapability } from "../use-app-state.js";
 
 /**
- * agent-luke-tools.ts -- Luke's own tools as an agent's MCP popover draws them: the ones the service says the agent is offered, and whether its `run_on_mac` is on and why not.
+ * agent-luke-tools.ts -- Fullspin's own tools as an agent's MCP popover draws them: the ones the service says the agent is offered, and whether its `run_on_mac` is on and why not.
  *
  * The service is asked as the popover opens and again whenever the window
  * is focused, which is how the developer comes back from Settings or from
- * opening Luke on their Mac; each answer stands until the next lands, and an
+ * opening Fullspin on their Mac; each answer stands until the next lands, and an
  * answer to an older ask never lands over a newer one. Whether this Mac's
  * Settings let no agent run commands on it is the window's own to say, and
  * counts only where the reader started the agent, whose Mac its commands
  * run on, and reads on a Mac.
  */
 
-/** The agent whose Luke tools the popover draws, and whether its reader started it. */
+/** The agent whose Fullspin tools the popover draws, and whether its reader started it. */
 export interface LukeToolsDoor {
   readonly agentId: string;
   /** Whether the reader started the agent, so this Mac's setting is the one its commands meet. */
   readonly starterReading: boolean;
 }
 
-/** Luke's tools as the popover draws them. */
+/** Fullspin's tools as the popover draws them. */
 export interface LukeToolsRead {
   /** The service's answer; nothing while it is read, or where it failed. */
   readonly answer: LukeToolsAnswer | undefined;
@@ -43,7 +43,7 @@ const MAC_COMMANDS_NEVER = Atom.map(
   (settings) => settings?.stored.macCommands === MAC_COMMAND_MODE.NEVER,
 );
 
-/** The agent's Luke tools, read for as long as the caller is drawn; nothing is read for no agent. */
+/** The agent's Fullspin tools, read for as long as the caller is drawn; nothing is read for no agent. */
 export function useLukeTools(door: LukeToolsDoor | undefined): LukeToolsRead {
   const { act } = useAct();
   const [read, setRead] = useState<{ answer: LukeToolsAnswer } | { failed: true } | undefined>(

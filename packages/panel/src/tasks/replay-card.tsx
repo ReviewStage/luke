@@ -66,7 +66,7 @@ import { useOpenPlace } from "./use-open-link.js";
  * the time alone, and its Copy, which copies the replay as it was handed. Its summary row names the source by the chip its tab
  * wears, which opens that tab and hangs its card, and how many of the
  * source's steps were replayed, of how many where the earliest were left
- * out. Opened, it says what it holds, Luke's summary of the oldest steps
+ * out. Opened, it says what it holds, Fullspin's summary of the oldest steps
  * and how many steps were left out where either applies, then the newest
  * steps, each drawn as the live transcript draws it, a line over who sent
  * it, when, and Copy, and a call as a call of its tool, opening onto its
@@ -203,7 +203,7 @@ function usePublished(agentId: string, read: ReplayPlace["readPublished"]): Publ
 
 /**
  * Who sent a replayed line, as a transcript names a line's sender: a
- * member by their face and name, Luke, an automation, GitHub's login, or
+ * member by their face and name, Fullspin, an automation, GitHub's login, or
  * another agent by their own marks; nobody for the reader's own, as a
  * transcript names nobody over the reader's own lines; and by its name
  * alone where its step's marker named no sender the window can place.
@@ -346,7 +346,7 @@ function StepRow({
 }
 
 /**
- * The summary Luke wrote of the oldest steps the replay could not keep,
+ * The summary Fullspin wrote of the oldest steps the replay could not keep,
  * folded under one quiet line saying how many it stands for and whose
  * words they are, as a webhook's body folds inside a run's prompt; its
  * words drawn as a transcript's are, once opened.
@@ -466,7 +466,7 @@ function ReplayFoot({
 
 /**
  * The card: the source's chip and how many steps on its summary row, and,
- * opened, Luke's summary and the steps left out, the newest steps
+ * opened, Fullspin's summary and the steps left out, the newest steps
  * a page at a time, and the foot; the line naming who started the agent and
  * when under it.
  */

@@ -54,7 +54,7 @@ import { LINK_OUTCOME } from "./github-installations.js";
 import { githubWebhookApp } from "./github-webhook-app.js";
 
 /**
- * The Luke GitHub App's webhook, answered by its group the way a function
+ * The Fullspin GitHub App's webhook, answered by its group the way a function
  * answers it, over a real dialect and a GitHub the test scripts: nothing of
  * a delivery is read before its signature over the body's own bytes holds
  * under the deployment's secret, a deployment with no secret refuses every
@@ -632,7 +632,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
   );
 
   it.effect(
-    "a trigger's settings choose whose pull requests fire it, at which moments, and whether drafts and forks do, and a push by Luke's agents never fires it",
+    "a trigger's settings choose whose pull requests fire it, at which moments, and whether drafts and forks do, and a push by Fullspin's agents never fires it",
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
@@ -711,8 +711,8 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           [1, 1], // a person opens it: both
           [1, 2], // marked ready: not a moment the review chose
           [2, 3], // a person's push: both
-          [3, 4], // Luke's agent opens one: both hear Luke's agents
-          [3, 4], // Luke's agent pushes: never, whatever a trigger says
+          [3, 4], // Fullspin's agent opens one: both hear Fullspin's agents
+          [3, 4], // Fullspin's agent pushes: never, whatever a trigger says
           [3, 5], // another bot: only the trigger that hears other bots
           [3, 6], // a draft: only the trigger that asks for drafts
           [3, 7], // a fork's: only the trigger that asks for forks
@@ -721,7 +721,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
   );
 
   it.effect(
-    "a person opening, reopening, or marking ready a pull request from a luke/ branch of the repository is Luke's agents, as a coding agent writing as its developer does, while a person's push to it, a fork's luke/ branch, and any other branch are people's",
+    "a person opening, reopening, or marking ready a pull request from a luke/ branch of the repository is Fullspin's agents, as a coding agent writing as its developer does, while a person's push to it, a fork's luke/ branch, and any other branch are people's",
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();

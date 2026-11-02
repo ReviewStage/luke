@@ -1225,7 +1225,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "a worker asked for on a fast version is refused as no model Luke offers where Anthropic never granted the organization of the account's own key fast mode, and recorded on it where Anthropic did",
+      "a worker asked for on a fast version is refused as no model Fullspin offers where Anthropic never granted the organization of the account's own key fast mode, and recorded on it where Anthropic did",
       () =>
         Effect.gen(function* () {
           const host = yield* hostOverStore();
@@ -1245,7 +1245,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             .pipe(Effect.provide(catalog));
 
           assert.ok(Result.isFailure(refused));
-          assert.match(refused.failure, /is no model Luke offers/u);
+          assert.match(refused.failure, /is no model Fullspin offers/u);
           assert.deepEqual(accepted, Result.succeed({ model: fast.id, effort: "high" }));
         }),
     );
@@ -2283,11 +2283,11 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
               (answer) => answer.status,
             );
 
-          // Luke's notes before the agent's first turn: that turn opens on the plan as its first message.
+          // Fullspin's notes before the agent's first turn: that turn opens on the plan as its first message.
           yield* TestClock.adjust("1 minute");
           yield* saveNotes(binding, [added("Context", "Invites go by email.")]);
           assert.equal(yield* typedAt("turn_0"), undefined);
-          // The first turn runs, started at the relay's clock, after Luke's notes.
+          // The first turn runs, started at the relay's clock, after Fullspin's notes.
           const session = { id: sessionId, auth, turn: { id: "turn_0" } };
           const state = memoryRelayState();
           for (const event of codingTurn("turn_0", "turn.completed")) {
@@ -2306,7 +2306,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           );
           assert.equal(yield* typedAt("turn_1"), undefined);
 
-          // Luke's notes while that turn ran, and the agent's after them in the same section, which
+          // Fullspin's notes while that turn ran, and the agent's after them in the same section, which
           // leave the agent the section's last writer: the next typed turn is handed the plan all the same.
           yield* TestClock.adjust("1 minute");
           yield* saveNotes(binding, [

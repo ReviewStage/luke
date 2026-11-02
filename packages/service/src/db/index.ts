@@ -5,7 +5,7 @@ import { Pool } from "pg";
 /**
  * The variables the database is reached through: the pooled URL both pools
  * are built from, and the unpooled one a connection that must keep its own
- * session, such as Luke Sync's `LISTEN`, is opened on.
+ * session, such as Fullspin Sync's `LISTEN`, is opened on.
  */
 const DATABASE_ENVIRONMENT = {
   URL: "DATABASE_URL",
@@ -72,7 +72,7 @@ export const databaseUrl: Config.Config<Redacted.Redacted> = Config.Redacted(
 /**
  * The unpooled connection string as a `Config`, or none where it is missing
  * or blank, under the same rule `databaseUrl` reads its own by. Note that it
- * is optional, because a function that cannot see it must still boot: Luke
+ * is optional, because a function that cannot see it must still boot: Fullspin
  * Sync's listener stays down without it, and every wait runs on its clock
  * (`sync/hub.ts`).
  */

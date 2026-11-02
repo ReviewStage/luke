@@ -743,7 +743,7 @@ body {
   gap: var(--luke-space-40);
 }
 
-/* Luke's face at the size the OAuth cards open with. */
+/* Fullspin's face at the size the OAuth cards open with. */
 .catalog-auth-mark {
   display: block;
   width: 52px;

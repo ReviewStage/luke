@@ -560,7 +560,7 @@ function parsePersistedSettingsEither(
 }
 
 /**
- * Reads and writes the small set of user-owned settings Luke needs. The
+ * Reads and writes the small set of user-owned settings Fullspin needs. The
  * stored account's tokens stay in the main process: no accessor returns them
  * to a renderer.
  */

@@ -53,7 +53,7 @@ function TextLinks(): React.JSX.Element {
           <Text tone={TEXT_TONE.MUTED}>
             Nothing opened?{" "}
             <TextLink href="#text-links-sentence" look={TEXT_LINK_LOOK.UNDERLINED}>
-              Get Luke
+              Get Fullspin
             </TextLink>{" "}
             and press again, or read the numbers in{" "}
             <TextLink href="#text-links-sentence" look={TEXT_LINK_LOOK.UNDERLINED} external newTab>
@@ -80,7 +80,7 @@ function TextLinks(): React.JSX.Element {
       <CatalogSection id="text-links-narrow" title="Narrow column, long words">
         <div className="catalog-narrow">
           <TextLink href="#text-links-narrow" variant={TEXT_VARIANT.LABEL}>
-            ← Every release of Luke since the first public preview
+            ← Every release of Fullspin since the first public preview
           </TextLink>
         </div>
       </CatalogSection>

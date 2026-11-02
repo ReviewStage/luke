@@ -309,7 +309,7 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
   ),
 );
 
-/** The browser tab's service, on the tab's own origin, as Better Auth and Luke's routes answer it. */
+/** The browser tab's service, on the tab's own origin, as Better Auth and Fullspin's routes answer it. */
 const TAB_ORIGIN = "https://luke.example.test";
 const BROWSER_CONTEXT = { clientId: "browser", role: GATEWAY_CLIENT_ROLE.OPERATOR };
 const PROVIDER_CONSENT = "https://github.com/login/oauth/authorize?state=state-1";

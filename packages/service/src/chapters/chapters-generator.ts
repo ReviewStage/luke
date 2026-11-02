@@ -74,7 +74,7 @@ import {
  *
  * The model is a seam (`ChaptersModel`), as an agent's title model is:
  * production reaches the provider on the API key the member who pressed
- * Generate saved, never Luke's: on the Claude model they chose in Settings,
+ * Generate saved, never Fullspin's: on the Claude model they chose in Settings,
  * Haiku unless they changed it (`chaptersModelOf`,
  * `@luke/features/chapters-model-choice`), where they saved an Anthropic
  * key, and on OpenAI's model of the same tier where they saved only an

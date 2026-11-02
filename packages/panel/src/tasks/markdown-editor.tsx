@@ -260,7 +260,7 @@ export function MarkdownEditor({
   });
   // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
   const text = () => handle.current?.markdown() ?? markdown;
-  // A Luke address pasted whole is called by the name the window holds for what it names.
+  // A Fullspin address pasted whole is called by the name the window holds for what it names.
   const known = useKnownNames();
   const picker = useMentionPicker({
     source: mentions === undefined ? undefined : { ...mentions.source, text },

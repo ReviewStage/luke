@@ -1,4 +1,4 @@
-// Better Auth owns its generated schema; Luke-owned tables can join this
+// Better Auth owns its generated schema; Fullspin-owned tables can join this
 // aggregate from their own schema modules without being overwritten by it.
 export * from "./account-provider-key.js";
 export * from "./agent.js";

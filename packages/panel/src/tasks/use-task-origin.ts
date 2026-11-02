@@ -10,7 +10,7 @@ import { appStateDerivedAtom } from "../use-app-state.js";
 import { agentActorState, providerOf } from "./agent-model.js";
 
 /**
- * use-task-origin.ts -- who made a task for its member, where they did not make it by hand: Luke on their call, a coding agent, or the automation whose run started it.
+ * use-task-origin.ts -- who made a task for its member, where they did not make it by hand: Fullspin on their call, a coding agent, or the automation whose run started it.
  *
  * A task names the agent that made it by id alone (`TaskSummary.origin`),
  * and the window already holds every agent it lists, each task's own and

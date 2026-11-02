@@ -2,7 +2,7 @@
 
 ## Scope
 
-This policy covers the Luke desktop app in this repository and the hosted
+This policy covers the Fullspin desktop app in this repository and the hosted
 service at tryluke.dev, which the app signs in to.
 
 ## Supported versions
@@ -16,7 +16,7 @@ Email **founders@stagereview.app**, or use GitHub's
 [private vulnerability reporting](https://github.com/ReviewStage/luke/security/advisories/new)
 on this repository. Please do not open a public issue for a security report.
 
-Include the Luke version, your macOS version, steps to reproduce, and what an
+Include the Fullspin version, your macOS version, steps to reproduce, and what an
 attacker gains.
 
 ## What to expect

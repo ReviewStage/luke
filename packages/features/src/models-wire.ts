@@ -36,7 +36,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * does not know, is sent none for the default.
  */
 
-/** The providers whose models Luke runs coding agents on, as the catalog prefixes their ids. */
+/** The providers whose models Fullspin runs coding agents on, as the catalog prefixes their ids. */
 export const MODEL_PROVIDER = {
   ANTHROPIC: "anthropic",
   OPENAI: "openai",

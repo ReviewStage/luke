@@ -1,5 +1,5 @@
 /**
- * video-player.tsx -- a recording played in place of a picture under Luke's
+ * video-player.tsx -- a recording played in place of a picture under Fullspin's
  * own bar, with its Expand, and as the file viewer plays it, both on a
  * short WebM the page records from a canvas as it opens, since the catalog
  * fetches nothing. While it records it says so, and where the browser can

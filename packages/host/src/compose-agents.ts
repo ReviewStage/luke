@@ -959,7 +959,7 @@ function composed(
         const { agentId } = yield* readParams(
           agentPullRequestParamsSchema,
           params,
-          "reading an agent's Luke tools names one agent",
+          "reading an agent's Fullspin tools names one agent",
         );
         const answer = yield* asked(client.lukeTools(agentId));
         return carried<AgentLukeToolsAnswerView>(answer);

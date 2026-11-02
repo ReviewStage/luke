@@ -395,7 +395,7 @@ export function problemsLine(problems: readonly InstalledSkillProblem[]): string
   return problems.map((problem) => PROBLEM_WORDS[problem]).join(" · ");
 }
 
-/** Why a paste is no source Luke installs from. */
+/** Why a paste is no source Fullspin installs from. */
 const UNSUPPORTED_WORDS = {
   [SKILL_PASTE_UNSUPPORTED.GITLAB]: "Only GitHub sources.",
   [SKILL_PASTE_UNSUPPORTED.AZURE_DEVOPS]: "Only GitHub sources.",
@@ -425,7 +425,7 @@ export interface DetectedLine {
 /**
  * What the box was read as the moment it changed, before the service says
  * more: the repository a command names, the name a skill's text declares,
- * or why it is nothing Luke installs. Nothing for an empty box.
+ * or why it is nothing Fullspin installs. Nothing for an empty box.
  */
 export function pastedLine(paste: SkillPaste): DetectedLine | undefined {
   switch (paste.kind) {
@@ -446,7 +446,7 @@ export function pastedLine(paste: SkillPaste): DetectedLine | undefined {
   }
 }
 
-/** What a preview that leaves nothing to show says under the box: no skill in the repository, or a source Luke does not read. */
+/** What a preview that leaves nothing to show says under the box: no skill in the repository, or a source Fullspin does not read. */
 export function previewLine(preview: InstalledSkillPreview): DetectedLine | undefined {
   if (preview.kind === SKILL_PASTE_KIND.UNSUPPORTED) {
     return { text: UNSUPPORTED_WORDS[preview.reason], tone: STATUS_TONE.ATTENTION };

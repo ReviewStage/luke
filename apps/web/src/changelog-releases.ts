@@ -14,7 +14,7 @@
 export const CHANGELOG_PATH = "/changelog";
 /** The changelog's RSS feed, every release an item linking to its own page. */
 export const CHANGELOG_FEED_PATH = "/changelog/rss.xml";
-const CHANGELOG_FEED_TITLE = "Luke changelog";
+const CHANGELOG_FEED_TITLE = "Fullspin changelog";
 const CHANGELOG_PAGE_SIZE = 10;
 const SITE_ORIGIN = "https://tryluke.dev";
 
@@ -27,7 +27,7 @@ export const CHANGELOG_VIEW = {
 /** The longest description a share card is given before it is cut at a word. */
 const DESCRIPTION_LIMIT = 200;
 
-const PAGE_DESCRIPTION = "What changed in each Luke release.";
+const PAGE_DESCRIPTION = "What changed in each Fullspin release.";
 
 const RELEASE_PATH = /^\/changelog\/(\d+\.\d+\.\d+)$/;
 const PAGE_PATH = /^\/changelog\/page\/(\d+)$/;
@@ -153,8 +153,8 @@ export function changelogViewForPath(
 /** A release's name where it stands alone: its version, and its first feature when it has one. */
 function releaseTitle(release: Release): string {
   return release.headline === undefined
-    ? `Luke ${release.version}`
-    : `Luke ${release.version}: ${release.headline}`;
+    ? `Fullspin ${release.version}`
+    : `Fullspin ${release.version}: ${release.headline}`;
 }
 
 function releaseHead(release: Release): PageHead {
@@ -168,7 +168,7 @@ function releaseHead(release: Release): PageHead {
 
 function pageHead(page: number): PageHead {
   return {
-    title: page === 1 ? "Changelog — Luke" : `Changelog, page ${page} — Luke`,
+    title: page === 1 ? "Changelog — Fullspin" : `Changelog, page ${page} — Fullspin`,
     description: PAGE_DESCRIPTION,
     url: `${SITE_ORIGIN}${changelogPagePath(page)}`,
     image: undefined,

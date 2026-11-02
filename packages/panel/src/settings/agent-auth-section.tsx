@@ -99,7 +99,7 @@ import { useHeldThroughExit } from "../use-held-through-exit.js";
  * default is the plan's `forAgents`: Subscription checked is on, API key
  * checked is off, and every agent Start makes on that provider's models
  * runs on the credential checked; there is no choice at Start. A radio is pressable only once its credential is saved; with
- * neither saved, no agent starts on that provider's models, since Luke's key
+ * neither saved, no agent starts on that provider's models, since Fullspin's key
  * pays for no coding agent. Calls and dictation run on the OpenAI API key
  * alone, so every answer here is handed to the window too
  * (`../openai-key.tsx`), and removing that key says they stop.
@@ -115,7 +115,7 @@ import { useHeldThroughExit } from "../use-held-through-exit.js";
  * The ChatGPT sign-in runs through a loopback only the desktop can listen
  * on; elsewhere its card says so and stands unpressable until a sign-in
  * made on the desktop is there to pick or disconnect. The first sign-in on
- * this Mac is met with OpenAI's notice that Luke uses the ChatGPT plan
+ * this Mac is met with OpenAI's notice that Fullspin uses the ChatGPT plan
  * (developers.openai.com/siwc/ui-ux-guidelines), drawn in its card under the
  * sign-in, dismissed with Got it and never shown again here, kept in the
  * renderer's own storage.
@@ -205,8 +205,8 @@ const WORDS = {
   REMOVING: "Removing",
   ADD_TOKEN: "Add token",
   REPLACE_TOKEN: "Replace token",
-  REPLACES_TOKEN: "Saving replaces the token Luke holds.",
-  REPLACES_KEY: "Saving replaces the key Luke holds.",
+  REPLACES_TOKEN: "Saving replaces the token Fullspin holds.",
+  REPLACES_KEY: "Saving replaces the key Fullspin holds.",
   SIGN_IN: "Sign in with ChatGPT",
   WAITING: "Waiting for ChatGPT",
   CONNECTED: INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.CONNECTED],
@@ -222,10 +222,10 @@ const WORDS = {
   CHATGPT_INELIGIBLE:
     "OpenAI says this ChatGPT account isn't eligible for Codex. Sign in with ChatGPT to use another.",
   REVOCATION_UNCONFIRMED:
-    "Luke no longer holds your ChatGPT sign-in, but OpenAI didn't confirm it ended. To end it there too, remove Luke in your ChatGPT settings.",
+    "Fullspin no longer holds your ChatGPT sign-in, but OpenAI didn't confirm it ended. To end it there too, remove Fullspin in your ChatGPT settings.",
   NOTICE_TITLE: "You're using your ChatGPT plan",
   NOTICE_BODY:
-    "Eligible usage in Luke uses your ChatGPT plan. Manage usage in your ChatGPT settings.",
+    "Eligible usage in Fullspin uses your ChatGPT plan. Manage usage in your ChatGPT settings.",
   GOT_IT: "Got it",
   SAVE_TOKEN_FAILED: "The token could not be saved. Try again.",
   SAVE_KEY_FAILED: "The key could not be saved. Try again.",
@@ -268,7 +268,7 @@ function keyStanding(status: ProviderKeyStatus): boolean {
   return status === PROVIDER_KEY_STATUS.VERIFIED || status === PROVIDER_KEY_STATUS.UNVERIFIED;
 }
 
-/** The credential the harness's new agents use: the plan where it is on for them, else the key, else neither (Luke's). */
+/** The credential the harness's new agents use: the plan where it is on for them, else the key, else neither (Fullspin's). */
 function defaultOf(
   plan: SubscriptionKeySummary | undefined,
   key: ProviderKeySummary | undefined,

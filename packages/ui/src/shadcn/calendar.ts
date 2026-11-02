@@ -1,5 +1,5 @@
 /**
- * calendar.ts -- shadcn/ui's calendar (style `base-nova`), its drawing alone, in Luke's month grid.
+ * calendar.ts -- shadcn/ui's calendar (style `base-nova`), its drawing alone, in Fullspin's month grid.
  *
  * What is kept of `shadcn add calendar` is the drawing its `classNames` hand
  * react-day-picker: the month, its caption, its nav, the weekday headings,
@@ -12,7 +12,7 @@
  * (`components/calendar/calendar.tsx`), none of which react-day-picker's
  * local dates and own focus keep.
  *
- * Luke's changes, against shadcn's own strings: the grid is a table of
+ * Fullspin's changes, against shadcn's own strings: the grid is a table of
  * square cells a control's height across, the caption a label's semibold
  * at the start with the two steps at the end rather than a centred label
  * between them; a day's face is drawn behind its number (`before:`), lit

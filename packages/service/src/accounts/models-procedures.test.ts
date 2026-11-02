@@ -4,7 +4,7 @@
  * The models route, answered by the hosted oRPC router the way the web
  * route answers it, over a real dialect: the signed-in desktop reads the offered models as
  * the catalog holds them, but for Anthropic's fast versions where the key
- * its agents run on, its own or Luke's, belongs to an organization never
+ * its agents run on, its own or Fullspin's, belongs to an organization never
  * granted fast mode, and nobody else reads anything.
  *
  * Synthetic accounts, bearers, and sealed keys throughout.
@@ -229,7 +229,7 @@ it.layer(getTestDB())("the models route", (it) => {
   );
 
   it.effect(
-    "an account reads Anthropic's fast versions by its own Anthropic key: withheld, its base model saying so, where Anthropic said that key's organization was never granted fast mode; offered where it ran one or none has answered, and where the account saved no Anthropic key, whose fast access Luke's own key never stands in for",
+    "an account reads Anthropic's fast versions by its own Anthropic key: withheld, its base model saying so, where Anthropic said that key's organization was never granted fast mode; offered where it ran one or none has answered, and where the account saved no Anthropic key, whose fast access Fullspin's own key never stands in for",
     () =>
       Effect.gen(function* () {
         yield* accountWithAnthropicKey("user-own-not-enabled", FAST_ACCESS.NOT_ENABLED);

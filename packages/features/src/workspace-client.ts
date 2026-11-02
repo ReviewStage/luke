@@ -322,7 +322,7 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** Whether the deployment holds Luke's Sentry integration, and the workspace's active installations of it. */
+  /** Whether the deployment holds Fullspin's Sentry integration, and the workspace's active installations of it. */
   sentryInstallations(
     workspaceId: string,
   ): Effect.Effect<WorkspaceCallResult<WorkspaceSentry>, never, HttpClient.HttpClient> {
@@ -338,7 +338,7 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** Where the browser goes to install Luke's Sentry integration for the workspace: Sentry's install address, carrying a single-use intent. */
+  /** Where the browser goes to install Fullspin's Sentry integration for the workspace: Sentry's install address, carrying a single-use intent. */
   sentryInstall(
     workspaceId: string,
   ): Effect.Effect<WorkspaceCallResult<string>, never, HttpClient.HttpClient> {

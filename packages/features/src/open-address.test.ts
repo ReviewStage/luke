@@ -4,7 +4,7 @@ import { LINK_PLACE } from "./link-grammar.js";
 import { openTargetOf } from "./open-address.js";
 
 /**
- * What a web page at a Luke link hands the desktop app: the place its
+ * What a web page at a Fullspin link hands the desktop app: the place its
  * address names, spelled in the app's own scheme, on tryluke.dev or any
  * preview that serves the web app, and nothing for an address that names no
  * place. Synthetic ids.

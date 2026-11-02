@@ -33,7 +33,7 @@ import {
  * after a wait drawn at random up to a second and then up to five, the
  * caller told it may be behind meanwhile.
  *
- * A held poll Luke Sync woke answers with the txids of the writes that woke
+ * A held poll Fullspin Sync woke answers with the txids of the writes that woke
  * it. From the first such answer on, the read hands the caller a wait for a
  * write's transaction (`onTxWait`), which a writer confirms its write on
  * (`confirmWrite`), and it asks again after the service's coalesce window
@@ -124,7 +124,7 @@ export interface LiveFollowDependencies<Part extends string> {
   ) => Effect.Effect<SealedRead<Part> | { readonly failure: string; readonly gone?: boolean }>;
   /**
    * Hears the read's wait for a write's transaction once an answer carried
-   * txids, which only one Luke Sync woke does, and none once it is let go.
+   * txids, which only one Fullspin Sync woke does, and none once it is let go.
    * A read no answer of which carried any hands none.
    */
   readonly onTxWait?: (wait: TxWait | undefined) => void;
@@ -146,7 +146,7 @@ export interface LiveFollowDependencies<Part extends string> {
 /**
  * Confirms a write once its transaction reaches the read that shows it: at
  * once where the write changed no row (no txid) or no wait is handed, as for
- * a read Luke Sync does not wake, since a poll shows the write on its next
+ * a read Fullspin Sync does not wake, since a poll shows the write on its next
  * answer anyway. A transaction that does not arrive within `TX_WAIT_TIMEOUT`
  * is said in the log and the write confirmed still, since it committed.
  */

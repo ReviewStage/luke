@@ -6,7 +6,7 @@
  * stopped, and resumes in a relaunched CLI after the sandbox stopped and
  * resumed, billed to the plan. Check two is that the token stays with the
  * CLI: neither a Terminal's shell nor a command the agent runs can read it
- * or call Anthropic with it, no file holds it, and Luke can still launch as
+ * or call Anthropic with it, no file holds it, and Fullspin can still launch as
  * root through the Sandbox API's sudo.
  *
  * The sandbox's default user holds the full capability set without sudo

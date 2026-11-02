@@ -38,7 +38,7 @@ export const RUN_PROFILE = {
   TASKS_COMMENTS: "tasks-comments",
   /** A synthetic account signed in, its tasks holding Inbox items: an ask of each kind, a form, a notice with code, a long thread, an answered item, and a closed one. */
   INBOX: "inbox",
-  /** Channels on, signed in as a member of a synthetic Luke workspace whose channels hold threads of every kind (`channels-fixture.ts`). */
+  /** Channels on, signed in as a member of a synthetic Fullspin workspace whose channels hold threads of every kind (`channels-fixture.ts`). */
   CHANNELS: "channels",
   /** The same workspace's channels, read as the member's teammate. */
   CHANNELS_TEAMMATE: "channels-teammate",
@@ -348,8 +348,8 @@ interface AppMacCommandsSlice {
 }
 
 /**
- * What macOS answered the last notification Luke posted, which is the only
- * word Electron gives of notifications being off for Luke in System Settings:
+ * What macOS answered the last notification Fullspin posted, which is the only
+ * word Electron gives of notifications being off for Fullspin in System Settings:
  * unknown until one is shown or refused, and kept for the launch alone.
  */
 interface AppNotificationsSlice {

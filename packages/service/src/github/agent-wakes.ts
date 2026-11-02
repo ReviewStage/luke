@@ -51,7 +51,7 @@ import {
  *
  * An agent's turn ends with its pull request open, and what happens on it
  * after reached nobody until the developer looked: a review, a comment, a
- * check that fails once the agent stopped watching. The Luke GitHub App's
+ * check that fails once the agent stopped watching. The Fullspin GitHub App's
  * webhook hands each delivery here as well, and three are read: a review
  * submitted (`pull_request_review`), which a lone inline comment and a reply
  * in a thread submit too, so a review's inline comments are never told one
@@ -75,9 +75,9 @@ import {
  * On a public repository anyone on GitHub may write a review or a comment,
  * so the line says whether it carries words a person other than the told
  * agent's owner wrote (`outside_words`), by GitHub's id of its author
- * against the GitHub accounts the owner linked to Luke, and such a line
+ * against the GitHub accounts the owner linked to Fullspin, and such a line
  * takes `run_on_mac` from the agent (`mac-command-store.ts`'s
- * `heardFromAnotherAccount`). An App's words never count, Luke's own, a
+ * `heardFromAnotherAccount`). An App's words never count, Fullspin's own, a
  * deployment's, and a review bot's among them, told by the `[bot]` GitHub
  * ends every App's login with and no person's login can spell: Dean's
  * ruling of 2026-10-28, since an App comments only where the repository
@@ -96,7 +96,7 @@ import {
  * owner (`coder-host/steer.ts`), under the delivery's own id, so a delivery
  * GitHub sends twice is told once; the line is drawn as GitHub's, by the
  * login. A review or a comment by a person or another App reaches an agent
- * at work too, as a message steers a turn under way. One by Luke's own App
+ * at work too, as a message steers a turn under way. One by Fullspin's own App
  * may be the agent's own, since every agent comments as that App, so it
  * reaches only an agent that was not at work when GitHub says it was made:
  * an agent comments only inside a turn, so one idle since before is not its
@@ -769,7 +769,7 @@ function carriesWords(
 /**
  * Whether the line a wake writes the agent of `userId` carries words a
  * person other than that owner wrote: words at all (`carriesWords`), by no
- * App, and by a GitHub account other than those the owner linked to Luke,
+ * App, and by a GitHub account other than those the owner linked to Fullspin,
  * told apart by GitHub's id, or by one GitHub named no id for.
  */
 function outsideWordsFor(
@@ -829,9 +829,9 @@ function inlineCommentsOf(
 
 /**
  * Whether an agent is told of a delivery, from its newest turn and the
- * login of Luke's own App: never an archived agent; a review or a comment
- * by anyone but Luke's App always; and a failed check, or a review or a
- * comment by Luke's App, only where the agent is not at work and its newest
+ * login of Fullspin's own App: never an archived agent; a review or a comment
+ * by anyone but Fullspin's App always; and a failed check, or a review or a
+ * comment by Fullspin's App, only where the agent is not at work and its newest
  * turn ended before GitHub says it was made: the agent did not make that
  * comment, and was not watching when that check failed, so a delivery that
  * arrives after the turn that watched it does not start another. Every

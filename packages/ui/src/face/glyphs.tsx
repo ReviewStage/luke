@@ -6,7 +6,7 @@
  * both is `icons/icons.ts`. They are ours, not
  * anyone's brand mark, so they inherit `currentColor` like any other text — a
  * provider's own mark lives in `marks/provider-mark.tsx` and keeps its brand colour.
- * The one exception is Luke's own mark, which is ours in both senses: it is a
+ * The one exception is Fullspin's own mark, which is ours in both senses: it is a
  * brand mark, and it inherits `currentColor` like the rest.
  */
 
@@ -200,7 +200,7 @@ export function ArrowDownIcon(): React.JSX.Element {
   );
 }
 
-/** Sound leaving the machine: everything about how Luke is heard. */
+/** Sound leaving the machine: everything about how Fullspin is heard. */
 export function SpeakerIcon(): React.JSX.Element {
   return (
     <Glyph>
@@ -211,7 +211,7 @@ export function SpeakerIcon(): React.JSX.Element {
   );
 }
 
-/** The display Luke stands on: everything about where and how he is drawn. */
+/** The display Fullspin stands on: everything about where and how it is drawn. */
 export function DisplayIcon(): React.JSX.Element {
   return (
     <Glyph>
@@ -462,7 +462,7 @@ export function TerminalIcon(): React.JSX.Element {
   );
 }
 
-/** A lit bulb: what Luke's agents remember for the workspace. */
+/** A lit bulb: what Fullspin's agents remember for the workspace. */
 export function MemoryIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">

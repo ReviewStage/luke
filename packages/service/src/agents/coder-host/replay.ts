@@ -187,7 +187,7 @@ const CALL_ENTRY_WORDS = {
 const REPLAY_WORDS = {
   SAID: "Said",
   DEVELOPER: "The developer",
-  LUKE: "Luke",
+  LUKE: "Fullspin",
   FORMER_MEMBER: "A former member",
   STARTING_AGENT: "The agent that started it",
   ATTACHED: "Attached file",
@@ -750,8 +750,8 @@ function preambleOf(
     counts.summarized === 0
       ? ""
       : left > 0
-        ? ` ${unfit} of its ${counts.total} steps did not fit: a summary of ${counts.summarized} of them comes first, written by Luke rather than by that agent, so read it as a recap, not its words; the other ${left} are left out.`
-        : ` The oldest ${counts.summarized} of its ${counts.total} steps did not fit, so a summary of them comes first, written by Luke rather than by that agent: read it as a recap, not its words.`;
+        ? ` ${unfit} of its ${counts.total} steps did not fit: a summary of ${counts.summarized} of them comes first, written by Fullspin rather than by that agent, so read it as a recap, not its words; the other ${left} are left out.`
+        : ` The oldest ${counts.summarized} of its ${counts.total} steps did not fit, so a summary of them comes first, written by Fullspin rather than by that agent: read it as a recap, not its words.`;
   const dropped =
     left > 0 && counts.summarized === 0
       ? ` The oldest ${left} of its ${counts.total} steps are left out to fit.`

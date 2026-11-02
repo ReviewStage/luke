@@ -74,7 +74,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  *
  * ⌘F over the page itself finds in the frame: no find of this window reaches
  * the page's words, so the find bar asks the frame, whose page is served
- * with a find of Luke's own ahead of it (`@luke/features/page-find`), and
+ * with a find of Fullspin's own ahead of it (`@luke/features/page-find`), and
  * hears back its tally and its selection, from that frame alone and only
  * in the find's own shape.
  */

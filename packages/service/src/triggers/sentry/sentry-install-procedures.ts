@@ -1,5 +1,5 @@
 /**
- * sentry-install-procedures.ts -- a workspace's installations of Luke's Sentry integration begun, read, and disconnected.
+ * sentry-install-procedures.ts -- a workspace's installations of Fullspin's Sentry integration begun, read, and disconnected.
  *
  * Three procedures the signed-in desktop calls with its bearer:
  *

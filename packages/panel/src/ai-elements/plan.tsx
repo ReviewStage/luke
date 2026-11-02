@@ -24,7 +24,7 @@ type PlanBodyLayout = (typeof PLAN_BODY_LAYOUT)[keyof typeof PLAN_BODY_LAYOUT];
  * plan.tsx -- AI Elements' Plan: a plan as a card across the column, its title on the header and the plan itself under it once opened.
  *
  * After the AI Elements registry (https://elements.ai-sdk.dev), restyled
- * to Luke's tokens and drawn as `@luke/ui`'s card fold rather than the
+ * to Fullspin's tokens and drawn as `@luke/ui`'s card fold rather than the
  * registry's card over a collapsible: the header is the one line a closed card shows
  * and is what opens it, so the registry's separate trigger button is not
  * here. Neither is its streaming title, because the plan a coding agent is

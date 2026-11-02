@@ -1,8 +1,8 @@
 /**
- * link-platform.ts -- whether this browser runs on a Mac, where Luke for Mac can be.
+ * link-platform.ts -- whether this browser runs on a Mac, where Fullspin for Mac can be.
  *
  * The app's hand-off of a link (`app/mac-app-handoff.ts`) and a landing
- * page's Open Luke (`connect-return.ts`) both ask, so a page that only lands
+ * page's Open Fullspin (`connect-return.ts`) both ask, so a page that only lands
  * reads it without loading the app's own modules.
  */
 

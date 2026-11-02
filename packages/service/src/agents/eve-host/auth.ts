@@ -19,7 +19,7 @@ import {
 } from "./bounds.js";
 
 /**
- * Who is asking, decided at the door and pinned to the session. A Luke
+ * Who is asking, decided at the door and pinned to the session. A Fullspin
  * account's bearer is resolved the way every hosted route resolves it, through
  * the auth service's own userinfo answer, and becomes the eve principal: the
  * account id, and nothing else about the person. The request may name the
@@ -59,7 +59,7 @@ import {
  * deployment acting for the account the cookie named (`coder-host/stop.ts`'s
  * `eveFor`), and so does every message such a route sends: a coding agent's
  * start, a message to one, an inbox answer, a manual automation's run, and
- * a comment's ask of Luke. A cancel and a reset open no turn, so the table
+ * a comment's ask of Fullspin. A cancel and a reset open no turn, so the table
  * says nothing about them and they name no kind; what bounds them is the
  * door's ownership check, which admits them only on a session a
  * conversation the named account reaches recorded.
@@ -93,7 +93,7 @@ function requestAttributes(headers: Headers): SessionAuthContext["attributes"] {
  */
 export type BearerAccount = (request: Request) => Promise<string | undefined>;
 
-/** The route authenticator: a Luke account bearer, or nothing so the walk moves on. */
+/** The route authenticator: a Fullspin account bearer, or nothing so the walk moves on. */
 export function lukeAccount(resolveUserId: BearerAccount): AuthFn<Request> {
   return withAuthChallenges(async (request) => {
     const userId = await resolveUserId(request);

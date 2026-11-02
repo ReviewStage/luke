@@ -290,7 +290,7 @@ it.effect(
 );
 
 it.effect(
-  "Open Luke at login, which stands on This Mac, keeps the choice already stored through a reopen and through Appearance's reset",
+  "Open Fullspin at login, which stands on This Mac, keeps the choice already stored through a reopen and through Appearance's reset",
   () =>
     Effect.gen(function* () {
       const directory = yield* temporaryDirectoryScoped("luke-settings-");

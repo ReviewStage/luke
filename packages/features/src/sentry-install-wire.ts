@@ -2,9 +2,9 @@ import { Schema as EffectSchema } from "effect";
 import { workspaceIdSchema } from "./task-wire.js";
 
 /**
- * sentry-install-wire.ts -- a workspace's installations of Luke's Sentry integration, as the desktop reads, begins, and ends them.
+ * sentry-install-wire.ts -- a workspace's installations of Fullspin's Sentry integration, as the desktop reads, begins, and ends them.
  *
- * An owner or admin installs Luke's Sentry integration on a Sentry
+ * An owner or admin installs Fullspin's Sentry integration on a Sentry
  * organization for one workspace, whose automations its deliveries then fire.
  * `POST /api/workspaces/sentry/install` answers Sentry's install address,
  * which carries a single-use intent's state there and back; Sentry returns
@@ -12,7 +12,7 @@ import { workspaceIdSchema } from "./task-wire.js";
  * installation and lands on the integrations landing page.
  * `GET /api/workspaces/sentry/installations` answers whether the deployment
  * holds the integration at all, and the workspace's active installations,
- * each named by its Sentry organization's slug where Luke has it;
+ * each named by its Sentry organization's slug where Fullspin has it;
  * `POST /api/workspaces/sentry/disconnect` stops one firing anything and
  * answers the same. No answer carries a Sentry token.
  */
@@ -33,7 +33,7 @@ export const workspaceSentryRequestSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
 });
 
-/** Where the browser goes to install: Sentry's install address for Luke's integration, carrying the intent's state. */
+/** Where the browser goes to install: Sentry's install address for Fullspin's integration, carrying the intent's state. */
 export const workspaceSentryInstallAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String.check(EffectSchema.isNonEmpty()),
 });
@@ -44,7 +44,7 @@ export const workspaceSentryDisconnectRequestSchema = EffectSchema.Struct({
   installationId: installationIdSchema,
 });
 
-/** One active installation: Sentry's id for it, and the slug of the organization it is on where Luke has it. */
+/** One active installation: Sentry's id for it, and the slug of the organization it is on where Fullspin has it. */
 const workspaceSentryInstallationSchema = EffectSchema.Struct({
   installationId: installationIdSchema,
   account: EffectSchema.optionalKey(EffectSchema.String),
@@ -53,7 +53,7 @@ const workspaceSentryInstallationSchema = EffectSchema.Struct({
 export type WorkspaceSentryInstallation = typeof workspaceSentryInstallationSchema.Type;
 
 /**
- * A workspace's Sentry as it stands: whether this deployment holds Luke's
+ * A workspace's Sentry as it stands: whether this deployment holds Fullspin's
  * Sentry integration, without which nothing is offered, and the workspace's
  * active installations, the first linked first.
  */

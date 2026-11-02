@@ -113,7 +113,7 @@ describe("authorizeUrl", () => {
     expect(`${url.origin}${url.pathname}`).toBe(ENDPOINTS.authorize);
     expect(Object.fromEntries(url.searchParams)).toEqual({
       client_id: "dynamic_agent_client",
-      agent_name_hint: "Luke",
+      agent_name_hint: "Fullspin",
       ext_agent_host_id: PENDING.extAgentHostId,
       response_type: "code",
       redirect_uri: "http://127.0.0.1:1455/auth/callback",

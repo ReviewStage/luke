@@ -21,7 +21,7 @@ import { DateTime, Effect, Option, Result, Schema } from "effect";
 /**
  * automation-github.ts -- a GitHub delivery read as an automation's trigger: which events it is, the issue, pull request, or branch it names, and the runs it queues.
  *
- * The Luke GitHub App's webhook (`github-webhook-app.ts`) hands every signed
+ * The Fullspin GitHub App's webhook (`github-webhook-app.ts`) hands every signed
  * delivery here as well. A pull request opened or labelled, a pull request
  * ready for review opened, reopened, marked ready, or pushed to, an issue
  * opened or labelled, a check suite that completed without passing, and a
@@ -36,7 +36,7 @@ import { DateTime, Effect, Option, Result, Schema } from "effect";
  * automation; the sweep acts on it within the minute, since starting an
  * agent inside GitHub's ten seconds is not a promise this can keep.
  *
- * Each event is read with who sent it, people, Luke's agents (the App's
+ * Each event is read with who sent it, people, Fullspin's agents (the App's
  * own bot, or a person opening, reopening, or marking ready a pull request
  * from a `luke/` branch, which is a coding agent writing as its developer),
  * or another bot, and, for a pull request, the moment it is
@@ -45,7 +45,7 @@ import { DateTime, Effect, Option, Result, Schema } from "effect";
  * branch to tell it by, and reads as people's; the trigger's own settings say which of those fire
  * it (`triggerMatches`), people's events alone and no draft or fork where
  * it names none. Two things fire nothing whatever a trigger says, so an
- * automation cannot fire itself in a loop: a push by Luke's agents, to a
+ * automation cannot fire itself in a loop: a push by Fullspin's agents, to a
  * branch or to a pull request, since an agent answering its run with a
  * push would start that run again, and a failed check on a `luke/` branch,
  * which is where a coding agent works and where it already watches its own
@@ -180,7 +180,7 @@ interface GitHubEventRead {
   readonly fork: boolean;
 }
 
-/** Who sent a delivery: Luke's agents where it is the App's own bot, another bot, or a person. */
+/** Who sent a delivery: Fullspin's agents where it is the App's own bot, another bot, or a person. */
 function senderOf(
   sender: { readonly type: string; readonly login: string },
   agentLogin: string | undefined,
@@ -194,10 +194,10 @@ function senderOf(
 /**
  * Who sent a pull request's delivery. A person who opened, reopened, or
  * marked ready a pull request from a `luke/` branch of the repository's own
- * is Luke's agents, because a coding agent that writes as its developer
+ * is Fullspin's agents, because a coding agent that writes as its developer
  * opens its pull request on their token, so GitHub names the developer;
  * the branch is where every coding agent works. Note that a person doing
- * the same by hand reads as Luke's agents too, which mislabels the event
+ * the same by hand reads as Fullspin's agents too, which mislabels the event
  * and grants nothing, and that a push is read by its sender alone, which
  * is the App's for every push an agent makes.
  */
@@ -398,7 +398,7 @@ function githubEventOf(
  * hears (people's alone where it names none), the moments of an update it
  * fires on (every one where it names none), a draft or a fork's pull
  * request only where it asks for them, and its label and branch filters
- * where it names any. Note that a push by Luke's agents fires nothing
+ * where it names any. Note that a push by Fullspin's agents fires nothing
  * whatever the trigger says, because an agent answering its own run with
  * a push would start that run again.
  */
@@ -446,7 +446,7 @@ const queueRunsOf = Effect.fnUntraced(function* (deliveryId: string, read: GitHu
 /**
  * Queues a run, under the delivery's own id, for every enabled automation
  * working in the delivery's repository whose trigger listens for one of the
- * events it is, `agentLogin` naming the App's own bot, which Luke's agents
+ * events it is, `agentLogin` naming the App's own bot, which Fullspin's agents
  * act as; answers how many it queued, none for a delivery no automation
  * listens for or one recorded before. Note that the one id
  * serves every event of the delivery, because an automation listens for

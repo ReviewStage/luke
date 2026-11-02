@@ -41,7 +41,7 @@ const TOKEN_LABEL = "GitHub personal access token";
 
 /** What the row says while no token is saved, so what the token is for is told before it is asked for. */
 const TOKEN_PURPOSE =
-  "Lets agents work in repositories Luke's GitHub App does not reach, and open pull requests as you.";
+  "Lets agents work in repositories Fullspin's GitHub App does not reach, and open pull requests as you.";
 
 /** What the row says where the token could not be read, so what stands is unknown. */
 const TOKEN_READ_FAILED = "The token could not be read.";

@@ -5,7 +5,7 @@ import { sniffMediaType } from "./media-signature.js";
 import { WEBM_TYPE, webmDimensions } from "./video-signature.js";
 
 /**
- * picture-wire.ts -- a picture Luke keeps for a reader: the types it may be, its byte bounds, and the one reading of the `data:` URL a picture is sent as.
+ * picture-wire.ts -- a picture Fullspin keeps for a reader: the types it may be, its byte bounds, and the one reading of the `data:` URL a picture is sent as.
  *
  * A picture is re-encoded on the Mac to at most `PICTURE_BOUNDS.MAX_BYTES`
  * and sent as a `data:` URL of one of `PICTURE_TYPE`, as a workspace's

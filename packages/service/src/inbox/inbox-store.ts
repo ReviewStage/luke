@@ -3039,7 +3039,7 @@ export interface WorkspaceChannelsLiveStatements {
 }
 
 /**
- * A workspace's channels list as its reader reads it, written for Luke
+ * A workspace's channels list as its reader reads it, written for Fullspin
  * Sync, each column under the key `channel-live.ts` reads it by and each
  * instant in epoch milliseconds: every channel of it, open or archived, as
  * its row holds it; how many threads of each the reader may read and when
@@ -3600,7 +3600,7 @@ export function answerInboxAsk(
         const ask = knownAsk(asking.value.ask);
         const refusal =
           ask === undefined
-            ? "The ask is one this Luke does not know."
+            ? "The ask is one this Fullspin does not know."
             : inboxAnswersRefusal(ask, sent.answers, sent.text, files);
         if (refusal !== undefined) return standing(INBOX_ASK_ANSWER.REFUSED, refusal);
         const now = yield* DateTime.nowAsDate;

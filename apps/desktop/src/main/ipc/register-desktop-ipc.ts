@@ -246,7 +246,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
      * The document as one window stands, answered before anything is drawn
      * over it: the host read once so no window is handed a state it never
      * told, and the microphone taken afresh, because macOS's answer is its
-     * own to move and moves while Luke runs. Every later reading of the same
+     * own to move and moves while Fullspin runs. Every later reading of the same
      * document arrives on `app:state`.
      */
     snapshotFor: async (sender): Promise<AppStateSnapshot> => {

@@ -1,5 +1,5 @@
 /**
- * native-sandbox-template.test.ts -- Luke's own template of the coding agent's image, against a fake of Vercel Sandbox's REST API: reused once ready, built where missing, built once under concurrent launches, built anew for a new image, and swept.
+ * native-sandbox-template.test.ts -- Fullspin's own template of the coding agent's image, against a fake of Vercel Sandbox's REST API: reused once ready, built where missing, built once under concurrent launches, built anew for a new image, and swept.
  */
 
 import assert from "node:assert/strict";

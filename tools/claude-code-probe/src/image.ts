@@ -25,7 +25,7 @@ export const SCRIPT_NAME = "luke-probe";
 
 /** The commit identity the agent's commits carry; the probe's own, never the developer's. */
 const PROBE_COMMITTER = {
-  NAME: "Luke probe",
+  NAME: "Fullspin probe",
   EMAIL: "luke-probe@users.noreply.github.com",
 } as const;
 

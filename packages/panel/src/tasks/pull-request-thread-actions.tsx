@@ -15,7 +15,7 @@ import { ReplyForm, type ReplyFormWords } from "./reply-form.js";
  * `RESOLVE_THREAD`, `UNRESOLVE_THREAD`) naming the thread by GitHub's own
  * id, which the conversation's read carries, made on GitHub by the service
  * as the member pressing it, on their own GitHub sign-in and never the
- * Luke GitHub App's; GitHub's refusal stands under the thread in its own
+ * Fullspin GitHub App's; GitHub's refusal stands under the thread in its own
  * words, with the sign-in offered where GitHub would not take the
  * member's. Whatever GitHub answered, the tab reads the conversation
  * again, so the thread says where it stands now.

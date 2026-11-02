@@ -5,7 +5,7 @@ import { LID_STATE, MICROPHONE_TRANSPORT, type MicrophoneRoute } from "@luke/set
  *
  * Echo cancellation is deliberately off. The microphone is open only while
  * the talk key is held, and the live session's own model handles a voice
- * overlapping Luke's, so nothing here depends on the canceller. What the
+ * overlapping Fullspin's, so nothing here depends on the canceller. What the
  * constraint would buy instead is Chromium's system echo canceller, which on
  * macOS runs the capture through the OS's own voice processing — and the OS then ducks and thins
  * every other app's audio for as long as the device is open. That processing,
@@ -31,7 +31,7 @@ interface EnumeratedMicrophone {
  * The built-in microphone's name, when it is the better device to open.
  *
  * Capturing from a Bluetooth headset's own microphone pulls the whole headset
- * onto its narrow call codec, so everything it plays — Luke's answer, the
+ * onto its narrow call codec, so everything it plays — Fullspin's answer, the
  * music the duck is about to restore — turns phone-grade for as long as the
  * device is open. The Mac's own microphone costs none of that, so it is
  * preferred exactly when the system default would be a Bluetooth headset and

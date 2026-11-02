@@ -137,12 +137,12 @@ import {
  * connects for everyone, named apart from the account's own Integrations
  * page, each drawn as Settings › Integrations draws its rows. GitHub,
  * the one place a workspace's repositories are set: every GitHub
- * account whose installation of the Luke GitHub App is connected, each
+ * account whose installation of the Fullspin GitHub App is connected, each
  * inset under GitHub's row with its picture on GitHub, Connected or suspended;
  * an owner or an admin connects the first with Connect, and once one is,
  * Manage on GitHub opens the one GitHub page that both adds an account and
  * chooses an account's repositories, where which accounts and repositories
- * Luke reaches is managed, so nothing here disconnects one. A member sees
+ * Fullspin reaches is managed, so nothing here disconnects one. A member sees
  * the same list, or is told to ask. Last, anyone but the owner leaves, and
  * the owner hands the workspace to an admin first.
  *
@@ -204,9 +204,9 @@ const OWNER_INVITES_ADMINS = "Only the owner invites admins";
 /** What the toast says once an invitation's accept link is on the clipboard. */
 const INVITE_LINK_COPIED = "Invite link copied";
 
-/** What the invitations say where none is pending, with the one fact a reader cannot guess: Luke mails no one. */
+/** What the invitations say where none is pending, with the one fact a reader cannot guess: Fullspin mails no one. */
 const INVITATIONS_EMPTY =
-  "No invitations. Luke sends no email, so copy each invitation's link and send it yourself.";
+  "No invitations. Fullspin sends no email, so copy each invitation's link and send it yourself.";
 
 /** What a list's line says where its read did not land, in `ErrorState`'s words. */
 const READ_FAILED = {
@@ -1232,7 +1232,7 @@ function Invitations({
             leading: <ActorMark actor={INVITED_ACTOR} size={ACTOR_SIZE.CARD} />,
             label: <OneLine hint={wholeWordsHint(one.email)}>{one.email}</OneLine>,
             description: `Invited as ${ROLE_WORDS[one.role]} · Expires ${dayAndTimeText(Date.parse(one.expiresAt))}`,
-            // Luke sends no mail: the accept link is copied and sent by hand.
+            // Fullspin sends no mail: the accept link is copied and sent by hand.
             control: (
               <Button
                 variant={BUTTON_VARIANT.OUTLINE}
@@ -1314,11 +1314,11 @@ function ConnectionRow({ connection }: { connection: ShownConnection }): React.J
 
 /**
  * The workspace's GitHub, for an owner or an admin: Connect while none is,
- * which installs the Luke GitHub App on a GitHub account for this
+ * which installs the Fullspin GitHub App on a GitHub account for this
  * workspace, and once one is, Manage on GitHub, which opens the same page:
  * GitHub lists every account there, to install the App on another or to
  * configure one it is on, so one door does both. Either press opens the
- * browser through the one connect, whose return to Luke adds the
+ * browser through the one connect, whose return to Fullspin adds the
  * installation to this workspace; a page that could not be opened says why
  * under the row. The row is `@luke/ui`'s `SettingsRow` led by GitHub's mark,
  * its press the outline `Button`.
@@ -1554,7 +1554,7 @@ function ManagedSentry({
         confirm={disconnect}
         question={{
           title: `Disconnect Sentry from ${workspace.name}?`,
-          body: "Its alerts and new issues stop triggering this workspace's automations. Uninstall Luke in Sentry's settings to remove it there too.",
+          body: "Its alerts and new issues stop triggering this workspace's automations. Uninstall Fullspin in Sentry's settings to remove it there too.",
           verb: "Disconnect",
           running: "Disconnecting",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
@@ -1565,7 +1565,7 @@ function ManagedSentry({
 }
 
 /**
- * The workspace's Sentry: drawn only where the deployment holds Luke's
+ * The workspace's Sentry: drawn only where the deployment holds Fullspin's
  * Sentry integration, an owner's or an admin's to install for everyone,
  * and for a member, read only, where it is installed or the ask to have it;
  * a read that did not land says so in the row's place, with Retry.

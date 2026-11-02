@@ -445,7 +445,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * The repositories the account reaches through the Luke GitHub App, or
+   * The repositories the account reaches through the Fullspin GitHub App, or
    * only those of the installation the workspace given stands for, with
    * whether the App is installed anywhere for it and where to install it;
    * or why there is none: the service did not answer.

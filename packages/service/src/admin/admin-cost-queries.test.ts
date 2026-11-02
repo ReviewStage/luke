@@ -128,7 +128,7 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
         const agent = yield* openConversation(owner, CONVERSATION_KIND.AGENT);
         const agentWorker = yield* openConversation(owner, CONVERSATION_KIND.CHILD, agent);
 
-        // Luke's own turn ran on two models, which its breakdown names apart.
+        // Fullspin's own turn ran on two models, which its breakdown names apart.
         yield* settleTurn(owner, main, {
           model: MODEL.MINI,
           usage: {

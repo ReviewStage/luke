@@ -88,7 +88,7 @@ function openGitHubTab(url: string): void {
 
 /**
  * The link that opens the Mac app on what the tab's address names, or on
- * Luke's home where it names nothing, which still brings the app forward.
+ * Fullspin's home where it names nothing, which still brings the app forward.
  */
 function macAppLink(): string {
   return openTargetOf(location.pathname, location.hash, location.search)?.appLink ?? APP_HOME_LINK;
