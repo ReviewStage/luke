@@ -350,13 +350,15 @@ const PULL_REQUEST_WORDS = {
  * Where an agent asked for a plan, a proposal, a design, or research puts
  * the write-up, rather than a document under `docs/` and a pull request to
  * land it: the plan, where it was handed one and so can edit it; a page
- * otherwise, on its task or, on none, on itself.
+ * otherwise, on its task or, on none, on itself. Its thread is posted as the
+ * Threads section says (`threadsWords`), which an agent another agent
+ * started is told to send to that agent instead.
  */
 function writeUpPlace(brief: AgentBrief, onTask: boolean): string {
   if (brief === AGENT_BRIEF.PLAN && onTask) {
-    return `write it into the plan with \`${AGENT_EDIT_PLAN_TOOL}\`, or show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` where it reads better as one, and post it in a thread for the developer`;
+    return `write it into the plan with \`${AGENT_EDIT_PLAN_TOOL}\`, or show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` where it reads better as one, and post it in a thread for the developer, as the threads section below says`;
   }
-  return `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` and post it in a thread for the developer`;
+  return `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` and post it in a thread for the developer, as the threads section below says`;
 }
 
 /**
