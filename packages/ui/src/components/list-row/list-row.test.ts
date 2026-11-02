@@ -586,6 +586,38 @@ test("a row's fold is a control beside its press, saying whether its rows stand 
   expect(container.querySelector("output")?.textContent).toBe("unfold,fold");
 });
 
+test("a nested row is read at its level and its place among the rows under the same parent, its parent at the top level among the rows there", () => {
+  const nested = (title: string, depth: number, position: number) =>
+    createElement(ListRow, {
+      key: title,
+      title,
+      depth,
+      nest: { position, size: 2 },
+      onPress: ignore,
+    });
+  const container = draw(
+    createElement(List, {
+      label: "Tasks",
+      children: [
+        nested("Parent", 0, 1),
+        nested("First child", 1, 1),
+        nested("Second child", 1, 2),
+        nested("Other", 0, 2),
+      ],
+    }),
+  );
+  const read = [...container.querySelectorAll("li")].map(
+    (item) =>
+      `${item.querySelector("button")?.textContent}: level ${item.getAttribute("aria-level")}, ${item.getAttribute("aria-posinset")} of ${item.getAttribute("aria-setsize")}`,
+  );
+  expect(read).toEqual([
+    "Parent: level 1, 1 of 2",
+    "First child: level 2, 1 of 2",
+    "Second child: level 2, 2 of 2",
+    "Other: level 1, 2 of 2",
+  ]);
+});
+
 test("a row that opens nothing hears no keys, not even its acts'", () => {
   const heard: string[] = [];
   const container = draw(

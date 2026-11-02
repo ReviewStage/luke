@@ -24,6 +24,7 @@ import {
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
+  type ListRowNest,
   RowHint,
   RowHintOptions,
   Tooltip,
@@ -392,6 +393,8 @@ function PinnedTabCard({
 /** What a pin's row draws, beyond its menu: its glyph and name, the card it hangs, and where it opens. */
 interface PinnedRowDrawn {
   pin: SidebarPin;
+  /** Where the row stands among the pins, where Pinned nests child tasks under its plans. */
+  nest: ListRowNest | undefined;
   card: React.ReactNode;
   glyph: React.JSX.Element;
   /** Whether the open task no longer holds what the pin opens, which dims the row and opens nothing. */
@@ -426,13 +429,14 @@ function PinnedTabRow({
   description?: React.ReactNode;
   rowRef?: ((press: HTMLElement | null) => void) | undefined;
 }): React.JSX.Element {
-  const { pin, card, glyph, gone, current, inSight, tasks, onOpen, onUnpin } = drawn;
+  const { pin, nest, card, glyph, gone, current, inSight, tasks, onOpen, onUnpin } = drawn;
   const place = useRowPlace();
   const editing = editor !== undefined;
   return (
     <RowHintOptions card={card}>
       <ListRow
         ref={rowRef}
+        nest={nest}
         density={LIST_DENSITY.DENSE}
         ink={LIST_ROW_INK.SIDEBAR}
         leading={
@@ -549,6 +553,7 @@ export function SidebarPinnedTab({
   tasks,
   pin: kept,
   on,
+  nest,
   current,
   inSight,
   onOpen,
@@ -561,6 +566,8 @@ export function SidebarPinnedTab({
   current: boolean;
   /** What the tab is pinned on, whose name the row's card carries. */
   on: PinnedOn;
+  /** Where the pin's row stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
+  nest?: ListRowNest | undefined;
   /** Whether the sidebar is in sight: folded away, its menu stands over nothing. */
   inSight: boolean;
   onOpen: () => void;
@@ -580,6 +587,7 @@ export function SidebarPinnedTab({
   const copyLink = useCopyLinkItem();
   const drawn: PinnedRowDrawn = {
     pin,
+    nest,
     card:
       changesCard !== null ? (
         changesCard

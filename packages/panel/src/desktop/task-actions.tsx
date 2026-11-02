@@ -24,6 +24,7 @@ import {
   LIST_ROW_INK,
   ListRow,
   type ListRowFold,
+  type ListRowNest,
   type MenuRow,
   nextRowOrHead,
   OneLine,
@@ -801,6 +802,7 @@ export function SidebarTask({
   repository,
   faces = EVERY_FACE,
   depth,
+  nest,
   fold,
   childCount,
   onOpen,
@@ -823,6 +825,8 @@ export function SidebarTask({
   faces?: RowFaces;
   /** How deep the row stands nested under its parent tasks: at the top unless said. */
   depth?: number | undefined;
+  /** Where the row stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
+  nest?: ListRowNest | undefined;
   /** The child tasks nested under the row, which it folds; none where the list holds none. */
   fold?: ListRowFold | undefined;
   /** How many of the task's child tasks are finished, of all of them, said before its time; none where it has none. */
@@ -941,6 +945,7 @@ export function SidebarTask({
                 : { ...chosenRowMenu("Task", chosen, tasks.shown), openRequest: statusAsked }
           }
           depth={depth}
+          nest={nest}
           fold={fold}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
