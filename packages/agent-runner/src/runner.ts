@@ -115,14 +115,14 @@ const DENIED_VARIABLES = [
 /**
  * The worker the agent hands a scoped job to (`CLAUDE_CODE_WORKER`): its
  * own model's, without the tools that write a file, start another worker,
- * or act through the service, and told it never commits or pushes, which Bash
- * alone could still do.
+ * or act through the service, and told to read only, which Bash and the
+ * integration servers it keeps could still contradict.
  */
 const WORKER: AgentDefinition = {
   description:
     "A read-only worker for one scoped job, such as a broad search, a comparison of approaches, or an investigation: it reads the checkout and the web and answers, and never edits, commits, or pushes.",
   prompt:
-    "You are a read-only worker for an agent. Do the one job you were handed and answer with what it asks for. You are read-only in the checkout: never write, edit, move, or delete a file, never commit or push, and never change anything elsewhere, such as on GitHub; run only commands that read.",
+    "You are a read-only worker for an agent. Do the one job you were handed and answer with what it asks for. You are read-only in the checkout: never write, edit, move, or delete a file, never commit or push; run only commands that read, and use the connected services only to read from them.",
   model: "inherit",
   disallowedTools: ["Edit", "Write", "NotebookEdit", "Agent", `mcp__${MCP_SERVER}`],
 };

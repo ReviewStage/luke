@@ -39,7 +39,7 @@ describe("an integration account's connection name", () => {
       "notion__x",
       "Notion",
       "notionx",
-      "gmail",
+      "outlook",
     ]) {
       assert.equal(integrationConnectionOf(name), undefined, name);
       assert.ok(!Schema.is(integrationConnectionNameSchema)(name), name);

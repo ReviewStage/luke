@@ -348,11 +348,11 @@ function callLukeTool(
 
 /**
  * The tools listed to the admitted agent: those eve offers it, by its
- * repository, its kind, whether a pilot started it, and its starter's
- * Memory (`offeredLukeMcpTool`),
- * each in the words it is shown them with (`describe`); those eve offers
- * every agent where its row is gone, since no narrowed tool's door would
- * carry out a call for an agent that no longer stands.
+ * repository, whether a pilot started it, and its starter's Memory
+ * (`offeredLukeMcpTool`), each in the words it is shown them with
+ * (`describe`); those eve offers every agent where its row is gone, since no
+ * narrowed tool's door would carry out a call for an agent that no longer
+ * stands.
  */
 function listLukeTools(
   admitted: AdmittedConversation,
