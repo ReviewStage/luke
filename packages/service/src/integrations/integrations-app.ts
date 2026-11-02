@@ -90,7 +90,7 @@ export interface IntegrationsAppSeams {
   deleteAccount: (
     account: Pick<IntegrationConnectionRow, "userId" | "connectionName" | "id">,
   ) => IntegrationStoreEffect<boolean>;
-  /** Labels an account that carries no label yet, once, with what its grant named or an empty label for nothing; only the account under that grant's subject. */
+  /** Labels an account that carries no label yet, or an empty one, with what its grant or its provider named or an empty label for nothing; only the account under that grant's subject. */
   fillLabel: (account: IntegrationConnectionRow, label: string) => IntegrationStoreEffect<void>;
   /** Names one account; answers whether the account held it. */
   renameConnection: (

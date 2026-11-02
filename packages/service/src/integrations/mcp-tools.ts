@@ -103,9 +103,18 @@ const SECRET_WORDS =
 /** A run long enough to be a short key: any that mixes letters and digits is dropped. */
 const KEY_LIKE_RUN = /[A-Za-z0-9_+=.-]{16,}/g;
 
+/**
+ * Whether a line names a secret or holds a bearer, a Slack token, or a long
+ * run of token characters: the checks short of `KEY_LIKE_RUN`, for a value
+ * whose own shape is held otherwise, as an email's is.
+ */
+export function namesSecret(line: string): boolean {
+  return CREDENTIAL_SHAPE.test(line) || SECRET_WORDS.test(line);
+}
+
 /** Whether a line holds anything a credential could hide in, short or long. */
 function shapedLikeCredential(line: string): boolean {
-  if (CREDENTIAL_SHAPE.test(line) || SECRET_WORDS.test(line)) return true;
+  if (namesSecret(line)) return true;
   return (line.match(KEY_LIKE_RUN) ?? []).some((run) => /\d/.test(run) && /[A-Za-z]/.test(run));
 }
 

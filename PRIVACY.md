@@ -894,10 +894,11 @@ memory for a short while, and sends it only to Linear's MCP server, never to
 your Mac, a model, or a sandbox. We keep only your connection's state
 (waiting for sign-in, connected, or expired), when it last changed and last
 finished signing in, and, while a sign-in is under way, when it began and a
-one-time value that matches its return. Where you connect more than one
-account at one service, we also keep a name for each: the name the service
-gives that account's workspace when Vercel Connect hands us its token, or one
-you give it in Settings › Integrations. An agent handed more than one account
+one-time value that matches its return. We also keep a name for each
+account, which Settings › Integrations shows beside the service's: the name
+the service gives that account's workspace when Vercel Connect hands us its
+token, the account's email where the service answers it instead (Google's,
+below), or one you give it in Settings › Integrations. An agent handed more than one account
 at a service is told each one's name, so it can ask which you mean and say
 which it used. The list of Linear's tools that menu
 shows is held in our service's memory for five minutes. While you are
@@ -989,7 +990,10 @@ signs you in to Google in your browser through Vercel Connect for that one
 product, so connecting Calendar never grants mail. Vercel Connect stores
 Google's token for your account, encrypted, and renews it. Our service
 handles the token as it does Linear's, keeps the same record of your
-connection, and sends it only to Google's MCP server for that product. While
+connection, and sends it only to Google's MCP server for that product, and
+to that product's own API to read your Google account's email, which names
+the connection: Gmail's profile, your primary calendar's entry, or Drive's
+account details. A read that fails is not tried again for five minutes. While
 you are connected, the agents, as for Linear, can do whatever that grant
 allows, through Google's own MCP servers, without asking you first: for
 Gmail, search and read your mail and apply labels, and write drafts, but

@@ -161,8 +161,10 @@ function wordsOf(
 }
 
 /**
- * A server's name as its row and card say it: its provider's, and where the
- * provider holds more than one account, the account's name after it.
+ * A server's name as its row and card say it: its provider's, and the
+ * account's name after it where the provider holds more than one account, or
+ * where its one account carries a label (a name the provider gave it, its
+ * email, or the developer's own), never "Account 1" for an account alone.
  */
 export function serverName(
   provider: IntegrationProvider,
@@ -170,7 +172,10 @@ export function serverName(
   accounts: readonly IntegrationAccount[],
 ): string {
   const named = integrationAccountNames(accounts).get(connection);
-  return named !== undefined && accounts.length > 1
+  const labelled = accounts.some(
+    (account) => account.connection === connection && (account.label ?? "").trim() !== "",
+  );
+  return named !== undefined && (accounts.length > 1 || labelled)
     ? `${INTEGRATION_NAME[provider]} · ${named}`
     : INTEGRATION_NAME[provider];
 }
@@ -299,7 +304,8 @@ export function searchServers(rows: readonly ServerRow[], query: string): Server
     row,
     match: matchIntegration(row.provider, row.tools ?? [], tokens),
     // An account's label finds its row too, so "personal" finds Notion · Personal.
-    labelled: row.accounts > 1 && tokens.every((token) => row.name.toLowerCase().includes(token)),
+    labelled:
+      row.account !== undefined && tokens.every((token) => row.name.toLowerCase().includes(token)),
   }));
   return {
     rows: found.flatMap(({ row, match, labelled }) => (match?.named || labelled ? [row] : [])),
@@ -316,8 +322,8 @@ export interface NamedServer {
 
 /**
  * Every server the signed-in account holds, standing as `status` says, in the
- * provider list's order: each account at a provider, named by its label
- * where the provider has more than one, and a provider with none by itself.
+ * provider list's order: each account at a provider, named as `serverName`
+ * names it, and a provider with none by itself.
  */
 export function namedServers(input: {
   statusOf: (server: string) => IntegrationStatus | undefined;
@@ -326,17 +332,13 @@ export function namedServers(input: {
 }): readonly NamedServer[] {
   return INTEGRATION_PROVIDER_LIST.flatMap((provider) => {
     const accounts = input.accountsOf(provider);
-    const names = integrationAccountNames(accounts);
     const servers: readonly NamedServer[] =
       accounts.length === 0
         ? [{ provider, connection: provider, name: INTEGRATION_NAME[provider] }]
         : accounts.map((account) => ({
             provider,
             connection: account.connection,
-            name:
-              accounts.length > 1
-                ? `${INTEGRATION_NAME[provider]} · ${names.get(account.connection)}`
-                : INTEGRATION_NAME[provider],
+            name: serverName(provider, account.connection, accounts),
           }));
     return servers.filter((server) => input.standing(input.statusOf(server.connection)));
   });

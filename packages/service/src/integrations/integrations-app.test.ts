@@ -75,6 +75,7 @@ const SLACK = INTEGRATION_PROVIDER.SLACK;
 const SLACK_CONNECTOR = { SLACK_CONNECTOR_UID: "oauth/slack" } as const;
 const NOTION = INTEGRATION_PROVIDER.NOTION;
 const NOTION_CONNECTOR = { NOTION_CONNECTOR_UID: "oauth/notion" } as const;
+const GMAIL = INTEGRATION_PROVIDER.GMAIL;
 
 /** The deployment the origin guard reads its own origins from. */
 const DEPLOYMENT = { VERCEL_ENV: "production", BETTER_AUTH_URL: ORIGIN } as const;
@@ -942,6 +943,95 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           accountsIn(after.body).map((account) => account.label),
           [undefined],
         );
+      }),
+  );
+
+  it.effect(
+    "a Google account, whose grant names nothing, is called by its email at Google, one stored unnamed before among them, and keeps it",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount("dean@google-email.example");
+        yield* beginIntegrationSignIn(
+          userId,
+          firstIntegrationAccount(userId, GMAIL),
+          `state-gmail-${userId}`,
+        );
+        yield* completeIntegrationSignIn(userId, GMAIL, `state-gmail-${userId}`);
+        // As a read before Google was asked for the email left it: read once, and named nothing.
+        const [connected] = yield* readIntegrationConnections(userId);
+        yield* fillIntegrationLabel(connected ?? assert.fail("Gmail has a row"), "");
+        let down = false;
+        // Gmail's profile, answered only to the account's own token.
+        const google = fakeHttpClientLayer((url, init) =>
+          !down &&
+          url === "https://gmail.googleapis.com/gmail/v1/users/me/profile" &&
+          new Headers(init.headers).get("authorization") === `Bearer token_${userId}`
+            ? Response.json({ emailAddress: "dean.stratakos2026@gmail.example" })
+            : new Response(null, { status: 401 }),
+        );
+        const group = yield* standing({ GMAIL_CONNECTOR_UID: "google/gmail" }, undefined, google);
+        const labels = Effect.map(
+          group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }),
+          ({ body }) => accountsIn(body).map((account) => account.label),
+        );
+
+        assert.deepEqual(yield* labels, ["dean.stratakos2026@gmail.example"]);
+        // The name is kept: a Google that no longer answers still leaves it.
+        down = true;
+        assert.deepEqual(yield* labels, ["dean.stratakos2026@gmail.example"]);
+      }),
+  );
+
+  it.effect(
+    "a provider that could not answer whose account a token is leaves the read as it was, and is asked again only once its hold lapses",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount("dee@google-down.example");
+        yield* beginIntegrationSignIn(
+          userId,
+          firstIntegrationAccount(userId, GMAIL),
+          `state-gmail-down-${userId}`,
+        );
+        yield* completeIntegrationSignIn(userId, GMAIL, `state-gmail-down-${userId}`);
+        let down = true;
+        const google = fakeHttpClientLayer(() =>
+          down
+            ? new Response(null, { status: 503 })
+            : Response.json({ emailAddress: "dee@gmail.example" }),
+        );
+        const group = yield* standing({ GMAIL_CONNECTOR_UID: "google/gmail" }, undefined, google);
+        const accounts = Effect.map(
+          group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }),
+          ({ body }) => accountsIn(body).map((account) => [account.status, account.label]),
+        );
+
+        assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, undefined]]);
+        // Google answers again, but the account is not asked until its hold lapses.
+        down = false;
+        yield* TestClock.adjust("4 minutes");
+        assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, undefined]]);
+        yield* TestClock.adjust("2 minutes");
+        assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, "dee@gmail.example"]]);
+
+        // A hold is its grant's: an account connected again within it is asked at once.
+        const other = yield* openAccount("dom@google-reconnects.example");
+        const connectOther = (state: string) =>
+          Effect.gen(function* () {
+            yield* beginIntegrationSignIn(other, firstIntegrationAccount(other, GMAIL), state);
+            yield* completeIntegrationSignIn(other, GMAIL, state);
+          });
+        const otherAccounts = Effect.map(
+          group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId: other }),
+          ({ body }) => accountsIn(body).map((account) => account.label),
+        );
+        yield* connectOther(`state-gmail-first-${other}`);
+        down = true;
+        assert.deepEqual(yield* otherAccounts, [undefined]);
+        down = false;
+        yield* TestClock.adjust("1 minute");
+        yield* deleteIntegrationConnection(other, GMAIL);
+        yield* connectOther(`state-gmail-again-${other}`);
+        assert.deepEqual(yield* otherAccounts, ["dee@gmail.example"]);
       }),
   );
 

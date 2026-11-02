@@ -34,6 +34,7 @@
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import {
+  INTEGRATION_LABEL_MAX,
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
@@ -53,7 +54,7 @@ import { Config, Context, Data, Effect, Layer, Option, Redacted, Schema } from "
 import { readAccountPerson } from "../accounts/account-person.js";
 import { text } from "../core.js";
 import { INTEGRATION, type IntegrationDefinition } from "./integrations.js";
-import { credentialFreeLine } from "./mcp-tools.js";
+import { credentialFreeLine, namesSecret } from "./mcp-tools.js";
 
 /** Why Connect answered nothing usable. */
 export const INTEGRATION_CONNECT_FAILURE = {
@@ -203,8 +204,26 @@ const VERCEL_CONNECT_SDK: ConnectSdk = {
   deleteTokenCacheEntry,
 };
 
-/** The longest account name a grant's fields are read as a label for. */
-const ACCOUNT_NAME_MAX = 64;
+/** The longest account name a grant's fields or a provider's answer are read as a label for. */
+const ACCOUNT_NAME_MAX = INTEGRATION_LABEL_MAX;
+
+/** An email as an account is called by it: a local part of the characters a mailbox's name is spelled with, `@`, then a host of at least two labels. */
+const ACCOUNT_EMAIL_PATTERN = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
+
+/**
+ * An account's name at the provider as an account's label keeps it, from a
+ * grant's fields or the provider's own answer alike: a short line shaped like
+ * no credential, or a short email that names no secret. Note that an email
+ * is held by its own shape rather than `credentialFreeLine`, which drops a
+ * long run mixing letters and digits, as many a mailbox's name is; and that
+ * every name is held to a label's length, which is what an agent is told.
+ */
+export function accountNameLine(candidate: string): string | undefined {
+  const name = candidate.trim();
+  const line =
+    ACCOUNT_EMAIL_PATTERN.test(name) && !namesSecret(name) ? name : credentialFreeLine(name);
+  return line === undefined || line.length > ACCOUNT_NAME_MAX ? undefined : line;
+}
 
 /** Where in a grant's metadata an account's name may stand, each read alone so one of the wrong shape hides none of the others. */
 const GRANT_NAME_READS = [
@@ -242,9 +261,9 @@ const GRANT_NAME_READS = [
  * The account's name at the provider as Connect's grant carries it, for an
  * account's label: Notion's `workspace_name`, Slack's team, an
  * organization's name, or the grant's own `name` where it is not the
- * connector's id. Note that each field is read only where it is a short line
- * shaped like no credential, because what Connect's driver stores is no
- * contract we can vouch for.
+ * connector's id. Note that each field is read only as `accountNameLine`
+ * keeps a name, because what Connect's driver stores is no contract we can
+ * vouch for.
  */
 function grantAccountName(response: ConnectTokenResponse): string | undefined {
   const candidates = [
@@ -252,8 +271,8 @@ function grantAccountName(response: ConnectTokenResponse): string | undefined {
     ...(response.name !== undefined ? [response.name] : []),
   ];
   for (const candidate of candidates) {
-    const line = credentialFreeLine(candidate);
-    if (line === undefined || line.length > ACCOUNT_NAME_MAX) continue;
+    const line = accountNameLine(candidate);
+    if (line === undefined) continue;
     if (line === response.connector.uid || line === response.connector.id) continue;
     return line;
   }
