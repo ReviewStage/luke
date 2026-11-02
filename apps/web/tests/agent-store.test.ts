@@ -24,7 +24,7 @@ import { listTasks } from "@luke/database/models/task-store";
 import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
 import { conversations, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_KIND, CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
 import {
   AGENT_BRIEF,
@@ -82,6 +82,7 @@ function start(
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     repository: "reviewstage/luke",
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     ...overrides,
     ...brief,
   };
@@ -207,6 +208,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
               model: "anthropic/claude-opus-5.5",
               effort: "high",
               repository,
+              runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
             }),
             started,
           );
@@ -474,6 +476,7 @@ it.layer(getTestDB())("the plan list's agent lines", (it) => {
             model: "anthropic/claude-opus-5.5",
             effort: "high",
             repository: "reviewstage/luke",
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         );
 

@@ -10,6 +10,7 @@ import {
   listChannelLooks,
 } from "@luke/database/models/channel-store";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import type { WireBoundaryInput } from "@luke/wire";
 import { type Context, Effect, Option, Result } from "effect";
@@ -118,6 +119,7 @@ it.layer(getTestDB())("the channels route", (it) => {
           repository: "acme/relay",
           planSnapshot: "# Teammate invitations\n",
           prompt: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         assert.ok(Option.isSome(started));
         const thread = Result.getOrThrow(
