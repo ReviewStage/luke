@@ -106,7 +106,7 @@ test("a release's head names its first feature, opens on its first paragraph, an
     (candidate) => candidate.path === "/changelog/1.4.0",
   );
   assert.ok(route !== undefined);
-  assert.equal(route.head.title, "Fullspin 1.4.0: The Call tab — Changelog");
+  assert.equal(route.head.title, "Vespin 1.4.0: The Call tab — Changelog");
   assert.equal(
     route.head.description,
     "Each plan's calls read as one thread in the Call tab, with code kept as words.",
@@ -123,7 +123,7 @@ test("a release with only standing sections is titled by its version and opens o
     (candidate) => candidate.path === "/changelog/1.0.0",
   );
   assert.ok(route !== undefined);
-  assert.equal(route.head.title, "Fullspin 1.0.0 — Changelog");
+  assert.equal(route.head.title, "Vespin 1.0.0 — Changelog");
   assert.equal(route.head.description, "Fixed thing 0");
   assert.equal(route.head.image, undefined);
 });

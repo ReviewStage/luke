@@ -316,7 +316,7 @@ function answer(request: Asked): Promise<Answered> {
       if (refuseGitHubOpen) {
         return Promise.resolve({
           status: FAKE_ANSWER.REFUSED,
-          reason: "Fullspin could not open your browser.",
+          reason: "Vespin could not open your browser.",
         });
       }
       return Promise.resolve(done(undefined));
@@ -1716,7 +1716,7 @@ test("a GitHub page the browser could not open is said under the row, from Manag
   await settle();
 
   for (const { page } of [managed, unconnected]) {
-    assert.equal(refusalOf(githubGroup(page)), "Fullspin could not open your browser.");
+    assert.equal(refusalOf(githubGroup(page)), "Vespin could not open your browser.");
   }
 });
 

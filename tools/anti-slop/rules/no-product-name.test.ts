@@ -26,23 +26,23 @@ tester.run("no-product-name", noProductNameRule, {
     { code: "const quit = `Quit ${PRODUCT_NAME}?`;", filename: SOURCE },
     { code: 'const failed = "The service did not answer.";', filename: SOURCE },
     // A comment is prose about the code, not something the product says.
-    { code: "// Fullspin keeps this.\nconst a = 1;", filename: SOURCE },
+    { code: "// Vespin keeps this.\nconst a = 1;", filename: SOURCE },
     // A test pins what a surface says.
-    { code: 'const title = "Quit Fullspin?";', filename: TEST_FILE },
+    { code: 'const title = "Quit Vespin?";', filename: TEST_FILE },
   ],
   invalid: [
     {
-      code: 'const title = "Quit Fullspin?";',
+      code: 'const title = "Quit Vespin?";',
       filename: SOURCE,
       errors: [{ messageId: "productName" }],
     },
     {
-      code: "const line = `Fullspin host ${1}`;",
+      code: "const line = `Vespin host ${1}`;",
       filename: SOURCE,
       errors: [{ messageId: "productName" }],
     },
     {
-      code: "const a = <p>Sign in to Fullspin</p>;",
+      code: "const a = <p>Sign in to Vespin</p>;",
       filename: SOURCE,
       errors: [{ messageId: "productName" }],
     },

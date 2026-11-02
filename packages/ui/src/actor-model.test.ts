@@ -69,7 +69,7 @@ test("an actor is named as the reader says them, in a sentence and as whose", ()
       actorName(agent, { sentence: true }),
       actorName({ kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED }, { sentence: true }),
     ],
-    ["You", "you", "Your", "your", "Sam Okafor’s", "Fullspin", "Fix auth flow", "someone"],
+    ["You", "you", "Your", "your", "Sam Okafor’s", "Vespin", "Fix auth flow", "someone"],
   );
 });
 
@@ -125,7 +125,7 @@ function said(activity: ActorActivity | undefined): string | undefined {
   return activity === undefined ? undefined : activityWords(activity);
 }
 
-test("a plan's edit is named by who wrote it: a member as the members read them, Fullspin, an agent by its name, and nobody before history", () => {
+test("a plan's edit is named by who wrote it: a member as the members read them, Vespin, an agent by its name, and nobody before history", () => {
   const byLuke = { actor: PLAN_ACTOR.NOTETAKER, by: DANA_REF, at: 0, duringCall: false };
   const byAgent = { actor: PLAN_ACTOR.AGENT, label: "Fix auth flow", at: 0, duringCall: false };
   const byDana = { actor: PLAN_ACTOR.DEVELOPER, by: DANA_REF, at: 0, duringCall: false };
@@ -287,7 +287,7 @@ test("the signed-in account is drawn as the reader, by the name, address, and pi
   );
 });
 
-test("someone a pull request names on GitHub is a teammate where their GitHub account is a member's, and themself on GitHub otherwise, Fullspin's own bot among them", () => {
+test("someone a pull request names on GitHub is a teammate where their GitHub account is a member's, and themself on GitHub otherwise, Vespin's own bot among them", () => {
   const place = { members: [DANA, SAM], readerId: SAM.userId };
 
   assert.deepEqual(
@@ -325,7 +325,7 @@ test("someone a pull request names on GitHub is a teammate where their GitHub ac
   assert.deepEqual(
     githubActor({ login: "luke-agent[bot]", bot: true }, place),
     { kind: ACTOR_KIND.GITHUB, login: "luke-agent[bot]", bot: true },
-    "Fullspin's own App's bot is an App's bot like any other",
+    "Vespin's own App's bot is an App's bot like any other",
   );
   assert.deepEqual(
     [actorName(stranger), actorName(devin, { possessive: true })],
@@ -379,7 +379,7 @@ test("a linked GitHub login who left keeps their picture and their account's nam
   );
 });
 
-test("a task Fullspin or an agent made names them, the automation whose run started the agent in its place, and an agent the window does not hold as an agent; a task made by hand names nobody", () => {
+test("a task Vespin or an agent made names them, the automation whose run started the agent in its place, and an agent the window does not hold as an agent; a task made by hand names nobody", () => {
   assert.equal(originActor(undefined, undefined), undefined);
   assert.equal(originActor({ actor: PLAN_ACTOR.NOTETAKER }, undefined), LUKE_ACTOR);
   const held = {

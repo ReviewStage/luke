@@ -28,7 +28,7 @@ import { workspaceInvitationsLive, workspaceMembersLive } from "./live-queries.j
  * either read, through its real writer, notifies the workspace's topic, which
  * both reads are woken on, so a window holding them hears it within a
  * coalesce window rather than at the hold's end. Memberships and invitations
- * are written by the organization plugin through the seams Fullspin's routes
+ * are written by the organization plugin through the seams Vespin's routes
  * call; an account's name and its sign-in by the account's own row, as the
  * plugin's adapter writes them; and the work that names a former member by
  * the stores. A sign-in moves no read, so it notifies nothing.

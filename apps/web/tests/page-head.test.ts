@@ -16,15 +16,15 @@ test("a route's head replaces the changelog template's title, description, and a
   const html = withPageHead(
     TEMPLATE,
     {
-      title: "Changelog, page 2 — Fullspin",
-      description: "What changed in each Fullspin release.",
+      title: "Changelog, page 2 — Vespin",
+      description: "What changed in each Vespin release.",
       url: "https://tryluke.dev/changelog/page/2",
       image: undefined,
     },
     undefined,
   );
-  assert.match(html, /<title>Changelog, page 2 — Fullspin<\/title>/);
-  assert.equal(metaContent(html, "og:title"), "Changelog, page 2 — Fullspin");
+  assert.match(html, /<title>Changelog, page 2 — Vespin<\/title>/);
+  assert.equal(metaContent(html, "og:title"), "Changelog, page 2 — Vespin");
   assert.equal(metaContent(html, "og:url"), "https://tryluke.dev/changelog/page/2");
   assert.equal(metaContent(html, "og:image"), "https://tryluke.dev/luke-og-card.png");
 });
@@ -33,7 +33,7 @@ test("a release shares its own screenshot, at its own size, in place of the site
   const html = withPageHead(
     TEMPLATE,
     {
-      title: "Fullspin 0.12.0: The Call tab — Changelog",
+      title: "Vespin 0.12.0: The Call tab — Changelog",
       description: 'Calls read as one thread, "quoted" & <kept>.',
       url: "https://tryluke.dev/changelog/0.12.0",
       image: {

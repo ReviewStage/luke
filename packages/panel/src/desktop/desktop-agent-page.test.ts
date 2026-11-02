@@ -154,12 +154,12 @@ const SWEEP: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-/** The prompt an automation's run handed its agent: the automation's own, then what Fullspin adds of the firing. */
+/** The prompt an automation's run handed its agent: the automation's own, then what Vespin adds of the firing. */
 const HANDED = `Sweep the flaky tests.
 
 ---
 
-Fullspin started this run for the automation "Flaky-test sweep" because its schedule was due.`;
+Vespin started this run for the automation "Flaky-test sweep" because its schedule was due.`;
 
 /** The agent an automation's run started, read as its page with the run. */
 const RUN_PAGE: AgentPage = {
@@ -1416,7 +1416,7 @@ test("an automation's agent opens on the automation's prompt alone, sent by the 
   const automation = sender?.querySelector<HTMLButtonElement>("button[data-actor-ref]");
   assert.equal(words(automation), "Flaky-test sweep");
   assert.match(card.textContent ?? "", /Sweep the flaky tests\./u);
-  assert.doesNotMatch(card.textContent ?? "", /Fullspin started this run/u);
+  assert.doesNotMatch(card.textContent ?? "", /Vespin started this run/u);
   act(() => automation?.click());
 
   assert.deepEqual(opened, [{ kind: "edit", automationId: SWEEP.id }]);
@@ -2111,7 +2111,7 @@ it.effect(
 );
 
 it.effect(
-  "an agent working in no repository, as Fullspin does, still takes an @ in its box, which offers the workspace's agents",
+  "an agent working in no repository, as Vespin does, still takes an @ in its box, which offers the workspace's agents",
   () =>
     Effect.gen(function* () {
       installEditorLayout();

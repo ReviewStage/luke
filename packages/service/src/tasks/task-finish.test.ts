@@ -247,7 +247,7 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
   );
 
   it.effect(
-    "an agent of a task Fullspin finished stands, and still stands once messaged, its turn taking the task up and its reply finishing it again",
+    "an agent of a task Vespin finished stands, and still stands once messaged, its turn taking the task up and its reply finishing it again",
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
@@ -256,12 +256,12 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         yield* recordAgentPublished(userId, agent.id, pullRequestIn(PULL_REQUEST_STATE.MERGED));
         yield* turnOf(agent, TURN_STATUS.SETTLED);
 
-        // Its pull request merged and its turn ended: Fullspin finishes the task and leaves the agent standing.
+        // Its pull request merged and its turn ended: Vespin finishes the task and leaves the agent standing.
         yield* settleTaskAfterTurn(userId, task.id, agent.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.DONE);
         assert.equal(yield* archived(userId, agent.id), false);
 
-        // Messaged, its turn takes the task up, and its reply ends the turn, at whose end Fullspin finishes it again.
+        // Messaged, its turn takes the task up, and its reply ends the turn, at whose end Vespin finishes it again.
         yield* reopenTaskForWork(userId, task.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.IN_PROGRESS);
         yield* turnOf(agent, TURN_STATUS.SETTLED);

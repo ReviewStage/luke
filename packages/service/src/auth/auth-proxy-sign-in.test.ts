@@ -49,7 +49,7 @@ type Ends = ReturnType<typeof ends>;
 
 function endFor(deployment: AuthDeployment, secret: string, trail: Trail) {
   return betterAuth({
-    appName: "Fullspin",
+    appName: "Vespin",
     baseURL: deployment.baseURL,
     trustedOrigins: deployment.trustedOrigins,
     secret,

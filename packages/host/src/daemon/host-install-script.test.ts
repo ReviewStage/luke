@@ -77,7 +77,7 @@ const FAKE_NODE = [
   `printf 'luke-host %s\\n' "$*" >>"$FAKE_ASKED"`,
   '[ "$1" = connect ] || exit 0',
   'if [ -f "$LUKE_HOST_STATE_ROOT/device.json" ]; then echo "This box is already connected."; exit 0; fi',
-  'if [ -n "$FAKE_CONNECT_EXIT" ]; then echo "The code was denied in Fullspin, so this box was not connected." >&2; exit "$FAKE_CONNECT_EXIT"; fi',
+  'if [ -n "$FAKE_CONNECT_EXIT" ]; then echo "The code was denied in Vespin, so this box was not connected." >&2; exit "$FAKE_CONNECT_EXIT"; fi',
   'mkdir -p "$LUKE_HOST_STATE_ROOT"',
   `printf '%s' "$FAKE_PAIRING" >"$LUKE_HOST_STATE_ROOT/device.json"`,
   "echo 'Connected as box.'",
@@ -280,7 +280,7 @@ describe("the host's install script", () => {
       WSL1_PROC_VERSION,
       "Upgrade it with: wsl --set-version <distro> 2",
     ],
-    ["another kernel", "FreeBSD", "amd64", "", "Fullspin host runs on Linux, not FreeBSD."],
+    ["another kernel", "FreeBSD", "amd64", "", "Vespin host runs on Linux, not FreeBSD."],
   ] as const) {
     it(`refuses ${computer} by name`, () => {
       const answer = sh(
@@ -315,9 +315,9 @@ describe("the host's install script", () => {
       "an Apple silicon Mac on macOS 12.2",
       "arm64",
       "12.2",
-      "Fullspin host needs macOS 12.3 or later, and this Mac runs macOS 12.2.",
+      "Vespin host needs macOS 12.3 or later, and this Mac runs macOS 12.2.",
     ],
-    ["an Intel Mac", "x86_64", "14.5", "Fullspin does not run agents on Intel Macs."],
+    ["an Intel Mac", "x86_64", "14.5", "Vespin does not run agents on Intel Macs."],
   ] as const) {
     it(`${refusal === undefined ? "lets" : "refuses"} ${computer} ${refusal === undefined ? "through, past every check of the computer" : "by name"}, before anything is changed`, () => {
       // Note that the run has no home, which the next check refuses, so a Mac let through goes no further.
@@ -342,7 +342,7 @@ describe("the host's install script", () => {
     expect(answer.status).toBe(1);
     expect(answer.stdout).toBe("");
     expect(answer.stderr).toContain(
-      `Run it without sudo, as the account whose agents Fullspin host should run: curl -fsSL ${ORIGIN}/install.sh | sh`,
+      `Run it without sudo, as the account whose agents Vespin host should run: curl -fsSL ${ORIGIN}/install.sh | sh`,
     );
     expect(existsSync(computer.releases)).toBe(false);
   });
@@ -397,7 +397,7 @@ describe("the host's install script", () => {
     expect(wsl.stderr).toContain("[boot] systemd=true in /etc/wsl.conf");
     expect(wsl.stderr).toContain("wsl --shutdown");
     expect(linux.status).toBe(1);
-    expect(linux.stderr).toContain("Fullspin host needs systemd.");
+    expect(linux.stderr).toContain("Vespin host needs systemd.");
     expect(linux.stderr).not.toContain("wsl");
   });
 
@@ -476,7 +476,7 @@ describe("the host's install script", () => {
     const answer = computer.install("0.3.0", { FAKE_CONNECT_EXIT: "2" });
 
     expect(answer.status).toBe(2);
-    expect(answer.stderr).toContain("The code was denied in Fullspin");
+    expect(answer.stderr).toContain("The code was denied in Vespin");
     expect(answer.stderr).toContain(
       `For a new code, run: ${computer.link} connect --origin ${ORIGIN}`,
     );
@@ -566,7 +566,7 @@ describe("the host's install script", () => {
 
     expect(answer.status).toBe(1);
     expect(answer.stderr).toContain(
-      "Could not stop Fullspin host for this account, so nothing was changed",
+      "Could not stop Vespin host for this account, so nothing was changed",
     );
   });
 
@@ -600,7 +600,7 @@ describe("the host's install script", () => {
     { loaded: false, status: 0 },
     { loaded: true, status: 1 },
   ])(
-    "a Mac's uninstall removes the machines and folders of the agents its daemon made, never another Fullspin install's or root's, and leaves the clones every install shares, unless the LaunchAgent will not stop (still loaded: $loaded)",
+    "a Mac's uninstall removes the machines and folders of the agents its daemon made, never another Vespin install's or root's, and leaves the clones every install shares, unless the LaunchAgent will not stop (still loaded: $loaded)",
     ({ loaded, status }) => {
       const removed = status === 0;
       const fakes = folder();
@@ -619,7 +619,7 @@ describe("the host's install script", () => {
         writeFileSync(join(fakes, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
       }
       const app = join(home, "Library/Application Support/Luke Host");
-      // Note that one smolvm store holds every Fullspin install's agents' machines for the user, this one's among them.
+      // Note that one smolvm store holds every Vespin install's agents' machines for the user, this one's among them.
       const smolvm = join(app, "state/agent-tools/smolvm/1/smolvm");
       mkdirSync(join(smolvm, ".."), { recursive: true });
       writeFileSync(
@@ -627,7 +627,7 @@ describe("the host's install script", () => {
         `#!/bin/sh\n[ "$1 $2" != "machine delete" ] || echo "$4" >> "${deletes}"\n`,
         { mode: 0o755 },
       );
-      // Note that agent one is this install's, by its daemon's record, and agent two another Fullspin install's.
+      // Note that agent one is this install's, by its daemon's record, and agent two another Vespin install's.
       mkdirSync(join(app, "state/owned-agents"), { recursive: true });
       writeFileSync(join(app, "state/owned-agents/one"), "");
       for (const place of [home, rootHome]) {
@@ -689,7 +689,7 @@ describe("the host's install script", () => {
       mkdirSync(join(state, "owned-agents"), { recursive: true });
       writeFileSync(join(state, "owned-agents/one"), "");
       writeFileSync(join(state, "device.json"), "{}");
-      // Note that agent one is this install's, by its daemon's record, and agent two another Fullspin install's.
+      // Note that agent one is this install's, by its daemon's record, and agent two another Vespin install's.
       for (const each of ["agents/one", "agents/two", "clones/acme"]) {
         mkdirSync(join(home, ".luke", each), { recursive: true });
       }

@@ -22,7 +22,7 @@ import { SettingsPanel, type SettingsPanelProps } from "./settings-panel.js";
 /**
  * Settings' Account page as the panel draws it: its own groups and no list of
  * the other pages, which the Settings sidebar alone lists; This Mac saying
- * where macOS has Fullspin's notifications off; and no page's buttons end their
+ * where macOS has Vespin's notifications off; and no page's buttons end their
  * words with an ellipsis.
  */
 
@@ -117,7 +117,7 @@ test("a signed-out Workspace page says to sign in rather than drawing nothing", 
   assert.equal(container.textContent, "Sign in to use this page.");
 });
 
-test("This Mac says under Ask every time where macOS refused Fullspin's last notification, and opens System Settings", () => {
+test("This Mac says under Ask every time where macOS refused Vespin's last notification, and opens System Settings", () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -139,7 +139,7 @@ test("This Mac says under Ask every time where macOS refused Fullspin's last not
     );
     return container.textContent ?? "";
   };
-  const offLine = "macOS has notifications off for Fullspin";
+  const offLine = "macOS has notifications off for Vespin";
 
   assert.equal(drawn(NOTIFICATIONS_STATUS.ON).includes(offLine), false);
   assert.equal(drawn(NOTIFICATIONS_STATUS.OFF).includes(offLine), true);

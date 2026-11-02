@@ -179,14 +179,14 @@ async function crashPastTheBound(window: InstanceType<typeof FakeBrowserWindow>,
   }
 }
 
-test("Quit Fullspin quits, and loads nothing more", async () => {
+test("Quit Vespin quits, and loads nothing more", async () => {
   const { window } = drawnPanel();
   await crashPastTheBound(window, 1);
   expect(quit.asked).toBe(true);
   expect(window.loads).toBe(4);
 });
 
-test("Quit Fullspin held by a live call that is kept loads the panel once more rather than leaving it blank", async () => {
+test("Quit Vespin held by a live call that is kept loads the panel once more rather than leaving it blank", async () => {
   quit.goes = false;
   const { window } = drawnPanel();
   await crashPastTheBound(window, 1);

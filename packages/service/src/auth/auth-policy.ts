@@ -162,8 +162,9 @@ export const DESKTOP_SESSION = { clientID: DESKTOP_SESSION_CLIENT_ID } as const;
  * `userId` and carries no session through, which is the one way Fullspin
  * creates a workspace.
  *
- * An invitation's id is the accept link an owner copies and shares by hand,
- * so it travels outside the invitee's mailbox, which is the case the plugin's
+ * An invitation's id is the accept link the service emails the invitee and
+ * an owner may also copy and share by hand, so it can travel outside the
+ * invitee's mailbox, which is the case the plugin's
  * `requireEmailVerificationOnInvitation` names: only an account whose
  * provider verified the invited address reads or accepts it.
  */

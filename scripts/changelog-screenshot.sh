@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Takes one CHANGELOG.md screenshot: a capture of Fullspin's window, framed on
+# Takes one CHANGELOG.md screenshot: a capture of Vespin's window, framed on
 # macOS's Golden Gate Sunset aerial.
 #
 #   scripts/changelog-screenshot.sh <out.png> [--from <capture.png>] [--layout window|top|bleed]
 #       [--crop <x,y,width,height>] [--zoom <factor>]
 #
-# With no capture given it opens macOS's window capture, so click Fullspin's
+# With no capture given it opens macOS's window capture, so click Vespin's
 # window; the capture keeps the window's shadow, which the frame draws over the
 # wallpaper. `--from` frames a capture already taken the same way (⇧⌘4, then
 # Space, then the window). `--crop` cuts the framed picture to that part of
@@ -64,7 +64,7 @@ fi
 if [[ -z $capture ]]; then
     capture="$work_root/capture.png"
     rm -f -- "$capture"
-    printf 'Click Fullspin'\''s window to capture it.\n' >&2
+    printf 'Click Vespin'\''s window to capture it.\n' >&2
     screencapture -iWx "$capture"
     if [[ ! -s $capture ]]; then
         printf 'error: no window was captured\n' >&2

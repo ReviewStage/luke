@@ -26,7 +26,7 @@ const BRANCH_ONLY = {
   pullRequest: null,
 };
 
-const REFUSAL = "That address is not one Fullspin opens.";
+const REFUSAL = "That address is not one Vespin opens.";
 
 const roots: Root[] = [];
 

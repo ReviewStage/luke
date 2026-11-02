@@ -9,6 +9,7 @@
 
 import { ConfigProvider, Effect, Layer, Logger } from "effect";
 import { FetchHttpClient } from "effect/http";
+import { invitationMailFromEnvironment } from "./accounts/invitation-mail.js";
 import { settledTurnListener } from "./agents/coder-host/settled-turns.js";
 import { bearerCallersLayer } from "./auth/bearer-callers.js";
 import { webSqlClient } from "./db/sql-client.js";
@@ -98,6 +99,9 @@ const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)
  * connection. Without that URL its listener stays down, and every wait
  * polls on its own clock.
  *
+ * `InvitationMail` is the one place the Resend key and the sender a
+ * workspace invitation is emailed from are read (`accounts/invitation-mail.ts`).
+ *
  * `BearerCallers` keeps the caller each bearer resolved to for a minute
  * (`auth/bearer-callers.ts`), so a held read and the polls inside it ask the
  * auth service once a minute per bearer rather than on every request.
@@ -133,6 +137,7 @@ export const webServices = Layer.mergeAll(
   productAnalyticsFromEnvironment.pipe(
     Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment)),
   ),
+  invitationMailFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer)),
 ).pipe(Layer.provide(webConfigProvider));
 
 /** What an effect run on a runtime over these services may require. */

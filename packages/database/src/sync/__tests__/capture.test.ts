@@ -13,7 +13,7 @@ import { defineSyncTable } from "../sync-table.js";
 import { SYNC_TABLES } from "../tables.js";
 
 /**
- * Fullspin Sync's capture, on a table only these tests create: a row names its
+ * Vespin Sync's capture, on a table only these tests create: a row names its
  * workspace and task itself, and takes its agents from the parents of its
  * group, which it names by a key many parents share. What a write notifies
  * is heard on the test database's own listener, so on PGlite and on the CI

@@ -3,7 +3,7 @@
  *
  * The run opens its own sandbox from the linked Vercel project (the SDK
  * reads `.vercel/project.json` and the CLI's sign-in), prepares it with the
- * same `prepareImage` every Fullspin agent's snapshot is made with, installs the
+ * same `prepareImage` every Vespin agent's snapshot is made with, installs the
  * pinned Codex root-owned and creates `agent`, and deletes the sandbox at the
  * end whatever happened. It gathers `Observations` for `checks.ts` to judge
  * and returns them with the recording; it prints only progress lines.
@@ -89,7 +89,7 @@ export function readGithubRepository(value: string | undefined): string | undefi
   return value;
 }
 
-/** The firewall policy that sets a GitHub token on GitHub's hosts, as Fullspin's agents have it today. */
+/** The firewall policy that sets a GitHub token on GitHub's hosts, as Vespin's agents have it today. */
 function githubPolicy(token: string): NetworkPolicy {
   const authorization = `Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`;
   const rule = [{ transform: [{ headers: { authorization } }] }];
@@ -219,7 +219,7 @@ async function chooseModel(
 /** The first turn's instructions: an edit, the scanner, the MCP tool, and the long watch to wait out. */
 function firstTurnPrompt(nonce: string, ciMarker: string, ciSeconds: number): string {
   return [
-    "You are being exercised by Fullspin's sandbox probe. Do these steps in order with your tools:",
+    "You are being exercised by Vespin's sandbox probe. Do these steps in order with your tools:",
     `1. Create PROBE.md in the current directory containing exactly the line ${nonce}.`,
     `2. Run \`node ${PROBE_FILES.SCANNER}\` once and keep its output; do not run it any other way.`,
     `3. Call the \`echo\` tool of the \`luke_probe\` MCP server with the text ${nonce}.`,
@@ -323,7 +323,7 @@ async function prepare(
   const repository = PROBE_FILES.REPOSITORY;
   const clone =
     options.githubRepository === undefined
-      ? `cd ${repository} && git init -q && echo '# Fullspin probe' > README.md`
+      ? `cd ${repository} && git init -q && echo '# Vespin probe' > README.md`
       : `git clone -q "https://github.com/$1.git" "$2"`;
   await must(
     "repository",

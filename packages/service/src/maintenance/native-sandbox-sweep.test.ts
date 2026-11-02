@@ -176,7 +176,7 @@ const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at
     return agent;
   });
 
-/** A running sandbox as Fullspin names a native agent's, tagged with its agent, and with the runner named where one was launched. */
+/** A running sandbox as Vespin names a native agent's, tagged with its agent, and with the runner named where one was launched. */
 function nativeSandbox(agentId: string, commandId?: string): FakeSandbox {
   const id = randomUUID();
   const running = `sbs_${id}`;
@@ -337,10 +337,10 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
             return [agent.id, sandbox] as const;
           }),
         );
-        // eve's sandbox, even tagged as an ended native agent's would be, is not Fullspin's to stop.
+        // eve's sandbox, even tagged as an ended native agent's would be, is not Vespin's to stop.
         const eve = { ...eveSandbox(), tags: { sessionId: "wrun_eve", lukeAgent: ended.id } };
         const eveOwn = eveSandbox();
-        // A sandbox named as Fullspin's whose agent runs on eve is left to eve's own lifecycle.
+        // A sandbox named as Vespin's whose agent runs on eve is left to eve's own lifecycle.
         const misnamed = nativeSandbox(onEve.id);
         api.sandboxes.unshift(eve, eveOwn);
         api.sandboxes.push(misnamed);

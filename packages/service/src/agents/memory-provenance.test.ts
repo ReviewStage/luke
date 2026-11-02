@@ -168,7 +168,7 @@ it.layer(getTestDB())("a remember's provenance", (it) => {
   );
 
   it.effect(
-    "a turn that read the web, through Fullspin's page read or Claude Code's search, keeps nothing",
+    "a turn that read the web, through Vespin's page read or Claude Code's search, keeps nothing",
     () =>
       Effect.gen(function* () {
         for (const read of [AGENT_TOOL.READ_WEB_PAGE, CLAUDE_CODE_TOOL.WEB_SEARCH]) {

@@ -100,7 +100,7 @@ test("a revision names its writer as the developer knows them, and says what it 
         agents,
       ),
     );
-  assert.equal(named({}), "Fullspin");
+  assert.equal(named({}), "Vespin");
   assert.equal(named({ actor: PLAN_ACTOR.DEVELOPER, by: DEAN }), "You");
   assert.equal(
     named({ actor: PLAN_ACTOR.AGENT, label: "Invite emails" }, AGENT_ID),
@@ -129,7 +129,7 @@ test("a revision names its writer as the developer knows them, and says what it 
 });
 
 /**
- * A plan's revisions, newest first, as the service lists them: Fullspin's on a
+ * A plan's revisions, newest first, as the service lists them: Vespin's on a
  * call, moved on by saves from three hours ago to two, an agent's five hours
  * ago, and the plan before its history began.
  */
@@ -328,7 +328,7 @@ test("only a revision of several changes opens its sections: not one change, a r
   );
 });
 
-test("a revision's Open goes to its agent's tab, and nowhere for Fullspin's own saves, whose work no tab draws, or anyone else", () => {
+test("a revision's Open goes to its agent's tab, and nowhere for Vespin's own saves, whose work no tab draws, or anyone else", () => {
   const agentEdit = { actor: PLAN_ACTOR.AGENT, label: "Invite emails", at: NOW, duringCall: false };
 
   assert.equal(revisionSource(line()), undefined);

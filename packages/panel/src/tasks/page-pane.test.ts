@@ -226,7 +226,7 @@ test.each([
   { holder: "a task's page", place: { taskId: TASK }, path: `plan/${TASK}` },
   { holder: "a page of an agent on no task", place: { agentId: AGENT }, path: `agent/${AGENT}` },
 ])(
-  "Open in browser on $holder opens its own Fullspin link, flagged to stay on the web, never the address it is framed from",
+  "Open in browser on $holder opens its own Vespin link, flagged to stay on the web, never the address it is framed from",
   ({ place, path }) => {
     const opened: string[] = [];
     fakeAppPlatform({ pageFrameUrl, openWeb: (url) => opened.push(url) });

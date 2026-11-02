@@ -107,7 +107,7 @@ function heldFold(open: boolean, heard: boolean[]): ReactElement {
     open,
     onOpenChange: (next: boolean) => heard.push(next),
     children: [
-      createElement(DisclosureSummary, { key: "summary", children: "Fullspin · Lines 3–9" }),
+      createElement(DisclosureSummary, { key: "summary", children: "Vespin · Lines 3–9" }),
       createElement(DisclosureBody, { key: "body", children: "Why these lines" }),
     ],
   });

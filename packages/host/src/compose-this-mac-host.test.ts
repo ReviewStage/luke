@@ -1,5 +1,5 @@
 /**
- * compose-this-mac-host.test.ts -- This Mac's `luke-host` as the member turns it on: a Mac holding no record never enrolled but by the member's own Turn on, which enrolls it under the device id the app already had before the login item is registered, and a Mac Fullspin removed never enrolled again but by the member's own act.
+ * compose-this-mac-host.test.ts -- This Mac's `luke-host` as the member turns it on: a Mac holding no record never enrolled but by the member's own Turn on, which enrolls it under the device id the app already had before the login item is registered, and a Mac Vespin removed never enrolled again but by the member's own act.
  *
  * The composer runs over a real state folder of its own, holding the device
  * id the account already had, and a fake service and login item that each
@@ -190,7 +190,7 @@ it.effect(
 );
 
 it.effect(
-  "a Mac whose secret Fullspin refused is shown removed and never enrolled again on its own, only by Turn on again",
+  "a Mac whose secret Vespin refused is shown removed and never enrolled again on its own, only by Turn on again",
   () =>
     Effect.scoped(
       Effect.gen(function* () {

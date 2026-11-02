@@ -1,8 +1,8 @@
 {
   "id": "/app",
-  "name": "Fullspin",
-  "short_name": "Fullspin",
-  "description": "Plan a feature out loud with Fullspin before a coding agent builds it.",
+  "name": "Vespin",
+  "short_name": "Vespin",
+  "description": "Plan a feature out loud with Vespin before a coding agent builds it.",
   "start_url": "/app",
   "scope": "/",
   "display": "standalone",

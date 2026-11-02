@@ -383,7 +383,7 @@ async function fakeCoderEve(
   };
 }
 
-/** Fullspin's Sentry integration as a deployment that configures it holds it. */
+/** Vespin's Sentry integration as a deployment that configures it holds it. */
 const SENTRY_CONFIGURED = Layer.succeed(
   SentryApp,
   sentryAppService(
@@ -692,11 +692,11 @@ test("list_agents from an agent another started names its starter first, ahead o
   assert.equal(eve.sent.length, 0, "a list sends nothing");
 });
 
-test("read_agent reads a teammate's agent on another task of the caller's workspace, with the tail of its transcript in entries kept longer than Fullspin's and as many as asked, older turns included, and reads no agent of another workspace", async () => {
+test("read_agent reads a teammate's agent on another task of the caller's workspace, with the tail of its transcript in entries kept longer than Vespin's and as many as asked, older turns included, and reads no agent of another workspace", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
-  // The teammate's final report runs past the short entry Fullspin summarises aloud.
+  // The teammate's final report runs past the short entry Vespin summarises aloud.
   const report = Array.from(
     { length: 10 },
     () => "The invitations backfill stalls on rows whose inviter left the workspace.",
@@ -1613,7 +1613,7 @@ test("start_agent refuses to continue an agent whose session died while it still
   assert.ok(openingWords(eve.sent).includes("CSV writer"));
 });
 
-test("start_agent from a source whose transcript does not fit the new agent's window hands it Fullspin's summary of the steps left out, written on the deployment's summary model", async () => {
+test("start_agent from a source whose transcript does not fit the new agent's window hands it Vespin's summary of the steps left out, written on the deployment's summary model", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
   await database.run(
@@ -4153,7 +4153,7 @@ test("list_automations, create_automation, update_automation, and delete_automat
   );
 });
 
-test("create_automation and update_automation take a Sentry trigger once the workspace installed Fullspin's Sentry integration, with its filters and per-issue cooldown, and refuse one where the deployment configures no Sentry integration or the workspace installed none", async () => {
+test("create_automation and update_automation take a Sentry trigger once the workspace installed Vespin's Sentry integration, with its filters and per-issue cooldown, and refuse one where the deployment configures no Sentry integration or the workspace installed none", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);

@@ -99,7 +99,7 @@ jobs:
                     `DMG_CHECKSUM_NAME=${dmgName}.sha256`,
                     `LATEST_DMG_ASSET_NAME=${config.RELEASE_LATEST_DMG_FILE_NAME}`,
                     `UPDATE_FEED_ASSET_NAME=${config.RELEASE_UPDATE_FEED_FILE_NAME}`,
-                    `APP_PATH=${distDirectory}/mac-arm64/Luke.app`,
+                    `APP_PATH=${distDirectory}/mac-arm64/Vespin.app`,
                     `UPDATE_FEED_PATH=${distDirectory}/${config.RELEASE_UPDATE_FEED_FILE_NAME}`,
                     "",
                   ].join("\n"),
@@ -139,7 +139,7 @@ jobs:
           grep -q "Authority=Developer ID Application" <<< "$codesign_details"
           grep -Eq "flags=.*\(.*runtime.*\)" <<< "$codesign_details"
 
-          architectures=$(lipo -archs "$APP_PATH/Contents/MacOS/Luke")
+          architectures=$(lipo -archs "$APP_PATH/Contents/MacOS/Vespin")
           if [[ "$architectures" != "arm64" ]]; then
             echo "error: expected an arm64-only application, found: $architectures" >&2
             exit 1

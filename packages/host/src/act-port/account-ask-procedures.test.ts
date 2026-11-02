@@ -93,7 +93,7 @@ const ACTS = [
   },
   {
     kind: ACCOUNT_ASK_ACT_KIND.DICTATION_TRANSCRIBE,
-    payload: { audio: "GkXfow==", durationMs: 1200, keywords: ["Fullspin"] },
+    payload: { audio: "GkXfow==", durationMs: 1200, keywords: ["Vespin"] },
     ask: "dictationTranscribe",
   },
 ] as const;

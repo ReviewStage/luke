@@ -104,7 +104,7 @@ test("the Cost chart's skeleton stands its own heading and legend, with no capti
     (title) => title.textContent === "Daily list-price equivalent by source, USD",
   );
   const card = heading?.closest(".luke-card");
-  for (const source of ["Agents", "Fullspin's own turns", "Dictation"]) {
+  for (const source of ["Agents", "Vespin's own turns", "Dictation"]) {
     expect(card?.textContent).toContain(source);
   }
 });

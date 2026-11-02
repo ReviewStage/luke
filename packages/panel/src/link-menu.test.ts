@@ -119,7 +119,7 @@ test("a right-click on a row that opens an address offers the same menu, opening
   assert.deepEqual(copied, [ADDRESS]);
 });
 
-test("a right-click on a row naming an agent's page offers Open in browser, which opens the page's own Fullspin link flagged to stay on the web", () => {
+test("a right-click on a row naming an agent's page offers Open in browser, which opens the page's own Vespin link flagged to stay on the web", () => {
   const page = `${LINK_ORIGIN}/acme/plan/7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10/page/5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f`;
   const opened: string[] = [];
   mount(

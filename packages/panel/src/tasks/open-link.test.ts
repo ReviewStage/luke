@@ -20,11 +20,11 @@ import { TranscriptWords } from "./transcript-blocks.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
 /**
- * A link pressed in written words: a Fullspin link, a task's drawn as its chip,
+ * A link pressed in written words: a Vespin link, a task's drawn as its chip,
  * opens its place in the window, a task at its section, an agent, an Inbox
  * item, and never the browser, while a GitHub page, drawn as GitHub's chip,
  * and any other web page open in the browser over their acts; off the
- * window, where no opener for a place is handed down, a Fullspin link opens
+ * window, where no opener for a place is handed down, a Vespin link opens
  * nothing in it. Synthetic ids.
  */
 
@@ -80,7 +80,7 @@ function pressedEach(openPlace: ((link: ReadLink) => void) | undefined): void {
   }
 }
 
-test("a Fullspin link opens its place in the window, a task at its section, an agent, an Inbox item, and other pages open in the browser", () => {
+test("a Vespin link opens its place in the window, a task at its section, an agent, an Inbox item, and other pages open in the browser", () => {
   const opened: ReadLink[] = [];
 
   pressedEach((link) => opened.push(link));
@@ -103,7 +103,7 @@ test("a Fullspin link opens its place in the window, a task at its section, an a
   );
 });
 
-test("off the window, where no opener for a place is handed down, a Fullspin link opens in the browser as any page does", () => {
+test("off the window, where no opener for a place is handed down, a Vespin link opens in the browser as any page does", () => {
   pressedEach(undefined);
 
   assert.deepEqual(

@@ -93,7 +93,7 @@ async function paneOf(tab: AgentBrowserTab): Promise<{
       registry,
       createElement(CloudBrowserPane, {
         tab: shown,
-        owner: { name: "Fullspin", icon: createElement("span") },
+        owner: { name: "Vespin", icon: createElement("span") },
         shown: true,
         memberName: () => undefined,
       }),
