@@ -23,6 +23,7 @@ import {
   LINK_OPEN_LIST,
   type LinkPlatform,
   linkOpenTarget,
+  withoutStayOnWeb,
 } from "@luke/features/link-open";
 import { HTTP_METHOD } from "@luke/wire";
 import { Effect, Schema } from "effect";
@@ -51,18 +52,28 @@ export interface MacAppHandoffDoor {
   readonly open: (appLink: string) => void;
 }
 
+/** Whether the tab's address carries Open in browser's flag, which is dropped from it, the entry's state kept, so it is honoured once. */
+function tookStayOnWeb(): boolean {
+  const without = withoutStayOnWeb(location.href);
+  if (without !== undefined) history.replaceState(history.state, "", without);
+  return without !== undefined;
+}
+
 /**
  * Whether the page was loaded by a fresh navigation to its address, as a
  * link followed or an address opened is: not a reload or a Back or Forward,
- * and not onto an entry the browser brought back with a place the panel
- * saved in it (`browser-history.ts`). Read before the panel writes its own
- * first place into the entry. A browser that does not say how it loaded the
- * page is taken as not, so a doubt stays on the web.
+ * not onto an entry the browser brought back with a place the panel saved
+ * in it (`browser-history.ts`), and not by Fullspin's own Open in browser,
+ * whose flag this takes out of the address. Read once, before the panel
+ * reads the address or writes its own first place into the entry. A
+ * browser that does not say how it loaded the page is taken as not, so a
+ * doubt stays on the web.
  */
 export function browserLoadedFresh(): boolean {
+  const stay = tookStayOnWeb();
   const [loaded] = performance.getEntriesByType("navigation");
   const navigated = loaded !== undefined && "type" in loaded && loaded.type === NAVIGATED;
-  return navigated && savedEntry() === undefined;
+  return navigated && !stay && savedEntry() === undefined;
 }
 
 /**

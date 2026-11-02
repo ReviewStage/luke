@@ -1011,6 +1011,21 @@ test("a Fullspin link to a page an agent on no task showed opens that agent's pa
   assert.deepEqual(panelOf(tab), { open: true, tab: { page: page.id } });
 });
 
+test("a Fullspin link to a page of the task, as Open in browser lands on, opens the task's side panel on the page's tab", async () => {
+  const page = { id: "page-1", title: "Invite funnel", version: 1, at: 1 };
+  const tab = mount({ shown: true, tasks: { ...withAgents([RUNNING_AGENT]), pages: [page] } });
+  await settle();
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.PAGE, planId: TASK.id, pageId: page.id },
+    }),
+  );
+
+  assert.deepEqual(panelOf(tab), { open: true, tab: { page: page.id } });
+});
+
 test("a Fullspin link to an agent's worker opens the worker's own tab in the task's side panel beside its agent's, and one to its Changes their tab", async () => {
   const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
