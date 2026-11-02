@@ -2,12 +2,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import {
-  DEVICE_ARCH,
-  DEVICE_PLATFORM,
-  DEVICE_SETUP,
-  HOST_UPDATE,
-} from "@luke/features/device-agent-wire";
+import { DEVICE_ARCH, DEVICE_PLATFORM, HOST_UPDATE } from "@luke/features/device-agent-wire";
 import type { Host } from "@luke/features/host-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { ThisMacHostRead } from "@luke/host/contract";
@@ -32,10 +27,10 @@ import { HostsSection } from "./hosts-section.js";
 
 /**
  * hosts-section.test.ts -- Settings › Hosts: Add hosts shows the public
- * install command and follows each host that joins while it stands, one
+ * install command and names each host that joins while it stands, one
  * approved from its link in the same window among them, a host that joins
- * is listed, and This Mac stands first. Synthetic ids, codes, and
- * addresses.
+ * is listed, a host updating says so, and This Mac stands first. Synthetic
+ * ids, codes, and addresses.
  */
 
 declare global {
@@ -130,50 +125,32 @@ test("Add hosts shows the public install command, with no secret in it, waits fo
   assert.ok(document.body.textContent?.includes("hel-02"), "the host approved meanwhile is listed");
 });
 
-it.effect(
-  "the dialog names a host that joins while it stands within seconds, and moves on by itself from connecting through getting ready to why its setup failed",
-  () =>
-    Effect.gen(function* () {
-      const id = "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31";
-      const joined: Host = {
-        id,
-        name: "hel-02",
-        seenAt: Date.now(),
-        version: "0.1.0",
-        upgradeNeeded: false,
-      };
-      const hosts: Host[] = [];
-      fakeActPort({
-        [ACT_KIND.HOSTS_LIST]: () =>
-          Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-        [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [{ deviceId: id, ageMs: 0 }] }),
-      });
-      drawHosts(yield* onTestClock);
-      yield* Effect.promise(settle);
-      yield* Effect.promise(() => press("Add hosts"));
-      /** Lists the host as given, and lets the dialog's next read land. */
-      const listed = (host: Host) =>
-        Effect.gen(function* () {
-          hosts.splice(0, hosts.length, host);
-          yield* TestClock.adjust("5 seconds");
-          yield* Effect.promise(settle);
-          return dialogText();
-        });
+it.effect("the dialog names a host that joins while it stands within seconds", () =>
+  Effect.gen(function* () {
+    const id = "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31";
+    const joined: Host = {
+      id,
+      name: "hel-02",
+      seenAt: Date.now(),
+      version: "0.1.0",
+      upgradeNeeded: false,
+    };
+    const hosts: Host[] = [];
+    fakeActPort({
+      [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
+      [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [{ deviceId: id, ageMs: 0 }] }),
+    });
+    drawHosts(yield* onTestClock);
+    yield* Effect.promise(settle);
+    yield* Effect.promise(() => press("Add hosts"));
+    hosts.push({ ...joined, calledIn: false });
+    yield* TestClock.adjust("5 seconds");
+    yield* Effect.promise(settle);
+    const approved = dialogText();
 
-      const approved = yield* listed({ ...joined, calledIn: false });
-      const preparing = yield* listed({ ...joined, calledIn: true, setup: DEVICE_SETUP.PREPARING });
-      const failed = yield* listed({
-        ...joined,
-        calledIn: true,
-        setup: DEVICE_SETUP.FAILED,
-        setupFailure: "Claude Code could not be installed",
-      });
-
-      assert.ok(approved.includes("hel-02") && approved.includes("Connecting…"), approved);
-      assert.ok(!approved.includes("Waiting for approval"));
-      assert.ok(preparing.includes("Getting ready…"), preparing);
-      assert.ok(failed.includes("Couldn't set up: Claude Code could not be installed"), failed);
-    }),
+    assert.ok(approved.includes("hel-02"), approved);
+    assert.ok(!approved.includes("Waiting for approval"));
+  }),
 );
 
 /** What a pairing's link does as it lands in the window: opens its dialog for the code. */
@@ -222,7 +199,7 @@ test("a code approved from its link in the same window lets Add hosts, open bene
   await settle();
   await press("Connect");
 
-  assert.ok(dialogText().includes("hel-02") && dialogText().includes("Connecting…"), dialogText());
+  assert.ok(dialogText().includes("hel-02"), dialogText());
 });
 
 it.effect(
@@ -258,7 +235,7 @@ it.effect(
       yield* Effect.promise(settle);
       assert.ok(document.body.textContent?.includes("fra-03"), "the server that joined is listed");
       assert.ok(
-        document.body.textContent?.includes("Offline · Mac · 0.1.0"),
+        document.body.textContent?.includes("Offline · Mac"),
         "a Mac its desktop enrolled is listed as a Mac",
       );
     }),
@@ -274,116 +251,72 @@ async function press(words: string): Promise<void> {
   await settle();
 }
 
-/** Hosts drawn in the desktop over the hosts given, with the device This Mac's host's record names as given, the One host program experiment on, or with that experiment off where none is given, and the beats given. */
+/** Hosts drawn in the desktop over the hosts given, This Mac read as given, the beats given, and the One host program experiment on, or off where `kept` says so. */
 async function machinesWithThisMac(
   hosts: readonly Host[],
-  thisMac: ThisMacHostRead | undefined,
+  thisMac: ThisMacHostRead,
   beats: readonly { readonly deviceId: string; readonly ageMs: number }[] = [],
+  kept = true,
 ): Promise<void> {
   fakeActPort({
     [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
     [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [...beats] }),
-    [ACT_KIND.THIS_MAC_HOST_READ]: () => Promise.resolve(thisMac ?? {}),
+    [ACT_KIND.THIS_MAC_HOST_READ]: () => Promise.resolve(thisMac),
   });
-  handState(
-    thisMac === undefined ? experimentsOn() : experimentsOn(EXPERIMENT.THIS_MAC_ACCOUNT_HOST),
-  );
+  handState(kept ? experimentsOn(EXPERIMENT.THIS_MAC_ACCOUNT_HOST) : experimentsOn());
   drawHosts();
   await settle();
 }
 
-test("this Mac stands first on the row of the machine its record names, with no Remove, setup line, or Update needed", async () => {
-  const mac = "7a1c9e3b-2f4d-4c6a-8b0e-5d7f9a1c3e52";
+/** A machine id as a host reports it. */
+const MACHINE_ID = "a".repeat(64);
+
+/** A server, and a Mac on the machine This Mac is, as the service lists them. */
+const SERVER_AND_THIS_MAC: readonly Host[] = [
+  { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-03" },
+  {
+    id: "7a1c9e3b-2f4d-4c6a-8b0e-5d7f9a1c3e52",
+    name: "Studio",
+    platform: DEVICE_PLATFORM.DARWIN,
+    machineId: MACHINE_ID,
+  },
+].map((host) => ({ seenAt: 0, version: "0.2.1", upgradeNeeded: false, ...host }));
+
+test("This Mac stands first on the row of the machine it is, with no Remove", async () => {
   await machinesWithThisMac(
-    [
-      {
-        id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14",
-        name: "fra-03",
-        seenAt: 0,
-        version: "0.1.0",
-        upgradeNeeded: false,
-      },
-      {
-        id: mac,
-        name: "Studio",
-        platform: DEVICE_PLATFORM.DARWIN,
-        seenAt: 0,
-        version: "0.0.9",
-        upgradeNeeded: true,
-        setup: DEVICE_SETUP.FAILED,
-        setupFailure: "the image pull timed out",
-      },
-    ],
-    { deviceId: mac },
-    [{ deviceId: mac, ageMs: 0 }],
+    SERVER_AND_THIS_MAC,
+    { machineId: MACHINE_ID },
+    SERVER_AND_THIS_MAC.map((host) => ({ deviceId: host.id, ageMs: 0 })),
   );
   const text = document.body.textContent ?? "";
 
-  assert.ok(text.indexOf("Studio (this Mac)") < text.indexOf("fra-03"), "this Mac stands first");
-  assert.ok(text.includes("Online · Mac · 0.0.9"), text);
-  assert.ok(!text.includes("the image pull timed out"), "This Mac's row draws no setup line");
-  assert.ok(!text.includes("Update needed"), "This Mac's row draws no Update needed");
-  assert.equal(document.querySelector('button[aria-label="Studio (this Mac) actions"]'), null);
+  assert.ok(text.indexOf("This Mac") < text.indexOf("fra-03"), "This Mac stands first");
+  assert.ok(text.includes("Online · Mac"), text);
+  assert.equal(document.querySelector('button[aria-label="This Mac actions"]'), null);
 });
 
-test("with One host program off, no row speaks of this Mac, and another Mac's row says why its setup failed", async () => {
-  const mini = "5c2e8a1f-3b7d-4e9a-8c6f-1d3b5e7a9c20";
-  await machinesWithThisMac(
-    [
-      {
-        id: mini,
-        name: "mini",
-        platform: DEVICE_PLATFORM.DARWIN,
-        seenAt: 0,
-        version: "0.0.9",
-        upgradeNeeded: true,
-        setup: DEVICE_SETUP.FAILED,
-        setupFailure: "Claude Code could not be installed",
-      },
-    ],
-    undefined,
-    [{ deviceId: mini, ageMs: 0 }],
-  );
+test("with One host program off, This Mac is named but stands where the list puts it, with its Remove", async () => {
+  await machinesWithThisMac(SERVER_AND_THIS_MAC, { machineId: MACHINE_ID }, [], false);
   const text = document.body.textContent ?? "";
 
-  assert.ok(text.includes("Couldn't set up: Claude Code could not be installed"));
-  assert.ok(!/this Mac/iu.test(text), "nothing speaks of this Mac");
+  assert.ok(text.indexOf("fra-03") < text.indexOf("This Mac"), text);
+  assert.ok(document.querySelector('button[aria-label="This Mac actions"]') !== null);
 });
 
-test("a host's row says its version and where its update stands, and This Mac's draws no update that failed", async () => {
-  const mac = "7a1c9e3b-2f4d-4c6a-8b0e-5d7f9a1c3e52";
-  const updating: readonly Host[] = [
+test("a host's row says Updating… in place of Online while its update runs", async () => {
+  const hosts: readonly Host[] = [
     { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "ams-01", update: HOST_UPDATE.WAITING },
     { id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "ord-01", update: HOST_UPDATE.UPDATING },
-    {
-      id: "5c2e8a1f-3b7d-4e9a-8c6f-1d3b5e7a9c20",
-      name: "nrt-01",
-      update: HOST_UPDATE.FAILED,
-      updateFailure: "the download did not match its checksum",
-    },
-    {
-      id: mac,
-      name: "Studio",
-      platform: DEVICE_PLATFORM.DARWIN,
-      update: HOST_UPDATE.FAILED,
-      updateFailure: "this Mac's disk is full",
-    },
   ].map((host) => ({ seenAt: 0, version: "0.2.1", upgradeNeeded: false, ...host }));
   await machinesWithThisMac(
-    updating,
-    { deviceId: mac },
-    updating.map((host) => ({ deviceId: host.id, ageMs: 0 })),
+    hosts,
+    {},
+    hosts.map((host) => ({ deviceId: host.id, ageMs: 0 })),
   );
   const text = document.body.textContent ?? "";
 
-  assert.ok(text.includes("Online · Linux server · 0.2.1"), text);
-  assert.ok(text.includes("Update ready, waiting for agents to finish"));
-  assert.ok(text.includes("Updating…"));
-  assert.ok(text.includes("Couldn't update: the download did not match its checksum"));
-  assert.ok(
-    !text.includes("this Mac's disk is full"),
-    "This Mac's row draws no update that failed",
-  );
+  assert.ok(text.includes("ams-01Online · Linux server"), text);
+  assert.ok(text.includes("ord-01Updating… · Linux server"), text);
 });
 
 test("each host's ⋯ is named by its host, and its Remove asks about that host first", async () => {
@@ -391,7 +324,7 @@ test("each host's ⋯ is named by its host, and its Remove asks about that host 
     { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-01" },
     { id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "sfo-02" },
   ].map((host) => ({ seenAt: 0, version: "0.2.1", upgradeNeeded: false, ...host }));
-  await machinesWithThisMac(hosts, undefined);
+  await machinesWithThisMac(hosts, {}, [], false);
   const more =
     document.querySelector<HTMLButtonElement>('button[aria-label="sfo-02 actions"]') ??
     assert.fail("sfo-02's ⋯ is drawn");

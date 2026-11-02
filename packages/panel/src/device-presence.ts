@@ -78,12 +78,6 @@ export function presenceStanding(
   return deviceStanding(beat.ageMs + (monotonicNow() - beat.landedAt), book.failed);
 }
 
-/** How long ago `deviceId` last beat as the book now knows it, none where no beat is held. */
-export function presenceAgeMs(book: PresenceBook, deviceId: string): number | undefined {
-  const beat = book.beats.get(deviceId);
-  return beat === undefined ? undefined : beat.ageMs + (monotonicNow() - beat.landedAt);
-}
-
 /** The book after a read that landed at `landedAt`: its ages where it answered, the held ones where it did not. */
 export function presenceAfter(
   book: PresenceBook,
