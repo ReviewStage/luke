@@ -856,7 +856,7 @@ it.effect(
     Effect.gen(function* () {
       const http = fakeHttpClientLayer(async () => new Response(null, { status: 409 }));
       const refused = yield* askCodexToken(TOKEN_URL, ENV).pipe(Effect.provide(http), Effect.flip);
-      assert.equal(refused.detail, "Fullspin refused the token: 409");
+      assert.equal(refused.detail, "The service refused the token: 409");
 
       const unset = yield* askCodexToken(TOKEN_URL, {}).pipe(Effect.provide(http), Effect.flip);
       assert.equal(unset.detail, "LUKE_RUNNER_TOKEN is not set");
@@ -868,7 +868,7 @@ it.effect(
         Effect.provide(unreachable),
         Effect.flip,
       );
-      assert.equal(failed.detail, "Fullspin did not answer");
+      assert.equal(failed.detail, "The service did not answer");
     }),
 );
 

@@ -1,6 +1,7 @@
 import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { INTEGRATION_STATUS_WORDS } from "@luke/features/integration-status-words";
 import { INTEGRATION_STATUS } from "@luke/features/integration-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -205,8 +206,8 @@ const WORDS = {
   REMOVING: "Removing",
   ADD_TOKEN: "Add token",
   REPLACE_TOKEN: "Replace token",
-  REPLACES_TOKEN: "Saving replaces the token Fullspin holds.",
-  REPLACES_KEY: "Saving replaces the key Fullspin holds.",
+  REPLACES_TOKEN: `Saving replaces the token ${PRODUCT_NAME} holds.`,
+  REPLACES_KEY: `Saving replaces the key ${PRODUCT_NAME} holds.`,
   SIGN_IN: "Sign in with ChatGPT",
   WAITING: "Waiting for ChatGPT",
   CONNECTED: INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.CONNECTED],
@@ -221,11 +222,9 @@ const WORDS = {
     "This sign-in can no longer be read. Sign in with ChatGPT to connect again.",
   CHATGPT_INELIGIBLE:
     "OpenAI says this ChatGPT account isn't eligible for Codex. Sign in with ChatGPT to use another.",
-  REVOCATION_UNCONFIRMED:
-    "Fullspin no longer holds your ChatGPT sign-in, but OpenAI didn't confirm it ended. To end it there too, remove Fullspin in your ChatGPT settings.",
+  REVOCATION_UNCONFIRMED: `${PRODUCT_NAME} no longer holds your ChatGPT sign-in, but OpenAI didn't confirm it ended. To end it there too, remove ${PRODUCT_NAME} in your ChatGPT settings.`,
   NOTICE_TITLE: "You're using your ChatGPT plan",
-  NOTICE_BODY:
-    "Eligible usage in Fullspin uses your ChatGPT plan. Manage usage in your ChatGPT settings.",
+  NOTICE_BODY: `Eligible usage in ${PRODUCT_NAME} uses your ChatGPT plan. Manage usage in your ChatGPT settings.`,
   GOT_IT: "Got it",
   SAVE_TOKEN_FAILED: "The token could not be saved. Try again.",
   SAVE_KEY_FAILED: "The key could not be saved. Try again.",

@@ -10,6 +10,7 @@ import {
 } from "@luke/features/device-agent-wire";
 import { HOST_TARGET, type HostTarget, hostTarballUrl } from "@luke/features/host-release";
 import { hostVersionMeets, readHostVersion } from "@luke/features/host-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   Deferred,
   Duration,
@@ -189,7 +190,7 @@ export const hostUpdate = Effect.fnUntraced(function* (options: HostUpdateOption
   /** The update failed for the reason given, which every beat says until it is tried again. */
   const failed = (release: DeviceAgentRelease, reason: string) =>
     Effect.gen(function* () {
-      report(`Fullspin host: could not update to ${release.version}: ${reason}`);
+      report(`${PRODUCT_NAME} host: could not update to ${release.version}: ${reason}`);
       yield* Ref.set(standing, {
         release,
         update: {
@@ -205,9 +206,9 @@ export const hostUpdate = Effect.fnUntraced(function* (options: HostUpdateOption
       const { version } = release;
       const sha256 = release.sha256[target];
       if (sha256 === undefined) {
-        return yield* Effect.fail(`Fullspin host ${version} has no build for ${target}`);
+        return yield* Effect.fail(`${PRODUCT_NAME} host ${version} has no build for ${target}`);
       }
-      report(`Fullspin host: fetching ${version}, to switch to once no agent runs.`);
+      report(`${PRODUCT_NAME} host: fetching ${version}, to switch to once no agent runs.`);
       yield* stagedFolder(
         {
           parent: releases.folder,
@@ -257,7 +258,9 @@ export const hostUpdate = Effect.fnUntraced(function* (options: HostUpdateOption
       Effect.andThen(
         Effect.gen(function* () {
           yield* Ref.set(standing, { release, update: { update: HOST_UPDATE.WAITING } });
-          report(`Fullspin host: ${release.version} is ready, and switches in once no agent runs.`);
+          report(
+            `${PRODUCT_NAME} host: ${release.version} is ready, and switches in once no agent runs.`,
+          );
         }),
       ),
       // Note that the schedule never ends, so a failure is only ever tried again.
@@ -320,7 +323,7 @@ export const hostUpdate = Effect.fnUntraced(function* (options: HostUpdateOption
       }
       yield* othersRemoved(version);
       yield* Ref.set(standing, { release, update: { update: HOST_UPDATE.UPDATING } });
-      report(`Fullspin host: switching to ${version}.`);
+      report(`${PRODUCT_NAME} host: switching to ${version}.`);
       yield* beat;
       yield* currentMoved(version);
     });
@@ -357,7 +360,7 @@ export const hostUpdate = Effect.fnUntraced(function* (options: HostUpdateOption
           ),
         );
         if (Result.isSuccess(outcome)) {
-          report(`Fullspin host: switched to ${release.version}, so it starts again on it.`);
+          report(`${PRODUCT_NAME} host: switched to ${release.version}, so it starts again on it.`);
           yield* Deferred.succeed(switched, undefined);
           return true;
         }

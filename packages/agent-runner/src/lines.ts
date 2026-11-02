@@ -82,24 +82,24 @@ function readOnce(
   return client.execute(request).pipe(
     Effect.timeout(READ_TIMEOUT),
     // Note that the error is not kept as the cause, because the request it carries holds the bearer in its headers.
-    Effect.mapError(() => new LinesUnread({ transient: true, detail: "Fullspin unreachable" })),
+    Effect.mapError(() => new LinesUnread({ transient: true, detail: "Service unreachable" })),
     Effect.flatMap((response) => {
       if (response.status !== HTTP_OK) {
         const transient = response.status >= SERVER_ERROR || TRANSIENT_STATUS.has(response.status);
         return Effect.fail(
-          new LinesUnread({ transient, detail: `Fullspin answered ${response.status}` }),
+          new LinesUnread({ transient, detail: `The service answered ${response.status}` }),
         );
       }
       return response.json.pipe(
         Effect.mapError(
-          () => new LinesUnread({ transient: true, detail: "Fullspin's answer is not JSON" }),
+          () => new LinesUnread({ transient: true, detail: "The service's answer is not JSON" }),
         ),
         Effect.map(decodeAnswer),
         Effect.flatMap(
           Option.match({
             onNone: () =>
               Effect.fail(
-                new LinesUnread({ transient: true, detail: "Fullspin's answer holds no lines" }),
+                new LinesUnread({ transient: true, detail: "The service's answer holds no lines" }),
               ),
             onSome: Effect.succeed,
           }),

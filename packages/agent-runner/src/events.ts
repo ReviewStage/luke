@@ -155,13 +155,13 @@ function postOnce(
     // Note that the error is not kept as the cause, because the request it
     // carries holds the bearer in its headers.
     Effect.mapError(
-      () => new EventsUndelivered({ transient: true, detail: "Fullspin unreachable" }),
+      () => new EventsUndelivered({ transient: true, detail: "Service unreachable" }),
     ),
     Effect.flatMap((response) => {
       if (response.status >= 200 && response.status < 300) return Effect.void;
       const transient = response.status >= SERVER_ERROR || TRANSIENT_STATUS.has(response.status);
       return Effect.fail(
-        new EventsUndelivered({ transient, detail: `Fullspin answered ${response.status}` }),
+        new EventsUndelivered({ transient, detail: `The service answered ${response.status}` }),
       );
     }),
   );

@@ -10,11 +10,12 @@
 
 import { APP_HOME_LINK } from "@luke/features/link-home";
 import { LINK_PLATFORM, type LinkPlatform } from "@luke/features/link-open";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import type { AuthAction } from "@luke/ui";
 import { browserLinkPlatform } from "./link-platform";
 
 /** The words every way back is offered in. */
-export const OPEN_LUKE = "Open Fullspin";
+export const OPEN_LUKE = `Open ${PRODUCT_NAME}`;
 
 /** Open Fullspin as the Mac app at its home, on a Mac; nothing on any other platform. */
 export function openMacApp(platform: LinkPlatform): AuthAction | undefined {

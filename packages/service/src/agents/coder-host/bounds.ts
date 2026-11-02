@@ -1,6 +1,7 @@
 import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/agent-status";
 import { AGENT_MACHINE, type AgentMachineKind } from "@luke/features/agent-wire";
 import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { Duration } from "effect";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 
@@ -291,13 +292,11 @@ export const CODER_MODEL_FIXTURE = {
 export const CODER_REFUSAL = {
   NO_AGENT: "Not run: this conversation is no agent's.",
   NO_REPOSITORY: "Not run: the agent works in no repository.",
-  UNKNOWN_PROVIDER: "Not run: the agent's model is outside the providers Fullspin runs agents on.",
+  UNKNOWN_PROVIDER: `Not run: the agent's model is outside the providers ${PRODUCT_NAME} runs agents on.`,
   NO_PROVIDER_KEY: "Not run: the account saved no API key for the agent's model provider.",
-  NO_FAST_VERSION:
-    "Not run: Fullspin cannot run the fast version of the agent's model at its provider. Choose the model with Fast off.",
+  NO_FAST_VERSION: `Not run: ${PRODUCT_NAME} cannot run the fast version of the agent's model at its provider. Choose the model with Fast off.`,
   /** No step is refused this way since Fast runs on an account's own key; kept for the turns that were refused so before, which still read as this. */
-  FAST_ON_OWN_KEY:
-    "Not run: Fast isn't available on your own API key; Fullspin runs Fast on its own Anthropic key alone. Choose the model with Fast off.",
+  FAST_ON_OWN_KEY: `Not run: Fast isn't available on your own API key; ${PRODUCT_NAME} runs Fast on its own Anthropic key alone. Choose the model with Fast off.`,
   /** No step fails this way since a refused fast call runs at standard speed; kept for the turns that failed so before, which still read as this. */
   FAST_NOT_ENABLED:
     "Not run: Fast mode isn't enabled for this Anthropic organization. Choose the model with Fast off.",

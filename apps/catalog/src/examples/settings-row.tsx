@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   AVATAR_SIZE,
@@ -74,7 +75,7 @@ function Rows(): React.JSX.Element {
     <SettingsSection>
       <SettingsRow
         label="Launch at login"
-        description="Fullspin opens with the Mac, in the menu bar."
+        description={`${PRODUCT_NAME} opens with the Mac, in the menu bar.`}
       >
         {(control) => <HeldSwitch label="Launch at login" control={control} />}
       </SettingsRow>

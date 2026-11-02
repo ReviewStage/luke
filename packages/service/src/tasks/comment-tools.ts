@@ -16,6 +16,7 @@ import {
   type PlanCommentThread,
   planCommentWordsSchema,
 } from "@luke/features/plan-comment-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
@@ -154,7 +155,7 @@ export function commentedTaskOf(input: UnparsedWireValue): string | undefined {
 function writerOf(entry: PlanCommentEntry): string {
   switch (entry.writer.actor) {
     case PLAN_COMMENT_ACTOR.LUKE:
-      return "Fullspin";
+      return PRODUCT_NAME;
     case PLAN_COMMENT_ACTOR.AGENT:
       return entry.writer.agentId === undefined ? "agent" : `agent ${entry.writer.agentId}`;
     case PLAN_COMMENT_ACTOR.MEMBER:
@@ -180,7 +181,7 @@ function threadRead(thread: PlanCommentThread): WireRecord {
       by: writerOf(entry),
       to:
         entry.asked?.actor === PLAN_COMMENT_ACTOR.LUKE
-          ? "Fullspin"
+          ? PRODUCT_NAME
           : `agent ${entry.asked?.agentId ?? ""}`,
     }));
   return {

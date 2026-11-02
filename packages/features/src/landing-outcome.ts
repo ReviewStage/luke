@@ -1,5 +1,6 @@
 import { GITHUB_INSTALL_STATUS, type GitHubInstallStatus } from "./github-install-wire.js";
 import { INTEGRATION_LANDING_STATUS, type IntegrationLandingStatus } from "./integration-wire.js";
+import { PRODUCT_NAME } from "./product-name.js";
 
 /**
  * landing-outcome.ts -- how a connect ended, as every page a browser lands on after one says it: its tone, its title, and the line under it.
@@ -65,14 +66,14 @@ export const LANDING_CLOSE_TAB = "You can close this tab.";
 
 /** How to go on from an outcome a fresh connect fixes. */
 function connectAgain(name: string | undefined): string {
-  return `Connect ${name ?? "it"} again from Fullspin.`;
+  return `Connect ${name ?? "it"} again from ${PRODUCT_NAME}.`;
 }
 
 /** Each outcome's words, for the provider `name`, or none where the page does not know it. */
 const LANDING_WORDS = {
   [LANDING_OUTCOME.CONNECTED]: (name) => ({
     tone: LANDING_TONE.COMPLETE,
-    title: name === undefined ? "Connected to Fullspin" : `${name} is connected`,
+    title: name === undefined ? `Connected to ${PRODUCT_NAME}` : `${name} is connected`,
     line: undefined,
   }),
   [LANDING_OUTCOME.WORKSPACE_CONNECTED]: (name) => ({
@@ -84,16 +85,16 @@ const LANDING_WORDS = {
     tone: LANDING_TONE.COMPLETE,
     title:
       name === undefined
-        ? "Fullspin can see your repositories"
-        : `Fullspin can see your ${name} repositories`,
+        ? `${PRODUCT_NAME} can see your repositories`
+        : `${PRODUCT_NAME} can see your ${name} repositories`,
     line: undefined,
   }),
   [LANDING_OUTCOME.UPDATED]: (name) => ({
     tone: LANDING_TONE.COMPLETE,
     title:
       name === undefined
-        ? "Fullspin's repositories were updated"
-        : `Fullspin's ${name} repositories were updated`,
+        ? `${PRODUCT_NAME}'s repositories were updated`
+        : `${PRODUCT_NAME}'s ${name} repositories were updated`,
     line: undefined,
   }),
   [LANDING_OUTCOME.REQUESTED]: () => ({
@@ -106,8 +107,8 @@ const LANDING_WORDS = {
     tone: LANDING_TONE.DANGER,
     title:
       name === undefined
-        ? "Fullspin could not confirm the installation"
-        : `Fullspin could not confirm the ${name} installation`,
+        ? `${PRODUCT_NAME} could not confirm the installation`
+        : `${PRODUCT_NAME} could not confirm the ${name} installation`,
     line: connectAgain(name),
   }),
   [LANDING_OUTCOME.NOT_COMPLETED]: (name) => ({
@@ -119,8 +120,8 @@ const LANDING_WORDS = {
     tone: LANDING_TONE.DANGER,
     title:
       name === undefined
-        ? "Fullspin could not finish connecting"
-        : `Fullspin could not reach ${name}`,
+        ? `${PRODUCT_NAME} could not finish connecting`
+        : `${PRODUCT_NAME} could not reach ${name}`,
     line: "Try again in a moment.",
   }),
   [LANDING_OUTCOME.EXPIRED]: (name) => ({
@@ -142,11 +143,11 @@ const LANDING_WORDS = {
   [LANDING_OUTCOME.NOTHING_TO_CONNECT]: (name) => ({
     tone: LANDING_TONE.DANGER,
     title: name === undefined ? "Nothing to connect" : `No ${name} connection to finish`,
-    line: `Connect ${name ?? "it"} from Fullspin.`,
+    line: `Connect ${name ?? "it"} from ${PRODUCT_NAME}.`,
   }),
   [LANDING_OUTCOME.LUKE_UNREACHABLE]: () => ({
     tone: LANDING_TONE.DANGER,
-    title: "Fullspin could not be reached",
+    title: `${PRODUCT_NAME} could not be reached`,
     line: "Reload this page to try again.",
   }),
 } as const satisfies Record<LandingOutcome, (name: string | undefined) => LandingWords>;

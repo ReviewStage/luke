@@ -1,4 +1,6 @@
 // experiments.ts -- the features a developer can turn on before they are finished, and how a choice of them is read.
+
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import type { UnparsedWireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
 
@@ -46,7 +48,7 @@ export const EXPERIMENTS = [
     name: "Bring your own host",
     detail:
       "Run agents on your own Macs and Linux machines. " +
-      "Their transcripts and the files their tools read still reach Fullspin.",
+      `Their transcripts and the files their tools read still reach ${PRODUCT_NAME}.`,
     owner: "Charles",
     since: "2026-10-30",
   },
@@ -54,7 +56,7 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.SKILLS,
     name: "Skills",
     detail:
-      "Install skills into Fullspin for your agents to use, " +
+      `Install skills into ${PRODUCT_NAME} for your agents to use, ` +
       "and name one with / in a message to an agent.",
     owner: "Charles",
     since: "2026-10-30",

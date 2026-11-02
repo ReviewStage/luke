@@ -5,6 +5,7 @@ import { AGENT_QUEUE_BOUNDS, agentQueueSchema } from "./agent-queue-wire.js";
 import { DEVICE_LAUNCH_STEP } from "./device-agent-wire.js";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
+import { PRODUCT_NAME } from "./product-name.js";
 import {
   mergeMethodSchema,
   PULL_REQUEST_WRITE_BOUNDS,
@@ -1899,7 +1900,7 @@ export const agentDelegationInputSchema = EffectSchema.Struct({
   model: EffectSchema.optionalKey(
     describeWire(
       EffectSchema.String,
-      "The id of the model the worker runs on, from Fullspin's catalog; your own where left out.",
+      `The id of the model the worker runs on, from ${PRODUCT_NAME}'s catalog; your own where left out.`,
     ),
   ),
   effort: EffectSchema.optionalKey(

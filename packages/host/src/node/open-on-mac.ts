@@ -1,4 +1,5 @@
 import path from "node:path";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 
 /**
  * open-on-mac.ts -- the script Open on this Mac runs in a terminal of this Mac drawn in Fullspin: a coding agent's pushed branch checked out in a worktree of Fullspin's own clone of the repository, and the repository's run command run there.
@@ -132,7 +133,7 @@ const SWEEP = [
   '    only_git "$earlier_clone" &&',
   '    [ -z "$(git -C "$earlier_clone" rev-list --max-count=1 --branches --not --remotes --glob=refs/luke/*)" ]; then',
   '    mkdir -p "$trash" && mv "$earlier_clone" "$trash/$(date +%s)-$$-clone" &&',
-  '      echo "▸ Removed the clone an earlier Fullspin kept at $earlier_clone"',
+  `      echo "▸ Removed the clone an earlier ${PRODUCT_NAME} kept at $earlier_clone"`,
   "  fi",
   '  rm -rf "$trash"/* 2>/dev/null',
   "}",

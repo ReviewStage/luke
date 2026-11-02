@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { WEB_APP_URL } from "./SiteChrome";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { UNREPORTED } from "@luke/ui/reported-failure";
 import { mountPrerenderedPage } from "./mount-page";
 
@@ -72,10 +73,10 @@ type View =
 const WORKING: View = { kind: VIEW.WORKING };
 
 /** What the joined page says beneath its title, which keeps the way back to the Mac app. */
-const JOINED_BODY = "Return to Fullspin. You can close this tab.";
+const JOINED_BODY = `Return to ${PRODUCT_NAME}. You can close this tab.`;
 
 /** The way on the joined page offers to a reader with no Mac app to return to. */
-const OPEN_ON_THE_WEB = { label: "Open Fullspin on the web", href: WEB_APP_URL } as const;
+const OPEN_ON_THE_WEB = { label: `Open ${PRODUCT_NAME} on the web`, href: WEB_APP_URL } as const;
 
 const SPENT: View = said(
   "This invitation is no longer valid",
@@ -123,7 +124,10 @@ function unverified(email: string): View {
   );
 }
 
-const UNREACHED: View = said("Fullspin could not be reached", "Reload this page to try again.");
+const UNREACHED: View = said(
+  `${PRODUCT_NAME} could not be reached`,
+  "Reload this page to try again.",
+);
 
 /** A refusal of the plugin's accept in words: a sign-in where another account would do, else what went wrong. */
 function refused(
@@ -176,9 +180,9 @@ function descriptionOf(view: View): string | undefined {
   if (view.kind === VIEW.WORKING) return undefined;
   if (view.kind !== VIEW.OFFER) return view.body;
   if (view.inviter === undefined) {
-    return `You're invited to plan in ${view.name} on Fullspin, as ${view.role}.`;
+    return `You're invited to plan in ${view.name} on ${PRODUCT_NAME}, as ${view.role}.`;
   }
-  return `${view.inviter} invited you to plan in ${view.name} on Fullspin, as ${view.role}.`;
+  return `${view.inviter} invited you to plan in ${view.name} on ${PRODUCT_NAME}, as ${view.role}.`;
 }
 
 /**

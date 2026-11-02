@@ -84,6 +84,7 @@
     "./integration-wire": "./src/integration-wire.js",
     "./integration-status-words": "./src/integration-status-words.js",
     "./model-label": "./src/model-label.js",
+    "./product-name": "./src/product-name.js",
     "./models-wire": "./src/models-wire.js",
     "./page-wire": "./src/page-wire.js",
     "./picture-wire": "./src/picture-wire.js",

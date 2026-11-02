@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { BUTTON_VARIANT, Button, CommandAsk, Inline } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
@@ -17,7 +18,7 @@ const LONG_COMMAND = [
   "pnpm exec vitest run packages/host/src/compose-mac-commands.test.ts --reporter=verbose",
   "git log --oneline -20 && git status --short && pnpm exec tsc --noEmit",
   'for pkg in packages/*; do echo "$pkg"; (cd "$pkg" && pnpm run typecheck); done',
-  "tail -n 200 ~/Library/Logs/Fullspin/main.log",
+  `tail -n 200 ~/Library/Logs/${PRODUCT_NAME}/main.log`,
 ].join(" && \\\n  ");
 
 /** A script shipped as base64, as an agent writes a file to the Mac in one command. */

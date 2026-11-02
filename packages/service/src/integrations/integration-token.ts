@@ -27,6 +27,7 @@ import {
   INTEGRATION_NAME,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { causeKind } from "@luke/runtime/effect";
 import { Effect, Redacted, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
@@ -55,11 +56,11 @@ export function integrationUnavailable(provider: IntegrationProvider): Unavailab
   const signedIn = INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN;
   return {
     NOT_CONNECTED: signedIn
-      ? `${name} is not connected for this account. The developer can sign in with GitHub in Fullspin's Settings › Integrations; carry on without it.`
-      : `${name} is not connected for this account. The developer can connect it in Fullspin's Settings › Integrations; carry on without it.`,
-    EXPIRED: `${name}'s sign-in for this account has expired. The developer can connect it again in Fullspin's Settings › Integrations; carry on without it.`,
-    NOT_CONFIGURED: `${name} is not set up on this deployment of Fullspin; carry on without it.`,
-    UNREACHABLE: `Fullspin could not reach ${name}'s sign-in service just now. Try once more later, or carry on without it.`,
+      ? `${name} is not connected for this account. The developer can sign in with GitHub in ${PRODUCT_NAME}'s Settings › Integrations; carry on without it.`
+      : `${name} is not connected for this account. The developer can connect it in ${PRODUCT_NAME}'s Settings › Integrations; carry on without it.`,
+    EXPIRED: `${name}'s sign-in for this account has expired. The developer can connect it again in ${PRODUCT_NAME}'s Settings › Integrations; carry on without it.`,
+    NOT_CONFIGURED: `${name} is not set up on this deployment of ${PRODUCT_NAME}; carry on without it.`,
+    UNREACHABLE: `${name}'s sign-in service could not be reached just now. Try once more later, or carry on without it.`,
     NO_ACCOUNT: `This session stands for no account that can use ${name}.`,
   };
 }

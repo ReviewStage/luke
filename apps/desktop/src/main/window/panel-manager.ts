@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import type { RunMode } from "@luke/host";
 import type { EventPushName, PushPayload } from "@luke/host/contract";
 import {
@@ -361,7 +362,7 @@ export class PanelManager {
       ...(placement.fullScreen ? { fullscreen: true } : undefined),
       minWidth: DESKTOP_WINDOW.MIN_WIDTH,
       minHeight: DESKTOP_WINDOW.MIN_HEIGHT,
-      title: this.#instance === undefined ? "Fullspin" : `Fullspin (${this.#instance})`,
+      title: this.#instance === undefined ? PRODUCT_NAME : `${PRODUCT_NAME} (${this.#instance})`,
       show: false,
       backgroundColor: DESKTOP_WINDOW.CLEAR,
       // On Tahoe the window is clear for the Liquid Glass laid behind its

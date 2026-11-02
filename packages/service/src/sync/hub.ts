@@ -141,7 +141,7 @@ const SYNC_METRIC = {
 const UNPOOLED_URL_MISSING = new SqlError({
   reason: new ConnectionError({
     cause: new Error("DATABASE_URL_UNPOOLED is not set"),
-    message: "Fullspin Sync has no unpooled URL to listen on",
+    message: "Sync has no unpooled URL to listen on",
     operation: "connect",
   }),
 });

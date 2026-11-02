@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { SidebarIdentity, WingFace } from "@luke/ui";
 import { useRef } from "react";
 import { useFaceHover, useFaceMotion } from "../luke-face-mood.js";
@@ -17,7 +18,7 @@ export function LukeIdentity({ qualifier }: { qualifier?: string | undefined }):
   const face = useFaceMotion(useMotionHeld(), useFaceHover(faceElement));
   return (
     <SidebarIdentity
-      name="Fullspin"
+      name={PRODUCT_NAME}
       qualifier={qualifier}
       faceRef={faceElement}
       face={<WingFace key={face.play} motion={face.motion} fill />}

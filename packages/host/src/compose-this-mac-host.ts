@@ -90,16 +90,15 @@ const SETUP_READ_EVERY = Duration.seconds(30);
 
 /** What a failed turn-on says, by what failed. */
 const FAILED_WORDS = {
-  VERSION: "Fullspin couldn't start its host program on this Mac",
-  NOT_FOUND: "Fullspin didn't find this Mac under your account. Retry.",
-  UPGRADE_NEEDED:
-    "Fullspin needs a newer version of this app to run agents here. Update Fullspin, then Retry.",
-  UNANSWERED: "Fullspin couldn't be reached to add this Mac. Check your connection, then Retry.",
-  REFUSED: "Fullspin refused to add this Mac",
-  NOT_SAVED: "Fullspin couldn't save this Mac's sign-in in its state folder. Retry.",
-  LOGIN_ITEM: "macOS refused Fullspin's login item",
-  NO_LOGIN_ITEM: "This build of Fullspin carries no login item to run agents with.",
-  SETUP: "Fullspin couldn't download what agents run on here",
+  VERSION: "Couldn't start the host program on this Mac",
+  NOT_FOUND: "This Mac isn't under your account. Retry.",
+  UPGRADE_NEEDED: "Running agents here needs a newer version of this app. Update it, then Retry.",
+  UNANSWERED: "Couldn't reach the service to add this Mac. Check your connection, then Retry.",
+  REFUSED: "The service refused to add this Mac",
+  NOT_SAVED: "Couldn't save this Mac's sign-in in the state folder. Retry.",
+  LOGIN_ITEM: "macOS refused the app's login item",
+  NO_LOGIN_ITEM: "This build carries no login item to run agents with.",
+  SETUP: "Couldn't download what agents run on here",
 } as const;
 
 /** Where this Mac's setup stands as the service lists it: none for one that is ready. */

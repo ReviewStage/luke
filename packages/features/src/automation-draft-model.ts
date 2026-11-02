@@ -33,6 +33,7 @@ import {
 } from "./automation-wire.js";
 import type { ModelChoice } from "./models-wire.js";
 import { formatCount } from "./number-format.js";
+import { PRODUCT_NAME } from "./product-name.js";
 import {
   SENTRY_TRIGGER_EVENT,
   type SentryTriggerEvent,
@@ -180,7 +181,7 @@ const NEW_SCHEDULE: ScheduleDraft = {
 
 /** Why a schedule was refused, as its field says it. */
 const SCHEDULE_REFUSAL_WORDS = {
-  [SCHEDULE_REFUSAL.CRON]: "That isn't a schedule Fullspin can read.",
+  [SCHEDULE_REFUSAL.CRON]: `That isn't a schedule ${PRODUCT_NAME} can read.`,
   [SCHEDULE_REFUSAL.TIMEZONE]: "Pick a time zone.",
   [SCHEDULE_REFUSAL.TOO_FREQUENT]: "It can run at most every 15 minutes.",
 } as const satisfies Record<ScheduleRefusal, string>;

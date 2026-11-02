@@ -19,6 +19,7 @@
  */
 
 import { INSTALLED_SKILLS } from "@luke/agent-runner/protocol";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { SKILL_KEY } from "@luke/features/skill-file";
 import type { AgentSkill } from "../agent-runtime/skills.js";
 import type { VercelSandboxApi } from "../vercel-sandbox-api.js";
@@ -38,7 +39,7 @@ const FILE_MODE = 0o644;
 /** The plugin's manifest, which names it, so Claude Code lists its skills as `luke:<name>`. */
 const MANIFEST = {
   name: INSTALLED_SKILLS.PLUGIN,
-  description: "The skills you installed into Fullspin.",
+  description: `The skills you installed into ${PRODUCT_NAME}.`,
 } as const;
 
 const encoder = new TextEncoder();

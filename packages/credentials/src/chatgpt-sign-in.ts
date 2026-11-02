@@ -19,6 +19,8 @@
  * answer, which names no token. A refusal is a fixed sentence and never
  * quotes OpenAI's answer, a code, or a claim.
  */
+
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import type { ChatGptCredentialsSaveRequest } from "@luke/features/provider-key-wire";
 import {
   isRecord,
@@ -47,7 +49,7 @@ export const CHATGPT_SIGN_IN = {
   RESOURCE: "https://api.openai.com/v1",
   /** The first-registration entrypoint, never the client a sign-in is kept under. */
   REGISTRATION_CLIENT_ID: "dynamic_agent_client",
-  AGENT_NAME_HINT: "Fullspin",
+  AGENT_NAME_HINT: PRODUCT_NAME,
   CALLBACK_PATH: "/auth/callback",
   /** OpenAI's example port; any free one serves, since only the port may vary. */
   PREFERRED_PORT: 1455,
@@ -67,24 +69,23 @@ export const CHATGPT_SIGN_IN = {
 export const CHATGPT_SIGN_IN_REASON = {
   REFUSED: "ChatGPT sign-in was not completed.",
   TIMED_OUT: "ChatGPT sign-in timed out.",
-  UNREACHABLE: "Fullspin couldn't reach ChatGPT. Try again.",
-  NOT_REGISTERED: "ChatGPT didn't finish connecting Fullspin. Try again.",
-  USAGE_NOT_ENABLED:
-    "ChatGPT subscription use wasn't enabled for Fullspin. Try again and allow it in the browser.",
-  NOT_VERIFIED: "Fullspin couldn't verify the ChatGPT sign-in. Try again.",
+  UNREACHABLE: "Couldn't reach ChatGPT. Try again.",
+  NOT_REGISTERED: `ChatGPT didn't finish connecting ${PRODUCT_NAME}. Try again.`,
+  USAGE_NOT_ENABLED: `ChatGPT subscription use wasn't enabled for ${PRODUCT_NAME}. Try again and allow it in the browser.`,
+  NOT_VERIFIED: "Couldn't verify the ChatGPT sign-in. Try again.",
 } as const;
 
 /** The landing cards the browser is left on. */
 const PAGES = {
   granted: {
     badge: "Connected",
-    title: "Fullspin is connected to ChatGPT",
-    body: "You can close this tab and return to Fullspin.",
+    title: `${PRODUCT_NAME} is connected to ChatGPT`,
+    body: `You can close this tab and return to ${PRODUCT_NAME}.`,
   },
   notGranted: {
     badge: "Not connected",
-    title: "Fullspin isn't connected to ChatGPT",
-    body: "Return to Fullspin to see why and try again.",
+    title: `${PRODUCT_NAME} isn't connected to ChatGPT`,
+    body: `Return to ${PRODUCT_NAME} to see why and try again.`,
   },
 } as const;
 

@@ -35,6 +35,7 @@ import {
   type FeedbackKind,
   type FeedbackSubmission,
 } from "@luke/features/feedback";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { pasteCutWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -88,7 +89,7 @@ const FEEDBACK_COPY = {
   [FEEDBACK_KIND.PROMPT]: {
     title: "Suggest a feature",
     field: "Feature suggestion",
-    placeholder: "What would you want Fullspin to do?",
+    placeholder: `What would you want ${PRODUCT_NAME} to do?`,
   },
 } as const;
 

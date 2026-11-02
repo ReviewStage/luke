@@ -33,6 +33,7 @@ import {
 import { isLinkHome } from "./link-home.js";
 import { LINK_SITE_LIST, linkSiteName, linkSiteOf } from "./link-site.js";
 import { parsedUrl } from "./parsed-url.js";
+import { PRODUCT_NAME } from "./product-name.js";
 import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
 
 /**
@@ -895,7 +896,7 @@ const BARE_NAME = {
   AGENT: "Agent",
   PERSON: "Person",
   CHANNEL: "Channel",
-  LUKE: "Fullspin",
+  LUKE: PRODUCT_NAME,
 } as const;
 
 /** A file's lines as a chip names them, `app.ts:12–20`, as a mention of them picked from a File tab is named. */

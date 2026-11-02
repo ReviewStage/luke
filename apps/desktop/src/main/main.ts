@@ -1,4 +1,5 @@
 import { appLinkInArguments, appLinkInbox } from "@luke/features/app-links";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { launchFailureReported } from "@luke/features/sentry-reporting";
 import { closeEveryMacTerminal, reportToStderr, tolerateClosedStderr } from "@luke/host/node";
 import { desktopQuit, QUIT_STAGE } from "@luke/host/quit";
@@ -124,7 +125,7 @@ if (app.requestSingleInstanceLock()) {
   void main();
 } else {
   reportToStderr(
-    "Fullspin is already running; the existing panel was refreshed instead of starting a second copy.",
+    `${PRODUCT_NAME} is already running; the existing panel was refreshed instead of starting a second copy.`,
   );
   app.quit();
 }

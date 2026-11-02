@@ -58,6 +58,7 @@ import {
   type ModelProvider,
 } from "@luke/features/models-wire";
 import { formatCompact, formatUsd } from "@luke/features/number-format";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
@@ -234,7 +235,7 @@ export function archivedByReading(
     by.by === AGENT_ARCHIVER.MEMBER
       ? member
       : by.by === AGENT_ARCHIVER.LUKE
-        ? `Fullspin${forMember}`
+        ? `${PRODUCT_NAME}${forMember}`
         : `${by.agent?.name || UNNAMED_ARCHIVER}${forMember}`;
   const archived = by.withTask === true ? "Archived with its task" : "Archived";
   return {
@@ -424,10 +425,10 @@ export function agentStateWords(status: AgentStatus): string | undefined {
 export const START_NEEDS_REPOSITORY = "Choose a repository";
 
 /** What a call refused for a repository out of the workspace's reach says, wherever it is refused. */
-export const REPOSITORY_UNREACHED_NOTE = "Fullspin cannot reach this task's repository on GitHub.";
+export const REPOSITORY_UNREACHED_NOTE = `${PRODUCT_NAME} cannot reach this task's repository on GitHub.`;
 
 /** What a message no answer came back for says, which may have reached the agent all the same. */
-const NOT_HEARD_BACK = "Fullspin didn't hear back.";
+const NOT_HEARD_BACK = "No answer came back.";
 
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
@@ -662,7 +663,7 @@ const RUN_IN_CLOUD = "or set this task to run in the cloud";
 /** How a device that went quiet is brought back, by its platform: a Mac woken and logged in on, since its host runs in its user's login session, or a Linux server's own Fullspin started. */
 const DEVICE_WAKE = {
   [DEVICE_PLATFORM.DARWIN]: "Wake it and log in on it",
-  [DEVICE_PLATFORM.LINUX]: "Start Fullspin on that host",
+  [DEVICE_PLATFORM.LINUX]: `Start ${PRODUCT_NAME} on that host`,
 } as const satisfies Record<DevicePlatform, string>;
 
 /** How a device whose setup failed tries it again, by its platform: Retry under This Mac in its app, or a Linux server's own Fullspin started again. */
@@ -750,7 +751,7 @@ export function unrunnableChoice(
 }
 
 /** What an agent Fullspin's key paid for says to a message, since it never moves to another payer. */
-const LUKE_PAID_REFUSAL = "Fullspin's key no longer runs agents. Continue in a new one.";
+const LUKE_PAID_REFUSAL = `${PRODUCT_NAME}'s key no longer runs agents. Continue in a new one.`;
 
 /** The one sentence a missing credential says: the harness to connect, by the provider the service named, and what it unblocks. */
 function credentialMissingWords(
@@ -930,7 +931,7 @@ function unreachedFailure(
   if (unreached?.reason === REPOSITORY_UNREACHED.NOT_SELECTED) {
     return {
       reason: FAILURE_REASON.ADD_REPOSITORY,
-      text: `Fullspin's GitHub App doesn't have access to ${unreached.repository}.`,
+      text: `${PRODUCT_NAME}'s GitHub App doesn't have access to ${unreached.repository}.`,
       repository: unreached.repository,
       settingsUrl: unreached.settingsUrl,
     };
@@ -975,13 +976,13 @@ function unreachedFailure(
     case REPOSITORY_UNREACHED.NOT_CONNECTED:
       return {
         reason: FAILURE_REASON.CONNECT_GITHUB,
-        text: `This workspace isn't connected to GitHub, so Fullspin cannot reach ${repository}.`,
+        text: `This workspace isn't connected to GitHub, so ${PRODUCT_NAME} cannot reach ${repository}.`,
         taskId: taskId,
       };
     case REPOSITORY_UNREACHED.CONNECTION_LAPSED:
       return {
         reason: FAILURE_REASON.RECONNECT_GITHUB,
-        text: `This workspace's GitHub connection was removed or suspended, so Fullspin cannot reach ${repository}.`,
+        text: `This workspace's GitHub connection was removed or suspended, so ${PRODUCT_NAME} cannot reach ${repository}.`,
         taskId: taskId,
       };
     case REPOSITORY_UNREACHED.OTHER_OWNER:

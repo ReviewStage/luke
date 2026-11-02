@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
@@ -19,10 +20,8 @@ import type { SettingsWrites } from "./writes.js";
 
 /** What the line says where macOS refused Fullspin's last notification, by whether this is the packaged app. */
 const NOTIFICATIONS_OFF_WORDS = {
-  packaged:
-    "macOS has notifications off for Fullspin, so a command waiting while Fullspin is behind won't say so.",
-  development:
-    "macOS has notifications off for Electron, which is how the dev build appears to macOS, so a command waiting while Fullspin is behind won't say so.",
+  packaged: `macOS has notifications off for ${PRODUCT_NAME}, so a command waiting while ${PRODUCT_NAME} is behind won't say so.`,
+  development: `macOS has notifications off for Electron, which is how the dev build appears to macOS, so a command waiting while ${PRODUCT_NAME} is behind won't say so.`,
 } as const;
 
 /** The line under the choice where macOS refused Fullspin's last notification, and the way to turn them back on. Note that it has no name of its own, because the choice above it is what it is about. */

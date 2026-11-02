@@ -509,7 +509,7 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
 
     // Note that a sandbox's runner reads every line past its config from Fullspin, so a line written
     // here is a caller's mistake, refused loudly rather than written where nothing reads it.
-    writeLine: () => Effect.die(new Error("a sandbox's runner reads its lines from Fullspin")),
+    writeLine: () => Effect.die(new Error("a sandbox's runner reads its lines from the service")),
 
     wrote: () => Effect.succeed(false),
 

@@ -21,7 +21,7 @@ import {
   type RunOnMacReason,
   runOnMacDetail,
 } from "@luke/features/luke-tools-model";
-import { PRODUCT_NAME } from "@luke/features/model-label";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
   AnchoredPopover,

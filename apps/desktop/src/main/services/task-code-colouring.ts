@@ -8,6 +8,7 @@
  * with the scope the launch builds it in.
  */
 import path from "node:path";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { type ColourCode, taskCodeProcessColouring } from "@luke/host/task-code-remote";
 import type { Effect, Scope } from "effect";
 import { utilityProcess } from "electron";
@@ -16,7 +17,7 @@ import { utilityProcess } from "electron";
 const ENTRY = "task-code.js";
 
 /** What Activity Monitor names the process. */
-const SERVICE_NAME = "Fullspin Code Colouring";
+const SERVICE_NAME = `${PRODUCT_NAME} Code Colouring`;
 
 /** The colouring the act port asks for, through a process forked from `resourceDirectory`'s bundle. */
 export function colourCodeInUtilityProcess(

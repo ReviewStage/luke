@@ -18,6 +18,7 @@ import {
   openAskOf,
 } from "@luke/features/inbox-wire";
 import { markdownLink } from "@luke/features/link-grammar";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -516,7 +517,7 @@ function useScrollToOwnMessage(
 }
 
 /** What an ask's box says where its type is one this build does not know. */
-const NEWER_LUKE_ASK = "Answer this in a newer Fullspin.";
+const NEWER_LUKE_ASK = `Answer this in a newer ${PRODUCT_NAME}.`;
 
 /**
  * Who an open ask waits on where that is a teammate (`inboxWaitsOn`): its

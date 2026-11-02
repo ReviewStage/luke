@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { TASK_PRIORITY_ORDER, TASK_STATUS_ORDER, type TaskSummary } from "@luke/features/task-wire";
 import {
   CHIP_LOOK,
@@ -168,7 +169,7 @@ const COMPLETED_WORDS = {
 const MAKER_WORDS = {
   [TASK_MAKER.PERSON]: "People",
   [TASK_MAKER.AGENT]: "Agents and automations",
-  [TASK_MAKER.LUKE]: "Fullspin",
+  [TASK_MAKER.LUKE]: PRODUCT_NAME,
 } as const satisfies Record<TaskMaker, string>;
 
 const MAKER_ACTOR = {

@@ -2,6 +2,7 @@ import type { UnparsedWireValue } from "@luke/wire";
 import { Schema } from "effect";
 import { openTargetOf } from "./open-address.js";
 import { parsedUrl } from "./parsed-url.js";
+import { PRODUCT_NAME } from "./product-name.js";
 
 /**
  * link-open.ts -- where the account opens a Fullspin link, and whether a web page showing one hands it to the Mac app.
@@ -32,7 +33,7 @@ export const LINK_OPEN_LIST: readonly LinkOpen[] = [LINK_OPEN.BROWSER, LINK_OPEN
 /** What a choice reads as on a control. */
 export const LINK_OPEN_LABEL = {
   [LINK_OPEN.BROWSER]: "Browser",
-  [LINK_OPEN.MAC_APP]: "Fullspin for Mac",
+  [LINK_OPEN.MAC_APP]: `${PRODUCT_NAME} for Mac`,
 } as const satisfies Record<LinkOpen, string>;
 
 /** The platform a browser runs on, as far as a hand-off cares: the app is a Mac's alone. */

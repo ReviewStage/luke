@@ -8,6 +8,7 @@ import {
   type PlanCommentAsked,
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { MESSAGE_CHANNEL } from "@luke/wire";
 import { Effect, Option } from "effect";
 import { steerAgent } from "../agents/coder-host/steer.js";
@@ -54,7 +55,7 @@ export interface CommentAsk {
 function writerName(entry: PlanCommentThread["entries"][number]): string {
   switch (entry.writer.actor) {
     case PLAN_COMMENT_ACTOR.LUKE:
-      return "Fullspin";
+      return PRODUCT_NAME;
     case PLAN_COMMENT_ACTOR.AGENT:
       return "An agent";
     case PLAN_COMMENT_ACTOR.MEMBER:

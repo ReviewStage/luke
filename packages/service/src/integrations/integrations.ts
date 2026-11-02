@@ -24,6 +24,7 @@ import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { orList } from "@luke/features/words";
 
 export interface IntegrationDefinition {
@@ -85,8 +86,7 @@ export const INTEGRATION = {
    */
   [INTEGRATION_PROVIDER.GITHUB]: {
     MCP_URL: "https://api.githubcopilot.com/mcp/x/all",
-    DESCRIPTION:
-      "GitHub, the developer's code host, as their own account sees it through the Fullspin GitHub App: find, read, create, and update repositories, files, branches, issues, pull requests and their reviews, discussions, Actions runs and their logs, and code search, on the repositories the App is installed on.",
+    DESCRIPTION: `GitHub, the developer's code host, as their own account sees it through the ${PRODUCT_NAME} GitHub App: find, read, create, and update repositories, files, branches, issues, pull requests and their reviews, discussions, Actions runs and their logs, and code search, on the repositories the App is installed on.`,
   },
   [INTEGRATION_PROVIDER.GRANOLA]: {
     CONNECTOR_VARIABLE: "GRANOLA_CONNECTOR_UID",

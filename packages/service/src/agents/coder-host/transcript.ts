@@ -57,6 +57,7 @@ import {
   type TurnRecord,
 } from "@luke/features/agent-wire";
 import { DEVICE_LAUNCH_STEPS } from "@luke/features/device-agent-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { turnRecordOf } from "@luke/features/turn-record";
 import type { ToolSet } from "ai";
 import { Clock, Duration, Effect, Option, type Schema } from "effect";
@@ -326,7 +327,7 @@ const journalTurnsOf = (userId: string, records: readonly StoredMessageRecord[])
 
 /** The names a line is sent under where no member's account names it: Fullspin's, and a member's whose account is gone. */
 const SENDER_NAME = {
-  LUKE: "Fullspin",
+  LUKE: PRODUCT_NAME,
   FORMER_MEMBER: "Former member",
 } as const;
 

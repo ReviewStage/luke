@@ -177,7 +177,7 @@ export const spawnAppServer = Effect.fn("agent-runner/spawnAppServer")(function*
     if (method !== undefined && id !== undefined) {
       return write({
         id,
-        error: { code: METHOD_NOT_FOUND, message: "Fullspin's runner serves no requests" },
+        error: { code: METHOD_NOT_FOUND, message: "The runner serves no requests" },
       }).pipe(
         Effect.andThen(Effect.logWarning(`agent-runner: refused app-server's ${method} request`)),
       );

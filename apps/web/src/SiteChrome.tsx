@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   FaceMark,
   IconButtonLink,
@@ -77,7 +78,7 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
           <span className="inline-flex h-4.5 w-5 shrink-0">
             <FaceMark />
           </span>
-          Fullspin
+          {PRODUCT_NAME}
         </span>
       </TextLink>
       <div className="flex items-center gap-4">
@@ -104,7 +105,7 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
           <IconButtonLink
             href={REPOSITORY_URL}
             icon={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}
-            label="Fullspin on GitHub"
+            label={`${PRODUCT_NAME} on GitHub`}
           />
         </span>
       </div>

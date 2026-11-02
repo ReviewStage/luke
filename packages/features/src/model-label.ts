@@ -67,9 +67,6 @@ export function modelLabel(modelId: string, models?: readonly CatalogModel[]): s
   );
 }
 
-/** The product's own name, as its tools, its own messages, and a mention of it are named. */
-export const PRODUCT_NAME = "Fullspin";
-
 /** What names an agent: its title, the automation whose run started it, and the model it runs on. */
 interface NamedAgent {
   readonly title: string | null;
