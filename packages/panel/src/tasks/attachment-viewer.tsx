@@ -69,7 +69,8 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * A picture opens fitted to the window, or at its own pixels where the place
  * opening it asks, and zooms as Preview's does: a pinch, a trackpad's or two
  * fingers', or a Control-scroll about the pointer, a press to its own pixels there
- * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, it is
+ * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, its
+ * card fills the room it stands in rather than its fitted shape, and it is
  * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage). A video,
  * such as one an agent recorded and opened from its Expand,
  * plays at once as large as the card lets it, with the player's own
@@ -524,7 +525,9 @@ export function AttachmentViewer({
   const walking = !phone && files.length > 1;
   // A picture or a video takes a card of its own shape, so no ground stands beside it; a phone's fills the screen as its header does,
   // and a picture opened at its own pixels, a diagram to be moved about in, fills the room it is moved in.
-  const hug = !phone && (video || (image && opening === IMAGE_OPENING.FITTED));
+  // Note that a zoomed picture's card fills the room too, as Preview's and Quick Look's do,
+  // because a tall, narrow picture zoomed inside a card of its fitted shape is seen through a slit.
+  const hug = !phone && (video || (image && opening === IMAGE_OPENING.FITTED && !zoom.zoomed));
   // The arrows walk the message's files, and a picture's zoom keys zoom it;
   // a key's own default, a copy of the lines selected among them, is left alone.
   const walkKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
