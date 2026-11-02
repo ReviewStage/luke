@@ -191,9 +191,7 @@ export const NODE_LINUX_PINS: LinuxToolPins = {
 
 /**
  * The Node a Mac's `luke-host` runs on, the same release as a Linux host's,
- * which the desktop app carries inside its bundle, signed with it
- * (`apps/host/scripts/package.ts --os darwin`), since the app's own
- * Electron may not run as Node.
+ * which a Mac's release carries (`apps/host/scripts/package.ts --os darwin`).
  */
 export const NODE_MAC_PIN: AgentToolPin = {
   NAME: "node",

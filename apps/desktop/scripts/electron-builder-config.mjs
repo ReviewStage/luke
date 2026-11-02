@@ -16,15 +16,7 @@ import {
   resolveSigningMode,
   SIGNING_MODE,
 } from "./package-config.mjs";
-import {
-  AGENT_RUNNER_RESOURCES,
-  BUNDLE_FOLDER,
-  HOST_LOGIN_ITEM,
-  HOST_RESOURCES,
-  LIQUID_GLASS_ADDON,
-  NATIVE_HELPERS,
-  packagedAppPath,
-} from "./package-layout.mjs";
+import { LIQUID_GLASS_ADDON, NATIVE_HELPERS, packagedAppPath } from "./package-layout.mjs";
 import { builderReleaseArtifactDirectory, RELEASE_VOLUME_NAME } from "./release-config.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -46,12 +38,7 @@ export const ELECTRON_BUILDER_GITHUB_PUBLISH_CONFIG = {
 };
 
 function macBinaryPath(helper) {
-  return path.join("Contents", helper.folder, helper.binary);
-}
-
-/** The helpers shipped in the folder of `Contents` given. */
-function helpersIn(folder) {
-  return packageAssets.helpers.filter((helper) => helper.folder === folder);
+  return path.join("Contents", "Resources", helper.binary);
 }
 
 export function createElectronBuilderConfig(env = process.env) {
@@ -94,12 +81,10 @@ export function createElectronBuilderConfig(env = process.env) {
     npmRebuild: false,
     files: ["dist/**/*", "package.json", "!dist/**/*.map"],
     extraResources: [
-      ...helpersIn(BUNDLE_FOLDER.RESOURCES).map((helper) => ({
-        from: helper.path,
-        to: helper.binary,
+      ...packageAssets.helperPaths.map((helperPath) => ({
+        from: helperPath,
+        to: path.basename(helperPath),
       })),
-      { from: packageAssets.agentRunnerPath, to: AGENT_RUNNER_RESOURCES.directory },
-      { from: packageAssets.hostPath, to: HOST_RESOURCES.directory },
       {
         from: packageAssets.licensePath,
         to: path.basename(packageAssets.licensePath),
@@ -107,19 +92,6 @@ export function createElectronBuilderConfig(env = process.env) {
       {
         from: packageAssets.noticePath,
         to: path.basename(packageAssets.noticePath),
-      },
-    ],
-    // Note that on a Mac these land under the app's `Contents`: the
-    // `luke-host` command in `MacOS`, and the login item's launchd job where
-    // `SMAppService` reads it.
-    extraFiles: [
-      ...helpersIn(BUNDLE_FOLDER.MAC_OS).map((helper) => ({
-        from: helper.path,
-        to: path.join(BUNDLE_FOLDER.MAC_OS, helper.binary),
-      })),
-      {
-        from: packageAssets.hostLoginItemPath,
-        to: path.join(HOST_LOGIN_ITEM.folder, HOST_LOGIN_ITEM.plist),
       },
     ],
     afterSign: notarizeElectronBuilderApp,
@@ -137,15 +109,7 @@ export function createElectronBuilderConfig(env = process.env) {
       entitlements: packageAssets.entitlementsPath,
       entitlementsInherit: packageAssets.entitlementsPath,
       minimumSystemVersion: MACOS_DEPLOYMENT_TARGET,
-      binaries: [
-        ...[...NATIVE_HELPERS, LIQUID_GLASS_ADDON].map(macBinaryPath),
-        path.join(
-          "Contents",
-          BUNDLE_FOLDER.RESOURCES,
-          HOST_RESOURCES.directory,
-          HOST_RESOURCES.node,
-        ),
-      ],
+      binaries: [...NATIVE_HELPERS, LIQUID_GLASS_ADDON].map(macBinaryPath),
       // The app's own scheme, which an app link's page that opens it in the app hands
       // the plan to (`src/main/services/window-service.ts`): written into the
       // bundle's CFBundleURLTypes, which macOS registers the app for.

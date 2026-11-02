@@ -35,8 +35,8 @@ import type { HostOs } from "./host-os.js";
  * and its agents run on.
  */
 
-/** The runner's bundle, in the folder the host's OS names for it (`HostOs.runnerFolder`). */
-const RUNNER_BUNDLE = "agent-runner.mjs";
+/** The runner's bundle, in the `lib/` of the host's release beside the daemon's own. */
+const RUNNER_BUNDLE = "lib/agent-runner.mjs";
 
 /** The superuser's id, as which a dedicated box's host may run. */
 const ROOT = 0;
@@ -47,10 +47,8 @@ const CLAUDE_CODE_SANDBOXED = "IS_SANDBOX";
 interface HostPlatformOptions {
   /** The OS the host runs on, which names its platform, its name, and its check for unsaved work. */
   readonly os: HostOs;
-  /** The folder the host's release is installed in (`/opt/luke-host`), beside or under which the runner's bundle stands (`HostOs.runnerFolder`). */
+  /** The folder the host's release is installed in (`/opt/luke-host`), under which the runner's bundle stands. */
   readonly installFolder: string;
-  /** The runner's folder where something other than the OS names it: a development build's own. */
-  readonly runnerFolder?: string | undefined;
   /** The Node the host itself runs on, which every runner runs on too. */
   readonly node: string;
   readonly arch: DeviceArch;
@@ -64,7 +62,6 @@ interface HostPlatformOptions {
 
 /** A host's local agent platform, for the release installed in the folder given. */
 export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSeam {
-  const runnerFolder = options.runnerFolder ?? options.os.runnerFolder(options.installFolder);
   const clis =
     options.clis ?? localAgentClis(options.stateRoot, options.os.agentClis(options.arch));
   return {
@@ -80,7 +77,7 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
       ),
     tools: { node: options.node, claude: clis.paths.claude, codex: clis.paths.codex },
     clis,
-    runnerBundle: `${runnerFolder}/${RUNNER_BUNDLE}`,
+    runnerBundle: `${options.installFolder}/${RUNNER_BUNDLE}`,
     runnerEnv: {
       [RUNNER_ENV.PLACE]: RUNNER_PLACE.HOST,
       ...(options.user.uid === ROOT ? { [CLAUDE_CODE_SANDBOXED]: "1" } : {}),
