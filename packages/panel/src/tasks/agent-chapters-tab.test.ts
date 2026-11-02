@@ -827,7 +827,7 @@ test("a generation that failed says why with Retry, chapters someone else is mak
       },
     }),
   );
-  assert.match(elsewhere.textContent ?? "", /Chapters are being generated/u);
+  assert.match(elsewhere.textContent ?? "", /Generating chapters/u);
   act(() => button(elsewhere, "Refresh").click());
   await settle();
   assert.equal(reads, 2);
