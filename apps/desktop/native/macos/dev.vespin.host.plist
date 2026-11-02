@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  This Mac's login item: Vespin's host daemon, run as the member at login,
+  This Mac's login item: the app's host daemon, run as the member at login,
   whether or not the app is open, and started again after a crash. An exit
-  of 0, the daemon's answer to its machine being removed in Vespin, leaves it
+  of 0, the daemon's answer to its machine being removed in the app, leaves it
   stopped until the next login. Registered and unregistered through
   SMAppService by the app's luke-host command (HostLoginItem.swift), which
   is also the program it runs, named relative to the app (BundleProgram).

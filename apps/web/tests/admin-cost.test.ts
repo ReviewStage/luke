@@ -10,9 +10,9 @@ import { underWebAdminDoors } from "./support/admin-doors";
 /**
  * admin-cost.test.ts -- the Cost screen reads its window and scope from the
  * service, states each headline tile in words, names every dollar figure a
- * list-price equivalent and says it is not what Vespin pays, shows a model the
+ * list-price equivalent and says it is not what we pay, shows a model the
  * catalog does not price as unpriced rather than as dollars, and opens an expensive account's own page from its
- * row. The network, the HTTP boundary to Vespin, is a fake that answers the
+ * row. The network, the HTTP boundary to the service, is a fake that answers the
  * screen's read.
  */
 

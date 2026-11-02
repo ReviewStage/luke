@@ -102,8 +102,8 @@ import { dispatched } from "./support/platform-landing";
  * A plan's own routes are asked at the path a client sends, landed through
  * the committed rewrites on the hosted oRPC router; the old group's at the
  * path the rewrite hands it, the task id moved from the path into the `id`
- * query. A task's repository is kept only once the
- * Vespin GitHub App, over a GitHub the test scripts, confirms the
+ * query. A task's repository is kept only once our
+ * GitHub App, over a GitHub the test scripts, confirms the
  * installation connected to the task's workspace reaches it.
  *
  * Synthetic accounts, bearers, tokens, and repositories throughout.
@@ -1488,7 +1488,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
             }),
           );
 
-        // At the bound alone, but past it once laid over the line Vespin added.
+        // At the bound alone, but past it once laid over the line we added.
         const padding = "x".repeat(TASK_BOUNDS.MAX_BODY_CHARS - INVITATIONS_TEXT.length);
         const oversized = yield* edit(
           taskId,

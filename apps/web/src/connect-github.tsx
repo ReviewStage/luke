@@ -53,8 +53,8 @@ import { mountPrerenderedPage } from "./mount-page";
  * comes back to the same address. Nothing of the address is drawn: how the
  * connect ended is said in every landing's words
  * (`@luke/features/landing-outcome`), and an error by our words for its code,
- * or by Better Auth's own. Once the page says how it ended it offers Open
- * Fullspin (`connect-return.ts`), and a connect the web app started closes where
+ * or by Better Auth's own. Once the page says how it ended it offers the
+ * Open link (`connect-return.ts`), and a connect the web app started closes where
  * that is `done=1`; never while the page is still on its way to GitHub.
  */
 
@@ -146,7 +146,7 @@ function settledView(step: ConnectStep): View | undefined {
  * The page opens on GitHub's mark, badged once the connect has ended: the
  * title says where the connect stands, the description what to do about it,
  * with a link that offers a refused connect again, the body holds the
- * providers when a sign-in comes first, and Open Fullspin goes back once it
+ * providers when a sign-in comes first, and the Open link goes back once it
  * ended. A sign-in that cannot start is said in the page's alert region
  * rather than under the choices.
  */

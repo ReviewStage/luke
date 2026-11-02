@@ -146,7 +146,7 @@ export function createElectronBuilderConfig(env = process.env) {
           HOST_RESOURCES.node,
         ),
       ],
-      // The app's own scheme, which a Vespin link's "Open in Vespin" page hands
+      // The app's own scheme, which an app link's page that opens it in the app hands
       // the plan to (`src/main/services/window-service.ts`): written into the
       // bundle's CFBundleURLTypes, which macOS registers the app for.
       protocols: [{ name: "Vespin link", schemes: ["vespin", "tryluke"], role: "Viewer" }],

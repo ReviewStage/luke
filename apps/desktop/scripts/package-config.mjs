@@ -8,7 +8,7 @@ export const NOTICE_RESOURCE_NAME = "LUKE-NOTICE.txt";
 // what consent is given against. It has to say where the audio goes.
 export const MICROPHONE_USAGE_DESCRIPTION =
   "Vespin uses the microphone for dictation. What you dictate is sent to OpenAI to be transcribed.";
-// The sentence macOS shows when it asks whether Vespin may control another app,
+// The sentence macOS shows when it asks whether we may control another app,
 // so it is what consent is given against. Note that only a command an agent
 // runs on this Mac (an `osascript` through luke-host, which inherits the
 // app's entitlements) can raise it.

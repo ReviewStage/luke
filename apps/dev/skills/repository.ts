@@ -7,7 +7,7 @@ import { sandboxRecord } from "../session-prompt.js";
 
 /**
  * The skills the agent's repository keeps, then the ones its member
- * installed into Fullspin, offered to the session as it starts and standing for
+ * installed into the app, offered to the session as it starts and standing for
  * its life (`packages/service/src/agents/coder-host/skills.ts`), each under
  * its own name, which is what a developer's `/name` names and `load_skill`
  * loads; an installed skill's supporting files eve writes into the sandbox,

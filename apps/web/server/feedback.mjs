@@ -1,5 +1,5 @@
 /**
- * Turns one Vespin feedback submission into email to the founders.
+ * Turns one feedback submission into email to the founders.
  *
  * This is the fixed endpoint the desktop app's composer posts to
  * (`packages/features/src/feedback/delivery.ts`), deployed with the landing page.
