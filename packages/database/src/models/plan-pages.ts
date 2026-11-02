@@ -119,6 +119,21 @@ const findNewestVersion = SqlSchema.findOneOption({
     ),
 });
 
+/** The id of the owner's page last written from the file at the path; nothing where it has none. */
+const findPageIdBySourcePath = SqlSchema.findOneOption({
+  Request: Schema.Struct({ owner: OwnerKeySchema.fields.owner, sourcePath: Schema.String }),
+  Result: Schema.Struct({ pageId: Schema.String }),
+  execute: ({ owner, sourcePath }) =>
+    Database.use((db) =>
+      db
+        .select({ pageId: planPageVersion.pageId })
+        .from(planPageVersion)
+        .where(and(ownedBy(owner), eq(planPageVersion.sourcePath, sourcePath)))
+        .orderBy(desc(planPageVersion.at))
+        .limit(1),
+    ),
+});
+
 const insertVersion = SqlSchema.findOne({
   Request: Schema.Struct({
     taskId: Schema.NullOr(Schema.String),
@@ -126,6 +141,7 @@ const insertVersion = SqlSchema.findOne({
     pageId: Schema.String,
     version: Schema.Number,
     title: Schema.String,
+    sourcePath: Schema.NullOr(Schema.String),
     html: Schema.String,
     shownBy: pageShowerSchema,
     at: Schema.Date,
@@ -235,8 +251,9 @@ function ownerColumns(owner: PageOwner, shownBy: PageShower) {
 }
 
 /**
- * Writes the page's next version, or a new page's first where the write
- * names none, on the owner, as shown by `shownBy`; the page as it now
+ * Writes the page's next version, or, where the write names none, the next
+ * version of the owner's page last written from the same `sourcePath`, or a
+ * new page's first, on the owner, as shown by `shownBy`; the page as it now
  * stands. Nothing where the account reaches no such owner, or the owner no
  * such page, and a schema failure, with nothing written, for a write past
  * the wire's bounds.
@@ -253,18 +270,26 @@ export function writePage(
         const admitted = yield* Schema.decodeUnknownEffect(pageWriteSchema)(write);
         const locked = yield* lockOwner({ userId, owner });
         if (Option.isNone(locked)) return Option.none<PageLine>();
+        // Note that a page named outright wins over the path, which only finds the page a file already made.
+        const sameFile =
+          admitted.pageId !== undefined || admitted.sourcePath === undefined
+            ? Option.none()
+            : yield* findPageIdBySourcePath({ owner, sourcePath: admitted.sourcePath });
+        const pageId =
+          admitted.pageId ?? Option.getOrUndefined(Option.map(sameFile, (r) => r.pageId));
         const newest =
-          admitted.pageId === undefined
+          pageId === undefined
             ? Option.some({ version: 0 })
-            : yield* findNewestVersion({ owner, pageId: admitted.pageId });
+            : yield* findNewestVersion({ owner, pageId });
         if (Option.isNone(newest)) return Option.none<PageLine>();
         const at = yield* DateTime.nowAsDate;
         // An insert that returned no row is the database breaking its own contract, not an outcome.
         const row = yield* insertVersion({
           ...ownerColumns(owner, shownBy),
-          pageId: admitted.pageId ?? randomUUID(),
+          pageId: pageId ?? randomUUID(),
           version: newest.value.version + 1,
           title: admitted.title,
+          sourcePath: admitted.sourcePath ?? null,
           html: admitted.html,
           shownBy,
           at,

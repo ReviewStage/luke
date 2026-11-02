@@ -49,6 +49,8 @@ export const planPageVersion = pgTable(
     /** The version's number within its page, from one. */
     version: integer("version").notNull(),
     title: text("title").notNull(),
+    /** The file the version was written from, as the agent's sandbox resolved it; null for one written before it was kept, or from no file. */
+    sourcePath: text("source_path"),
     /** The page's whole HTML document, as the agent wrote it. */
     html: text("html").notNull(),
     /** Who showed the version, the brain or a coding agent by its id (`PageShower`); null for one shown before it was kept. */
@@ -61,6 +63,8 @@ export const planPageVersion = pgTable(
     index("plan_page_version_task").on(table.taskId),
     // An agent's own pages are read together, and its deletion clears its name from the rest.
     index("plan_page_version_agent").on(table.agentId),
+    // A file shown again is found among its owner's versions by its path.
+    index("plan_page_version_source_path").on(table.sourcePath),
     // A page stands on a task or on the agent that showed it, never on nothing.
     check(
       "plan_page_version_owner",

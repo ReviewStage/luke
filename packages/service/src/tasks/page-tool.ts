@@ -31,11 +31,14 @@ import { logStoreFailure } from "../http/store-failure.js";
  * (`apps/desktop/src/main/window/page-protocol.ts`). A coding agent, which
  * builds pages as files, names one in its sandbox as `path`, read here
  * through the same door its own file tools reach the sandbox by, bounded and
- * never read whole past the bound. Naming a page shown before writes its next version, and naming
- * none makes a new page, so an agent revises a page rather than piling up
- * copies of it. The answer carries the page's id and version, and its
- * mention ready to write (`../agents/written-mentions.ts`), and never the
- * HTML, which the model wrote and need not read again.
+ * never read whole past the bound. The page remembers the path it was
+ * written from, so writing the same file again makes the page's next
+ * version and a new path makes a new page: an agent revises a page rather
+ * than piling up copies of it. Naming a page by its `page` id writes its next
+ * version from any file, which is how a page with no recorded path goes on.
+ * The answer carries the page's id and version, and its mention ready to
+ * write (`../agents/written-mentions.ts`), and never the HTML, which the
+ * model wrote and need not read again.
  *
  * Note that the account and what the page stands on are the binding the
  * service built from the conversation, never an argument: the
@@ -66,9 +69,9 @@ export const SHOW_PAGE_REFUSAL = {
   EMPTY: "Not shown: the page is empty.",
   TOO_LARGE: `Not shown: the page is larger than ${PAGE_BOUNDS.MAX_HTML_CHARS / 1024} KB. Inline less data, or load a library from cdnjs rather than inlining it.`,
   NO_PAGE:
-    "Not shown: this task has no page with that id. Leave `page` out to make a new page, or name one you showed on this task.",
+    "Not shown: this task has no page with that id. Leave `page` out to show the file as its own page, or name one you showed on this task.",
   NO_OWN_PAGE:
-    "Not shown: you have no page with that id. Leave `page` out to make a new page, or name one you showed yourself.",
+    "Not shown: you have no page with that id. Leave `page` out to show the file as its own page, or name one you showed yourself.",
   NO_TASK: "Not shown: this task no longer exists.",
   NO_AGENT: "Not shown: you could not be read just now as an agent of this workspace.",
   UNAVAILABLE: "Not shown: the page could not be saved just now. The call may be made again.",
@@ -87,7 +90,7 @@ const CODER_SHOW_PAGE_INPUT = Schema.Struct({
   page: Schema.optionalKey(
     describeWire(
       wireUuidSchema,
-      "The id a page you showed on this task answered with, to write its next version in its place. Leave it out to make a new page.",
+      "Only to write a page's next version from a different file than it was made from: the id it answered with. Leave it out to write the same file's page again.",
     ),
   ),
 });
@@ -107,8 +110,8 @@ export const CODER_SHOW_PAGE_TOOL = {
     "layout that reflows to one column, wide tables, code, and charts that scroll inside their " +
     "own box, and text and tap targets big enough for a finger. It runs sealed off: it cannot " +
     "fetch, post, open links or windows, store anything, or load images from the web, so put its " +
-    "data in the page. Never put a secret in a page. Call it again with the `page` it answered to " +
-    "replace that page with a new version rather than making another. Answers `accepted` with the " +
+    "data in the page. Never put a secret in a page. To change a page, write the same file again " +
+    "and call it again with the same `path`: that makes the page's next version rather than another page. Answers `accepted` with the " +
     "page's id, its version, and its mention, the `[@title](link)` to name it by in your words, " +
     "or `rejected` and why nothing was shown.",
   inputSchema: CODER_SHOW_PAGE_INPUT,
@@ -145,15 +148,16 @@ const readBoundedText = Effect.fnUntraced(function* (stream: ReadableStream<Uint
 
 /**
  * The page's HTML at the path, read from the agent's sandbox, or the one
- * sentence refusing it. A path is resolved from the checkout: inside it
- * when relative, as written when absolute.
+ * sentence refusing it. The path is as resolved from the checkout: inside it
+ * when relative, as written when absolute; `path` is only how the refusal
+ * names it.
  */
 function readPageFile(
   sandbox: NonNullable<PageToolBinding["sandbox"]>,
+  resolved: string,
   path: string,
 ): Effect.Effect<Result.Result<string, string>> {
   // Note that the rule reads the path as resolved, because `x/.env/.` names the `.env` it spells around.
-  const resolved = posix.resolve(sandbox.checkout, path);
   if (isSecretFile(resolved)) return Effect.succeed(Result.fail(SHOW_PAGE_REFUSAL.SECRET));
   return Effect.gen(function* () {
     const opened = yield* Effect.tryPromise(() => sandbox.door());
@@ -165,16 +169,6 @@ function readPageFile(
       onSome: (html) => Result.succeed(html),
     });
   }).pipe(Effect.catch(() => Effect.succeed(Result.fail(SHOW_PAGE_REFUSAL.UNAVAILABLE))));
-}
-
-/** The page's HTML as read from the path the call names; the refusal where there is no sandbox or the file does not read. */
-function htmlOf(
-  binding: PageToolBinding,
-  path: string,
-): Effect.Effect<Result.Result<string, string>> {
-  if (binding.sandbox === undefined)
-    return Effect.succeed(Result.fail(SHOW_PAGE_REFUSAL.NO_SANDBOX));
-  return readPageFile(binding.sandbox, path);
 }
 
 /** Why HTML read from a file cannot be a page's: empty, or past the bound in characters. */
@@ -219,14 +213,17 @@ export function runShowPage(
     const read = readCoderInput(input);
     if (Result.isFailure(read)) return showPageRejected(SHOW_PAGE_REFUSAL.UNREADABLE_PATH);
     const { title, page } = read.success;
-    const html = yield* htmlOf(binding, read.success.path);
+    if (binding.sandbox === undefined) return showPageRejected(SHOW_PAGE_REFUSAL.NO_SANDBOX);
+    // Note that the page remembers the path as resolved, so a relative and an absolute spelling of one file are the same page.
+    const sourcePath = posix.resolve(binding.sandbox.checkout, read.success.path);
+    const html = yield* readPageFile(binding.sandbox, sourcePath, read.success.path);
     if (Result.isFailure(html)) return showPageRejected(html.failure);
     const refusal = htmlRefusal(html.success);
     if (refusal !== undefined) return showPageRejected(refusal);
     const write: PageWrite =
       page === undefined
-        ? { title, html: html.success }
-        : { title, html: html.success, pageId: page };
+        ? { title, html: html.success, sourcePath }
+        : { title, html: html.success, sourcePath, pageId: page };
     const written = yield* writePage(binding.userId, binding.owner, write, shownBy).pipe(
       Effect.tapError(logStoreFailure),
       Effect.option,

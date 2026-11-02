@@ -26,7 +26,7 @@ import {
 /**
  * `show_page`, every agent's one tool for a page, through its public
  * function against a real dialect: inline HTML makes a page the task lists,
- * a page named again takes its next version, a secret file is never read,
+ * the same file shown again takes the page's next version and a new file makes a new page, a page named by id takes its next version from any file, a secret file is never read,
  * and another account's task takes no page. An agent on no task shows its
  * pages on itself, named by its own address, and revises none but its own.
  * Synthetic accounts, tasks, agents, and pages throughout.
@@ -120,6 +120,7 @@ it.layer(getTestDB())("show_page", (it) => {
         const { sandbox } = sandboxWith({
           [`${CHECKOUT}/funnel.html`]: FUNNEL,
           [`${CHECKOUT}/weekly.html`]: `${FUNNEL}<p>v2</p>`,
+          [`${CHECKOUT}/other.html`]: `${FUNNEL}<p>other</p>`,
         });
         const task = { ...(yield* openTask), sandbox };
         const first = yield* show(
@@ -140,6 +141,15 @@ it.layer(getTestDB())("show_page", (it) => {
           ),
         );
 
+        const sameFile = shownPage(
+          yield* show(task, { title: "Invite funnel", path: "./funnel.html" }, task.agent),
+        );
+        const otherFile = shownPage(
+          yield* show(task, { title: "Other", path: "other.html" }, task.agent),
+        );
+
+        assert.deepEqual(sameFile, { id: page.id, version: 3 });
+        assert.notEqual(otherFile.id, page.id);
         assert.deepEqual(first, {
           status: ACTION_RESULT_STATUS.ACCEPTED,
           page: {
@@ -150,20 +160,25 @@ it.layer(getTestDB())("show_page", (it) => {
         });
         assert.deepEqual(second, { id: page.id, version: 2 });
         assert.deepEqual(
-          (yield* listPages(task.userId, taskPageOwner(task.taskId))).map(
-            ({ id, title, version, shownBy }) => ({
-              id,
-              title,
-              version,
-              shownBy,
-            }),
-          ),
-          [{ id: page.id, title: "Invite funnel, by week", version: 2, shownBy: agent }],
+          (yield* listPages(task.userId, taskPageOwner(task.taskId)))
+            .map(({ id, title, version }) => ({ id, title, version }))
+            .sort((a, b) => a.version - b.version),
+          [
+            { id: otherFile.id, title: "Other", version: 1 },
+            { id: page.id, title: "Invite funnel", version: 3 },
+          ],
         );
         const stored = Option.getOrThrow(
           yield* readPageVersion(task.userId, taskPageOwner(task.taskId), page.id, 1),
         );
         assert.deepEqual([stored.html, stored.shownBy], [FUNNEL, task.agent]);
+        const byAgent = Option.getOrThrow(
+          yield* readPageVersion(task.userId, taskPageOwner(task.taskId), page.id, 2),
+        );
+        assert.equal(
+          byAgent.shownBy?.kind === PAGE_SHOWER.AGENT && byAgent.shownBy.agentId,
+          agent.agentId,
+        );
       }),
   );
 
@@ -243,7 +258,7 @@ it.layer(getTestDB())("show_page", (it) => {
         const first = yield* show(binding, { title: "Funnel", path: "funnel.html" }, shower);
         const page = shownPage(first);
         const again = shownPage(
-          yield* show(binding, { title: "Funnel", path: "funnel.html", page: page.id }, shower),
+          yield* show(binding, { title: "Funnel", path: "funnel.html" }, shower),
         );
 
         assert.deepEqual(first, {

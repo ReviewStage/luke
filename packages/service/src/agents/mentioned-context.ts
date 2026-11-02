@@ -234,7 +234,7 @@ function pageNoteOf(
   const on = owner?.kind === PAGE_OWNER.AGENT ? "among your own pages" : "on this task";
   if (page === undefined) return `The page "${name}": no longer ${on}.`;
   const shown = owner?.kind === PAGE_OWNER.AGENT ? "that you showed" : "shown on this task";
-  return `The developer pointed you at the page "${page.title}" (id \`${page.id}\`, version ${page.version}) ${shown}. Read it as the developer saw it with \`${AGENT_TOOL.READ_PAGE}\`, \`pageId: "${page.id}"\`, and \`version: ${page.version}\`, or leave the version out for its newest. To change it, show it again with \`${AGENT_TOOL.SHOW_PAGE}\` and \`page: "${page.id}"\`, which writes its next version in its place.`;
+  return `The developer pointed you at the page "${page.title}" (id \`${page.id}\`, version ${page.version}) ${shown}. Read it as the developer saw it with \`${AGENT_TOOL.READ_PAGE}\`, \`pageId: "${page.id}"\`, and \`version: ${page.version}\`, or leave the version out for its newest. To change it, write the file it was made from again and show it with \`${AGENT_TOOL.SHOW_PAGE}\` and the same \`path\`, or from another file with \`page: "${page.id}"\`, which writes its next version in its place.`;
 }
 
 /** How the agent reads another agent's work: its pull request's diff, else its branch's, by the repository the agent shares with it or names. */

@@ -41,10 +41,12 @@ export const pageVersionNumberSchema = EffectSchema.Int.check(
 
 /**
  * What an agent writes of a page: its title and whole HTML, as the next
- * version of the page it names, or as a new page's first where it names none.
+ * version of the page it names, or, where it names none, of the page already
+ * written from the same `sourcePath` on its owner, or as a new page's first.
  */
 export const pageWriteSchema = EffectSchema.Struct({
   pageId: EffectSchema.optionalKey(wireUuidSchema),
+  sourcePath: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
   title: pageTitleSchema,
   html: pageHtmlSchema,
 });
