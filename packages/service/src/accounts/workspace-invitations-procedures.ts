@@ -23,13 +23,15 @@
  */
 
 import type { MemberSeams, PluginInvitation } from "@luke/database/models/workspace-seams";
+import { workspaceGitHubAccountId } from "@luke/database/models/workspace-store";
+import { githubAccountAvatarUrl } from "@luke/features/account-picture";
 import {
   INVITATION_ROLE,
   invitationAcceptUrl,
   WORKSPACE_INVITATIONS_QUERY,
   type WorkspaceInvitation,
 } from "@luke/features/workspace-invitation-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { Clock, Effect, Option } from "effect";
 import {
   recordServerEvent,
@@ -42,7 +44,7 @@ import {
   type SessionUserIdResolver,
 } from "../http/http-effect.js";
 import { hosted, sessionMiddleware } from "../orpc/base.js";
-import { readAccountPerson } from "./account-person.js";
+import { readAccountPerson, readAccountPicture } from "./account-person.js";
 import { InvitationMail } from "./invitation-mail.js";
 import { invitationOffer } from "./invitation-offers.js";
 import { managedWorkspace, pluginCallOrRefused } from "./workspace-access.js";
@@ -106,22 +108,40 @@ function pendingInvitations(
  * where their account has none, as stage did. A runtime without a sender
  * emails nothing, and an inviter whose row cannot be read is "A teammate",
  * since the invitation already stands.
+ *
+ * The letter shows pictures a mail client loads by address alone: the
+ * workspace's connected GitHub account's avatar, else, on the inviter's own
+ * first workspace, their sign-in picture, else the letter draws its tile; and
+ * the inviter's sign-in picture, else their initial. Note that a photo
+ * uploaded in Settings is not shown, because it is served to members alone.
  */
 const emailInvitation = Effect.fn("web/emailWorkspaceInvitation")(function* (
   invitation: WorkspaceInvitation,
-  workspaceName: string,
+  workspace: Workspace,
   inviterId: string,
 ) {
   const mail = yield* Effect.serviceOption(InvitationMail);
   if (Option.isNone(mail)) return;
   const inviter = yield* readAccountPerson(inviterId).pipe(Effect.orElseSucceed(() => undefined));
+  const accountId = yield* workspaceGitHubAccountId(inviterId, workspace.id).pipe(
+    Effect.orElseSucceed(() => Option.none<number>()),
+  );
+  const workspacePictureUrl = Option.match(accountId, {
+    onNone: () => workspace.pictureUrl,
+    onSome: githubAccountAvatarUrl,
+  });
+  const inviterPictureUrl = yield* readAccountPicture(inviterId).pipe(
+    Effect.orElseSucceed(() => undefined),
+  );
   yield* mail.value.send({
     email: invitation.email,
     acceptUrl: invitation.acceptUrl,
-    workspaceName,
+    workspaceName: workspace.name,
     inviterLabel: inviter?.name.trim() || inviter?.email || INVITER_UNKNOWN,
     role: invitation.role,
     expiresAt: invitation.expiresAt,
+    ...(workspacePictureUrl === undefined ? {} : { workspacePictureUrl }),
+    ...(inviterPictureUrl === undefined ? {} : { inviterPictureUrl }),
   });
 });
 
@@ -175,7 +195,7 @@ export function workspaceInvitationsProcedures(seams: WorkspaceInvitationsProced
         yield* Clock.currentTimeMillis,
       );
       if (invitation === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      yield* emailInvitation(invitation, workspace.name, context.userId);
+      yield* emailInvitation(invitation, workspace, context.userId);
       return { invitation };
     }),
     cancel: resource.cancel.effect(function* ({ input, context }) {

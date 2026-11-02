@@ -158,6 +158,10 @@ export interface InvitationLetter {
   readonly role: WorkspaceInvitation["role"];
   /** When the link stops working, as the invitation's ISO time. */
   readonly expiresAt: string;
+  /** The workspace's picture, an https address a mail client loads with no session; absent where the letter draws the workspace's initial instead. */
+  readonly workspacePictureUrl?: string;
+  /** The inviter's sign-in picture, an https address a mail client loads with no session; absent where the letter draws their initial instead. */
+  readonly inviterPictureUrl?: string;
 }
 
 interface InvitationMailValues {

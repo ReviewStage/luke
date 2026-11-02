@@ -126,6 +126,8 @@ const WorkspaceRowSchema = Schema.Struct({
 const InstallationRowSchema = Schema.Struct({
   organizationId: Schema.String,
   installationId: Schema.Number,
+  /** GitHub's numeric id of the account the installation is on, which outlives a rename of its login. */
+  accountId: Schema.Number,
   /** The login of the GitHub account the installation is on. */
   login: Schema.String,
   /** The installation's status as its webhook, or a read of GitHub, last wrote it. */
@@ -325,6 +327,7 @@ function installationRows(db: DatabaseShape, userId: string, organizationId?: st
     .select({
       organizationId: githubInstallation.organizationId,
       installationId: githubInstallation.installationId,
+      accountId: githubInstallation.accountId,
       login: githubInstallation.accountLogin,
       status: githubInstallation.status,
     })
@@ -783,6 +786,22 @@ export function workspaceOf(
     if (Option.isNone(row)) return Option.none();
     const installations = yield* findInstallations({ userId, organizationId });
     return Option.some(workspaceOfRow(row.value, installations));
+  });
+}
+
+/**
+ * The GitHub account a workspace is seen as, by GitHub's numeric id, to a
+ * member of it alone: the first linked installation still active, else the
+ * first linked, as the list's `github` names it; nothing for a workspace it
+ * is not in, or one with no installation.
+ */
+export function workspaceGitHubAccountId(
+  userId: string,
+  organizationId: string,
+): WorkspaceStoreEffect<Option.Option<number>> {
+  return Effect.map(findInstallations({ userId, organizationId }), (installations) => {
+    const active = installations.find((one) => one.status === GITHUB_INSTALLATION_STATUS.ACTIVE);
+    return Option.fromNullishOr((active ?? installations[0])?.accountId);
   });
 }
 
