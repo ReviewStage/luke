@@ -9,11 +9,11 @@ import {
   GLYPH_ARRIVAL,
   GLYPH_INK,
   GlyphSlot,
+  ProductMark,
   Stack,
   TEXT_VARIANT,
   Text,
   UserIcon,
-  WingFace,
 } from "@luke/ui";
 import { ICON_SIZE } from "@luke/ui/icons";
 import { useState } from "react";
@@ -23,7 +23,7 @@ import { CatalogSection } from "../section";
 /**
  * glyph-slots.tsx -- a glyph's seat before a line's words in each ink: a
  * call's muted glyph, the full ink of the one item in progress, the ink its
- * holder sets, and the app's face in its blue; a to-do's seat as tall as its
+ * holder sets, and the product's mark in its blue; a to-do's seat as tall as its
  * first line before words that wrap; a slot its container sizes larger;
  * a page's outline inset a step inside its slot beside a person's; and a
  * to-do's glyph arriving as a press moves the step on.
@@ -84,7 +84,7 @@ function GlyphSlots(): React.JSX.Element {
           </span>
           <span className="catalog-glyph-line">
             <GlyphSlot ink={GLYPH_INK.VOICE}>
-              <WingFace fill inherit />
+              <ProductMark fill inherit />
             </GlyphSlot>
             <Text variant={TEXT_VARIANT.CAPTION}>{PRODUCT_NAME}'s note on lines 3–4</Text>
           </span>
@@ -125,7 +125,7 @@ function GlyphSlots(): React.JSX.Element {
       <CatalogSection id="glyph-slots-sized" title="Sized by its container">
         <span className="catalog-glyph-line catalog-glyph-large">
           <GlyphSlot ink={GLYPH_INK.VOICE}>
-            <WingFace fill inherit />
+            <ProductMark fill inherit />
           </GlyphSlot>
           <Text variant={TEXT_VARIANT.CAPTION}>{PRODUCT_NAME}</Text>
         </span>

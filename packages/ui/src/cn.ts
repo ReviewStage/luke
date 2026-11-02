@@ -171,9 +171,9 @@ const PANEL_WINDOW = {
   spacing: [
     "actor-badge",
     "actor-badge-glyph",
-    "actor-face-share",
     "actor-for-near",
     "actor-for-x",
+    "actor-mark-share",
     "actor-for-y",
     "actor-overlap",
     "corner-dot",
@@ -235,7 +235,7 @@ const PANEL_HOME_TASKS = {
     "tasks-list-maker",
     "tasks-list-row",
     "welcome-composer",
-    "welcome-face",
+    "welcome-mark",
     "welcome-tile",
   ],
 } as const;

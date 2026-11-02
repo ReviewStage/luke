@@ -25,6 +25,7 @@ import {
   HoverCardRule,
   INLINE_REF_LOOK,
   InlineRef,
+  ProductMark,
   TEXT_BUTTON_LINES,
   TextButton,
   TIME_LOOK,
@@ -34,7 +35,6 @@ import {
   UnassignedAvatar,
   useMinute,
   VisuallyHidden,
-  WingFace,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -76,7 +76,7 @@ import { AgentMark } from "./tasks/tab-look.js";
  * one. A picture on GitHub's avatar host is asked for at twice the size it
  * is drawn, so a Retina screen draws it sharp and nothing larger is
  * fetched. The app's own square holds
- * its face in its own blue, an agent's its harness, swapped for the working
+ * its mark in the working ink, an agent's its harness, swapped for the working
  * mark while it writes as its tab's glyph is, and an automation's its Zap,
  * each its glyph alone on the ground beneath it, as a tab's is. In a
  * facepile (`ActorStack`) whose faces overlap each stands on one solid
@@ -285,7 +285,14 @@ function Face({
         <PersonDisc id={actor.userId} name={actor.name} pictureUrl={actor.pictureUrl} size={size} />
       );
     case ACTOR_KIND.LUKE:
-      return <GlyphSquare name={actorName(actor)} glyph={<WingFace />} size={size} tiled={tiled} />;
+      return (
+        <GlyphSquare
+          name={actorName(actor)}
+          glyph={<ProductMark small />}
+          size={size}
+          tiled={tiled}
+        />
+      );
     case ACTOR_KIND.AGENT:
       return (
         <GlyphSquare
@@ -362,7 +369,7 @@ export function commentAuthor(actor: Actor): CommentAuthor {
     case ACTOR_KIND.PERSON:
       return { name: actor.name, id: actor.userId, picture: picture(actor.pictureUrl) };
     case ACTOR_KIND.LUKE:
-      return { name: actorName(actor), shape: AVATAR_SHAPE.SQUARE, glyph: <WingFace /> };
+      return { name: actorName(actor), shape: AVATAR_SHAPE.SQUARE, glyph: <ProductMark small /> };
     case ACTOR_KIND.AGENT:
       return {
         name: actorName(actor),
@@ -459,9 +466,9 @@ export function ActorMark({
         "actor-mark relative inline-grid flex-none align-middle text-foreground",
         "[--state-glyph-size:var(--spacing-avatar-glyph-share)] [&_.state-glyph>:is(svg,img)]:size-full",
         squared(actor) ? "rounded-avatar-square" : "rounded-disc",
-        // The app wears its blue on its face, the colour its voice already answers in, its face filling more of its square than a glyph does. Note that the size is important, because base.css sizes every face outside the layers.
+        // The app wears the working ink on its mark, the colour its voice already answers in, its mark filling more of its square than a glyph does. Note that the size is important, because base.css sizes every mark outside the layers.
         actor.kind === ACTOR_KIND.LUKE &&
-          "text-working [&_.luke-face]:size-actor-face-share! [&_.luke-face]:text-inherit",
+          "text-working [&_.luke-product-mark]:size-actor-mark-share! [&_.luke-product-mark]:text-inherit",
         actor.kind === ACTOR_KIND.SOMEONE && "text-muted-foreground",
         // A member who left keeps their own face, grayed and muted on the tile, their name saying they left.
         leftWithFace(actor) && "bg-actor-tile [&>*]:opacity-80 [&>*]:grayscale",

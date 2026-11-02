@@ -7,11 +7,11 @@ import {
   Button,
   FormField,
   MARK_PROVIDER,
+  ProductMark,
   ProviderButton,
   SocialSignInCard,
   TEXT_FIELD_TYPE,
   TextField,
-  WingFace,
 } from "@luke/ui";
 import { useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
@@ -32,7 +32,7 @@ const OPEN_LUKE = { label: `Open ${PRODUCT_NAME}`, href: "#" } as const;
 function Face(): React.JSX.Element {
   return (
     <span className="catalog-auth-mark">
-      <WingFace />
+      <ProductMark />
     </span>
   );
 }

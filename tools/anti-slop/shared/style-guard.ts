@@ -103,15 +103,6 @@ const TOKEN_SHEETS = ["packages/ui/src/tokens/", "packages/ui/src/tailwind/theme
 const TOOLING = [".agents/", ".claude/", ".codex/", ".cursor/", ".opencode/"];
 
 /**
- * Files one rule passes whole: the face's motions are generated from
- * `@luke/brand`'s tables, phase by phase, and answer `--luke-face-motion`.
- */
-const RULE_EXEMPT_FILES: Readonly<Partial<Record<StyleRule, readonly string[]>>> = {
-  [STYLE_RULE.DURATION]: ["packages/ui/src/face/face-motion.css"],
-  [STYLE_RULE.EASING]: ["packages/ui/src/face/face-motion.css"],
-};
-
-/**
  * Folders one rule passes whole: `@luke/ui` is where a popover's width is
  * drawn from its token, and the catalog's stage and rooms are its own
  * demonstration layout, not a picker.
@@ -421,24 +412,19 @@ const EASING_KEYWORD =
 const MOTION_PROPERTY = /^(?:transition|animation)(?:-[a-z-]+)?$/u;
 
 /** The play-state tokens an endless loop answers (docs/DESIGN.md's vocabulary). */
-const PLAY_STATE_TOKEN = /var\(\s*--(?:luke-)?(?:loop|face)-motion\b/u;
-
-const FACE_MOTION_TOKEN = /var\(\s*--luke-face-motion\b/u;
+const PLAY_STATE_TOKEN = /var\(\s*--(?:luke-)?loop-motion\b/u;
 
 /**
  * Whether a declaration is an animation the play-state exception covers:
- * one in a block whose animation answers a play-state token and either
- * never ends or follows the face's own gestures (`--luke-face-motion`),
- * whose finite companions docs/DESIGN.md lets keep a gesture's phase. A
- * transition beside it is no part of the loop and is checked as any other.
+ * one in a block whose animation answers a play-state token and never ends.
+ * A transition beside it is no part of the loop and is checked as any other.
  */
 function isAnsweredLoop(declaration: CssDeclaration, block: CssBlock): boolean {
   if (!declaration.property.startsWith("animation")) return false;
   const animations = block.declarations.filter(({ property }) => property.startsWith("animation"));
   const answering = animations.filter(({ value }) => PLAY_STATE_TOKEN.test(value));
   if (answering.length === 0) return false;
-  const face = answering.some(({ value }) => FACE_MOTION_TOKEN.test(value));
-  return face || animations.some(({ value }) => /\binfinite\b/u.test(value));
+  return animations.some(({ value }) => /\binfinite\b/u.test(value));
 }
 
 function literalDuration(declaration: CssDeclaration): boolean {
@@ -989,7 +975,6 @@ export function styleViolations(
   return violations.filter(
     (violation) =>
       RULE_SCOPES[violation.rule]?.test(file) !== false &&
-      !RULE_EXEMPT_FILES[violation.rule]?.includes(file) &&
       !RULE_EXEMPT_FOLDERS[violation.rule]?.some((folder) => file.startsWith(folder)),
   );
 }

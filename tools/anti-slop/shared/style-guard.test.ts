@@ -281,11 +281,6 @@ describe("a stylesheet", () => {
     expect(sheetRules(css, "packages/ui/src/tailwind/theme.css")).toEqual([]);
     expect(sheetRules(css, ".agents/skills/shots/shots.css")).toEqual([]);
   });
-
-  it("passes the face's generated motions their literal phases", () => {
-    const css = ".face { animation: blink 3200ms cubic-bezier(0.2, 0, 0, 1) both; }";
-    expect(sheetRules(css, "packages/ui/src/face/face-motion.css")).toEqual([]);
-  });
 });
 
 describe("a module's class strings", () => {

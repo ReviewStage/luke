@@ -186,15 +186,20 @@ body {
   margin: 0 0 var(--luke-space-12);
 }
 
-.catalog-face {
+.catalog-mark {
   width: 96px;
   height: 96px;
   color: var(--luke-color-working);
 }
 
-.catalog-face svg {
+.catalog-mark > .luke-product-mark {
   width: 100%;
   height: 100%;
+}
+
+.catalog-mark-small {
+  width: 32px;
+  height: 32px;
 }
 
 .catalog-tiles {
@@ -465,11 +470,11 @@ body {
   background: var(--luke-color-surface);
 }
 
-/* The face gives way to a narrow or short window, so the card that fits it
+/* The mark gives way to a narrow or short window, so the card that fits it
    never has to clip it: the window less the dimmed margin, the picture's
    inset, the card's edge, and, for its height, the bar above it. */
-.catalog-media-picture > .luke-face,
-.catalog-window-picture > .luke-face {
+.catalog-media-picture > .luke-product-mark,
+.catalog-window-picture > .luke-product-mark {
   width: min(
     480px,
     100vw -

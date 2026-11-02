@@ -55,7 +55,6 @@ export const ADMIN_TAB = {
   RELIABILITY: "reliability",
   WORKSPACES: "workspaces",
   USERS: "users",
-  ANIMATIONS: "animations",
 } as const;
 
 export type AdminTab = (typeof ADMIN_TAB)[keyof typeof ADMIN_TAB];
@@ -77,16 +76,15 @@ export function adminSection(view: AdminView): boolean {
   return view.kind !== ADMIN_PAGE.ACCOUNT && view.kind !== ADMIN_PAGE.DAY;
 }
 
-/** The view a section opens on; Animations is the web page's alone, so the app opens the Overview for it. */
+/** The view a section opens on. */
 export function adminSectionView(tab: AdminTab): AdminView {
-  return { kind: tab === ADMIN_TAB.ANIMATIONS ? ADMIN_TAB.DASHBOARD : tab };
+  return { kind: tab };
 }
 
 /** The section a view stands under: an account's page under Users, a day's under the Overview. */
 export function adminSectionOf(view: AdminView): AdminTab {
   if (view.kind === ADMIN_PAGE.ACCOUNT) return ADMIN_TAB.USERS;
   if (view.kind === ADMIN_PAGE.DAY) return ADMIN_TAB.DASHBOARD;
-  if (view.kind === ADMIN_TAB.ANIMATIONS) return ADMIN_TAB.DASHBOARD;
   return view.kind;
 }
 

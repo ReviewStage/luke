@@ -20,7 +20,7 @@ import "@luke/panel/styles/shell.css";
 import { AccountAvatar, type ViewerAccount } from "@luke/panel/admin/chrome/page-header";
 import { ADMIN_PLACES } from "@luke/panel/admin/chrome/places";
 import { type AdminTab, plainLeftClick, tabHref } from "@luke/panel/admin/routing";
-import { LukeIdentity } from "@luke/panel/desktop/luke-identity";
+import { ProductIdentity } from "@luke/panel/desktop/product-identity";
 import { SHELL_ROOM } from "@luke/panel/shell-room";
 import { useStageRoom } from "@luke/panel/stage-room";
 import {
@@ -146,7 +146,7 @@ function AdminSidebar({
   return (
     <aside ref={ref} className="desktop-sidebar" inert={!inSight}>
       <div className="desktop-drag-strip" />
-      <LukeIdentity qualifier="Admin" />
+      <ProductIdentity qualifier="Admin" />
       <SidebarPlaces label="Admin sections">
         {ADMIN_PLACES.map(({ tab, label, icon }) => (
           <NavItemLink

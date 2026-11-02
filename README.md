@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="packages/brand/assets/luke-wordmark-dark.svg">
-    <img src="packages/brand/assets/luke-wordmark-light.svg" alt="Vespin" width="360">
+    <source media="(prefers-color-scheme: dark)" srcset="packages/brand/assets/logo/luke-logo-dark.svg">
+    <img src="packages/brand/assets/logo/luke-logo-light.svg" alt="Vespin" width="360">
   </picture>
 </p>
 
