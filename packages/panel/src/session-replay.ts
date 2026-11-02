@@ -247,9 +247,11 @@ function laysOut(name: string, value: string, element: Element | undefined): boo
  * no `maskAllText` for recordings, and the recorder drops an option it does
  * not know without a word, so the names are asserted against the installed
  * bundle), every input masked, every attribute but those the replay lays out
- * by (`LAYOUT`) asterisked, autocapture off, since a click event carries the
- * text of what was clicked, and canvas recording off, since a canvas carries
- * its words as pixels.
+ * by (`LAYOUT`) asterisked, every comment in the markup left out, since the
+ * recorder copies a comment's words as they stand and no masking reaches
+ * one, autocapture off, since a click event carries the text of what was
+ * clicked, and canvas recording off, since a canvas carries its words as
+ * pixels.
  *
  * An allowlist rather than a list of the attributes that carry words,
  * because that list kept missing one: an element's `id` and the ids that
@@ -289,6 +291,7 @@ const SESSION_REPLAY_MASKING = {
     maskTextSelector: "*",
     maskAttributeFn: (name: string, value: string, element?: Element): string =>
       laysOut(name.toLowerCase(), value, element) ? value : "*".repeat(value.length),
+    slimDOMOptions: { comment: true },
     recordHeaders: false,
     recordBody: false,
   },
