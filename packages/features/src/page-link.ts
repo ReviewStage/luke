@@ -44,14 +44,14 @@ export const pageLinkPressSchema = EffectSchema.Struct({
  * The listener goes once that press reaches it, so a press the page starts
  * inside it is let by, and in any case once the press is done, so one the
  * page stopped short of the window leaves none behind.
- * A link out is one to a web address on another site than the one the page's
- * links are read against, its own, since its policy refuses it a `<base>`;
- * any other link is left to the frame.
+ * A link out is one to a mail address, or to a web address on another site
+ * than the one the page's links are read against, its own, since its policy
+ * refuses it a `<base>`; any other link is left to the frame.
  */
 export const PAGE_LINK_SCRIPT = `(() => {
   "use strict";
   const TYPE = ${JSON.stringify(PAGE_LINK_TYPE)};
-  const WEB = new Set(["http:", "https:"]);
+  const OPENED = new Set(["http:", "https:", "mailto:"]);
   const LINK = "a[href], area[href]";
 
   const linkOut = (link) => {
@@ -61,7 +61,7 @@ export const PAGE_LINK_SCRIPT = `(() => {
     } catch {
       return undefined;
     }
-    if (!WEB.has(address.protocol) || address.origin === new URL(document.baseURI).origin) return undefined;
+    if (!OPENED.has(address.protocol) || address.origin === new URL(document.baseURI).origin) return undefined;
     return address.href;
   };
 
