@@ -45,11 +45,11 @@ export interface HostRelease {
  * published, and the script served meanwhile says there is none yet.
  */
 export const HOST_RELEASE: HostRelease | undefined = {
-  VERSION: "0.4.0",
+  VERSION: "0.5.0",
   SHA256: {
-    [HOST_TARGET.LINUX_X64]: "21d632e79f0c9a16157eb623d07119095c670ab4532453d067e6d6d3160ee978",
-    [HOST_TARGET.LINUX_ARM64]: "0e755e88c7991659e15dafd6346c2cdd35ae1e02bfcdcaab3c6206027dd9116e",
-    [HOST_TARGET.DARWIN_ARM64]: "98ffc0ca556c4a17f34c968d1bbbd036d22f5b3fc52fde7f0299d9b886cec7b3",
+    [HOST_TARGET.LINUX_X64]: "d455282db3b444e4f289e838d98b6ef7b49eb6cabc970af7232cfe437d03656f",
+    [HOST_TARGET.LINUX_ARM64]: "364b4b3e855b271172df3721578293c606c9cdb7c47826f6959690bb3402e00f",
+    [HOST_TARGET.DARWIN_ARM64]: "564d999f8f4d0fcc8b6e8982aa24bd0e414b9c5998f951e88ab97e0f45744143",
   },
 };
 
