@@ -15,6 +15,7 @@ import {
   TURN_FAILURE,
   type TurnFailure,
 } from "../../core.js";
+import { CODER_REFUSAL } from "../coder-host/bounds.js";
 import { EVE_HOST_TURN, EVE_HOST_TURN_KIND } from "../eve-host/bounds.js";
 import {
   NATIVE_ENDING,
@@ -225,6 +226,8 @@ export interface NativeProjectionContext {
   readonly sequence: number;
   readonly now: number;
   readonly model: string | undefined;
+  /** Whether the starter's own API key pays for the agent, so a refusal of it is theirs to replace in Settings. */
+  readonly ownKey: boolean;
   /** Whether the stored tool set holds a call of this name; a call of any other is left out, its answer with it. */
   readonly registered: (name: string) => boolean;
   /** Where a moment the record leaves out is said. */
@@ -463,7 +466,10 @@ class Fold {
     const turn = this.#closed(held);
     const status = statusOf(moment.ending, turn.failure);
     const failed = status === RUN_STATUS.FAILED;
-    const detail = [moment.detail, turn.failure, this.state.rateLimit]
+    // Note that a refusal of the starter's own key leads with the coder's word for it, so the window reads the failure as a key to replace rather than a model call failed.
+    const ownKeyRefused =
+      turn.refused === true && this.#context.ownKey ? CODER_REFUSAL.ACCOUNT_KEY_REFUSED : undefined;
+    const detail = [ownKeyRefused, moment.detail, turn.failure, this.state.rateLimit]
       .filter((word) => word !== undefined)
       .join("; ");
     const model = this.#context.model;

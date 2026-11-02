@@ -18,7 +18,11 @@ import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/
 import { threadLineWords } from "@luke/features/inbox-wire";
 import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/models-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import {
+  FAILURE_CONDITION,
+  FAILURE_SURFACE,
+  type FailureAbout,
+} from "@luke/features/shown-failure";
 import type { TaskStatus } from "@luke/features/task-wire";
 import {
   CALL_KIND,
@@ -1634,11 +1638,14 @@ function AgentEndLine({
   endReason,
   keyProvider,
   onOpenApiKeys,
+  about,
 }: {
   ended: EndLineParts;
   endReason: FailureReason | undefined;
   keyProvider: ModelProvider | undefined;
   onOpenApiKeys: (() => void) | undefined;
+  /** The agent and task the failure is about, which its copied details name. */
+  about: FailureAbout;
 }): React.JSX.Element {
   // Note that a key refused is mended at its harness's row in Settings, so its line offers that row after the words.
   const remedy =
@@ -1659,7 +1666,9 @@ function AgentEndLine({
         <FailureNote
           failure={failureShown({
             surface: FAILURE_SURFACE.AGENT_TURN,
-            cause: endReason ?? FAILURE_CONDITION.UNREAD,
+            // Note that the service's word for the failure is its code, so a report names what failed rather than what mends it.
+            cause: { code: ended.failure ?? FAILURE_CONDITION.UNREAD },
+            about,
           })}
           time={FAILURE_NOTE_TIME.PAST}
         >
@@ -1710,6 +1719,7 @@ function AgentEndRow({
   endReason,
   keyProvider,
   onOpenApiKeys,
+  about,
   press,
   centred = false,
 }: {
@@ -1717,6 +1727,7 @@ function AgentEndRow({
   endReason: FailureReason | undefined;
   keyProvider: ModelProvider | undefined;
   onOpenApiKeys: (() => void) | undefined;
+  about: FailureAbout;
   press: ReactNode;
   /** Whether it stands in the empty state's own centred column, centred as its column is. */
   centred?: boolean;
@@ -1731,6 +1742,7 @@ function AgentEndRow({
         endReason={endReason}
         keyProvider={keyProvider}
         onOpenApiKeys={onOpenApiKeys}
+        about={about}
       />
       {press}
     </div>
@@ -2421,6 +2433,7 @@ function AgentTranscriptView({
                         endReason={endReason}
                         keyProvider={keyProvider}
                         onOpenApiKeys={onOpenApiKeys}
+                        about={{ agentId, taskId }}
                         press={endPress}
                       />
                     )}
@@ -2477,6 +2490,7 @@ function AgentTranscriptView({
               endReason={endReason}
               keyProvider={keyProvider}
               onOpenApiKeys={onOpenApiKeys}
+              about={{ agentId, taskId }}
               press={endPress}
               centred
             />

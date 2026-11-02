@@ -588,6 +588,7 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
         sequence,
         now,
         model: applying.model,
+        ownKey: applying.payer === AGENT_PAYER.API_KEY,
         registered,
         report: (said) => reports.push(said),
       });

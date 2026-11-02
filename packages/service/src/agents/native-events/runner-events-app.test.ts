@@ -25,6 +25,7 @@ import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import {
+  AGENT_FAILURE,
   AGENT_KIND,
   AGENT_PAYER,
   type AgentPayer,
@@ -56,6 +57,7 @@ import { type AfterResponse, keptAfterResponse } from "../../http/after-response
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { CODER } from "../coder-host/bounds.js";
+import { agentFailureOf } from "../coder-host/status.js";
 import { titleAgent } from "../coder-host/title.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
@@ -1817,6 +1819,24 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           reported.map((attributes) => attributes.agentId),
           [onLuke.agentId],
         );
+        // The starter's own key reads as a key to replace; Fullspin's own key refused is no key of theirs.
+        const db = yield* Database;
+        const failureOf = (conversationId: string) =>
+          Effect.map(
+            db
+              .select({
+                status: turns.status,
+                failure: turns.failure,
+                failureDetail: turns.failureDetail,
+              })
+              .from(turns)
+              .where(eq(turns.conversationId, conversationId)),
+            (ended) => ended.map((turn) => agentFailureOf(turn)),
+          );
+        assert.deepEqual(yield* failureOf(onKey.target.conversationId), [
+          AGENT_FAILURE.PROVIDER_KEY,
+        ]);
+        assert.deepEqual(yield* failureOf(onLuke.target.conversationId), [AGENT_FAILURE.MODEL]);
       }),
   );
 

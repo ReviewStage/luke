@@ -18,6 +18,7 @@ test("a call of a tool the record does not hold is reported, but the harness's o
       sequence: 0,
       now: 0,
       model: undefined,
+      ownKey: false,
       registered: () => false,
       report: (said) => reports.push(said),
     },
@@ -30,6 +31,7 @@ test("a warm launch that fails after its turn ended at its IDLE fails no turn of
     conversationId: "c_projection",
     now: 0,
     model: undefined,
+    ownKey: false,
     registered: () => true,
     report: () => undefined,
   };

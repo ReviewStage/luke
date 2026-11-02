@@ -340,6 +340,8 @@ export function lineSender(
 export interface EndLineParts {
   readonly words: string;
   readonly failed: boolean;
+  /** Why a failed turn failed, as the service's word, which the failure it reports names; none for a stop, or a failure that said no reason. */
+  readonly failure?: AgentFailure | undefined;
 }
 
 /**
@@ -366,10 +368,14 @@ export function endLineParts(
       return { words: "Stopped", failed: false };
     case AGENT_STATUS.FAILED: {
       if (ranDirectly !== undefined)
-        return { words: ranDirectlyWords(ranDirectly.folder, starter), failed: true };
+        return { words: ranDirectlyWords(ranDirectly.folder, starter), failed: true, failure };
       const words =
         failure === undefined ? undefined : agentFailureWords(failure, starter, continuable);
-      return { words: `Failed: ${words ?? "the run ended without saying why"}`, failed: true };
+      return {
+        words: `Failed: ${words ?? "the run ended without saying why"}`,
+        failed: true,
+        failure,
+      };
     }
     case AGENT_STATUS.STARTING:
     case AGENT_STATUS.RUNNING:
