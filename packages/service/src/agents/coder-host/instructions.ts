@@ -369,7 +369,7 @@ function pagesWords(sharedFiles: string): string {
 
 ## Pages
 
-When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML file in your sandbox, under \`${sharedFiles}/\` (\`mkdir -p ${sharedFiles}\` where it is missing), its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\` by passing its \`path\`: the developer sees it in Fullspin's side panel. To change it, show it again under the page it answered rather than making another.`;
+When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML file in your sandbox, under \`${sharedFiles}/\` (\`mkdir -p ${sharedFiles}\` where it is missing), its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\` by passing its \`path\`: the developer sees it in Fullspin's side panel. Make it read well on a phone as on a desktop: a \`<meta name="viewport" content="width=device-width, initial-scale=1">\`, a layout that reflows to one column on a narrow screen rather than fixed widths, wide tables, code, and charts that scroll sideways inside their own box, and text and tap targets big enough for a finger. To change it, show it again under the page it answered rather than making another.`;
 }
 
 /**
