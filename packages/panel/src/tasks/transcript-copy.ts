@@ -209,6 +209,11 @@ function agentBlock(part: AgentPart): CopiedBlock[] {
     return [{ kind: COPIED_BLOCK.REASONING, text: part.text }];
   }
   if (part.kind !== AGENT_PART.TOOL) return [];
+  // Note that the calls a run of to-do calls was joined from are read too, as each was drawn before they were one row.
+  if (part.joined !== undefined) {
+    const { joined, ...last } = part;
+    return [...joined, last].flatMap(agentBlock);
+  }
   const error = part.errorText;
   if (isDelegation(part)) {
     const view = delegationView(part, undefined);

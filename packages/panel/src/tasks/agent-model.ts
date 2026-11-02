@@ -115,6 +115,7 @@ import {
   remoteCallOf,
   TOOL_TARGET,
   type ToolTarget,
+  todosView,
   toolTarget,
 } from "./tool-call-model.js";
 
@@ -1583,6 +1584,22 @@ const TOOL_STATES: ReadonlySet<string> = new Set(Object.values(TOOL_STATE));
 /** A part its page carried cut (`cutParts`): its two ends and its whole size, and the message and index it is fetched whole by. */
 export type AgentPartCut = Omit<PartCut, "field"> & { readonly messageId: string };
 
+/** A call of a tool as the transcript draws it. */
+export interface AgentToolPart {
+  readonly kind: typeof AGENT_PART.TOOL;
+  readonly tool: string;
+  readonly callId: string;
+  readonly state: ToolState;
+  readonly input: WireValue | undefined;
+  /** None while the call has not answered, and on a call whose answer its page carried cut, which `cut` holds the ends of. */
+  readonly output: WireValue | undefined;
+  /** The error's own text, on a call that ended in one. */
+  readonly errorText: string | undefined;
+  readonly cut?: AgentPartCut;
+  /** The earlier calls of a run of to-do calls drawn as this one row (`joinedTodos`), which a find and a copy still read, and the first of which the row stays keyed by as the run grows. */
+  readonly joined?: readonly AgentToolPart[];
+}
+
 /** One part of a stored message as the tab draws it. */
 export type AgentPart =
   | { readonly kind: typeof AGENT_PART.TEXT; readonly text: string }
@@ -1592,20 +1609,7 @@ export type AgentPart =
       readonly text: string;
       readonly cut?: AgentPartCut;
     }
-  | {
-      readonly kind: typeof AGENT_PART.TOOL;
-      readonly tool: string;
-      readonly callId: string;
-      readonly state: ToolState;
-      readonly input: WireValue | undefined;
-      /** None while the call has not answered, and on a call whose answer its page carried cut, which `cut` holds the ends of. */
-      readonly output: WireValue | undefined;
-      /** The error's own text, on a call that ended in one. */
-      readonly errorText: string | undefined;
-      readonly cut?: AgentPartCut;
-      /** The first call of a run of to-do calls drawn as this one row (`joinedTodos`), which the row stays keyed by as the run grows. */
-      readonly runFrom?: string;
-    }
+  | AgentToolPart
   | { readonly kind: typeof AGENT_PART.STEP_START }
   | { readonly kind: typeof AGENT_PART.OTHER }
   | { readonly kind: typeof AGENT_PART.ARRIVED; readonly line: AgentTranscriptMessage };
@@ -1983,7 +1987,7 @@ export function isTodos(
 /** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent, a to-do list and a set of pictures or a recording shown each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
   key: (part, index) => {
-    if (part.kind === AGENT_PART.TOOL) return part.runFrom ?? part.callId;
+    if (part.kind === AGENT_PART.TOOL) return part.joined?.[0]?.callId ?? part.callId;
     return part.kind === AGENT_PART.ARRIVED ? part.line.id : String(index);
   },
   part: (part) => {
@@ -2077,14 +2081,19 @@ function joinedSets(first: ToolPart, second: ToolPart): ToolPart {
   };
 }
 
-/** Whether a part is a to-do call that a run of them may draw as one row: not one that failed, whose row is where its error is read, nor one whose answer was cut. */
+/** Whether a part is a to-do call that a run of them may draw as one row: not one that failed, whose row is where its error is read, nor one whose answer was cut, nor a whole list's write whose input does not read as a list yet, because the list before it is still the one standing (`newestTodos`). */
 function isJoinableTodos(part: AgentPart): part is ToolPart {
-  return isTodos(part) && part.state !== TOOL_STATE.OUTPUT_ERROR && part.cut === undefined;
+  return (
+    isTodos(part) &&
+    part.state !== TOOL_STATE.OUTPUT_ERROR &&
+    part.cut === undefined &&
+    (part.tool !== AGENT_TOOL.WRITE_TODOS || todosView(part.input) !== undefined)
+  );
 }
 
-/** Two to-do calls as one: the second's call, which holds the list as it stood after both, keyed by the first of the run. */
+/** Two to-do calls as one: the second's call, which holds the list as it stood after both, over the calls before it. */
 function joinedTodos(first: ToolPart, second: ToolPart): ToolPart {
-  return { ...second, runFrom: first.runFrom ?? first.callId };
+  return { ...second, joined: [...(first.joined ?? []), first] };
 }
 
 /**

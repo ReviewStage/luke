@@ -5,6 +5,7 @@ import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import { AGENT_PART, agentRows } from "./agent-model.js";
 import { dockedTodos, newestTodos, taskTodos } from "./agent-todos.js";
+import { drawnMessageWords } from "./transcript-copy.js";
 
 /**
  * agent-todos.test.ts -- a coding agent on Claude Code keeps its to-dos one
@@ -186,6 +187,13 @@ test("a run of to-do calls with nothing drawn between them is one row, keyed by 
   );
   // Whole-list writes repeated back to back are one row too, whatever the tool, and a step boundary between them draws nothing.
   assert.deepEqual(rows([write("w1"), { type: "step-start" }, write("w2")]), [["w1", "w2"]]);
+  // A write still streaming, whose list does not read yet, leaves the one before it standing on its row.
+  assert.deepEqual(
+    rows([write("w1"), call("w2", "write_todos", {})]).map(([, id]) => id),
+    ["w1", "w2"],
+  );
+  // A find and a copy still read the calls the row was joined from.
+  assert.match(drawnMessageWords(turn("turn-1", four)), /Item 1[\s\S]*Item 4/);
   // The list the row holds is the one after the run's last call.
   assert.deepEqual(taskTodos([turn("turn-1", four)]).get("c4")?.length, 4);
 });
