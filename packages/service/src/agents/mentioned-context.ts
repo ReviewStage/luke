@@ -364,9 +364,14 @@ function handedMention(
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
       return mention;
-    // A well-known site's page has no server to read it through, and its address is in the words already.
-    case MENTION_KIND.LINK:
-      return "provider" in mention ? mention : undefined;
+    // A well-known site's page has no server to read it through, and its address is in the words already, unless an integration reads it.
+    case MENTION_KIND.LINK: {
+      if ("provider" in mention) return mention;
+      const reader = SITE_READ_BY[mention.site];
+      return reader === undefined
+        ? undefined
+        : { kind: mention.kind, provider: reader, url: mention.url };
+    }
     // A whole file is the agent's to read; only lines the developer picked are handed a note.
     case MENTION_KIND.FILE:
       return mention.lines === undefined ? undefined : mention;
