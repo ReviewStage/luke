@@ -17,6 +17,7 @@
 import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
+import { pageFrameAnswerSchema } from "../page-frame.js";
 import { planPageVersionAnswerSchema, taskPagesAnswerSchema } from "../page-wire.js";
 import { PICTURE_BOUNDS } from "../picture-wire.js";
 import {
@@ -68,6 +69,13 @@ const taskTreeQuerySchema = EffectSchema.Struct({
   recursive: EffectSchema.optionalKey(QUERY_FLAG),
 });
 
+/** One version of one page of the plan, as the path names it. */
+const taskPageVersionSchema = EffectSchema.Struct({
+  ...taskInputSchema.fields,
+  page: EffectSchema.String,
+  version: EffectSchema.String,
+});
+
 /** What keeping a picture answers: its status beside the wire's answer. */
 const pictureKeptSchema = EffectSchema.Struct({
   status: EffectSchema.Literals(Object.values(PLAN_ATTACHMENT_STATUS)),
@@ -112,12 +120,17 @@ export const taskFilesContract = {
         path: `${TASK_PATH}/pages/{page}/versions/{version}`,
       }),
     )
-    .input(
-      EffectSchema.Struct({
-        ...taskInputSchema.fields,
-        page: EffectSchema.String,
-        version: EffectSchema.String,
+    .input(taskPageVersionSchema)
+    .output(EffectSchema.flip(planPageVersionAnswerSchema)),
+  /** One version of one page as a browser's frame loads it: sent on to its short-lived link on the sandbox's own site, or to the page saying pages open in the Mac app where the deployment has no sandbox. */
+  pageFrame: hostedProcedure
+    .meta(
+      openapi({
+        method: HTTP_METHOD.GET,
+        path: `${TASK_PATH}/pages/{page}/versions/{version}/frame`,
+        outputStructure: "detailed",
       }),
     )
-    .output(EffectSchema.flip(planPageVersionAnswerSchema)),
+    .input(taskPageVersionSchema)
+    .output(EffectSchema.flip(pageFrameAnswerSchema)),
 };

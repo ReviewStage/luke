@@ -28,14 +28,14 @@ import { Redacted } from "effect";
 import { text } from "../core.js";
 
 /** The Vercel environment a deployment runs as, as its own `VERCEL_ENV` names it. */
-const DEPLOYMENT_ENVIRONMENT = {
+export const DEPLOYMENT_ENVIRONMENT = {
   PRODUCTION: "production",
   PREVIEW: "preview",
   DEVELOPMENT: "development",
 } as const;
 
 /** The variables the deployment's shape is read from; a blank value is absent. */
-const AUTH_DEPLOYMENT_ENVIRONMENT = {
+export const AUTH_DEPLOYMENT_ENVIRONMENT = {
   ENVIRONMENT: "VERCEL_ENV",
   DEPLOYMENT_HOST: "VERCEL_URL",
   BRANCH_HOST: "VERCEL_BRANCH_URL",

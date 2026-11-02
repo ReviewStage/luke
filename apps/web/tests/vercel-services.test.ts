@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, matchesGlob, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PAGE_SANDBOX_ORIGIN } from "@luke/features/page-frame";
 import { RESERVED_WORKSPACE_SLUGS } from "@luke/features/workspace-wire";
 import { temporaryDirectory } from "@luke/runtime/testing";
+import { PAGE_LINK_ROUTE } from "@luke/service/pages/page-links";
 import { test } from "vitest";
-import { webFunctions } from "../server/function-layout";
+import { functionPublicPath, webFunctions } from "../server/function-layout";
 import { apiRewrites, readVercelConfig, vercelConfigSource } from "../server/function-rewrites";
 import { changelogRoutes } from "../src/changelog-releases";
 import { parseReleases } from "../src/site-markdown";
@@ -21,12 +23,19 @@ const WEB = fileURLToPath(new URL("..", import.meta.url));
 
 const vercel = await readVercelConfig(WEB);
 
-test("the /api/ rewrites are generated into the web service's routes, ahead of its other routes", async () => {
+/** Whether a route or a top-level rewrite is held to one host, as the sandbox's are. */
+const heldToAHost = (route: object) => "has" in route;
+
+test("the /api/ rewrites are generated into the web service's routes, ahead of its other routes but the sandbox host's", async () => {
   const generated = apiRewrites(await webFunctions(WEB));
-  const web = vercel.services[SERVICE.WEB];
-  assert.deepEqual(web.routes.slice(0, generated.length), generated);
+  const { routes } = vercel.services[SERVICE.WEB];
+  const locked = routes.filter(heldToAHost);
+  const rest = routes.slice(locked.length);
+  assert.ok(locked.length > 0);
+  assert.deepEqual(routes.slice(0, locked.length), locked);
+  assert.deepEqual(rest.slice(0, generated.length), generated);
   assert.deepEqual(
-    web.routes.slice(generated.length).filter((route) => route.src.startsWith("/api/")),
+    rest.slice(generated.length).filter((route) => route.src.startsWith("/api/")),
     [],
   );
 });
@@ -96,9 +105,12 @@ test("each eve service keeps the agent name its standing sessions' queue is name
 const FIRST_STEP = /^\^?\/([a-z0-9-]+)(?:\/|$)/u;
 
 test("no workspace's slug can be the first step of a page the web app serves under its own name", () => {
+  // A route held to the sandbox's host is never the app's own address.
   const routed = [
-    ...vercel.services[SERVICE.WEB].routes.map((route) => route.src),
-    ...vercel.rewrites.map((rewrite) => rewrite.source),
+    ...vercel.services[SERVICE.WEB].routes
+      .filter((route) => !heldToAHost(route))
+      .map((route) => route.src),
+    ...vercel.rewrites.filter((rewrite) => !heldToAHost(rewrite)).map((rewrite) => rewrite.source),
   ];
   const pages = readdirSync(WEB)
     .filter((name) => name.endsWith(".html"))
@@ -117,17 +129,50 @@ test("no workspace's slug can be the first step of a page the web app serves und
   );
 });
 
+/** A condition a route or a rewrite holds a request to: the host it was made to, as a pattern of its spellings. */
+interface HostCondition {
+  readonly type: "host";
+  readonly value: { readonly re: string };
+}
+
 /**
  * A route of the web service as the platform reads it: a rewrite to a file
- * of the build and the headers sent beside it, a redirect's status and
- * `Location`, or headers alone that routing carries on past (`continue`).
+ * of the build and the headers sent beside it, held to one host where it
+ * names one, with the status it is answered with where it names one; a
+ * redirect's status and `Location`; or headers alone that routing carries on
+ * past (`continue`).
  */
 interface WebRoute {
   readonly src: string;
+  readonly has?: readonly HostCondition[];
   readonly dest?: string;
   readonly status?: number;
   readonly headers?: Readonly<Record<string, string>>;
   readonly continue?: true;
+}
+
+/** The app's own host: any host but the sandbox's answers alike. */
+const APP_HOST = "tryluke.dev";
+
+/** The sandbox's own host, which the routing holds to the page route, by each spelling a browser may send: with a trailing dot too. */
+const SANDBOX_HOST = new URL(PAGE_SANDBOX_ORIGIN).host;
+
+const SANDBOX_HOSTS = [SANDBOX_HOST, `${SANDBOX_HOST}.`] as const;
+
+/** Whether a request made to the host meets every condition a route or a rewrite holds it to. */
+function heldTo(entry: { readonly has?: readonly HostCondition[] }, host: string): boolean {
+  return (entry.has ?? []).every((condition) => new RegExp(condition.value.re, "u").test(host));
+}
+
+/**
+ * The service a request enters, read as Vercel reads the top-level
+ * rewrites: in order, the first whose pattern matches the whole path and
+ * whose conditions the request meets.
+ */
+function serviceFor(path: string, host: string): string | undefined {
+  return vercel.rewrites.find(
+    (rewrite) => heldTo(rewrite, host) && new RegExp(`^${rewrite.source}$`, "iu").test(path),
+  )?.destination.service;
 }
 
 /**
@@ -142,30 +187,32 @@ interface AnswerHeaders {
 
 /**
  * What the web service answers a path with: the file of the build a route
- * rewrote it to, or the path left to the build's own files (`file`
- * undefined), with the headers its routes laid on it; or a redirect.
+ * rewrote it to, with the status the route forces where it names one, or the
+ * path left to the build's own files (`file` undefined), with the headers its
+ * routes laid on it; or a redirect.
  */
 type Served =
-  | ({ readonly file: string | undefined } & AnswerHeaders)
+  | ({ readonly file: string | undefined; readonly forced?: number } & AnswerHeaders)
   | { readonly status: number; readonly location: string };
 
 const WEB_ROUTES: readonly WebRoute[] = vercel.services[SERVICE.WEB].routes;
 
 /**
- * What the web service answers a path with, read as Vercel reads its routes,
- * in order: each whose pattern matches the whole path, whatever its case,
- * lays its headers on the answer, a later route's header standing in for an
- * earlier one of the same name; one that continues lets routing go on, and
- * the first that does not rewrites the path to its destination, the
+ * What the web service answers a path made to a host with, the app's unless
+ * named, read as Vercel reads its routes, in order: each whose pattern
+ * matches the whole path, whatever its case, and whose conditions the request
+ * meets lays its headers on the answer, a later route's header standing in
+ * for an earlier one of the same name; one that continues lets routing go on,
+ * and the first that does not rewrites the path to its destination, the
  * pattern's groups written in, or redirects it. Where none does, the path is
  * left to the build's own files.
  */
-function servedBy(path: string): Served {
+function servedBy(path: string, host = APP_HOST): Served {
   const headers = new Map<string, string>();
   const named = new Map<string, string[]>();
   for (const route of WEB_ROUTES) {
     const pattern = new RegExp(`^${route.src}$`, "iu");
-    if (!pattern.test(path)) continue;
+    if (!heldTo(route, host) || !pattern.test(path)) continue;
     for (const [name, value] of Object.entries(route.headers ?? {})) {
       const key = name.toLowerCase();
       headers.set(key, value);
@@ -173,15 +220,18 @@ function servedBy(path: string): Served {
     }
     if (route.continue) continue;
     if (route.dest !== undefined) {
-      return { file: path.replace(pattern, route.dest), headers, named };
+      const file = path.replace(pattern, route.dest);
+      return route.status === undefined
+        ? { file, headers, named }
+        : { file, forced: route.status, headers, named };
     }
     return { status: route.status ?? 0, location: route.headers?.Location ?? "" };
   }
   return { file: undefined, headers, named };
 }
 
-const servedFile = (path: string) => {
-  const served = servedBy(path);
+const servedFile = (path: string, host = APP_HOST) => {
+  const served = servedBy(path, host);
   return "file" in served ? served.file : undefined;
 };
 
@@ -280,6 +330,89 @@ test("a link to any place in Luke, a plan's, a section's, a picture's, and a box
   }
 });
 
+/** A link's token as the routing sees it: its claims and its signature, base64url, joined by a dot. */
+const LINK_TOKEN = "eyJzaXRlIjoiaHR0cHM6Ly9mdWxsc3Bpbi5wYWdlIn0.c2lnbmVkLWJ5LXRoZS1zZXJ2aWNl";
+
+/** The paths of the app, its API, auth, eve, and its files, none of which the sandbox's host may serve. */
+const APP_PATHS = [
+  "/",
+  "/app",
+  "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
+  "/connect/BCDF-GHJK",
+  "/api/auth/get-session",
+  "/api/plans/x/revisions",
+  "/api/pages/sandbox",
+  "/api/default.js",
+  "/eve/coder/v1/sessions",
+  "/sign-in.html",
+  "/page-in-mac-app.html",
+  "/favicon.svg",
+  "/assets/app-DyIpMmfT.js",
+  "/install.sh",
+] as const;
+
+/** The file the sandbox's host answers every path but a link's with, under a forced 404. */
+const SANDBOX_NOT_FOUND = "/sandbox-not-found.txt";
+
+test("the sandbox's host, spelled with a trailing dot or without, reaches the page route alone, by a link's address, and answers every other path, the app's, the API's, auth's, and eve's among them, not found from a static file", async () => {
+  const pageRoute = PAGE_LINK_ROUTE.PATH.slice("/api/".length);
+  const pages = (await webFunctions(WEB)).find((definition) =>
+    definition.routes.includes(pageRoute),
+  );
+  assert.ok(pages !== undefined);
+  // The function a link lands in holds no other route, so no `route` a caller's query names reaches the API.
+  assert.deepEqual(pages.routes, [pageRoute]);
+  const pagesPath = `/${functionPublicPath(pages)}`;
+  const linkPath = `/${PAGE_LINK_ROUTE.STEP}/${LINK_TOKEN}`;
+  assert.ok(readdirSync(join(WEB, "public")).includes(SANDBOX_NOT_FOUND.slice(1)));
+  for (const host of SANDBOX_HOSTS) {
+    // Every path of the host enters the web service, whose routes hold it, eve's mount among them.
+    for (const path of [linkPath, ...APP_PATHS]) {
+      assert.equal(serviceFor(path, host), SERVICE.WEB, `${host}${path}`);
+    }
+    const link = servedBy(linkPath, host);
+    assert.ok("file" in link && link.file !== undefined && link.forced === undefined, host);
+    const landed = new URL(link.file, PAGE_SANDBOX_ORIGIN);
+    assert.equal(landed.pathname, pagesPath, host);
+    assert.equal(landed.searchParams.get("route"), pageRoute, host);
+    assert.equal(landed.searchParams.get(PAGE_LINK_ROUTE.TOKEN_QUERY), LINK_TOKEN, host);
+    // Every other path is a file of the build's own, answered not found, so no function is woken by it.
+    for (const path of APP_PATHS) {
+      const refused = servedBy(path, host);
+      assert.ok("file" in refused, `${host}${path}`);
+      assert.deepEqual(
+        { file: refused.file, forced: refused.forced },
+        { file: SANDBOX_NOT_FOUND, forced: 404 },
+        `${host}${path}`,
+      );
+      assert.equal(refused.headers.get("x-content-type-options"), "nosniff", `${host}${path}`);
+      assert.deepEqual(
+        directivesOf(refused.headers.get("content-security-policy") ?? "").get("default-src"),
+        ["'none'"],
+        `${host}${path}`,
+      );
+    }
+  }
+});
+
+test("on any host but the sandbox's, a link's address reaches no route, and the app is routed as before", () => {
+  const linkPath = `/${PAGE_LINK_ROUTE.STEP}/${LINK_TOKEN}`;
+  // A host that holds the sandbox's name within it is no spelling of the sandbox's.
+  for (const host of [
+    APP_HOST,
+    "luke-web-git-main-stage-review.vercel.app",
+    `www.${SANDBOX_HOST}`,
+    `${SANDBOX_HOST}.example`,
+    `${SANDBOX_HOST}s`,
+  ]) {
+    assert.equal(serviceFor(linkPath, host), SERVICE.WEB, host);
+    // Left to the build's own files, which hold none at that path.
+    assert.equal(servedFile(linkPath, host), undefined, host);
+    assert.equal(servedFile("/app", host), "/app.html", host);
+    assert.equal(serviceFor("/eve/coder/v1/sessions", host), SERVICE.DEV, host);
+  }
+});
+
 test("every path the web app is served at sends its own Content Security Policy and no other, refuses to be framed, keeps the connect tabs it opens, and is never sniffed", () => {
   const app = WEB_ROUTES.filter((route) => route.dest === "/app.html");
   assert.ok(app.length > 0);
@@ -304,6 +437,8 @@ test("every path the web app is served at sends its own Content Security Policy 
     assert.deepEqual(directives.get("base-uri"), ["'self'"], path);
     assert.deepEqual(directives.get("form-action"), ["'self'"], path);
     assert.deepEqual(directives.get("frame-ancestors"), ["'none'"], path);
+    // An agent's page is framed from the sandbox's own site (`@luke/features/page-frame`), and no other.
+    assert.deepEqual(directives.get("frame-src"), ["'self'", PAGE_SANDBOX_ORIGIN], path);
     // The installed app's manifest and its icons are the site's own files.
     assert.deepEqual(directives.get("manifest-src"), ["'self'"], path);
     assert.ok(directives.get("img-src")?.includes("'self'"), path);
@@ -472,6 +607,8 @@ test("the site's pages run scripts from this origin and PostHog's assets alone, 
       address,
     );
     assert.deepEqual(directives.get("img-src"), ["'self'", "data:"], address);
+    // Only the app frames the sandbox's site.
+    assert.equal(directives.get("frame-src"), undefined, address);
   }
 });
 

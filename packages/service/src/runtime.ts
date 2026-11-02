@@ -19,6 +19,7 @@ import { githubRateGate } from "./github/github-rate-gate.js";
 import { pullRequestLinksLayer } from "./github/pull-request-links.js";
 import { integrationConnectFromEnvironment } from "./integrations/integration-connect.js";
 import { sentryLogger } from "./observability/sentry.js";
+import { pageLinksFromEnvironment } from "./pages/page-links.js";
 import { modelCatalogLayer } from "./providers/model-catalog.js";
 import { syncFromEnvironment } from "./sync/hub.js";
 import { sentryAppFromEnvironment } from "./triggers/sentry/sentry-app-config.js";
@@ -101,6 +102,11 @@ const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)
  * (`auth/bearer-callers.ts`), so a held read and the polls inside it ask the
  * auth service once a minute per bearer rather than on every request.
  *
+ * `PageLinks` is the one place the sandbox agents' pages are drawn from on
+ * the web is read, with the key their links are signed with
+ * (`pages/page-links.ts`), for the frame that mints a link and the page
+ * route that reads it back alike.
+ *
  * `@effect/platform-node` has no entry: a Vercel function's platform is the
  * Web `fetch` its runtime already carries, and a Node-reaching companion
  * behind this door would have to be traced into every bundle. `@effect/sql-pg`
@@ -121,6 +127,7 @@ export const webServices = Layer.mergeAll(
   webLogger,
   syncFromEnvironment,
   bearerCallersLayer,
+  pageLinksFromEnvironment,
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
   pullRequestLinksLayer,
   productAnalyticsFromEnvironment.pipe(

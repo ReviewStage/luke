@@ -206,18 +206,39 @@ const decodeApiRewrites = Schema.decodeUnknownSync(
 );
 
 /**
+ * A condition that a request was made to one host, as a pattern held to its
+ * whole value, which names each spelling a browser may send of it, the one
+ * with a trailing dot among them: what holds the sandbox's host to the page
+ * route (`@luke/features/page-frame`). Note that it is written `re` and
+ * anchored, because a bare string is a pattern Vercel may match anywhere in
+ * the host, and a list of spellings would be reflowed by the formatter that
+ * runs on commit, against the generation this file holds the file to.
+ */
+const HostConditionSchema = Schema.Struct({
+  type: Schema.Literal("host"),
+  value: Schema.Struct({ re: Schema.String }),
+});
+
+/** The status a host's refused path is answered with. */
+const NOT_FOUND_STATUS = 404;
+
+/**
  * A route of the web service as `vercel.json` writes it: a rewrite, and the
  * response headers a page route sends beside it, as the app's routes send
- * its Content Security Policy; a redirect, its status and its `Location`
- * header, as the app's built file name sends the browser to `/app`; or
- * headers alone, which routing carries on past (`continue`) to whichever
- * later route or built file answers, as every page of the site wears its
- * security headers. A generated `/api/` rewrite carries none of them.
+ * its Content Security Policy, or, held to one host, the status every other
+ * path of that host is answered with; a redirect, its status and its
+ * `Location` header, as the app's built file name sends the browser to
+ * `/app`; or headers alone, which routing carries on past (`continue`) to
+ * whichever later route or built file answers, as every page of the site
+ * wears its security headers. A generated `/api/` rewrite carries none of
+ * them.
  */
 const WebRouteSchema = Schema.Union([
   Schema.Struct({
     src: Schema.String,
+    has: Schema.optionalKey(Schema.Array(HostConditionSchema)),
     dest: Schema.String,
+    status: Schema.optionalKey(Schema.Literal(NOT_FOUND_STATUS)),
     headers: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
   }),
   Schema.Struct({
@@ -289,8 +310,10 @@ const CoderService = Schema.Struct({
   routes: Schema.Array(TransformRouteSchema),
 });
 
+/** A top-level rewrite: the service a path enters, where one host's alone, that host's. */
 const ServiceRewriteSchema = Schema.Struct({
   source: Schema.String,
+  has: Schema.optionalKey(Schema.Array(HostConditionSchema)),
   destination: Schema.Struct({ service: Schema.String }),
 });
 
@@ -372,11 +395,24 @@ export async function rewritesDrifted(web: string): Promise<boolean> {
   return !sameRewrites(table, generated) || !sameRewrites(committed, table);
 }
 
-/** `vercel.json` with the web service's generated rewrites replaced by the committed table, ahead of every other route of that service. */
+/** Whether a route or a top-level rewrite is held to one host, as the sandbox's are. */
+const isHostLocked = (route: object): boolean => "has" in route;
+
+/**
+ * `vercel.json` with the web service's generated rewrites replaced by the
+ * committed table, ahead of every other route of that service but those held
+ * to one host. Those stand first, because Vercel stops at the first route
+ * that matches, so a table rule ahead of them would answer an `/api/` path on
+ * the sandbox's host that they refuse.
+ */
 export async function vercelConfigSource(web: string): Promise<string> {
   const config = await readVercelConfig(web);
   const others = config.services.web.routes.filter((rewrite) => !isTableRewrite(rewrite));
-  const routes = [...(await readApiRewritesTable(web)), ...others];
+  const routes = [
+    ...others.filter(isHostLocked),
+    ...(await readApiRewritesTable(web)),
+    ...others.filter((route) => !isHostLocked(route)),
+  ];
   const services = { ...config.services, web: { ...config.services.web, routes } };
   return `${JSON.stringify({ ...config, services }, null, 2)}\n`;
 }

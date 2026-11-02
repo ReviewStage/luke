@@ -2,9 +2,11 @@
  * agent-pages-procedures.ts -- the pages a coding agent on no task showed on itself, as the hosted oRPC router answers them.
  *
  * `GET /api/agents/{id}/pages` is the agent's own pages, each by its newest
- * version, and `/api/agents/{id}/pages/{page}/versions/{version}` one
+ * version, `/api/agents/{id}/pages/{page}/versions/{version}` one
  * version's HTML, answered inside JSON so no page is ever a document of this
- * origin (`@luke/database/models/plan-pages`). Each reads as the task's own
+ * origin (`@luke/database/models/plan-pages`), and `…/versions/{version}/frame`
+ * a browser's frame of it, sent on to the sandbox's own site
+ * (`../pages/page-frame.ts`). Each reads as the task's own
  * pages read under the task (`../tasks/task-files-procedures.ts`), gated on
  * the agent's rule of who may read it rather than a task's: an agent the
  * account does not reach lists no pages and answers a version as not found,
@@ -24,6 +26,7 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import { pageFrameAnswer } from "../pages/page-frame.js";
 
 export interface AgentPagesProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -56,6 +59,13 @@ export function agentPagesProcedures(seams: AgentPagesProcedureSeams) {
       );
       if (Option.isNone(page)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { page: page.value };
+    }),
+    frame: member.frame.effect(function* ({ input, context }) {
+      const agentId = yield* pathUuid(input.id);
+      const pageId = yield* pathUuid(input.page);
+      const version = yield* pageVersionOf(input.version);
+      const owner = { kind: PAGE_OWNER.AGENT, agentId } as const;
+      return yield* pageFrameAnswer(context.request, context.userId, owner, pageId, version);
     }),
   };
 }
