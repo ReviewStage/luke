@@ -17,6 +17,18 @@
   ],
   "rules": {
     "unicorn/no-useless-spread": "off",
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["@luke/ui/icons", "lucide-react", "lucide-react/**"],
+            "importNamePattern": "Sparkle",
+            "message": "Never draw a sparkle, in any of its glyphs: draw the act's own glyph from `GLYPH`, such as `GLYPH.RETRY` for an act that runs again."
+          }
+        ]
+      }
+    ],
     "anti-slop/async-press-needs-busy": "error",
     "anti-slop/enforce-delete-with-where": "error",
     "anti-slop/enforce-update-with-where": "error",
@@ -42,6 +54,12 @@
     "anti-slop/skeleton-through-components": "error"
   },
   "overrides": [
+    {
+      "files": ["packages/ui/src/icons/icons.ts"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    },
     {
       "files": ["**/*.test.ts", "**/*.test.mjs", "**/*.test.tsx"],
       "rules": {
