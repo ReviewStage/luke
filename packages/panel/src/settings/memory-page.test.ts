@@ -247,10 +247,6 @@ test("what Luke kept in the workspace is read for it and listed in the service's
       .map((request) => request.payload),
     [{ workspaceId: ACME.id }],
   );
-  assert.match(
-    page.textContent ?? "",
-    /keep what you settle in Acme and recall it in later tasks/u,
-  );
   assert.deepEqual(words(page), [DEPLOYS.text, TESTS.text]);
   const keeper = (memory: MemorySummary) =>
     rowOf(page, memory).querySelector(".luke-comment-head")?.textContent ?? "";
@@ -445,7 +441,7 @@ test("showing another workspace reads that workspace's memories in place of the 
     [{ workspaceId: ACME.id }, { workspaceId: GLOBEX.id }],
   );
   assert.deepEqual(words(page), []);
-  assert.match(page.textContent ?? "", /settle in Globex/u);
+  assert.match(page.textContent ?? "", /Globex/u);
 });
 
 test("a forget answered after the page moved on to another workspace leaves that workspace's list as it read it", async () => {
@@ -460,7 +456,7 @@ test("a forget answered after the page moved on to another workspace leaves that
   await settle();
 
   assert.deepEqual(words(page), []);
-  assert.match(page.textContent ?? "", /settle in Globex/u);
+  assert.match(page.textContent ?? "", /Globex/u);
 });
 
 test("a forget answered after the page left its workspace and came back reads that workspace again, so the forgotten memory is not left listed", async () => {

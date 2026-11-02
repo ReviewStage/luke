@@ -78,19 +78,11 @@ const DISCARD_QUESTION: DialogQuestion = {
   loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 
-/** What the review may say, in the order GitHub's own review box offers it, and what the two that need it mean. */
+/** What the review may say, in the order GitHub's own review box offers it. */
 const EVENT_OPTIONS = [
-  {
-    value: REVIEW_EVENT.COMMENT,
-    label: "Comment",
-    detail: "Submit general feedback without approval.",
-  },
+  { value: REVIEW_EVENT.COMMENT, label: "Comment" },
   { value: REVIEW_EVENT.APPROVE, label: "Approve" },
-  {
-    value: REVIEW_EVENT.REQUEST_CHANGES,
-    label: "Request changes",
-    detail: "Submit feedback that must be addressed.",
-  },
+  { value: REVIEW_EVENT.REQUEST_CHANGES, label: "Request changes" },
 ] as const satisfies readonly ChoiceOption<ReviewEvent>[];
 
 /** The field's prompt, by what the review says: changes asked for want their summary. */

@@ -43,9 +43,6 @@ import {
   SkeletonRegion,
   Stack,
   selectionMenu,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
   Tooltip,
   TrashIcon,
   useConfirmDialog,
@@ -146,11 +143,6 @@ const FORMER_KEY = "former";
 
 /** What everyone who left is called in the filter. */
 const FORMER_WORDS = "Former members";
-
-/** What the page says the memories are for, and who shares them. */
-function noteFor(workspace: Workspace): string {
-  return `Luke's agents keep what you settle in ${workspace.name} and recall it in later tasks.`;
-}
 
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
 const NO_CAPTURE = "ph-no-capture";
@@ -794,35 +786,30 @@ export function MemorySection({
     );
   }
   return (
-    <>
-      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-        {noteFor(workspace)}
-      </Text>
-      <div className={NO_CAPTURE}>
-        {memories !== undefined ? (
-          // Note that the keepers are read in the workspace Settings shows, which may not be the one the window's tasks stand in.
-          <MemberDirectory workspace={workspace} readerId={readerId}>
-            <MemoryList
-              workspace={workspace}
-              readerId={readerId}
-              memories={memories}
-              forgetting={forgetting !== undefined}
-              onForget={forgetAll}
-            />
-          </MemberDirectory>
-        ) : readFailed ? (
-          <SettingsLine>
-            <ErrorState
-              failure={unreadShown(FAILURE_SURFACE.MEMORIES_READ)}
-              onRetry={() => setAttempt((count) => count + 1)}
-            >
-              {PAGE_LINE.FAILED}
-            </ErrorState>
-          </SettingsLine>
-        ) : (
-          <MemoriesSkeleton label={READING_LABEL.MEMORY} />
-        )}
-      </div>
-    </>
+    <div className={NO_CAPTURE}>
+      {memories !== undefined ? (
+        // Note that the keepers are read in the workspace Settings shows, which may not be the one the window's tasks stand in.
+        <MemberDirectory workspace={workspace} readerId={readerId}>
+          <MemoryList
+            workspace={workspace}
+            readerId={readerId}
+            memories={memories}
+            forgetting={forgetting !== undefined}
+            onForget={forgetAll}
+          />
+        </MemberDirectory>
+      ) : readFailed ? (
+        <SettingsLine>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.MEMORIES_READ)}
+            onRetry={() => setAttempt((count) => count + 1)}
+          >
+            {PAGE_LINE.FAILED}
+          </ErrorState>
+        </SettingsLine>
+      ) : (
+        <MemoriesSkeleton label={READING_LABEL.MEMORY} />
+      )}
+    </div>
   );
 }
