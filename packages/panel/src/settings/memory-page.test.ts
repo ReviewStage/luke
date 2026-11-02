@@ -1,14 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
 import type { MemorySummary } from "@luke/features/memory-wire";
+import {
+  FAILURE_KIND,
+  FAILURE_SURFACE,
+  type ShownFailureReport,
+} from "@luke/features/shown-failure";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { installShownFailureReporter } from "../failure-report.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { chooseMenuItem, menuItems } from "../testing/phone-head.js";
 import { MemorySection } from "./memory-page.js";
@@ -59,8 +65,8 @@ const TESTS: MemorySummary = {
 let stored: MemorySummary[] = [];
 /** Every act the page sent, in order. */
 let sent: AnyAct[] = [];
-/** Whether the read is answered with a failure rather than the memories. */
-let refuseRead = false;
+/** The failure the read is answered with rather than the memories, where it fails. */
+let readFailure: { readonly failure: AgentCallFailure } | undefined;
 /** Whether a forget is answered with a failure rather than the memories. */
 let refuseForget = false;
 /** Where a forget is held unanswered until the test lets it go, rather than answered at once. */
@@ -84,7 +90,7 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
         const held = holdReads;
         return new Promise((resolve) => held.push(resolve));
       }
-      return Promise.resolve(done(refuseRead ? unanswered : { memories: stored }));
+      return Promise.resolve(done(readFailure ?? { memories: stored }));
     case ACT_KIND.MEMORIES_FORGET:
       if (refuseForget) return Promise.resolve(done(unanswered));
       if (holdForgets !== undefined) {
@@ -103,7 +109,7 @@ const roots: Root[] = [];
 beforeEach(() => {
   stored = [DEPLOYS, TESTS];
   sent = [];
-  refuseRead = false;
+  readFailure = undefined;
   refuseForget = false;
   holdForgets = undefined;
   holdReads = undefined;
@@ -468,12 +474,12 @@ test("a workspace Fullspin has remembered nothing in says so", async () => {
 });
 
 test("a read that fails offers to try again, and no account reads nothing", async () => {
-  refuseRead = true;
+  readFailure = unanswered;
   const { page: failed } = await mount();
   const { page: signedOut } = await mount(false);
 
   assert.match(failed.textContent ?? "", /Fullspin's memory could not be read\./u);
-  refuseRead = false;
+  readFailure = undefined;
   act(() => button(failed, "Retry").click());
   await settle();
   assert.deepEqual(words(failed), [DEPLOYS.text, TESTS.text]);
@@ -482,6 +488,23 @@ test("a read that fails offers to try again, and no account reads nothing", asyn
     sent.filter((request) => request.kind === ACT_KIND.MEMORIES_READ).length,
     2,
     "the signed-out page reads nothing",
+  );
+});
+
+test("a read the service refused is reported as that refusal, never as a page that read nothing", async () => {
+  const refusal = { failure: AGENT_CALL_FAILURE.NOT_FOUND } as const;
+  readFailure = refusal;
+  const reports: ShownFailureReport[] = [];
+  const uninstall = installShownFailureReporter((report) => {
+    reports.push(report);
+    return undefined;
+  });
+  await mount();
+  uninstall();
+
+  assert.deepEqual(
+    reports.map((report) => [report.surface, report.kind, report.cause]),
+    [[FAILURE_SURFACE.MEMORIES_READ, FAILURE_KIND.REFUSED, refusal]],
   );
 });
 

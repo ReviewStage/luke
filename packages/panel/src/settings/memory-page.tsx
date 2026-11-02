@@ -61,7 +61,7 @@ import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
-import { confirmFailure, unreadShown } from "../failure-report.js";
+import { confirmFailure, failureShown, unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
@@ -636,7 +636,10 @@ export function MemorySection({
 }): React.JSX.Element {
   const { act } = useAct();
   const [memories, setMemories] = useState<readonly MemorySummary[] | undefined>(undefined);
-  const [readFailed, setReadFailed] = useState(false);
+  /** What the last read failed with, its answer or its error, which its failure is reported as; absent while none failed. */
+  const [readFailure, setReadFailure] = useState<{ readonly cause: unknown } | undefined>(
+    undefined,
+  );
   const [attempt, setAttempt] = useState(0);
   const [forgetting, setForgetting] = useState<string | undefined>(undefined);
   // Note that every change of workspace or reader starts a new scope, because a forget still out
@@ -677,16 +680,16 @@ export function MemorySection({
     const forgottenBefore = forgotten.current;
     // Nothing of an earlier read, an earlier account, or another workspace stands while this one is out.
     setMemories(undefined);
-    setReadFailed(false);
+    setReadFailure(undefined);
     act(ACT_KIND.MEMORIES_READ, { workspaceId }).then(
       (answer) => {
         if (!live) return;
-        if ("failure" in answer) setReadFailed(true);
+        if ("failure" in answer) setReadFailure({ cause: answer });
         else if (forgotten.current !== forgottenBefore) setAttempt((count) => count + 1);
         else draw(request, answer.memories);
       },
-      () => {
-        if (live) setReadFailed(true);
+      (error: unknown) => {
+        if (live) setReadFailure({ cause: error });
       },
     );
     return () => {
@@ -767,10 +770,14 @@ export function MemorySection({
             onForget={forgetAll}
           />
         </MemberDirectory>
-      ) : readFailed ? (
+      ) : readFailure !== undefined ? (
         <SettingsLine>
           <ErrorState
-            failure={unreadShown(FAILURE_SURFACE.MEMORIES_READ)}
+            failure={failureShown({
+              surface: FAILURE_SURFACE.MEMORIES_READ,
+              cause: readFailure.cause,
+              about: { workspaceId: workspace.id },
+            })}
             onRetry={() => setAttempt((count) => count + 1)}
           >
             {PAGE_LINE.FAILED}
