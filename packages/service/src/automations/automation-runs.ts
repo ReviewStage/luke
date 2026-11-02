@@ -57,7 +57,7 @@ import { failureKind } from "@luke/runtime/effect";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { type StartServices, startAgent } from "../agents/coder-host/start.js";
+import { type StartServices, type StartWhere, startAgent } from "../agents/coder-host/start.js";
 import { agentStatusOf } from "../agents/coder-host/status.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -334,12 +334,13 @@ function automationStart(
 /**
  * The repository a run starts in: a GitHub event's own, as the automation
  * spells it among its repositories, and the first of them for any other
- * firing; none where a GitHub event names a repository the automation no
+ * firing, null where it has none, so the run works in no repository;
+ * undefined where a GitHub event names a repository the automation no
  * longer works in.
  */
-function runRepository(automation: Automation, run: ActedRun): string | undefined {
+function runRepository(automation: Automation, run: ActedRun): string | null | undefined {
   const { firing } = run;
-  if (firing.kind !== AUTOMATION_FIRING.GITHUB) return automation.repositories[0];
+  if (firing.kind !== AUTOMATION_FIRING.GITHUB) return automation.repositories[0] ?? null;
   const named = firing.repository.toLowerCase();
   return automation.repositories.find((repository) => repository.toLowerCase() === named);
 }
@@ -355,7 +356,7 @@ const firingRepositoryHeld = Effect.fnUntraced(function* (
   run: AutomationRun,
 ) {
   const repository = runRepository(automation, run);
-  if (repository === undefined) return false;
+  if (repository === undefined || repository === null) return false;
   if (automation.targetKind !== AUTOMATION_TARGET.SAME_AGENT || automation.targetAgentId === null) {
     return true;
   }
@@ -614,8 +615,8 @@ const decide = (automationId: string, run: ActedRun) =>
  * A claimed run's agent started, the run settled with it, or failed with
  * the start's refusal in one fixed word. The agent starts in the
  * automation's workspace on no task, in the repository a GitHub event named
- * and on the first of its repositories otherwise, so
- * the automation's runs group under the automation itself.
+ * and on the first of its repositories otherwise, or in none where it has
+ * none, so the automation's runs group under the automation itself.
  */
 const startClaimed = Effect.fnUntraced(function* (
   eveFor: EveForAccount,
@@ -631,19 +632,22 @@ const startClaimed = Effect.fnUntraced(function* (
   }
   const repository = runRepository(automation, run);
   const { organizationId } = automation;
+  // A GitHub event about a repository the automation no longer works in has nowhere to start.
   if (repository === undefined) {
-    const reason = AUTOMATION_RUN_REASON.NO_REPOSITORY;
+    const reason = AUTOMATION_RUN_REASON.REPOSITORY_CHANGED;
     yield* failClaimedRun(run.id, reason);
     const outcome: AutomationRunOutcome = { status: AUTOMATION_RUN_STATUS.FAILED, reason };
     return outcome;
   }
   // Note that a run that starts an agent reads through the workspace's installation alone (`start.ts`).
   const handed = automationStart(automation, run, GITHUB_ACCESS.APP);
+  const where: StartWhere =
+    repository === null
+      ? { taskId: null, organizationId, repository: null }
+      : { taskId: null, organizationId, repository };
   const start = yield* Effect.result(
     startAgent(eveFor(automation.userId), automation.userId, {
-      taskId: null,
-      organizationId,
-      repository,
+      ...where,
       idempotencyKey: run.id,
       choice: automation.action.choice,
       // The servers its owner switched off for it, as a Start switches them off for its agent.

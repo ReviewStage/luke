@@ -109,7 +109,7 @@ import {
   TimerIcon,
   WrenchIcon,
 } from "@luke/ui/icons";
-import { saysOwnAddress, siteName } from "@luke/ui/link-face";
+import { siteName } from "@luke/ui/link-face";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import {
   MARKDOWN_HTML_STEP,
@@ -211,10 +211,10 @@ export const INERT_LINK_CLASS =
 /**
  * A link in a transcript's words. A web page, such as the pull request an
  * agent opened or the docs it read, is a plain link (`../text-link.tsx`)
- * that opens in the browser over the act channel (`use-open-link.ts`), or,
- * written bare, as its own address, its website chip (`SiteChip`); any
- * other address is drawn as words that go nowhere, with the address as its
- * hint. `words` are its label's, which say whether it is its own address.
+ * that opens in the browser over the act channel (`use-open-link.ts`), as
+ * it is in a plan, bare or labelled; any other address is drawn as words
+ * that go nowhere, with the address as its hint. `words` are its label's,
+ * which say whether it is its own address.
  * Note that the press is ours rather than Streamdown's, because Streamdown's
  * link asks in a modal of its own and then calls `window.open`, which the
  * window denies (`hardened-window.ts`), so its link opened nothing.
@@ -236,7 +236,6 @@ function TranscriptLink({
       </Tooltip>
     );
   }
-  if (saysOwnAddress(href, words) && siteName(href) !== undefined) return <SiteChip href={href} />;
   return (
     <TextLink href={href} words={words} onOpen={openLink}>
       {children}

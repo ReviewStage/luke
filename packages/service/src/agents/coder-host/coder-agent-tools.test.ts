@@ -12,7 +12,6 @@ import {
   archiveAgent,
   createAgent,
   fillAgentTitle,
-  hasRepository,
   latestTurnsOf,
   readAgent,
   recordAgentPublished,
@@ -93,8 +92,7 @@ import { MESSAGE_CHANNEL, unparsedWire, type WireBoundaryInput } from "@luke/wir
 import { settleJsonSchemaGolden } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
 import { desc, eq } from "drizzle-orm";
-import { Effect, Layer, Option, Redacted, Result } from "effect";
-import type { SessionAuth, SessionAuthContext } from "eve/context";
+import { Effect, Layer, Option, Redacted } from "effect";
 import { afterAll, test } from "vitest";
 import {
   ACTION_RESULT_STATUS,
@@ -134,7 +132,6 @@ import {
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
 import { scriptedHarness } from "../../testing/native-harness-fake.js";
-import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { toolsOf } from "../agent-runtime/tools.js";
@@ -149,23 +146,21 @@ import {
   UPDATE_TASK_REFUSAL,
 } from "../agent-tools.js";
 import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
-import { EVE_HOST_ATTRIBUTE, EVE_HOST_HEADER, EVE_HOST_TURN } from "../eve-host/bounds.js";
-import { claimRuntimeSession } from "../eve-host/conversation.js";
+import { EVE_HOST_HEADER, EVE_HOST_TURN } from "../eve-host/bounds.js";
+import { type AdmittedConversation, claimRuntimeSession } from "../eve-host/conversation.js";
 import { EVE_MOUNT, eveSessionsComposer } from "../eve-host/eve-sessions.js";
 import { TASK_BLOCK_REFUSAL } from "../task-block-changes.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL, WORKSPACE_AGENTS_LIST_LIMIT } from "../workspace-agents.js";
+import { type AgentDoorSeams, type AgentToolCall, runAgentTools } from "./agent-doors.js";
 import {
   MAX_MESSAGE_WORDS_CHARS,
   MESSAGE_AGENT_REFUSAL,
   MESSAGE_AGENT_TOOL,
 } from "./agent-message.js";
 import { CODER_REFUSAL } from "./bounds.js";
-import { CODER_DEPLOYMENT_PRESENCE, CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
-import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
-import type { CoderHostSeams } from "./production.js";
 import type { SummaryModelOf } from "./replay-summary.js";
 import { NativeAgentSessions } from "./runtime-sessions.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
@@ -250,39 +245,24 @@ function sessionId(): string {
   return `${NATIVE_SESSION_PREFIX.claude_code}${String(minted).padStart(22, "0")}`;
 }
 
-/** The host over the suite's store, acting at eve's door as the deployment where `acting` says, its summaries written on the model given. */
-function hostOf(acting: boolean, summaryModel?: SummaryModelOf): CoderHost {
-  const seams: CoderHostSeams = {
+/** The agent tools' seams over the suite's store, acting as the deployment where `acting` says, its summaries written on the model given. */
+function hostOf(acting: boolean, summaryModel?: SummaryModelOf): AgentDoorSeams {
+  return {
     writer: () => Effect.succeed(writer),
-    userInfo: () => Effect.succeed(undefined),
-    ownership: {
-      reachesSession: () => Promise.resolve(false),
-      reachesConversation: () => Promise.resolve(false),
-    },
     deploymentSecret: () => (acting ? Redacted.make(DEPLOYMENT_SECRET) : undefined),
     eveOrigin: () => (acting ? EVE_ORIGIN : undefined),
-    keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
-    fastRefused: async () => undefined,
-    titleModel: () => Effect.succeed(undefined),
-    scriptedModel: () => true,
     ...(summaryModel === undefined ? undefined : { summaryModel }),
-    now: () => NOW,
   };
-  return coderHost(seams);
 }
 
-/** The auth an agent's own session runs under: its starter's, on its conversation. */
-function seat(target: ConversationTarget): SessionAuth {
-  const own: SessionAuthContext = {
-    principalId: target.userId,
-    principalType: "user",
-    authenticator: "test",
-    attributes: {
-      [EVE_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId,
-      [EVE_HOST_ATTRIBUTE.TURN]: EVE_HOST_TURN.TYPED,
-    },
+/** The agent's own conversation as the MCP door admits its runner's bearer: its starter's, on the session it recorded. */
+function admittedOf(agent: StartedAgent): AdmittedConversation {
+  return {
+    caller: agent.userId,
+    target: { userId: agent.userId, conversationId: agent.conversationId },
+    runtimeSessionId: agent.sessionId,
+    timeZone: undefined,
   };
-  return { current: own, initiator: own };
 }
 
 interface StartedAgent extends ConversationTarget {
@@ -429,25 +409,24 @@ const SENTRY_CONFIGURED = Layer.succeed(
   ),
 );
 
-/** A caller of the agent tools from the agent's own session, under the host given, over the suite's catalog and a configured Sentry integration unless others are given. */
+/** A caller of the agent tools from the agent's own session, as the MCP door runs them under the seams given, over the suite's catalog and a configured Sentry integration unless others are given. */
 async function peerCaller(
-  host: CoderHost,
+  host: AgentDoorSeams,
   agent: StartedAgent,
   services: Awaited<ReturnType<typeof fakeCoderEve>>["services"],
   catalog: Layer.Layer<ModelCatalog> = modelCatalogOf(CATALOG),
   sentry: Layer.Layer<SentryApp> = SENTRY_CONFIGURED,
 ) {
-  const admitted = await database.run(host.admit(seat(agent), agent.sessionId));
-  if (Result.isFailure(admitted)) return assert.fail(admitted.failure);
+  const admitted = admittedOf(agent);
   return (
     tool: AgentToolCall["tool"],
     input: WireBoundaryInput,
     callId = "call-1",
   ): Promise<WireRecord> =>
     database.run(
-      host
-        .agentTools(admitted.success, { tool, input: unparsedWire(input), callId })
-        .pipe(Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, sentry))),
+      runAgentTools(host, admitted, { tool, input: unparsedWire(input), callId }).pipe(
+        Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, sentry)),
+      ),
     );
 }
 
@@ -460,31 +439,27 @@ function sentWords(body: string | undefined): string {
 }
 
 /**
- * The agent's own `message_agent` to another agent, run through the host's
- * agent tools door as eve's tool file runs it, which is how one agent
- * messages another; answers what the tool answers.
+ * The agent's own `message_agent` to another agent, run through the agent
+ * tools door as the MCP door runs it, which is how one agent messages
+ * another; answers what the tool answers.
  */
 async function directMessage(
-  host: CoderHost,
+  host: AgentDoorSeams,
   from: StartedAgent,
   to: { readonly id: string },
   services: Awaited<ReturnType<typeof fakeCoderEve>>["services"] | Layer.Layer<never>,
   callId = "call-1",
 ): Promise<WireRecord> {
-  const admitted = await database.run(host.admit(seat(from), from.sessionId));
-  if (Result.isFailure(admitted)) return assert.fail(admitted.failure);
   return database.run(
-    host
-      .agentTools(admitted.success, {
-        tool: CODER_TOOL.MESSAGE_AGENT,
-        input: unparsedWire({ agentId: to.id, text: NOTE }),
-        callId,
-      })
-      .pipe(
-        Effect.provide(
-          Layer.mergeAll(services, modelCatalogOf(CATALOG), ANALYTICS.layer, SENTRY_CONFIGURED),
-        ),
+    runAgentTools(host, admittedOf(from), {
+      tool: CODER_TOOL.MESSAGE_AGENT,
+      input: unparsedWire({ agentId: to.id, text: NOTE }),
+      callId,
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(services, modelCatalogOf(CATALOG), ANALYTICS.layer, SENTRY_CONFIGURED),
       ),
+    ),
   );
 }
 
@@ -831,12 +806,11 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.ok(message.startsWith(prompt), message);
   assert.ok(message.includes(START_NOTE_HEADING.AGENT), message);
   assert.ok(message.includes(`"${caller.name}"`) && message.includes(caller.id), message);
-  // It reports back by message, and threads to the developer are the starter's: what it would post goes to it instead.
+  // It reports back by message.
   assert.ok(
     message.includes(`call ${CODER_TOOL.MESSAGE_AGENT} with its agentId, ${caller.id}.`),
     message,
   );
-  assert.ok(message.includes("Threads to the developer are that agent's to post"), message);
   // An agent's own pick of a model is no member's new default.
   assert.equal((await database.run(readAccountPreferences(caller.userId)))?.agent, undefined);
 
@@ -1193,48 +1167,8 @@ test("start_agent with a branch starts an agent whose checkout is cloned at that
   assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
   assert.equal(eve.sent.length, 1);
 
-  // The started agent's own session checks its repository out at the branch named.
   const stored = Option.getOrThrow(await database.run(readAgent(caller.userId, started.agent.id)));
-  assert.ok(hasRepository(stored));
-  const target = { userId: caller.userId, conversationId: stored.conversationId };
-  const session = sessionId();
-  assert.equal(await database.run(claimRuntimeSession(target, session, new Date(NOW))), true);
-  const admitted = await database.run(host.admit(seat(target), session));
-  if (Result.isFailure(admitted)) return assert.fail(admitted.failure);
-  const sandbox = sandboxDouble(() => undefined);
-  await database.run(host.checkOut(admitted.success, sandbox).pipe(Effect.provide(eve.services)));
-  assert.deepEqual(
-    sandbox.clones.map((clone) => clone.branch),
-    [STACKED_BRANCH],
-  );
-  const instructions = await database.run(
-    host.prompt(admitted.success, stored).pipe(Effect.provide(eve.services)),
-  );
-  assert.ok(
-    instructions.text.includes(`cut from \`${STACKED_BRANCH}\`, the branch you were started on`),
-    instructions.text,
-  );
-  assert.ok(
-    instructions.text.includes(`started on \`${STACKED_BRANCH}\`, so pass it as \`base\``),
-    instructions.text,
-  );
-
-  // A turn that ends on the branch it started on records no branch of its own, so the pull request
-  // already on that branch is never taken for this agent's; one it cut is recorded.
-  let standing = STACKED_BRANCH;
-  const shell = sandboxDouble((command) =>
-    command === "git branch --show-current"
-      ? { exitCode: 0, stdout: `${standing}\n`, stderr: "" }
-      : undefined,
-  );
-  shell.checkedOut = RELAY_FULL_NAME;
-  const branchOf = async () =>
-    Option.getOrThrow(await database.run(readAgent(caller.userId, stored.id))).branch;
-  await database.run(host.recordBranch(admitted.success, shell));
-  assert.equal(await branchOf(), null);
-  standing = "luke/invitation-reminder";
-  await database.run(host.recordBranch(admitted.success, shell));
-  assert.equal(await branchOf(), standing);
+  assert.equal(stored.startBranch, STACKED_BRANCH);
 
   // The same call run again once the branch is gone answers the agent its start made.
   branches.length = 0;
@@ -2910,105 +2844,6 @@ test("a message to an agent whose turn had already ended before its session did 
   assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
   assert.equal(openingsOf(eve).length, 1);
   assert.deepEqual(await newestTurnOf(agents.teammates), [turnId, TURN_STATUS.SETTLED, undefined]);
-});
-
-/** The coder channel's handlers of a session's end, each handing the session to the host given as eve's channel adapter would. */
-function sessionEndsOf(host: CoderHost) {
-  const { events } = coderChannelInput(
-    async () => undefined,
-    { reachesSession: async () => false, reachesConversation: async () => false },
-    {
-      secret: undefined,
-      admits: CODER_DEPLOYMENT_TURNS,
-      presents: CODER_DEPLOYMENT_PRESENCE,
-    },
-    (sessionId, failed) => database.run(host.sessionEnded(sessionId, failed)),
-  );
-  const failed = events?.["session.failed"];
-  const completed = events?.["session.completed"];
-  assert.ok(failed !== undefined && completed !== undefined);
-  return {
-    failed: (sessionId: string) =>
-      failed({ code: "WORKFLOW_EXECUTION_FAILED", message: "The run threw.", sessionId }, {}),
-    completed: (agent: StartedAgent) =>
-      completed(
-        undefined,
-        {},
-        {
-          session: { id: agent.sessionId, auth: seat(agent), turn: { id: "turn_0", sequence: 0 } },
-          getSandbox: () => Promise.reject(new Error("no sandbox stands")),
-        },
-      ),
-  };
-}
-
-test("an agent whose session eve says failed reads as failed for its session's end at once, a repeated end changes nothing, and an unknown session, an idle agent, and an agent whose conversation recorded a newer session are left as they stood", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
-  const eve = await fakeCoderEve(workspaceId);
-  const host = hostOf(true);
-  const call = await peerCaller(host, agents.caller, eve.services);
-  const ends = sessionEndsOf(host);
-  const running = [AGENT_STATUS.RUNNING, undefined, AGENT_STATUS.RUNNING, undefined];
-  const failed = [
-    AGENT_STATUS.FAILED,
-    AGENT_FAILURE.SESSION_ENDED,
-    AGENT_STATUS.FAILED,
-    AGENT_FAILURE.SESSION_ENDED,
-  ];
-  const bob = agents.teammates.userId;
-  await turnOn(agents.teammates, false);
-  const idle = await agentOn(bob, tasks.billing);
-  await turnOn(idle, true);
-  // A newer session recorded on the conversation since, whose turn is that session's own.
-  const rotated = await agentOn(bob, tasks.billing);
-  assert.equal(await database.run(claimRuntimeSession(rotated, sessionId(), new Date(NOW))), true);
-  await turnOn(rotated, false);
-
-  await ends.failed(sessionId());
-  assert.deepEqual(await standingAsRead(call, agents.teammates.id), running);
-
-  await ends.failed(agents.teammates.sessionId);
-  assert.deepEqual(await standingAsRead(call, agents.teammates.id), failed);
-  const settled = await database.run(
-    latestTurnsOf(agents.teammates.userId, [agents.teammates.conversationId]),
-  );
-  assert.equal(
-    settled.get(agents.teammates.conversationId)?.failureDetail,
-    "WORKFLOW_EXECUTION_FAILED The run threw.",
-    "eve's code and message stand on the turn",
-  );
-  await ends.failed(agents.teammates.sessionId);
-  assert.deepEqual(
-    await standingAsRead(call, agents.teammates.id),
-    failed,
-    "a repeated end changes nothing",
-  );
-
-  await ends.failed(idle.sessionId);
-  assert.deepEqual(await standingAsRead(call, idle.id), [
-    AGENT_STATUS.COMPLETED,
-    undefined,
-    AGENT_STATUS.COMPLETED,
-    undefined,
-  ]);
-  await ends.failed(rotated.sessionId);
-  assert.deepEqual(await standingAsRead(call, rotated.id), running);
-});
-
-test("an agent whose session eve says completed while its turn still reads running reads as failed for its session's end", async () => {
-  const { workspaceId, agents } = await openWorkspaces();
-  const eve = await fakeCoderEve(workspaceId);
-  const host = hostOf(true);
-  const call = await peerCaller(host, agents.caller, eve.services);
-  await turnOn(agents.teammates, false);
-
-  await sessionEndsOf(host).completed(agents.teammates);
-  assert.deepEqual(await standingAsRead(call, agents.teammates.id), [
-    AGENT_STATUS.FAILED,
-    AGENT_FAILURE.SESSION_ENDED,
-    AGENT_STATUS.FAILED,
-    AGENT_FAILURE.SESSION_ENDED,
-  ]);
 });
 
 test("an agent whose starter has left the workspace archives no agent of it", async () => {

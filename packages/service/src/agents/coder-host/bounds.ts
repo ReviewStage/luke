@@ -281,30 +281,16 @@ export const CODER = {
   STOP_CONFIRM: Duration.seconds(10),
 } as const;
 
-/** The environment the coding-agent host reads beside the names every hosted route already honours. */
-export const CODER_ENVIRONMENT = {
-  /** Selects the scripted fixture model in place of the providers; set only by the fixture eval. */
-  MODEL_FIXTURE: "LUKE_CODER_MODEL_FIXTURE",
-} as const;
-
-/** The one fixture the model environment may name, and the model id its turns are recorded under. */
-export const CODER_MODEL_FIXTURE = {
-  SCRIPTED: "scripted",
-  SCRIPTED_MODEL_ID: "luke-coder-scripted",
-} as const;
-
 /** Why the host refused a session's standing or a step, in words a log or a failed turn can carry. */
 export const CODER_REFUSAL = {
   NO_AGENT: "Not run: this conversation is no agent's.",
   NO_REPOSITORY: "Not run: the agent works in no repository.",
-  UNKNOWN_PROVIDER: `Not run: the agent's model is outside the providers ${PRODUCT_NAME} runs agents on.`,
-  NO_PROVIDER_KEY: "Not run: the account saved no API key for the agent's model provider.",
-  NO_FAST_VERSION: `Not run: ${PRODUCT_NAME} cannot run the fast version of the agent's model at its provider. Choose the model with Fast off.`,
   /** No step is refused this way since Fast runs on an account's own key; kept for the turns that were refused so before, which still read as this. */
   FAST_ON_OWN_KEY: `Not run: Fast isn't available on your own API key; ${PRODUCT_NAME} runs Fast on its own Anthropic key alone. Choose the model with Fast off.`,
   /** No step fails this way since a refused fast call runs at standard speed; kept for the turns that failed so before, which still read as this. */
   FAST_NOT_ENABLED:
     "Not run: Fast mode isn't enabled for this Anthropic organization. Choose the model with Fast off.",
+  /** No step is refused for its own key this way since eve, whose steps ran on it, was retired; kept with the two below for the turns refused so before, which still read as these. */
   ACCOUNT_KEY_UNREADABLE:
     "Not run: your own API key for the agent's model provider cannot be read. Replace it in Settings.",
   ACCOUNT_KEY_REFUSED:
@@ -314,9 +300,6 @@ export const CODER_REFUSAL = {
   NOT_REACHABLE:
     "Not run: the agent's repository is not reachable through the GitHub installation connected to its task's workspace.",
   GITHUB_UNAVAILABLE: "Not run: GitHub could not be asked for the repository's credential.",
-  NO_DELEGATION: "Not run: this session is no worker of an agent's.",
-  NO_DELEGATION_PINNED: "Not run: the worker's session was started by no call of an agent's.",
-  CATALOG_UNAVAILABLE: "Not run: the model catalog could not be read; delegate again in a moment.",
 } as const;
 
 export type CoderRefusal = (typeof CODER_REFUSAL)[keyof typeof CODER_REFUSAL];

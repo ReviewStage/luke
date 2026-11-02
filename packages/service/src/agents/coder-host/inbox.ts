@@ -376,9 +376,6 @@ export const INBOX_REFUSAL = {
   NO_ADDRESSEE: "Not posted: the member you addressed is not in your workspace.",
   ADDRESSEE_CANNOT_SEE:
     "Not posted: the member you addressed cannot see your task, so they would never see the thread; address someone who can, or leave to out.",
-  UNDER_PILOT:
-    "Not posted: a pilot started you, and the developer's threads are the top pilot's alone. Post nothing; " +
-    "report to the pilot that started you with message_agent instead, and it decides what reaches the developer.",
   NO_AGENT: "Not done: this conversation is no agent's.",
   UNAVAILABLE: "Not done: the service could not reach its store.",
 } as const;
@@ -637,8 +634,6 @@ function storeRefusal(refusal: InboxPostRefusal): string {
       return INBOX_REFUSAL.NO_ADDRESSEE;
     case INBOX_POST_REFUSAL.ADDRESSEE_CANNOT_SEE:
       return INBOX_REFUSAL.ADDRESSEE_CANNOT_SEE;
-    case INBOX_POST_REFUSAL.UNDER_PILOT:
-      return INBOX_REFUSAL.UNDER_PILOT;
   }
 }
 

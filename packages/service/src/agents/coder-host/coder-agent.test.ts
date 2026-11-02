@@ -3,199 +3,16 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { AGENT_BRIEF, AGENT_KIND, type AgentBrief } from "@luke/features/agent-wire";
 import { DEVICE_ISOLATION } from "@luke/features/device-agent-wire";
-import { Duration, Redacted, Schema } from "effect";
-import { routeAuth } from "eve/channels/auth";
-import type { SessionAuthContext } from "eve/context";
-import { serializeModelInputSchema } from "eve/tools";
+import { Schema } from "effect";
 import { test } from "vitest";
-import { AGENT_ROLE } from "../agent-runtime/role.js";
-import { toolsOf } from "../agent-runtime/tools.js";
-import { lukeAccount } from "../eve-host/auth.js";
-import {
-  EVE_HOST_ATTRIBUTE,
-  EVE_HOST_AUTHENTICATOR,
-  EVE_HOST_DEPLOYMENT_PRINCIPAL,
-  EVE_HOST_HEADER,
-  EVE_HOST_PRINCIPAL_TYPE,
-  EVE_HOST_REFUSAL,
-  EVE_HOST_TURN,
-} from "../eve-host/bounds.js";
-import { EVE_HOST_TURN_POLICY } from "../eve-host/channel.js";
-import { CODER } from "./bounds.js";
-import { CODER_DEPLOYMENT_PRESENCE, CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
 import { INBOX_TOOLS } from "./inbox.js";
-import { CODER_HARNESS, coderInstructions, coderWorkerInstructions } from "./instructions.js";
-import { SLEEP_TOOL } from "./sleep.js";
+import { CODER_HARNESS, coderInstructions } from "./instructions.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /** The link of the task an agent on one works on, as its instructions are handed it. */
 const TASK_ADDRESS = "https://vespin.dev/acme/plan/pl_1";
 
-const SECRET = "eve-deployment-secret-1";
-const ACCOUNT = "user-a";
-const CONVERSATION = "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
-const OWN_SESSION = "wrun_01SESSIONOFACCOUNTA0000000";
-const OTHER_SESSION = "wrun_01SESSIONOFACCOUNTB0000000";
-
-/** What the door answered: the principal it admitted, or the word it refused with. */
-type DoorAnswer =
-  | { readonly admitted: SessionAuthContext; readonly refused?: undefined }
-  | { readonly refused: string; readonly admitted?: undefined };
-
-/** The deployment's request on an agent's session under its secret, naming the account, the conversation, and the kind of turn given. */
-function deploymentRequest(sessionId: string, turn: string | undefined, method = "POST"): Request {
-  return new Request(`https://luke.test/eve/v1/session/${sessionId}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${SECRET}`,
-      [EVE_HOST_HEADER.ACCOUNT]: ACCOUNT,
-      [EVE_HOST_HEADER.CONVERSATION]: CONVERSATION,
-      ...(turn === undefined ? undefined : { [EVE_HOST_HEADER.TURN]: turn }),
-    },
-  });
-}
-
-/** The deployment's opening of an agent's session under its secret, naming the account, the conversation, and the kind of turn given. */
-function deploymentOpening(turn: string): Request {
-  return new Request("https://luke.test/eve/v1/session", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${SECRET}`,
-      [EVE_HOST_HEADER.ACCOUNT]: ACCOUNT,
-      [EVE_HOST_HEADER.CONVERSATION]: CONVERSATION,
-      [EVE_HOST_HEADER.TURN]: turn,
-    },
-  });
-}
-
-/** The coder channel over a store in which the account reaches its own session and conversation alone. */
-function coderChannel() {
-  return coderChannelInput(
-    async () => undefined,
-    {
-      reachesSession: async (userId, sessionId) => userId === ACCOUNT && sessionId === OWN_SESSION,
-      reachesConversation: async (userId, conversationId) =>
-        userId === ACCOUNT && conversationId === CONVERSATION,
-    },
-    {
-      secret: Redacted.make(SECRET),
-      admits: CODER_DEPLOYMENT_TURNS,
-      presents: CODER_DEPLOYMENT_PRESENCE,
-    },
-    async () => undefined,
-  );
-}
-
-/** The developer's own principal as the deployment carries it, as a cancel or a retire is admitted under. */
-function asCarriedAccount(admitted: SessionAuthContext | undefined) {
-  assert.ok(admitted);
-  return [
-    admitted.authenticator,
-    admitted.principalType,
-    admitted.principalId,
-    admitted.attributes[EVE_HOST_ATTRIBUTE.CARRIER],
-  ];
-}
-
-const CARRIED_ACCOUNT = [
-  EVE_HOST_AUTHENTICATOR.ACCOUNT,
-  EVE_HOST_PRINCIPAL_TYPE.ACCOUNT,
-  ACCOUNT,
-  EVE_HOST_DEPLOYMENT_PRINCIPAL,
-];
-
-/** The channel's door as a request meets it: the principal admitted, or the word refused with. */
-function doorOf(channel: ReturnType<typeof coderChannelInput>) {
-  return async (request: Request): Promise<DoorAnswer> => {
-    const answer = await routeAuth(request, channel.auth);
-    if (!(answer instanceof Response)) return { admitted: answer };
-    // SAFETY: eve's own refusal body, whose `error` field is the word the door threw.
-    const refusal = (await answer.json()) as { error: string };
-    return { refused: refusal.error };
-  };
-}
-
-test("a follow-up steers the turn under way; the deployment's typed line on the named account's own agent session and its typed opening of the account's own conversation are both minted as the developer's own principal, authenticator, type, and id, which is what eve steers the running turn on, with the deployment named as its carrier; another account's session is refused", async () => {
-  const channel = coderChannel();
-  assert.equal(channel.turnPolicy, EVE_HOST_TURN_POLICY.STEER);
-  const door = doorOf(channel);
-
-  // The developer's own follow-up on the same session, as the agent's turn runs under it.
-  const developer = await lukeAccount(async () => ACCOUNT)(
-    new Request(`https://luke.test/eve/v1/session/${OWN_SESSION}`, {
-      method: "POST",
-      headers: {
-        authorization: "Bearer developer-token",
-        [EVE_HOST_HEADER.CONVERSATION]: CONVERSATION,
-        [EVE_HOST_HEADER.TURN]: EVE_HOST_TURN.TYPED,
-      },
-    }),
-  );
-  const { admitted: carried } = await door(deploymentRequest(OWN_SESSION, EVE_HOST_TURN.TYPED));
-  assert.ok(developer);
-  assert.ok(carried);
-  assert.deepEqual(
-    [carried.authenticator, carried.principalType, carried.principalId],
-    [developer.authenticator, developer.principalType, developer.principalId],
-  );
-  assert.deepEqual(carried.attributes, {
-    ...developer.attributes,
-    [EVE_HOST_ATTRIBUTE.CARRIER]: EVE_HOST_DEPLOYMENT_PRINCIPAL,
-  });
-
-  // The start of an agent: the deployment opens the account's own conversation as the developer too.
-  const { admitted: opened } = await door(deploymentOpening(EVE_HOST_TURN.TYPED));
-  assert.ok(opened);
-  assert.deepEqual(
-    [opened.authenticator, opened.principalType, opened.principalId, opened.attributes],
-    [developer.authenticator, developer.principalType, developer.principalId, carried.attributes],
-  );
-
-  assert.deepEqual(await door(deploymentRequest(OTHER_SESSION, EVE_HOST_TURN.TYPED)), {
-    refused: EVE_HOST_REFUSAL.NOT_OWNER,
-  });
-});
-
-test("the deployment's cancel of a turn, which a continue started through start_agent stops its source with, is admitted on the named account's own session as the developer's own principal, with no row of the table, and refused on a session the account does not reach", async () => {
-  const door = doorOf(coderChannel());
-  const cancel = (sessionId: string) =>
-    new Request(`https://luke.test/eve/v1/session/${sessionId}/cancel`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${SECRET}`, [EVE_HOST_HEADER.ACCOUNT]: ACCOUNT },
-    });
-
-  const { admitted } = await door(cancel(OWN_SESSION));
-  assert.deepEqual(asCarriedAccount(admitted), CARRIED_ACCOUNT);
-  assert.deepEqual(await door(cancel(OTHER_SESSION)), { refused: EVE_HOST_REFUSAL.NOT_OWNER });
-});
-
-test("the deployment's retire of a session, which a delete a browser asked for ends an agent's session with, is admitted on the named account's own session as the developer's own principal, with no row of the table; another account's session, a read, and eve's other session controls are refused", async () => {
-  const door = doorOf(coderChannel());
-  const control = (sessionId: string, route: string, method = "POST") =>
-    new Request(`https://luke.test/eve/v1/session/${sessionId}/${route}`, {
-      method,
-      headers: { authorization: `Bearer ${SECRET}`, [EVE_HOST_HEADER.ACCOUNT]: ACCOUNT },
-    });
-
-  const { admitted } = await door(control(OWN_SESSION, "reset"));
-  assert.deepEqual(asCarriedAccount(admitted), CARRIED_ACCOUNT);
-  assert.deepEqual(await door(control(OTHER_SESSION, "reset")), {
-    refused: EVE_HOST_REFUSAL.NOT_OWNER,
-  });
-  for (const [route, method] of [
-    ["reset", "GET"],
-    ["compact", "POST"],
-    ["clear", "POST"],
-  ] as const) {
-    assert.deepEqual(
-      await door(control(OWN_SESSION, route, method)),
-      { refused: EVE_HOST_REFUSAL.NOT_DEPLOYMENT_ACT },
-      `${method} ${route}`,
-    );
-  }
-});
-
-test("a Claude Code agent is told of Claude Code's own tools and never of Vespin's it is not offered, and an eve agent of Vespin's as before", () => {
+test("a Claude Code agent is told of Claude Code's own tools and never of Vespin's it is not offered", () => {
   // The tools Claude Code owns in place of ours, as eve's instructions name ours.
   const LUKES = [
     "`bash`",
@@ -217,7 +34,6 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Vespin
     for (const repository of ["Acme/Relay", null]) {
       for (const memberToken of [false, true]) {
         const args = [repository, brief, true, TASK_ADDRESS, undefined, null, memberToken] as const;
-        const eve = coderInstructions(...args);
         const claudeCode = coderInstructions(...args, CODER_HARNESS.CLAUDE_CODE);
         const label = `${brief} ${repository ?? "no repository"} ${memberToken ? "token" : "app"}`;
         assert.deepEqual(
@@ -225,20 +41,11 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Vespin
           [],
           label,
         );
-        assert.ok(
-          LUKES.some((tool) => eve.includes(tool)),
-          label,
-        );
         assert.deepEqual(
           // An agent with no repository is offered no skills.
           CLAUDE_CODES.filter(
             (tool) => !claudeCode.includes(tool) && (repository !== null || tool !== "Skill tool"),
           ),
-          [],
-          label,
-        );
-        assert.deepEqual(
-          CLAUDE_CODES.filter((tool) => eve.includes(tool)),
           [],
           label,
         );
@@ -555,7 +362,7 @@ test("the thread post tool tells the session never to ask for a credential or a 
   );
 });
 
-test("the session sends whatever is ready for the developer to look at or review to a thread, a pull request among it, and a test only the developer can run, save an agent another coding agent started, which sends that agent what it would post", () => {
+test("the session sends whatever is ready for the developer to look at or review to a thread, a pull request among it, and a test only the developer can run, and an agent another coding agent started may message that agent before its report", () => {
   const READY = "ready for them to look at or review";
   for (const brief of Object.values(AGENT_BRIEF)) {
     for (const taskLink of [TASK_ADDRESS, null]) {
@@ -563,10 +370,10 @@ test("the session sends whatever is ready for the developer to look at or review
       assert.ok(inbox?.includes(READY), brief);
       assert.ok(inbox?.includes("a pull request you opened or marked ready"), brief);
       assert.ok(inbox?.includes("needs to test something by hand"), brief);
-      // An agent another coding agent started sends that agent what it would post instead.
+      // An agent another coding agent started reports to it, and is not told to keep off the threads.
       assert.ok(
         inbox?.includes(
-          "Where another agent started you, as your first message says, threads to the developer are that agent's to post",
+          "Where another agent started you, as your first message says, your final message reaches it by itself as your report",
         ),
         brief,
       );
@@ -608,73 +415,6 @@ test("an agent on its starter's own token reads its checks and its pull request 
     assert.ok(onToken.includes("`gh api repos/{owner}/{repo}/pulls/<number>/reviews`"), brief);
     assert.ok(onToken.includes("A draft cannot be marked ready from here"), brief);
   }
-});
-
-test("an agent whose credential reads its checks waits on them with sleep until GitHub tells it they finished, never on a watch of CI, which it is offered and its read-only worker is not", () => {
-  const WAIT = `wait with \`${CODER_TOOL.SLEEP}\``;
-  const TOLD = "GitHub tells you so in a message, which ends the wait early";
-  for (const brief of Object.values(AGENT_BRIEF)) {
-    for (const memberToken of [false, true]) {
-      const reads = coderInstructions(
-        "Acme/Relay",
-        brief,
-        true,
-        TASK_ADDRESS,
-        undefined,
-        null,
-        memberToken,
-      );
-      assert.ok(reads.includes(WAIT) && reads.includes(TOLD), brief);
-      assert.ok(
-        !reads.includes("--fail-fast") && reads.includes("command that waits on CI"),
-        brief,
-      );
-    }
-    assert.ok(!coderInstructions("Acme/Relay", brief, false, TASK_ADDRESS).includes(WAIT), brief);
-  }
-  assert.deepEqual(
-    [
-      toolsOf(AGENT_ROLE.CODER).has(CODER_TOOL.SLEEP),
-      toolsOf(AGENT_ROLE.CODER_WORKER).has(CODER_TOOL.SLEEP),
-    ],
-    [true, false],
-  );
-});
-
-test("a worker is offered neither the developer's Mac, the browser, nor show_image, and is told what it cannot do; one of an agent with no repository is told of a working folder and no checkout", () => {
-  for (const tool of [CODER_TOOL.RUN_ON_MAC, CODER_TOOL.BROWSER, CODER_TOOL.SHOW_IMAGE]) {
-    assert.deepEqual(
-      [toolsOf(AGENT_ROLE.CODER).has(tool), toolsOf(AGENT_ROLE.CODER_WORKER).has(tool)],
-      [true, false],
-      tool,
-    );
-  }
-  const inRepository = coderWorkerInstructions("Acme/Relay");
-  const inFolder = coderWorkerInstructions(null);
-  for (const words of [inRepository, inFolder]) {
-    assert.ok(words.includes("Your shell has no network"));
-    assert.ok(
-      words.includes(
-        "you cannot push, open a pull request, run a command on the developer's Mac, or drive a browser",
-      ),
-    );
-    assert.ok(!words.includes("run_on_mac") && !words.includes(`\`${CODER_TOOL.BROWSER}\``));
-  }
-  assert.ok(inRepository.includes(`checked out at \`${CODER.CHECKOUT_PATH}\``));
-  assert.ok(inRepository.includes("history is fetched for you"));
-  assert.ok(inFolder.includes(`working folder is \`${CODER.CHECKOUT_PATH}\``));
-  assert.ok(
-    !inFolder.includes("The agent's repository") && !inFolder.includes("history is fetched"),
-  );
-  assert.ok(inFolder.includes("there is no history to read"));
-});
-
-test("the model is shown the bound on one pause", () => {
-  const shown = serializeModelInputSchema(SLEEP_TOOL.inputSchema);
-  assert.equal(
-    JSON.stringify(shown).includes(`"maximum":${Duration.toSeconds(CODER.SLEEP_MAX)}`),
-    true,
-  );
 });
 
 test("every agent is told that what happens on its pull request after its turn reaches it from GitHub, and to read its reviews before it ends a turn", () => {
@@ -787,7 +527,7 @@ test("with Memory off the instructions say nothing of the workspace's memory; wi
       undefined,
       null,
       false,
-      CODER_HARNESS.EVE,
+      CODER_HARNESS.CLAUDE_CODE,
       AGENT_KIND.CODER,
       true,
     );
@@ -816,7 +556,7 @@ function pilotInstructions(): string {
     undefined,
     null,
     false,
-    CODER_HARNESS.EVE,
+    CODER_HARNESS.CLAUDE_CODE,
     AGENT_KIND.PILOT,
   );
 }

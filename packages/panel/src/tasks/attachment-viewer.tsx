@@ -70,7 +70,9 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * opening it asks, and zooms as Preview's does: a pinch, a trackpad's or two
  * fingers', or a Control-scroll about the pointer, a press to its own pixels there
  * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, it is
- * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage). A video,
+ * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage). Its card
+ * fills the room whatever the picture's shape, as Slack's and Quick Look's
+ * frames do, so the header stands still while the picture is zoomed. A video,
  * such as one an agent recorded and opened from its Expand,
  * plays at once as large as the card lets it, with the player's own
  * controls, Full screen among them (`@luke/ui`'s VideoPlayer). A Mermaid
@@ -522,9 +524,10 @@ export function AttachmentViewer({
   const media = view === ATTACHMENT_VIEW.IMAGE || video;
   // A phone walks the files from its ⋯ and the arrow keys, with no room beside the card for the arrows or under it for the strip.
   const walking = !phone && files.length > 1;
-  // A picture or a video takes a card of its own shape, so no ground stands beside it; a phone's fills the screen as its header does,
-  // and a picture opened at its own pixels, a diagram to be moved about in, fills the room it is moved in.
-  const hug = !phone && (video || (image && opening === IMAGE_OPENING.FITTED));
+  // A video takes a card of its own shape, so no ground stands beside it; a phone's fills the screen as its header does.
+  // Note that a picture's card fills the room, because a picture is zoomed inside it,
+  // and a card of its fitted shape would either show a zoomed tall picture through a slit or resize its header on every zoom.
+  const hug = !phone && video;
   // The arrows walk the message's files, and a picture's zoom keys zoom it;
   // a key's own default, a copy of the lines selected among them, is left alone.
   const walkKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
