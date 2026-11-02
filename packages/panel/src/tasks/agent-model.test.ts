@@ -725,7 +725,7 @@ test("a message a Claude plan refused says to reconnect it, a limit says when it
   );
 });
 
-test("a Start refused for a missing credential says in one sentence which harness to connect, its press opening Settings beside Retry; a message to an agent Vespin's key paid for says to continue in a new one, Settings mending nothing", () => {
+test("a Start refused for a missing credential says in one sentence which harness to connect, its press opening Settings beside Retry", () => {
   const missing = (provider?: (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER]) => ({
     failure: AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
     ...(provider === undefined ? undefined : { provider }),
@@ -736,7 +736,6 @@ test("a Start refused for a missing credential says in one sentence which harnes
       startFailureNote(missing(MODEL_PROVIDER.ANTHROPIC), null),
       startFailureNote(missing(MODEL_PROVIDER.OPENAI), "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10"),
       messageFailureNote(missing(MODEL_PROVIDER.OPENAI), null, AGENT_PAYER.API_KEY),
-      messageFailureNote(missing(MODEL_PROVIDER.ANTHROPIC), null, AGENT_PAYER.LUKE),
     ],
     [
       {
@@ -753,10 +752,6 @@ test("a Start refused for a missing credential says in one sentence which harnes
         reason: FAILURE_REASON.CONNECT_AGENTS,
         text: "Connect Codex in Settings to message this agent.",
         provider: MODEL_PROVIDER.OPENAI,
-      },
-      {
-        reason: FAILURE_REASON.OTHER,
-        text: "Vespin's key no longer runs agents. Continue in a new one.",
       },
     ],
   );

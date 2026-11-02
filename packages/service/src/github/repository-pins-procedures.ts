@@ -41,9 +41,13 @@ export function repositoryPinsProcedures(seams: RepositoryPinsProcedureSeams) {
       if (Option.isNone(set)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       // Counted only where the write changed a row, which is the one that answers a transaction.
       if (set.value.txid !== undefined) {
-        yield* recordServerEvent(SERVER_EVENT.REPOSITORY_PIN, context.userId, {
-          pinned: input.pinned,
-        });
+        yield* recordServerEvent(
+          SERVER_EVENT.REPOSITORY_PIN,
+          { userId: context.userId },
+          {
+            pinned: input.pinned,
+          },
+        );
       }
       return set.value;
     }),

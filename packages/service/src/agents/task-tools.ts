@@ -510,9 +510,13 @@ export function runCreateTask(
         if (Option.isNone(raced)) return agentToolRejected(AGENT_TOOL_REFUSAL.STORE);
         return answer(raced.value.task);
       }
-      yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
-        source: SERVER_TASK_SOURCE.AGENT,
-      });
+      yield* recordServerEvent(
+        SERVER_EVENT.TASK_CREATE,
+        { userId, workspaceId: workspace.value },
+        {
+          source: SERVER_TASK_SOURCE.AGENT,
+        },
+      );
       return answer(made.value);
     }),
   );

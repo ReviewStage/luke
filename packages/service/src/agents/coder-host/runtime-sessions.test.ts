@@ -348,7 +348,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const retired = {
             outcome: EVE_SEND_OUTCOME.FAILED,
             status: 409,
-            runtimeRefusal: RUNTIME_REFUSAL.EVE_RETIRED,
+            runtimeRefusal: RUNTIME_REFUSAL.ENDED,
           };
 
           const sessions = yield* routedSessions(eve.sessions, teammate).pipe(
@@ -500,7 +500,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a message to an agent on eve is refused as ended whoever paid for it and whatever its starter keeps now, Vespin's key, none recorded, or a key since removed, and one to an agent on Claude Code whose API key was since removed is refused by name; nothing reaches eve and no payer moves",
+      "a message to an agent on eve, its session recorded as every one's was, is refused as ended whoever paid for it, Vespin's key, an API key since removed, or none recorded, and one to an agent on Claude Code whose API key was since removed is refused by name; nothing reaches eve and no payer moves",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
@@ -531,7 +531,18 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
           const lukes = yield* onEveAs(owner, taskId, AGENT_PAYER.LUKE);
           const unrecorded = yield* onEveAs(bare, bareTask.id, undefined);
-          const keyRemoved = yield* onEveAs(bare, bareTask.id, AGENT_PAYER.API_KEY);
+          const eveKeyRemoved = yield* onEveAs(bare, bareTask.id, AGENT_PAYER.API_KEY);
+          for (const [starter, agent] of [
+            [owner, lukes],
+            [bare, unrecorded],
+            [bare, eveKeyRemoved],
+          ] as const) {
+            yield* claimRuntimeSession(
+              { userId: starter, conversationId: agent.conversationId },
+              `wrun_${agent.id}`,
+              new Date(0),
+            );
+          }
           const nativeKeyRemoved = yield* onEveAs(
             bare,
             bareTask.id,
@@ -541,18 +552,21 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const { eve } = runtimes();
           const writer = storeWriter({ tools: CODER_TOOL_SET });
           const send = (starter: string, agent: Agent) =>
-            Effect.result(
-              steerAgent(eve.sessions, writer, starter, agent, {
-                text: "Expire invitations after a week.",
-                clientKey: randomUUID(),
-                sender: { kind: MESSAGE_SENDER.MEMBER, userId: starter },
-              }),
-            );
+            Effect.gen(function* () {
+              const sessions = yield* routedSessions(eve.sessions, starter);
+              return yield* Effect.result(
+                steerAgent(sessions, writer, starter, agent, {
+                  text: "Expire invitations after a week.",
+                  clientKey: randomUUID(),
+                  sender: { kind: MESSAGE_SENDER.MEMBER, userId: starter },
+                }),
+              );
+            });
 
           for (const [name, starter, agent] of [
             ["Vespin's key paid, an API key saved since", owner, lukes],
             ["no payer recorded, no API key", bare, unrecorded],
-            ["its API key removed", bare, keyRemoved],
+            ["its API key removed", bare, eveKeyRemoved],
             ["on Claude Code, its API key removed", bare, nativeKeyRemoved],
           ] as const) {
             const sent = yield* send(starter, agent);
@@ -583,7 +597,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a rewind ends a Claude Code agent's runner before it cuts and cuts nothing where the runner could not be ended, and an eve agent's is refused as ended, its transcript kept whole and its session untouched",
+      "a rewind ends a Claude Code agent's runner before it cuts and cuts nothing where the runner could not be ended, and cuts an eve agent's, whose session ended, with nothing to stop and nothing asked of eve",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
@@ -591,7 +605,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
           const unhalted = yield* agentOn(owner, taskId, "claude_code");
           const { eve, claudeCode, native } = runtimes();
-          const writer = storeWriter({ tools: CODER_TOOL_SET });
           const nativeSession = `${NATIVE_SESSION_PREFIX.claude_code}000000000001-${randomUUID()}`;
           const lines = new Map<string, string>();
           for (const [agent, sessionId] of [
@@ -613,13 +626,8 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               placedAt: new Date(0),
             });
           }
-          const reach: EveReach = {
-            eveOrigin: () => "https://luke.test",
-            eveAs: () => eve.sessions,
-          };
-          const request = new Request("https://luke.test/api/agents/rewind");
           const rewind = (agent: Agent) =>
-            rewoundAgent(reach, writer, request, owner, agent, lines.get(agent.id) ?? "").pipe(
+            rewoundAgent(owner, agent, lines.get(agent.id) ?? "").pipe(
               Effect.provide(native),
               Effect.result,
             );
@@ -634,14 +642,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
 
           // A rewind to a line that is not there is refused before anything is stopped.
-          const missing = yield* rewoundAgent(
-            reach,
-            writer,
-            request,
-            owner,
-            onClaudeCode,
-            randomUUID(),
-          ).pipe(Effect.provide(native), Effect.result);
+          const missing = yield* rewoundAgent(owner, onClaudeCode, randomUUID()).pipe(
+            Effect.provide(native),
+            Effect.result,
+          );
           assert.deepEqual(missing, Result.fail(HOSTED_REFUSAL.NOT_FOUND));
           assert.deepEqual(claudeCode.calls, []);
 
@@ -650,7 +654,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           claudeCode.answers.halts = false;
           const refused = yield* rewind(unhalted);
 
-          assert.deepEqual(eveRewound, Result.fail(HOSTED_REFUSAL.AGENT_RETIRED));
+          assert.ok(Result.isSuccess(eveRewound));
           assert.ok(Result.isSuccess(nativeRewound));
           assert.deepEqual(refused, Result.fail(HOSTED_REFUSAL.UNAVAILABLE));
           // Each is stopped before the cut and again after it, and a runner that could not be ended is not cut.
@@ -662,7 +666,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           ]);
           assert.deepEqual(
             [yield* standing(onEve), yield* standing(onClaudeCode), yield* standing(unhalted)],
-            [1, 0, 1],
+            [0, 0, 1],
           );
         }),
     );

@@ -177,13 +177,17 @@ export const sendQueued = Effect.fn("web/sendQueued")(function* (
     },
   );
   if (sent !== undefined) {
-    yield* recordServerEvent(SERVER_EVENT.MESSAGE_SEND, message.userId, {
-      runtime: sent.runtime,
-      machine: agent.machine ?? AGENT_MACHINE.VERCEL,
-      agent_kind: agent.kind,
-      turn_running: sent.turnRunning,
-      queued: true,
-    });
+    yield* recordServerEvent(
+      SERVER_EVENT.MESSAGE_SEND,
+      { userId: message.userId, workspaceId: agent.organizationId },
+      {
+        runtime: sent.runtime,
+        machine: agent.machine ?? AGENT_MACHINE.VERCEL,
+        agent_kind: agent.kind,
+        turn_running: sent.turnRunning,
+        queued: true,
+      },
+    );
   }
   // Note that the message went, so a failure to take it out of the queue is no refusal of it: it is logged, and
   // its claim left to lapse, after which the next hand-off sends it again under its id, answered as a repeat.

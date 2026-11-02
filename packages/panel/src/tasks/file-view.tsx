@@ -550,10 +550,12 @@ export function gitHubAction(onGitHub: (() => void) | undefined, detail?: string
   };
 }
 
-/** A bar's ⋯ as groups of a phone's ⋯, a submenu's items standing in its group, since a ⋯ nests no menu. */
+/** A bar's ⋯ as groups of a phone's ⋯, a submenu's items standing in its group, since a ⋯ nests no menu; a panel, which has no items to stand there, is left out. */
 export function barMenuItems(more: PaneBarMenu | undefined): MenuAction[][] {
   return (more?.groups ?? []).map((group) =>
-    group.flatMap((entry) => ("items" in entry ? [...entry.items] : [entry])),
+    group.flatMap((entry) =>
+      "items" in entry ? [...entry.items] : "panel" in entry ? [] : [entry],
+    ),
   );
 }
 

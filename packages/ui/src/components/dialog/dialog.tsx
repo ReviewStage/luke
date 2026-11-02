@@ -216,8 +216,8 @@ export const DIALOG_VEIL = { [VEIL_ATTRIBUTE]: "" } as const;
  * The card a bare dialog's owner draws (`DIALOG_SIZE.WINDOW`), in the dialog
  * card's own edge, corner, ground, and shadow, clipping what it holds edge to
  * edge, as a picture's card does. It fills the room its owner leaves it, or
- * hugs what it holds (`hug`), as a picture shown at its own shape is, no
- * narrower than a picture's card so its head's buttons still fit, and no
+ * hugs what it holds (`hug`), as a video shown at its own shape is, no
+ * narrower than a media card so its head's buttons still fit, and no
  * larger than that room.
  */
 export function DialogCard({

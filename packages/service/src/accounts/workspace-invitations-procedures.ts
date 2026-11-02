@@ -160,7 +160,11 @@ export function workspaceInvitationsProcedures(seams: WorkspaceInvitationsProced
           role,
         }),
       );
-      yield* recordServerEvent(SERVER_EVENT.WORKSPACE_INVITE_SEND, context.userId, { role });
+      yield* recordServerEvent(
+        SERVER_EVENT.WORKSPACE_INVITE_SEND,
+        { userId: context.userId, workspaceId: workspace.id },
+        { role },
+      );
       const [invitation] = pendingInvitations(
         [made],
         new URL(context.request.url).origin,

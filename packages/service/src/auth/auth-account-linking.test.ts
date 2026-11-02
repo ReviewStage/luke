@@ -172,7 +172,7 @@ test("a signed-in account links a GitHub whose address is not its own, and holds
     assert.equal(linked.github, String(GITHUB_ACCOUNT_ID));
     // Counted under the account that linked, as a link and not as a sign-up.
     assert.deepEqual(linked.counts, [
-      { name: "github:account_link", userId: linked.userId, properties: {} },
+      { name: "github:account_link", actor: { userId: linked.userId }, properties: {} },
     ]);
   });
 });

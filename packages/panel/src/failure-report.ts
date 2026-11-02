@@ -121,6 +121,7 @@ const ABOUT_KEYS = [
   "agentId",
   "conversationId",
   "turnId",
+  "callId",
   "inboxItemId",
   "automationId",
   "channelId",

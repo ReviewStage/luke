@@ -169,13 +169,13 @@ in `packages/database/src/models/recorded-session.ts` admits a member of the
 workspace of the agent naming the conversation, or naming its standing
 parent one hop up (a subagent's session), and the opener alone for a
 conversation no agent names, so a member who leaves the workspace leaves its
-conversations with it. The eve door (`eve-host/door.ts`), the host's
-admission (`eve-host/conversation.ts`, which answers the caller beside the
-conversation's owner), and the ask door all read it, so a member speaks into
-the session a teammate opened. From there the caller and the owner are two
-ids: the task, every tool binding, an integration's grant, and a
-worker's title are read, written, and metered as the caller, while the
-writer, the seed, and the relay address the owner's rows.
+conversations with it. The MCP door's admission
+(`packages/service/src/agents/luke-mcp/bearer.ts`, which answers the caller
+beside the conversation's owner) and the ask door read it, so a member speaks
+into the session a teammate opened. From there the caller and the owner are
+two ids: the task, every tool binding, and an integration's grant are read,
+written, and metered as the caller, while the writer addresses the owner's
+rows.
 An agent still runs on its starter's provider keys and GitHub
 token, and its steps are its starter's spend, whichever member messages it.
 
@@ -284,7 +284,7 @@ builder the check cannot read is refused by name rather than
 skipped, because a path constant that outlives its route otherwise fails
 nothing until production answers 404 (LUKE-186). The same derived list is
 what `scripts/preview-probe.ts` (`server/preview-probe.ts`) sends to a
-deployment: every caller path, the cron's, the page, and eve's health, failing
+deployment: every caller path, the cron's, and the page, failing
 on any answer that is Vercel's own rather than a handler's — the
 `x-vercel-error` header the platform puts on its `NOT_FOUND`, which a
 function's own 404 never carries — with the requests `EXPECTED_STATUS` names
@@ -349,31 +349,25 @@ at `/api/terminal/sessions` and the desktop posts feedback to
 commit with no migration and no dashboard state, and the deploy shape returns
 to Vercel's own pass.
 
-The Vercel project is two services in one deployment, declared under `services`
-in the repository root's `vercel.json`, which Vercel reads at the project's
-Root Directory (the repository root, so each service's `root` is relative to
-it) and only while the project's Framework Preset is Services. `web` is this
+The Vercel project is one service, declared under `services` in the
+repository root's `vercel.json`, which Vercel reads at the project's Root
+Directory (the repository root, so the service's `root` is relative to it)
+and only while the project's Framework Preset is Services. `web` is this
 app, rooted at `apps/web`, and carries the migrate-and-seed
 build, the install filter, the ignore rule, and the `routes` above unchanged.
-`dev` is the agent service, the standalone eve app at `apps/dev`,
-built by a plain `pnpm exec eve build` in that root, which writes the Build
-Output static-build reads back from it, so nothing relocates it and no
-variable of eve's own is set by hand (`packages/service/README.md`'s "The
-agent service").
-Public routing is the top-level `rewrites`:
-`/eve/coder/v1/*` enters the dev service, and everything else the web
-service, and a
+Public routing is the top-level `rewrites`, which send every request into
+the web service, and a
 service's own routes run only once a request has entered it. That is why the
 generated `/api/` rewrites live under the web service's `routes` and the
 generator (`server/function-rewrites.ts`) refuses a `routes` key at the top
 level beside `services`: Vercel ignores one there rather than erroring, so a
 file generated into the old location would pass every check and 404 every
 `/api/` route in production. The project's
-environment variables reach both services alike. The project's Ignored Build
-Step (`scripts/vercel-ignore.sh`), not either service's own `ignoreCommand`,
+environment variables reach the service. The project's Ignored Build
+Step (`scripts/vercel-ignore.sh`), not the service's own `ignoreCommand`,
 which Vercel does not act on, is what skips the build, so a commit that changes
-nothing the services ship (the workspaces they reach, the workspace manifests,
-or `vercel.json`) deploys neither. A Vercel `vercel.ts` is not used: Vercel's Git builds refuse a
+nothing the service ships (the workspaces it reaches, the workspace manifests,
+or `vercel.json`) deploys nothing. A Vercel `vercel.ts` is not used: Vercel's Git builds refuse a
 `{ service }` destination in a `vercel.ts` (`rewrites[0].destination should be
 string`, #2838) although `vercel.json` takes the same rewrites.
 
@@ -473,9 +467,7 @@ the document), so a rewrite reaches only the reads of what it rewrote.
 `server/runtime.ts` holds the one `ManagedRuntime` this app has, memoized at
 module scope, and `runWeb(effect)` is the only place `apps/web` runs an effect.
 The layer it builds, `webServices`, is `@luke/service/runtime`'s, which runs
-nothing; each eve root builds its own runtime over the same layer in its own
-`runtime.ts` and runs through its `runAgent`, so no agent file reaches into
-`server/`.
+nothing.
 Vercel keeps a warm instance's module registry between invocations, so the
 first invocation of a cold start builds the layer and every later one on that
 instance reuses the services it built; a runtime built where the work lives
@@ -519,9 +511,7 @@ meter every hosted operation spends — so the group yields the seam on the
 request's own fiber and the edge that serves the request is the one place the
 client behind it is provided. What still holds a runner is everything a route
 composes apart from the store and that still hands a promise up — the
-writers and the eve host's two seams
-the eve project reaches through a promise of its own — each handed its
-edge's own, `runWeb` in a
+writers — each handed its edge's own, `runWeb` in a
 function and the store tests'
 runtime in a test; the conversation row lock every write runs under is the
 client's own transaction. What the layer does need at build
@@ -593,20 +583,17 @@ rather than read past to the cookie, and the browser's session cookie only
 where no `Authorization` is carried. `/api/mac-commands` takes the bearer
 alone (`resolveHostedBearerUserId`), because its held read claims commands
 for the one Mac that asks. Everything else takes either, the work that
-reaches eve included: a request that carries a bearer reaches eve over it,
-and one that carries only the cookie reaches eve as the deployment acting
-for the account the cookie named (`packages/service/src/agents/coder-host/stop.ts`'s
+reaches an agent's session included: a request that carries a bearer reaches
+it over that bearer, and one that carries only the cookie as the deployment
+acting for the account the cookie named (`packages/service/src/agents/coder-host/stop.ts`'s
 `eveFor`), so an agent's Start, message, and Stop, an inbox answer, a manual
 automation run, a comment's ask of an agent, and a task's delete and the account's, which
-retire the eve sessions of what they delete, all work in a browser. Note that a route
+retire the sessions of the agents they delete, all work in a browser. Note that a route
 file's choice of resolver is not a boundary, because every function holding
 a group answers every path the group declares, the one a client names in the
-dispatcher's `route-path` query among them; whom eve is reached as is chosen
-per request in the endpoint instead, so where a request lands changes
-nothing about it. The eve service under `/eve/coder/v1/*` shares the origin
-but never passes through this adaptor; it resolves the bearer alone
-(`hostedUserId`), or the deployment's own secret naming an account, and takes
-no cookie. Every route
+dispatcher's `route-path` query among them; whom a session is reached as is
+chosen per request in the endpoint instead, so where a request lands changes
+nothing about it. Every route
 that answers bytes rather than JSON (a task's picture, an inbox attachment,
 a picture a tool answered, a workspace's photo, and an image an agent's pull
 request names, an SVG among them) answers them under `HOSTED_BYTES_HEADERS`:
@@ -666,7 +653,7 @@ a registrable domain of its own, `vespin.page`
 (`@luke/features/page-frame`'s `PAGE_SANDBOX_ORIGIN`), attached to this
 project beside the app's. That host serves one route and nothing else. The
 first top-level rewrite sends every request made to it into the web service,
-ahead of eve's mount, and the web service's first two routes, which the
+and the web service's first two routes, which the
 generator keeps ahead of the `/api/` table (`function-rewrites.ts`), send a
 link's `/p/<token>` to the page route with its token in a query and every
 other path of the host to a file of the build's own,
@@ -832,18 +819,14 @@ invitation stands. Canceling an invitation emails nothing.
 
 ## Sentry
 
-The functions and both eve roots report to Sentry's `luke-web` project, set
+The functions report to Sentry's `luke-web` project, set
 up as Sentry's own guides set it up. `server/runtime.ts` provides
 `@luke/service/observability/sentry`'s `sentryLayer()`, which is the Effect
 guide's: `Sentry.effectLayer` starts the SDK and registers its
 `ErrorReporter`, so a route that fails or dies is captured as the router
 answers 500, and the tracer and metrics layers send Effect's spans and
 metrics. `webServices` adds `Sentry.SentryEffectLogger` beside the JSON
-logger, so every log line is a Sentry log. Each eve root starts Sentry in
-`instrumentation/sentry.ts` with `Sentry.eveInstrumentation`, the eve guide's,
-which eve runs before it loads the agent and which traces every turn, model
-call, and tool call; its `runtime.ts` adds the same reporting without a second
-start. The scheduled sweep checks in to the `maintenance-sweep` Cron monitor
+logger, so every log line is a Sentry log. The scheduled sweep checks in to the `maintenance-sweep` Cron monitor
 as a run starts and as it ends, and Sentry creates the monitor from the
 first check-in.
 
@@ -868,12 +851,15 @@ The terminal relay and the Browser tab's live view are WebSocket functions,
 each exporting the `http.Server` Vercel upgrades into, so enable the
 WebSockets feature on the Vercel team and make sure Fluid compute is on for
 the project. `PROVIDER_KEY_ENCRYPTION_KEYS` seals each account's own provider
-keys, and `EVE_DEPLOYMENT_SECRET` is the deployment's own secret at eve's door
-and never the cron's `CRON_SECRET`; eve's origin is the deployment's own
-unless `LUKE_EVE_ORIGIN` names another. No separate service is deployed.
+keys. `EVE_DEPLOYMENT_SECRET`, never the cron's `CRON_SECRET`, and an eve
+origin, the deployment's own unless `LUKE_EVE_ORIGIN` names another, must
+still stand for the deployment to act for an account whose bearer it does not
+hold, although no eve service answers either now
+(`packages/service/README.md`'s "Reaching eve as the deployment"). No
+separate service is deployed.
 
 ## The agents
 
-Every agent is an agent, served by its own eve app, `apps/dev`; its
-layout, deployment, and evals are in `packages/service/README.md`'s "The
-agent service".
+Every agent runs on Claude Code or Codex in a Vercel Sandbox of its own,
+which `packages/service/README.md`'s "The agent service" describes; no agent
+is served by an app of its own.

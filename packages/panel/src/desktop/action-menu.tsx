@@ -3,6 +3,7 @@ import {
   type DrawnMenu,
   type ListRowMenu,
   Menu,
+  type MenuPanel,
   type MenuSubject,
   type MenuAction as SharedMenuAction,
   type MenuEntry as SharedMenuEntry,
@@ -17,7 +18,8 @@ import {
  * items the empty side panel also lists as buttons of their own. It is
  * drawn rather than asked of the system so that every door draws it the same
  * way and an action can be drawn red. The menu itself, how it hangs, its
- * keys, submenus, and exit, is `@luke/ui`'s `Menu`, opened through
+ * keys, submenus, the panels an item opens beside it, and exit, is
+ * `@luke/ui`'s `Menu`, opened through
  * `useMenu`; what is the window's own is an item's shortcut, named by the
  * command it takes and printed as the menu bar prints its chord.
  */
@@ -40,6 +42,9 @@ export interface MenuSubmenu {
 /** One line of a menu: an action, or a submenu of them. */
 export type MenuEntry = MenuAction | MenuSubmenu;
 
+/** One line of a menu that may also hold a panel its owner draws beside it as its submenu (`@luke/ui`'s `MenuPanel`). */
+export type PanelMenuEntry = MenuEntry | MenuPanel;
+
 /** What a menu draws beyond its items: what it acts on, which heads it as a phone's sheet, and a foot under the items, as a task's menu says who created and last edited it. */
 export interface MenuEnds {
   readonly subject?: MenuSubject | undefined;
@@ -52,7 +57,8 @@ function sharedAction({ command, ...action }: MenuAction): SharedMenuAction {
   return { ...action, hint: <Shortcut chord={APP_SHORTCUTS[command].chord} /> };
 }
 
-function sharedEntry(entry: MenuEntry): SharedMenuEntry {
+function sharedEntry(entry: PanelMenuEntry): SharedMenuEntry {
+  if ("panel" in entry) return entry;
   if (!("items" in entry)) return sharedAction(entry);
   const { command, ...submenu } = entry;
   const items = submenu.items.map(sharedAction);
@@ -79,7 +85,7 @@ export function ActionMenu({
   /** Where it hangs, and whether it is on its way out (`useMenu`'s `drawn`). */
   menu: DrawnMenu;
   heading?: React.ReactNode;
-  groups: readonly (readonly MenuEntry[])[];
+  groups: readonly (readonly PanelMenuEntry[])[];
   /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;
 }): React.JSX.Element {

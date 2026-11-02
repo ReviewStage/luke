@@ -394,7 +394,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
     "a Generate tells the chapters for the head, every member of the workspace reads them, and a read once the head moves answers them made for the head they were",
     () =>
       Effect.gen(function* () {
-        const { owner, teammate, analytics, ask, moveHead } = yield* standing();
+        const { owner, teammate, organizationId, analytics, ask, moveHead } = yield* standing();
         const generated = chaptersOf(yield* ask(owner, { method: "POST", number: NUMBER }));
         const ready = {
           status: PULL_REQUEST_CHAPTERS_STATE.READY,
@@ -415,6 +415,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
             {
               name: SERVER_EVENT.PULL_REQUEST_CHAPTERS_GENERATE,
               userId: owner,
+              workspaceId: organizationId,
               properties: { outcome: "ready", chapters: 1, hunks: 1, duration_ms: 0 },
             },
           ],

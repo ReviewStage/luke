@@ -411,7 +411,7 @@ export const AUTOMATION_RUN_REASON = {
   TASK_UNREACHABLE: "plan-unreachable",
   /** Its creator is no longer a member of its workspace, and a run starts as its creator. */
   CREATOR_LEFT: "creator-left",
-  /** The task names no repository. */
+  /** No longer produced, but still read: rows written before a run could start in no repository hold it. */
   NO_REPOSITORY: "no-repository",
   /** The GitHub installation connected to the task's workspace no longer reaches the repository. */
   REPOSITORY_UNREACHABLE: "repository-unreachable",
@@ -557,9 +557,8 @@ export const automationDeletedAnswerSchema = EffectSchema.Struct({
   txid: EffectSchema.optionalKey(automationTxidSchema),
 });
 
-/** The repositories an automation's runs work in, `owner/name` each, the first where a run starts: at least one, and a handful at most. */
+/** The repositories an automation's runs work in, `owner/name` each, the first where a run starts: none for runs that work in no repository, and a handful at most. */
 const automationRepositoriesSchema = EffectSchema.Array(githubRepositoryFullNameSchema).check(
-  EffectSchema.isMinLength(1),
   EffectSchema.isMaxLength(AUTOMATION_BOUNDS.MAX_REPOSITORIES),
 );
 
@@ -567,8 +566,10 @@ const automationRepositoriesSchema = EffectSchema.Array(githubRepositoryFullName
  * An automation to make (POST): where it stands, its name, trigger, and
  * action, and its guards or the defaults. It stands on a task, whose
  * workspace and repository it takes, or on a workspace with the
- * repositories its runs work in, which is how an automation is made with no
- * task; a request naming both, or neither, is refused.
+ * repositories its runs work in, none for runs that work in no repository,
+ * which is how an automation is made with no task; a request naming both,
+ * or neither, is refused, and so is a GitHub trigger with no repository
+ * whose events could fire it.
  */
 export const automationCreateRequestSchema = EffectSchema.Struct({
   planId: EffectSchema.optionalKey(wireUuidSchema),

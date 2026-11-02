@@ -37,7 +37,6 @@ import {
   GearIcon,
   GLYPH_INK,
   GlyphSlot,
-  IconButton,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
   List,
@@ -45,6 +44,7 @@ import {
   ListRow,
   type ListRowHint,
   McpIcon,
+  type MenuPanel,
   MenuSection,
   NO_BACK_KEY,
   OneLine,
@@ -114,12 +114,14 @@ import { type LukeToolsDoor, type LukeToolsRead, useLukeTools } from "./agent-lu
 import { ServerCard } from "./server-card.js";
 
 /**
- * agent-servers.tsx -- the MCP button at an agent box's foot, and the popover that lists the servers the agent is handed with a switch for each, and each server's tools.
+ * agent-servers.tsx -- the MCP servers row of an agent box's + menu and an automation's servers field, and the popover both open that lists the servers the agent is handed with a switch for each, and each server's tools.
  *
- * Between the model chip and the context ring stands the MCP mark. A press
- * opens a popover from the button's trailing edge, as the model menu and
- * the context popover hang from theirs (`@luke/ui`'s `AnchoredPopover` and
- * `PopoverPanel`, a menu's), drawn as the searchable menu is: a search field first, then, for a
+ * The agent box's + opens a menu whose MCP servers row opens the popover
+ * beside the menu as its submenu (`serversMenuPanel`, `@luke/ui`'s
+ * `MenuPanel`), the menu standing behind it; an automation's form opens the
+ * same popover from its field's chip, hung from the chip's trailing edge
+ * (`AgentServersButton`, `@luke/ui`'s `AnchoredPopover`). Either way it is
+ * a `PopoverPanel`, a menu's, drawn as the searchable menu is: a search field first, then, for a
  * started agent, our own tools under Built in, then the servers under
  * Connected, which counts how many this agent has on, and Not connected
  * (`agent-servers-model.ts`), each section under `@luke/ui`'s `MenuSection`,
@@ -161,11 +163,12 @@ import { ServerCard } from "./server-card.js";
  * the developer comes back from the browser, so the popover stays open
  * while the window is away. A draft agent keeps its choice until its first
  * message starts it. Escape goes back one level, from a tool's page or a
- * server's, and otherwise closes the popover, and stops there so the panel behind stays open; a
- * second press of the button, and focus leaving it for another part of the
- * window, close it too. The button, the back, a row's switch and its
- * Connect, Reopen, Cancel or Retry are `@luke/ui`'s, each pressed
- * without taking the focus from the field.
+ * server's, and otherwise closes the popover, or, standing as the + menu's
+ * submenu, goes back to its row, and stops there so the panel behind stays
+ * open; Manage in Settings closes the + menu with it. A second press of the
+ * chip, and focus leaving it for another part of the window, close it too.
+ * The chip, the back, a row's switch and its Connect, Reopen, Cancel or
+ * Retry are `@luke/ui`'s, each pressed without taking the focus from the field.
  */
 
 /** The servers an agent is handed, as the button changes them. */
@@ -205,6 +208,9 @@ const SERVER_END_CLASS = "ml-auto flex flex-none items-center gap-tight-gap";
  */
 export const SERVER_PAGE_HEAD_CLASS =
   "agent-servers-page-head flex h-pane-bar flex-none items-center gap-icon-gap border-b border-border pr-list-inset pl-item-gap [--luke-fold:folded]";
+
+/** What the + menu's row that opens the popover is named. */
+const SERVERS_ROW = "MCP servers";
 
 /** What the pinned row at the popover's foot is named, which opens Settings › Integrations. */
 const SERVERS_SETTINGS = "Manage in Settings";
@@ -559,6 +565,8 @@ function ServersPopover({
   servers,
   statuses,
   onClose,
+  onBack = onClose,
+  takesFocus = true,
   onLeave,
   onExited,
 }: {
@@ -567,8 +575,12 @@ function ServersPopover({
   id: string;
   servers: AgentServersControl;
   statuses: IntegrationStatuses;
-  /** Closes the popover and hands focus back to the button. */
+  /** Closes the popover, and the menu it stands beside, handing focus back to what opened it. */
   onClose: () => void;
+  /** Escape on the home: back to the menu row that opened it, where it stands as a submenu; the close otherwise. */
+  onBack?: (() => void) | undefined;
+  /** Whether its field takes the focus as it opens: not where the pointer resting on the + menu's row opened it, which leaves the keyboard in the menu until the pointer arrives. */
+  takesFocus?: boolean | undefined;
   /** Focus left the popover for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
   onExited: () => void;
@@ -644,12 +656,17 @@ function ServersPopover({
     ? query
     : "";
 
-  // The field takes focus as the popover opens and as any page with one is
-  // drawn, and a tool's page its body, so the keys and focus leaving it are heard.
+  // The field takes focus as the popover opens, unless its owner leaves the
+  // keyboard where it was, and as any page with one is drawn, and a tool's
+  // page its body, so the keys and focus leaving it are heard.
+  const opening = useRef(true);
   useEffect(() => {
+    const first = opening.current;
+    opening.current = false;
+    if (first && !takesFocus) return;
     if (tool !== undefined || onRunOnMac) toolBody.current?.focus({ preventScroll: true });
     else field.current?.focus();
-  }, [page?.connection, tool, onLuke, onRunOnMac]);
+  }, [page?.connection, tool, onLuke, onRunOnMac, takesFocus]);
 
   useLayoutEffect(() => {
     if (tool !== undefined || onRunOnMac) return;
@@ -815,7 +832,7 @@ function ServersPopover({
     else if (onLuke) backFromLuke();
     else if (tool !== undefined) closeTool();
     else if (page !== undefined) back();
-    else onClose();
+    else onBack();
   };
 
   /** A row's button while its server waits on an act: busy if it started that act, off if the other did. */
@@ -1306,6 +1323,7 @@ function ServersPopover({
                 ? `${page.name} tools`
                 : SERVERS_LABEL
       }
+      takesFocus={takesFocus}
       onDismiss={dismiss}
       onLeave={onLeave}
       onExited={onExited}
@@ -1340,29 +1358,75 @@ function ServersPopover({
   );
 }
 
+/** The popover as a menu's submenu, drawn while it stands and gone at once as it goes back. */
+function ServersMenuPanel({
+  servers,
+  statuses,
+  entered,
+  onBack,
+  onClose,
+}: {
+  servers: AgentServersControl;
+  statuses: IntegrationStatuses;
+  /** Whether a press or a key opened it, which takes the keyboard into its field. */
+  entered: boolean;
+  onBack: () => void;
+  onClose: () => void;
+}): React.JSX.Element {
+  const id = useId();
+  // Note that focus leaving the popover is the menu's to hear, which closes unless it went to the menu itself.
+  return (
+    <ServersPopover
+      open
+      id={id}
+      servers={servers}
+      statuses={statuses}
+      onClose={onClose}
+      onBack={onBack}
+      takesFocus={entered}
+      onLeave={() => undefined}
+      onExited={() => undefined}
+    />
+  );
+}
+
+/**
+ * The + menu's MCP servers row, which opens the popover beside the menu as
+ * its submenu: the same popover the chip hangs, Escape on its home going
+ * back to the row.
+ */
+export function serversMenuPanel(
+  servers: AgentServersControl,
+  statuses: IntegrationStatuses,
+): MenuPanel {
+  return {
+    label: SERVERS_ROW,
+    icon: <McpIcon />,
+    panel: ({ back, close, entered }) => (
+      <ServersMenuPanel
+        servers={servers}
+        statuses={statuses}
+        entered={entered}
+        onBack={back}
+        onClose={close}
+      />
+    ),
+  };
+}
+
+/** The popover hung from a form's field chip, as an automation's servers are picked. */
 export function AgentServersButton({
   servers,
   statuses,
   face,
-  open: heldOpen,
-  onOpenChange,
 }: {
   servers: AgentServersControl;
-  /** Where every connection stands, as the composer around the button reads it. */
+  /** Where every connection stands, as the form around the chip reads it. */
   statuses: IntegrationStatuses;
-  /**
-   * What a form row's button shows in place of the MCP mark, which draws it
-   * as a Settings picker's field chip, chevron and all; the composer's
-   * button leaves it out.
-   */
-  face?: React.ReactNode;
-  /** Whether the popover stands, where the owner holds it, as the composer does so its ⋯ menu can open it; the button's own otherwise. */
-  open?: boolean | undefined;
-  onOpenChange?: ((open: boolean) => void) | undefined;
+  /** What the chip shows, as a Settings picker's field chip draws it, chevron and all. */
+  face: React.ReactNode;
 }): React.JSX.Element {
-  const [ownOpen, setOwnOpen] = useState(false);
-  const open = heldOpen ?? ownOpen;
-  const setOpen = onOpenChange ?? setOwnOpen;
+  const [open, setOpen] = useState(false);
   const popoverId = useId();
   const labelId = useId();
   const faceId = useId();
@@ -1372,46 +1436,32 @@ export function AgentServersButton({
   const [drawn, setDrawn] = useState(open);
   if (open && !drawn) setDrawn(true);
 
-  // Note that we hand focus back to the button, as a menu returns it to its
+  // Note that we hand focus back to the chip, as a menu returns it to its
   // trigger, because closing takes the focused popover away with it.
   const close = () => {
     setOpen(false);
     trigger.current?.focus();
   };
-  const press = {
-    ref: trigger,
-    "aria-haspopup": "dialog",
-    "aria-expanded": open,
-    "aria-controls": open ? popoverId : undefined,
-    onClick: () => setOpen(!open),
-  } as const;
 
   return (
     <div className="agent-servers relative flex min-w-0" ref={root}>
-      {face === undefined ? (
-        // Note that the box, not the button, wears the class the composer's ⋯ finds the press by (`agent-composer.tsx`).
-        <span className="agent-servers-button flex">
-          <Tooltip label={SERVERS_LABEL}>
-            <IconButton icon={<McpIcon />} label={SERVERS_LABEL} {...press} />
-          </Tooltip>
-        </span>
-      ) : (
-        // A face is a form's field, at least the column its pickers share.
-        <>
-          <VisuallyHidden id={labelId}>{SERVERS_LABEL}</VisuallyHidden>
-          {/* Note that the chip is named by its field's name and then the words its face draws ("None", "+2"), through its own id, because a name that left them out would not match the screen. */}
-          <Chip
-            look={CHIP_LOOK.FIELD}
-            width={CHIP_WIDTH.MIN_FIELD}
-            chevron
-            id={faceId}
-            aria-labelledby={`${labelId} ${faceId}`}
-            {...press}
-          >
-            {face}
-          </Chip>
-        </>
-      )}
+      {/* A face is a form's field, at least the column its pickers share. */}
+      <VisuallyHidden id={labelId}>{SERVERS_LABEL}</VisuallyHidden>
+      {/* Note that the chip is named by its field's name and then the words its face draws ("None", "+2"), through its own id, because a name that left them out would not match the screen. */}
+      <Chip
+        ref={trigger}
+        look={CHIP_LOOK.FIELD}
+        width={CHIP_WIDTH.MIN_FIELD}
+        chevron
+        id={faceId}
+        aria-labelledby={`${labelId} ${faceId}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? popoverId : undefined}
+        onClick={() => setOpen(!open)}
+      >
+        {face}
+      </Chip>
       <AnchoredPopover open={open} align={POPOVER_ALIGN.END}>
         {drawn ? (
           <ServersPopover

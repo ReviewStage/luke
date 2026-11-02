@@ -31,6 +31,10 @@ import {
   MenuSurface,
   MoreButton,
   PencilIcon,
+  PlusIcon,
+  riseAbove,
+  SEARCHABLE_MENU_LAYER,
+  SearchableMenu,
   SearchField,
   Shortcut,
   TEXT_ELEMENT,
@@ -41,6 +45,7 @@ import {
   UserIcon,
   useMenu,
 } from "@luke/ui";
+import { PaperclipIcon } from "@luke/ui/icons";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -49,7 +54,8 @@ import { CatalogSection } from "../section";
  * menu.tsx -- a menu dropped from a ⋯ with glyphs, shortcuts, a dimmed item
  * and a red one ruled apart; one of settings in submenus; one with a heading
  * and a footer, its long words fading where cut; people whose items hang
- * their cards beside them; one a right-click hangs at the pointer; a searchable menu's pinned rows, steered from its field: one
+ * their cards beside them; a + whose item opens a searchable list beside
+ * the menu as its submenu, a panel its owner draws; one a right-click hangs at the pointer; a searchable menu's pinned rows, steered from its field: one
  * opening a list beside it, a switch, and one that does not apply now; and
  * the menu's surface under lists an app hangs and keys itself: an `@` list
  * narrowed under its kind's crumb, edge to edge, one press inset, as
@@ -118,6 +124,50 @@ function ViewMenu(): React.JSX.Element {
           onClose={menu.close}
         />
       )}
+    </>
+  );
+}
+
+const RELATED_TASKS = [
+  { id: "stag-1012", label: "New task dialog polish", detail: "STAG-1012" },
+  { id: "stag-1031", label: "Inbox answer box", detail: "STAG-1031" },
+  { id: "stag-1047", label: "Composer + menu consistency", detail: "STAG-1047" },
+] as const;
+
+/** A composer's +, raised over it: Attachment, and Task relation, whose task search stands beside the menu as its submenu. */
+function PlusMenu(): React.JSX.Element {
+  const menu = useMenu(true);
+  const [related, setRelated] = useState<string | undefined>(undefined);
+  const groups: readonly (readonly MenuEntry[])[] = [
+    [
+      { label: "Attachment", icon: <PaperclipIcon />, onSelect: ignore },
+      {
+        label: "Task relation",
+        icon: <FolderIcon />,
+        panel: ({ back, close }) => (
+          <SearchableMenu
+            layer={SEARCHABLE_MENU_LAYER.EMBEDDED}
+            id="catalog-related-task"
+            label="Task relation"
+            placeholder="Search tasks"
+            rows={RELATED_TASKS}
+            value={related}
+            noMatch="No tasks match"
+            onPick={(id) => {
+              setRelated(id);
+              close();
+            }}
+            onClose={back}
+            onLeave={ignore}
+          />
+        ),
+      },
+    ],
+  ];
+  return (
+    <>
+      <IconButton label="Add" icon={<PlusIcon />} {...menu.trigger(riseAbove)} />
+      {menu.drawn && <Menu label="Add" menu={menu.drawn} groups={groups} onClose={menu.close} />}
     </>
   );
 }
@@ -304,6 +354,9 @@ function MenuExample(): React.JSX.Element {
           <AccountMenu />
           <PeopleMenu />
         </Inline>
+      </CatalogSection>
+      <CatalogSection id="menu-panel" title="A panel as a submenu">
+        <PlusMenu />
       </CatalogSection>
       <CatalogSection id="menu-pointer" title="At the pointer">
         <RightClickRow />

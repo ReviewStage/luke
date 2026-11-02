@@ -138,11 +138,11 @@ export const HOSTED_REFUSAL = {
   MESSAGE_TOO_LONG: { error: HOSTED_API_ERROR.MESSAGE_TOO_LONG },
   /** The agent's session is still coming up; the same message a moment later is taken. */
   AGENT_NOT_READY: { error: HOSTED_API_ERROR.AGENT_NOT_READY },
-  /** eve no longer runs the agent's session, so nothing reaches its sandbox again; nothing was written. */
+  /** The agent's session has ended for good, as every agent's that ran on eve has, so nothing reaches it again and only a new agent goes on from its work; nothing was written. */
   AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
   /** The agent's native harness's sandbox image is still being prepared; nothing was written, and the same request later, under its key, is taken. */
   AGENT_IMAGE_PREPARING: { error: HOSTED_API_ERROR.AGENT_IMAGE_PREPARING },
-  /** The agent runs on a native harness this function cannot reach (neither launched nor relayed from it); nothing was written, and nothing fell through to eve. */
+  /** The agent runs on a native harness this function cannot reach; nothing was written. */
   NATIVE_AGENT_NOT_HERE: { error: HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE },
   /** The account saved no OpenAI API key, which a voice call or a dictated clip runs on. */
   OPENAI_KEY_MISSING: { error: HOSTED_API_ERROR.OPENAI_KEY_MISSING },
