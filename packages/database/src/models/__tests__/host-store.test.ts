@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import {
+  DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
   DEVICE_PLATFORM,
   type DevicePlatform,
@@ -15,10 +16,10 @@ import { user } from "../../schemas/auth.js";
 import { task } from "../../schemas/task.js";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "../../testing/index.js";
 import { createAgent } from "../agent-store.js";
+import { latestDeviceAgentLaunch, queueDeviceAgentLine } from "../device-agent-store.js";
 import { deviceLayout, registerDevice } from "../device-store.js";
 import {
   enrollOwnDevice,
-  foldMachine,
   hostBySecret,
   hostRemoved,
   hostsOf,
@@ -47,7 +48,7 @@ const openAccounts = Effect.gen(function* () {
   return { owner, other };
 });
 
-/** A host the account's session enrolled under a fresh id, named, on the machine given where its host said one, a Mac unless another platform is given; its id and its secret's hash. */
+/** A host the account's session enrolled under a fresh id, named, on the machine given where its host said one, a Mac unless another platform is given; its id, its secret's hash, and the agents its enroll's fold moved. */
 const enrolledHost = (
   userId: string,
   host: { readonly name: string; readonly machineId?: string; readonly platform?: DevicePlatform },
@@ -63,8 +64,7 @@ const enrolledHost = (
       ...(host.machineId === undefined ? undefined : { machineId: host.machineId }),
       machine: { name: host.name, platform, arch: DEVICE_ARCH.ARM64 },
     });
-    assert.equal(enrolled, true);
-    return { id, secretHash };
+    return { id, secretHash, folded: Option.getOrThrow(enrolled) };
   });
 
 it.layer(getTestDB())("the host store", (it) => {
@@ -95,9 +95,9 @@ it.layer(getTestDB())("the host store", (it) => {
           machine,
         });
 
-        assert.equal(unnamed, false, "an enroll naming no machine creates none");
-        assert.equal(created, true);
-        assert.equal(byOther, false, "another account's id is never taken");
+        assert.ok(Option.isNone(unnamed), "an enroll naming no machine creates none");
+        assert.deepEqual(created, Option.some([]));
+        assert.ok(Option.isNone(byOther), "another account's id is never taken");
         assert.deepEqual(
           (yield* hostsOf(owner)).map((host) => [host.id, host.name, host.platform]),
           [[id, "Mini", DEVICE_PLATFORM.DARWIN]],
@@ -144,12 +144,12 @@ it.layer(getTestDB())("the host store", (it) => {
         const removedByOther = yield* removeHost(other, id);
         const removed = yield* removeHost(owner, id);
 
-        assert.equal(byOther, false, "another account's session enrolls nothing");
+        assert.ok(Option.isNone(byOther), "another account's session enrolls nothing");
         assert.equal(removedByOther, false, "another account removes nothing");
         assert.ok(Option.isNone(layoutForOther), "another account starts nothing on it");
         assert.ok(Option.isNone(yield* hostBySecret(otherHash)));
         assert.deepEqual(yield* hostsOf(other), []);
-        assert.deepEqual([first, rotated], [true, true]);
+        assert.deepEqual([first, rotated], [Option.some([]), Option.some([])]);
         assert.deepEqual(
           listed.map((host) => [host.id, host.name, host.platform]),
           [[id, "Studio", DEVICE_PLATFORM.DARWIN]],
@@ -167,7 +167,7 @@ it.layer(getTestDB())("the host store", (it) => {
   );
 
   it.effect(
-    "a fold moves the account's other Macs on the machine into the device, with their agents, the tasks that run on them, and the Runs on pick, and removes them, never the device itself or a Linux box naming the machine",
+    "a Mac's enroll folds the account's other Macs on its machine into it, moving their agents, the tasks that run on them, and the Runs on pick, settling their open launches, and removing them, never itself or a Linux box naming the machine",
     () =>
       Effect.gen(function* () {
         const { owner } = yield* openAccounts;
@@ -193,9 +193,14 @@ it.layer(getTestDB())("the host store", (it) => {
           }),
         );
         yield* keepRunsOnPick(owner, runsOn);
-        const fresh = yield* enrolledHost(owner, { name: "Air", machineId });
+        yield* queueDeviceAgentLine(owner, {
+          agentId: agent.id,
+          kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
+          payload: {},
+        });
 
-        const folded = yield* foldMachine(owner, fresh.id);
+        const fresh = yield* enrolledHost(owner, { name: "Air", machineId });
+        const launch = yield* latestDeviceAgentLaunch(owner, agent.id);
         const db = yield* Database;
         const [movedAgent] = yield* db
           .select({ deviceId: agentTable.deviceId })
@@ -206,8 +211,14 @@ it.layer(getTestDB())("the host store", (it) => {
           .from(task)
           .where(eq(task.id, started.id));
 
-        assert.deepEqual(folded, [{ conversationId: agent.conversationId, runningTurnIds: [] }]);
+        assert.deepEqual(fresh.folded, [
+          { conversationId: agent.conversationId, runningTurnIds: [] },
+        ]);
         assert.deepEqual([movedAgent?.deviceId, movedTask?.deviceId], [fresh.id, fresh.id]);
+        assert.ok(
+          Option.isSome(launch) && launch.value.settled,
+          "the agent's runner on the folded Mac reads as gone, so it launches again on the new one",
+        );
         assert.deepEqual(
           yield* readRunsOnPick(owner),
           Option.some({ machine: AGENT_MACHINE.DEVICE, deviceId: fresh.id }),
@@ -229,9 +240,7 @@ it.layer(getTestDB())("the host store", (it) => {
       const others = yield* enrolledHost(other, { name: "Air", machineId });
       const own = yield* enrolledHost(owner, { name: "Air", machineId });
 
-      const folded = yield* foldMachine(owner, own.id);
-
-      assert.deepEqual(folded, []);
+      assert.deepEqual(own.folded, []);
       assert.deepEqual(
         (yield* hostsOf(other)).map((host) => host.id),
         [others.id],

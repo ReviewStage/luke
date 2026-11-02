@@ -19,13 +19,14 @@
  *
  * One Mac stands as one host. A Mac that joins again, after a reinstall,
  * a lost record, or a second sign-in's enroll, folds the account's other
- * listed Macs on the same machine into its own row (`foldMachine`): their
+ * listed Macs on the same machine into its own row (`folded`): their
  * agents, the tasks that run on them, and the account's Runs on pick move
- * to it, and they are removed as Settings' Remove removes a host, in one
- * transaction. Only an own enroll and a host's first register fold, never
- * a later register, so two hosts already running never remove each other;
- * and only Macs, since a Linux image may ship one baked machine id to many
- * boxes.
+ * to it, their open launches are settled, and they are removed as
+ * Settings' Remove removes a host, in the join's own transaction. Only an
+ * own enroll and a host's first register fold, never a later register, so
+ * two hosts already running never remove each other; the account's joins
+ * take one lock, so two at once land one after another; and only Macs
+ * fold, since a Linux image may ship one baked machine id to many boxes.
  */
 
 import {
@@ -48,6 +49,7 @@ import { hostPairing } from "../schemas/host-pairing.js";
 import { accountPreference } from "../schemas/preferences.js";
 import { task } from "../schemas/task.js";
 import { runningTurnIds } from "./abandoned-turns.js";
+import { settleGoneDeviceAgentLaunches } from "./device-agent-store.js";
 import {
   type DeviceRegistration,
   MachineColumnsSchema,
@@ -384,7 +386,19 @@ export interface FoldedAgent {
   readonly runningTurnIds: readonly string[];
 }
 
-/** The fold `foldMachine` names, on the transaction its caller holds. */
+/**
+ * Folds the account's other listed Macs on the machine its standing Mac of
+ * the id runs on into that Mac, on the transaction its caller holds: their
+ * agents, the tasks that run on them, and the account's Runs on pick move
+ * to it, the launches still open on them are settled as their runner gone,
+ * so a moved agent launches again on the Mac rather than reading a runner
+ * there as live, and they are removed as `removeHost` removes one, their
+ * secret refused from now on. Never the Mac itself, so one enrolled again
+ * under its own id keeps its row, and never another account's device.
+ * Answers each agent moved, with the turns it had running; none where the
+ * device is no standing Mac of the account's, its host never said which
+ * machine it is, or no other host stands on it.
+ */
 const folded = (userId: string, id: string) =>
   Effect.gen(function* () {
     const machine = yield* findMacMachine({ userId, id });
@@ -397,6 +411,7 @@ const folded = (userId: string, id: string) =>
     const moved = yield* moveAgents(fold);
     yield* moveTasks(fold);
     yield* movePick(fold);
+    yield* settleGoneDeviceAgentLaunches(userId, fold.from);
     // Note that the running turns are read before the fold commits, so a turn the device begins once it does is never among them.
     return yield* Effect.forEach(moved, ({ conversationId }) =>
       Effect.map(runningTurnIds(conversationId), (ids) => ({
@@ -406,9 +421,22 @@ const folded = (userId: string, id: string) =>
     );
   });
 
-/** The effect given, in one transaction. */
-function transacted<A>(work: HostEffect<A>): HostEffect<A> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(work));
+/**
+ * The effect given, in one transaction holding the account's lock on its
+ * hosts' joins, so two joins of the account's land one after another and
+ * the later folds the earlier, never each the other: two folds that each
+ * spare only their own row would otherwise each remove the other's and
+ * leave the machine none.
+ */
+function underJoinLock<A>(userId: string, work: HostEffect<A>): HostEffect<A> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        yield* client`select pg_advisory_xact_lock(hashtextextended(${userId}, 3))`;
+        return yield* work;
+      }),
+    ),
+  );
 }
 
 /** What a signed-in session enrolls its own machine with: its id, its daemon's version, its new secret's hash, which machine it is where it read it, and the machine as it names itself, which creates the device where the account never registered the id. */
@@ -434,44 +462,40 @@ export interface OwnEnrollment extends DeviceMachine {
  * it is where the enroll named it (`machineColumns`). A machine already
  * enrolled is keyed again, its old secret refused from now on, and a
  * removed one brought back, since the session holds the account's whole
- * say over its devices; when to ask is its caller's. False where the id is
- * another account's device, or no row holds it and the enroll named no
- * machine, and nothing was written.
+ * say over its devices; when to ask is its caller's. The enrolled Mac then
+ * folds the account's other Macs on its machine into it (`folded`), in the
+ * same transaction under the account's join lock (`underJoinLock`). Answers
+ * the agents the fold moved; nothing where the id is another account's
+ * device, or no row holds it and the enroll named no machine, and nothing
+ * was written.
  */
-export function enrollOwnDevice(userId: string, enrollment: OwnEnrollment): HostEffect<boolean> {
+export function enrollOwnDevice(
+  userId: string,
+  enrollment: OwnEnrollment,
+): HostEffect<Option.Option<readonly FoldedAgent[]>> {
   const { machine, ...key } = enrollment;
-  const kept =
-    machine === undefined
-      ? keyOwnDevice({ userId, ...key })
-      : Effect.flatMap(DateTime.nowAsDate, (now) =>
-          insertOwnDevice({ userId, ...key, ...machine, now }),
-        );
-  return Effect.map(kept, (rows) => rows.length > 0);
-}
-
-/**
- * Folds the account's other listed Macs on the machine its standing Mac of
- * the id runs on into that Mac, in one transaction: their agents, the
- * tasks that run on them, and the account's Runs on pick move to it, and
- * they are removed as `removeHost` removes one, their secret refused from
- * now on. Never the Mac itself, so one enrolled again under its own id
- * keeps its row, and never another account's device. Answers each agent
- * moved, with the turns it had running; none where the device is no
- * standing Mac of the account's, its host never said which machine it is,
- * or no other host stands on it.
- */
-export function foldMachine(userId: string, id: string): HostEffect<readonly FoldedAgent[]> {
-  return transacted(folded(userId, id));
+  return underJoinLock(
+    userId,
+    Effect.gen(function* () {
+      const kept =
+        machine === undefined
+          ? yield* keyOwnDevice({ userId, ...key })
+          : yield* insertOwnDevice({ userId, ...key, ...machine, now: yield* DateTime.nowAsDate });
+      if (kept.length === 0) return Option.none();
+      return Option.some(yield* folded(userId, enrollment.id));
+    }),
+  );
 }
 
 /**
  * Registers the account's host as `registerDevice` does, and where this is
  * its first register, folds the account's other Macs on its machine into
- * it as `foldMachine` does, in one transaction, so a register the fold
- * failed under is a first register still when it is asked again. Note that
- * only the first folds, a paired box's first word naming its machine,
- * because a later one comes from a host already running, and two such on
- * one machine must never remove each other. Answers the agents the fold
+ * it (`folded`), in one transaction under the account's join lock
+ * (`underJoinLock`), so a register the fold failed under is a first
+ * register still when it is asked again. Note that only the first folds,
+ * a paired box's first word naming its machine, because a later one comes
+ * from a host already running, and two such on one machine must never
+ * remove each other. Answers the agents the fold
  * moved; nothing where another account holds the id, and nothing was
  * written.
  */
@@ -479,7 +503,8 @@ export function registerHost(
   userId: string,
   registered: { readonly id: string; readonly name: string } & DeviceRegistration,
 ): HostEffect<Option.Option<readonly FoldedAgent[]>> {
-  return transacted(
+  return underJoinLock(
+    userId,
     Effect.gen(function* () {
       const joining = (yield* findUnregistered({ userId, id: registered.id })).length > 0;
       if (!(yield* registerDevice(userId, registered))) return Option.none();

@@ -25,7 +25,7 @@
  * knows (`DEVICE_CAPABILITY`), so a newer follower's list is never refused.
  * An own enroll, and a host's first register, which is a paired box's first
  * word naming its machine, fold the account's other Macs on that machine
- * into it (`@luke/database/models/host-store`'s `foldMachine`), and the
+ * into it (`@luke/database/models/host-store`), and the
  * turns their agents had running are settled lost as a removed host's are;
  * a later register never folds, so two hosts already running never remove
  * each other.
@@ -72,12 +72,7 @@ import {
   openHostPairing,
   pollHostPairing,
 } from "@luke/database/models/host-pairing-store";
-import {
-  enrollOwnDevice,
-  foldMachine,
-  hostsOf,
-  registerHost,
-} from "@luke/database/models/host-store";
+import { enrollOwnDevice, hostsOf, registerHost } from "@luke/database/models/host-store";
 import { type DeviceAgentRelease, knownDeviceCapabilities } from "@luke/features/device-agent-wire";
 import { HOST_RELEASE } from "@luke/features/host-release";
 import {
@@ -278,10 +273,8 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
           ...(machine === undefined ? undefined : { machine }),
         }),
       );
-      if (!enrolled) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      // Note that a fold never takes the device it folds into, so a Mac enrolled again under its own id keeps its row.
-      const folded = yield* hostedStoreOrUnavailable(foldMachine(userId, input.deviceId));
-      yield* settleLostHostTurns(folded);
+      if (Option.isNone(enrolled)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      yield* settleLostHostTurns(enrolled.value);
       if (!before.some((host) => host.id === input.deviceId)) {
         yield* recordServerEvent(
           SERVER_EVENT.HOST_INSTALL,
