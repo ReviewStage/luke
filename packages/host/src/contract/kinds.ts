@@ -32,7 +32,7 @@ export const ACCOUNT_ASK_ACT_KIND = {
   /** A connected plan's default for the account's coding agents turned on or off, from beside its row in Settings. */
   PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
   /**
-   * Settings › Coding agents › Codex: Sign in with ChatGPT for Vespin's hosted
+   * Settings › Coding agents › Codex: Sign in with ChatGPT for our hosted
    * runtime, run by the host through the developer's browser, and the one
    * waiting withdrawn. Nothing crosses from the renderer but the press, and
    * the answer is the keys as the service then holds them: the sign-in's
@@ -225,7 +225,7 @@ export const AGENT_INBOX_ACT_KIND = {
 
 /**
  * A coding agent's Pull request tab's Chapters: a pull request's chapters
- * read as its workspace keeps them, and generated for its head on Vespin's own
+ * read as its workspace keeps them, and generated for its head on our own
  * model key when the developer presses Generate, the generation answered
  * once it lands, which may take minutes; and Settings' choice of the Claude
  * model the member's Generate runs on, read and written.
@@ -287,7 +287,7 @@ export const SETTINGS_ACT_KIND = {
  * repository, pinned or unpinned, or deleted. The view arrives on the document rather than as
  * an answer. The one write of a task's document from here is the
  * developer's edit of a field, `TASKS_EDIT`, which answers whether it
- * saved, conflicted with what Vespin wrote meanwhile, or failed. Beside them,
+ * saved, conflicted with what was written meanwhile, or failed. Beside them,
  * a page of GitHub's or the web's opened in the browser, the account's own
  * GitHub connected or disconnected. And
  * what one task holds, read as its tabs draw it: its
@@ -308,7 +308,7 @@ export const TASKS_ACT_KIND = {
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
   /** One change to the sidebar's sections, kept on the account; answers whether the service took it. */
   TASKS_WRITE_SECTION: "tasks.writeSection",
-  /** The repository chip's read: the repositories the account reaches through the Vespin GitHub App, as the service answers them now. */
+  /** The repository chip's read: the repositories the account reaches through our GitHub App, as the service answers them now. */
   TASKS_REPOSITORIES: "tasks.repositories",
   /** A task given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
   TASKS_SET_REPOSITORY: "tasks.setRepository",
@@ -322,7 +322,7 @@ export const TASKS_ACT_KIND = {
   TASKS_CHANGE_RELATION: "tasks.changeRelation",
   /** The developer's edit of the open task's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
   TASKS_EDIT: "tasks.edit",
-  /** A page of GitHub's opened in the browser: a repository, or where the Vespin GitHub App is installed. No other address opens through it. */
+  /** A page of GitHub's opened in the browser: a repository, or where our GitHub App is installed. No other address opens through it. */
   GITHUB_OPEN: "github.open",
   /** A web page opened in the default browser: a link a transcript's or an Inbox item's words hold, off GitHub. No address but an http or https one opens through it. */
   WEB_OPEN: "web.open",
@@ -457,7 +457,7 @@ export const TERMINAL_ACT_KIND = {
 /**
  * This Mac's `luke-host` as Settings › Hosts reaches it
  * (`this-mac-host.ts`): where it stands, read while the switch is drawn, and
- * an explicit turn-on, which enrolls the Mac again where Vespin removed it or
+ * an explicit turn-on, which enrolls the Mac again where the service removed it or
  * the last turn-on failed. Answered by the host, which runs it.
  */
 export const THIS_MAC_HOST_ACT_KIND = {
@@ -484,7 +484,7 @@ export const UPDATE_ACT_KIND = {
  * its owners and admins, answered with the photo's new version or none;
  * one's pending invitations read, one made, answered
  * with its accept link, and one canceled, for its owners and admins; a GitHub
- * organization connected to one, the Vespin GitHub App's install address the
+ * organization connected to one, our GitHub App's install address the
  * service answers opened in the browser, or disconnected from it; one
  * workspace's members read; one member removed, answered with the members
  * who remain; another member given a role, or the workspace handed to one
@@ -533,7 +533,7 @@ export const WORKSPACE_ACT_KIND = {
 /**
  * What a window asks of the system it is drawn on: the microphone asked for
  * and its route read afresh, the microphone's and the notifications' settings
- * opened, a new mail to the people who make Vespin, the panel focused, words
+ * opened, a new mail to the people who make the app, the panel focused, words
  * copied, a file saved, and feedback sent.
  */
 export const WINDOW_SURFACE_ACT_KIND = {
@@ -547,7 +547,7 @@ export const WINDOW_SURFACE_ACT_KIND = {
   MICROPHONE_ROUTE: "microphone.route",
   MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
   NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
-  /** A new message to the people who make Vespin, in the system's mail app, to the address main holds. */
+  /** A new message to the people who make the app, in the system's mail app, to the address main holds. */
   CONTACT_EMAIL: "contact.email",
   WINDOW_FOCUS_PANEL: "window.focusPanel",
   WINDOW_COPY_TEXT: "window.copyText",

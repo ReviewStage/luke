@@ -1,14 +1,14 @@
 /**
- * events.ts -- the runner's way out: every message numbered in the order it was emitted, and posted to Fullspin in batches, in order, retried until Fullspin takes it.
+ * events.ts -- the runner's way out: every message numbered in the order it was emitted, and posted to the service in batches, in order, retried until the service takes it.
  *
  * One sender fiber posts one batch at a time, so a batch never overtakes the
  * one before it, and a batch that fails is posted again whole with the same
- * numbers, which Fullspin applies at most once. Everything emitted while a post
+ * numbers, which the service applies at most once. Everything emitted while a post
  * is in flight waits in the queue and goes in the next batch, so a stream of
  * partial messages costs a post per round trip rather than per token. Beside
  * the sender, a heartbeat posts a batch with no events every
  * `RUNNER_HEARTBEAT` for as long as the launch runs, once each, since the
- * next is never far, so Fullspin keeps the sandbox alive through a harness's
+ * next is never far, so the service keeps the sandbox alive through a harness's
  * long silence; it stops as the sink drains.
  */
 
@@ -37,11 +37,11 @@ import {
 const BATCH_MAX = 256;
 
 /**
- * How long the sender waits after a post Fullspin did not take: the first wait,
+ * How long the sender waits after a post the service did not take: the first wait,
  * doubling on each failure, up to the longest, each spread by jitter so the
  * launches an outage cut off together do not all post again in step. There is
  * no count after which it gives up: a launch that holds its run posts for as
- * long as it runs, and only Fullspin refusing it (a status that never changes by
+ * long as it runs, and only the service refusing it (a status that never changes by
  * waiting) or the device stopping it ends it.
  */
 const POST_RETRY = {
@@ -57,7 +57,7 @@ const POST_BACKOFF = Schedule.exponential(POST_RETRY.FIRST).pipe(
 );
 
 /**
- * How long one post waits on Fullspin's answer before it is let go as a failure
+ * How long one post waits on the service's answer before it is let go as a failure
  * to retry: the heartbeat's own bound, so a connection a sleep or a network
  * change left half open cannot hold the sender for good.
  */
@@ -70,11 +70,11 @@ const POST_TIMEOUT = Duration.millis(RUNNER_HEARTBEAT.TIMEOUT_MS);
  */
 const STOP_DRAIN = POST_TIMEOUT;
 
-/** The statuses that say Fullspin may take the same batch later: its own failure, a timeout, or a limit. */
+/** The statuses that say the service may take the same batch later: its own failure, a timeout, or a limit. */
 const TRANSIENT_STATUS = new Set([408, 429]);
 const SERVER_ERROR = 500;
 
-/** A post Fullspin did not take. `transient` is whether posting it again may succeed. */
+/** A post the service did not take. `transient` is whether posting it again may succeed. */
 export class EventsUndelivered extends Data.TaggedError("EventsUndelivered")<{
   readonly transient: boolean;
   readonly detail: string;
@@ -89,13 +89,13 @@ interface SinkOptions {
 }
 
 export interface EventSink {
-  /** Numbers a message and queues it for Fullspin. */
+  /** Numbers a message and queues it for the service. */
   readonly emit: (message: RunnerMessage) => Effect.Effect<void>;
-  /** Takes no more messages and waits until every queued one is posted, or Fullspin refused them for good. */
+  /** Takes no more messages and waits until every queued one is posted, or the service refused them for good. */
   readonly drain: Effect.Effect<void, EventsUndelivered>;
-  /** `drain` for a launch Fullspin stopped: waits at most one post's bound for the last events, then lets them go. */
+  /** `drain` for a launch the service stopped: waits at most one post's bound for the last events, then lets them go. */
   readonly drainStopped: Effect.Effect<void, EventsUndelivered>;
-  /** Settles only if Fullspin refuses a post for good, with why: Fullspin will not hear anything more from this launch. */
+  /** Settles only if the service refuses a post for good, with why: it will not hear anything more from this launch. */
   readonly undelivered: Effect.Effect<EventsUndelivered>;
   /** Adds a secret the launch came to hold, such as a refreshed token, to those no batch from now on carries. */
   readonly withhold: (secret: Redacted.Redacted) => Effect.Effect<void>;
@@ -104,7 +104,7 @@ export interface EventSink {
 /** What a secret is replaced with wherever an event carried it. */
 const REDACTED = "[redacted]";
 
-/** A value as it crosses to Fullspin: JSON's own shapes. */
+/** A value as it crosses to the service: JSON's own shapes. */
 type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json };
 
 /** A text with every secret taken out. */
@@ -126,7 +126,7 @@ function redacted(value: Json, secrets: readonly string[]): Json {
 }
 
 /**
- * A batch as the text Fullspin is sent, with every secret the launch holds taken
+ * A batch as the text the service is sent, with every secret the launch holds taken
  * out. Note that we scrub every event, the SDK's included, because a tool's
  * output or a CLI's error is text the runner never wrote; the command sandbox
  * keeps both secrets from the agent's commands, and this is the second fence.
@@ -140,7 +140,7 @@ function batchText(batch: RunnerEventBatch, secrets: readonly Redacted.Redacted[
   return JSON.stringify(redacted(json, values));
 }
 
-/** One batch, posted once: taken, or why Fullspin did not take it. */
+/** One batch, posted once: taken, or why the service did not take it. */
 function postOnce(
   client: HttpClient.HttpClient,
   options: SinkOptions,
@@ -167,7 +167,7 @@ function postOnce(
   );
 }
 
-/** One batch, posted until Fullspin takes it or answers that it never will. */
+/** One batch, posted until the service takes it or answers that it never will. */
 const postBatch = Effect.fn("agent-runner/postBatch")(function* (
   client: HttpClient.HttpClient,
   options: SinkOptions,
@@ -183,7 +183,7 @@ const postBatch = Effect.fn("agent-runner/postBatch")(function* (
 
 /**
  * The sink for one launch, numbering from `firstSequence`. Its sender runs in
- * the caller's scope; a post Fullspin refuses for good stops it, and `drain`
+ * the caller's scope; a post the service refuses for good stops it, and `drain`
  * reports that failure.
  */
 export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
@@ -201,7 +201,7 @@ export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
     }
   }).pipe(Effect.catchIf(Cause.isDone, () => Effect.void));
   const sender = yield* Effect.forkScoped(sendAll);
-  // Note that a heartbeat Fullspin did not take, or did not answer within the post's bound, is let go, since the next follows within the interval.
+  // Note that a heartbeat the service did not take, or did not answer within the post's bound, is let go, since the next follows within the interval.
   // Note that `Effect.schedule` waits one interval before the first beat, as the schedule's first step sleeps.
   const heartbeat = yield* Effect.forkScoped(
     Effect.schedule(

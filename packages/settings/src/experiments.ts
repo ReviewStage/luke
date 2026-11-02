@@ -16,9 +16,9 @@ export const EXPERIMENT = {
   CHANNELS: "channels",
   /** Pilot: a new task can start with one pilot agent that plans the work, splits it into child tasks, and runs a coding agent on each. */
   PILOT: "pilot",
-  /** Skills: the skills a member installs into Fullspin for their agents, managed in Settings › Skills, and the `/` list of skills in a box written to an agent. */
+  /** Skills: the skills a member installs into the app for their agents, managed in Settings › Skills, and the `/` list of skills in a box written to an agent. */
   SKILLS: "skills",
-  /** Bring your own host: agents that run on the member's own Macs and Linux machines, This Mac among them, set up in Settings › Hosts, rather than only in Fullspin's cloud. */
+  /** Bring your own host: agents that run on the member's own Macs and Linux machines, This Mac among them, set up in Settings › Hosts, rather than only in our cloud. */
   BRING_YOUR_OWN_HOST: "bring-your-own-host",
 } as const;
 

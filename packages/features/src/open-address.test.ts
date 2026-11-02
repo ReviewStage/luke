@@ -4,7 +4,7 @@ import { LINK_PLACE } from "./link-grammar.js";
 import { openTargetOf } from "./open-address.js";
 
 /**
- * What a web page at a Vespin link hands the desktop app: the place its
+ * What a web page at a link of ours hands the desktop app: the place its
  * address names, spelled in the app's own scheme, on vespin.dev or any
  * preview that serves the web app, and nothing for an address that names no
  * place. Synthetic ids.

@@ -4,7 +4,7 @@ import { appLinkClaim, appLinkInArguments, appLinkInbox, placeOfAppLink } from "
 import { LINK_PLACE, type ReadLink, type ShownLink } from "./link-grammar.js";
 
 /**
- * A Vespin link the system hands the app: read only as a place in Vespin, in
+ * A link of ours the system hands the app: read only as a place in the app, in
  * the app's own scheme; held until a panel can open it, then
  * opened in the order it came, and each later one as it comes; let go once
  * the launch is torn down. Synthetic ids.

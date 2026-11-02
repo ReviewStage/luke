@@ -3,7 +3,7 @@
  *
  * A call the host makes for a window answers rather than fails
  * (`agent-client.ts`), so the window draws its one sentence for every
- * failure it cannot name, "Fullspin didn't hear back" among them. What failed
+ * failure it cannot name, "didn't hear back" among them. What failed
  * rides beside that answer as these facts: which failure it was, the fault,
  * refusal, HTTP status, code, error name, reason, and trace id it names, and
  * the failure beneath it where there is one. The panel hands the answer on as

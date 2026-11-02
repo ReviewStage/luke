@@ -31,7 +31,7 @@ import { wireUuidSchema } from "./service-wire.js";
  *
  * Every path the service hands out is absolute, under the agent's own
  * folder in the Mac's home (`deviceAgentLayout`): its worktree, the files a
- * message carries, and the skills its member installed into Vespin, never
+ * message carries, and the skills its member installed into the app, never
  * the user's own `~/.claude`.
  */
 
@@ -125,7 +125,7 @@ export const DEVICE_AGENT_LINE_CAPABILITY: Partial<Record<DeviceAgentLineKind, D
 
 /** What program a device ran local agents through when its row was written, which nothing reads since every device runs the host program; still on the wire for clients that decode it. */
 export const DEVICE_KIND = {
-  /** The Vespin desktop app, on the Mac its member is signed in at. */
+  /** The desktop app, on the Mac its member is signed in at. */
   DESKTOP: "desktop",
   /** A headless host a member added, with nobody signed in at it. */
   HOST: "host",
@@ -135,13 +135,13 @@ export type DeviceKind = (typeof DEVICE_KIND)[keyof typeof DEVICE_KIND];
 
 /**
  * How a device runs its local agents. A sandboxed agent runs in a Linux
- * microVM of its own, booted from Vespin's sandbox image, with its folder
+ * microVM of its own, booted from our sandbox image, with its folder
  * mounted in at the same absolute path it has on the device, so every path
  * the service hands out (`deviceAgentLayout`) stands in every mode; it
  * reaches none of the device's own tools, services, or logins. A direct
  * agent runs on the device itself, as the device's own user, with full
- * access to what that user reaches, but on the sign-ins saved in Vespin and
- * the GitHub token Vespin hands the device, as a sandboxed one does; a bare
+ * access to what that user reaches, but on the sign-ins saved in the app and
+ * the GitHub token we hand the device, as a sandboxed one does; a bare
  * one ran on the developer's own logins.
  */
 export const DEVICE_ISOLATION = {
@@ -149,7 +149,7 @@ export const DEVICE_ISOLATION = {
   SANDBOX: "sandbox",
   /** Each agent directly on the device, with its installed tools and its own logins. */
   BARE: "bare",
-  /** Each agent directly on the device, in a folder of its own, on the sign-ins saved in Vespin and the GitHub token Vespin hands it. */
+  /** Each agent directly on the device, in a folder of its own, on the sign-ins saved in the app and the GitHub token we hand it. */
   DIRECT: "direct",
 } as const;
 
@@ -246,11 +246,11 @@ export const DEVICE_AGENT_FOLDER = {
   REPOSITORY: "repository",
   /** The files a message carries, one folder per line, made `0700`. */
   ATTACHMENTS: "attachments",
-  /** The skills the member installed into Vespin, as the harness's local plugin. */
+  /** The skills the member installed into the app, as the harness's local plugin. */
   INSTALLED_SKILLS: "installed-skills",
   /** The agent's own `gh` sign-in on a host (`GH_CONFIG_DIR`), which no read of the agent's tools answers from. */
   GITHUB_CONFIG: "gh",
-  /** The agent's temp folder (`TMPDIR`), made `0700`, which its runner and its commands write to, and where it saves what Vespin reads back. */
+  /** The agent's temp folder (`TMPDIR`), made `0700`, which its runner and its commands write to, and where it saves what we read back. */
   TEMP: "tmp",
 } as const;
 
@@ -388,7 +388,7 @@ export const deviceAgentReadArgsSchema = EffectSchema.Struct({
  * Which harnesses the Mac is signed in to by itself, by the harness's own
  * login on the Mac, never the credential: a local agent on a harness its Mac
  * is signed in to launches on that login rather than the plan or key the
- * account saved in Vespin. A key absent is a harness the Mac did not check.
+ * account saved in the app. A key absent is a harness the Mac did not check.
  * A sandboxed or direct device says none, since its agents run on none of
  * its logins, so each launches on the account's saved credential.
  */
@@ -413,7 +413,7 @@ const deviceField = { deviceId: wireUuidSchema };
  * A register: the Mac's id, its name, its home folder, and the CLI it
  * bundles, both absolute, the Codex binary it runs, absent until it has one,
  * which harnesses it is signed in to (neither, from a device that
- * runs its agents in VMs or directly on the sign-ins saved in Vespin), its platform and architecture, and
+ * runs its agents in VMs or directly on the sign-ins saved in the app), its platform and architecture, and
  * how it runs its agents, absent for one that runs them bare, as every
  * desktop from before the field does, and the capabilities its follower has
  * (`DEVICE_CAPABILITY`), absent for none, as every desktop from before the
@@ -495,7 +495,7 @@ export const deviceAgentClaimRequestSchema = EffectSchema.Struct({
  * one the service words for the agent's reader.
  */
 export const DEVICE_LAUNCH_REFUSAL = {
-  /** The agent ran directly on the device before Vespin kept each agent's repository and sessions in its own folder, on the developer's own logins, so its session cannot be reached again there. */
+  /** The agent ran directly on the device before we kept each agent's repository and sessions in its own folder, on the developer's own logins, so its session cannot be reached again there. */
   RAN_DIRECTLY: "ran-directly",
 } as const;
 
@@ -583,7 +583,7 @@ export const deviceAgentBeatAnswerSchema = EffectSchema.Struct({
 /**
  * The ids of the account's agents that should still stand on this Mac:
  * those pinned to it and not archived, whatever their task's status. A
- * device removes the folder of any agent of Vespin's it holds that is
+ * device removes the folder of any agent of ours it holds that is
  * not named, so the list is what stands rather than a discard it could miss.
  */
 export const deviceAgentLiveAgentsAnswerSchema = EffectSchema.Struct({

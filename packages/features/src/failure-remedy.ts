@@ -117,7 +117,7 @@ export function remedyLabel(failure: Failure): string | undefined {
 }
 
 /**
- * Whether Retry stands beside the remedy: a remedy finished somewhere Fullspin
+ * Whether Retry stands beside the remedy: a remedy finished somewhere we
  * cannot watch, on GitHub or in Settings, leaves the same send to be made
  * again once it is done.
  */

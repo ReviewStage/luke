@@ -1,5 +1,5 @@
 /**
- * notification.ts -- the topics a write touches, and what a notification on Fullspin Sync's channel carries.
+ * notification.ts -- the topics a write touches, and what a notification on Sync's channel carries.
  *
  * A synced table's triggers (`render.ts`) send each write's topics on one
  * channel, and the listener (`listener.ts`) hands what arrives to whoever

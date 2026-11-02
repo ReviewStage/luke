@@ -14,7 +14,7 @@ import { filledText } from "./text-schema.js";
  * on every save (`plan-comment-anchor.ts`); a thread whose words were
  * deleted keeps its quote and stands with no anchor, which the window says
  * as "Original content deleted". A thread's entries are its comments, and
- * the lines of what happened to it in between: who asked Fullspin or a coding
+ * the lines of what happened to it in between: who asked the app or a coding
  * agent to read it, and who resolved or reopened it. Posting a comment asks
  * no one anything.
  *
@@ -61,7 +61,7 @@ export const PLAN_COMMENT_STATUS = {
 
 export type PlanCommentStatus = (typeof PLAN_COMMENT_STATUS)[keyof typeof PLAN_COMMENT_STATUS];
 
-/** Who wrote an entry: a member of the workspace, Fullspin, or one of the task's coding agents. */
+/** Who wrote an entry: a member of the workspace, the app, or one of the task's coding agents. */
 export const PLAN_COMMENT_ACTOR = {
   MEMBER: "member",
   LUKE: "luke",
@@ -73,7 +73,7 @@ export type PlanCommentActor = (typeof PLAN_COMMENT_ACTOR)[keyof typeof PLAN_COM
 /** What one entry of a thread is: a comment, or a line of what happened to the thread. */
 export const PLAN_COMMENT_ENTRY = {
   COMMENT: "comment",
-  /** Someone sent the thread to Fullspin or a coding agent to read and answer. */
+  /** Someone sent the thread to the app or a coding agent to read and answer. */
   ASKED: "asked",
   RESOLVED: "resolved",
   REOPENED: "reopened",
@@ -97,7 +97,7 @@ const planCommentSpanSchema = EffectSchema.Struct({
 });
 
 /**
- * Who wrote an entry: a member, named as the service names one, Fullspin, or a
+ * Who wrote an entry: a member, named as the service names one, the app, or a
  * coding agent by its id, whose name the window reads off the task's agents.
  * An entry whose member's account is gone names no member.
  */
@@ -109,7 +109,7 @@ const planCommentWriterSchema = EffectSchema.Struct({
 
 export type PlanCommentWriter = typeof planCommentWriterSchema.Type;
 
-/** Who a thread was sent to: Fullspin, or a coding agent by its id. */
+/** Who a thread was sent to: the app, or a coding agent by its id. */
 const planCommentAskedSchema = EffectSchema.Struct({
   actor: EffectSchema.Literals([PLAN_COMMENT_ACTOR.LUKE, PLAN_COMMENT_ACTOR.AGENT]),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
@@ -218,7 +218,7 @@ export const PLAN_COMMENT_ACTION = {
   RESOLVE: "resolve",
   REOPEN: "reopen",
   DELETE_THREAD: "delete-thread",
-  /** Sends the thread to Fullspin or one of the task's coding agents, to read with the plan and answer in the thread. */
+  /** Sends the thread to the app or one of the task's coding agents, to read with the plan and answer in the thread. */
   ASK: "ask",
 } as const;
 
@@ -303,7 +303,7 @@ export const planCommentAnchorsSchema = EffectSchema.Struct({
 
 export type PlanCommentAnchors = typeof planCommentAnchorsSchema.Type;
 
-/** The tools Fullspin and every coding agent on the task read and answer the plan's comments with, by the name the model calls each. */
+/** The tools the app and every coding agent on the task read and answer the plan's comments with, by the name the model calls each. */
 export const PLAN_COMMENT_TOOL = {
   READ: "read_comments",
   REPLY: "reply_to_comment",

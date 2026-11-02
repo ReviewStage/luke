@@ -10,7 +10,7 @@ import { parseReleaseVersion } from "./release-version.js";
 
 /**
  * What the desktop may count about its own use, and the one reader both sides
- * run over it. The rest of `@luke/features` holds the contracts for what Fullspin's service
+ * run over it. The rest of `@luke/features` holds the contracts for what our service
  * *answers*; this holds the contract for what the desktop *asks* it to record.
  *
  * The vocabulary is the privacy boundary, not a convention on top of one. An
@@ -92,7 +92,7 @@ export const PRODUCT_EVENT_PROPERTY = {
 
 type ProductEventProperty = (typeof PRODUCT_EVENT_PROPERTY)[keyof typeof PRODUCT_EVENT_PROPERTY];
 
-/** Where a Fullspin account stands after an action, never who the account is. */
+/** Where an account stands after an action, never who the account is. */
 export const PRODUCT_ACCOUNT_ACTION = {
   SIGN_IN_START: "sign_in_start",
   SIGN_IN_CANCEL: "sign_in_cancel",
@@ -253,7 +253,7 @@ export const PRODUCT_EXPERIMENT = {
   /** Removed with video calls, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   VIDEO_CALLS: "video-calls",
   MEMORY: "memory",
-  /** Removed with Fullspin's own issues, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
+  /** Removed with our own issues, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   ISSUES: "issues",
   /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   SECTIONS: "sections",
@@ -547,7 +547,7 @@ export function productEventBatchFromWire(value: UnparsedWireValue): ProductEven
 }
 
 /**
- * Which of Fullspin's shells something came from, under the `platform` property:
+ * Which of our shells something came from, under the `platform` property:
  * the desktop's panel window or the web app's tab, for the counted events and
  * the session replay alike, so one filter separates both. A client names
  * itself in its batch's `build`; the service's own counts are `server`, which

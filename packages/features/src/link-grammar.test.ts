@@ -21,7 +21,7 @@ import {
 import { linkLabels, linksIn, mentionLinksIn, mentionsIn } from "./mention-link.js";
 
 /**
- * A place in Vespin as the link a teammate is sent: written under its
+ * A place in the app as the link a teammate is sent: written under its
  * workspace by its ids alone, read back by the web's scheme or the
  * desktop's, and nothing read from an address that names no place.
  * Synthetic ids.

@@ -1,10 +1,10 @@
 /**
- * link-home.ts -- where a Vespin link lives: the host its address is written on, the desktop's own scheme, and the earlier names every reader still takes.
+ * link-home.ts -- where a link of ours lives: the host its address is written on, the desktop's own scheme, and the earlier names every reader still takes.
  *
- * A Vespin link is the thing's address on the web, `https://<host>/<workspace>/…`,
+ * A link of ours is the thing's address on the web, `https://<host>/<workspace>/…`,
  * and the desktop is handed the same address with its scheme swapped for the
- * app's own. Both are spelled here and nowhere else. The product was
- * Luke, at `tryluke.dev` and `tryluke:`, which stand in `HOST_ALIASES` and
+ * app's own. Both are spelled here and nowhere else. Links were once
+ * written at `tryluke.dev` and `tryluke:`, which stand in `HOST_ALIASES` and
  * `SCHEME_ALIASES` below: every reader goes on taking them as the home's, so
  * no link already pasted anywhere stops opening.
  * The bundle's own claim on the scheme (`electron-builder-config.mjs`'s
@@ -12,10 +12,10 @@
  * no TypeScript; a rename names its alias there too.
  */
 
-/** Hosts a link was once written on, read as the home's: Luke's. */
+/** Hosts a link was once written on, read as the home's. */
 const HOST_ALIASES: readonly string[] = ["tryluke.dev"];
 
-/** Schemes the desktop was once handed a link in, read as its own: Luke's. */
+/** Schemes the desktop was once handed a link in, read as its own. */
 const SCHEME_ALIASES: readonly string[] = ["tryluke"];
 
 export const LINK_HOME = {
@@ -32,9 +32,9 @@ export const LINK_ORIGIN = `https://${LINK_HOME.HOST}`;
 const APP_LINK_PROTOCOL = `${LINK_HOME.APP_SCHEME}:`;
 
 /**
- * Vespin's home in the desktop's own scheme. It names no place, so the app
+ * Our home in the desktop's own scheme. It names no place, so the app
  * opens nothing of it (`app-links.ts`), but macOS still brings the app
- * forward to take it: the link a page hands a Mac to open Vespin at all.
+ * forward to take it: the link a page hands a Mac to open the app at all.
  */
 export const APP_HOME_LINK = `${APP_LINK_PROTOCOL}//${LINK_HOME.HOST}/`;
 
@@ -64,7 +64,7 @@ export function isAppLinkProtocol(protocol: string): boolean {
   return APP_PROTOCOLS.has(protocol);
 }
 
-/** Whether an address is a Vespin link's: on the home's host or an alias of it, by the web's scheme or the desktop's. */
+/** Whether an address is a link of ours: on the home's host or an alias of it, by the web's scheme or the desktop's. */
 export function isLinkHome(url: URL): boolean {
   return HOSTS.has(url.host) && (url.protocol === "https:" || isAppLinkProtocol(url.protocol));
 }

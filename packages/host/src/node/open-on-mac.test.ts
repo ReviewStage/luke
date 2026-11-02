@@ -22,7 +22,7 @@ import {
 
 /**
  * Open on this Mac's script over real Git and bash, an origin on disk
- * standing in for GitHub: the first run clones it into Vespin's own folder
+ * standing in for GitHub: the first run clones it into the app's own folder
  * and makes a worktree on the agent's branch, tracking GitHub's; a later run after the agent pushes more, or
  * force-pushes, brings the worktree to the branch's new head and keeps what
  * Git ignores there; a worktree with the developer's own changes, or
@@ -33,15 +33,15 @@ import {
  * with no command says where to set one; a branch GitHub
  * deleted once its pull request merged opens at that pull request's last
  * head; a worktree folder deleted by hand is made again; one an earlier
- * Vespin kept under its application data is left there and said; two opens of
- * the shared clone at once each bring in their own branch, none taking the
- * lock from an open that took it after the holder it read let go; one waits on a
- * clone another holds while it lives, and takes the lock over once it is
- * gone; an open tidies the worktrees, this Vespin's and an earlier one's,
- * whose branch is gone from GitHub, unless one is in use, was opened in the
- * last day, or holds the developer's own, and an earlier Vespin's clone once
- * it holds none; and no two
- * branches share a worktree or reach outside its repository's folder.
+ * version of the app kept under its application data is left there and said;
+ * two opens of the shared clone at once each bring in their own branch, none
+ * taking the lock from an open that took it after the holder it read let go;
+ * one waits on a clone another holds while it lives, and takes the lock over
+ * once it is gone; an open tidies the worktrees, this version's and an earlier
+ * one's, whose branch is gone from GitHub, unless one is in use, was opened in
+ * the last day, or holds the developer's own, and an earlier version's clone
+ * once it holds none; and no two branches share a worktree or reach outside
+ * its repository's folder.
  */
 
 const GIT_ENVIRONMENT = {
@@ -62,7 +62,7 @@ function git(folder: string, args: readonly string[]): string {
   return execFileSync("git", args, { cwd: folder, env: GIT_ENVIRONMENT, encoding: "utf8" }).trim();
 }
 
-/** An origin with `main` and an agent's branch pushed to it, and the state root Vespin keeps its clone in. */
+/** An origin with `main` and an agent's branch pushed to it, and the state root the app keeps its clone in. */
 async function fixture(t: Parameters<typeof temporaryDirectory>[0]) {
   const scratch = await temporaryDirectory(t, "luke-open-on-mac-");
   const origin = path.join(scratch, "origin");

@@ -1,7 +1,7 @@
 /**
- * luke-tools-model.ts -- what an agent's MCP popover says of Fullspin's own tools: each one's group and one line of what it does, and whether `run_on_mac` is on for the agent and why not.
+ * luke-tools-model.ts -- what an agent's MCP popover says of our own tools: each one's group and one line of what it does, and whether `run_on_mac` is on for the agent and why not.
  *
- * Which of Fullspin's tools an agent is offered is the service's answer
+ * Which of our tools an agent is offered is the service's answer
  * (`luke-tools-wire.ts`), read off the same rules its runtime narrows the
  * list by, so it never drifts from what the agent is handed. What each tool
  * is called beside its name, and the group it stands under, is said here,
@@ -26,7 +26,7 @@ import { RUN_ON_MAC_OFF, type RunOnMacStanding } from "./luke-tools-wire.js";
 import { PRODUCT_NAME } from "./product-name.js";
 import { dayAndTimeText } from "./time-format.js";
 
-/** The groups Fullspin's tools stand under on its page, in the order they are drawn. */
+/** The groups our tools stand under on their page, in the order they are drawn. */
 export const LUKE_TOOL_GROUP = {
   MAC: "Your Mac",
   THREADS: "Threads",
@@ -44,13 +44,13 @@ export type LukeToolGroup = (typeof LUKE_TOOL_GROUP)[keyof typeof LUKE_TOOL_GROU
 
 const GROUP_ORDER: readonly LukeToolGroup[] = Object.values(LUKE_TOOL_GROUP);
 
-/** One of Fullspin's tools as its page says it: its group, and one line of what it does. */
+/** One of our tools as its page says it: its group, and one line of what it does. */
 interface LukeToolWords {
   readonly group: LukeToolGroup;
   readonly summary: string;
 }
 
-/** Every tool of Fullspin's, by its name: its group and one line of what it does. */
+/** Every tool of ours, by its name: its group and one line of what it does. */
 const LUKE_TOOL_WORDS = {
   [AGENT_TOOL.RUN_ON_MAC]: {
     group: LUKE_TOOL_GROUP.MAC,
@@ -254,13 +254,13 @@ const LUKE_TOOL_WORDS = {
   },
 } as const satisfies { readonly [Tool in AgentTool]: LukeToolWords };
 
-/** One tool as Fullspin's page draws it: its name, and one line of what it does where this build knows it. */
+/** One tool as our tools' page draws it: its name, and one line of what it does where this build knows it. */
 export interface LukeToolRow {
   readonly name: string;
   readonly summary?: string;
 }
 
-/** One group of Fullspin's page: its heading and its tools, in the order the service answered them. */
+/** One group of our tools' page: its heading and its tools, in the order the service answered them. */
 export interface LukeToolSection {
   readonly heading: LukeToolGroup;
   readonly tools: readonly LukeToolRow[];
@@ -270,7 +270,7 @@ function wordsOf(name: string): LukeToolWords | undefined {
   return Object.hasOwn(LUKE_TOOL_WORDS, name) ? LUKE_TOOL_WORDS[name as AgentTool] : undefined;
 }
 
-/** One line of what a tool of Fullspin's does; nothing for a name this build does not know. */
+/** One line of what a tool of ours does; nothing for a name this build does not know. */
 export function lukeToolSummary(name: string): string | undefined {
   return wordsOf(name)?.summary;
 }
@@ -296,13 +296,13 @@ export const RUN_ON_MAC_REASON = {
 
 export type RunOnMacReason = (typeof RUN_ON_MAC_REASON)[keyof typeof RUN_ON_MAC_REASON];
 
-/** What Fullspin says of one reason: a short line for a row, and a sentence of detail for the tool's page where the short line leaves something unsaid. */
+/** What we say of one reason: a short line for a row, and a sentence of detail for the tool's page where the short line leaves something unsaid. */
 interface RunOnMacReasonWords {
   readonly short: string;
   readonly detail?: string;
 }
 
-/** What Fullspin says of each reason. Settings off has no detail, since the Open settings beside its short line says the rest. */
+/** What we say of each reason. Settings off has no detail, since the Open settings beside its short line says the rest. */
 export const RUN_ON_MAC_REASON_WORDS = {
   [RUN_ON_MAC_REASON.SETTINGS_OFF]: { short: "Off in Settings" },
   [RUN_ON_MAC_REASON.MAC_AWAY]: {

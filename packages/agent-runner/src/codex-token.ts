@@ -1,11 +1,11 @@
 /**
- * codex-token.ts -- the runner as Codex's token command: Fullspin asked for the plan's access token under the runner's bearer, and the token answered for app-server alone.
+ * codex-token.ts -- the runner as Codex's token command: the service asked for the plan's access token under the runner's bearer, and the token answered for app-server alone.
  *
  * App-server runs `node <bundle> codex-token <tokenUrl>` (its provider's
  * `auth` command, `codex.ts`) for the bearer it sends OpenAI: as it first
  * needs one, again once its cached one is older than the refresh interval,
  * and again after a 401, mid-turn included. The command inherits
- * app-server's environment, the runner's bearer in it (which the Fullspin MCP
+ * app-server's environment, the runner's bearer in it (which our MCP
  * server's header already reads from there), and prints the token on stdout,
  * which app-server reads and nothing else does. A refusal or failure says
  * only its status on stderr, which app-server may quote in a turn's error,
@@ -17,7 +17,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { RUNNER_ENV, RunnerTokenAnswerSchema } from "./protocol.js";
 
-/** How long Fullspin is given to answer, within app-server's own timeout for the command. */
+/** How long the service is given to answer, within app-server's own timeout for the command. */
 const ASK_TIMEOUT = Duration.seconds(20);
 
 const HTTP_OK = 200;
@@ -29,7 +29,7 @@ class CodexTokenFailed extends Data.TaggedError("CodexTokenFailed")<{
   readonly detail: string;
 }> {}
 
-/** The plan's access token, asked of Fullspin at `url` under the bearer in `env`. */
+/** The plan's access token, asked of the service at `url` under the bearer in `env`. */
 export const askCodexToken = Effect.fn("agent-runner/askCodexToken")(function* (
   url: string,
   env: Readonly<Record<string, string | undefined>>,
