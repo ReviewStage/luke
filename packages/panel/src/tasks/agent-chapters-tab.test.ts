@@ -332,6 +332,8 @@ interface Answers {
   readonly viewed?: readonly string[];
   /** The head GitHub holds as each read of the overview and the files asks; theirs where none is named, the overview's merge box saying none. */
   readonly head?: () => string;
+  /** Whether the files' read names no head, as where the service could not read the pull request's commits. */
+  readonly filesHeadless?: boolean;
 }
 
 /** The agent's control, its overview, files, and chapters answering as given. */
@@ -381,7 +383,12 @@ function controlAnswering(answers: Answers): AgentsControl {
       // The older push's files hold none of the chapters' hunks, so drawing them under the chapters shows.
       const files = head === HEAD ? FILES : [];
       return Promise.resolve({
-        pullRequest: { url: PAGE, headSha: head, truncated: false, files },
+        pullRequest: {
+          url: PAGE,
+          ...(answers.filesHeadless === true ? {} : { headSha: head }),
+          truncated: false,
+          files,
+        },
       });
     },
     readPullRequestViewed: () =>
@@ -718,6 +725,20 @@ test("the Chapters tab says where the chapters stand before their view is opened
   );
 
   assert.equal(tab.querySelector(".chapters-view"), null, "the view was never opened");
+  assert.equal(chaptersTabWords(tab), "Chapters out of date 3");
+});
+
+test("the Chapters tab counts none viewed where the files' read names no head, since the view takes the chapters as out of date then", async () => {
+  const tab = await draw(
+    controlAnswering({
+      head: () => HEAD,
+      filesHeadless: true,
+      readChapters: () => Promise.resolve(answering(ready())),
+      viewed: [STORE.path],
+    }),
+  );
+
+  assert.match(tab.querySelector(".luke-tab-notice")?.textContent ?? "", /New commits since/u);
   assert.equal(chaptersTabWords(tab), "Chapters out of date 3");
 });
 

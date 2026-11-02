@@ -2091,15 +2091,17 @@ const CHAPTERS_TAB_GLYPHS = {
  * many are viewed of how many where any is, in the complete tone once all
  * are; nothing while there are none. Note that viewed is read from the files
  * and the marks Files changed reads, so it stands only once either view has
- * read them, and before then the files' head is taken as the pull
- * request's, which is the head the view will read them at.
+ * read them; before then the files' head is taken as the pull request's,
+ * which is the head the view will read them at, and once read it is
+ * theirs, as the view takes it.
  */
 function chaptersTabCount(
   chapters: ChaptersRead,
   changes: ChangesReads,
 ): readonly CountPart[] | undefined {
   const files = changes.pullRequest ?? undefined;
-  const filesHead = files?.headSha ?? chapters.head;
+  // Note that once the files are read their own head is the one the view judges by, even where they name none.
+  const filesHead = files === undefined ? chapters.head : files.headSha;
   const state = chaptersShown(chapters.answer, chapters.out, chapters.generating, {
     pullRequest: chapters.head,
     files: filesHead,
@@ -2126,8 +2128,8 @@ function chaptersTabCount(
   }
   if (state.kind !== CHAPTERS_SHOWN.READY) return undefined;
   const total = state.chapters.length;
-  // Note that with no head read yet nothing says they are out of date, so they are counted as they stand.
-  if (state.stale && filesHead !== undefined) {
+  // Note that with neither the files nor the pull request's head read yet nothing says they are out of date, so they are counted as they stand.
+  if (state.stale && (files !== undefined || chapters.head !== undefined)) {
     return [
       {
         text: formatCount(total),
