@@ -67,6 +67,7 @@
 
 SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 DEFAULT_BRANCH=main
+# The demo branch, which must match `DEMO_BRANCH` in `packages/service/src/db/index.ts`.
 DEMO_BRANCH=demo
 # Where the fetched `main` is kept, out of the way of any branch of the clone's own.
 MAIN_REF=refs/vercel-ignore/main

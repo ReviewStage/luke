@@ -60,9 +60,11 @@ production into them under `DATABASE_URL` and `DATABASE_URL_UNPOOLED`, so the
 demo's addresses are held under names it never sets,
 `LUKE_DEMO_DATABASE_URL` and `LUKE_DEMO_DATABASE_URL_UNPOOLED`, scoped to
 `demo`. Every reader, the migrator included, prefers those wherever they hold
-a value and `VERCEL_ENV` is not `production`
-(`packages/service/src/db/index.ts`), and `scripts/vercel-ignore.sh` builds
-every deployment of the branch, whose tree is otherwise `main`'s.
+a value and `VERCEL_ENV` is not `production`, and on the `demo` branch reads
+them alone, so a missing one fails the build and refuses requests rather than
+showing the copy of production (`packages/service/src/db/index.ts`).
+`scripts/vercel-ignore.sh` builds every deployment of the branch, whose tree
+is otherwise `main`'s.
 
 The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_APP_CLIENT_ID`, and

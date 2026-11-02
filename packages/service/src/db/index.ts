@@ -18,11 +18,18 @@ const DATABASE_ENVIRONMENT = {
 /** One connection's pair of variables. */
 type DatabaseVariables = (typeof DATABASE_ENVIRONMENT)[keyof typeof DATABASE_ENVIRONMENT];
 
-/** Vercel's own name for the environment a deployment runs as. */
-const DEPLOYMENT_VARIABLE = "VERCEL_ENV";
+/** Vercel's own names for the environment a deployment runs as and the git branch it was built from, both present at build and at run time. */
+const VERCEL_ENVIRONMENT = { ENVIRONMENT: "VERCEL_ENV", BRANCH: "VERCEL_GIT_COMMIT_REF" } as const;
 
 /** The environment a deployment runs as, as its own `VERCEL_ENV` names it. */
 const DEPLOYMENT_ENVIRONMENT = { PRODUCTION: "production" } as const;
+
+/**
+ * The long-lived branch whose Previews are the demo deployment. Note that it
+ * must match `DEMO_BRANCH` in `scripts/vercel-ignore.sh`, which builds every
+ * deployment of it.
+ */
+const DEMO_BRANCH = "demo";
 
 /**
  * The `sslmode` values `pg-connection-string` (v2) already treats as
@@ -59,43 +66,54 @@ function connectionStringOf(value: string | undefined): string | undefined {
   return trimmed ? withExplicitSslMode(trimmed) : undefined;
 }
 
-/** What one connection's variables hold, beside the environment the deployment runs as. */
+/** What one connection's variables hold, beside what Vercel says the deployment is. */
 interface HeldConnection {
   readonly deployment: string | undefined;
+  readonly branch: string | undefined;
   readonly demo: string | undefined;
   readonly fallback: string | undefined;
 }
 
 /**
- * The one rule every reader picks a connection string by: the demo branch's
- * variable where it holds one and the deployment is not production, and the
- * default variable otherwise, each under `connectionStringOf`. Note that
+ * The one rule every reader picks a connection string by, each variable
+ * under `connectionStringOf`: production reads the default variable alone;
+ * the demo branch reads the demo variable alone; any other deployment reads
+ * the demo variable where it holds one and the default otherwise. Note that
  * production ignores the demo variable even where it is set, so one scoped
  * wider than the demo branch by mistake cannot move production off its own
- * database.
+ * database, and that the demo branch never falls back, because its default
+ * variable may be Neon's branch of production, which a demo must never show:
+ * a missing demo variable fails the migrator and refuses every request.
  */
 function chosenConnectionString(held: HeldConnection): string | undefined {
-  const demo =
-    held.deployment?.trim() === DEPLOYMENT_ENVIRONMENT.PRODUCTION
-      ? undefined
-      : connectionStringOf(held.demo);
-  return demo ?? connectionStringOf(held.fallback);
+  if (held.deployment?.trim() === DEPLOYMENT_ENVIRONMENT.PRODUCTION) {
+    return connectionStringOf(held.fallback);
+  }
+  const demo = connectionStringOf(held.demo);
+  return held.branch?.trim() === DEMO_BRANCH ? demo : (demo ?? connectionStringOf(held.fallback));
 }
 
-/** One connection's string as a `Config`, chosen by `chosenConnectionString`, or none where neither variable holds one. */
+/** What a deployment that finds no connection string lacks: the demo variable on the demo branch, and the default one anywhere else. */
+function connectionRequirement(variables: DatabaseVariables): string {
+  return `${variables.DEMO} on the ${DEMO_BRANCH} branch, or ${variables.DEFAULT} elsewhere,`;
+}
+
+/** One connection's string as a `Config`, chosen by `chosenConnectionString`, or none where the variable it chose holds none. */
 function connectionStringConfig(
   variables: DatabaseVariables,
 ): Config.Config<Option.Option<Redacted.Redacted>> {
   return Config.all({
-    deployment: Config.option(Config.String(DEPLOYMENT_VARIABLE)),
+    deployment: Config.option(Config.String(VERCEL_ENVIRONMENT.ENVIRONMENT)),
+    branch: Config.option(Config.String(VERCEL_ENVIRONMENT.BRANCH)),
     demo: Config.option(Config.Redacted(variables.DEMO)),
     fallback: Config.option(Config.Redacted(variables.DEFAULT)),
   }).pipe(
-    Config.map(({ deployment, demo, fallback }) =>
+    Config.map(({ deployment, branch, demo, fallback }) =>
       Option.map(
         Option.fromUndefinedOr(
           chosenConnectionString({
             deployment: Option.getOrUndefined(deployment),
+            branch: Option.getOrUndefined(branch),
             demo: Option.getOrUndefined(Option.map(demo, Redacted.value)),
             fallback: Option.getOrUndefined(Option.map(fallback, Redacted.value)),
           }),
@@ -106,7 +124,7 @@ function connectionStringConfig(
   );
 }
 
-/** One connection's string as a `Config` that fails the read where neither variable holds one, as a missing variable does. */
+/** One connection's string as a `Config` that fails the read where the variable it chose holds none, as a missing variable does. */
 function requiredConnectionString(variables: DatabaseVariables): Config.Config<Redacted.Redacted> {
   return connectionStringConfig(variables).pipe(
     Config.mapEffect(
@@ -115,7 +133,7 @@ function requiredConnectionString(variables: DatabaseVariables): Config.Config<R
           Effect.fail(
             new Config.ConfigError(
               new ConfigProvider.SourceError({
-                message: `${variables.DEFAULT} is missing or blank`,
+                message: `${connectionRequirement(variables)} is missing or blank`,
               }),
             ),
           ),
@@ -201,12 +219,15 @@ export function getPool(): Pool {
   }
 
   const connectionString = chosenConnectionString({
-    deployment: process.env[DEPLOYMENT_VARIABLE],
+    deployment: process.env[VERCEL_ENVIRONMENT.ENVIRONMENT],
+    branch: process.env[VERCEL_ENVIRONMENT.BRANCH],
     demo: process.env[DATABASE_ENVIRONMENT.URL.DEMO],
     fallback: process.env[DATABASE_ENVIRONMENT.URL.DEFAULT],
   });
   if (!connectionString) {
-    throw new Error(`${DATABASE_ENVIRONMENT.URL.DEFAULT} is required to connect to the database.`);
+    throw new Error(
+      `${connectionRequirement(DATABASE_ENVIRONMENT.URL)} is required to connect to the database.`,
+    );
   }
 
   pool = createPool(connectionString);

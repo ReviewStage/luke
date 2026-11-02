@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { type AddressInfo, createServer, type Server, type Socket } from "node:net";
 import { it } from "@effect/vitest";
-import { type Config, ConfigProvider, Effect, Redacted } from "effect";
+import { type Config, ConfigProvider, Effect, Option, Redacted } from "effect";
 import { afterEach, test, vi } from "vitest";
 import { databaseUrl, getPool, requiredDatabaseUnpooledUrl } from "./index.js";
 
@@ -176,11 +176,11 @@ it.effect(
 const DEMO = "postgres://u:p@demo-host/db";
 
 it.effect(
-  "off production the demo branch's variables win where they hold a value, and production reads its own whatever else is set",
+  "off production the demo branch's variables win where they hold a value, the demo branch fails the read rather than fall back, and production reads its own whatever else is set",
   () =>
     Effect.gen(function* () {
       const cases: ReadonlyArray<
-        readonly [Config.Config<Redacted.Redacted>, Record<string, string>, string]
+        readonly [Config.Config<Redacted.Redacted>, Record<string, string>, string | undefined]
       > = [
         [
           databaseUrl,
@@ -203,13 +203,26 @@ it.effect(
         ],
         [
           databaseUrl,
+          {
+            VERCEL_ENV: "preview",
+            VERCEL_GIT_COMMIT_REF: "demo",
+            LUKE_DEMO_DATABASE_URL: " ",
+            DATABASE_URL: BASE,
+          },
+          undefined,
+        ],
+        [
+          databaseUrl,
           { VERCEL_ENV: "production", LUKE_DEMO_DATABASE_URL: DEMO, DATABASE_URL: BASE },
           BASE,
         ],
       ];
 
       for (const [url, environment, expected] of cases) {
-        assert.equal(yield* readUrl(environment, url), expected);
+        assert.equal(
+          Option.getOrUndefined(yield* Effect.option(readUrl(environment, url))),
+          expected,
+        );
       }
     }),
 );
