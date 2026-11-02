@@ -112,6 +112,7 @@ import {
   transcriptRow,
   userTexts,
 } from "../testing/agents-app-support.js";
+import { harnessFor } from "../testing/native-harness-fake.js";
 import { scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
 import { receivedMessage } from "./attached-files.js";
 import { CODER } from "./coder-host/bounds.js";
@@ -120,7 +121,7 @@ import { EVE_SEND_OUTCOME } from "./eve-host/eve-sessions.js";
 
 it.layer(getTestDB())("messaging a coding agent", (it) => {
   it.effect(
-    "over a browser's session cookie a message reaches the agent as the deployment acting for the cookie's account, and over the bearer as ever over the bearer",
+    "over a browser's session cookie a message reaches the agent as one over the bearer does, its harness acting for the agent's starter",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -150,12 +151,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(
           eve.sent.map((each) => [each.authorization, each.sessionId, each.message.message]),
           [
-            [deploymentFor(owner), sessionId, "Use the new table."],
-            [`Bearer ${owner}`, sessionId, "And drop the old one."],
+            [harnessFor(owner), sessionId, "Use the new table."],
+            [harnessFor(owner), sessionId, "And drop the old one."],
           ],
         );
         const counted = {
-          runtime: CONVERSATION_RUNTIME.EVE,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           machine: AGENT_MACHINE.VERCEL,
           agent_kind: AGENT_KIND.CODER,
           turn_running: false,
@@ -217,7 +218,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           countedWith(owner, SERVER_EVENT.MESSAGE_SEND),
           [
             {
-              runtime: CONVERSATION_RUNTIME.EVE,
+              runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
               machine: AGENT_MACHINE.VERCEL,
               agent_kind: AGENT_KIND.CODER,
               turn_running: true,
@@ -425,7 +426,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a teammate's session cookie messages and stops the owner's agent and deletes its task, each as the deployment acting for the teammate and never for the owner the rows name",
+    "a teammate's session cookie messages the owner's agent through its harness acting for the owner, and stops it and deletes its task as the deployment acting for the teammate and never for the owner the rows name",
     () =>
       Effect.gen(function* () {
         // An idle agent of the owner's, which the teammate messages.
@@ -458,7 +459,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.equal(sent.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(sent.body));
         assert.deepEqual(
           messaged.eve.sent.map((each) => [each.authorization, each.sessionId]),
-          [[deploymentFor(messaged.other), messaged.sessionId]],
+          [[harnessFor(messaged.owner), messaged.sessionId]],
         );
         assert.equal(agentStop.status, HOSTED_HTTP_STATUS.OK);
         assert.equal(
@@ -640,22 +641,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a model change of a Claude Code agent is refused another provider's model or a context window, and takes a Claude model, its summary naming its runtime, while an eve agent's takes any as before",
+    "a model change of a Claude Code agent is refused another provider's model or a context window, and takes a Claude model, its summary naming its runtime",
     () =>
       Effect.gen(function* () {
-        const onEve = yield* messagedAgent(fakeEve(), undefined);
         const onClaudeCode = yield* messagedAgent(fakeEve(), undefined);
-        const stored = Option.getOrThrow(
-          yield* readAgent(onClaudeCode.owner, onClaudeCode.agent.id),
-        );
-        yield* Database.use((db) =>
-          db
-            .update(conversations)
-            .set({ runtime: "claude_code" })
-            .where(eq(conversations.id, stored.conversationId)),
-        );
         const change = (
-          started: typeof onEve,
+          started: typeof onClaudeCode,
           body: { model: string; effort: string; contextWindow?: string },
         ) =>
           started.ask(
@@ -675,11 +666,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           HOSTED_HTTP_STATUS.OK,
           yield* change(onClaudeCode, { model: SMALL_WINDOW.model, effort: "low" }),
         ).agent;
-        const onEveTaken = readAnswer(
-          agentAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* change(onEve, { model: SOL, effort: "low" }),
-        ).agent;
 
         for (const answered of refused) {
           assert.deepEqual(
@@ -691,7 +677,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           [taken.model, taken.effort, taken.runtime],
           [SMALL_WINDOW.model, "low", "claude_code"],
         );
-        assert.deepEqual([onEveTaken.model, onEveTaken.runtime], [SOL, undefined]);
       }),
   );
 
@@ -902,7 +887,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.equal(sent.agent.startedBy?.userId, owner);
         assert.deepEqual(
           eve.sent.map((each) => [each.authorization, each.sessionId]),
-          [[`Bearer ${other}`, sessionId]],
+          [[harnessFor(owner), sessionId]],
         );
         assert.deepEqual(yield* transcript(), {
           lines: [SNAPSHOT, "Rename the subject line too."],
@@ -1450,7 +1435,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.match(first.txid ?? "", /^\d+$/u);
         assert.deepEqual(
           eve.sent.map((each) => [each.authorization, each.sessionId, each.message.conversationId]),
-          [[`Bearer ${other}`, sessionId, target.conversationId]],
+          [[harnessFor(owner), sessionId, target.conversationId]],
         );
         assert.equal(
           yield* sentLineStands(owner, target.conversationId, sentLineId(clientKey)),
@@ -1564,25 +1549,27 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a message while a turn runs reaches eve under the developer's bearer with no policy of its own, shows in the transcript at once as the developer's line, and leaves the agent running",
+    "a message while a turn runs reaches the agent's harness acting for its starter, named by its line, with no policy of its own, shows in the transcript at once as the developer's line, and leaves the agent running",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
         const { owner, sessionId, sent, transcript } = yield* messagedAgent(eve, {
           running: true,
         });
-        const answered = yield* sent("  Use the helper.  ");
+        const clientKey = randomUUID();
+        const answered = yield* sent("  Use the helper.  ", clientKey);
         assert.equal(answered.agent.status, AGENT_STATUS.RUNNING);
         assert.deepEqual(
           eve.sent.map((each) => [each.authorization, each.sessionId, each.message]),
           [
             [
-              `Bearer ${owner}`,
+              harnessFor(owner),
               sessionId,
               {
                 conversationId: eve.opened[0]?.message.conversationId,
                 turn: EVE_HOST_TURN.TYPED,
                 message: "Use the helper.",
+                lineId: sentLineId(clientKey),
               },
             ],
           ],

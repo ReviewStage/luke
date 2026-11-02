@@ -95,7 +95,8 @@ export const MESSAGE_AGENT_REFUSAL = {
   NOT_READY:
     "Not sent: that agent's session is still coming up; the same message a moment later is taken.",
   RETIRED:
-    "Not sent: that agent's session has ended for good, so nothing reaches it; only a new agent goes on from its work.",
+    "Not sent: that agent's session has ended for good, so nothing reaches it; only a new agent goes on from its work, " +
+    `which ${AGENT_TOOL.START_AGENT} starts with that agent's id as its from.`,
   IMAGE_PREPARING:
     "Not sent: that agent's sandbox image is still being prepared; the same message in a minute or two is taken.",
   PLAN_SIGNED_OUT:

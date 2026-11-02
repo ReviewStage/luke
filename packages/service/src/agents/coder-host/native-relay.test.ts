@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices } from "@luke/database/core/query";
+import { Database } from "@luke/database/core/query";
 import {
   type Agent,
   createAgent,
@@ -27,7 +27,7 @@ import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { eq } from "drizzle-orm";
-import { type Context, Effect, Layer, Option, Redacted, Result } from "effect";
+import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { TURN_ORIGIN } from "../../core.js";
 import { HOSTED_API_ERROR } from "../../http/http.js";
@@ -172,11 +172,7 @@ const nativeSessionOf = (owner: string, agent: Agent) =>
   });
 
 /** Whether the message's own transaction wrote or locked the row: its xmin or xmax is this transaction's id. */
-const heldHere = (
-  table: "agent" | "conversations",
-  column: "conversation_id" | "id",
-  id: string,
-) =>
+const heldHere = (table: "agent" | "conversations", column: "conversation_id" | "id", id: string) =>
   Effect.flatMap(
     SqlClient.SqlClient,
     (sql) =>
@@ -249,7 +245,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
   "the eve app reaches a native agent through the web's relay",
   (it) => {
     it.effect(
-      "the router an eve agent's tools compose hands a Claude Code agent's every call to the web's harness, acting as the router names, and an eve agent's to eve with the relay hearing nothing",
+      "the router an eve agent's tools compose hands a Claude Code agent's every call to the web's harness, acting as the router names, and refuses an eve agent's launch and message as ended, its Stop and retire reaching eve, with the relay hearing nothing",
       () =>
         Effect.gen(function* () {
           const { owner, teammate, taskId } = yield* openTeam;
@@ -261,14 +257,16 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const route = yield* sessionsRouter.pipe(Effect.provide(relay.layer));
           const sessions = route(eve.sessions, teammate);
 
-          const eveOpened = yield* sessions.open(messageTo(onEve));
-          assert.ok(eveOpened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-          yield* sessions.send(eveOpened.sessionId, messageTo(onEve, "And the emails."));
-          yield* sessions.cancel(eveOpened.sessionId, "turn_1");
-          yield* sessions.reset(eveOpened.sessionId);
+          assert.equal((yield* sessions.open(messageTo(onEve))).outcome, EVE_SEND_OUTCOME.FAILED);
+          assert.equal(
+            (yield* sessions.send("wrun_eve", messageTo(onEve, "And the emails."))).outcome,
+            EVE_SEND_OUTCOME.FAILED,
+          );
+          yield* sessions.cancel("wrun_eve", "turn_1");
+          yield* sessions.reset("wrun_eve");
           assert.deepEqual(
             eve.calls.map((call) => call.split(":")[0]),
-            ["open", "send", "cancel", "reset"],
+            ["cancel", "reset"],
           );
           assert.deepEqual(relay.statuses, [], "an eve agent's calls post nothing to the relay");
 
@@ -300,7 +298,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             relay.heard.map(({ message }) => message),
             ["Expire invitations after a week.", "And the emails.", undefined, undefined],
           );
-          assert.equal(eve.calls.length, 4, "eve heard nothing of the Claude Code agent");
+          assert.equal(eve.calls.length, 2, "eve heard nothing of the Claude Code agent");
           // A change of its model, which update_agent hands its runner, reaches it alike, acting for its starter.
           assert.equal(
             yield* runnerChoiceApplied(onClaudeCode).pipe(Effect.provide(relay.layer)),
@@ -427,43 +425,19 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a message mentioning a server to a Claude Code agent relaunched or launched through the relay holds no row the launch writes, so the launch never waits on it, and its servers stand before the harness hears the words, as an eve agent's stand before eve hears them",
+      "a message mentioning a server to a Claude Code agent relaunched or launched through the relay holds no row the launch writes, so the launch never waits on it, and its servers stand before the harness hears the words",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
           const relaunched = yield* agentOn(owner, taskId, "claude_code");
           const session = yield* nativeSessionOf(owner, relaunched);
           const launched = yield* agentOn(owner, taskId, "claude_code", true);
-          const onEve = yield* agentOn(owner, taskId, "eve");
-          yield* claimRuntimeSession(
-            { userId: owner, conversationId: onEve.conversationId },
-            "wrun_eve",
-            new Date(0),
-          );
           // Note that a launch writes the agent's row on the web's own connection in production, so a
           // row a transaction of the message's had locked and written would hold it until the hand-over
           // gave up; here the one connection is shared, so what the harness reads is what it would wait on.
           const relay = yield* nativeRelayFake({ onLaunch: launchMeets });
           yield* Effect.addFinalizer(() => Effect.promise(relay.dispose));
-          const eveSaw: unknown[] = [];
-          const eve = recordingEve();
-          const eveReading: AgentSessions = {
-            ...eve.sessions,
-            send: (sessionId, message) =>
-              Effect.gen(function* () {
-                // SAFETY: the steer hands eve its words on the store's services, outside any transaction.
-                const services =
-                  (yield* Effect.context<never>()) as Context.Context<DatabaseServices>;
-                eveSaw.push(
-                  yield* serversOfConversation(message.conversationId).pipe(
-                    Effect.provideContext(services),
-                    Effect.orDie,
-                  ),
-                );
-                return yield* eve.sessions.send(sessionId, message);
-              }),
-          };
-          const sessions = yield* routedSessions(eveReading, owner).pipe(
+          const sessions = yield* routedSessions(recordingEve().sessions, owner).pipe(
             Effect.provide(relay.layer),
           );
           const writer = storeWriter({ tools: CODER_TOOL_SET });
@@ -473,7 +447,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             { workspace: "acme", repository: null },
           )} first.`;
 
-          for (const agent of [relaunched, launched, onEve]) {
+          for (const agent of [relaunched, launched]) {
             assert.equal(
               yield* steerAgent(sessions, writer, owner, agent, steerLine(owner, words)),
               STEER_OUTCOME.SENT,
@@ -505,7 +479,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               ],
             ],
           );
-          assert.deepEqual(eveSaw, [[INTEGRATION_PROVIDER.LINEAR]]);
           // Each launch's bearer stands on its agent, found again by its digest as the runner's calls find it.
           for (const agent of [relaunched, launched]) {
             assert.equal(

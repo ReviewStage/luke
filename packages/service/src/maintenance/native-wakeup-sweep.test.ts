@@ -7,7 +7,9 @@ import { replaceAgentWakeups } from "@luke/database/models/agent-wakeups";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { AGENT_PAYER } from "@luke/features/agent-wire";
 import { Duration, Effect, Option } from "effect";
 import { cancelledTurn } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -88,6 +90,8 @@ const openAgent = Effect.gen(function* () {
     planSnapshot: "# Invitations\n",
     prompt: null,
     repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+    payer: AGENT_PAYER.API_KEY,
   });
   const { agent } = Option.getOrThrow(started);
   const sessionId = `wrun_${randomUUID()}`;

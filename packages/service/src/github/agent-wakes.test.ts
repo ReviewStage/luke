@@ -15,9 +15,14 @@ import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store
 import { awaitingLinesOfReached, readMessageByClientId } from "@luke/database/models/message-reads";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { turns } from "@luke/database/schemas/storage";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { AGENT_BOUNDS, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+import {
+  AGENT_BOUNDS,
+  AGENT_PAYER,
+  CHECK_SUMMARY,
+  PULL_REQUEST_STATE,
+} from "@luke/features/agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import {
   type GitHubLineMetadata,
@@ -195,6 +200,8 @@ const openAgentOn = (githubAccess: GitHubAccess) =>
       prompt: null,
       repository: RELAY_FULL_NAME,
       githubAccess,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+      payer: AGENT_PAYER.API_KEY,
     });
     const agent = Option.getOrThrow(started).agent;
     const ref = `luke/teammate-invitations-${randomUUID()}`;

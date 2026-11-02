@@ -127,6 +127,7 @@ import {
   githubReaching,
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
+import { scriptedHarness } from "../../testing/native-harness-fake.js";
 import { nativeRelayFake } from "../../testing/native-relay-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
@@ -145,6 +146,7 @@ import {
 import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
 import { EVE_HOST_ATTRIBUTE, EVE_HOST_HEADER, EVE_HOST_TURN } from "../eve-host/bounds.js";
 import { claimRuntimeSession } from "../eve-host/conversation.js";
+import { EVE_MOUNT, eveSessionsComposer } from "../eve-host/eve-sessions.js";
 import { TASK_BLOCK_REFUSAL } from "../task-block-changes.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
@@ -160,6 +162,7 @@ import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import type { CoderHostSeams } from "./production.js";
 import type { SummaryModelOf } from "./replay-summary.js";
+import { NativeAgentSessions } from "./runtime-sessions.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -308,7 +311,14 @@ async function claimed(
   userId: string,
   start: Parameters<typeof createAgent>[1],
 ): Promise<StartedAgent> {
-  const started = await database.run(createAgent(userId, start));
+  // An agent starts on Claude Code on its starter's API key, as a Start's would; none starts on eve.
+  const started = await database.run(
+    createAgent(userId, {
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+      payer: AGENT_PAYER.API_KEY,
+      ...start,
+    }),
+  );
   assert.ok(Option.isSome(started));
   const target = { userId, conversationId: started.value.agent.conversationId };
   const session = sessionId();
@@ -375,13 +385,31 @@ async function fakeCoderEve(
     );
   });
   return {
-    services: github.layer,
+    services: Layer.provideMerge(harnessOverScript, github.layer),
     sent,
     retire: () => {
       retired = true;
     },
   };
 }
+
+/**
+ * The native harnesses as the suite's eve script answers them, over its
+ * wire as the deployment acting for the agent's starter, so a native
+ * agent's launch and messages are written down beside every other call.
+ */
+const harnessOverScript = Layer.effect(
+  NativeAgentSessions,
+  Effect.map(eveSessionsComposer, (compose) =>
+    scriptedHarness((account) =>
+      compose({
+        origin: EVE_ORIGIN,
+        caller: { secret: Redacted.make(DEPLOYMENT_SECRET), account },
+        mount: EVE_MOUNT.CODER,
+      }),
+    ),
+  ),
+);
 
 /** Our Sentry integration as a deployment that configures it holds it. */
 const SENTRY_CONFIGURED = Layer.succeed(
@@ -3393,9 +3421,11 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
   });
 });
 
-test("update_agent renames a teammate's agent, moves it to a model the catalog offers as the catalog reads the choice, and switches its servers, pins an agent on a task and one on no task, refuses a model the catalog refuses with nothing written, and changes no agent of another workspace", async () => {
-  const { workspaceId, agents } = await openWorkspaces();
-  const { caller, teammates, otherWorkspaces } = agents;
+test("update_agent renames a teammate's eve agent, moves it to a model the catalog offers as the catalog reads the choice, and switches its servers, pins an agent on a task and one on no task, refuses a model the catalog refuses with nothing written, and changes no agent of another workspace", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const { caller, otherWorkspaces } = agents;
+  // Note that only an agent on eve moves to another provider's model and takes a window, so the teammate's is one.
+  const teammates = await eveAgentOn(agents.teammates.userId, tasks.billing);
   const eve = await fakeCoderEve(workspaceId);
   const offered: readonly OfferedModel[] = [
     ...CATALOG,
@@ -3539,10 +3569,24 @@ async function claudeCodeAgentOn(userId: string, taskId: string): Promise<Starte
   });
 }
 
+/** An agent of the account's on the task on eve, as a row from before the native harnesses still reads. */
+async function eveAgentOn(userId: string, taskId: string): Promise<StartedAgent> {
+  return claimed(userId, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId,
+    planSnapshot: "# Billing",
+    prompt: null,
+    runtime: AGENT_RUNTIME.EVE,
+    payer: undefined,
+  });
+}
+
 test("list_models for a Claude Code agent lists its Claude models alone, their fast versions among them, while a start's list and an eve agent's list every model, as they did", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const onClaudeCode = await claudeCodeAgentOn(agents.teammates.userId, tasks.billing);
+  const onEve = await eveAgentOn(agents.teammates.userId, tasks.billing);
   const call = await peerCaller(
     hostOf(true),
     agents.caller,
@@ -3553,7 +3597,7 @@ test("list_models for a Claude Code agent lists its Claude models alone, their f
     Array.isArray(listed.models) ? listed.models.map((model) => isRecord(model) && model.id) : [];
 
   const forStart = await call(CODER_TOOL.LIST_MODELS, {});
-  const forEve = await call(CODER_TOOL.LIST_MODELS, { agentId: agents.teammates.id });
+  const forEve = await call(CODER_TOOL.LIST_MODELS, { agentId: onEve.id });
   const forClaudeCode = await call(CODER_TOOL.LIST_MODELS, { agentId: onClaudeCode.id });
 
   assert.deepEqual(ids(forStart), [OPUS, OPUS_FAST, SONNET, SOL, SOL_FAST]);
@@ -3583,6 +3627,7 @@ test("update_agent refuses a Claude Code agent a GPT model and a context window,
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const onClaudeCode = await claudeCodeAgentOn(agents.teammates.userId, tasks.billing);
+  const onEve = await eveAgentOn(agents.teammates.userId, tasks.billing);
   const call = await peerCaller(
     hostOf(true),
     agents.caller,
@@ -3649,12 +3694,12 @@ test("update_agent refuses a Claude Code agent a GPT model and a context window,
     { model: SOL, effort: "low" },
   ]) {
     const changed = await call(CODER_TOOL.UPDATE_AGENT, {
-      agentId: agents.teammates.id,
+      agentId: onEve.id,
       ...change,
     });
     assert.equal(changed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(changed));
   }
-  assert.equal((await stored(agents.teammates)).model, SOL);
+  assert.equal((await stored(onEve)).model, SOL);
 });
 
 test("a Codex agent lists its GPT models alone with no fast version, and update_agent refuses it a Claude model, a fast version, and a context window in words and takes a GPT one", async () => {

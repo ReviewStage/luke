@@ -226,6 +226,7 @@
     "./testing/github-app-fake": "./src/testing/github-app-fake.js",
     "./testing/integration-connect": "./src/testing/integration-connect.js",
     "./testing/linux-shell-tools": "./src/testing/linux-shell-tools.js",
+    "./testing/native-harness-fake": "./src/testing/native-harness-fake.js",
     "./testing/task-contents": "./src/testing/task-contents.js",
     "./testing/plan-documents": "./src/testing/plan-documents.js",
     "./testing/repository-sandbox": "./src/testing/repository-sandbox.js",
