@@ -5,11 +5,11 @@ import { parsedUrl } from "./parsed-url.js";
 import { PRODUCT_NAME } from "./product-name.js";
 
 /**
- * link-open.ts -- where the account opens a Fullspin link, and whether a web page showing one hands it to the Mac app.
+ * link-open.ts -- where the account opens a link of ours, and whether a web page showing one hands it to the Mac app.
  *
  * As Linear's "Open links in the desktop app" does, an account chooses
- * whether a Fullspin link opened in a browser stays there or goes to Fullspin for
- * Mac. The choice is the account's (`@luke/settings`' `linkOpen`, its own
+ * whether a link of ours opened in a browser stays there or goes to the Mac
+ * app. The choice is the account's (`@luke/settings`' `linkOpen`, its own
  * part of the preferences snapshot), so the web reads it on a signed-in
  * load and decides here. The hand-off is the web app's "Open in the Mac
  * app" link (`open-address.ts`): the place the address names, written again in the
@@ -17,11 +17,11 @@ import { PRODUCT_NAME } from "./product-name.js";
  * The browser is the default, because it works without the app.
  */
 
-/** Where an account opens a Fullspin link. */
+/** Where an account opens a link of ours. */
 export const LINK_OPEN = {
   /** Stay on the web, which works wherever there is a browser. */
   BROWSER: "browser",
-  /** Hand the link to Fullspin for Mac through its own scheme. */
+  /** Hand the link to the Mac app through its own scheme. */
   MAC_APP: "mac-app",
 } as const;
 
@@ -45,14 +45,14 @@ export const LINK_PLATFORM = {
 export type LinkPlatform = (typeof LINK_PLATFORM)[keyof typeof LINK_PLATFORM];
 
 /**
- * The query a Fullspin link carries where Fullspin's own Open in browser
+ * The query a link of ours carries where our own Open in browser
  * opened it, so the web page it lands on stays there rather than hand it
  * straight back to the Mac app, and drops it from the address once read
  * (`mac-app-handoff.ts`). It is the flag's alone, and names no place.
  */
 const STAY_ON_WEB = { QUERY: "stay", VALUE: "web" } as const;
 
-/** A Fullspin link as Open in browser opens it: flagged to stay on the web. */
+/** A link of ours as Open in browser opens it: flagged to stay on the web. */
 export function stayingOnWeb(link: string): string {
   const url = new URL(link);
   url.searchParams.set(STAY_ON_WEB.QUERY, STAY_ON_WEB.VALUE);
@@ -78,7 +78,7 @@ export function isLinkOpen(value: UnparsedWireValue): value is LinkOpen {
  * The link a web page showing `address` hands to the Mac app, or nothing
  * where it stays on the web: the account chose the browser, the browser is
  * on no Mac, or the address names no place in a workspace. The address is
- * the page's own, on Fullspin's home or a preview alike, read as
+ * the page's own, on our home or a preview alike, read as
  * `open-address.ts` reads it.
  */
 export function linkOpenTarget(

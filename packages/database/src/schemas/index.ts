@@ -1,4 +1,4 @@
-// Better Auth owns its generated schema; Fullspin-owned tables can join this
+// Better Auth owns its generated schema; our own tables can join this
 // aggregate from their own schema modules without being overwritten by it.
 export * from "./account-provider-key.js";
 export * from "./agent.js";
@@ -19,6 +19,7 @@ export * from "./github-install-intent.js";
 export * from "./github-installation.js";
 export * from "./github-personal-token.js";
 export * from "./github-rate-hold.js";
+export * from "./github-repository.js";
 export * from "./github-repository-read.js";
 export * from "./host-pairing.js";
 export * from "./inbox.js";

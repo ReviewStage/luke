@@ -332,6 +332,8 @@ interface Answers {
   readonly viewed?: readonly string[];
   /** The head GitHub holds as each read of the overview and the files asks; theirs where none is named, the overview's merge box saying none. */
   readonly head?: () => string;
+  /** Whether the files' read names no head, as where the service could not read the pull request's commits. */
+  readonly filesHeadless?: boolean;
 }
 
 /** The agent's control, its overview, files, and chapters answering as given. */
@@ -381,7 +383,12 @@ function controlAnswering(answers: Answers): AgentsControl {
       // The older push's files hold none of the chapters' hunks, so drawing them under the chapters shows.
       const files = head === HEAD ? FILES : [];
       return Promise.resolve({
-        pullRequest: { url: PAGE, headSha: head, truncated: false, files },
+        pullRequest: {
+          url: PAGE,
+          ...(answers.filesHeadless === true ? {} : { headSha: head }),
+          truncated: false,
+          files,
+        },
       });
     },
     readPullRequestViewed: () =>
@@ -421,11 +428,14 @@ async function settle(): Promise<void> {
   });
 }
 
-/** Draws the agent's tab on its Chapters view, its reads landed. */
-async function draw(control: AgentsControl): Promise<HTMLElement> {
+/** Draws the agent's tab on its Chapters view, or the view given, its reads landed. */
+async function draw(
+  control: AgentsControl,
+  first: PullRequestView = PULL_REQUEST_VIEW.CHAPTERS,
+): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  const tab = createElement(Switching, { control, first: PULL_REQUEST_VIEW.CHAPTERS });
+  const tab = createElement(Switching, { control, first });
   act(() =>
     root?.render(
       onRegistry(
@@ -455,6 +465,15 @@ async function draw(control: AgentsControl): Promise<HTMLElement> {
 /** The tabs of the row under the header, by their words. */
 function tabNames(tab: HTMLElement): string[] {
   return [...tab.querySelectorAll('[role="tab"]')].map((each) => each.textContent ?? "");
+}
+
+/** What the Chapters tab says, its glyph's words among them. */
+function chaptersTabWords(tab: HTMLElement): string {
+  const chapters =
+    [...tab.querySelectorAll('[role="tab"]')].find((each) =>
+      each.textContent?.startsWith("Chapters"),
+    ) ?? assert.fail("the Chapters tab stands");
+  return drawnWords(chapters);
 }
 
 /** The button whose words are as given, where one stands outside a hidden view. */
@@ -666,6 +685,7 @@ test("a chapter is viewed once every file it holds is; Mark chapter viewed and â
 
   const rail = () => tab.querySelector(".chapter-rail");
   assert.match(drawnWords(railRow(rail(), 0)), /viewed$/u, "the read's one file is viewed");
+  assert.equal(chaptersTabWords(tab), "Chapters 1/3 viewed", "the tab counts the chapters viewed");
   assert.doesNotMatch(drawnWords(railRow(rail(), 1)), /viewed/u, "the sweep's new file is not");
 
   press(tab, { key: "ArrowRight" });
@@ -681,6 +701,7 @@ test("a chapter is viewed once every file it holds is; Mark chapter viewed and â
   await settle();
   assert.deepEqual(marked, [{ action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: SWEEP.path }]);
   assert.match(drawnWords(railRow(rail(), 1)), /viewed$/u);
+  assert.equal(chaptersTabWords(tab), "Chapters 2/3 viewed");
 
   const box =
     tab.querySelector<HTMLInputElement>('.chapter-viewed input[type="checkbox"]') ??
@@ -692,6 +713,33 @@ test("a chapter is viewed once every file it holds is; Mark chapter viewed and â
     { action: PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED, path: SWEEP.path },
     { action: PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED, path: STORE.path },
   ]);
+});
+
+test("the Chapters tab says where the chapters stand before their view is opened: out of date under a clock once the pull request moved on from their head", async () => {
+  const tab = await draw(
+    controlAnswering({
+      head: () => HEAD,
+      readChapters: () => Promise.resolve(answering(ready(OLDER))),
+    }),
+    PULL_REQUEST_VIEW.CONVERSATION,
+  );
+
+  assert.equal(tab.querySelector(".chapters-view"), null, "the view was never opened");
+  assert.equal(chaptersTabWords(tab), "Chapters out of date 3");
+});
+
+test("the Chapters tab counts none viewed where the files' read names no head, since the view takes the chapters as out of date then", async () => {
+  const tab = await draw(
+    controlAnswering({
+      head: () => HEAD,
+      filesHeadless: true,
+      readChapters: () => Promise.resolve(answering(ready())),
+      viewed: [STORE.path],
+    }),
+  );
+
+  assert.match(tab.querySelector(".luke-tab-notice")?.textContent ?? "", /New commits since/u);
+  assert.equal(chaptersTabWords(tab), "Chapters out of date 3");
 });
 
 /** The Chapters tab answering ready chapters, made by `model` for `headSha`. */
@@ -827,7 +875,7 @@ test("a generation that failed says why with Retry, chapters someone else is mak
       },
     }),
   );
-  assert.match(elsewhere.textContent ?? "", /Chapters are being generated/u);
+  assert.match(elsewhere.textContent ?? "", /Generating chapters/u);
   act(() => button(elsewhere, "Refresh").click());
   await settle();
   assert.equal(reads, 2);

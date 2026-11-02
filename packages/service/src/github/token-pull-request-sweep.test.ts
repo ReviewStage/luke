@@ -10,8 +10,9 @@ import {
 import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { turns } from "@luke/database/schemas/storage";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+import { AGENT_PAYER, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { Effect, Option, Result } from "effect";
@@ -165,6 +166,8 @@ const openTokenAgent = (
       prompt: null,
       repository,
       githubAccess: GITHUB_ACCESS.TOKEN,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+      payer: AGENT_PAYER.API_KEY,
     });
     const { agent } = Option.getOrThrow(started);
     const ref = `luke/invitations-${randomUUID()}`;
@@ -216,7 +219,7 @@ const sweepAt = (
     Effect.provide(github.layer),
   );
 
-/** Who GitHub names by the login given: the member by the id their Fullspin account is linked to, anyone else by one of their own. */
+/** Who GitHub names by the login given: the member by the id their account is linked to, anyone else by one of their own. */
 function author(login: string) {
   return {
     login,

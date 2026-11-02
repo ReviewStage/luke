@@ -20,11 +20,11 @@ import { TranscriptWords } from "./transcript-blocks.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
 /**
- * A link pressed in written words: a Fullspin link, a task's drawn as its chip,
+ * A link pressed in written words: an app link, a task's drawn as its chip,
  * opens its place in the window, a task at its section, an agent, an Inbox
  * item, and never the browser, while a GitHub page, drawn as GitHub's chip,
  * and any other web page open in the browser over their acts; off the
- * window, where no opener for a place is handed down, a Fullspin link opens
+ * window, where no opener for a place is handed down, an app link opens
  * nothing in it. Synthetic ids.
  */
 
@@ -33,10 +33,10 @@ const AGENT_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const ITEM_ID = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
 
 const WORDS = [
-  `See [the rollout](https://tryluke.dev/acme/plan/${TASK_ID}#rollout),`,
-  `[the plan](https://tryluke.dev/personal-u_1/plan/${TASK_ID}),`,
-  `[the agent](https://tryluke.dev/acme/plan/${TASK_ID}/agent/${AGENT_ID}),`,
-  `[its question](https://tryluke.dev/acme/agent/${AGENT_ID}/inbox/${ITEM_ID}),`,
+  `See [the rollout](https://vespin.dev/acme/plan/${TASK_ID}#rollout),`,
+  `[the plan](https://vespin.dev/personal-u_1/plan/${TASK_ID}),`,
+  `[the agent](https://vespin.dev/acme/plan/${TASK_ID}/agent/${AGENT_ID}),`,
+  `[its question](https://vespin.dev/acme/agent/${AGENT_ID}/inbox/${ITEM_ID}),`,
   "[the pull request](https://github.com/acme/relay/pull/12),",
   "and [the docs](https://example.com/docs).",
 ].join(" ");
@@ -80,7 +80,7 @@ function pressedEach(openPlace: ((link: ReadLink) => void) | undefined): void {
   }
 }
 
-test("a Fullspin link opens its place in the window, a task at its section, an agent, an Inbox item, and other pages open in the browser", () => {
+test("a Vespin link opens its place in the window, a task at its section, an agent, an Inbox item, and other pages open in the browser", () => {
   const opened: ReadLink[] = [];
 
   pressedEach((link) => opened.push(link));
@@ -103,7 +103,7 @@ test("a Fullspin link opens its place in the window, a task at its section, an a
   );
 });
 
-test("off the window, where no opener for a place is handed down, a Fullspin link opens in the browser as any page does", () => {
+test("off the window, where no opener for a place is handed down, a Vespin link opens in the browser as any page does", () => {
   pressedEach(undefined);
 
   assert.deepEqual(

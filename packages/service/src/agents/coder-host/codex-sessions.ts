@@ -1,11 +1,11 @@
 /**
- * codex-sessions.ts -- a coding agent's sessions on Codex: the runner in its Codex mode, launched on the account's ChatGPT sign-in, whose token the runner asks Fullspin's token route for, or on a local agent's Mac's own Codex sign-in.
+ * codex-sessions.ts -- a coding agent's sessions on Codex: the runner in its Codex mode, launched on the account's ChatGPT sign-in, whose token the runner asks our token route for, or on a local agent's Mac's own Codex sign-in.
  *
  * The `codex` implementation of `AgentSessions`
  * (`eve-host/eve-sessions.ts`), on the launch machinery every native
  * harness shares (`runner-sessions.ts`). What is Codex's own:
  *
- * - The runner's config names the image's `codex` and carries Fullspin's coder
+ * - The runner's config names the image's `codex` and carries our coder
  *   instructions as the thread's `developer_instructions`, with the events
  *   and MCP URLs; the runner itself writes OpenAI's documented ChatGPT-plan
  *   provider into app-server's argv (`@luke/agent-runner`'s `codex.ts`). A
@@ -13,7 +13,7 @@
  *   as the events route records it, for `thread/resume`.
  * - The launch's environment carries `CODEX_HOME`, on the sandbox's
  *   persisted disk where the image made it, so a thread outlives a stop.
- * - On the plan, the config names Fullspin's token route
+ * - On the plan, the config names our token route
  *   (`../native-events/runner-token-app.ts`), and app-server asks it for the
  *   token through the runner's token command as it needs one: as its turn's
  *   requests go out, every few minutes, and after a 401, so a turn outlives
@@ -80,7 +80,7 @@ import {
 import type { NativeSessions } from "./runtime-sessions.js";
 
 export interface CodexSessionsOptions extends RunnerSessionsOptions {
-  /** Fullspin's token route, which the runner asks for the plan's token mid-turn (`RUNNER_TOKEN_PATH`). */
+  /** Our token route, which the runner asks for the plan's token mid-turn (`RUNNER_TOKEN_PATH`). */
   readonly tokenUrl: string;
 }
 
@@ -266,7 +266,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
    * Codex holds a sign-in of its own, that sign-in, with nothing of the
    * account's in the environment, so no token is ever handed to the Mac;
    * otherwise the account's saved credential (`savedPayer`), its key in the
-   * environment or the plan's token asked of Fullspin's route over HTTPS.
+   * environment or the plan's token asked of our route over HTTPS.
    */
   const launch = (agent: Agent) =>
     Effect.gen(function* () {

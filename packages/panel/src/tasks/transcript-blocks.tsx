@@ -331,8 +331,8 @@ function wordsOf(node: WordsNode): string {
 }
 
 /**
- * Marks every link in the words whose target may name a mention, or is a
- * Fullspin link to any place (`readLink`), to be drawn as its own element,
+ * Marks every link in the words whose target may name a mention, or is an
+ * app link to any place (`readLink`), to be drawn as its own element,
  * which reads what it names against the plan its page is of (`linkChip`):
  * the same rule for a developer's `@`
  * mention, an agent's link, a reference link, and a bare address. A target
@@ -1562,9 +1562,9 @@ function TodoItem({ todo, live }: { todo: AgentTodos["todos"][number]; live: boo
  * has got, which opens onto the list itself, set bare at the row's text
  * column as Claude Code and Codex hang theirs under the call, since it is
  * words rather than the code a call's card holds, and selectable as a
- * call's body is; a failure is said under it as a subagent's is. Whether it starts open is the caller's, since only
- * the newest list is worth reading unasked, and so is whether it is `live`,
- * the list the agent is at, whose item in progress wears the moving mark.
+ * call's body is; a failure is said under it as a subagent's is. It starts
+ * folded, as every call's row does, and whether it is `live`, the list the
+ * agent is at, whose item in progress wears the moving mark, is the caller's.
  */
 export function TranscriptTodos({
   state,
@@ -1677,7 +1677,7 @@ export type TranscriptSubagentProps = {
   /**
    * The task and the answer, for a row that opens no tab, which folds them
    * open under its line as a call's row does: a native harness's subagent,
-   * whose own work Fullspin keeps no transcript of.
+   * whose own work we keep no transcript of.
    */
   body?: { readonly input: ToolBlock; readonly output: ToolBlock | undefined } | undefined;
 };

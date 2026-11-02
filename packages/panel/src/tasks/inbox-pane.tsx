@@ -81,7 +81,7 @@ import {
 } from "../ai-elements/conversation.js";
 import { useAutomation } from "../automation-directory.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { PhoneHead } from "../desktop/phone-head.js";
+import { PhoneHead, phoneFindGroups } from "../desktop/phone-head.js";
 import { unreadShown } from "../failure-report.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { useSteadyDoor } from "../steady-door.js";
@@ -195,7 +195,7 @@ import {
  * pill saying a newer question, or message, replaced it; withdrawn, the
  * same over a pill saying so and its why as a muted sentence, or who closed
  * the item. An ask of a type this build does not know, one a newer service
- * wrote, is drawn as a line naming a newer Fullspin, so the rest still reads.
+ * wrote, is drawn as a line naming a newer version of the app, so the rest still reads.
  *
  * The draft reply is the reader's chip, "You" and nothing after it, over
  * the agent composer's box, its card and its field, with its `@` mentions,
@@ -726,7 +726,7 @@ function AskMarker({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element | 
  * (`HeldAsk`); for a withdrawn one the same, over a marker saying so and
  * why, or with none where a member's close stands, which the thread's own
  * line says (`ResolvedEvent`); and an ask this build does not know a card
- * naming a newer Fullspin.
+ * naming a newer version of the app.
  */
 function AskBox({
   title,
@@ -1018,7 +1018,8 @@ function InboxItemMenu({
     onAskClose: close.ask,
     keyed: true,
   });
-  const groups = itemGroups(lead);
+  // Note that a phone's ⋯, the one given a lead, also stands in for ⌘F, read here as the menu is drawn rather than as the lead was made.
+  const groups = itemGroups(lead === NO_LEAD ? lead : [...lead, ...phoneFindGroups()]);
   if (groups.length === 0) return null;
   return (
     <>

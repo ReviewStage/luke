@@ -7,7 +7,7 @@ import { Schema as EffectSchema } from "effect";
  * that refuses it a popup and a navigation to anywhere but itself
  * (`@luke/features/page-policy`), so a link out of it, followed in the
  * frame, goes nowhere. Every server of a page therefore answers it with one
- * script of Fullspin's own ahead of the agent's HTML (`withPageScripts`),
+ * script of our own ahead of the agent's HTML (`withPageScripts`),
  * which takes a press of a link to another site from the page, so the frame
  * does not follow it, and posts its address to the panel, which opens it as
  * it opens any link outside the window (`page-pane.tsx`). A link within the
@@ -15,7 +15,7 @@ import { Schema as EffectSchema } from "effect";
  * own scripts took first.
  *
  * The script runs among the page's own, so whatever the frame posts is the
- * page's word, not Fullspin's: the panel takes the message only from the frame it
+ * page's word, not ours: the panel takes the message only from the frame it
  * drew, only in the shape below, only for an address it would open from any
  * other link, and only while the window holds a press of the developer's,
  * which a press in the frame hands the window that framed it, so no script
@@ -33,7 +33,7 @@ export const pageLinkPressSchema = EffectSchema.Struct({
 
 /**
  * The script the frame runs, ahead of the page's own. It is plain JavaScript in
- * a string because it runs in the page, apart from every bundle of Fullspin's.
+ * a string because it runs in the page, apart from every bundle of ours.
  * It hears a press last of all: on the window as the press sets out, it adds
  * a listener of its own to the window for the press's way back, which the
  * window then hears after every listener the page gave it, its own scripts

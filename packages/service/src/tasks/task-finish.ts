@@ -35,7 +35,7 @@ import { discardedOrLogged } from "../agents/device-discard.js";
  * running, an agent started blank with no turn as idle.
  *
  * The finish archives no agent, since someone may be talking to one: an
- * agent brought back and messaged on a task Fullspin finished takes the task up,
+ * agent brought back and messaged on a task we finished takes the task up,
  * and its reply finishes it again. Only a member's or an agent's move to Done
  * archives the task's agents standing idle with it, as them
  * (`task-store.ts`'s `updateTaskCommitted`), never the agent that moved it. An

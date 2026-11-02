@@ -8,7 +8,7 @@ import { rememberReturn } from "../src/connect-return";
  * github-installed.test.ts -- the GitHub App's landing says where an
  * installation stands and what to do next: a confirmed one says the tab can
  * go, a refused one says why and how to try again, and an address whose
- * status the page does not know reads as an installation Fullspin could not
+ * status the page does not know reads as an installation the service could not
  * confirm. The page runs as it does in the browser, mounted on its own
  * `#root`.
  */
@@ -48,7 +48,7 @@ test("an installation says the tab can go", async () => {
   const page = await openPage(GITHUB_INSTALL_STATUS.INSTALLED);
 
   expect(said(page)).toEqual([
-    "Fullspin can see your GitHub repositories",
+    "Vespin can see your GitHub repositories",
     "You can close this tab.",
   ]);
 });
@@ -73,7 +73,7 @@ test("an expired link sends the developer back to connect again", async () => {
 
   expect(said(page)).toEqual([
     "This link to connect GitHub has expired",
-    "Connect GitHub again from Fullspin.",
+    "Connect GitHub again from Vespin.",
   ]);
 });
 
@@ -82,8 +82,8 @@ test("an address with no status it knows reads as an unconfirmed installation", 
     const page = await openPage(status);
 
     expect(said(page)).toEqual([
-      "Fullspin could not confirm the GitHub installation",
-      "Connect GitHub again from Fullspin.",
+      "Vespin could not confirm the GitHub installation",
+      "Connect GitHub again from Vespin.",
     ]);
   }
 });
@@ -102,5 +102,5 @@ test("an installation the web app's tab left for offers the way back, with what 
       link.textContent,
       link.getAttribute("href"),
     ]),
-  ).toEqual([["Open Fullspin", "/settings/workspace"]]);
+  ).toEqual([["Open Vespin", "/settings/workspace"]]);
 });

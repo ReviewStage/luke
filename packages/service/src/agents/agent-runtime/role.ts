@@ -1,5 +1,5 @@
 /**
- * role.ts -- the two agents Fullspin runs on its one agent runtime, and what sets each apart.
+ * role.ts -- the two agents we run on our one agent runtime, and what sets each apart.
  *
  * The coding agent and its declared worker are two eve agents over one
  * runtime: every slot of each is the runtime's, told which role it serves,

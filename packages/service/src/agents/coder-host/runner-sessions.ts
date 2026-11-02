@@ -1,12 +1,12 @@
 /**
- * runner-sessions.ts -- a coding agent's sessions on a native harness: the runner launched on the machine Fullspin opens for it, its stdin written to, and the machine's place stopped, resumed, and thrown away around it.
+ * runner-sessions.ts -- a coding agent's sessions on a native harness: the runner launched on the machine we open for it, its stdin written to, and the machine's place stopped, resumed, and thrown away around it.
  *
  * The launch machinery the `claude_code` and `codex` implementations of
  * `AgentSessions` (`eve-host/eve-sessions.ts`) share; each names what is
  * its own as a `RunnerHarness` (`claude-code-sessions.ts`,
  * `codex-sessions.ts`): the credential its runner is started with, its
  * config line, and the lines that go ahead of a message to a runner already
- * running. Its session is Fullspin's own: an id minted as the session opens,
+ * running. Its session is our own: an id minted as the session opens,
  * which the machine finds the agent's place by (in a sandbox, its
  * `sessionId` tag, so the Terminal tab, the stop and the cleanup sweep find
  * the sandbox by it exactly as they find eve's: `terminal/agent-sandbox.ts`,
@@ -19,7 +19,7 @@
  * once eve took the message; past the answer (`after-response.ts`) it opens
  * the agent's place with its repository checked out, waiting while the
  * machine's image is prepared, writes the skills its member installed into
- * Fullspin beside it (`native-skills.ts`), and launches the runner. A launch that
+ * the app beside it (`native-skills.ts`), and launches the runner. A launch that
  * fails there is the agent's failed turn. The place, the launch, and every
  * write to the runner's stdin go through the agent's machine
  * (`../machine/agent-machine.ts`: Vercel Sandbox in
@@ -49,7 +49,7 @@
  * past the answer, a turn still running `CODER.STOP_CONFIRM` on has its
  * runner ended and is settled cancelled. `reset` retires the runner's
  * bearer and throws the place away. Nothing here streams: the runner posts its
- * events to Fullspin itself.
+ * events to the service itself.
  *
  * At a launch's end (`runnerEnded`, which the events route calls on the
  * runner's END event) the place is stopped unless a developer's Terminal
@@ -200,11 +200,11 @@ export interface RunnerSessionsOptions {
   readonly eventsUrl: string;
   /** Where a runner on a machine that has it read its lines reads them (`RUNNER_LINES`), which the composing edge names. */
   readonly linesUrl: string;
-  /** The Fullspin MCP server's endpoint (P06), which the composing edge names. */
+  /** Our MCP server's endpoint (P06), which the composing edge names. */
   readonly mcpUrl: string;
-  /** The integrations the agent is handed as its launch starts, each an MCP server of its own beside Fullspin's. */
+  /** The integrations the agent is handed as its launch starts, each an MCP server of its own beside ours. */
   readonly integrations: (agent: Agent) => Effect.Effect<readonly IntegrationServer[]>;
-  /** Fullspin's coder instructions for the agent, naming its checkout and installed skills where its machine keeps them, which the harness's config carries. */
+  /** Our coder instructions for the agent, naming its checkout and installed skills where its machine keeps them, which the harness's config carries. */
   readonly instructions: (
     agent: Agent,
     place: Pick<MachineLayout, "checkoutPath" | "installedSkills" | "isolation" | "sharedFiles">,
@@ -304,7 +304,7 @@ const ATTACHMENT_MODE = 0o644;
 /** How long a written file's name may be, which a tar header holds whole (`vercel-sandbox-api.ts`'s `tarOf`). */
 const ATTACHMENT_NAME_CHARS = 80;
 
-/** The developer's line as the runner takes it, under Fullspin's id for it. */
+/** The developer's line as the runner takes it, under our id for it. */
 type MessageLine = Extract<InputLine, { readonly type: typeof INPUT_LINE.MESSAGE }> & {
   readonly uuid: string;
 };
@@ -454,7 +454,7 @@ function launchFingerprint(
 
 /**
  * Whether the agent's turn ended longer ago than the warm window of the
- * machine given (`CODER.RUNNER_WARM`), so Fullspin has closed or is closing it,
+ * machine given (`CODER.RUNNER_WARM`), so we have closed or are closing it,
  * and the runner may soon end itself at its own idle cap. Never where the
  * window is zero, which the IDLE's own retire closes (`runnerIdled`). An
  * ended turn with no settle time stamped reads as ended long ago, as the
@@ -820,7 +820,7 @@ export const runnerSessions = <
           );
         }
         // A released wait's wakeups go once the CLI has started again and taken its first
-        // message: it restores on resume what it can (`agent-wakeups.ts`), so a copy Fullspin
+        // message: it restores on resume what it can (`agent-wakeups.ts`), so a copy the service
         // still held would fire twice, or after the agent cancelled it. A launch that failed
         // before this leaves them for the sweep to deliver, and a delete that failed is logged,
         // never failing the launch that already runs.
@@ -841,7 +841,7 @@ export const runnerSessions = <
     const delivered = (agent: Agent, runner: RecordedRunner, lines: readonly InputLine[]) =>
       deliveredTo(machine, userId, agent.id, runner, lines);
 
-    /** The message as a line, under Fullspin's id for it where the caller named one, and the files it names, where the machine's layout keeps them. */
+    /** The message as a line, under our id for it where the caller named one, and the files it names, where the machine's layout keeps them. */
     const messageLine = (message: EveMessage<Turn>, layout: MachineLayout): RunnerMessage => {
       const uuid = message.lineId ?? randomUUID();
       const { content, files } = runnerContent(
@@ -1734,7 +1734,7 @@ export const runnerSessions = <
           for (const place of places) {
             if (!(yield* ownsPlace(place))) continue;
             retired += 1;
-            // The bearer goes first, so a runner still up is refused by Fullspin before its place is gone.
+            // The bearer goes first, so a runner still up is refused by us before its place is gone.
             if (place.agentId !== undefined) {
               yield* recordAgentRunnerToken(userId, place.agentId, null);
             }

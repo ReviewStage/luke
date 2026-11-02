@@ -560,7 +560,7 @@ function parsePersistedSettingsEither(
 }
 
 /**
- * Reads and writes the small set of user-owned settings Fullspin needs. The
+ * Reads and writes the small set of user-owned settings the app needs. The
  * stored account's tokens stay in the main process: no accessor returns them
  * to a renderer.
  */

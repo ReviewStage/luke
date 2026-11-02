@@ -40,6 +40,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
@@ -511,6 +512,7 @@ function SummaryRow({
   entry,
   onPick,
   menu,
+  more,
   editor,
   description,
   rowRef,
@@ -518,6 +520,8 @@ function SummaryRow({
   entry: SummaryEntry;
   onPick: () => void;
   menu?: ListRowMenu | undefined;
+  /** Whether the menu draws its ⋯, which a finger's agent row leaves out (`ListRow`'s `more`). */
+  more?: boolean | undefined;
   /** The field the row's name is edited in, in its title's place while a Rename is open. */
   editor?: ReactNode;
   /** What stands under the title, in the row's own detail's place: a refused rename's note. */
@@ -540,6 +544,7 @@ function SummaryRow({
         }
         onPress={editing ? undefined : onPick}
         menu={editing ? undefined : menu}
+        more={more}
       />
     </RowHintOptions>
   );
@@ -549,11 +554,12 @@ function SummaryRow({
 const AGENT_THING = "Agent";
 
 /**
- * An agent's row, whose ⋯, right-click and menu key offer the agent's one
- * menu over the doors a row has (`agent-actions.tsx`): Copy link, Rename,
- * which turns the row into its name's field as the sidebar's rows do, Archive,
- * asking first while a teammate's agent still works, and Permanently
- * delete, asked first.
+ * An agent's row, whose ⋯, right-click, long press and menu key offer the
+ * agent's one menu over the doors a row has (`agent-actions.tsx`): Copy link,
+ * Rename, which turns the row into its name's field as the sidebar's rows do,
+ * Archive, asking first while a teammate's agent still works, and Permanently
+ * delete, asked first. A finger's row draws no ⋯, so its name keeps the room,
+ * as the sidebar's agent rows draw none.
  */
 function AgentSummaryRow({
   entry,
@@ -580,6 +586,7 @@ function AgentSummaryRow({
   const { rename } = actions;
   const editing = rename?.editing === true;
   const endedByKey = useRefocusAfterEdit(editing, row);
+  const coarse = useCoarsePointer();
   return (
     <>
       <SummaryRow
@@ -587,6 +594,7 @@ function AgentSummaryRow({
         onPick={onPick}
         rowRef={hold}
         menu={rowMenu(AGENT_THING, agentMenuGroups(rowDoors(actions.doors)), shown)}
+        more={!coarse}
         editor={
           editing && rename !== undefined ? (
             <InlineEdit

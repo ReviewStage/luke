@@ -1,5 +1,5 @@
 /**
- * native-call-keys.ts -- the key a native agent's call of a Fullspin tool runs under: one per conversation, tool, and input, held for a window.
+ * native-call-keys.ts -- the key a native agent's call of one of our tools runs under: one per conversation, tool, and input, held for a window.
  *
  * The key is read and written in one statement, so two calls of one input
  * at once, as a harness's retry after a timeout and the call it timed out

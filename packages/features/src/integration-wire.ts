@@ -5,9 +5,9 @@ import { Schema as EffectSchema } from "effect";
 /**
  * integration-wire.ts -- the account's integrations, as the desktop reads and changes them.
  *
- * An integration is a service an account connects so Fullspin's agents can use
+ * An integration is a service an account connects so our agents can use
  * it on the account's behalf, each through its own hosted MCP server and a
- * grant Vercel Connect holds. A Fullspin account may connect more than one
+ * grant Vercel Connect holds. A user account may connect more than one
  * account at a provider (two Notion workspaces), each its own grant under
  * its own connection name. `GET /api/account/integrations` answers where
  * every provider's first account stands, one word each, and every account
@@ -55,7 +55,7 @@ export type IntegrationProvider = (typeof INTEGRATION_PROVIDER)[keyof typeof INT
 export const INTEGRATION_PROVIDER_LIST: readonly IntegrationProvider[] =
   Object.values(INTEGRATION_PROVIDER);
 
-/** What each provider is called wherever Fullspin names it, to the developer and to a model alike. */
+/** What each provider is called wherever the app names it, to the developer and to a model alike. */
 export const INTEGRATION_NAME = {
   [INTEGRATION_PROVIDER.EXECUTOR]: "Executor",
   [INTEGRATION_PROVIDER.GITHUB]: "GitHub",
@@ -73,12 +73,12 @@ export const INTEGRATION_NAME = {
   [INTEGRATION_PROVIDER.YCOMBINATOR]: "Y Combinator",
 } as const satisfies Record<IntegrationProvider, string>;
 
-/** How an account grants Fullspin's agents a provider. */
+/** How an account grants our agents a provider. */
 export const INTEGRATION_GRANT = {
   /** A sign-in to the provider through Vercel Connect, begun from Settings › Integrations and ended there. */
   CONNECT: "connect",
   /**
-   * The account's own sign-in to Fullspin with GitHub, whose GitHub App user
+   * The account's own sign-in to the app with GitHub, whose GitHub App user
    * token the provider's server takes: the provider stands connected
    * whenever that sign-in does, and is connected by signing in with GitHub.
    */
@@ -249,7 +249,7 @@ export type IntegrationRemoteCall = typeof integrationRemoteCallSchema.Type;
 
 /** Where an account's connection to one provider stands. */
 export const INTEGRATION_STATUS = {
-  /** Fullspin's agents may use the account's grant. */
+  /** Our agents may use the account's grant. */
   CONNECTED: "connected",
   /** A sign-in was begun and has not completed. */
   PENDING: "pending",
@@ -257,7 +257,7 @@ export const INTEGRATION_STATUS = {
   EXPIRED: "expired",
   /** The account has no connection. */
   DISCONNECTED: "disconnected",
-  /** This deployment of Fullspin offers no connection to the provider at all. */
+  /** This deployment of the service offers no connection to the provider at all. */
   UNAVAILABLE: "unavailable",
 } as const;
 
@@ -279,13 +279,13 @@ export const INTEGRATION_QUERY = {
 /** The value of `INTEGRATION_QUERY.ADD` that asks for a new account. */
 export const INTEGRATION_ADD_ACCOUNT = "true";
 
-/** The most accounts a Fullspin account may hold at one provider. */
+/** The most accounts a user account may hold at one provider. */
 export const INTEGRATION_ACCOUNTS_MAX = 5;
 
 /** The longest label an account may carry, in characters. */
 export const INTEGRATION_LABEL_MAX = 64;
 
-/** One account the Fullspin account holds at a provider, as the statuses read answers it. */
+/** One account the user account holds at a provider, as the statuses read answers it. */
 export const integrationAccountSchema = EffectSchema.Struct({
   provider: integrationProviderSchema,
   connection: integrationConnectionNameSchema,
@@ -297,7 +297,7 @@ export const integrationAccountSchema = EffectSchema.Struct({
 export type IntegrationAccount = typeof integrationAccountSchema.Type;
 
 /**
- * What an account is called where Fullspin names it among its provider's
+ * What an account is called where the app names it among its provider's
  * others: its label, or "Account 2" by its place while it has none.
  */
 export function integrationAccountLabel(account: {
@@ -354,7 +354,7 @@ export const integrationAccountAnswerSchema = EffectSchema.Struct({
   account: integrationAccountSchema,
 });
 
-/** How a sign-in the browser never brought back to Fullspin ended, as Vercel Connect tells it. */
+/** How a sign-in the browser never brought back to the app ended, as Vercel Connect tells it. */
 export const INTEGRATION_SIGN_IN_FAILURE = {
   /** The developer cancelled it on Connect's own page. */
   CANCELED: "canceled",
@@ -376,7 +376,7 @@ export type IntegrationSignInFailure = typeof integrationSignInFailureSchema.Typ
 /**
  * Where every provider's connection stands (GET): its first account's word,
  * which a desktop that predates more than one account reads alone; every
- * account the Fullspin account holds; the providers it may add another account
+ * account the user account holds; the providers it may add another account
  * at; and each sign-in this read found ended without a grant, which a read
  * says so once, as it ends it.
  */
@@ -488,11 +488,11 @@ export const INTEGRATION_LANDING = {
 export const INTEGRATION_LANDING_STATUS = {
   /** The account is connected. */
   CONNECTED: "connected",
-  /** The sign-in did not give Fullspin a grant: declined, cancelled, or abandoned. */
+  /** The sign-in did not give us a grant: declined, cancelled, or abandoned. */
   NOT_COMPLETED: "not-completed",
-  /** The sign-in's link was not one Fullspin issued, or it is too old to finish. */
+  /** The sign-in's link was not one we issued, or it is too old to finish. */
   EXPIRED: "expired",
-  /** Fullspin could not reach Vercel Connect to settle the sign-in. */
+  /** We could not reach Vercel Connect to settle the sign-in. */
   UNAVAILABLE: "unavailable",
   /** The provider's account is already installed for another workspace, which keeps it. */
   ALREADY_CONNECTED: "already-connected",

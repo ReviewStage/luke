@@ -38,6 +38,7 @@ import {
   type EveFailed,
   type EveMessage,
   PLAN_REFUSAL,
+  RUNTIME_REFUSAL,
 } from "../eve-host/eve-sessions.js";
 import { memoryRelayState, StreamRelay } from "../eve-host/relay.js";
 import { type StartAsk, startAgent } from "./start.js";
@@ -281,7 +282,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
   );
 
   it.effect(
-    "a Start eve refused is reported with the agent's ids, and one its plan refused is not",
+    "a Start no harness here could take is reported with the agent's ids, and one its plan refused is not",
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId } = yield* openConnectedWorkspace;
@@ -303,7 +304,11 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
             ),
           );
 
-        yield* started({ outcome: EVE_SEND_OUTCOME.FAILED, status: 500 });
+        yield* started({
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 503,
+          runtimeRefusal: RUNTIME_REFUSAL.NOT_HERE,
+        });
         yield* started({
           outcome: EVE_SEND_OUTCOME.FAILED,
           status: 429,
@@ -311,7 +316,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
         });
 
         assert.equal(reported.length, 1);
-        assert.equal(reported[0]?.reason, HOSTED_REFUSAL.UNAVAILABLE.error);
+        assert.equal(reported[0]?.reason, HOSTED_REFUSAL.NATIVE_AGENT_NOT_HERE.error);
         assert.equal(typeof reported[0]?.agentId, "string");
         assert.equal(typeof reported[0]?.conversationId, "string");
       }),

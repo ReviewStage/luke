@@ -105,7 +105,7 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * Changes from its bar, says so where there is no pull request yet, and
  * offers a retry where a read failed. The overview is three reads, the pull
  * request itself, its checks, and its conversation, each drawn as it lands,
- * a skeleton until then, under the pill and title Fullspin already held.
+ * a skeleton until then, under the pill and title the app already held.
  * Synthetic people throughout.
  */
 
@@ -510,7 +510,7 @@ function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
   });
 }
 
-/** Draws the agent's tab inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in Fullspin where one is given. */
+/** Draws the agent's tab inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in the app where one is given. */
 async function draw(
   control: AgentsControl,
   first: PullRequestView = PULL_REQUEST_VIEW.CONVERSATION,
@@ -521,7 +521,7 @@ async function draw(
   return drawn(createElement(Switching, { control, first }), registry, github, openPlace);
 }
 
-/** Draws `tab` inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in Fullspin where one is given. */
+/** Draws `tab` inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in the app where one is given. */
 async function drawn(
   tab: React.ReactElement,
   registry = AtomRegistry.make(),
@@ -661,7 +661,7 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
   assert.deepEqual(
     [opener.querySelector(".luke-inline-ref-label")?.textContent, opener.getAttribute("data-kind")],
     ["luke-agent", "github"],
-    "Fullspin's own App's bot opened it, an App's bot on GitHub like any other",
+    "Vespin's own App's bot opened it, an App's bot on GitHub like any other",
   );
 
   const description =
@@ -1892,7 +1892,7 @@ test("an App's bot stands by the logo GitHub gives it at its App's address, in t
   );
 });
 
-test("each tab counts what Fullspin holds of it: the conversation its comments, reviews, and threads; the checks how they went as published from the first frame, and how many once read; the files the lines published", async () => {
+test("each tab counts what Vespin holds of it: the conversation its comments, reviews, and threads; the checks how they went as published from the first frame, and how many once read; the files the lines published", async () => {
   const checks = held<AgentOverviewChecksAnswerView>();
   const tab = await draw(controlAnswering({ checks: checks.read }));
   assert.equal(tabCount(tab, "Conversation"), "2");
@@ -2155,7 +2155,7 @@ test("an agent with no pull request yet says so, and the toolbar's ⋯ offers no
   assert.deepEqual(toolbarItems(none), []);
 });
 
-test("the pill, the title, and the files' count stand from what Fullspin holds before any read lands; each part is a skeleton until its own read lands, and is drawn the moment it does, whatever the order", async () => {
+test("the pill, the title, and the files' count stand from what Vespin holds before any read lands; each part is a skeleton until its own read lands, and is drawn the moment it does, whatever the order", async () => {
   const pullRequest = held<{ pullRequest: AgentOverviewPullRequest }>();
   const checks = held<{ pullRequest: AgentOverviewChecks }>();
   const conversation = held<{ pullRequest: AgentOverviewConversation }>();
@@ -2174,7 +2174,7 @@ test("the pill, the title, and the files' count stand from what Fullspin holds b
   assert.equal(
     tab.querySelector(".pull-request-title")?.textContent,
     "Expire invitations #42",
-    "the title is what Fullspin held of the pull request",
+    "the title is what Vespin held of the pull request",
   );
   assert.equal(tabCount(tab, "Files changed"), "+4 −1");
   assert.deepEqual(waiting(tab), [
@@ -2449,7 +2449,7 @@ test("a change refused for a repository out of the workspace's reach says where 
     assert.fail("the tab says why the change was not made");
   assert.match(
     note.textContent ?? "",
-    /Fullspin cannot reach this task's repository on GitHub\. Choose which repositories Fullspin can see\./u,
+    /Vespin cannot reach this task's repository on GitHub\. Choose which repositories Vespin can see\./u,
   );
   const open =
     [...note.querySelectorAll("button")].find((button) => button.textContent === "Open Settings") ??
@@ -5638,7 +5638,7 @@ test("a thread's ⋯ in Files changed shows it in the Conversation through the s
   assert.equal(document.activeElement, card.querySelector("summary"));
 });
 
-test("Copy link in a thread's ⋯ copies its Fullspin link in the view it is drawn in; a thread with no id offers no ⋯ and no press to Files changed", async () => {
+test("Copy link in a thread's ⋯ copies its Vespin link in the view it is drawn in; a thread with no id offers no ⋯ and no press to Files changed", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...DESKTOP_LINKS, ...copyingInto(copied) });
   const tab = await drawn(
@@ -5656,7 +5656,7 @@ test("Copy link in a thread's ⋯ copies its Fullspin link in the view it is dra
   await threadMenuItem(card ?? assert.fail("the thread is drawn"), "Copy link");
 
   assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/agent/${AGENT.id}/changes/conversation/thread/${JUMPED}`,
+    `https://vespin.dev/acme/agent/${AGENT.id}/changes/conversation/thread/${JUMPED}`,
   ]);
 });
 

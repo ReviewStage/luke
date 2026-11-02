@@ -68,7 +68,7 @@ export const CODER = {
   /**
    * The repositories whose agents' sandboxes open larger than
    * `SANDBOX_VCPUS`, by `owner/name` lowercased, as `sandboxVcpus` reads
-   * them; a repository asks for more by a row here. Fullspin's own is four,
+   * them; a repository asks for more by a row here. This repository's own is four,
    * because its typecheck needs about 5 GB of real memory. Measured on a
    * fresh checkout: `pnpm typecheck` takes 83 seconds at four vCPUs and peaks
    * near 5.2 GB, and at two vCPUs (4 GB) it is killed out of memory at a
@@ -78,9 +78,14 @@ export const CODER = {
    * with JS plugins it reserves about 6 GiB per thread, which the kernel's
    * default overcommit refuses at 4 GB, but it uses under one, and
    * `vm.overcommit_memory=1`, set on every boot, since a resumed sandbox
-   * boots with the default, lets it lint there in 36 seconds.
+   * boots with the default, lets it lint there in 36 seconds. It is named
+   * under its name now and the one it is being renamed to, since an agent's
+   * repository follows GitHub's rename (`models/github-repositories.ts`).
    */
-  SANDBOX_VCPUS_BY_REPOSITORY: new Map([["reviewstage/luke", 4]]) as ReadonlyMap<string, number>,
+  SANDBOX_VCPUS_BY_REPOSITORY: new Map([
+    ["reviewstage/luke", 4],
+    ["reviewstage/vespin", 4],
+  ]) as ReadonlyMap<string, number>,
   /**
    * The snapshots Vercel keeps of the agent's sandbox: the newest alone, which
    * is all a resume reads, so snapshot storage stays flat however many turns
@@ -220,7 +225,7 @@ export const CODER = {
    * through a relaunched CLI, a new GitHub token, and the last runner's
    * grace. Thirty, half the runner's own cap (`@luke/agent-runner`'s
    * `RUNNER_WARM.IDLE_CAP_MS`, sixty minutes), because the window is closed
-   * by Fullspin's retire under the lease and never by the runner ending itself,
+   * by our retire under the lease and never by the runner ending itself,
    * whose stdin a message its host writes in that instant is lost on: the
    * sweep retires it past the window, a message sent past it ends the
    * runner and relaunches whether or not the sweep ran (`sendHolding`), and
@@ -230,7 +235,7 @@ export const CODER = {
    * to end on its own, because a runner ending by itself stops reading its
    * stdin while its END is still posted, and a message written then would be
    * taken as delivered and never run; a runner that reads its lines from
-   * Fullspin leaves such a message waiting instead, and its END hands it on
+   * the service leaves such a message waiting instead, and its END hands it on
    * (`runner-sessions.ts`'s `LINES_WAITING`). A window is one line here:
    * raise it, and its sweep retires runners past it.
    */

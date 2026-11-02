@@ -5,6 +5,10 @@ import {
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
 import { listAgentsOnBranches } from "@luke/database/models/agent-store";
+import {
+  noteGitHubRepository,
+  type RepositorySighting,
+} from "@luke/database/models/github-repositories";
 import { EXCESS_KEYS, HTTP_METHOD, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Redacted, Result, Schema } from "effect";
@@ -37,7 +41,7 @@ import { clearRevokedAuthorization, GitHubApp } from "./github-app.js";
 import { setInstallationStatus } from "./github-installations.js";
 
 /**
- * github-webhook-app.ts -- the Fullspin GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again, one about an installation marks its workspace active or not, and a revoked authorization clears that GitHub user's tokens.
+ * github-webhook-app.ts -- our GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again, one about an installation marks its workspace active or not, and a revoked authorization clears that GitHub user's tokens.
  *
  * The events read are a pull request's, a check suite's, a check run's once
  * it ends, and a commit status's, since the checks' one word counts the
@@ -45,8 +49,8 @@ import { setInstallationStatus } from "./github-installations.js";
  * read before the signature over the body's own bytes is confirmed in
  * constant time; a deployment holding no secret refuses every delivery as
  * unavailable, so an unconfigured webhook trusts nothing. Of a delivery only
- * its event, its action, the repository's full name, and the branches it
- * names are read, and none of them is kept or logged: the branch finds the
+ * its event, its action, the repository's id and full name, and the branches it
+ * names are read, and none of them is logged: the branch finds the
  * agents whose rows stand on it, of whichever account, and what each
  * published is read again from GitHub on its owner's own token, exactly as
  * the agent's tab reads it (`packages/service/src/agents/coder-host/published.ts`), which writes
@@ -55,6 +59,17 @@ import { setInstallationStatus } from "./github-installations.js";
  * read that fails is logged by its kind alone and the delivery is still
  * answered, since GitHub retries nothing on its own and the next delivery
  * or the tab's next read reads again.
+ *
+ * Before anything else of a delivery is read, the repository it names is
+ * recorded by GitHub's id under the name it carries
+ * (`@luke/database/models/github-repositories`), which relabels every stored
+ * name of the repository where GitHub renamed or transferred it since it was
+ * last seen, so the agents, tasks, and automations below are found under
+ * its name now; a delivery late or redelivered, older by the repository's
+ * own `updated_at` than the one it was last seen in, moves nothing back. A `repository` delivery, which the App reads where it
+ * subscribes to the Repository event, is read for that alone, its
+ * `renamed` and `transferred` actions naming the name it had before, so a
+ * repository renamed before the service ever saw it is relabeled too.
  *
  * An installation's own deliveries, which GitHub sends every App without
  * its subscribing, move the status of the workspace that stands for it
@@ -113,6 +128,14 @@ const WEBHOOK_EVENT = {
   INSTALLATION: "installation",
   /** A user revoked their authorization of the App. */
   APP_AUTHORIZATION: "github_app_authorization",
+  /** A repository created, renamed, transferred, or otherwise changed. */
+  REPOSITORY: "repository",
+} as const;
+
+/** The repository actions whose delivery names the name it had before. */
+const REPOSITORY_ACTION = {
+  RENAMED: "renamed",
+  TRANSFERRED: "transferred",
 } as const;
 
 /** The one action an authorization delivery has: the user revoked it. */
@@ -187,6 +210,38 @@ const StatusDeliverySchema = Schema.Struct({
 const InstallationDeliverySchema = Schema.Struct({
   action: Schema.String,
   installation: Schema.Struct({ id: Schema.Number }),
+});
+
+/** The repository any delivery names, by GitHub's id, its name, and when GitHub last saw it change, as of the delivery; absent from an installation's or an authorization's. */
+const SightedDeliverySchema = Schema.Struct({
+  repository: Schema.Struct({
+    id: Schema.Number,
+    full_name: Schema.String,
+    updated_at: Schema.DateFromString,
+  }),
+});
+
+const OwnerLoginSchema = Schema.Struct({ login: Schema.String });
+
+/**
+ * A repository delivery as far as its name before is read: a rename's old
+ * name, or a transfer's old owner, a user or an organization
+ * (https://docs.github.com/en/webhooks/webhook-events-and-payloads#repository).
+ */
+const RepositoryChangeDeliverySchema = Schema.Struct({
+  action: Schema.String,
+  repository: Schema.Struct({ name: Schema.String, owner: OwnerLoginSchema }),
+  changes: Schema.Struct({
+    repository: Schema.optionalKey(Schema.Struct({ name: Schema.Struct({ from: Schema.String }) })),
+    owner: Schema.optionalKey(
+      Schema.Struct({
+        from: Schema.Struct({
+          user: Schema.optionalKey(OwnerLoginSchema),
+          organization: Schema.optionalKey(OwnerLoginSchema),
+        }),
+      }),
+    ),
+  }),
 });
 
 /** An authorization delivery as far as it is read: what happened, and GitHub's own id of the user it happened to. */
@@ -271,6 +326,33 @@ function deliveryTarget(event: string, payload: UnparsedWireValue): DeliveryTarg
     default:
       return undefined;
   }
+}
+
+/** The `owner/name` a repository delivery says the repository had before, where its action is a rename or a transfer. */
+function formerName(payload: UnparsedWireValue): string | undefined {
+  const read = readDelivery(RepositoryChangeDeliverySchema, payload);
+  if (Result.isFailure(read)) return undefined;
+  const { action, repository, changes } = read.success;
+  if (action === REPOSITORY_ACTION.RENAMED && changes.repository !== undefined) {
+    return `${repository.owner.login}/${changes.repository.name.from}`;
+  }
+  const from = changes.owner?.from;
+  const formerOwner = from?.organization?.login ?? from?.user?.login;
+  return action === REPOSITORY_ACTION.TRANSFERRED && formerOwner !== undefined
+    ? `${formerOwner}/${repository.name}`
+    : undefined;
+}
+
+/** The repository a delivery names, with the name it had before where a repository delivery says; nothing for a delivery that names none. */
+function repositorySighting(
+  event: string,
+  payload: UnparsedWireValue,
+): RepositorySighting | undefined {
+  const read = readDelivery(SightedDeliverySchema, payload);
+  if (Result.isFailure(read)) return undefined;
+  const { id, full_name: fullName, updated_at: updatedAt } = read.success.repository;
+  const formerly = event === WEBHOOK_EVENT.REPOSITORY ? formerName(payload) : undefined;
+  return { id, fullName, updatedAt, formerly };
 }
 
 /** The installation an installation delivery is about and the status its action leaves it at, where its action moves one. */
@@ -358,6 +440,10 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
       }
       return hostedJsonResponse(200, { read: 0 });
     }
+    // Note that the repository is recorded first, because a rename relabels the stored names the reads below match on.
+    const sighting = repositorySighting(event, payload);
+    if (sighting !== undefined) yield* hostedStoreOrUnavailable(noteGitHubRepository(sighting));
+    if (event === WEBHOOK_EVENT.REPOSITORY) return hostedJsonResponse(200, { read: 0 });
     // A deployment with no App configured knows no bot of its own, so every bot is another's.
     const agentLogin = yield* Effect.orElseSucceed((yield* GitHubApp).botLogin, () => undefined);
     const queued = yield* hostedStoreOrUnavailable(

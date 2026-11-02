@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Roll out a plan or Linear issue as a set of PRs by acting as an orchestrator, from a Fullspin coding agent. Splits the plan into small PRs, gives each PR to its own worker (a Fullspin coding agent) on a model and effort the orchestrator picks for that PR, runs independent PRs in parallel, has each worker babysit its PR and merge it on green unless the PR needs the user's attention, restacks a stack through a short-lived worker, monitors the workers through messages rather than polling, and archives every worker it started once that worker's work is done, so the user never has to clean up after a rollout. Use when the user says "orchestrate", "roll out this plan", or asks you to farm a plan or issue out to workspaces or agents instead of doing the work here.
+description: Roll out a plan or Linear issue as a set of PRs by acting as an orchestrator, from a Vespin coding agent. Splits the plan into small PRs, gives each PR to its own worker (a Vespin coding agent) on a model and effort the orchestrator picks for that PR, runs independent PRs in parallel, has each worker babysit its PR and merge it on green unless the PR needs the user's attention, restacks a stack through a short-lived worker, monitors the workers through messages rather than polling, and archives every worker it started once that worker's work is done, so the user never has to clean up after a rollout. Use when the user says "orchestrate", "roll out this plan", or asks you to farm a plan or issue out to workspaces or agents instead of doing the work here.
 ---
 
 # Orchestrate
@@ -204,7 +204,7 @@ and each message arrives as a new turn; a worker's
 - **Merged**: if any PR builds on this one, restack (Step 3), which also
   retargets the PR above to `main`. Archive the merged PR's worker now, as the
   table says.
-- **Worker ended**: a line from Fullspin, not the worker, naming a
+- **Worker ended**: a line from Vespin, not the worker, naming a
   worker of yours whose turn failed, or that someone else stopped or
   archived. No report will come from it on its own, so act now unless its PR
   already merged: read it with `read_agent`, then continue a failed worker
@@ -213,12 +213,12 @@ and each message arrives as a new turn; a worker's
   continue it. Each ending is told once, so do not wait for a second line.
 
 A worker that fails, is stopped, or is archived is reported to you
-as above, but one whose runner hangs is reported only once Fullspin abandons its
+as above, but one whose runner hangs is reported only once Vespin abandons its
 turn, a day later. So if a worker has gone quiet far longer than its work
 plausibly takes, send it one message asking for status, and check on it as
 the table says. If the
 message is refused because its session has ended, the worker is dead (in
-Fullspin it now reads `failed`). Continue it yourself, as the table's "Continue
+Vespin it now reads `failed`). Continue it yourself, as the table's "Continue
 a dead or stalled worker" row says; do not ask the user to.
 
 If a worker is alive but going the wrong way (out of scope, or against an
@@ -228,7 +228,7 @@ table says, then continue it the same way, with the correction in the note.
 The continued agent runs on the old one's task and model, with its
 transcript and a copy of its work. While the old worker's PR is open, the
 new agent carries that work onto the PR's branch and opens no second PR;
-the note says so too, since Fullspin may not have recorded the PR yet. If
+the note says so too, since Vespin may not have recorded the PR yet. If
 `start_agent` refuses because the old worker is still running, stop it,
 wait until `list_agents` no longer reads it `running`, and call again. An
 agent already continued is continued again, and the answer's
@@ -246,7 +246,7 @@ each branch-off stack based on it, that a restack is pending, and wait for
 each to reply "holding"; stop one that does not hold, as the table says. Then
 start a short-lived restack worker (the Step 1 start, named "Restack <stack
 title>"; without `branch`, on
-`main`, since a Fullspin agent never pushes the branch it was started on, so its
+`main`, since a Vespin agent never pushes the branch it was started on, so its
 checkout is a single-branch clone of `main`, possibly shallow, and its brief
 has it first run `git remote set-branches origin '*'`, then `git fetch
 origin`, with `--unshallow` when `git rev-parse --is-shallow-repository` says

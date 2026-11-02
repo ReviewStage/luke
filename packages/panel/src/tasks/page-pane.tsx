@@ -66,7 +66,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * link out of the page is not followed in the frame, which may draw nothing
  * but a page: the frame hands its press to the pane
  * (`@luke/features/page-link`), which opens it as any link of the window
- * opens (`useOpenLink`), a site in the browser and a Fullspin link in the
+ * opens (`useOpenLink`), a site in the browser and a link of ours in the
  * window. Reload draws the page again. What the page draws is the
  * task's, so the pane is left out of the screen recording (`ph-no-capture`);
  * the recording could not see into the frame in any case.
@@ -76,7 +76,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * under the same settings, and ⌘F over them. The tab's one ⋯, the strip's,
  * offers its Copy link, then Open in browser, then Copy source while the
  * source is shown, then Reload page, which the page hands up on every
- * screen (`useTabActions`). Open in browser opens the page's own Fullspin
+ * screen (`useTabActions`). Open in browser opens the page's own app
  * link, never the address the frame is drawn from (`open-in-browser-item.tsx`).
  * The frame's own read is the frame's alone, so the source is read again,
  * once a version, through main, which colours it as HTML
@@ -85,7 +85,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  *
  * ⌘F over the page itself finds in the frame: no find of this window reaches
  * the page's words, so the find bar asks the frame, whose page is served
- * with a find of Fullspin's own ahead of it (`@luke/features/page-find`), and
+ * with a find of our own ahead of it (`@luke/features/page-find`), and
  * hears back its tally and its selection, from that frame alone and only
  * in the find's own shape.
  */

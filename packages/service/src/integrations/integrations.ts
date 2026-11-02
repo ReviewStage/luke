@@ -42,7 +42,7 @@ export interface IntegrationDefinition {
    */
   readonly ALLOWED_ACCOUNTS_VARIABLE?: string;
   /**
-   * The variable that holds the provider to one account per Fullspin account,
+   * The variable that holds the provider to one account per user account,
    * set to `off`, `false`, or `0`; present only for a provider that offers
    * more than one by default, whose grant at the provider is one workspace's
    * or one organization's, so a second account reaches what the first does

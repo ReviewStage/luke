@@ -9,7 +9,7 @@ import { ActorRef } from "../actor-ref.js";
  * A document scrolls in its own column, a `ScrollArea` with its edges
  * faded, its bar's room kept, and one block inside it (`.plan-document-body`):
  * its page's inset around it and the room for its last line under it, its
- * words selectable, and Fullspin's accent for its caret; its
+ * words selectable, and the app's accent for its caret; its
  * body stands at the page's measure in the plan's type (`.plan-body` under
  * `.desktop-document`). Under its title one muted line says who created
  * it and when, then what its page says of its last edit, each phrase
@@ -52,7 +52,7 @@ export function DocumentScroll({
 /**
  * The line under a document's title: "Created by [Charles] Charles Pan ·
  * 3d ago", "Created by [agent] Invite emails for [Dean] you · 6m ago" and "From
- * Teammate invitations" for a task Fullspin or an agent made, or "Created · 3d
+ * Teammate invitations" for a task the app or an agent made, or "Created · 3d
  * ago" where nobody is named, then `edited`, the
  * page's own phrase for its last edit, where it has one. The creator hangs
  * their card, and the time moves on with `now`.
@@ -66,7 +66,7 @@ export function DocumentByline({
   saved,
 }: {
   creator: Actor | undefined;
-  /** Fullspin or the coding agent that made the task for `creator`, and the task the agent works on, which the line says it came from; none for one made by hand. */
+  /** The app or the coding agent that made the task for `creator`, and the task the agent works on, which the line says it came from; none for one made by hand. */
   maker?: { readonly actor: Actor; readonly fromTask?: string | undefined } | undefined;
   createdAt: number;
   now: number;

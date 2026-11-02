@@ -26,7 +26,7 @@ import { workspacesLive } from "./live-queries.js";
  * linked to it or suspended, which notify the workspace; and for the
  * account's first workspace named its own, which notifies the account.
  * Workspaces and memberships are written by the organization plugin, as
- * Fullspin's routes write them.
+ * our routes write them.
  *
  * Synthetic accounts, workspaces, and installations throughout.
  */

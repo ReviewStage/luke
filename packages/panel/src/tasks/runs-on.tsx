@@ -49,7 +49,7 @@ import { keptKey, useKept } from "../use-kept.js";
  * refuses a task set to one that has not beat lately or is not set up yet.
  * New task's chip starts on the member's last pick, kept in this window, and
  * on Cloud only where nothing is kept or that device is no longer listed. A
- * kept device that is offline, as a Mac is while Fullspin restarts on it, or
+ * kept device that is offline, as a Mac is while the app restarts on it, or
  * still getting ready or not set up, stays picked and says so, so its start
  * is refused by name rather than sent quietly to the cloud. It stands on
  * every New task but an automation's or a child's, and lists Cloud alone

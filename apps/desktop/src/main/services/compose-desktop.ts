@@ -96,7 +96,7 @@ export interface DesktopServices {
   /** Which panels say they hold unsaved work, as each tells it. */
   readonly unsavedWork: UnsavedWorkHolders<WebContents>;
   /**
-   * Asks before a way out of Fullspin while something would be lost, answering
+   * Asks before a way out of the app while something would be lost, answering
    * whether to go on: the one sheet the quit, Restart to update, and Sign
    * out each ask through.
    */

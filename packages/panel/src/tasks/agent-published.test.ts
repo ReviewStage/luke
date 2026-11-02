@@ -5,6 +5,7 @@ import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { longPress, underAFinger } from "../testing/finger.js";
 import { BranchChip, LinesChanged, type PublishedDoors, PublishedRow } from "./agent-published.js";
 
 /**
@@ -111,6 +112,18 @@ test("the pull request's right-click offers Copy GitHub link, copying its addres
     act(() => root?.unmount());
     document.body.innerHTML = "";
   }
+});
+
+test("under a finger, the pull request's row draws no ⋯, and held it offers its menu", () => {
+  underAFinger();
+  const { row } = drawRow(true);
+  assert.ok(
+    document.querySelector('[aria-label="Pull request actions"]') === null,
+    "the row draws no ⋯",
+  );
+
+  longPress(row);
+  menuItem("Open on GitHub");
 });
 
 test("where no panel takes the tab, the pull request's row opens it on GitHub", () => {

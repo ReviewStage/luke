@@ -1,5 +1,5 @@
 /**
- * main.ts -- the host daemon's process: `luke-host run` follows the machine's local agents for as long as its service runs, `luke-host connect` pairs the machine with a code a member approves in Fullspin, and `luke-host version` prints the daemon's version.
+ * main.ts -- the host daemon's process: `luke-host run` follows the machine's local agents for as long as its service runs, `luke-host connect` pairs the machine with a code a member approves in the app, and `luke-host version` prints the daemon's version.
  *
  * Bundled into one file (`pnpm --filter @luke/host-daemon build`) that the
  * host's release carries at `lib/luke-host.mjs`, beside the runner's bundle
@@ -20,12 +20,12 @@
  * so and reads its record again every `UNENROLLED_REST`, rather than
  * exiting for its service to start it over; one that did runs the daemon
  * (`@luke/host/daemon`) until the service is stopped, which stops every
- * runner it started with it, or until Fullspin refuses the box's secret, the
+ * runner it started with it, or until the service refuses the box's secret, the
  * host removed, when it stops them and exits 0, and its service, starting
  * it again a minute later, finds its record refused and rests, until the
  * box is connected again by hand. A daemon the account install runs, its
  * own real path in a version folder of the install's releases
- * (`accountReleases`), updates itself to the newer release Fullspin names
+ * (`accountReleases`), updates itself to the newer release the service names
  * (`host-update.ts`): once it switched `current` to it, every runner
  * stopped, it asks a systemd user unit to start it again at once, since
  * the unit's own restart waits a minute, or on a Mac just exits, since
@@ -34,7 +34,7 @@
  * and as its user.
  *
  * `connect` is run as the box is set up or by hand: it prints the link and
- * the code a member approves in Fullspin, waits for them to, and exits by how
+ * the code a member approves in the app, waits for them to, and exits by how
  * the connect ended (`CONNECT_EXIT`), never printing the poll secret or the
  * device secret. A box already connected
  * says so and pairs nothing. Ctrl-C ends the wait with a line saying the
@@ -101,12 +101,12 @@ const RESTART_ASK = Duration.seconds(10);
 /** The exit codes of `connect`, which the install script reads: a box already connected exits as connected. */
 const CONNECT_EXIT = {
   CONNECTED: 0,
-  /** Fullspin could not be reached, or refused the pairing for a reason the box cannot fix. */
+  /** The service could not be reached, or refused the pairing for a reason the box cannot fix. */
   FAILED: 1,
   DENIED: 2,
   EXPIRED: 3,
   UPGRADE_NEEDED: 4,
-  /** Fullspin is starting no more pairings from the box's address for now. */
+  /** The service is starting no more pairings from the box's address for now. */
   BRAKED: 5,
   USAGE: 64,
 } as const;
@@ -182,7 +182,7 @@ const arch = ({ os: hostOs }: HostRuntime) =>
       : Effect.succeed(read);
   });
 
-/** The daemon on the box's record, or a rest until there is one; it ends once Fullspin refuses the box's secret, or the daemon switched to a newer release. */
+/** The daemon on the box's record, or a rest until there is one; it ends once the service refuses the box's secret, or the daemon switched to a newer release. */
 const follow = (runtime: HostRuntime) =>
   Effect.gen(function* () {
     const { stateRoot } = runtime;
@@ -194,7 +194,7 @@ const follow = (runtime: HostRuntime) =>
       yield* Effect.sleep(UNENROLLED_REST);
       return undefined;
     }
-    // Note that a box Fullspin refused before is not asked again on the dead secret: it rests removed until it is connected again.
+    // Note that a box the service refused before is not asked again on the dead secret: it rests removed until it is connected again.
     if (device.value.refused === true) {
       reportToStderr(
         `${PRODUCT_NAME} host: ${PRODUCT_NAME} refused this box's secret before, so it was removed. Connect it again to follow its agents.`,
@@ -264,7 +264,7 @@ const restartAsked = (runtime: HostRuntime) =>
         ),
       );
 
-/** `luke-host run`: the daemon, until Fullspin refuses the box's secret, or until it switched to a newer release, which its service is asked to start at once. */
+/** `luke-host run`: the daemon, until the service refuses the box's secret, or until it switched to a newer release, which its service is asked to start at once. */
 const run = (runtime: HostRuntime) =>
   Effect.gen(function* () {
     const ended = yield* follow(runtime);
@@ -279,7 +279,7 @@ function connectCommand(origin: string): string {
     : `luke-host connect --origin ${origin}`;
 }
 
-/** How the code is shown: its link to open and the code to check against the one Fullspin shows, then that the box waits. */
+/** How the code is shown: its link to open and the code to check against the one the app shows, then that the box waits. */
 const showCode = ({ url, userCode, expiresInMs }: HostPairingCode) =>
   Effect.sync(() =>
     process.stdout.write(

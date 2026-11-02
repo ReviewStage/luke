@@ -77,7 +77,7 @@ test("a menu's copy the clipboard took stands for a confirmation's hold, then le
   mount();
   const hold = Duration.toMillis(TOAST_HOLD.DONE);
 
-  await copyFromMenu("https://tryluke.dev/acme/plan/1", "Link copied");
+  await copyFromMenu("https://vespin.dev/acme/plan/1", "Link copied");
   pass(hold - 1);
   const justBefore = standing();
   pass(1);
@@ -91,7 +91,7 @@ test("a menu's copy the clipboard refused stands for a failure's hold, longer th
   mount();
   const hold = Duration.toMillis(TOAST_HOLD.FAILED);
 
-  await copyFromMenu("https://tryluke.dev/acme/plan/1", "Link copied");
+  await copyFromMenu("https://vespin.dev/acme/plan/1", "Link copied");
   pass(hold - 1);
   const justBefore = standing();
   pass(1);

@@ -293,7 +293,7 @@ interface AgentInboxLine {
   readonly id: string;
   readonly key: string;
   readonly title: string;
-  /** The thread as the agent names it in its words, `[@title](link)`, which Fullspin draws as its chip; none where the member reads its workspace no longer. */
+  /** The thread as the agent names it in its words, `[@title](link)`, which the app draws as its chip; none where the member reads its workspace no longer. */
   readonly mention?: string;
   readonly status: InboxItem["status"];
   /** Whether an answer to the open ask reaches the agent as a message, on a thread still asking. */

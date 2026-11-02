@@ -17,7 +17,7 @@ test("a place labelled with words of its own still says its kind", () => {
 
 test("a name that already starts with its kind says it once", () => {
   assert.equal(thingWordHeard(THING_KIND.INBOX, "Inbox"), undefined);
-  assert.equal(thingWordHeard(THING_KIND.LUKE, "Fullspin"), undefined);
+  assert.equal(thingWordHeard(THING_KIND.LUKE, "Vespin"), undefined);
   assert.equal(thingWordHeard(THING_KIND.CHANGES, "Changes by Ada"), undefined);
   assert.equal(thingWordHeard(THING_KIND.MESSAGE, "Message from Ada"), undefined);
   assert.equal(thingWordHeard(THING_KIND.INBOX, "Inbox (team)"), undefined);

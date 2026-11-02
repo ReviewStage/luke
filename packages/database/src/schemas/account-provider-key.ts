@@ -42,7 +42,7 @@ export const accountProviderKey = pgTable(
     /**
      * When the access token a ChatGPT sign-in's sealed credentials hold
      * expires, so a refresh is due without opening them; null for every
-     * other kind, whose credential carries no expiry Fullspin reads.
+     * other kind, whose credential carries no expiry we read.
      */
     accessExpiresAt: timestamptz("access_expires_at"),
     /**
@@ -67,7 +67,7 @@ export const accountProviderKey = pgTable(
 );
 
 /**
- * The account's own `ext_agent_host_id` for Fullspin's hosted runtime: the host
+ * The account's own `ext_agent_host_id` for our hosted runtime: the host
  * OpenAI's Sign in with ChatGPT names when the desktop signs in for the
  * service, minted once and kept across sign-outs, as OpenAI's guide asks a
  * host's id to be, so it outlives the credential row it signs in for. It is

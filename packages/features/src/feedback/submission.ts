@@ -3,9 +3,9 @@ import { Option, Schema } from "effect";
 import { PICTURE_TYPE, type PictureType } from "../picture-wire.js";
 
 /**
- * A note from the user to the people who make Fullspin. Two kinds, because they are
- * read differently on arrival: feedback is about Fullspin, and a prompt is an ask
- * Fullspin should have handled better. Both travel the same way — typed in the
+ * A note from the user to the people who make the app. Two kinds, because they are
+ * read differently on arrival: feedback is about the app, and a prompt is an ask
+ * the app should have handled better. Both travel the same way — typed in the
  * panel, carried by the main process to one fixed endpoint, and forwarded from
  * there as email to the founders. Nothing observed ever rides along: a
  * submission holds only what the dialog showed the user — their words, their

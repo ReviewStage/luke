@@ -14,6 +14,7 @@ import {
   CHIP_SIZE,
   Chip,
   ChipName,
+  type ListRowNest,
   type MenuEntry,
   PencilIcon,
   ProgressCount,
@@ -136,14 +137,16 @@ function PullRequest({ number }: { number: number }): React.JSX.Element {
   );
 }
 
-/** One task's row, nested and folding as said. */
+/** One task's row, nested and folding as said, and read at its place among its siblings. */
 function CatalogTaskRow({
   task,
   depth,
+  nest,
   fold,
 }: {
   task: CatalogTask;
   depth?: number;
+  nest?: ListRowNest;
   fold?: { open: boolean; onOpenChange: (open: boolean) => void };
 }): React.JSX.Element {
   return (
@@ -186,20 +189,29 @@ function CatalogTaskRow({
       menu={{ thing: "Task", groups: taskMenu(task.name) }}
       onOpen={ignore}
       depth={depth}
+      nest={nest}
       fold={fold === undefined ? undefined : { ...fold, label: `Child tasks of ${task.name}` }}
     />
   );
 }
 
-/** Three related tasks, the second nested under the first, which folds it. */
+/**
+ * Three related tasks, the second nested under the first, which folds it: a
+ * reader hears the first and the third at level 1, 1 and 2 of 2, and the
+ * second at level 2, 1 of 1, though the three stand flat in one list.
+ */
 function RelatedTasks(): React.JSX.Element {
   const [open, setOpen] = useState(true);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   return (
     <TaskRows label="Related tasks" selection={{ selected, onChange: setSelected }}>
-      <CatalogTaskRow task={PARENT} fold={{ open, onOpenChange: setOpen }} />
-      {open ? <CatalogTaskRow task={CHILD} depth={1} /> : null}
-      <CatalogTaskRow task={RELATED} />
+      <CatalogTaskRow
+        task={PARENT}
+        nest={{ position: 1, size: 2 }}
+        fold={{ open, onOpenChange: setOpen }}
+      />
+      {open ? <CatalogTaskRow task={CHILD} depth={1} nest={{ position: 1, size: 1 }} /> : null}
+      <CatalogTaskRow task={RELATED} nest={{ position: 2, size: 2 }} />
     </TaskRows>
   );
 }

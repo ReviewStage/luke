@@ -4,7 +4,7 @@ import { GITHUB_REPOSITORY_BOUNDS, GITHUB_REPOSITORY_PATTERN } from "./link-gram
 import { countedNumber } from "./service-wire.js";
 
 /**
- * github-repositories-wire.ts -- the repositories a signed-in developer reaches through the Fullspin GitHub App, as the desktop reads them.
+ * github-repositories-wire.ts -- the repositories a signed-in developer reaches through our GitHub App, as the desktop reads them.
  *
  * The service reads them from GitHub on the developer's own token the moment
  * they are asked for, and stores none of them: what travels is each
@@ -30,7 +30,7 @@ export const githubRepositoryFullNameSchema = EffectSchema.Trim.check(
 );
 
 /**
- * How a repository is reached: through the workspace's Fullspin GitHub App
+ * How a repository is reached: through the workspace's GitHub App
  * installation, or on the member's own personal access token. The App wins
  * wherever it reaches the repository.
  */
@@ -43,6 +43,8 @@ export type GitHubAccess = (typeof GITHUB_ACCESS)[keyof typeof GITHUB_ACCESS];
 
 /** One repository the App, or the developer's own token, reaches for the developer. */
 export const githubRepositorySchema = EffectSchema.Struct({
+  /** GitHub's id for it, which a rename or a transfer keeps; absent from a service older than it. */
+  id: EffectSchema.optionalKey(EffectSchema.Number),
   /** The user or organization that owns it. */
   owner: EffectSchema.String,
   name: EffectSchema.String,
@@ -74,7 +76,7 @@ export const GITHUB_REPOSITORIES_QUERY = {
 
 /** The repositories (GET): every one the App reaches for the developer, or for the workspace named, most recently updated first. */
 export const githubRepositoriesAnswerSchema = EffectSchema.Struct({
-  /** Whether the developer reaches any installation of the App at all; false is "Install Fullspin on GitHub". */
+  /** Whether the developer reaches any installation of the App at all; false offers to install it on GitHub. */
   installed: EffectSchema.Boolean,
   repositories: EffectSchema.Array(githubRepositorySchema),
   /**

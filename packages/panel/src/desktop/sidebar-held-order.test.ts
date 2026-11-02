@@ -80,7 +80,7 @@ function mountSidebar(tasks: readonly TaskSummary[]) {
     );
   };
   draw(tasks);
-  const tasksNav = container.querySelector('nav[aria-label="Tasks"]');
+  const tasksNav = container.querySelector('nav[aria-label="My tasks"]');
   assert.ok(tasksNav !== null);
   pointerCross(document.body, tasksNav);
   return { container, draw, leave: () => pointerCross(tasksNav, document.body) };
@@ -88,7 +88,7 @@ function mountSidebar(tasks: readonly TaskSummary[]) {
 
 /** The names of the tasks drawn under Tasks, in the order drawn. */
 function names(sidebar: HTMLElement): string[] {
-  const region = sidebar.querySelector('nav[aria-label="Tasks"]');
+  const region = sidebar.querySelector('nav[aria-label="My tasks"]');
   return [...(region?.querySelectorAll(".luke-list-row-title") ?? [])].map(
     (name) => name.firstChild?.textContent ?? "",
   );

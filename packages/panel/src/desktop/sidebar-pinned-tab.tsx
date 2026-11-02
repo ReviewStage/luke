@@ -24,6 +24,7 @@ import {
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
+  type ListRowNest,
   RowHint,
   RowHintOptions,
   Tooltip,
@@ -35,6 +36,7 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useRef } from "react";
 import { askAct } from "../act.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { rendererRuntime } from "../renderer-runtime.js";
@@ -79,7 +81,9 @@ import { PullRequestLine, RepositoryDetail } from "./task-card.js";
  * task's own row is pressed or another task opens. Its Unpin stands at the row's end while it is hovered or
  * reached from the keyboard, in the task rows' Pin and Archive style, and
  * part of the row to its card, as theirs are, and
- * a menu, opened by its ⋯, a right-click, or the menu key, offers Unpin, the
+ * a menu, opened by its ⋯, a right-click, a long press, or the menu key,
+ * a finger's row drawing neither its ⋯ nor its Unpin, as a task's row,
+ * offers Unpin, the
  * pin's own keeping, first, as a tab's keeping leads its tab's menu, then,
  * for an agent's pin, the agent's one menu (`agent-actions.tsx`'s
  * `agentMenuGroups`): the whole of it while its task is open, whose agents
@@ -392,6 +396,8 @@ function PinnedTabCard({
 /** What a pin's row draws, beyond its menu: its glyph and name, the card it hangs, and where it opens. */
 interface PinnedRowDrawn {
   pin: SidebarPin;
+  /** Where the row stands among the pins, where Pinned nests child tasks under its plans. */
+  nest: ListRowNest | undefined;
   card: React.ReactNode;
   glyph: React.JSX.Element;
   /** Whether the open task no longer holds what the pin opens, which dims the row and opens nothing. */
@@ -426,13 +432,15 @@ function PinnedTabRow({
   description?: React.ReactNode;
   rowRef?: ((press: HTMLElement | null) => void) | undefined;
 }): React.JSX.Element {
-  const { pin, card, glyph, gone, current, inSight, tasks, onOpen, onUnpin } = drawn;
+  const { pin, nest, card, glyph, gone, current, inSight, tasks, onOpen, onUnpin } = drawn;
   const place = useRowPlace();
+  const coarse = useCoarsePointer();
   const editing = editor !== undefined;
   return (
     <RowHintOptions card={card}>
       <ListRow
         ref={rowRef}
+        nest={nest}
         density={LIST_DENSITY.DENSE}
         ink={LIST_ROW_INK.SIDEBAR}
         leading={
@@ -467,9 +475,10 @@ function PinnedTabRow({
             ? undefined
             : rowMenu("Pinned tab", withRowMoves(groups, place), tasks.shown && inSight)
         }
+        more={!coarse}
         actionsAt={LIST_ROW_ACTIONS.HOVER}
         actions={
-          editing ? null : (
+          editing || coarse ? null : (
             <Tooltip label={UNPIN.label}>
               <IconButton
                 icon={UNPIN.icon}
@@ -549,6 +558,7 @@ export function SidebarPinnedTab({
   tasks,
   pin: kept,
   on,
+  nest,
   current,
   inSight,
   onOpen,
@@ -561,6 +571,8 @@ export function SidebarPinnedTab({
   current: boolean;
   /** What the tab is pinned on, whose name the row's card carries. */
   on: PinnedOn;
+  /** Where the pin's row stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
+  nest?: ListRowNest | undefined;
   /** Whether the sidebar is in sight: folded away, its menu stands over nothing. */
   inSight: boolean;
   onOpen: () => void;
@@ -580,6 +592,7 @@ export function SidebarPinnedTab({
   const copyLink = useCopyLinkItem();
   const drawn: PinnedRowDrawn = {
     pin,
+    nest,
     card:
       changesCard !== null ? (
         changesCard

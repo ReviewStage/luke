@@ -1,4 +1,4 @@
-# Fullspin web server
+# Vespin web server
 
 ## Database and auth workflow
 
@@ -10,7 +10,7 @@ builder reads it through, and `pnpm db:generate` writes the migration that
 builds it from that module. "The data layer" below is the rest.
 Better Auth is no exception, reaching its tables through its Drizzle adapter
 over `packages/database/src/schemas/auth.ts` (see below), which is in the same barrel as
-the eleven Fullspin-owned modules, so a migration that changes an auth column's type
+the eleven Vespin-owned modules, so a migration that changes an auth column's type
 changes that declaration too.
 
 Every instant column is `timestamp with time zone` (migration 0026 moved the
@@ -56,7 +56,7 @@ No package lifecycle hook runs migrations.
 The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_APP_CLIENT_ID`, and
 `GITHUB_APP_CLIENT_SECRET`; the GitHub App beneath the last two is described
-under "The Fullspin GitHub App" below.
+under "The Vespin GitHub App" below.
 
 The web service's `routes` in `vercel.json` carry a legacy entry for
 `/api/auth/(.*)` because Vercel's zero-config `api/` detection treats
@@ -69,7 +69,7 @@ Each deployment build runs `pnpm auth:seed` after the migration and before Vite,
 so every database the application reaches already carries the clients, including
 the branch database Neon creates for a Preview deployment, which would otherwise
 be migrated but empty. The Drizzle seed is idempotent, upserting each public
-OAuth client compiled into Fullspin, which is what makes running it on every build
+OAuth client compiled into Vespin, which is what makes running it on every build
 safe. The same step then deletes every JWKS signing key the deployment's
 `BETTER_AUTH_SECRET` cannot open (`dropUnreadableJwks`): Better Auth seals a
 private key under the secret of the deployment that minted it and fails the
@@ -97,7 +97,7 @@ The organization plugin's tables (`organization`, `member`, `invitation`, and
 one edit, instants through `timestamptz()`, and migration
 `20261013230002_organization` is drizzle-kit's from that module. They keep
 Better Auth's default model names, since the Drizzle adapter finds a model by
-its export's name. A Fullspin workspace is an
+its export's name. A Vespin workspace is an
 `organization` and its team the `member` rows, under the plugin's default
 roles `owner`, `admin`, and `member`. A desktop caller holds an OAuth token and
 no Better Auth session, which every member and organization endpoint requires,
@@ -219,7 +219,7 @@ Better Auth session as a signed bearer token that the bearer plugin reads as
 the session cookie, and the browser's cookie only where it carries none, so a
 bearer the plugin did not sign is never read past to a cookie beside it. So these six
 paths take the session, not the OAuth token, and the plugin checks the
-caller's role and membership again behind Fullspin's own rules. A workspace the
+caller's role and membership again behind Vespin's own rules. A workspace the
 account is not in is `not-found`; a role that does not allow it,
 `not-permitted`; a session the service does not take,
 `invalid-token`, which is the Mac's cue to ask for a new one through the
@@ -238,7 +238,7 @@ Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 OAuth scope (`GITHUB_SIGN_IN` in `packages/service/src/auth/auth-policy.ts`): it is a GitHub App's
 user authorization, and a GitHub App has permissions rather than scopes, the
 App's "Email addresses: read" among them, which is what answers the email
-read Fullspin requires for its account snapshot, and what Better Auth's GitHub
+read Vespin requires for its account snapshot, and what Better Auth's GitHub
 provider reads to link the account at all.
 
 Accounts link (`accountLinking` in `ACCOUNT_TOKEN_STORAGE`,
@@ -252,7 +252,7 @@ through Better Auth's own `/link-social`, whatever email address GitHub holds
 hold the GitHub its workspaces and repositories need; `/link-social`,
 `/unlink-account`, and `/list-accounts` stay open, since none of them answers
 a token. A user revoking the App's authorization on GitHub deletes that
-GitHub user's account row (`github_app_authorization` under "The Fullspin GitHub
+GitHub user's account row (`github_app_authorization` under "The Vespin GitHub
 App" below).
 
 ## How the functions deploy
@@ -662,7 +662,7 @@ headers at every address it answers at.
 ## The sandbox's host
 
 An agent's page runs the script the agent wrote, so the web app draws it from
-a registrable domain of its own, `fullspin.page`
+a registrable domain of its own, `vespin.page`
 (`@luke/features/page-frame`'s `PAGE_SANDBOX_ORIGIN`), attached to this
 project beside the app's. That host serves one route and nothing else. The
 first top-level rewrite sends every request made to it into the web service,
@@ -672,7 +672,7 @@ link's `/p/<token>` to the page route with its token in a query and every
 other path of the host to a file of the build's own,
 `public/sandbox-not-found.txt`, under a forced 404, so a stray request wakes
 no function. A host condition is written as an anchored pattern,
-`{"re": "^fullspin\\.page\\.?$"}`, so the spelling with a trailing dot a
+`{"re": "^vespin\\.page\\.?$"}`, so the spelling with a trailing dot a
 browser may send is held too, and no host that merely holds the name is;
 never as a bare string, which Vercel may match anywhere in the host. The page
 route
@@ -682,7 +682,7 @@ query named it, and it refuses any host but the sandbox's, so its own `/api/`
 path on the app's host answers 404 too. It answers a frame's load alone, as
 the browser names it in `Sec-Fetch-Dest`, and so does the mint below: a page
 opened in a whole tab would be free of the app's `frame-src` on a domain of
-Fullspin's own, so a load that names itself a tab's, or names nothing, is 404.
+Vespin's own, so a load that names itself a tab's, or names nothing, is 404.
 
 A frame on the app's host asks the app's own `…/versions/{version}/frame`
 procedure under the session cookie, which answers 303 to a link on the
@@ -811,12 +811,24 @@ is a build-time variable that lets the site's own pages talk to PostHog
 directly, so PostHog sees a visitor's address there. A build without it never
 loads the library at all.
 
-Use is counted per user per UTC day in the Fullspin-owned `hosted_usage` table:
+Use is counted per user per UTC day in the Vespin-owned `hosted_usage` table:
 one atomic upsert before each upstream call (`packages/database/src/models/quota.ts`).
 A dictated clip is counted once it is transcribed instead, as one call and its
 seconds of audio in the row's `dictation_seconds`. Nothing is refused on the count, which the admin pages read; a spend limit on
 the OpenAI project behind the key is the backstop and should be configured
 with it.
+
+## Invitation email
+
+A workspace invitation made from Settings is emailed to the invited address
+as it is made (`packages/service/src/accounts/invitation-mail.ts`), through
+Resend, with the accept link the owner can still copy by hand. It needs
+`RESEND_API_KEY`, the key the feedback form already sends with, and
+`INVITE_FROM`, the sender, such as `Name <invites@notifications.example>`
+on a domain Resend has verified. Without either the build logs it once by
+the variables' names and nothing is emailed, which is the intended state for
+a Preview. A send Resend refuses is logged by its status alone, and the
+invitation stands. Canceling an invitation emails nothing.
 
 ## Sentry
 

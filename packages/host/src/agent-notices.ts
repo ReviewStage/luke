@@ -25,7 +25,7 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * notification, since news the developer did not ask for interrupts more
  * than it tells: the agent's unseen dot, the Inbox's counts and the Dock's
  * badge, and the Automations failed mark. The
- * one notification Fullspin posts is a command waiting on this Mac
+ * one notification the app posts is a command waiting on this Mac
  * (`client/client-notices.ts`), through the same doors.
  *
  * The panel reads an agent's status only while its tab is on screen, so
@@ -47,8 +47,8 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * the new turn's id arrives, whose own end is the next dot. A list that
  * landed late, describing a turn the agent has left behind, says nothing
  * newer. A Stop is the developer's own and leaves no dot. The ledger is this
- * launch's and this account's, so an agent that ended before Fullspin watched
- * it, or while Fullspin was not running, is not dotted, a reload of the window
+ * launch's and this account's, so an agent that ended before the app watched
+ * it, or while the app was not running, is not dotted, a reload of the window
  * dots nothing twice, and an account that signs out takes its agents with
  * it. Only another account is a change of hands: the account's own session
  * renewing, which it does mid-run, says the same account again and keeps the
@@ -549,7 +549,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** One agent as an answer carried it, against where the ledger last had it. */
     function observe(agentId: string, next: HeldAgent): void {
       const was = ledger.get(agentId);
-      // An agent first seen ended ended before Fullspin watched it; one first seen at work may have just started.
+      // An agent first seen ended ended before the app watched it; one first seen at work may have just started.
       if (was === undefined) {
         if (ledger.size === 0) holder = dependencies.signedInAs();
         ledger.set(agentId, next);

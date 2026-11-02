@@ -4,7 +4,7 @@
  * The `claude_code` implementation of `AgentSessions`
  * (`eve-host/eve-sessions.ts`), on the launch machinery every native
  * harness shares (`runner-sessions.ts`). What is Claude Code's own: the
- * runner's config names the image's `claude` and appends Fullspin's coder
+ * runner's config names the image's `claude` and appends our coder
  * instructions to Claude Code's prompt; the plan's token, opened from the
  * account's sealed `claude_setup_token` row, is the launch's credential, or,
  * for an agent its starter's API key pays for, that key opened as

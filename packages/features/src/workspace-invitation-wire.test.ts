@@ -4,10 +4,10 @@ import { invitationAcceptQuery, invitationAcceptUrl } from "./workspace-invitati
 
 test("the accept page reads back the invitation and the address the invite page wrote, plus and ampersand included", () => {
   const link = new URL(
-    invitationAcceptUrl("https://tryluke.dev", "inv_1", "ada+luke&co@example.com"),
+    invitationAcceptUrl("https://vespin.dev", "inv_1", "ada+luke&co@example.com"),
   );
 
-  assert.equal(link.origin + link.pathname, "https://tryluke.dev/accept-invitation.html");
+  assert.equal(link.origin + link.pathname, "https://vespin.dev/accept-invitation.html");
   assert.deepEqual(invitationAcceptQuery(link.search), {
     id: "inv_1",
     email: "ada+luke&co@example.com",

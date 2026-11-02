@@ -14,7 +14,7 @@ test("an edit of a document still holding its base takes the developer's text ex
   });
 });
 
-test("an edit of a document Fullspin wrote in meanwhile is laid over its words, which stay", () => {
+test("an edit of a document Vespin wrote in meanwhile is laid over its words, which stay", () => {
   const lukes = `${DOCUMENT}- Invites expire after 7 days.\n`;
   const value = DOCUMENT.replace("an admin", "an owner");
 

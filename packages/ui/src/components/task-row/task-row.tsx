@@ -7,7 +7,7 @@ import { BUTTON_SIZE } from "../button/button.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, CARD_SHADOW, Card } from "../card/card.js";
 import { CardPress, SELECT_BOX_PLACE } from "../card-press/card-press.js";
 import { motionKey } from "../list-motion/list-motion.js";
-import type { ListRowFold } from "../list-row/list-row.js";
+import { type ListRowFold, type ListRowNest, nestedItem } from "../list-row/list-row.js";
 import { OneLine } from "../one-line/one-line.js";
 import { useRovingKeys } from "../roving-keys/roving-keys.js";
 import { type ListRowMenu, useRowMenu } from "../row-menu/row-menu.js";
@@ -47,7 +47,11 @@ import { SelectionRegion } from "../selection/selection-region.js";
  * holds a control (a related task's kind) or the name is the last cell, so
  * neither is ever covered; on a screen with no hover it stands there at
  * rest, the cells after the name stepping aside for it where it would stand
- * over the last (`task-row.css`). Renamed, its name gives way
+ * over the last (`task-row.css`). A row may leave its ⋯ out (`more`), as a
+ * phone's mail list draws none on its rows, and offer its menu by the long
+ * press, the right-click, and the menu key alone: no cell then steps aside
+ * or gives way, and its list keeps the ⋯ no column (`TaskRows`'s `more`).
+ * One being renamed, whose press is its field, keeps it. Renamed, its name gives way
  * to the field its owner hands (`editor`); what did not land stands under
  * it (`note`).
  *
@@ -55,7 +59,8 @@ import { SelectionRegion } from "../selection/selection-region.js";
  * for each level, its other columns still lined up with every row's; and a
  * row with rows nested under it folds them (`fold`), by a chevron before
  * its name, a control of its own beside the press, and by → and ← on the
- * press, as a `ListRow`'s fold does.
+ * press, as a `ListRow`'s fold does; a reader hears its level and its place
+ * among its siblings (`nest`), as a `ListRow`'s reader does.
  *
  * A group's quick add draws its draft as a row of the same cells, raised
  * as a card off the list (`TaskRowDraft`), so it reads as the row it is
@@ -271,17 +276,18 @@ function cellOf(
 /**
  * The grid's columns for the cells drawn, in the order a row draws them:
  * those before the name, the name, and those after it, then the ⋯'s own
- * where it comes in over no cell (`cellUnderMore`); the cell it comes in
- * over is held to the ⋯'s width at least (`CELL_LEAST`). The list standing
- * the rows lays them as its `--tasks-list-columns`.
+ * where it comes in over no cell (`cellUnderMore`) and its rows draw it
+ * (`more`); the cell it comes in over is held to the ⋯'s width at least
+ * (`CELL_LEAST`). The list standing the rows lays them as its
+ * `--tasks-list-columns`.
  */
-export function taskRowColumns(cells: readonly TaskRowCell[]): string {
+export function taskRowColumns(cells: readonly TaskRowCell[], more = true): string {
   const drawn = inOrder(cells);
   const width = (cell: TaskRowCell) => COLUMN_WIDTH[cell];
   const before = drawn.filter((cell) => LEADING.includes(cell)).map(width);
   const after = drawn.filter((cell) => !LEADING.includes(cell)).map(width);
-  const more = cellUnderMore(cells) === undefined ? [MORE_COLUMN] : [];
-  return [...before, "minmax(0, 1fr)", ...after, ...more].join(" ");
+  const moreColumn = more && cellUnderMore(cells) === undefined ? [MORE_COLUMN] : [];
+  return [...before, "minmax(0, 1fr)", ...after, ...moreColumn].join(" ");
 }
 
 /** One task's row: its press, which opens it, its cells in their columns, and its ⋯ over its end. */
@@ -295,10 +301,12 @@ export function TaskRow({
   editor,
   note,
   menu,
+  more = true,
   disabled = false,
   onOpen,
   pressRef,
   depth = 0,
+  nest,
   fold,
   settled = false,
   children,
@@ -321,6 +329,8 @@ export function TaskRow({
   note?: ReactNode;
   /** The task's menu; none while it offers none, as while it is renamed. */
   menu?: ListRowMenu | undefined;
+  /** Whether the row draws its menu's ⋯; it may leave it out, its menu still a long press, a right-click, and the menu key away. Its list says the same (`TaskRows`'s `more`). */
+  more?: boolean | undefined;
   /** Whether its press is unavailable, as while the task is deleted. */
   disabled?: boolean | undefined;
   onOpen: () => void;
@@ -328,6 +338,8 @@ export function TaskRow({
   pressRef?: RefObject<HTMLButtonElement | null> | undefined;
   /** How deep it stands nested under other rows: 0, at the top, unless said. */
   depth?: number | undefined;
+  /** Where it stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
+  nest?: ListRowNest | undefined;
   /** The rows nested under it, which it folds; none where it holds none. */
   fold?: ListRowFold | undefined;
   /** Whether it stands settled beside the rows still open, its name in the muted ink: a blocker that is done. */
@@ -338,7 +350,10 @@ export function TaskRow({
   const own = useRef<HTMLButtonElement | null>(null);
   const press = pressRef ?? own;
   const nameId = useId();
-  const rowMenu = useRowMenu(menu, { disabled, opener: press });
+  // Note that a row being renamed keeps its ⋯, because its press, which the menu would hand focus back to, is its field.
+  const drawsMore = more || editor !== undefined;
+  const rowMenu = useRowMenu(menu, { disabled, opener: press, more: drawsMore });
+  const underMore = drawsMore ? cellUnderMore(cells) : undefined;
   // Note that → and ← are the row's only while they would move its fold, so the list still hears the rest.
   const foldKeys = (event: KeyboardEvent<HTMLElement>) => {
     if (fold === undefined) return;
@@ -382,6 +397,7 @@ export function TaskRow({
       {...rowMenu.props}
       data-editing={editor === undefined ? undefined : "true"}
       data-depth={depth === 0 ? undefined : depth}
+      {...nestedItem(depth, nest)}
       data-settled={settled ? "true" : undefined}
     >
       <span
@@ -413,7 +429,7 @@ export function TaskRow({
           </span>
         )}
       </span>
-      {inOrder(cells).map((cell) => cellOf(cell, content[cell], cellUnderMore(cells)))}
+      {inOrder(cells).map((cell) => cellOf(cell, content[cell], underMore))}
       <span className={MORE} data-cell="more">
         {rowMenu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
       </span>
@@ -476,7 +492,8 @@ export function TaskRowDraft({
 /**
  * A list of task rows standing on its own, outside the Tasks page: one grid
  * of the cells its rows draw (`RELATED_TASK_CELLS` unless said), named by
- * `label`. Its rows are one Tab stop that ↑↓ walk (`useRovingKeys`), and,
+ * `label`, keeping its rows' ⋯ a column where they draw it (`more`). Its
+ * rows are one Tab stop that ↑↓ walk (`useRovingKeys`), and,
  * where it is asked to (`selection`), chosen together as a Mac's list
  * chooses them, by the box in a row's gutter, ⌘-click, ⇧-click, ⇧↑↓, ⌘A,
  * and Esc (`SelectionRegion`), a plain press still opening the task.
@@ -485,6 +502,7 @@ export function TaskRows({
   id,
   label,
   cells = RELATED_TASK_CELLS,
+  more = true,
   selection,
   children,
 }: {
@@ -493,6 +511,8 @@ export function TaskRows({
   label: string;
   /** The cells its rows draw, which they are each handed too. */
   cells?: readonly TaskRowCell[] | undefined;
+  /** Whether its rows draw their ⋯, which they are each handed too; where they leave it out, it keeps no column for it. */
+  more?: boolean | undefined;
   /** Which rows are chosen and what hears the next set, where the list chooses rows at all. */
   selection?: ListSelection | undefined;
   /** Its `TaskRow`s. */
@@ -505,7 +525,7 @@ export function TaskRows({
       {...roving}
       className={ROWS}
       aria-label={label}
-      style={cssCustomProperties({ "--tasks-list-columns": taskRowColumns(cells) })}
+      style={cssCustomProperties({ "--tasks-list-columns": taskRowColumns(cells, more) })}
     >
       {children}
     </ul>

@@ -4,7 +4,7 @@ import { organization, user } from "./auth.js";
 
 /**
  * An owner's or admin's intent to connect GitHub to a workspace: made when
- * the Mac asks where to install the Fullspin GitHub App, carried to GitHub and
+ * the Mac asks where to install our GitHub App, carried to GitHub and
  * back as the install address's opaque `state`. When GitHub returns through
  * the Setup URL, the installation it names and a PKCE code verifier are
  * written on the row, and the browser goes on to authorize the App once

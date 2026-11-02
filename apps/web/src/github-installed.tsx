@@ -14,12 +14,12 @@ import "./styles.css";
 import { mountPrerenderedPage } from "./mount-page";
 
 /**
- * Where GitHub leaves a developer once the Fullspin GitHub App is installed, by
+ * Where GitHub leaves a developer once our GitHub App is installed, by
  * way of the service's Setup URL route, which confirmed the installation and
  * put one word of status on this page's address. Every string is fixed by
  * the build, worded once for every landing (`@luke/features/landing-outcome`):
  * the status chooses an outcome, and nothing the address carried is drawn.
- * The way back is Open Fullspin (`connect-return.ts`).
+ * The way back is the Open link (`connect-return.ts`).
  */
 
 function statusFromAddress(): GitHubInstallStatus {
@@ -32,8 +32,8 @@ function statusFromAddress(): GitHubInstallStatus {
 
 /**
  * The page opens on GitHub's mark, badged with how the installation ended:
- * the title says what happened, the description what to do next, and Open
- * Fullspin goes back.
+ * the title says what happened, the description what to do next, and the
+ * Open link goes back.
  */
 function GitHubInstalled(): React.JSX.Element {
   const [status] = useState(statusFromAddress);

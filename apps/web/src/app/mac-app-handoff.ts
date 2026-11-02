@@ -1,7 +1,7 @@
 /**
- * mac-app-handoff.ts -- a Fullspin link opened in a tab handed to Fullspin for Mac, once, where the account chose the Mac app and the tab is on a Mac.
+ * mac-app-handoff.ts -- an app link opened in a tab handed to the Mac app, once, where the account chose the Mac app and the tab is on a Mac.
  *
- * An account chooses where its Fullspin links open (`@luke/features/link-open`,
+ * An account chooses where its app links open (`@luke/features/link-open`,
  * Settings › Profile's Links). The web serves the app at every link's own
  * address, so a link opened in a browser lands here first; the root asks this
  * once per page load, after the panel's first paint, and the address it asks
@@ -63,7 +63,7 @@ function tookStayOnWeb(): boolean {
  * Whether the page was loaded by a fresh navigation to its address, as a
  * link followed or an address opened is: not a reload or a Back or Forward,
  * not onto an entry the browser brought back with a place the panel saved
- * in it (`browser-history.ts`), and not by Fullspin's own Open in browser,
+ * in it (`browser-history.ts`), and not by our own Open in browser,
  * whose flag this takes out of the address. Read once, before the panel
  * reads the address or writes its own first place into the entry. A
  * browser that does not say how it loaded the page is taken as not, so a

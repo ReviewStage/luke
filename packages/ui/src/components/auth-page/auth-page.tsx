@@ -54,14 +54,14 @@ export function AuthPage({
   footnote,
   children,
 }: {
-  /** The artwork the page opens with: an `AuthMark`, or Fullspin's face. */
+  /** The artwork the page opens with: an `AuthMark`, or the app's face. */
   mark?: ReactNode;
   /** What the page is for, or how it ended, which names it. */
   title: ReactNode;
   description?: ReactNode;
   /** What went wrong and the failure beneath it, or nothing while nothing has. */
   error?: ShownError | undefined;
-  /** The way on, such as Open Fullspin, or nothing where there is none. */
+  /** The way on, such as the Open link, or nothing where there is none. */
   action?: AuthAction | undefined;
   /** A closing note under everything else ("You can close this window"). */
   footnote?: ReactNode;

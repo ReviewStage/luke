@@ -1,5 +1,5 @@
 /**
- * runner.test.ts -- one launch of the runner against a scripted CLI playing P00's recorded stream and a fake Fullspin: the config line in, messages in, Stop, every event out in order through failed posts, a heartbeat while the CLI says nothing, and the launch's end where the agent's turn ends.
+ * runner.test.ts -- one launch of the runner against a scripted CLI playing P00's recorded stream and a fake service: the config line in, messages in, Stop, every event out in order through failed posts, a heartbeat while the CLI says nothing, and the launch's end where the agent's turn ends.
  */
 
 import assert from "node:assert/strict";
@@ -91,7 +91,7 @@ const CONFIG: RunnerConfig = {
   executable: "/opt/claude/bin/claude",
   model: "claude-sonnet",
   effort: EFFORT.HIGH,
-  append: "You are a Fullspin coding agent.",
+  append: "You are a Vespin coding agent.",
   resume: "00000000-0000-4000-8000-000000000001",
   firstSequence: FIRST_SEQUENCE,
   eventsUrl: EVENTS_URL,
@@ -106,7 +106,7 @@ const LINEAR_SERVER = { name: "linear", url: "https://luke.test/runner/mcp/integ
 const FIRST_MESSAGE: InputLine = {
   type: INPUT_LINE.MESSAGE,
   content: [
-    { type: "text", text: "Run Fullspin's probe." },
+    { type: "text", text: "Run Vespin's probe." },
     {
       type: "image",
       source: { type: "base64", media_type: IMAGE_MEDIA_TYPE.PNG, data: "iVBORw0K" },
@@ -114,7 +114,7 @@ const FIRST_MESSAGE: InputLine = {
   ],
 };
 
-/** The fake Fullspin events route these launches post to. */
+/** The fake events route these launches post to. */
 function fakeLuke(answers: readonly Answer[] = [], watchFor?: string) {
   return makeFakeLuke({
     url: EVENTS_URL,
@@ -140,7 +140,7 @@ function kinds(events: readonly RunnerEvent[]): string[] {
   });
 }
 
-/** One launch over stdin lines the test writes, against a fake CLI and a fake Fullspin. */
+/** One launch over stdin lines the test writes, against a fake CLI and a fake service. */
 function launch(
   steps: readonly Step[],
   luke: ReturnType<typeof fakeLuke>,
@@ -287,7 +287,7 @@ it.effect(
 );
 
 it.effect(
-  "takes Fullspin's later lines past a model change the CLI never answers, and ends on a Stop it never answers",
+  "takes Vespin's later lines past a model change the CLI never answers, and ends on a Stop it never answers",
   () =>
     Effect.gen(function* () {
       const luke = fakeLuke([], STOPPED_COMMAND);
@@ -364,7 +364,7 @@ it.effect("keeps the CLI up for a message sent during a turn until a turn answer
 );
 
 it.effect(
-  "keeps the CLI up past a result that names no prompt until the turn that answers Fullspin's message",
+  "keeps the CLI up past a result that names no prompt until the turn that answers Vespin's message",
   () =>
     Effect.gen(function* () {
       const luke = fakeLuke();
@@ -401,14 +401,14 @@ it.effect(
     }),
 );
 
-/** How many IDLE events Fullspin has taken. */
+/** How many IDLE events the service has taken. */
 function idles(luke: ReturnType<typeof fakeLuke>): number {
   return luke.applied.filter(
     ({ message }) => "type" in message && message.type === RUNNER_EVENT.IDLE,
   ).length;
 }
 
-/** Waits, without moving the clock, until Fullspin has taken the IDLE events given. */
+/** Waits, without moving the clock, until the service has taken the IDLE events given. */
 function untilIdles(luke: ReturnType<typeof fakeLuke>, count: number) {
   return Effect.gen(function* () {
     for (let step = 0; step < 5_000 && idles(luke) < count; step += 1) yield* Effect.yieldNow;
@@ -419,7 +419,7 @@ function untilIdles(luke: ReturnType<typeof fakeLuke>, count: number) {
 const WARM_CONFIG: RunnerConfig = { ...CONFIG, warm: true };
 
 it.effect(
-  "keeps a warm launch up past its turn, posting IDLE, takes the next message as a fresh turn of the same CLI, and ends as idled when Fullspin retires it",
+  "keeps a warm launch up past its turn, posting IDLE, takes the next message as a fresh turn of the same CLI, and ends as idled when Vespin retires it",
   () =>
     Effect.gen(function* () {
       const luke = fakeLuke();
@@ -476,7 +476,7 @@ it.effect("a retire written behind a message is skipped, and the message's turn 
 );
 
 it.effect(
-  "takes Fullspin's lines from the read its config names, past its cursor and its stdin's end",
+  "takes Vespin's lines from the read its config names, past its cursor and its stdin's end",
   () =>
     Effect.gen(function* () {
       const luke = fakeLuke();
@@ -585,11 +585,11 @@ it.effect(
     }),
 );
 
-it.effect("lets a heartbeat Fullspin never answers go, and posts the next one an interval on", () =>
+it.effect("lets a heartbeat Vespin never answers go, and posts the next one an interval on", () =>
   Effect.gen(function* () {
     const luke = fakeLuke([], "Working on the first message.");
     let hung = 0;
-    // Fullspin holds the first heartbeat open, answering nothing until the runner lets it go.
+    // The service holds the first heartbeat open, answering nothing until the runner lets it go.
     const stalling: typeof luke = {
       ...luke,
       layer: fakeHttpClientLayer((url, init) => {
@@ -621,11 +621,11 @@ it.effect("lets a heartbeat Fullspin never answers go, and posts the next one an
 
     assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
     assert.equal(hung, 1);
-    assert.equal(afterStall, 1, "the heartbeat after the one Fullspin held went out");
+    assert.equal(afterStall, 1, "the heartbeat after the one Vespin held went out");
   }),
 );
 
-it.effect("interrupts a turn a wakeup started when Fullspin stops it", () =>
+it.effect("interrupts a turn a wakeup started when Vespin stops it", () =>
   Effect.gen(function* () {
     const luke = fakeLuke([], STOPPED_COMMAND);
     const { cli, write, run } = yield* launch(WAKEUP_STOPPED_TURN, luke);
@@ -749,34 +749,32 @@ it.effect("ends a waiting launch at once on a stop, with no turn to interrupt", 
   }),
 );
 
-it.effect(
-  "posts each event once and in order through posts Fullspin failed or never answered",
-  () =>
-    Effect.gen(function* () {
-      const luke = fakeLuke([ANSWER.SERVER_ERROR, ANSWER.UNREACHABLE, ANSWER.TAKE_THEN_FAIL]);
-      const { write, run } = yield* launch(SHORT_TURN, luke);
-      yield* write(CONFIG);
-      yield* write(FIRST_MESSAGE);
+it.effect("posts each event once and in order through posts Vespin failed or never answered", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke([ANSWER.SERVER_ERROR, ANSWER.UNREACHABLE, ANSWER.TAKE_THEN_FAIL]);
+    const { write, run } = yield* launch(SHORT_TURN, luke);
+    yield* write(CONFIG);
+    yield* write(FIRST_MESSAGE);
 
-      const exit = yield* settled(run);
-      assert.ok(Exit.isSuccess(exit));
-      assert.equal(exit.value, RUNNER_END.TURN_ENDED);
-      assert.ok(luke.posts() > 3);
-      assert.deepEqual(kinds(luke.applied), [
-        "system/init",
-        "assistant",
-        "result/success",
-        RUNNER_EVENT.END,
-      ]);
-      assert.deepEqual(
-        luke.applied.map(({ sequence }) => sequence),
-        luke.applied.map((_, index) => FIRST_SEQUENCE + index),
-      );
-      assert.equal(luke.applied.length, 5);
-    }),
+    const exit = yield* settled(run);
+    assert.ok(Exit.isSuccess(exit));
+    assert.equal(exit.value, RUNNER_END.TURN_ENDED);
+    assert.ok(luke.posts() > 3);
+    assert.deepEqual(kinds(luke.applied), [
+      "system/init",
+      "assistant",
+      "result/success",
+      RUNNER_EVENT.END,
+    ]);
+    assert.deepEqual(
+      luke.applied.map(({ sequence }) => sequence),
+      luke.applied.map((_, index) => FIRST_SEQUENCE + index),
+    );
+    assert.equal(luke.applied.length, 5);
+  }),
 );
 
-/** A fake Fullspin that answers nothing, as a network that is down does, until `isUp` says it is back. */
+/** A fake service that answers nothing, as a network that is down does, until `isUp` says it is back. */
 function downUntil(luke: ReturnType<typeof fakeLuke>, isUp: () => boolean): typeof luke {
   return {
     ...luke,
@@ -788,7 +786,7 @@ function downUntil(luke: ReturnType<typeof fakeLuke>, isUp: () => boolean): type
 }
 
 it.effect(
-  "posts every event in order once Fullspin is back from an outage far longer than ten minutes",
+  "posts every event in order once Vespin is back from an outage far longer than ten minutes",
   () =>
     Effect.gen(function* () {
       let up = false;
@@ -821,7 +819,7 @@ it.effect(
     }),
 );
 
-it.effect("lets a post Fullspin never answers go after its bound, and posts it again", () =>
+it.effect("lets a post Vespin never answers go after its bound, and posts it again", () =>
   Effect.gen(function* () {
     const luke = fakeLuke();
     let hung = 0;
@@ -858,7 +856,7 @@ it.effect("lets a post Fullspin never answers go after its bound, and posts it a
   }),
 );
 
-it.effect("ends a stopped launch within one post's bound while Fullspin is still unreachable", () =>
+it.effect("ends a stopped launch within one post's bound while Vespin is still unreachable", () =>
   Effect.gen(function* () {
     const luke = fakeLuke();
     const { cli, write, run } = yield* launch(
@@ -923,7 +921,7 @@ it.effect("skips a message line whose uuid is not a UUID, handing the CLI nothin
   }),
 );
 
-it.effect("ends the launch, closing the CLI, when Fullspin refuses its bearer", () =>
+it.effect("ends the launch, closing the CLI, when Vespin refuses its bearer", () =>
   Effect.gen(function* () {
     const luke = fakeLuke([ANSWER.REFUSE]);
     const { cli, write, run } = yield* launch(STOPPED_TURN, luke);
@@ -941,7 +939,7 @@ it.effect("ends the launch, closing the CLI, when Fullspin refuses its bearer", 
 );
 
 it.effect(
-  "starts the CLI with the plan's options, Fullspin's MCP server in process with no secret, and both secrets denied to commands",
+  "starts the CLI with the plan's options, Vespin's MCP server in process with no secret, and both secrets denied to commands",
   () =>
     Effect.gen(function* () {
       const luke = fakeLuke();
@@ -965,7 +963,7 @@ it.effect(
       assert.deepEqual(options.settingSources, ["project"]);
       assert.equal(options.permissionMode, "bypassPermissions");
       assert.equal(options.includePartialMessages, true);
-      // The tools the prompt names that CLI 2.1.304 leaves out of its default set, and the built-ins beside Fullspin's own.
+      // The tools the prompt names that CLI 2.1.304 leaves out of its default set, and the built-ins beside our own.
       for (const tool of ["Glob", "Grep", "TaskCreate", "TaskUpdate"]) {
         assert.ok(options.allowedTools?.includes(tool), tool);
       }
@@ -983,7 +981,7 @@ it.effect(
       assert.equal(options.sandbox?.failIfUnavailable, true);
       assert.equal(options.sandbox?.enableWeakerNestedSandbox, true);
       assert.deepEqual(options.sandbox?.network?.allowedDomains, CONFIG.allowedDomains);
-      // A command may write the folder Fullspin reads a shown picture or page from.
+      // A command may write the folder the service reads a shown picture or page from.
       assert.deepEqual(options.sandbox?.filesystem?.allowWrite, [SHARED_FILES_DIRECTORY]);
       const denied = (options.sandbox?.credentials?.envVars ?? []).map(
         (rule: { name: string; mode: string }) => `${rule.name}:${rule.mode}`,
@@ -1027,7 +1025,7 @@ it.effect(
 );
 
 it.effect(
-  "loads the member's installed skills as a local plugin where Fullspin wrote them, and none where it wrote none",
+  "loads the member's installed skills as a local plugin where Vespin wrote them, and none where it wrote none",
   () =>
     Effect.gen(function* () {
       const folder = mkdtempSync(join(tmpdir(), "luke-installed-skills-"));
@@ -1058,7 +1056,7 @@ it.effect(
     }),
 );
 
-/** The MCP route of a fake Fullspin: answers each request as its server does, notifications with 202, and keeps what each post carried. */
+/** The MCP route of a fake service: answers each request as its server does, notifications with 202, and keeps what each post carried. */
 function fakeMcpRoute(answer: "take" | "refuse" = "take") {
   const calls: { authorization: string | null; body: unknown }[] = [];
   const respond = async (_url: string, init: RequestInit) => {
@@ -1089,7 +1087,7 @@ function fakeCliTransport() {
   return { transport, sent, answered };
 }
 
-/** A launch whose Fullspin answers the MCP server's route as `mcp` does, and that SDK server the CLI was handed, connected to a fake channel; Fullspin's own unless an integration's is named. */
+/** A launch whose fake service answers the MCP server's route as `mcp` does, and that SDK server the CLI was handed, connected to a fake channel; our own unless an integration's is named. */
 function launchWithMcp(
   mcp: ReturnType<typeof fakeMcpRoute>,
   named: { readonly name: string; readonly url: string } = { name: "luke", url: CONFIG.mcpUrl },
@@ -1116,32 +1114,30 @@ function launchWithMcp(
   });
 }
 
-it.effect(
-  "relays the CLI's MCP messages to Fullspin under the runner's bearer, over no socket",
-  () =>
-    Effect.gen(function* () {
-      const mcp = fakeMcpRoute();
-      const { channel, write, run } = yield* launchWithMcp(mcp);
+it.effect("relays the CLI's MCP messages to Vespin under the runner's bearer, over no socket", () =>
+  Effect.gen(function* () {
+    const mcp = fakeMcpRoute();
+    const { channel, write, run } = yield* launchWithMcp(mcp);
 
-      channel.transport.onmessage?.({ jsonrpc: "2.0", method: "notifications/initialized" });
-      channel.transport.onmessage?.({ jsonrpc: "2.0", id: 1, method: "tools/list" });
-      yield* Deferred.await(channel.answered);
-      yield* write(FIRST_MESSAGE);
-      yield* Fiber.join(run);
+    channel.transport.onmessage?.({ jsonrpc: "2.0", method: "notifications/initialized" });
+    channel.transport.onmessage?.({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    yield* Deferred.await(channel.answered);
+    yield* write(FIRST_MESSAGE);
+    yield* Fiber.join(run);
 
-      assert.deepEqual(channel.sent, [{ jsonrpc: "2.0", id: 1, result: { tools: [] } }]);
-      assert.deepEqual(
-        mcp.calls.map(({ authorization }) => authorization),
-        [`Bearer ${BEARER}`, `Bearer ${BEARER}`],
-      );
-      assert.deepEqual(
-        mcp.calls.map(({ body }) => body),
-        [
-          { jsonrpc: "2.0", method: "notifications/initialized" },
-          { jsonrpc: "2.0", id: 1, method: "tools/list" },
-        ],
-      );
-    }),
+    assert.deepEqual(channel.sent, [{ jsonrpc: "2.0", id: 1, result: { tools: [] } }]);
+    assert.deepEqual(
+      mcp.calls.map(({ authorization }) => authorization),
+      [`Bearer ${BEARER}`, `Bearer ${BEARER}`],
+    );
+    assert.deepEqual(
+      mcp.calls.map(({ body }) => body),
+      [
+        { jsonrpc: "2.0", method: "notifications/initialized" },
+        { jsonrpc: "2.0", id: 1, method: "tools/list" },
+      ],
+    );
+  }),
 );
 
 it.effect(
@@ -1170,7 +1166,7 @@ it.effect(
     }),
 );
 
-it.effect("answers the CLI's MCP request with a JSON-RPC error where Fullspin refuses it", () =>
+it.effect("answers the CLI's MCP request with a JSON-RPC error where Vespin refuses it", () =>
   Effect.gen(function* () {
     const { channel, write, run } = yield* launchWithMcp(fakeMcpRoute("refuse"));
 
@@ -1272,7 +1268,7 @@ it.effect(
     }),
 );
 
-/** Fullspin's browser, which the agent opened earlier in the turn: Xvfb and Chromium each leading a session of their own, a renderer in Chromium's. */
+/** Our browser, which the agent opened earlier in the turn: Xvfb and Chromium each leading a session of their own, a renderer in Chromium's. */
 const LUKE_BROWSER: readonly FakeProcess[] = [
   { pid: 300, parent: 1, emptied: true, argv: ["Xvfb", ":77", "-screen", "0", "1280x800x24"] },
   {
@@ -1290,7 +1286,7 @@ const LUKE_BROWSER: readonly FakeProcess[] = [
   },
 ];
 
-/** The sandbox's processes while the agent waits: the sandbox's init, the runner, the CLI it spawned, the CLI's own command-sandbox bridge (a `socat`), and Fullspin's browser, nothing of the agent's beside them. */
+/** The sandbox's processes while the agent waits: the sandbox's init, the runner, the CLI it spawned, the CLI's own command-sandbox bridge (a `socat`), and our browser, nothing of the agent's beside them. */
 const WAITING_PROCESSES: readonly FakeProcess[] = [
   ...LUKE_BROWSER,
   { pid: 1, parent: 0, emptied: false },
@@ -1414,7 +1410,7 @@ it.effect(
     }),
 );
 
-it.effect("keeps a waiting launch whose wait a message from Fullspin turned into a turn", () =>
+it.effect("keeps a waiting launch whose wait a message from Vespin turned into a turn", () =>
   Effect.gen(function* () {
     const proc = yield* fakeProc(WAITING_PROCESSES);
     const luke = fakeLuke([], WAKEUP.prompt);

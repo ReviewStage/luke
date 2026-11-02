@@ -10,7 +10,7 @@ import {
 } from "./github-connection-client.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
-const CONNECT_PAGE = "https://tryluke.dev/connect-github.html?intent=opaque-intent-1";
+const CONNECT_PAGE = "https://vespin.dev/connect-github.html?intent=opaque-intent-1";
 
 /** The client over an account holding OAuth token `token-1` and, unless told otherwise, session `session-1`. */
 function client(
@@ -25,7 +25,7 @@ function client(
     readAccountKey: () => Effect.succeed("ada@example.com"),
   };
   return new HostedGitHubConnectionClient({
-    serviceBaseUrl: "https://tryluke.dev",
+    serviceBaseUrl: "https://vespin.dev",
     credential: accountBearer(token),
     sessionCredential: sessionBearer({ ...token, ...session }),
   });

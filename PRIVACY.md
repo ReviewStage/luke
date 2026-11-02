@@ -2,16 +2,16 @@
 
 Last updated: 27 October 2026
 
-Fullspin is a macOS app for planning a feature. This policy explains
+Vespin is a macOS app for planning a feature. This policy explains
 what we collect, who we send it to, and how to turn it off.
 
 ## In short
 
-- **What Fullspin stores.** On your Mac, only its window layout and the messages
+- **What Vespin stores.** On your Mac, only its window layout and the messages
   you have not sent yet. On our service: your account, your tasks and their
   plans, your agents' transcripts, and your conversation. Agents work
   in sandboxes on our service, not on your Mac. An agent you run on This Mac
-  or on a host instead runs straight on that machine, as you or the user Fullspin's
+  or on a host instead runs straight on that machine, as you or the user Vespin's
   host runs as there, with full access to whatever that account can reach,
   in a folder of its own it keeps for its life; no copy of its work comes to
   us. See [What we collect](#what-we-collect) and [Storage](#storage).
@@ -21,7 +21,7 @@ what we collect, who we send it to, and how to turn it off.
 - **Who else gets data.** GitHub for your repositories. Vercel runs our
   service and the sandboxes, and Neon hosts our database. PostHog gets usage
   data and screen recordings with every word masked. Sentry gets crash,
-  error, and performance reports, and a log of the errors Fullspin shows you,
+  error, and performance reports, and a log of the errors Vespin shows you,
   which leave out what a model was sent or answered. Any integration you connect gets what your agents ask it. See
   [Who we send it to](#who-we-send-it-to).
 - **Commands on your Mac.** Agents can run commands on your Mac, and
@@ -36,17 +36,17 @@ what we collect, who we send it to, and how to turn it off.
 
 **On your Mac.** Agents can run any shell command on your
 Mac once you allow it, and what it prints leaves your Mac (see "Commands
-agents run on your Mac"). Apart from that, nothing in Fullspin reads an agent session, message history, file contents, or command output from your
+agents run on your Mac"). Apart from that, nothing in Vespin reads an agent session, message history, file contents, or command output from your
 Mac's disk or from any other app, except a file you hand it to attach to a
 agent's message (see "Files you attach to an agent"). The only
-agents it lists are the ones started on a task from Fullspin — its Start
+agents it lists are the ones started on a task from Vespin — its Start
 button, New agent, or another agent — which
 our service runs in sandboxes of their own (see "Who we send it to"), and
 the transcripts it shows, each an agent's or one of its workers', are
 read from our service. Each agent reads a task's repository in its
 sandbox on our service. No part of an agent runs on this Mac, so no
 transcript, working memory, or inbox of one is held here on disk, and in
-memory only the tabs described next. On disk, under its application data, Fullspin keeps only
+memory only the tabs described next. On disk, under its application data, Vespin keeps only
 the layout of its window: which tasks' tabs are open and which are pinned,
 each pin with its label (an agent's title or a file's path), which
 inbox items you have seen, and which groups you folded and how you sorted
@@ -59,34 +59,34 @@ stay in memory only.
 None of it is sent anywhere.
 
 **Run on this Mac.** Run, in an agent tab's ⋯, opens a terminal inside
-Fullspin, in a tab of its side panel, on this Mac. Its shell clones the repository
-from GitHub into Fullspin's application data the first time, with your own git
+Vespin, in a tab of its side panel, on this Mac. Its shell clones the repository
+from GitHub into Vespin's application data the first time, with your own git
 login, fetches the agent's pushed branch, checks it out in a worktree there,
 runs the run command you set for that repository if you set one, and stays
 open for you to type in. It runs as your macOS user in your login shell, and
 reaches what you can. Each repository's run command is kept in this Mac's
 settings, under Settings › Workspace › Repositories, and never sent anywhere;
-what the terminal prints and what you type pass only between Fullspin's windows
+what the terminal prints and what you type pass only between Vespin's windows
 on this Mac, are held in memory up to the latest 256 KB of output while the
 tab stays open, and are never written to disk, logged, counted, or recorded.
-Closing the tab, or quitting Fullspin, hangs up the terminal and everything it
+Closing the tab, or quitting Vespin, hangs up the terminal and everything it
 started on it; the clone and the worktree stay until you delete them.
 
 **Commands agents run on your Mac.** Every agent can run any shell
 command on your Mac, as many at a time as you allow; the workers an agent hands work to cannot, and run their own commands in the agent's
-sandbox with no network at all. This holds whenever Fullspin is open on the Mac and
+sandbox with no network at all. This holds whenever Vespin is open on the Mac and
 signed in to your account, and Settings › This Mac is not on Never. It has
 three modes: Ask every time, the default, where you see a prompt and can deny
 the command; Always allow, which runs it at once; and Never. The mode is kept
-on each Mac, not with your account, and opening Fullspin at login is on by default
+on each Mac, not with your account, and opening Vespin at login is on by default
 on every Mac. A
 command runs in your login shell, from your home folder, as your macOS user,
-with Fullspin's own environment, so it reaches everything you can: your files and
+with Vespin's own environment, so it reaches everything you can: your files and
 checkouts, your installed tools, and the network. Nothing is read into it, and
 it is killed after 60 seconds, or after up to eight minutes when the agent
-asks for longer; quitting Fullspin kills the commands still running, though a
+asks for longer; quitting Vespin kills the commands still running, though a
 process a command started apart from itself can outlive both. While the mode
-is not Never, Fullspin on your Mac keeps a read open to our service for the commands your
+is not Never, Vespin on your Mac keeps a read open to our service for the commands your
 agents queue, and our service records, once for your account, when a Mac of
 yours last read, with nothing about which Mac. A command waits in our database
 until a Mac takes it, and its answer until the agent has read it; both are
@@ -117,16 +117,16 @@ there. Opening an agent, yours or another member's, reads its
 transcript (its words, reasoning summaries, and tool calls with their input
 and output, and the lines said on calls an earlier version took) for its tab, as it runs, and
 opening one of its workers reads that worker's whole session for its own
-tab. All of this is held in Fullspin's memory, never on disk, goes when you leave
-the task or quit Fullspin, and is left out of the screen recording (see "Screen
+tab. All of this is held in Vespin's memory, never on disk, goes when you leave
+the task or quit Vespin, and is left out of the screen recording (see "Screen
 recordings"). Your default model, effort, and
 context size for an agent are kept with your account preferences on our
 service, set in Settings › Agents or by the model you last started
 with. The Claude model your Generate chapters runs on is kept with them too,
-set in Settings › Agents. Where a Fullspin link you open in a browser goes, staying there or handed
-to Fullspin for Mac, is kept with them too, set in Settings › Account; Fullspin in a
+set in Settings › Agents. Where a Vespin link you open in a browser goes, staying there or handed
+to Vespin for Mac, is kept with them too, set in Settings › Account; Vespin in a
 browser on a Mac reads it each time it loads a link that names something in
-Fullspin.
+Vespin.
 
 A fixture or evidence run keeps no conversation at all.
 
@@ -157,26 +157,26 @@ under your account its name and its plan, one Markdown document, which begins em
 and is written by agents started on it and by
 you, when you edit a section or restore an
 earlier version. Your edits are sent as you pause typing and when you finish;
-unsaved words stay in Fullspin's memory on your Mac, never on disk. Our service
+unsaved words stay in Vespin's memory on your Mac, never on disk. Our service
 keeps the plan's history without limit: the document after each revision
 (saves one writer makes close together count as one), who wrote it (you or
 another member, editing or restoring which version, kept as that member's
-account; or which agent; a revision a task's own Fullspin wrote, before
+account; or which agent; a revision a task's own Vespin wrote, before
 tasks lost him, keeps which member's call it was on) and
-when, and who last changed each section and when, so Fullspin can say so beside
+when, and who last changed each section and when, so Vespin can say so beside
 it, naming each member by their account's name to every member of the
 workspace. A revision of a member whose account is deleted keeps no account
 and names nobody. An agent's last fifty saves are also kept as its
 notes, so the task's agents are told what it changed. All of it is stored as written,
 bound to your account and readable by our own operators, like the
-conversation described below. Fullspin on your Mac remembers, for each task, only
+conversation described below. Vespin on your Mac remembers, for each task, only
 the time of its newest save when you last had it open, to show which sections
 changed since.
 
 Deleting a task removes it at once with its history, its inbox, and the
 record of each agent started on it with the plan copy or prompt that
 agent was handed, and marks each agent's transcript deleted, removed seven
-days later. The conversation a task held with its own Fullspin, before tasks
+days later. The conversation a task held with its own Vespin, before tasks
 lost him, is already marked deleted, whether or not the task is, and is
 removed seven days after it was marked. Before it deletes anything, it
 stops every agent of the task still at work, as Stop does; if one
@@ -185,7 +185,7 @@ and you can try again in a moment. Deleting your account removes every task. Pin
 stores only when you did it and deletes nothing.
 
 **A plan's pictures.** When you paste, drop, or choose a picture into a
-task's plan, Fullspin re-encodes it on your Mac to at most 1.5 MB and sends it
+task's plan, Vespin re-encodes it on your Mac to at most 1.5 MB and sends it
 to our service, which keeps it in our database beside the task, under the
 task rather than your account, with which member added it. An agent on
 the task may add a picture too: a PNG, JPEG, or WebP file of at most 1.5 MB in
@@ -193,9 +193,9 @@ its sandbox, such as a screenshot it took of what it built, or a short video it
 recorded there of what it did, a WebM of up to 4 MB, which our service
 reads from the sandbox and keeps the same way, as added by the member the
 agent's turn runs for, with the plan's history naming the agent. The plan's text
-names the picture by an address on tryluke.dev; our service serves its bytes
-only to Fullspin signed in as a member of the task's workspace, and opening the
-address in a browser shows a page that opens the task in Fullspin and nothing of
+names the picture by an address on vespin.dev; our service serves its bytes
+only to Vespin signed in as a member of the task's workspace, and opening the
+address in a browser shows a page that opens the task in Vespin and nothing of
 the picture. Every member of the workspace sees it, as they see the plan.
 A video an agent showed you can also be added to the plan from the file
 viewer's Add to plan, which sends it as it is, never re-encoded, up to 3.3 MB.
@@ -223,7 +223,7 @@ account: your words, which member wrote them and when, the words of the plan
 the thread is on as they stood when it was started, where those words stand
 in the plan now, and the section they stand in. It keeps the same of each
 reply, edit, resolve, and reopen, and of every comment an agent on the
-task writes, or a task's own Fullspin wrote before tasks lost it, naming the
+task writes, or a task's own Vespin wrote before tasks lost it, naming the
 member whose turn it ran on. Every member of
 the workspace sees every comment, as they see the plan. Comments are stored
 as written and readable by our own operators, like the plan. Deleting a
@@ -235,7 +235,7 @@ them with @ is handed to that agent whole as a request; either way the comments'
 and their writers' names go to that agent's model provider, as the plan does
 (see "Who we send it to").
 
-**What Fullspin remembers.** Where its developer turned on the Memory
+**What Vespin remembers.** Where its developer turned on the Memory
 experiment, as an agent works it may keep a fact or
 convention its developer settled or it confirmed in the code, such as how
 your team tests or ships, so later agents can recall it. Our service stores
@@ -245,7 +245,7 @@ kept it, or the one whose agent last corrected it) and when, readable by our
 own operators like the transcript it came from; nothing asks you first. A
 memory is the workspace's shared knowledge: any member's agent there
 may read it, and Settings › Memory shows it to every member with your name on
-it. No agent of another workspace reads it. Fullspin refuses to keep words that
+it. No agent of another workspace reads it. Vespin refuses to keep words that
 look like a key, token, or password, and agents are told never to keep a
 remark about one member. An agent keeps nothing on a turn an automation
 started, or once that turn has read the web, since neither's words are a
@@ -262,6 +262,14 @@ workspace's memories go when the workspace does.
 service stores its name and when you pinned it under your account, so the pin
 follows you to every Mac you sign in on. Unpinning deletes that record, and
 deleting your account removes them all.
+
+**Renamed repositories.** So that a task, an agent, an automation, or a pin
+keeps its repository when you rename or transfer it on GitHub, our service
+keeps each repository's GitHub id with the name GitHub last gave it, as
+GitHub's deliveries to the Vespin GitHub App and its answers name them, and
+moves every stored name of a repository to its new one when GitHub reports
+it. That record names no account and holds nothing else; it is not removed
+with an account.
 
 **Sidebar sections.** When you make a section in the sidebar, our service
 stores its title, its icon (an emoji, or an icon's name and the color you
@@ -283,7 +291,7 @@ up to 300 characters, or a short video it recorded there of what it did, such
 as clicking through a form it built: our service reads the file from the
 sandbox, keeps the image, up to 1.5 MB, or the video, a WebM of up to 4 MB,
 which plays where the item draws it, in our database beside the item, and
-serves it only to Fullspin signed in as you. A video is what the agent's own
+serves it only to Vespin signed in as you. A video is what the agent's own
 screen showed while it recorded, so it can hold whatever that screen did; it
 is left out of the screen recording as the pictures are. Items and their pictures are stored under your account
 and readable by our own operators, like the agent's transcript. The agent can
@@ -302,7 +310,7 @@ or not, with files on the same terms: our service keeps the message's words
 and files with the item under the account of the member who wrote it, which
 every member of the workspace sees by name beside it, and hands it to the
 agent as one of your messages, kept in its transcript. A thread stays until
-the item is deleted with its task. While you are signed in, Fullspin
+the item is deleted with its task. While you are signed in, Vespin
 on your Mac keeps a read open to our service for every item waiting in your
 workspaces, each in brief (its task, agent, title, and the account that started
 the agent), and for every task holding an item; it counts in its sidebar and on
@@ -310,7 +318,7 @@ its Dock icon only the open questions waiting on you: those an agent addressed
 to you, else those on a task assigned to you, else those of agents you started
 on a task nobody is assigned. Opening the Inbox reads
 each of those tasks' items whole, the ones you settled included, with what
-each offered and the answer you picked; Fullspin holds them in memory only, never
+each offered and the answer you picked; Vespin holds them in memory only, never
 on disk. Deleting the task, or your account, deletes
 its items.
 
@@ -318,7 +326,7 @@ its items.
 dropping, or pasting: images, PDFs up to 3 MB, and text files up to 100 KB, up
 to ten files and 3 MB a message. A PNG, JPEG, or WebP up to 1.5 MB is sent as
 it is; any other image, or a larger one, is first made into a smaller WebP on
-your Mac. Fullspin reads only the files you hand it and sends our service each
+your Mac. Vespin reads only the files you hand it and sends our service each
 one's name and contents, including whatever the file carries inside it, such
 as where and on what a photo was taken, but never where it was on your Mac.
 Our service sends them to the agent's model with your message and with every
@@ -331,7 +339,7 @@ on the same bounds as a file you attach. Any
 other file, and an image not kept that way, such as one past the transcript's
 200 MB of pictures, is stored in the transcript as sent, except that the
 prompt an agent is started on keeps a PDF, or an image not kept, by name
-alone. An agent that runs on Fullspin's own agent has its images and PDFs copied
+alone. An agent that runs on Vespin's own agent has its images and PDFs copied
 into its sandbox too; one that runs on Claude Code or Codex is handed them in
 its messages and never as files in its sandbox. They go when the transcript
 does; the sandbox's snapshot and the agent's session history keep them on the
@@ -357,7 +365,7 @@ video is what the agent's own screen showed while it recorded, so it can hold
 whatever that screen did; it is left out of the screen recording as the
 pictures are, and may be added to the task's plan (see "A plan's pictures").
 An agent's kept pictures are served only
-to Fullspin signed in as a member of the workspace who can read the agent. Kept
+to Vespin signed in as a member of the workspace who can read the agent. Kept
 pictures are readable by our own operators, like the transcript, and go
 when it does.
 
@@ -372,7 +380,7 @@ operators who hold both could. Beside it we keep the provider, a hint (the
 characters, such as `sk-ant-…abcd`), when you last saved it, and whether, and
 when, the provider last accepted it, refused it, or said it was out of credit,
 or our service could no longer read it, updated when an agent call on it
-finds that changed. Every model call Fullspin makes for you runs on your own keys
+finds that changed. Every model call Vespin makes for you runs on your own keys
 and never on ours: an agent's and its workers' calls, Fast, and web
 search on the key of the provider the model is on; dictation on your OpenAI
 key; and titles, pull request chapters, and the summary a
@@ -385,22 +393,22 @@ crash reports, or screen recordings. Removing it in Settings, or deleting your
 account, deletes it.
 
 **Your ChatGPT plan.** Where Settings offers it, Sign in with ChatGPT signs
-Fullspin in to your ChatGPT account through OpenAI's own page in your browser,
-which hands a one-time code back to Fullspin on your Mac over a connection that
+Vespin in to your ChatGPT account through OpenAI's own page in your browser,
+which hands a one-time code back to Vespin on your Mac over a connection that
 never leaves it (`127.0.0.1`). Your Mac trades that code with OpenAI for an
 access token, a renewable refresh token, and an ID token, checks the ID
-token's signature and that it was issued to Fullspin for this sign-in, and sends
-them, with the client id OpenAI issued Fullspin and your ChatGPT account's id
+token's signature and that it was issued to Vespin for this sign-in, and sends
+them, with the client id OpenAI issued Vespin and your ChatGPT account's id
 (the ID token's subject), once, over HTTPS, to our service. It keeps nothing
 of them itself. The service stores them under your account encrypted exactly
 as your own API keys are, with the scopes OpenAI granted and when the access
-token expires, beside a host id it made for your account, which names Fullspin's
+token expires, beside a host id it made for your account, which names Vespin's
 hosted runtime to OpenAI and is kept after you disconnect. It renews the
 access token with OpenAI as it nears its expiry. You are shown that you are
 connected and when, never a token, and we never log one or send it to our
 analytics, crash reports, or screen recordings. Disconnecting in Settings
 asks OpenAI to end the sign-in and deletes it whether or not OpenAI confirms;
-where OpenAI did not confirm, Settings says so, and you can remove Fullspin in
+where OpenAI did not confirm, Settings says so, and you can remove Vespin in
 your ChatGPT settings to end it there. Deleting your account deletes it too.
 
 **Your own GitHub token.** If you save a GitHub personal access token (classic)
@@ -429,7 +437,7 @@ it to our analytics, crash reports, or screen recordings. Removing it in
 Settings, or deleting your account, deletes it.
 
 **How agents read your repository.** A task names a GitHub
-repository of the Fullspin GitHub App installation connected to the task's
+repository of the Vespin GitHub App installation connected to the task's
 workspace. Each agent on the task reads and changes its code in a
 Vercel Sandbox of its own: an isolated machine our service opens for the
 agent's session, on Vercel's infrastructure, never on your Mac (see "Who we
@@ -440,25 +448,25 @@ words it gives to describe it, and what it printed are stored with the
 agent's transcript, under its terms. The checkout stays in the sandbox
 between turns and, once the sandbox is stopped, in a snapshot Vercel keeps
 until thirty days after its last use. When an agent's transcript, or the
-conversation a task's own Fullspin kept before tasks lost it, is removed,
+conversation a task's own Vespin kept before tasks lost it, is removed,
 seven days after you delete its task, our service deletes the sandbox of
 each of its sessions, with the snapshots no other sandbox uses, shortly
 after; deleting your account does the same for every session of yours,
 shortly after the deletion. A session an agent's conversation was moved off
 earlier in its life is not tracked, and its snapshot stays until Vercel lets
-it expire. The sandbox of each session a task's own Fullspin ran, before tasks
+it expire. The sandbox of each session a task's own Vespin ran, before tasks
 lost him, is deleted the same way, shortly after his conversation is removed.
 
 **A local agent on your Mac.** Once you turn on Bring your own host in
 Settings › Experimental and then This Mac in Settings › Hosts, an agent you
 start on This Mac runs Claude Code, or Codex for a GPT model, straight on your
-Mac, as you, in a folder of its own under `~/.luke/agents` that holds its
+Mac, as you, in a folder of its own under `~/.vespin/agents` that holds its
 repository, its home, and its caches. It has full access to whatever your
 account on the Mac can reach, as a program you run yourself does: your files,
 the folders of your other agents, your running programs, and the network;
 neither Claude Code nor Codex runs a sandbox of its own there or asks before a
 command. Its transcript, its events, and the files its tools read still reach
-our service as any agent's do. It runs on the plan or key you saved in Fullspin,
+our service as any agent's do. It runs on the plan or key you saved in Vespin,
 never on the sign-in of Claude Code or Codex on your Mac; a Codex agent asks
 our service for your ChatGPT plan's access token over HTTPS as it needs one, so
 no token waits in our database for your Mac. A Claude Code agent's plan token
@@ -467,32 +475,32 @@ unlike in a Vercel Sandbox. It reaches GitHub with a short-lived token our
 service hands your Mac, as for a host below, which your Mac writes into `gh`'s
 sign-in in the agent's own folder, where the agent's `git` and `gh` read it
 and any command it runs can too, rewrites as it renews, and deletes as each
-turn ends. No copy of an agent's work goes to Fullspin: its folder stays on your
+turn ends. No copy of an agent's work goes to Vespin: its folder stays on your
 Mac for the agent's life, and each turn goes on from it. An agent you archive or delete loses its
 folder from your Mac as soon as the archive reaches it, or within minutes of
 your Mac's next being online once our service no longer lists the agent; one
 where your Mac's check finds work that no remote has, or cannot tell, is kept
-for seven days, and then deleted. Only the agents this copy of Fullspin started
+for seven days, and then deleted. Only the agents this copy of Vespin started
 are ever touched, never another copy's sharing your Mac. Nothing of this
 happens until you turn This Mac on. Turning it on registers a login item that
-runs Fullspin's host program, `luke-host`, on your Mac at each login, whether the
+runs Vespin's host program, `luke-host`, on your Mac at each login, whether the
 app is open or not, and the app keeps it registered from then on; removing
 This Mac in Settings › Hosts stops its agents, and it runs none until you turn
 it on again. To run them, `luke-host` downloads Claude Code, Codex, and
-GitHub's CLI from their publishers once, and keeps each in Fullspin's own folder
-on your Mac only once it matches the checksum Fullspin pins. An agent that ran on
-your Mac before Fullspin gave each agent a folder of its own is not started again;
+GitHub's CLI from their publishers once, and keeps each in Vespin's own folder
+on your Mac only once it matches the checksum Vespin pins. An agent that ran on
+your Mac before Vespin gave each agent a folder of its own is not started again;
 continue it into a new agent.
 
 **A local agent on a host.** A host is a Linux machine or Mac of your own
-that you add to Fullspin to run your agents, as This Mac does. Each agent on
-it runs straight on the box, as the user Fullspin's host program runs as there, in
+that you add to Vespin to run your agents, as This Mac does. Each agent on
+it runs straight on the box, as the user Vespin's host program runs as there, in
 a folder of its own, with full access to whatever that user can reach: the
 box's files, the host program's own folder and the secret it holds among them,
 every other agent's folder, its running programs, and its network; where the
 host runs as root, that is the whole box. It has no git login of yours, so for
 each agent on it that works in a repository, our service hands the host a
-short-lived GitHub token over HTTPS. It is a Fullspin GitHub App installation token
+short-lived GitHub token over HTTPS. It is a Vespin GitHub App installation token
 cut to that one repository, good for an hour and renewed every 50 minutes. Your
 own saved GitHub token is never sent. The host writes the token into `gh`'s
 sign-in in the agent's own folder, where the agent's `git` and `gh` read it and
@@ -500,7 +508,7 @@ any command it runs can too, rewrites it as it renews, and deletes it as each
 turn ends. The token is never logged and never written to the conversation's
 record. As on This Mac, a Claude Code agent's plan token or key is in the
 agent's environment, where a command it runs can read it, and no copy of an
-agent's work goes to Fullspin: its folder stays on the box for the agent's life.
+agent's work goes to Vespin: its folder stays on the box for the agent's life.
 The host deletes an archived or deleted agent's folder once the archive reaches
 it or our service no longer lists the agent; one where the host's check finds
 work that no remote has, or cannot tell, is kept for seven days, then deleted.
@@ -508,9 +516,9 @@ work that no remote has, or cannot tell, is kept for seven days, then deleted.
 **Connecting a host with a code.** A host joins your account with a code.
 The box asks our service for a code with no
 credential, and our service keeps, beside the code, the name, operating
-system, and processor the box gives, its version of Fullspin's host program, and
+system, and processor the box gives, its version of Vespin's host program, and
 the IP address it asked from, for the code's ten minutes. Anyone signed in to
-Fullspin who opens the code's link is shown them, so you can tell whether the box
+Vespin who opens the code's link is shown them, so you can tell whether the box
 is yours before you approve it. Approving it adds the box to your hosts under
 that name; denying it, or letting the code lapse, adds nothing. What was kept
 with the code, its IP address included, is deleted once the box collects its
@@ -522,7 +530,7 @@ your account named that matched none.
 test of Claude plans, an agent your Claude plan pays for runs on
 Anthropic's Claude Code, and so does a Claude agent your own Anthropic
 API key pays for, in that agent's own Vercel Sandbox, rather than on
-Fullspin's own agent. Its sandbox's disk holds the agent's checkout of the
+Vespin's own agent. Its sandbox's disk holds the agent's checkout of the
 repository and Claude Code's own session files: its record of the session,
 which it picks up again from there when the agent is next messaged. Both stay
 on that disk between turns and in the snapshot Vercel keeps when the sandbox
@@ -574,11 +582,11 @@ repository and mints a token for that one repository that reads its contents, us
 read and never sent to your Mac, logged, or kept. It never reads a file named
 `.env` or starting with `.env`, and a link, a folder, a file over a megabyte,
 or one that is not text is refused. The file is read 500 lines at a time as you scroll, is
-not stored by our service, and is held by Fullspin only while its tab is open,
+not stored by our service, and is held by Vespin only while its tab is open,
 never on disk, except that copying or downloading it reads it whole (up to
 that megabyte, lines uncut) and a download is written where you save it. The
 File tab's tree lists the repository's folders and file names the same way,
-through our service, which does not store them, and Fullspin holds them in memory
+through our service, which does not store them, and Vespin holds them in memory
 only; a `.env` file's name may be listed, though the file is never read.
 An inbox item's line reference is read the same way, at the
 commit the agent named, for the lines on the item and the File tab it opens;
@@ -586,7 +594,7 @@ nothing of the file is stored.
 
 **An agent's pull request.** An agent's Pull request tab shows its
 pull request as GitHub holds it, in two views. Each time a view first opens, or
-you refresh it, our service reads it from GitHub with a token the Fullspin GitHub
+you refresh it, our service reads it from GitHub with a token the Vespin GitHub
 App mints for that one repository on the workspace's installation. The overview
 reads its title, branches, and whether it would merge, with how it may be
 merged: the merge methods and auto-merge its repository allows, whether a merge
@@ -607,7 +615,7 @@ service too, never by your Mac: an upload with the same one-repository token,
 through a fresh signed address GitHub gives for it, and any other image through
 GitHub's own image proxy, each up to 8 MB; other images are shown as links.
 Files changed reads each changed file's name and patch, for up to 300 files,
-leaving out a patch over 100,000 characters. It stores none of it, and Fullspin
+leaving out a patch over 100,000 characters. It stores none of it, and Vespin
 holds it in memory while the tab is open, never on disk, except that
 downloading a patch writes it where you save it. Chapters splits the pull
 request into chapters only when a member presses Generate chapters, or
@@ -634,12 +642,12 @@ changes the pull request, such as Ready for review, Convert to draft, Merge,
 Enable auto-merge, or giving or taking back a reaction, is
 sent to GitHub by our service as you, on the token of your own GitHub sign-in,
 whoever started the agent, so it can do only what your GitHub account may; it
-is never sent as the Fullspin GitHub App, and where you hold no GitHub sign-in
+is never sent as the Vespin GitHub App, and where you hold no GitHub sign-in
 GitHub takes, nothing is sent and the tab asks you to sign in with GitHub
 again. Files changed's Viewed boxes are GitHub's own, which GitHub keeps for
 each account: our service reads which files you marked viewed, and marks or
 unmarks one when you press its box, on the same token of your own GitHub
-sign-in and never as the Fullspin GitHub App, and stores none of it. Wherever Fullspin names someone on
+sign-in and never as the Vespin GitHub App, and stores none of it. Wherever Vespin names someone on
 GitHub, as the tab does who opened, reviewed, and commented on the pull
 request, it draws them by their GitHub avatar, which your Mac loads straight
 from GitHub's avatar host, as github.com does, so GitHub sees your Mac's IP
@@ -654,7 +662,7 @@ agent is told each skill's name and
 description, and reads a skill's whole file when it loads one, which you can
 ask for by typing `/` and its name in an agent's message box; a load is
 stored with the agent's transcript like any tool
-call. Fullspin on your Mac reads each skill's name, description, and path through
+call. Vespin on your Mac reads each skill's name, description, and path through
 our service, read from GitHub the same way, never its file, to list after `/`,
 and holds them in memory only; a skill named in a message opens its file in a
 File tab, by the rules above. Our service keeps no copy of the skills
@@ -674,31 +682,31 @@ page for a task: an interactive HTML document, such as a chart or a mockup,
 that opens in the task's side panel. Our service stores each page with the
 task, as written and readable by our own operators: its title and HTML, at
 most 262,144 characters a version, and every version it has had, each kept as
-written and never changed, with which agent showed it, or Fullspin, for
-a page a task's own Fullspin showed before tasks lost it.
+written and never changed, with which agent showed it, or Vespin, for
+a page a task's own Vespin showed before tasks lost it.
 Deleting the task deletes its pages. Agents can also read a page of
 any task of the workspace by its
 id, as a mention of the page points them to it: its HTML, at most 40,000
 characters of it, is then sent to that agent's model as part of its
-conversation. Fullspin
+conversation. Vespin
 on your Mac reads a page's HTML from our service only to draw it, in its tab
 or in the card over its tab, its row, or a chip naming it, holds it in
-memory only, and never passes it to the rest of the panel. Fullspin in a
-browser draws a page in the same places, loading it from fullspin.page, a
+memory only, and never passes it to the rest of the panel. Vespin in a
+browser draws a page in the same places, loading it from vespin.page, a
 domain of ours kept apart from the app's own so that a page never shares a
 site with your account. As the page loads, our service makes a link to it for
 your account: the link names your account's id, the page, and its version,
 works for one minute, and is signed so that nothing but our service can make
 one. Our service keeps no record of the link; Vercel's request log records its
-address, as it records every request's. Nothing on fullspin.page sets or
+address, as it records every request's. Nothing on vespin.page sets or
 reads a cookie. A page runs sealed
-off from Fullspin: it cannot read the panel, your account, or another page, and
+off from Vespin: it cannot read the panel, your account, or another page, and
 cannot store anything, open a window, or send anything anywhere but the
 requests it makes to the one place it may load from, cdnjs.cloudflare.com, for
 code libraries such as charts and diagrams, which Cloudflare's CDN then sees
 requested from your Mac's or your browser's address. A link inside a page does
-not open. A page is never published: it opens only in Fullspin, to whoever can
-open the task or agent it stands on, and in a browser only inside Fullspin's
+not open. A page is never published: it opens only in Vespin, to whoever can
+open the task or agent it stands on, and in a browser only inside Vespin's
 own frame, through a link that works for about a minute and loads nowhere
 else.
 
@@ -710,21 +718,21 @@ database keeps the record of each turn described under "Your account", from
 which a new session picks up. None of it is held on your Mac, in memory or on
 disk.
 
-Earlier versions kept the conversation, Fullspin's working memory, the things
+Earlier versions kept the conversation, Vespin's working memory, the things
 it remembered about you, and a search index over its workspace files in a
-database under Fullspin's application data (`agents/main/agent.sqlite`, with
+database under Vespin's application data (`agents/main/agent.sqlite`, with
 recovery archives under `archives/`), and versions before those in three
 files beside your settings. This version reads and writes none of them, so
 all of that starts over on our service. Each launch removes the database and
 its archives if it finds them; the three older files stay until you remove
 them.
 
-Fullspin's runtime runs inside the app. It holds your settings, the encrypted
+Vespin's runtime runs inside the app. It holds your settings, the encrypted
 credentials (decrypted where it runs, under the same Keychain entry), and your
 account's session, while the part that draws listens, speaks, holds the keys,
 and asks the runtime for everything else. Nothing about you crosses that
 boundary that the panel did not already draw; no stored key, token, or account
-secret travels in any answer or event. Quitting Fullspin cancels
+secret travels in any answer or event. Quitting Vespin cancels
 what was running, commands agents run on your Mac included, and writes down
 what did not finish rather than finishing it. Beside those commands and the
 files you attach, the one thing the app does on this machine at the runtime's
@@ -737,7 +745,7 @@ one under a different email address, in Settings › Integrations, which lets
 agents use GitHub tools as you, lets our service open the pull request
 of an agent you start as you, and lets it change an agent's pull
 request as you when you press a button in its Pull request tab; signing in with GitHub, or linking it,
-authorizes the Fullspin GitHub App: its token reaches only
+authorizes the Vespin GitHub App: its token reaches only
 repositories where you installed the App and can already see, with the App's
 permissions (reading a repository's details; reading and writing its contents,
 pull requests, issues, and discussions; reading its checks, commit statuses,
@@ -753,7 +761,7 @@ holds only your GitHub account's number, so signing in with GitHub again
 finds your account even if your GitHub email changed; your account keeps
 any other way you sign in. Signing in with Google leaves us
 Google's sign-in tokens, kept on our service and used for nothing after the
-sign-in. Your own GitHub is not how Fullspin reaches a workspace's
+sign-in. Your own GitHub is not how Vespin reaches a workspace's
 repositories: they are those of the GitHub installation connected to the
 workspace, read from GitHub with tokens the App mints for that installation
 when you choose one, and nobody's own GitHub account decides what a
@@ -764,7 +772,7 @@ number a day: one for each clip you dictated, and on days an earlier version
 opened voice sessions, one for each of those;
 beside it, how many seconds you dictated.
 
-Fullspin's own maintainers can see your name, email address, profile picture,
+Vespin's own maintainers can see your name, email address, profile picture,
 sign-in method, whether you are an administrator, when you joined and were
 last active, and your daily counts, and the names of your workspaces and
 their members, roles, invitations, connected integrations, GitHub
@@ -787,7 +795,7 @@ accounts, never named to one, it shows how many plan revisions, inbox
 answers, and automation runs there were, and how many accounts have GitHub
 connected on a workspace, have an integration
 connected, or opened or merged a pull request.
-Across every account, the same page counts how many of Fullspin's turns,
+Across every account, the same page counts how many of Vespin's turns,
 agents' runs, and automation runs ended and how many failed, were
 dropped, or were skipped, each by the fixed word the service records for why.
 Where one of your own API keys stands refused, out of quota, or unreadable,
@@ -813,9 +821,13 @@ you delete your account, as every workspace you own does, with only your
 membership removed. A workspace you create is a record
 named as you name it, holding you as its owner; every member of a workspace
 sees every other member's name, email address, and
-role in it, and an owner or admin of it can remove a member. A workspace may
+role in it, and an owner or admin of it can remove a member. An owner or
+admin invites someone by email address: the service keeps the address, the
+role offered, who invited them, and whether the invitation is still pending,
+and emails the invitation's link to that address through Resend, named
+under "Who we send it to" below. A workspace may
 show a photo an owner or admin of it uploads: the service keeps it with the
-workspace, a PNG, JPEG, or WebP image, and serves its bytes only to Fullspin
+workspace, a PNG, JPEG, or WebP image, and serves its bytes only to Vespin
 signed in as one of the workspace's members, never caching it on the way;
 the list of your workspaces names only a short digest of it, so your Mac
 reads the photo again only when it changes. The photo is the one picture
@@ -829,7 +841,7 @@ service keeps beside the workspace GitHub's ids for that installation and the
 account it is on, its login, whether it is a user or an organization, and
 whether the installation is active, suspended, or removed. To confirm the
 installation is one the person connecting it can see, GitHub asks them to
-authorize the Fullspin GitHub App once; our service uses the one-time token that
+authorize the Vespin GitHub App once; our service uses the one-time token that
 gives it to read their installations once, then revokes it, and keeps nothing
 of it or of that read. While a connect is under way it keeps, for at most an
 hour, a one-way digest of the connect link's random code beside your account
@@ -840,14 +852,14 @@ The service also keeps your conversations with your agents. Each
 turn an agent runs for you writes to our database your message as given; its reply, the summaries of its reasoning, and each tool call with
 its input and result; and the turn's model and effort, token counts, and
 when it was queued, started, and ended, and how (rows from earlier versions
-may also hold the ids of OpenAI's responses, and the turns a task's own Fullspin
+may also hold the ids of OpenAI's responses, and the turns a task's own Vespin
 ran before tasks lost him). A transcript from an earlier version, which took
 voice calls, may also hold the lines said on a call into the agent, yours and
 the voice's, each kept as it was written. These rows are not sealed: they are stored
 as written, and our own operators can read them. They stand until you delete
 your account, which removes them at once. A deleted task's agents'
 transcripts are marked deleted and removed seven days later, as is every
-conversation a task held with its own Fullspin before tasks lost it (see
+conversation a task held with its own Vespin before tasks lost it (see
 "Tasks").
 
 **Linear, if you connect it.** Connecting Linear in Settings › Integrations
@@ -870,7 +882,7 @@ connected, every agent and its workers can read and change whatever
 your Linear account can, through Linear's own MCP server, without asking you
 first, unless you switch Linear off for that agent in its message box's MCP menu,
 which takes effect from its next turn and is stored with the agent. A
-message to the agent from a member of the workspace or Fullspin, or an
+message to the agent from a member of the workspace or Vespin, or an
 automation's own prompt (never a webhook body or a GitHub event's words),
 that mentions Linear, one of its tools, or one of its pages hands it Linear
 for the turn that message opens, or, sent while a turn is under way, for its
@@ -880,13 +892,13 @@ none. The workers are told to change
 something only when their subagent task asks for
 it. What Linear answers goes to the model that made the call, and each call,
 with its input and everything Linear answered, is written to the agent's
-transcript like any other tool call. Disconnecting stops Fullspin
+transcript like any other tool call. Disconnecting stops Vespin
 using it from each agent's next step, removes the connection's record, and
 asks Vercel Connect to revoke the grant; what agents already changed in
 Linear, and the record of it, stays. Deleting your account removes the record
 and asks Vercel Connect to revoke the grant in the same way; if Vercel Connect
 cannot be reached then, your account is deleted all the same and the grant
-stays until you revoke Fullspin in Linear's own settings.
+stays until you revoke Vespin in Linear's own settings.
 
 **Notion, if you connect it.** Connecting Notion in Settings › Integrations
 signs you in to Notion in your browser through Vercel Connect, which stores
@@ -899,17 +911,17 @@ without asking you first. What
 Notion answers goes to the model that made the call, and each call, with its
 input and everything Notion answered, is written to the agent's transcript
 like any other tool call. Disconnecting and deleting
-your account work as they do for Linear: Fullspin stops using it from each agent's
+your account work as they do for Linear: Vespin stops using it from each agent's
 next step, removes the connection's record, and asks Vercel Connect to revoke
 the grant; what agents already changed in Notion, and the record of it, stays,
-and a grant Vercel Connect could not revoke stays until you remove Fullspin in
+and a grant Vercel Connect could not revoke stays until you remove Vespin in
 Notion's own settings.
 
 **Sentry, if you connect it.** Connecting Sentry in Settings › Integrations
 signs you in to Sentry in your browser through Vercel Connect, which stores
 Sentry's token for your account, encrypted, and renews it. Sentry's sign-in
-lists what Fullspin may do, reading issues and events among it, and you can untick
-its write access there to keep Fullspin to reading. Our service handles the token
+lists what Vespin may do, reading issues and events among it, and you can untick
+its write access there to keep Vespin to reading. Our service handles the token
 as it does Linear's, and keeps the same record of your connection. While you
 are connected, every agent and its workers, as for Linear, can do whatever your Sentry grant allows, through
 Sentry's own MCP server, without asking you first. What Sentry answers, which
@@ -917,10 +929,10 @@ can include the error messages, stack traces, and event data your applications
 sent it, goes to the model that made the call, and each call, with its input
 and everything Sentry answered, is written to the agent's transcript like
 any other tool call. Disconnecting and deleting your
-account work as they do for Linear: Fullspin stops using it from each agent's next
+account work as they do for Linear: Vespin stops using it from each agent's next
 step, removes the connection's record, and asks Vercel Connect to revoke the
 grant; what agents already changed in Sentry, and the record of it, stays, and
-a grant Vercel Connect could not revoke stays until you revoke Fullspin in
+a grant Vercel Connect could not revoke stays until you revoke Vespin in
 Sentry's own settings.
 
 **Slack, where it is offered.** Our service does not offer Slack yet:
@@ -940,11 +952,11 @@ Linear. What Slack answers, which can include other people's messages in
 conversations you can see, goes to the model that made the call, and each
 call, with its input and everything Slack answered, is written to the
 agent's transcript like any other tool call.
-Disconnecting and deleting your account work as they do for Linear: Fullspin
+Disconnecting and deleting your account work as they do for Linear: Vespin
 stops using it from each agent's next step, removes the connection's record,
 and asks Vercel Connect to revoke the grant; what agents already sent or
 changed in Slack, and the record of it, stays, and a grant Vercel Connect
-could not revoke stays until you remove Fullspin in Slack's own settings.
+could not revoke stays until you remove Vespin in Slack's own settings.
 
 **Granola, Mercury, Neon, PostHog, Stripe, Supabase, Vercel, and Y Combinator,
 if you connect them.** Connecting one signs you in to it in your browser through
@@ -970,11 +982,11 @@ decrypted environment variable, or an API key; like everything else it
 answers, it goes to the model that made the call, and each call, with its
 input and everything the service answered, is written to the agent's
 transcript like any other tool call.
-Disconnecting and deleting your account work as they do for Linear: Fullspin stops
+Disconnecting and deleting your account work as they do for Linear: Vespin stops
 using it from each agent's next step, removes the connection's record, and
 asks Vercel Connect to revoke the grant; what agents already changed there,
 and the record of it, stays, and a grant Vercel Connect could not revoke
-stays until you remove Fullspin in that service's own settings.
+stays until you remove Vespin in that service's own settings.
 
 **Executor, if you connect it.** Executor (executor.sh) is a gateway to the
 apps you set up in it: other services' MCP servers and APIs, skills, and
@@ -983,7 +995,7 @@ Vercel Connect, for the one Executor organization you pick there, and Vercel
 Connect stores its token for your account, encrypted, and renews it. Our
 service handles the token as it does Linear's, and keeps the same record of
 your connection. The credentials of the apps you set up in Executor stay in
-Executor, which attaches them to each call itself; Fullspin never receives them.
+Executor, which attaches them to each call itself; Vespin never receives them.
 While you are connected, the agents, as for Linear, can do whatever your
 Executor grant allows, without asking you first: read the apps' skills, search
 their tools, and call them or run a script over them, writes included. A call
@@ -993,7 +1005,7 @@ on only with your answer. What an app answers, which can include a credential
 that app hands out, goes to the model that made the call, and each call, with
 its input and everything Executor answered, is written to the agent's
 transcript like any other tool call. Disconnecting
-and deleting your account work as they do for Linear: Fullspin stops using it from
+and deleting your account work as they do for Linear: Vespin stops using it from
 each agent's next step, removes the connection's record, and asks Vercel
 Connect to revoke the grant; what agents already changed through Executor, and
 the record of it, stays, and a grant Vercel Connect could not revoke stays
@@ -1001,7 +1013,7 @@ until you revoke it in Executor's own settings.
 
 **GitHub, if you signed in with GitHub.** GitHub needs no connecting of its
 own: while your GitHub sign-in stands, every agent and its workers,
-as for Linear, can do whatever the Fullspin
+as for Linear, can do whatever the Vespin
 GitHub App's token allows, through GitHub's own MCP server
 (`api.githubcopilot.com`), without asking you first: read and change
 repositories, files, branches, issues, pull requests and their reviews,
@@ -1014,27 +1026,27 @@ call, with its input and everything GitHub answered, is written to the
 agent's transcript like any other tool call. An account
 that signed in with Google alone is offered Connect on GitHub's row in
 Settings › Integrations instead, which connects it, and Disconnect there
-ends it. Fullspin
+ends it. Vespin
 stops using it when your GitHub connection ends: when you disconnect it,
 revoke the App in GitHub's settings, or delete your account; what agents
 already changed on GitHub, and the record of it, stays.
 
-**Usage data.** We count how Fullspin's features are used on the Mac, and attach
+**Usage data.** We count how Vespin's features are used on the Mac, and attach
 your name and email to that record. The counts are event names and values from
 a fixed list. Among them is which kind of page or pane you opened (a task's
 plan, an agent, the Inbox, a channel, a pull request, a file, a terminal, a
-browser, Settings, and the like, never which one) and whether Fullspin's window
+browser, Settings, and the like, never which one) and whether Vespin's window
 was wide or narrow as you opened it. A count
-made before you sign in waits in Fullspin's memory and is sent under your account
-if you sign in before Fullspin quits, and is dropped otherwise. The mark that you
-used Fullspin on a day is counted once a day for each account signed in, so Fullspin
+made before you sign in waits in Vespin's memory and is sent under your account
+if you sign in before Vespin quits, and is dropped otherwise. The mark that you
+used Vespin on a day is counted once a day for each account signed in, so Vespin
 keeps in its settings file on your Mac, for each account it was sent for, the
 email address and the UTC day it was last sent, and only the newest day; it is
 never sent anywhere. Nothing you type
 or say and nothing from a session can appear in one: no titles, branches, file
-paths, prompts, or error text. Each count also carries Fullspin's version, whether
-it is a released build or a development one, whether it came from Fullspin for Mac
-or Fullspin in a browser tab (`platform`), and which deployment of our
+paths, prompts, or error text. Each count also carries Vespin's version, whether
+it is a released build or a development one, whether it came from Vespin for Mac
+or Vespin in a browser tab (`platform`), and which deployment of our
 service recorded it. Settings › Account › "Share usage data" turns these
 counts off (see "Your choices").
 
@@ -1046,7 +1058,7 @@ work), each of an agent's turns ended (with how it ended: answered, failed,
 stopped, or given up on by our service, roughly how long it ran, and what
 kind of agent it is), an agent stopped or archived (with what kind of agent
 it is), a pull
-request an agent opened (as you or as Fullspin's GitHub App, and whether as a
+request an agent opened (as you or as Vespin's GitHub App, and whether as a
 draft) and one it opened merged, an Inbox item
 answered, an automation made (with
 what triggers it), a message handed to an agent's runner (with which harness it
@@ -1070,12 +1082,12 @@ words of any of them. They go from our service to PostHog, so PostHog never
 sees your network address for them, and deleting your account erases them
 with the rest of your usage data.
 
-**Screen recordings.** Fullspin records what its own panel draws, never your
+**Screen recordings.** Vespin records what its own panel draws, never your
 screen, your editor, your terminal, or any other app, and records its shape,
 not its words: before it leaves your Mac, every piece of text, and every
 label, description, picture address, and link address a page carries for
 itself, is replaced with blocks of the same length, so a task's plan, a
-line of what you or Fullspin said, your name and email address, and anything
+line of what you or Vespin said, your name and email address, and anything
 you type all appear as blocks. An agent's message box is an editor, and
 the words in it and a skill chosen there are text it draws, which appear as
 blocks too; no chip carries what it names anywhere else. As a second line, some parts are left out
@@ -1095,13 +1107,13 @@ Terminal tab's shell draws its words as pixels, which the
 masking cannot reach, so leaving it out is
 its only line, and recording what a canvas draws is switched off. A mention drawn as a chip carries what it names, such as a
 plan section's heading, only in its words, never in an attribute the masking
-leaves, so the recording keeps its shape alone. Fullspin does not report what you
-clicked. Fullspin records only while you are signed in: nothing is recorded
+leaves, so the recording keeps its shape alone. Vespin does not report what you
+clicked. Vespin records only while you are signed in: nothing is recorded
 before you sign in, a visit to the web app that never signs in records
 nothing, and signing out stops it. Each recording is filed under your
 account, which carries your name and email address as you are shown in
-Fullspin, so that we can find the recordings of a person who reports a problem;
-deleting your account erases them. Each recording carries Fullspin's version,
+Vespin, so that we can find the recordings of a person who reports a problem;
+deleting your account erases them. Each recording carries Vespin's version,
 whether it is a released build or a development one, and whether it came
 from the Mac app or the web app; only a released build records at all.
 
@@ -1125,7 +1137,7 @@ at most 1.5 MB, in our database beside the transcript the call is written to,
 the agent's or its worker's, as it keeps the pictures an agent shows you (see
 "Pictures in a tool's answer"), under the same 200 MB a transcript keeps. The
 transcript names it by an id and shows it as a thumbnail that opens full size,
-to Fullspin signed in as a member of the workspace who can read the agent, which
+to Vespin signed in as a member of the workspace who can read the agent, which
 is each member who can open the task. Kept screenshots are readable by our
 own operators, like the transcript, and are deleted with it: deleting the
 agent or its task marks the transcript deleted and removes it, with its
@@ -1155,28 +1167,28 @@ and the transcript's screenshots.
 The browser's profile, with the cookies and logins you type into it, lives on
 the sandbox's disk, so it stays in that sandbox while it runs and in the
 snapshot Vercel keeps when the sandbox stops, until thirty days after the
-snapshot's last use, as the checkout does under "How Fullspin reads your
+snapshot's last use, as the checkout does under "How Vespin reads your
 repository"; the pages open at a stop are not kept, and the browser reopens
 each tab at its last address on resume. No other agent reaches that profile;
 an agent's workers share its sandbox, so they share it. Deleting the task, or
 your account, deletes the sandbox and its snapshot as described there.
 
-**Crash and performance reports from the Mac app.** In ordinary runs, Fullspin
+**Crash and performance reports from the Mac app.** In ordinary runs, Vespin
 sends Sentry reports of unhandled exceptions in its Electron main, preload,
 and renderer code, and of the errors it caught but could not recover from: a
 launch that could not start, a window whose state could not be read, and an
-internal error in an action, a background task, or a part of Fullspin shutting
+internal error in an action, a background task, or a part of Vespin shutting
 down. It also sends process-session status, and native minidumps when an
 Electron main, renderer, or GPU process crashes. It also sends performance
-traces for about one launch or page load in ten: how long Fullspin took to start,
-how each window's page loaded, and the requests each made. Fullspin uses Sentry's
+traces for about one launch or page load in ten: how long Vespin took to start,
+how each window's page loaded, and the requests each made. Vespin uses Sentry's
 default data collection, so reports and traces carry the exception message
-and code path, breadcrumbs (among them messages Fullspin wrote to its console and
+and code path, breadcrumbs (among them messages Vespin wrote to its console and
 the addresses of requests it made),
-the headers, bodies, and query parameters of requests Fullspin made, Electron,
+the headers, bodies, and query parameters of requests Vespin made, Electron,
 operating-system, runtime, and device context, and your Mac's IP address.
 Sentry replaces a value whose name looks like a credential, such as an
-authorization header or a token parameter, before it is sent. Fullspin drops any
+authorization header or a token parameter, before it is sent. Vespin drops any
 error report or breadcrumb that names an access token in an address's
 `access_token` parameter, and any traced step whose name or request address
 names one as it starts; in the rest of a trace, a name or a value that names
@@ -1185,22 +1197,22 @@ the address of a request or of the page that a trace carries, the value of
 each query parameter and the fragment are replaced, and so is any part of its
 path shaped like a credential, such as a long token; the scheme, the host, the
 rest of the path, and the parameters' names are sent as they were. Each
-report and log line names the Fullspin account signed in at the time by its id
+report and log line names the Vespin account signed in at the time by its id
 alone, never your email, your name, or your GitHub or Google login, so that we
 can find every error one person met; one sent while nobody is signed in names
-no account. Fullspin does not enable Sentry Replay, screenshots, or profiling.
+no account. Vespin does not enable Sentry Replay, screenshots, or profiling.
 Fixture and evidence runs send nothing to Sentry.
 
-**Errors Fullspin shows you.** Each time the Mac app or Fullspin in a browser shows
+**Errors Vespin shows you.** Each time the Mac app or Vespin in a browser shows
 you an error, such as a notice that something you asked for could not be
 done, it also sends Sentry a log line saying so; where the error is not one
 our service or the app named, as a limit you reached is, it sends an error
-report besides. Each carries where in Fullspin the error was shown, its code, the
+report besides. Each carries where in Vespin the error was shown, its code, the
 name, code, HTTP status, and message of the error behind it, with every run
 shaped like a credential replaced and the message cut short, the ids of what
 it was about (such as the workspace, task, agent, conversation, inbox item,
 channel, automation, or pull request number), whether your Mac or browser was
-online, whether you were signed in, and, while you were, your Fullspin
+online, whether you were signed in, and, while you were, your Vespin
 account's id, as every report described above does. It never carries what
 you typed, a
 transcript, a plan, or a file's contents. The message is the error's own, or
@@ -1211,7 +1223,7 @@ the time, the app's version, and the ids Sentry gave the report, and sends
 nothing anywhere: they go only where you paste them.
 
 **Error, performance, and agent reports from our service.** Our service and
-Fullspin's agents send Sentry reports so that we can find and fix failures. Our
+Vespin's agents send Sentry reports so that we can find and fix failures. Our
 service's web functions send every error they did not handle or that ended
 work they run apart from a request (such as standing the terminal service),
 with its message, stack trace, and
@@ -1225,7 +1237,7 @@ not send a request's headers or body, the values of local variables, or the IP
 address a request came from, except the trace id a request names in its
 `traceparent` header, which its trace, its errors, and its log lines carry, in
 Sentry and in our service's own logs alike, so the app's report of a request
-that failed and the service's record of the same request share one id. Fullspin's agents send what Sentry's SDK collects by
+that failed and the service's record of the same request share one id. Vespin's agents send what Sentry's SDK collects by
 default, apart from request bodies and what a model is sent or answers: every
 error they did not handle or that ended work they started apart from a turn,
 with its message, stack trace, the lines of code around it, and the values of
@@ -1254,27 +1266,27 @@ as the request carried them. An address written elsewhere, such as in a header
 or the words of an error or a log line, is sent as it was written. Terminal
 tabs' bytes are not sent. A report or a log line made while
 answering a request you signed in for, or while running one of your agents,
-names your Fullspin account by its id alone, never your email, your name, or a
+names your Vespin account by its id alone, never your email, your name, or a
 login, wherever our service knows whose it was, so that we can find every
 error one person met. What reaches Sentry is kept under Sentry's retention
 and is not erased when you delete your account: Sentry gives us no way to
 erase one account's reports, so they stay, naming an account that no longer
 exists, until that retention ends.
 
-**What earlier versions left on our service.** Earlier versions of Fullspin
+**What earlier versions left on our service.** Earlier versions of Vespin
 followed your agent sessions, kept a notebook, and pushed briefings to
 a phone; this version does none of that. On 13 October 2026 we deleted what
 they stored on our service: the Conductor key an earlier version synced, the
-roster of your Conductor sessions it observed, Fullspin's workspace files (among
+roster of your Conductor sessions it observed, Vespin's workspace files (among
 them the things he remembered about you in `USER.md`) with their embeddings,
 and the device rows and push tokens an earlier Mac, iOS, or Apple Watch app
-registered. What stays in our database, unread, is the conversations Fullspin kept
+registered. What stays in our database, unread, is the conversations Vespin kept
 for the sessions he followed and for the helpers he delegated to, deleted
 with your account. A calendar grant an earlier version kept encrypted on
 this Mac stays in its settings file as that version left it, still encrypted:
 this version neither reads nor sends it. Every provider key an earlier version
 stored on this Mac, a key of your own for voice among them, is removed from
-your Mac the next time Fullspin opens, without being read.
+your Mac the next time Vespin opens, without being read.
 
 **Feedback.** If you use the feedback form, we receive what you typed, any
 screenshots you attached, and — unless you untick "Include my name and email"
@@ -1305,12 +1317,19 @@ only when you press Send.
   only the clip and its length in your daily usage; OpenAI keeps the request and its reply
   under its own retention policy.
 - PostHog, for usage data and screen recordings from the Mac app, screen
-  recordings from Fullspin in a browser, and the counts our service makes of the
+  recordings from Vespin in a browser, and the counts our service makes of the
   work done through it. The counts go through our own service; the
-  recordings go from Fullspin, on the Mac or in your browser, to PostHog directly.
-- Sentry, for the Mac app's and Fullspin in a browser's crash and performance
-  reports, and our service's and Fullspin's agents' error, performance, log, and
+  recordings go from Vespin, on the Mac or in your browser, to PostHog directly.
+- Sentry, for the Mac app's and Vespin in a browser's crash and performance
+  reports, and our service's and Vespin's agents' error, performance, log, and
   agent reports, described above.
+- Resend, for email. When an owner or admin of a workspace invites someone,
+  our service sends Resend the invited address, the workspace's name, the
+  inviter's name (or their email address where their account has none), and
+  the invitation's link, and Resend delivers that one email to the invited
+  address and keeps it under its own policy. Nothing is emailed when an
+  invitation is canceled. A feedback note you send also reaches us by email
+  through Resend, with what it carries as described above.
 - Anthropic, for a pull request's chapters. Pressing Generate chapters in a
   agent's Pull request tab sends the pull request's title, description,
   commit messages, and patches, except those of files a reader reads past, to
@@ -1342,10 +1361,10 @@ only when you press Send.
   words it gives to describe a command) and output — is written to your
   account's conversation as described under "Your account". Archiving an agent
   stops a running turn and sets the agent aside; its transcript, with your
-  files, and its pull request are kept, and you can bring it back. Fullspin and
+  files, and its pull request are kept, and you can bring it back. Vespin and
   agents can archive an idle agent of the workspace too, a teammate's
   included, for the member they act for, and bring one back; neither archives
-  one that is still working. The agent records who archived it (you, or Fullspin
+  one that is still working. The agent records who archived it (you, or Vespin
   or the archiving agent's title on your behalf) and any reason given, which
   every member of the workspace sees on the archived agent until it is
   brought back, when the record is cleared. The sandbox
@@ -1375,14 +1394,14 @@ only when you press Send.
   characters each. A worker that an agent hands work to is
   titled from the whole subagent task it was handed. Each title is stored with the agent or worker; Anthropic keeps the
   request and its reply under its own retention policy.
-- GitHub, through the Fullspin GitHub App, for an agent's work. The agent
+- GitHub, through the Vespin GitHub App, for an agent's work. The agent
   checks the repository out and pushes its branch with an installation token
   the App mints for that one repository, set at the sandbox's network
   boundary and never inside it. Where you started the agent, in the app or
-  by asking Fullspin, you signed in with GitHub (or linked it), and your GitHub
+  by asking Vespin, you signed in with GitHub (or linked it), and your GitHub
   account may push to the repository, the agent writes as you: its commits
   name your GitHub account at the private noreply address GitHub gives it,
-  each with Fullspin's App as co-author, and our service opens its pull request
+  each with Vespin's App as co-author, and our service opens its pull request
   as you, with your own GitHub App token, in one request to GitHub for that
   one repository. Your token is used on our service alone and never reaches
   the agent's sandbox, so neither the agent nor anyone with a terminal in it
@@ -1438,7 +1457,7 @@ only when you press Send.
   Connect keeps Slack's token, and our service sends each Slack call, with its
   input, to Slack's MCP server, which keeps it under Slack's own policy.
 - GitHub's MCP server, if you signed in with GitHub: our service sends each
-  GitHub call, with its input and your Fullspin GitHub App token, to GitHub's MCP
+  GitHub call, with its input and your Vespin GitHub App token, to GitHub's MCP
   server, which keeps it under GitHub's own policy.
 - Vercel Connect and Executor, if you connect Executor: Vercel Connect keeps
   Executor's token, and our service sends each Executor call, with its input,
@@ -1458,17 +1477,17 @@ only when you press Send.
   turn still running included; a session that could not be reached or did
   not confirm in time is noted in our service's logs and left as it stood,
   and the delete goes on without it, its history kept under Vercel's own
-  retention. When a session of Fullspin's ends, Vercel deletes that history at
+  retention. When a session of Vespin's ends, Vercel deletes that history at
   once, though the session's ids, status, and times may stay as long as
   Vercel's own retention. This holds for a session started on or after
   13 October 2026. For now, an agent's session keeps its history after
   it ends for our hosting plan's Workflow retention period, so that we can
   find out why a session stopped partway, and Vercel deletes it after that.
-  A session of Fullspin's started before then, and the session of a worker
+  A session of Vespin's started before then, and the session of a worker
   either one hands work to, keeps its history under Vercel's own retention.
 - GitHub, asked by your Mac itself and unauthenticated, which sees your Mac's
-  network address: to check for updates, carrying nothing about you, when Fullspin
-  opens, every four hours, and when you ask from Fullspin's menu or Settings,
+  network address: to check for updates, carrying nothing about you, when Vespin
+  opens, every four hours, and when you ask from Vespin's menu or Settings,
   signed in or not, with a newer version downloaded from GitHub and installed
   when you quit; and for the picture of each repository owner the app names,
   an organization's logo or a person's avatar, carrying only the owner's name.
@@ -1480,7 +1499,7 @@ We do not sell your information or use it for advertising.
 
 ## Our website
 
-tryluke.dev counts page views, presses, and sign-in steps using PostHog, and
+vespin.dev counts page views, presses, and sign-in steps using PostHog, and
 records the pages themselves, except the sign-in pages, which it does not
 record. A press is counted by what was clicked and where, never the words on
 it, and a recording masks what you type into a field. Before a count or a
@@ -1491,7 +1510,7 @@ itself. It collects nothing else, whatever our PostHog project's settings
 say: no errors, nothing from your browser's console, no network requests,
 no page or network timings, no heatmaps, no chat widget, surveys, or product
 tours, and no feature flags. When you finish signing in, on the page that
-hands the sign-in back to Fullspin on your Mac, or on the consent page where one
+hands the sign-in back to Vespin on your Mac, or on the consent page where one
 is shown, the site names you to PostHog by your account's id, name, and
 email address, which links your earlier visits to your account, and counts
 the sign-in once, remembering in your browser which sign-in it last counted.
@@ -1499,8 +1518,8 @@ The hand-off page is one of the sign-in pages above: not recorded, its
 address cut to the page itself. Your browser contacts PostHog directly, so
 PostHog sees your network address, as it does for the app's recordings.
 
-Fullspin in a browser, the app at tryluke.dev/app and at every link to something
-in Fullspin, is not one of the site's pages above: it records and reports what the
+Vespin in a browser, the app at vespin.dev/app and at every link to something
+in Vespin, is not one of the site's pages above: it records and reports what the
 Mac app does. It makes screen recordings as described under "Screen
 recordings", with every word masked and the same parts left out, and with
 the tab's address, which names the workspace and what it opens, and the
@@ -1510,7 +1529,7 @@ follows your account in that browser: a visit that never signs in records
 nothing, signing out stops it, and deleting your account in one tab stops
 the recording in every tab of that browser until you sign in again. It sends Sentry reports of the
 errors it did not handle and of a tab that could not draw, the errors it
-shows you, as described under "Errors Fullspin shows you", and performance
+shows you, as described under "Errors Vespin shows you", and performance
 traces for about one page load in ten, and a warning for each kind of request
 the page's security policy refused, once in each tab, naming only the
 policy's directive and the refused address's origin, or the browser's own
@@ -1522,8 +1541,8 @@ take the place of the Mac's. Your browser contacts
 PostHog and Sentry (see "Who we send it to") directly, so each sees your
 network address.
 
-A link to something in Fullspin, pasted into Slack, iMessage, or anywhere else
-that previews links, shows only Fullspin's own card: the Fullspin name and logo, the
+A link to something in Vespin, pasted into Slack, iMessage, or anywhere else
+that previews links, shows only Vespin's own card: the Vespin name and logo, the
 same for every link, and nothing of the task, the agent, the person, or the
 workspace it opens.
 
@@ -1536,7 +1555,7 @@ were but for a voice key, removed as described above. Nothing of your
 conversations with agents or their working memory is kept on your Mac
 beyond the layout of its window described under "On your Mac", and the
 switch for commands on your Mac and each repository's run command for Run
-are kept with that Mac's settings. Fullspin in a browser keeps your settings in
+are kept with that Mac's settings. Vespin in a browser keeps your settings in
 that browser's own storage for the site, and no sign-in token at all: it is
 signed in by the site's session cookie, which only the browser holds. Its
 screen recording keeps, in that browser's storage for the site, the
@@ -1554,11 +1573,11 @@ and error, performance, and agent reports by Sentry.
 
 ## Your choices
 
-- Turn off Settings › Account › "Share usage data" to stop Fullspin sending the
+- Turn off Settings › Account › "Share usage data" to stop Vespin sending the
   usage counts it makes (see "Usage data"); what is waiting to be sent is
   dropped, and nothing more is sent until you turn it on again. It is set on
-  each Mac, and in each browser, apart. It is on by default in the Fullspin you
-  download, and off in a Fullspin you build and run from its source, which sends
+  each Mac, and in each browser, apart. It is on by default in the Vespin you
+  download, and off in a Vespin you build and run from its source, which sends
   no usage counts unless you turn it on. It does not stop the counts our
   service makes of the work done through it.
 - Turn off Settings › This Mac › "Let agents run commands on this Mac" to stop
@@ -1566,10 +1585,10 @@ and error, performance, and agent reports by Sentry.
   signing out stops it too.
 - Switch an integration off for one agent in its message box's MCP
   menu, or disconnect it for every agent in Settings › Integrations.
-- Delete any workspace file an earlier version of Fullspin left on your Mac;
+- Delete any workspace file an earlier version of Vespin left on your Mac;
   nothing reads it now. What earlier versions left on our service goes with
   your account.
-- Fullspin listens through your microphone only while a dictation into a message
+- Vespin listens through your microphone only while a dictation into a message
   box is recording, which the box shows as a moving waveform with its time.
   macOS's microphone indicator is lit whenever the device is open.
 - Delete your account from the Account section in Settings. This erases at
@@ -1580,8 +1599,8 @@ and error, performance, and agent reports by Sentry.
   inbox items and pictures, the conversation with
   its attached files, every call's record, the commands waiting for your Mac with the
   record of when it last read, your own API keys, your name on the memories
-  Fullspin's agents kept in your words (the memories themselves stay with their
-  workspace), Fullspin's record of your
+  Vespin's agents kept in your words (the memories themselves stay with their
+  workspace), Vespin's record of your
   Linear, Notion, Sentry, and Slack connections, and everything earlier
   versions left there — and asks PostHog to erase the person it holds for your
   account with its usage data and recordings, which PostHog queues and carries
@@ -1589,15 +1608,15 @@ and error, performance, and agent reports by Sentry.
   never attached to your account. If PostHog cannot be reached, refuses, or
   reports that it could not erase them, the account is deleted anyway and
   PostHog keeps what it holds.
-  Fullspin stops recording for the rest of the session, and starts again the next
+  Vespin stops recording for the rest of the session, and starts again the next
   time you open it or sign in. Sentry reporting continues, and what Sentry
   already received, which names your account by its id, is not erased with
   it but kept until Sentry's retention ends. Deleting does not affect your Google or GitHub account
-  or the account at any service you connected, and does not revoke the Fullspin
+  or the account at any service you connected, and does not revoke the Vespin
   GitHub App (revoke it in GitHub's settings). It asks Vercel Connect to
   revoke every integration's grant it holds; if Vercel Connect cannot
   be reached, the account is deleted anyway and a grant stays until you revoke
-  Fullspin in that service's own settings. It asks Vercel Workflow to end every
+  Vespin in that service's own settings. It asks Vercel Workflow to end every
   session of yours, noting in our logs any it could not, and, shortly after,
   deletes their sandboxes with the snapshots no other sandbox uses; the
   session history Vercel Workflow keeps goes as described under "Who we send
@@ -1606,7 +1625,7 @@ and error, performance, and agent reports by Sentry.
 
 ## Google user data
 
-Fullspin's use of information received from Google APIs adheres to the
+Vespin's use of information received from Google APIs adheres to the
 [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy),
 including the Limited Use requirements. We use what Google returns when you
 sign in with it, your name, email address, and profile picture, only to

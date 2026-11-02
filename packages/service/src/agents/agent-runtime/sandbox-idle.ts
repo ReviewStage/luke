@@ -22,13 +22,13 @@ import type { RepositorySandbox } from "../repository-shell.js";
  * (https://man7.org/linux/man-pages/man7/capabilities.7.html), so every
  * descendant of those commands, a daemon that detached from its shell
  * included, carries an empty one, and nothing else in the sandbox does:
- * the sandbox's API starts Fullspin's own commands, this probe among them, with
+ * the sandbox's API starts our own commands, this probe among them, with
  * the whole set. The probe reads `CapBnd` from each process's
  * `/proc/<pid>/status` and names each process whose set is empty.
  *
- * Fullspin's own browser is the one such process it passes over: Xvfb, and
+ * Our own browser is the one such process it passes over: Xvfb, and
  * Chromium with its renderers and helpers, each in a session led by Xvfb on
- * Fullspin's display or by Chromium on Fullspin's DevTools port
+ * our display or by Chromium on our DevTools port
  * (`@luke/agent-runner/pins`'s `LUKE_BROWSER_PIN`), which the probe reads
  * from the session's leader's `/proc/<sid>/cmdline`. Once the agent opened
  * it, it would otherwise hold every pause's sandbox up for the rest of the

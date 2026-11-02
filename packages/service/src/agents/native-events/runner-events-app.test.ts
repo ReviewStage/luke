@@ -848,7 +848,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
-    "a released wait ends its turn as done and keeps its wakeups for Fullspin to deliver, and a later Stop deletes them",
+    "a released wait ends its turn as done and keeps its wakeups for Vespin to deliver, and a later Stop deletes them",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -910,7 +910,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
-    "a Fullspin tool's pictures stay out of its stored answer, and a CLI tool's stand in for theirs",
+    "a Vespin tool's pictures stay out of its stored answer, and a CLI tool's stand in for theirs",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -1068,7 +1068,7 @@ interface RecordedLine {
 /**
  * P16's recording cut into the launches P20's runner makes of it, each as
  * the events it posts: the notifications app-server sent, an ACCEPTED for
- * each of Fullspin's lines where the runner's `turn/start` or `turn/steer` hands
+ * each of our lines where the runner's `turn/start` or `turn/steer` hands
  * one over, and the launch's END. The first launch runs the workflow turn
  * (steered once), the second the `sleep 600` turn it stops, and the third,
  * after a restart, the resumed thread's turn.
@@ -1246,7 +1246,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
   );
 
   it.effect(
-    "a Fullspin tool keeps its own name without its pictures, a subagent's thread folds under its interrupted call, and a plan's usage limit fails the turn saying so",
+    "a Vespin tool keeps its own name without its pictures, a subagent's thread folds under its interrupted call, and a plan's usage limit fails the turn saying so",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -1768,7 +1768,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
   );
 
   it.effect(
-    "an API key of the starter's that OpenAI refused as expired is marked invalid and opens no issue, where Fullspin's own key refused so opens one",
+    "an API key of the starter's that OpenAI refused as expired is marked invalid and opens no issue, where Vespin's own key refused so opens one",
     () =>
       Effect.gen(function* () {
         const reported: Readonly<Record<string, unknown>>[] = [];

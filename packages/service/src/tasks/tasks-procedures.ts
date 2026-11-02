@@ -9,7 +9,7 @@
  * write (`packages/service/src/tasks/plan-notes.ts`) that the notetaker and
  * the coding agents save their notes through: `POST /api/plans/{id}/edit` is
  * their edit of the document, saved, or answered as a conflict with the text
- * as it stands now where Fullspin wrote it meanwhile and the edit no longer
+ * as it stands now where we wrote it meanwhile and the edit no longer
  * lands, with nothing saved; and a restore puts back an earlier revision.
  * `GET /api/plans/{id}` is the window opening a plan, a read that moves
  * nothing: the list stands newest started first whatever is opened. Its
@@ -42,7 +42,7 @@
  *
  * A plan may name the GitHub repository it is about, at its start or by a
  * later change, and null is a plan with none. A repository is kept only once
- * the Fullspin GitHub App confirms the plan's workspace reaches it
+ * our GitHub App confirms the plan's workspace reaches it
  * (`packages/service/src/github/workspace-repository.ts`), so a plan never
  * names a repository its workspace could not reach at the moment it was
  * named. A plan starts in the workspace the request names, which the account

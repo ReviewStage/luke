@@ -1,5 +1,5 @@
 {
-  "instead": "Draw Fullspin's face with FaceMark from @luke/ui, and a provider's mark, X's and LinkedIn's included, with ProviderMark.",
+  "instead": "Draw Vespin's face with FaceMark from @luke/ui, and a provider's mark, X's and LinkedIn's included, with ProviderMark.",
   "patterns": [
     {
       "import": "@luke/brand",

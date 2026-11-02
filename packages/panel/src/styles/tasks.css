@@ -1448,7 +1448,7 @@
 }
 
 /* One card for what is written on lines of code (`annotation-card.tsx`): a
-   review thread in Files changed and the Conversation, and Fullspin's note in a
+   review thread in Files changed and the Conversation, and the app's note in a
    File tab. The review thread's quiet card (`@luke/ui`'s Card), as wide as
    its words up to a reading measure. Its columns are the custom properties below: the head's
    chevron in a file header's 24px slot at its inset, the faces' column
@@ -1680,7 +1680,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* An agent's tab: a frame the log fills, its rows drawn by the one set of
    blocks (../tasks/transcript-blocks.tsx over ../ai-elements/). What
-   follows is its own: Fullspin's mark beside a note of its, drawn at the row's
+   follows is its own: the app's mark beside a note of its, drawn at the row's
    16px in his voice's colour; the agent's composer; a worker's line. */
 /* An agent's tab while its transcript or the agent is read
    (`agent-tab-skeleton.tsx`): the log's last lines stand at its foot, where

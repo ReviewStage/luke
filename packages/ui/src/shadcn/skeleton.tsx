@@ -2,7 +2,7 @@ import type { ComponentProps } from "react";
 import { cn } from "../cn.js";
 
 /**
- * skeleton.tsx -- shadcn/ui's skeleton (style `base-nova`), vendored and drawn as Fullspin's loading block.
+ * skeleton.tsx -- shadcn/ui's skeleton (style `base-nova`), vendored and drawn as our loading block.
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add skeleton` reads as a small diff. Its local
@@ -12,7 +12,7 @@ import { cn } from "../cn.js";
  * rather than `muted`, the hover's wash, which reads as no block on a card;
  * its corner is the one its shape picks (`@luke/ui`'s `Skeleton`,
  * `components/skeleton/`) rather than `rounded-md`; and it breathes on
- * Fullspin's own opacity loop, the `luke-skeleton` keyframes held still by
+ * our own opacity loop, the `luke-skeleton` keyframes held still by
  * `--luke-loop-motion` (`components/skeleton/skeleton.css`), rather than on
  * `animate-pulse`, whose loop runs on through reduced motion and a capture
  * run. It is named `SkeletonBlock` rather than `Skeleton`, because the

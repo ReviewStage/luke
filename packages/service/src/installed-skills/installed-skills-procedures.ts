@@ -1,5 +1,5 @@
 /**
- * installed-skills-procedures.ts -- the skills members install into Fullspin: list the ones a workspace offers the account, read one, preview a paste and read one of its skills' `SKILL.md`, install from it, turn one on or off, check one for an update or update it, share a personal one with a workspace, and remove it.
+ * installed-skills-procedures.ts -- the skills members install into the app: list the ones a workspace offers the account, read one, preview a paste and read one of its skills' `SKILL.md`, install from it, turn one on or off, check one for an update or update it, share a personal one with a workspace, and remove it.
  *
  * Every procedure resolves the caller (`accountMiddleware`, on the
  * resource so it runs before an input is read) before it touches a row.

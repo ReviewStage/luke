@@ -263,7 +263,7 @@ function directivesOf(policy: string): ReadonlyMap<string, readonly string[]> {
   );
 }
 
-test("a link to any place in Fullspin, a plan's, a section's, a picture's, and a box's pairing among them, and the app's own path are served the web app, and no page of Fullspin's own is", () => {
+test("a link to any place in Vespin, a plan's, a section's, a picture's, and a box's pairing among them, and the app's own path are served the web app, and no page of Vespin's own is", () => {
   for (const path of [
     "/app",
     "/app/",
@@ -301,7 +301,7 @@ test("a link to any place in Fullspin, a plan's, a section's, a picture's, and a
     "/api/automations/x1/runs",
     "/api/agents/a1",
   ]) {
-    const served = new URL(servedFile(path) ?? "/", "https://tryluke.dev");
+    const served = new URL(servedFile(path) ?? "/", "https://vespin.dev");
     assert.equal(served.pathname, "/api/default.js", path);
     assert.equal(served.searchParams.get("route"), "orpc", path);
     assert.equal(served.searchParams.get("route-path"), path.slice("/api/".length), path);
@@ -310,7 +310,7 @@ test("a link to any place in Fullspin, a plan's, a section's, a picture's, and a
     ["/api/workspaces/w1/photo", "workspaces/photo"],
     ["/api/automations/x1/webhook", "automations/webhook"],
   ] as const) {
-    const served = new URL(servedFile(path) ?? "/", "https://tryluke.dev");
+    const served = new URL(servedFile(path) ?? "/", "https://vespin.dev");
     assert.equal(served.pathname, "/api/default.js", path);
     assert.equal(served.searchParams.get("route"), route, path);
     assert.equal(served.searchParams.get("id"), path.split("/")[3], path);

@@ -92,7 +92,7 @@ import { lukeMcpDoorSeams } from "./door-seams.js";
 import { LUKE_MCP_TOOLS, type LukeMcpServices, refusedByDoor } from "./tools.js";
 
 /**
- * Fullspin's MCP server, answered by its group the way a function answers it,
+ * Our MCP server, answered by its group the way a function answers it,
  * over a real dialect, and driven by the MCP SDK's own client, the one a
  * harness speaks: a runner's bearer admits its agent's conversation, the
  * server lists `read_threads` and runs it through the coder host's inbox door
@@ -278,7 +278,7 @@ const agentInSandbox = Effect.gen(function* () {
   return { ...agent, conversationId };
 });
 
-/** An SDK client connected under the bearer to the server at the path given, Fullspin's own unless another is named. */
+/** An SDK client connected under the bearer to the server at the path given, our own unless another is named. */
 function connected(fetch: typeof globalThis.fetch, bearer: string, path: string = LUKE_MCP_PATH) {
   return Effect.promise(async () => {
     const client = new Client({ name: "runner-test", version: "1.0.0" });
@@ -314,7 +314,7 @@ function post(
   });
 }
 
-/** The tools a native agent is served: every Fullspin tool of the eve agent's that its harness has no equal of. */
+/** The tools a native agent is served: every tool of ours the eve agent is offered that its harness has no equal of. */
 const SERVED_TOOLS = [
   "post_thread",
   "read_threads",
@@ -346,12 +346,11 @@ const SERVED_TOOLS = [
   "update_automation",
   "delete_automation",
   "run_automation",
-  "remember",
-  "recall",
+  "save_memory",
+  "search_memory",
   "read_comments",
   "reply_to_comment",
-  "resolve_thread",
-  "reopen_thread",
+  "update_comment",
   "run_on_mac",
   "browser",
 ] as const;
@@ -414,12 +413,11 @@ const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, Di
   update_automation: agentTool("update_automation"),
   delete_automation: agentTool("delete_automation"),
   run_automation: agentTool("run_automation"),
-  remember: agentTool("remember"),
-  recall: agentTool("recall"),
+  save_memory: agentTool("save_memory"),
+  search_memory: agentTool("search_memory"),
   read_comments: commentTool("read_comments"),
   reply_to_comment: commentTool("reply_to_comment"),
-  resolve_thread: commentTool("resolve_thread"),
-  reopen_thread: commentTool("reopen_thread"),
+  update_comment: commentTool("update_comment"),
 };
 
 /** The eve tools a harness has its own of, which the server never serves. */
@@ -454,7 +452,7 @@ const initialize = (protocolVersion: string) => ({
   params: { protocolVersion, capabilities: {}, clientInfo: { name: "raw", version: "1" } },
 });
 
-it.layer(getTestDB())("Fullspin's MCP server", (it) => {
+it.layer(getTestDB())("Vespin's MCP server", (it) => {
   it.effect(
     "an SDK client under the runner's bearer lists read_threads and reads its agent's threads through the inbox door, and is shown post_thread naming its workspace's channels",
     () =>
@@ -593,7 +591,7 @@ it.layer(getTestDB())("Fullspin's MCP server", (it) => {
   );
 
   it.effect(
-    "tools/list names every Fullspin tool the agent's harness has no equal of, each with its eve tool's schema, and none the harness has",
+    "tools/list names every Vespin tool the agent's harness has no equal of, each with its eve tool's schema, and none the harness has",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -631,7 +629,7 @@ it.layer(getTestDB())("Fullspin's MCP server", (it) => {
         const listed = yield* Effect.promise(() => client.listTools());
         yield* Effect.promise(() => client.close());
 
-        const withheld = ["open_pull_request", "remember", "recall"];
+        const withheld = ["open_pull_request", "save_memory", "search_memory"];
         assert.deepEqual(
           listed.tools.map((tool) => tool.name).sort(),
           SERVED_TOOLS.filter((name) => !withheld.includes(name)).sort(),
@@ -710,7 +708,7 @@ it.layer(getTestDB())("Fullspin's MCP server", (it) => {
       const noPicture = yield* Effect.promise(() =>
         client.callTool({
           name: "look_at_picture",
-          arguments: { address: "https://tryluke.dev/acme/plan/p/files/missing" },
+          arguments: { address: "https://vespin.dev/acme/plan/p/files/missing" },
         }),
       );
       yield* Effect.promise(() => client.close());

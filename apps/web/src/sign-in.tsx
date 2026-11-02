@@ -24,8 +24,8 @@ function providerHint(): SocialProvider | undefined {
 /**
  * The page opens on the provider's mark, unbadged while it offers that
  * provider's button. An address that names no provider is a sign-in that
- * cannot go on, so it opens on Fullspin's mark badged as failed, says so in the
- * consent page's failure wording, and offers Open Fullspin instead; it drops the
+ * cannot go on, so it opens on the app's mark badged as failed, says so in the
+ * consent page's failure wording, and offers the Open link instead; it drops the
  * closing note, which promises a confirmation that will never come.
  */
 function SignIn(): React.JSX.Element {

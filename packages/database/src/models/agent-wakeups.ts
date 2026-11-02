@@ -5,7 +5,7 @@
  * it waited is the whole of what it would have fired. The same call with no
  * wakeups deletes them: on a Stop, which ends a CLI's wakeups with it, and
  * as any launch starts, since the CLI restores on resume the tasks it can
- * and the agent then owns them again, a copy Fullspin kept would fire twice or
+ * and the agent then owns them again, a copy we kept would fire twice or
  * after the agent cancelled it (`../schemas/agent-wakeup.ts`).
  *
  * A claim takes the wakeups due, the longest due first and at most a batch,

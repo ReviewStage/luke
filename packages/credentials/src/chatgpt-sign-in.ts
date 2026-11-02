@@ -1,5 +1,5 @@
 /**
- * chatgpt-sign-in.ts -- OpenAI's open-source Sign in with ChatGPT for Fullspin's hosted runtime, as the desktop runs it: one consent trip whose exchange hands the credentials straight to the service and answers only what the service said.
+ * chatgpt-sign-in.ts -- OpenAI's open-source Sign in with ChatGPT for our hosted runtime, as the desktop runs it: one consent trip whose exchange hands the credentials straight to the service and answers only what the service said.
  *
  * The flow is the one OpenAI documents for an open-source client
  * (developers.openai.com/siwc/token-sharing-open-source/sign-in) and the one
@@ -10,7 +10,7 @@
  * otherwise) carrying the code and the issued `client_id`; the code is
  * exchanged under that client with the PKCE verifier; and the ID token is
  * checked against OpenAI's published keys, its issuer, audience, nonce and
- * expiry, before anything is kept. The host here is Fullspin's hosted runtime,
+ * expiry, before anything is kept. The host here is our hosted runtime,
  * not this Mac (OpenAI's self-hosted VM recipe), so its id is the account's
  * own, which the service minted and serves.
  *

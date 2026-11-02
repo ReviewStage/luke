@@ -1,5 +1,5 @@
 /**
- * live-query.ts -- a live read as Fullspin Sync wakes it: the synced tables it reads, the topics its params name, and its statements.
+ * live-query.ts -- a live read as Sync wakes it: the synced tables it reads, the topics its params name, and its statements.
  *
  * A live read the desktop follows (`live/live-procedures.ts`) is held until
  * its rows move. One with a definition here is held on a watch of the topics
@@ -98,7 +98,7 @@ export interface LiveQuery<
 }
 
 /**
- * Defines a live read Fullspin Sync wakes. Fails where it reads no table, since
+ * Defines a live read Sync wakes. Fails where it reads no table, since
  * nothing could wake it, and where its mode and its cursor parts disagree.
  */
 export function defineLiveQuery<

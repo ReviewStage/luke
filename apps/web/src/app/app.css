@@ -37,7 +37,7 @@
    screen's side insets, which the stage keeps off, count here as they do
    there. Its places are rows with nothing in them yet. Where no sidebar
    stands, a phone's, a signed-out browser's, or a first visit's, the frame
-   is the work column alone, and Fullspin's
+   is the work column alone, and the app's
    face comes up in its middle once the wait has run long enough to notice
    (`--luke-hint-delay`), so a quick load never flashes it. */
 .boot-frame {

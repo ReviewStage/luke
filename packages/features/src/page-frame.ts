@@ -11,7 +11,7 @@
  * one a coding agent on no task showed is `/agent/<agentId>/<pageId>/<version>`;
  * a task's id is a uuid, so it is never the word `agent`.
  *
- * A browser has no scheme of Fullspin's own, so the web draws a page from a site
+ * A browser has no scheme of our own, so the web draws a page from a site
  * of its own instead (`PAGE_SANDBOX_ORIGIN`). Its frame loads the version
  * through the service's same-origin answer, which sends it on to a link
  * minted for the account that asked, or to the page saying pages open in the
@@ -29,7 +29,7 @@ export const PAGE_SCHEME = "luke-page";
  * this host to the page route and lets the app frame it, and the service
  * serves pages there only where `AGENT_PAGES_ORIGIN` names it.
  */
-export const PAGE_SANDBOX_ORIGIN = "https://fullspin.page";
+export const PAGE_SANDBOX_ORIGIN = "https://vespin.page";
 
 /** What a page's frame shows on the web where the deployment has no sandbox: the site's page saying pages open in the Mac app. */
 export const PAGE_IN_MAC_APP_PATH = "/page-in-mac-app.html";

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import { type CookieOriginGuard, cookieOriginGuard } from "./origin-guard.js";
 
-const PRODUCTION_ORIGIN = "https://tryluke.dev";
+const PRODUCTION_ORIGIN = "https://vespin.dev";
 
 const PRODUCTION = {
   VERCEL_ENV: "production",
@@ -91,11 +91,11 @@ test("a cookie POST from a foreign origin, or one spelled other than a browser s
   for (const origin of [
     FOREIGN_ORIGIN,
     "null",
-    "http://tryluke.dev",
-    "https://tryluke.dev.evil.example",
+    "http://vespin.dev",
+    "https://vespin.dev.evil.example",
     "https://TRYLUKE.dev",
-    "https://tryluke.dev:443",
-    "https://tryluke.dev/",
+    "https://vespin.dev:443",
+    "https://vespin.dev/",
   ]) {
     assert.deepEqual(await verdict(guard, cookiePost(COOKIE_ROUTE, { origin })), REFUSED, origin);
   }

@@ -51,7 +51,7 @@ import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
- * chip-cards.test.ts -- a chip of a place in Fullspin hangs the card the window
+ * chip-cards.test.ts -- a chip of a place in the app hangs the card the window
  * hangs for that place wherever it names it: a plan's card for a plan, the
  * same card's head and the section's heading for a section, or the
  * version for a version; a page's title, version, and when it moved; a
@@ -115,7 +115,7 @@ const ACME: Workspace = {
 
 const PLACE: MentionPlace = { workspace: "acme", repository: "acme/relay" };
 
-const HOME = "https://tryluke.dev/acme";
+const HOME = "https://vespin.dev/acme";
 
 const MEMBERS: readonly WorkspaceMember[] = [
   { userId: SAM, name: "Sam Okafor", email: "sam@example.com", role: WORKSPACE_ROLE.OWNER },
@@ -599,7 +599,7 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
 
   assert.equal(page.card, "data-page-card");
   assert.equal(page.name, "Unfurl matrix");
-  assert.deepEqual([page.sub, page.detailWords], ["Version 3", ["Shown by Fullspin"]]);
+  assert.deepEqual([page.sub, page.detailWords], ["Version 3", ["Shown by Vespin"]]);
   assert.ok(page.corner, "the corner says when the page last moved");
   assert.deepEqual([other.name, other.notes], ["Old draft", [PAGE_UNREAD]]);
   // A page id the open plan holds, named on another plan, is not the open plan's page.
@@ -607,7 +607,7 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
   // A page of a plan not open hangs its tab's card all the same, as an Inbox item's bar names it.
   assert.equal(read.card, "data-page-card");
   assert.equal(read.name, "Rollout tracker");
-  assert.deepEqual([read.sub, read.detailWords], [undefined, ["Shown by Fullspin"]]);
+  assert.deepEqual([read.sub, read.detailWords], [undefined, ["Shown by Vespin"]]);
 });
 
 test("a page's chip of the open plan the window holds no pages for reads the plan's pages as it is hung, and says it can't be read once they lack it", async () => {
@@ -784,7 +784,7 @@ test("an automation's chip hangs its card, who made it and when at its foot, the
 test("a member's and an automation's chips under another workspace's link are read as that workspace holds them, not the words' own", async () => {
   vi.useFakeTimers({ now: CHANNELS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
   const container = await drawn(
-    `Ask [Sam](https://tryluke.dev/beta/person/${SAM}) about [the audit](https://tryluke.dev/beta/automation/${AUDIT.id}).`,
+    `Ask [Sam](https://vespin.dev/beta/person/${SAM}) about [the audit](https://vespin.dev/beta/automation/${AUDIT.id}).`,
   );
   const [person, automation] = chipsOf(container);
 
@@ -797,7 +797,7 @@ test("a member's and an automation's chips under another workspace's link are re
 });
 
 test("a member's chip under a link naming its workspace by id, as one with no slug is written, is read as that workspace holds them", async () => {
-  const container = await drawn(`Ask [Sam](https://tryluke.dev/${BETA.id}/person/${SAM}).`);
+  const container = await drawn(`Ask [Sam](https://vespin.dev/${BETA.id}/person/${SAM}).`);
 
   const member = await cardOf(chipsOf(container)[0]);
 

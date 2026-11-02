@@ -15,8 +15,8 @@ import { DesktopSidebar } from "./desktop-sidebar.js";
 
 /**
  * sidebar-tasks-head.test.ts -- the Tasks head carries New section and View
- * options, and offers New section on a right-click too, each naming the new
- * section in place in the sidebar. Synthetic throughout.
+ * options, New section naming the new section in place in the sidebar, and
+ * offers no right-click menu that would only repeat them. Synthetic throughout.
  */
 
 const WORKSPACE: Workspace = {
@@ -74,12 +74,12 @@ function mountTasks(): HTMLElement {
   );
   act(() => root.render(onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, props))));
   return (
-    container.querySelector<HTMLElement>('nav[aria-label="Tasks"]') ??
+    container.querySelector<HTMLElement>('nav[aria-label="My tasks"]') ??
     assert.fail("no Tasks section")
   );
 }
 
-test("the Tasks head carries New section and View options, and its button and a right-click both name a section in place", () => {
+test("the Tasks head carries New section and View options, opens no menu on a right-click, and its button names a section in place", () => {
   const tasks = mountTasks();
   const head =
     tasks.querySelector<HTMLElement>(".luke-group-header-head") ?? assert.fail("no head");
@@ -87,30 +87,18 @@ test("the Tasks head carries New section and View options, and its button and a 
     [...head.querySelectorAll("button[aria-label]")].map((each) => each.getAttribute("aria-label")),
     ["New section", "View options"],
   );
-  const offered = () =>
-    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(
-      (each) => each.textContent,
-    );
   const asked = () =>
     document.querySelector('nav[aria-label="Sections"] input[aria-label="Section name"]');
 
   act(() => {
     head.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
   });
-  assert.deepEqual(offered(), ["New section"]);
-  act(() => document.querySelector<HTMLElement>('[role="menuitem"]')?.click());
-  assert.ok(asked(), "the right-click's New section names a section in place");
-  assert.equal(document.querySelector('[role="dialog"]'), null, "no dialog is asked");
-  act(() => {
-    document.activeElement?.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
-    );
-  });
-  assert.equal(asked(), null);
+  assert.equal(document.querySelector('[role="menu"]'), null, "a right-click opens no menu");
 
   const button =
     head.querySelector<HTMLButtonElement>('button[aria-label="New section"]') ??
     assert.fail("no New section");
   act(() => button.click());
   assert.ok(asked(), "the button names a section in place at once");
+  assert.equal(document.querySelector('[role="dialog"]'), null, "no dialog is asked");
 });

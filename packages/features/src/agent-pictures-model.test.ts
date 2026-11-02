@@ -46,6 +46,14 @@ test("a shown set is each picture the call asked for, with what it was kept as o
   ]);
 });
 
+test("one picture shown bare, its path and caption with no list around them, is a set of that one", () => {
+  const input = { path: "artifacts/members.png", caption: "Members page" };
+
+  assert.deepEqual(shownPicturesOf(input, { status: "accepted", pictures: [MEMBERS] }), [
+    { picture: MEMBERS, name: "members", caption: "Members page" },
+  ]);
+});
+
 test("an integration's answer names its kept pictures and the ones it left out, by the remote tool, and an image resource's too", () => {
   const answer = [
     { type: "text", text: "2 images extracted from NW-482" },
@@ -119,11 +127,8 @@ test("a call whose answer is no list of blocks, or whose blocks carry no picture
 });
 
 test("a picture is added to a plan's text as its own last paragraph, escaped, and Undo takes exactly that back out", () => {
-  const line = taskPictureLine(
-    "Members [after]",
-    "https://tryluke.dev/acme/plan/5d8e/files/(3c9e)",
-  );
-  assert.equal(line, "![Members \\[after\\]](https://tryluke.dev/acme/plan/5d8e/files/\\(3c9e\\))");
+  const line = taskPictureLine("Members [after]", "https://vespin.dev/acme/plan/5d8e/files/(3c9e)");
+  assert.equal(line, "![Members \\[after\\]](https://vespin.dev/acme/plan/5d8e/files/\\(3c9e\\))");
 
   for (const plan of [
     "# Teammate invitations\n\nInvite by email.\n",

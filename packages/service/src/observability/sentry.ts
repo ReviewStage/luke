@@ -325,7 +325,7 @@ const sentryTelemetry = Layer.mergeAll(
 );
 
 /**
- * The annotation, or a report's attribute, that names the Fullspin account a
+ * The annotation, or a report's attribute, that names the user account a
  * request or a run was made for, by its id: set where a request's caller is
  * resolved (`http/http-effect.ts`, `orpc/base.ts`) and where a run reads its
  * agent's or turn's row. Sentry is handed it as its user's id

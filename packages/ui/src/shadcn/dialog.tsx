@@ -2,10 +2,10 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { cn } from "../cn.js";
 
 /**
- * dialog.tsx -- shadcn/ui's dialog (style `base-nova`, on Base UI), vendored and drawn as Fullspin's dimmed window and card.
+ * dialog.tsx -- shadcn/ui's dialog (style `base-nova`, on Base UI), vendored and drawn as our dimmed window and card.
  *
  * The component is shadcn's own source, kept as close to it as the window
- * allows, so a later `shadcn add dialog` reads as a small diff. Fullspin's
+ * allows, so a later `shadcn add dialog` reads as a small diff. Our
  * changes: the content stands in Base UI's `Viewport`, which is the dimmed
  * window itself, the palette's scrim fading in on the dialog's own beat and
  * laid out as a grid that centres the card, which a press on and a drag
@@ -27,7 +27,7 @@ import { cn } from "../cn.js";
  * may also stay drawn, hidden, while its dialog is shut (`keepMounted`, Base
  * UI's portal's own), so opening it again only shows it. shadcn's close
  * button, header, footer, title, description, trigger, and close are left
- * out, because a Fullspin dialog draws its own head and foot
+ * out, because a dialog of ours draws its own head and foot
  * (`components/dialog/dialog.tsx`), as is its ring utility,
  * because the card holds focus for its controls and draws no ring. What an
  * app draws is `@luke/ui`'s `Dialog`; this is its inside.

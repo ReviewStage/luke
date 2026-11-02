@@ -19,7 +19,7 @@ import { EVE_HOST_HEADER, type EVE_HOST_TURN, type EveHostTurn } from "./bounds.
  * The host's own calls into eve's HTTP API, made from a web function on the
  * developer's behalf: open the conversation's session with a first message,
  * follow up on the session it runs in, cancel one turn by eve's own id
- * for it, retire the session for good once Fullspin lets go of it. eve's `Client` would make the same requests, but its session handle keeps the delivery id an accepted
+ * for it, retire the session for good once we let go of it. eve's `Client` would make the same requests, but its session handle keeps the delivery id an accepted
  * follow-up answers to itself, and that id is what ties an ask to the turn
  * eve later starts, so the requests are made here as eve's own routes
  * document them. The caller is the deployment acting for an account it
@@ -39,7 +39,7 @@ import { EVE_HOST_HEADER, type EVE_HOST_TURN, type EveHostTurn } from "./bounds.
  * last wait costs a session opened for nothing, which the claim lets the
  * older one lose, and never two sessions writing one conversation. Reopening
  * is never eve's: the host decides it, under that claim. How a follow-up
- * reaches a turn under way is the channel's policy, which both of Fullspin's
+ * reaches a turn under way is the channel's policy, which both of our
  * channels set to steer; no call here names one of its own.
  *
  * Every call is an effect on the `HttpClient` the web runtime builds once
@@ -220,6 +220,8 @@ export type KeyRefusal = (typeof KEY_REFUSAL)[keyof typeof KEY_REFUSAL];
  */
 export const RUNTIME_REFUSAL = {
   NOT_HERE: "not_here",
+  /** The agent ran on eve, which runs no agent any more; nothing reaches it again, and only a new agent goes on from its work. */
+  EVE_RETIRED: "eve_retired",
   /** The harness's sandbox image is still being prepared; the same call a little later is taken. */
   IMAGE_PREPARING: "image_preparing",
   /** The agent's device is a host its account removed; no message reaches it again. */
@@ -301,7 +303,7 @@ export interface EveMessage<Turn extends EveHostTurn = EveHostTurn> {
   /** The sender's time zone, which the turn the message opens reads the day in; none reads UTC. */
   readonly timeZone?: string;
   /**
-   * Fullspin's own id for the message, the client id of the line it wrote for
+   * Our own id for the message, the client id of the line it wrote for
    * it: a native harness's runner names it back as it takes the message
    * (`runner-sessions.ts`). eve is never handed it.
    */
@@ -350,7 +352,7 @@ export interface AgentSessions<Turn extends EveHostTurn = EveHostTurn> {
  * session that names no capabilities as one that can, and a session that
  * can answers its token budget's end by parking on a prompt for an Approve
  * or a Stop rather than failing, and every subagent it delegates to
- * inherits that. Fullspin reads no such prompt and answers none, so a worker
+ * inherits that. We read no such prompt and answer none, so a worker
  * past its per-session budget parked on one for good and held the
  * brain turn waiting on its result with it. Declared unable, the next
  * model call past the budget fails as `SESSION_TOKEN_LIMIT_REACHED`, and
@@ -370,7 +372,7 @@ interface EvePostBody {
  * own secret, or the account itself, under the bearer its request carried,
  * which the door resolves as a hosted route resolves a bearer
  * (`auth/bearer.ts`'s `hostedUserId`) and never by a session cookie. A
- * comment's ask of Fullspin, and a coding agent's Start and Stop, come from a
+ * comment's ask of the app, and a coding agent's Start and Stop, come from a
  * route and reach eve as its caller (`coder-host/stop.ts`'s `eveFor`): over
  * the developer's own bearer, or, for a route a browser reached on its
  * session cookie alone, as the deployment acting for the account the cookie
