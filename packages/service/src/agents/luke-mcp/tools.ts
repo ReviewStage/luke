@@ -31,7 +31,7 @@
  * sends once, as eve's run again does; and the turn's count of plan notes is
  * kept on the running turn's row in the store (`runTurnCappedEditPlan`), so
  * the cap holds per turn as eve's does. The list is narrowed per agent as
- * eve narrows its own (`offeredLukeMcpTool`), `remember` and `recall` by its
+ * eve narrows its own (`offeredLukeMcpTool`), `save_memory` and `search_memory` by its
  * starter's Memory among it, and a tool left out is still refused by its
  * door where a harness calls it anyway. A tool whose words differ by
  * workspace, `post_thread`'s naming its open channels, is described for
@@ -61,9 +61,8 @@ import type { ModelCatalog } from "../../providers/model-catalog.js";
 import {
   type CommentToolName,
   READ_COMMENTS_TOOL,
-  REOPEN_THREAD_TOOL,
   REPLY_TO_COMMENT_TOOL,
-  RESOLVE_THREAD_TOOL,
+  UPDATE_COMMENT_TOOL,
 } from "../../tasks/comment-tools.js";
 import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import {
@@ -131,7 +130,7 @@ import {
 } from "../coder-host/tool-set.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
-import { RECALL_TOOL, REMEMBER_TOOL } from "../memory-tools.js";
+import { SAVE_MEMORY_TOOL, SEARCH_MEMORY_TOOL } from "../memory-tools.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
 
@@ -418,13 +417,12 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   agentTool(DELETE_AUTOMATION_TOOL),
   agentTool(RUN_AUTOMATION_TOOL),
   // The workspace's shared memory.
-  agentTool(REMEMBER_TOOL),
-  agentTool(RECALL_TOOL),
+  agentTool(SAVE_MEMORY_TOOL),
+  agentTool(SEARCH_MEMORY_TOOL),
   // The plan's comments.
   commentTool(READ_COMMENTS_TOOL),
   commentTool(REPLY_TO_COMMENT_TOOL),
-  commentTool(RESOLVE_THREAD_TOOL),
-  commentTool(REOPEN_THREAD_TOOL),
+  commentTool(UPDATE_COMMENT_TOOL),
   // The developer's Mac.
   entry(RUN_ON_MAC_TOOL, (admitted, input) => runOnMacTool(admitted.target, input)),
   // The agent's browser.
@@ -434,8 +432,8 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
 /** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
 export type LukeMcpOfferedTo = Pick<Agent, "repository" | "machine">;
 
-/** The workspace's shared memory, which eve offers only where the agent's starter turned Memory on (`apps/dev/tools/remember.ts`'s `memoryOffered`). */
-const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL];
+/** The workspace's shared memory, which eve offers only where the agent's starter turned Memory on (`apps/dev/tools/save_memory.ts`'s `memoryOffered`). */
+const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY];
 
 /** The tools eve offers some agents and not others: each one some agent's repository, starter, or starter's Memory withholds. */
 const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([

@@ -164,13 +164,9 @@ const LUKE_TOOL_WORDS = {
     group: LUKE_TOOL_GROUP.PLAN,
     summary: "Answers a comment thread it was mentioned in",
   },
-  [AGENT_TOOL.RESOLVE_THREAD]: {
+  [AGENT_TOOL.UPDATE_COMMENT]: {
     group: LUKE_TOOL_GROUP.PLAN,
-    summary: "Resolves a comment thread",
-  },
-  [AGENT_TOOL.REOPEN_THREAD]: {
-    group: LUKE_TOOL_GROUP.PLAN,
-    summary: "Reopens a comment thread",
+    summary: "Resolves or reopens a comment thread",
   },
   [AGENT_TOOL.SHOW_PAGE]: {
     group: LUKE_TOOL_GROUP.PAGES,
@@ -244,11 +240,11 @@ const LUKE_TOOL_WORDS = {
     group: LUKE_TOOL_GROUP.CODE,
     summary: "Waits before it checks on its checks or a deploy",
   },
-  [AGENT_TOOL.REMEMBER]: {
+  [AGENT_TOOL.SAVE_MEMORY]: {
     group: LUKE_TOOL_GROUP.MEMORY,
     summary: "Keeps a fact in the workspace's memory",
   },
-  [AGENT_TOOL.RECALL]: {
+  [AGENT_TOOL.SEARCH_MEMORY]: {
     group: LUKE_TOOL_GROUP.MEMORY,
     summary: "Searches the workspace's memory",
   },

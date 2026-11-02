@@ -307,6 +307,5 @@ export type PlanCommentAnchors = typeof planCommentAnchorsSchema.Type;
 export const PLAN_COMMENT_TOOL = {
   READ: "read_comments",
   REPLY: "reply_to_comment",
-  RESOLVE: "resolve_thread",
-  REOPEN: "reopen_thread",
+  UPDATE: "update_comment",
 } as const;

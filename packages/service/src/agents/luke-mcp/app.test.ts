@@ -346,12 +346,11 @@ const SERVED_TOOLS = [
   "update_automation",
   "delete_automation",
   "run_automation",
-  "remember",
-  "recall",
+  "save_memory",
+  "search_memory",
   "read_comments",
   "reply_to_comment",
-  "resolve_thread",
-  "reopen_thread",
+  "update_comment",
   "run_on_mac",
   "browser",
 ] as const;
@@ -414,12 +413,11 @@ const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, Di
   update_automation: agentTool("update_automation"),
   delete_automation: agentTool("delete_automation"),
   run_automation: agentTool("run_automation"),
-  remember: agentTool("remember"),
-  recall: agentTool("recall"),
+  save_memory: agentTool("save_memory"),
+  search_memory: agentTool("search_memory"),
   read_comments: commentTool("read_comments"),
   reply_to_comment: commentTool("reply_to_comment"),
-  resolve_thread: commentTool("resolve_thread"),
-  reopen_thread: commentTool("reopen_thread"),
+  update_comment: commentTool("update_comment"),
 };
 
 /** The eve tools a harness has its own of, which the server never serves. */
@@ -631,7 +629,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const listed = yield* Effect.promise(() => client.listTools());
         yield* Effect.promise(() => client.close());
 
-        const withheld = ["open_pull_request", "remember", "recall"];
+        const withheld = ["open_pull_request", "save_memory", "search_memory"];
         assert.deepEqual(
           listed.tools.map((tool) => tool.name).sort(),
           SERVED_TOOLS.filter((name) => !withheld.includes(name)).sort(),

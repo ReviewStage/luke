@@ -1597,13 +1597,13 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const thread = yield* openThread(userId, sibling.id);
           const call = (
             name: Parameters<CoderHost["comment"]>[1],
-            input: Readonly<Record<string, string>>,
+            input: Readonly<Record<string, string | boolean>>,
           ) => host.comment(admitted, name, unparsedWire({ taskId: sibling.id, ...input }));
 
           const read = yield* call(CODER_TOOL.READ_COMMENTS, {});
           const replied = yield* call(CODER_TOOL.REPLY_TO_COMMENT, { thread, words: "Link too." });
-          const resolved = yield* call(CODER_TOOL.RESOLVE_THREAD, { thread });
-          const reopened = yield* call(CODER_TOOL.REOPEN_THREAD, { thread });
+          const resolved = yield* call(CODER_TOOL.UPDATE_COMMENT, { thread, resolved: true });
+          const reopened = yield* call(CODER_TOOL.UPDATE_COMMENT, { thread, resolved: false });
 
           assert.deepEqual(
             [read, replied, resolved, reopened].map((answer) => answer.status),

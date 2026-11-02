@@ -18,7 +18,7 @@ import { type AgentCall, callerUserId, callerWorkspace } from "./agent-tools.js"
 import { rememberRefusal } from "./memory-provenance.js";
 
 /**
- * memory-tools.ts -- a coding agent's `remember` and `recall`: the workspace's shared memory of settled facts, kept and searched as the agent works.
+ * memory-tools.ts -- a coding agent's `save_memory` and `search_memory`: the workspace's shared memory of settled facts, kept and searched as the agent works.
  *
  * The agent decides what is worth keeping and when to look, and nothing asks
  * first; Settings › Memory is where members read and forget what was kept.
@@ -120,7 +120,7 @@ const REMEMBER_INPUT = Schema.Struct({
   replaces: Schema.optionalKey(
     describeWire(
       memoryIdSchema,
-      "The id of the memory this one corrects, as recall answered it; leave it out for a new memory.",
+      `The id of the memory this one corrects, as ${AGENT_TOOL.SEARCH_MEMORY} answered it; leave it out for a new memory.`,
     ),
   ),
 });
@@ -156,8 +156,8 @@ const MEMORY_REFUSAL = {
 } as const;
 
 /** The tools as a coding agent is offered them: each its name, its words, and its input schema. */
-export const REMEMBER_TOOL = {
-  name: AGENT_TOOL.REMEMBER,
+export const SAVE_MEMORY_TOOL = {
+  name: AGENT_TOOL.SAVE_MEMORY,
   description:
     "Keep a fact or convention for the workspace's later work, in any repository. Every member " +
     "of the workspace shares what you keep: a decision the team settled, how the team builds, " +
@@ -165,7 +165,7 @@ export const REMEMBER_TOOL = {
     "later agent would otherwise have to rediscover. Keep only what was settled, will still " +
     "hold next time, and helps the team, never a guess, an idea still being weighed, this task's own " +
     "detail, a remark about one member, or anything that would be a credential, " +
-    "key, token, or password. When what was said contradicts a memory recall answered, pass " +
+    `key, token, or password. When what was said contradicts a memory ${AGENT_TOOL.SEARCH_MEMORY} answered, pass ` +
     "that memory's id as replaces with the corrected statement, so the old one is rewritten " +
     "rather than kept beside it. Do it quietly: never ask the developer whether to keep something and " +
     "never mention a memory you kept unless they ask. Answers `accepted` with the outcome " +
@@ -173,22 +173,22 @@ export const REMEMBER_TOOL = {
   inputSchema: REMEMBER_INPUT,
 } as const;
 
-export const RECALL_TOOL = {
-  name: AGENT_TOOL.RECALL,
+export const SEARCH_MEMORY_TOOL = {
+  name: AGENT_TOOL.SEARCH_MEMORY,
   description:
-    "Search what the workspace's agents remembered: the settled facts and conventions every " +
+    "Search what the workspace's agents kept: the settled facts and conventions every " +
     "member shares. Call it once the task comes into focus, with a few words for the " +
     "area at hand, and again when a new area comes up; with no query it answers the memories " +
     "kept most recently. Treat what it answers as prior context, not as rules: the developer's " +
     "words now win, and a memory they contradict is corrected with " +
-    "remember's replaces. Answers `accepted` with the matching memories, each with its id and " +
+    `${AGENT_TOOL.SAVE_MEMORY}'s replaces. Answers \`accepted\` with the matching memories, each with its id and ` +
     "when it was last kept, and how many memories the workspace holds.",
   inputSchema: RECALL_INPUT,
 } as const;
 
 /**
  * Whether the member turned Memory on (`EXPERIMENT.MEMORY`): what decides
- * whether their agents are offered `remember` and `recall` and told of the
+ * whether their agents are offered `save_memory` and `search_memory` and told of the
  * memory. Where it cannot be read, it is off, logged for the operator.
  */
 export function memoryOnFor(userId: string): Effect.Effect<boolean, never, DatabaseServices> {
@@ -258,7 +258,7 @@ const orUnavailable = <R>(
     Effect.as(logStoreFailure(failure), rejected(MEMORY_REFUSAL.UNAVAILABLE)),
   );
 
-/** One call of `remember` in the call's workspace, as the member's words: the memory kept or corrected, or why nothing was. */
+/** One call of `save_memory` in the call's workspace, as the member's words: the memory kept or corrected, or why nothing was. */
 export function runRemember(
   call: MemoryCall,
   input: UnparsedWireValue,
@@ -296,7 +296,7 @@ function recalled(call: MemoryCall, query: string | undefined) {
   }));
 }
 
-/** One call of `recall` in the call's workspace: its memories the query finds, and how many it holds. */
+/** One call of `search_memory` in the call's workspace: its memories the query finds, and how many it holds. */
 export function runRecall(
   call: MemoryCall,
   input: UnparsedWireValue,
@@ -340,7 +340,7 @@ function agentMemory(
   );
 }
 
-/** One call of `remember` from a coding agent, refused on a turn whose words are no member's (`rememberRefusal`). */
+/** One call of `save_memory` from a coding agent, refused on a turn whose words are no member's (`rememberRefusal`). */
 export function runAgentRemember(
   call: AgentCall,
   input: UnparsedWireValue,
@@ -348,7 +348,7 @@ export function runAgentRemember(
   return agentMemory(call, (memory) => runRemember(memory, input), rememberRefusal);
 }
 
-/** One call of `recall` from a coding agent. */
+/** One call of `search_memory` from a coding agent. */
 export function runAgentRecall(
   call: AgentCall,
   input: UnparsedWireValue,

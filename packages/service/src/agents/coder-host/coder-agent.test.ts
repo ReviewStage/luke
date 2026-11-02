@@ -792,11 +792,11 @@ test("with Memory off the instructions say nothing of the workspace's memory; wi
       true,
     );
     assert.ok(!off.includes("## The workspace's memory"), brief);
-    assert.ok(!off.includes(`\`${CODER_TOOL.REMEMBER}\``), brief);
+    assert.ok(!off.includes(`\`${CODER_TOOL.SAVE_MEMORY}\``), brief);
     const start = on.indexOf("## The workspace's memory\n\n");
     const end = on.indexOf("## What your messages are", start);
     assert.ok(start > 0 && end > start, brief);
-    assert.ok(on.slice(start, end).includes(`\`${CODER_TOOL.RECALL}\``), brief);
+    assert.ok(on.slice(start, end).includes(`\`${CODER_TOOL.SEARCH_MEMORY}\``), brief);
     assert.equal(on.slice(0, start) + on.slice(end), off, brief);
   }
 });

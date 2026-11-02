@@ -45,8 +45,8 @@ export const AGENT_TOOL = {
   // The models an agent may be started on, named for any agent offered `start_agent`.
   LIST_MODELS: "list_models",
   // The workspace's shared memory, which a coding agent keeps and searches.
-  REMEMBER: "remember",
-  RECALL: "recall",
+  SAVE_MEMORY: "save_memory",
+  SEARCH_MEMORY: "search_memory",
   // The public reads, every role's: eve's provider-run search on the agent's own model call, and the page read.
   WEB_SEARCH: "web_search",
   READ_WEB_PAGE: "read_web_page",
@@ -80,8 +80,7 @@ export const AGENT_TOOL = {
   // The plan's comment threads, read and answered by the planning model and every coding agent on the task.
   READ_COMMENTS: PLAN_COMMENT_TOOL.READ,
   REPLY_TO_COMMENT: PLAN_COMMENT_TOOL.REPLY,
-  RESOLVE_THREAD: PLAN_COMMENT_TOOL.RESOLVE,
-  REOPEN_THREAD: PLAN_COMMENT_TOOL.REOPEN,
+  UPDATE_COMMENT: PLAN_COMMENT_TOOL.UPDATE,
   READ_PAGE: "read_page",
   // Pictures from a coding agent's sandbox, shown in its transcript.
   SHOW_IMAGE: "show_image",
@@ -124,8 +123,10 @@ export const CONNECTION_TOOL = {
  * post and read, since named for the channels a thread is posted to,
  * the four of the workspace's Chat, removed with it, the brain's lines of
  * code put on the developer's screen and its two whiteboard tools, removed
- * with the Code and Board tabs, and a voice call's question queue and
- * hang-up, removed with GPT Live.
+ * with the Code and Board tabs, a voice call's question queue and
+ * hang-up, removed with GPT Live, the memory's two tools, since named for
+ * the memory, and the plan comments' resolve and reopen, folded into
+ * `update_comment`.
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -163,6 +164,12 @@ export const RETIRED_TOOL = {
   QUEUE_QUESTION: "queue_question",
   WITHDRAW_QUESTION: "withdraw_question",
   END_CALL: "end_call",
+  // Renamed `save_memory` and `search_memory`, as every other tool names what it acts on.
+  REMEMBER: "remember",
+  RECALL: "recall",
+  // Folded into `update_comment` (`resolved`), whose name no channel thread's tool shares.
+  RESOLVE_THREAD: "resolve_thread",
+  REOPEN_THREAD: "reopen_thread",
 } as const;
 
 /**

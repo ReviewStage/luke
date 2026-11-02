@@ -118,8 +118,8 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.DELETE_AUTOMATION
     | typeof CODER_TOOL.RUN_AUTOMATION
     | typeof CODER_TOOL.LIST_MODELS
-    | typeof CODER_TOOL.REMEMBER
-    | typeof CODER_TOOL.RECALL;
+    | typeof CODER_TOOL.SAVE_MEMORY
+    | typeof CODER_TOOL.SEARCH_MEMORY;
   readonly input: UnparsedWireValue;
   readonly callId: string;
 }
@@ -145,8 +145,8 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.DELETE_AUTOMATION]: runDeleteAutomation,
   [CODER_TOOL.RUN_AUTOMATION]: runRunAutomation,
   [CODER_TOOL.LIST_MODELS]: runListModels,
-  [CODER_TOOL.REMEMBER]: runAgentRemember,
-  [CODER_TOOL.RECALL]: runAgentRecall,
+  [CODER_TOOL.SAVE_MEMORY]: runAgentRemember,
+  [CODER_TOOL.SEARCH_MEMORY]: runAgentRecall,
 } as const;
 
 /** The agent a read found, or the refusal that the conversation is none. */
