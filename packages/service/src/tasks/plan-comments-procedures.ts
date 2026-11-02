@@ -26,6 +26,7 @@ import {
 import { Effect, Option } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { recordServerEventIn, SERVER_EVENT } from "../events/server-events.js";
+import { afterResponse } from "../http/after-response.js";
 import { cursorOf, heldUntilMoved } from "../http/held-read.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -240,10 +241,13 @@ function handedTo(
  * The thread handed to each of the task's standing agents the comment reaches
  * (\`handedTo\`); an agent of another task, or an archived one, cannot take
  * it, and neither can the app's own assistant, which no task has any more.
- * Each ask is written under a key drawn from the words' own, so the words
- * sent again ask no one twice. A hand-over that does not land is taken
- * back, the words posted all the same. Answers the ones asked who could not
- * take it.
+ * Who can take it is read before the answer, which says back the ones in the
+ * thread who could not; the hand-overs themselves run past it
+ * (\`afterResponse\`), because waking an idle agent resumes its sandbox, which
+ * can outlast the member's request, and a comment posted must never read as
+ * not posted. Each ask is written under a key drawn from the words' own, so
+ * the words sent again ask no one twice; a hand-over that does not land is
+ * taken back and logged, the words posted all the same.
  */
 const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: PlanCommentsProcedureSeams,
@@ -252,44 +256,59 @@ const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   comment: MentioningComment,
 ) {
   const { userId, taskId } = comment;
-  const handOvers = handedTo(thread, comment.words, yield* pageWriterOf(userId, thread));
+  // Note that a page that could not be read names no writer, so the comment asks only those its thread and words name.
+  const writer = yield* pageWriterOf(userId, thread).pipe(
+    Effect.catch(() => Effect.succeed(undefined)),
+  );
   const unsent: PlanCommentAsked[] = [];
-  for (const { to, owed } of handOvers) {
-    const landed = yield* Effect.gen(function* () {
-      const agent = yield* askableAgent(userId, taskId, to);
-      if (agent === undefined) return !owed;
-      const ask = {
-        action: PLAN_COMMENT_ACTION.ASK,
-        clientKey: mentionKey(comment.clientKey, to),
-        to,
-      } as const;
-      const outcome = yield* hostedStoreOrUnavailable(
-        actOnPlanCommentThread(
-          { actor: PLAN_COMMENT_ACTOR.MEMBER, userId },
-          taskId,
-          thread.id,
-          ask,
-        ),
-      );
-      if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE || !("thread" in outcome.answer)) {
-        return false;
-      }
-      yield* askHandedOver(seams, request, {
-        userId,
-        taskId,
-        thread: outcome.answer.thread,
-        clientKey: ask.clientKey,
-        words: comment.words,
-        to: agent,
-      });
-      return true;
-    }).pipe(
-      // Note that one mention not taken leaves the others, and the words, as they are, and is said back.
-      Effect.catch(() => Effect.succeed(false)),
+  const taking: { readonly to: PlanCommentAsked; readonly agent: CommentRecipient }[] = [];
+  for (const { to, owed } of handedTo(thread, comment.words, writer)) {
+    const agent = yield* askableAgent(userId, taskId, to).pipe(
+      Effect.catch(() => Effect.succeed(undefined)),
     );
-    if (!landed) unsent.push(to);
+    if (agent !== undefined) taking.push({ to, agent });
+    else if (owed) unsent.push(to);
   }
+  yield* afterResponse(
+    "a comment's hand-over",
+    Effect.forEach(
+      taking,
+      ({ to, agent }) =>
+        handedOver(seams, request, thread, comment, to, agent).pipe(
+          // Note that one hand-over not taken leaves the others, and the words, as they are.
+          Effect.catch((refusal) =>
+            Effect.logWarning(`a comment's hand-over was not taken: ${String(refusal)}`),
+          ),
+        ),
+      { discard: true },
+    ),
+  );
   return unsent;
+});
+
+/** The ask written in the thread and the thread handed to the agent, under a key drawn from the comment's own. */
+const handedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: PlanCommentsProcedureSeams,
+  request: Request,
+  thread: PlanCommentThread,
+  comment: MentioningComment,
+  to: PlanCommentAsked,
+  agent: CommentRecipient,
+) {
+  const { userId, taskId } = comment;
+  const ask = { action: PLAN_COMMENT_ACTION.ASK, clientKey: mentionKey(comment.clientKey, to), to };
+  const outcome = yield* hostedStoreOrUnavailable(
+    actOnPlanCommentThread({ actor: PLAN_COMMENT_ACTOR.MEMBER, userId }, taskId, thread.id, ask),
+  );
+  if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE || !("thread" in outcome.answer)) return;
+  yield* askHandedOver(seams, request, {
+    userId,
+    taskId,
+    thread: outcome.answer.thread,
+    clientKey: ask.clientKey,
+    words: comment.words,
+    to: agent,
+  });
 });
 
 /**

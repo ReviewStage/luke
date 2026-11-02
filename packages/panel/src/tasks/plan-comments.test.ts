@@ -1229,12 +1229,16 @@ test("a reply's field empties as it is sent, and a refused reply takes the words
   assert.notEqual(keys[3], keys[2]);
 });
 
-test("replies sent before the first answers each stand as Sending and go one at a time, in the order written, Send never busy", async () => {
+test("replies sent before the first answers each stand as Sending and go one at a time, in the order written, Send never busy, and one the thread already holds is drawn there alone", async () => {
   const answers = [Promise.withResolvers<boolean>(), Promise.withResolvers<boolean>()];
-  const { container, asked } = drawn(
+  const { container, asked, rethread } = drawn(
     "page",
     THREADS,
     () => answers[asked.length - 1]?.promise ?? true,
+    PLAN,
+    undefined,
+    undefined,
+    "u-dean",
   );
   act(() =>
     container
@@ -1263,6 +1267,31 @@ test("replies sent before the first answers each stand as Sending and go one at 
   await act(async () => answers[0]?.resolve(true));
   assert.deepEqual(sent(), ["Not for v1.", "Maybe v2."]);
   assert.deepEqual(sending(), ["Maybe v2."]);
+  // The read brings the reply before its send answers, as one that wakes an agent may.
+  rethread(
+    THREADS.map((thread) =>
+      thread.id === ID.OPEN
+        ? {
+            ...thread,
+            entries: [
+              ...thread.entries,
+              {
+                id: "d1e2f3a4-b5c6-4d7e-8f9a-0b1c2d3e4f5a",
+                kind: PLAN_COMMENT_ENTRY.COMMENT,
+                writer: {
+                  actor: PLAN_COMMENT_ACTOR.MEMBER,
+                  by: { userId: "u-dean", name: "Dean" },
+                },
+                words: "Maybe v2.",
+                at: 2,
+              },
+            ],
+          }
+        : thread,
+    ),
+  );
+  const shown = [...card.querySelectorAll(".comment-words")].map((words) => words.textContent);
+  assert.equal(shown.filter((words) => words === "Maybe v2.").length, 1);
   await act(async () => answers[1]?.resolve(true));
   assert.deepEqual(sending(), []);
 });

@@ -41,6 +41,7 @@ import {
 } from "@luke/service/agents/eve-host/eve-sessions";
 import { sessionSandboxesLayer } from "@luke/service/agents/session-sandboxes";
 import { recordingProductAnalytics, SERVER_EVENT } from "@luke/service/events/server-events";
+import { type AfterResponse, keptAfterResponse } from "@luke/service/http/after-response";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { hostedFetch } from "@luke/service/orpc/handler";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
@@ -141,10 +142,11 @@ const countedProperties = (userId: string, name: string) =>
     .filter((event) => event.userId === userId && event.name === name)
     .map((event) => event.properties);
 
-/** The services a request runs on: the test's own database and clock, the analytics, and no GitHub or model catalog. */
-const servicesOver = (clock: Clock.Clock) =>
+/** The services a request runs on: the test's own database and clock, the analytics, no GitHub or model catalog, and where a case keeps it, the work run past the answer. */
+const servicesOver = (clock: Clock.Clock, after: Layer.Layer<AfterResponse> | undefined) =>
   Effect.gen(function* () {
     return Layer.mergeAll(
+      after ?? Layer.empty,
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, clock),
@@ -157,19 +159,19 @@ const servicesOver = (clock: Clock.Clock) =>
   });
 
 /** The web runtime's services as a request runs on them: the test's own database and clock. */
-const webServicesOver = (clock: Clock.Clock) =>
+const webServicesOver = (clock: Clock.Clock, after?: Layer.Layer<AfterResponse>) =>
   Effect.gen(function* () {
     const provided = yield* Effect.context<Database>().pipe(
-      Effect.provide(yield* servicesOver(clock)),
+      Effect.provide(yield* servicesOver(clock, after)),
     );
     // SAFETY: the procedures yield the database, the clock, GitHub and the analytics alone, which is all a test provides of the web runtime's services.
     return provided as Context.Context<WebServices>;
   });
 
-/** The comments resource behind the hosted handler, answering one request on the clock handed in. */
-const commentsAnswer = (request: Request, clock: Clock.Clock) =>
+/** The comments resource behind the hosted handler, answering one request on the clock handed in, keeping the work past its answer where `after` keeps it. */
+const commentsAnswer = (request: Request, clock: Clock.Clock, after?: Layer.Layer<AfterResponse>) =>
   Effect.gen(function* () {
-    const services = yield* webServicesOver(clock);
+    const services = yield* webServicesOver(clock, after);
     const handle = hostedFetch({
       planComments: planCommentsProcedures({
         resolveUserId,
@@ -518,7 +520,7 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
   );
 
   it.effect(
-    "a comment on a page hands the thread to the agent that showed it, mentioned or not, naming the page and its version, and one whose agent was archived is said back as not sent",
+    "a comment on a page is answered first, then hands the thread to the agent that showed it, mentioned or not, naming the page and its version, and one whose agent was archived is said back as not sent",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, taskId } = yield* openSharedTask;
@@ -532,10 +534,10 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
           ),
         );
         const before = opened.length;
+        const kept = keptAfterResponse();
 
         const thread = threadIn(
-          yield* answer(
-            "comments",
+          yield* commentsAnswer(
             request(
               commentsPath(taskId),
               teammate,
@@ -547,8 +549,12 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
                 words: "Is this a week's worth?",
               },
             ),
+            yield* Clock.Clock,
+            kept.layer,
           ),
         );
+        assert.equal(opened.length, before, "the comment was answered before any agent was woken");
+        yield* kept.run;
 
         const [message] = opened.slice(before);
         assert.ok(message, "the page's writer was handed the thread");

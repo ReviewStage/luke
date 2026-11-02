@@ -1658,8 +1658,15 @@ function ThreadCard({
               <EventLine key={entry.id} entry={entry} agents={doors.agents} now={now} />
             ),
           )}
+          {/* Note that a reply the thread already holds, read before its send answered, is drawn there alone. */}
           {replies.lines
-            .filter((reply) => reply.threadId === thread.id)
+            .filter(
+              (reply) =>
+                reply.threadId === thread.id &&
+                !comments.some(
+                  (entry) => writtenByReader(entry, doors.me) && entry.words === reply.send.words,
+                ),
+            )
             .map((reply) => (
               <SendingComment key={reply.send.key} reply={reply} doors={doors} now={now} />
             ))}
