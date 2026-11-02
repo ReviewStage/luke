@@ -3,7 +3,7 @@ import { type RefObject, useId, useMemo, useRef, useState } from "react";
 import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
 import { useDrawnThroughExit } from "../use-held-through-exit.js";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
-import { NewTaskComposer, useNewTaskHolding } from "./new-task-composer.js";
+import { NewTaskComposer } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
@@ -24,10 +24,8 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * card, and focus goes back to whatever opened it. Escape, with no menu or
  * dictation standing in the card, and a press on the dimmed window put the
  * card away with nothing started, its words and files kept as New task's
- * draft for the next opening (`../composer-drafts.ts`); while the draft
- * holds words or files, the first of them only nudges the card, since a
- * stray press would otherwise drop the picks made in it, and the next puts
- * it away. A start under way holds the card. A refusal keeps the card with the reason under the
+ * draft for the next opening (`../composer-drafts.ts`). A start under way
+ * holds the card. A refusal keeps the card with the reason under the
  * composer, and Start can be pressed again; a task started closes the card
  * and opens as the host's open task.
  *
@@ -66,7 +64,6 @@ function NewTaskCard({
   const purpose = newTask.preset?.purpose ?? NEW_TASK_PURPOSE.TASK;
   // A relation's New task opens it related to a task, whose workspace the new task starts in.
   const workspaceId = newTask.preset?.relation?.task.workspaceId ?? newTask.workspaceId;
-  const holding = useNewTaskHolding(workspaceId, purpose);
   const dialog = useRef<DialogHandle>(null);
   const titleId = useId();
   const body = useRef<HTMLDivElement>(null);
@@ -94,7 +91,6 @@ function NewTaskCard({
       labelledBy={titleId}
       ref={dialog}
       busy={starting}
-      holding={holding}
       initialFocus={field}
       onDismiss={close}
       onExited={onExited}
@@ -104,7 +100,7 @@ function NewTaskCard({
           newTask={newTask}
           workspaceId={workspaceId}
           onStarting={setStarting}
-          // Note that the field's Escape goes through the dialog, so a draft holds it back as it holds the card's own.
+          // Note that the field's Escape goes through the dialog, so a start under way holds it back as it holds the card's own.
           onLeave={() => dialog.current?.dismiss()}
           focusedByOwner
           titleId={titleId}
