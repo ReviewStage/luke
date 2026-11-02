@@ -89,9 +89,9 @@ it.effect(
 
                 status: "pending",
               },
-              { provider: "gmail", connection: "gmail", status: "connected" },
+              { provider: "outlook", connection: "outlook", status: "connected" },
             ],
-            addable: ["notion", "gmail"],
+            addable: ["notion", "outlook"],
           }),
         },
         "POST /api/account/integrations/notion/connect": {
