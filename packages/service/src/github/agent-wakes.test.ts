@@ -468,7 +468,7 @@ test("a check suite or check run completed, whatever its conclusion, or a commit
   }
 });
 
-test("a person's review reaches an agent at work or not, Vespin's App's only an agent idle since before it was made, a failed check only an agent idle since before it failed, and an archived agent nothing", () => {
+test("a person's review reaches an agent at work or not, Vespin's App's only an agent idle since before it was made, a failed check only an agent idle since before it failed, and an archived or stopped agent nothing", () => {
   const review = (by: string): AgentWake => ({
     kind: AGENT_WAKE.REVIEW,
     repository: RELAY_FULL_NAME,
@@ -516,6 +516,13 @@ test("a person's review reaches an agent at work or not, Vespin's App's only an 
       now,
     ),
     false,
+  );
+  assert.deepEqual(
+    [review("octocat"), failed].map((wake) =>
+      woken(wake, { ...idleBefore, status: TURN_STATUS.CANCELLED }),
+    ),
+    [false, false],
+    "a Stop holds until a message starts the agent's next turn",
   );
 });
 

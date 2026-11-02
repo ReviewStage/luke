@@ -839,7 +839,8 @@ export const START_AGENT_TOOL = {
     "images. Start it on the task you work on, taskId left " +
     "out, for any part of that task's work, even one that runs apart from yours, so its " +
     "branch, pull request, and transcript stand under that task; name another task only for " +
-    "work unrelated to it, or where the developer asked for that, and for work that should " +
+    "work unrelated to it, or where the developer asked for that, or, as a pilot, to start " +
+    "the agent of one of your child tasks, which needs no asking, and for work that should " +
     `stand as a task of its own, make it with ${AGENT_TOOL.CREATE_TASK} first. Where you work ` +
     "on no task, taskId left out starts it in your own workspace with no task, in the " +
     "repository you work in or the one repository names, and it needs a prompt, since there is " +

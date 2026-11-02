@@ -194,6 +194,8 @@ export interface SettledAgentTurn {
   readonly status: TurnStatus;
   /** The failure word a failed turn was settled with; null for any other end. */
   readonly failure: string | null;
+  /** The coding agent whose Stop the turn ended on (`turns.cancel_requested_by`); null for the developer's Stop, the service's, or none. */
+  readonly stoppedBy: string | null;
   /** How long the turn ran: from its start, or its queueing for one that never started, to its settle. */
   readonly ranMs: number;
 }
@@ -609,6 +611,7 @@ const TurnRowSchema = Schema.Struct({
   status: TurnStatusSchema,
   queuedAt: Schema.Date,
   startedAt: Schema.NullOr(Schema.Date),
+  cancelRequestedBy: Schema.NullOr(Schema.String),
 });
 
 const MessageInsertSchema = Schema.Struct({
@@ -686,7 +689,12 @@ const findTurn = SqlSchema.findOneOption({
   execute: (request) =>
     Database.use((db) =>
       db
-        .select({ status: turns.status, queuedAt: turns.queuedAt, startedAt: turns.startedAt })
+        .select({
+          status: turns.status,
+          queuedAt: turns.queuedAt,
+          startedAt: turns.startedAt,
+          cancelRequestedBy: turns.cancelRequestedBy,
+        })
         .from(turns)
         .where(and(eq(turns.id, request.turnId), eq(turns.conversationId, request.conversationId))),
     ),
@@ -1360,13 +1368,14 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
   // A coding agent's own turn that settled is told the runtime's listener, once the write is done.
   if (context.kind === CONVERSATION_KIND.AGENT) {
-    const { startedAt, queuedAt } = standing.value;
+    const { startedAt, queuedAt, cancelRequestedBy } = standing.value;
     context.settled.push({
       userId: context.target.userId,
       conversationId: context.target.conversationId,
       turnId: event.turnId,
       status,
       failure: failure ?? null,
+      stoppedBy: cancelRequestedBy,
       ranMs: Math.max(0, settledAt.getTime() - (startedAt ?? queuedAt).getTime()),
     });
   }

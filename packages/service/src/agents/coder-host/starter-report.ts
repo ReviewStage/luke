@@ -16,6 +16,14 @@
  * sends nothing twice (`steerAgent`'s repeat); one the service could not
  * send is logged and not tried again, since the starter reads the agent
  * itself (`read_agent`). A starter archived or gone is told by no one.
+ *
+ * Neither is a turn another agent stopped (`turns.cancel_requested_by`),
+ * since that agent made the Stop and is the one to resume it: a pilot told
+ * by the developer to stop stops every agent of its tree itself, and a
+ * pilot it started, told nothing of the stop, would otherwise be woken by
+ * each of its own agents' reports and continue them, so the developer's
+ * Stop would not hold. A turn the developer stopped from its tab is still
+ * reported, as the starter would otherwise wait on it.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
@@ -83,6 +91,10 @@ function reportLine(
   return [head, words ?? NO_WORDS, agentMessageReplyLine(agent.id)].join("\n\n");
 }
 
+/** Whether the turn ended on another agent's Stop, which that agent knows of and resumes. */
+const stoppedByAgent = (turn: SettledAgentTurn): boolean =>
+  turn.status === TURN_STATUS.CANCELLED && turn.stoppedBy !== null;
+
 /**
  * The starter the agent reports to: the agent that started it, where it
  * stands unarchived; none otherwise. Note that a pilot a continue took over
@@ -98,7 +110,8 @@ const starterOf = (agent: Agent) =>
 
 /**
  * Hands the settled turn's final message to the agent's starter, as the
- * header says, or nothing where the agent has none to tell; a failure to
+ * header says, or nothing where the agent has none to tell or another agent
+ * stopped the turn; a failure to
  * send is logged by its kind alone, never answered, so nothing of the agent
  * or its member rides the log line.
  */
@@ -106,6 +119,7 @@ export function reportToStarter(
   eveFor: EveForAccount,
   turn: SettledAgentTurn,
 ): Effect.Effect<void, never, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
+  if (stoppedByAgent(turn)) return Effect.void;
   return Effect.gen(function* () {
     const agent = yield* readAgentOfConversation(turn.userId, turn.conversationId);
     if (Option.isNone(agent)) return;

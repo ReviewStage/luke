@@ -23,6 +23,7 @@ import {
   GITHUB_LINE_EVENT,
   type GitHubLineMetadata,
   MESSAGE_CHANNEL,
+  TURN_STATUS,
   type UnparsedWireValue,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -829,7 +830,10 @@ function inlineCommentsOf(
 
 /**
  * Whether an agent is told of a delivery, from its newest turn and the
- * login of our own App: never an archived agent; a review or a comment
+ * login of our own App: never an archived agent, nor one whose newest turn
+ * ended on a Stop, which holds until a message starts its next turn, since
+ * a wake would undo it, and an agent resumed re-reads its pull request
+ * first; a review or a comment
  * by anyone but our App always; and a failed check, or a review or a
  * comment by our App, only where the agent is not at work and its newest
  * turn ended before GitHub says it was made: the agent did not make that
@@ -845,7 +849,7 @@ export function agentIsWoken(
   lukeLogin: string | undefined,
   now: number,
 ): boolean {
-  if (agent.archivedAt !== null) return false;
+  if (agent.archivedAt !== null || turn?.status === TURN_STATUS.CANCELLED) return false;
   const atWork = AT_WORK.has(agentStatusOf(turn, { createdAt: agent.createdAt, now }));
   if (wake.kind === AGENT_WAKE.CHECKS_COMPLETED) return atWork;
   const byLuke = lukeLogin !== undefined && wake.by.toLowerCase() === lukeLogin.toLowerCase();

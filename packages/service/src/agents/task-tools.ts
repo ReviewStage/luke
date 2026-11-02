@@ -297,7 +297,8 @@ export const CREATE_TASK_TOOL = {
     "would: owned by them, on the repository named or the one you work in, with their brief " +
     "and a plan to start from where given, and no agent on it. Make one for a separate piece of work that should stand as a task of its own, " +
     "where the developer asked for it or you " +
-    `work on no task; then start an agent on it with ${AGENT_TOOL.START_AGENT}'s taskId. ` +
+    "work on no task, or, as a pilot, for each of your child tasks, which needs no asking; " +
+    `then start an agent on it with ${AGENT_TOOL.START_AGENT}'s taskId. ` +
     "Give it a status, a priority, and an assignee where the developer said them. Give it a " +
     "parentTaskId to make it a child task of another, to any depth: a child always works in " +
     "its parent's repository and on its machine, so leave repository out for one. Give it a " +

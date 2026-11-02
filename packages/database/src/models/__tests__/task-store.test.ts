@@ -1003,7 +1003,7 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
   );
 
   it.effect(
-    "stays while a standing agent's pull request is open or a draft, an archived agent's counting for nothing either way, and while a question waits, a notice never blocking",
+    "stays while a standing agent's pull request is open or a draft, an archived agent's counting for nothing either way, while a question waits, a notice never blocking, and while a child task is unsettled",
     () =>
       Effect.gen(function* () {
         const { dean, taskId, workspace } = yield* openSharedTask;
@@ -1033,6 +1033,15 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
             .set({ status: INBOX_STATUS.ANSWERED })
             .where(eq(inboxItem.id, question)),
         );
+
+        // A child task still to do holds its parent, as a pilot's own merged pull request beside it does not finish it.
+        const { id: child } = yield* createTask(dean, {
+          name: "Child",
+          organizationId: workspace,
+          parentTaskId: taskId,
+        });
+        assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
+        yield* updateTask(dean, child, { status: TASK_STATUS.CANCELED });
         assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), true);
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.DONE);
       }),

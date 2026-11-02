@@ -1958,6 +1958,20 @@ const findStandingPullRequestStates = SqlSchema.findAll({
     ),
 });
 
+/** One child task of the task not yet done or canceled, which a pilot task's own pilot still sees through. */
+const findOpenChild = SqlSchema.findOneOption({
+  Request: Schema.Struct({ taskId: Schema.String }),
+  Result: TaskIdRowSchema,
+  execute: ({ taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: task.id })
+        .from(task)
+        .where(and(eq(task.parentTaskId, taskId), notInArray(task.status, [...SETTLED])))
+        .limit(1),
+    ),
+});
+
 /**
  * One inbox item of the task holding a question open for the developer:
  * open, and holding an ask open, which a notice, a post that asked nothing
@@ -2005,8 +2019,11 @@ const finishTask = SqlSchema.findOneOption({
  * Moves a task whose work is finished to done, and answers whether it moved.
  * The work is finished where every standing agent of the task, the archived
  * left out, stands idle by the caller's guard, none of them has a pull
- * request still open or a draft, at least one of them has a merged one, and
- * no inbox item of the task holds a question open for the developer. A task
+ * request still open or a draft, at least one of them has a merged one, no
+ * inbox item of the task holds a question open for the developer, and no
+ * child task of it stands unsettled: a pilot that did part of its task
+ * itself and split the rest has its own pull request merged long before its
+ * children are, and marks its task done itself once they are. A task
  * already done or canceled, one the account does not reach, and one whose
  * work is not finished stand as they were, so asking at every moment that
  * may have finished it is safe: a turn's end, a pull request first seen
@@ -2036,6 +2053,7 @@ export function finishTaskWork<R = never>(
           return false;
         if (!pullRequests.some(({ state }) => state === PULL_REQUEST_STATE.MERGED)) return false;
         if (Option.isSome(yield* findOpenQuestion({ taskId }))) return false;
+        if (Option.isSome(yield* findOpenChild({ taskId }))) return false;
         const agents = yield* lockStandingAgents({ taskId });
         if (!(yield* idle(agents))) return false;
         const now = yield* DateTime.nowAsDate;
