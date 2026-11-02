@@ -74,9 +74,12 @@ import { Cause, Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   recordServerEvent,
+  SERVER_AGENT_START_FAILURE,
   SERVER_AGENT_START_KIND,
   SERVER_AGENT_STARTER,
   SERVER_EVENT,
+  type ServerAgentStarter,
+  type ServerAgentStartFailure,
 } from "../../events/server-events.js";
 import { GitHubApp } from "../../github/github-app.js";
 import { githubReachOrRefusal } from "../../github/github-refusal.js";
@@ -768,13 +771,45 @@ const archivedPilot = (userId: string, pilot: Agent, by: Agent | undefined) => {
  * retry under the same key starts it afresh and no agent stands to read as
  * never started: why said once as an error and reported
  * (`agentFailureSaid`), in the caller's scope, which names the agent; a
- * discard that fails is logged.
+ * discard that fails is logged. The failed Start is counted
+ * (`startFailed`) once the agent is discarded.
  */
-const discardedAt = (userId: string, agent: Agent, said: string, reason: string) =>
+const discardedAt = (
+  userId: string,
+  agent: Agent,
+  said: string,
+  reason: string,
+  failed: StartFailed,
+) =>
   Effect.andThen(
     agentFailureSaid(said, reason, true),
-    Effect.ignore(hostedStoreOrUnavailable(discardAgent(userId, agent.id))),
+    Effect.andThen(
+      Effect.ignore(hostedStoreOrUnavailable(discardAgent(userId, agent.id))),
+      startFailed(userId, agent, failed),
+    ),
   );
+
+/** A Start that failed to open its agent's session, counted under the member who made it, in the count's words. */
+const startFailed = (userId: string, agent: Agent, { failure, startedBy }: StartFailed) =>
+  recordServerEvent(SERVER_EVENT.AGENT_START_FAIL, userId, {
+    failure,
+    started_by: startedBy,
+    agent_kind: agent.kind,
+  });
+
+/** Why a Start failed, and who started it, as the count words them. */
+interface StartFailed {
+  readonly failure: ServerAgentStartFailure;
+  readonly startedBy: ServerAgentStarter;
+}
+
+/** Who a Start is counted as made by: an agent's `start_agent` names its starter, an automation's run names its run, and a member's Start neither. */
+const starterOf = (ask: Pick<StartAsk, "startedBy" | "automationOrigin">) =>
+  ask.startedBy !== undefined
+    ? SERVER_AGENT_STARTER.AGENT
+    : automationRun(ask) !== undefined
+      ? SERVER_AGENT_STARTER.AUTOMATION
+      : SERVER_AGENT_STARTER.MEMBER;
 
 /**
  * The pilot a continue keeps as its starter: the one that started its
@@ -1208,6 +1243,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
             agent,
             `eve could not be reached to start a coding agent: ${refusal.error}`,
             refusal.error,
+            { failure: SERVER_AGENT_START_FAILURE.UNREACHABLE, startedBy: starterOf(ask) },
           ),
         ),
       );
@@ -1243,6 +1279,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
             agent,
             `a Start's first line was not written: ${refusal.error}`,
             refusal.error,
+            { failure: SERVER_AGENT_START_FAILURE.FIRST_LINE, startedBy: starterOf(ask) },
           ),
         ),
       );
@@ -1282,6 +1319,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
                 agent,
                 `a Start was cut short before its agent's session opened: ${causeKind(cause)}`,
                 causeKind(cause),
+                { failure: SERVER_AGENT_START_FAILURE.CUT_SHORT, startedBy: starterOf(ask) },
               ),
       ),
       Effect.annotateLogs(agentLogIds(agent)),
@@ -1301,6 +1339,13 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       yield* hostedStoreOrUnavailable(discardAgent(userId, agent.id)).pipe(
         Effect.annotateLogs(agentLogIds(agent)),
       );
+      yield* startFailed(userId, agent, {
+        failure:
+          opened === undefined
+            ? SERVER_AGENT_START_FAILURE.UNREACHABLE
+            : SERVER_AGENT_START_FAILURE.REFUSED,
+        startedBy: starterOf(ask),
+      });
       return yield* Effect.fail(refusal);
     }
     yield* Effect.logInfo("a Start opened its agent's session").pipe(
@@ -1348,12 +1393,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
           : SERVER_AGENT_START_KIND.FORK,
     is_from_automation: automationRun(ask) !== undefined,
     // An agent's `start_agent` names its starter, an automation's run names its run, and a member's Start neither.
-    started_by:
-      ask.startedBy !== undefined
-        ? SERVER_AGENT_STARTER.AGENT
-        : automationRun(ask) !== undefined
-          ? SERVER_AGENT_STARTER.AUTOMATION
-          : SERVER_AGENT_STARTER.MEMBER,
+    started_by: starterOf(ask),
     has_task: ask.taskId !== null,
     agent_kind: agent.kind,
   });

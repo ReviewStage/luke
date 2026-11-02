@@ -6,6 +6,8 @@ import type { ConversationRuntime } from "@luke/database/storage-vocabulary";
 import type { AgentKind, AgentMachineKind } from "@luke/features/agent-wire";
 import type { AutomationFiringKind, AutomationTriggerKind } from "@luke/features/automation-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
+import type { ProviderKeyProvider } from "@luke/features/provider-key-wire";
+import type { TASK_STATUS } from "@luke/features/task-wire";
 import { TURN_FAILURE } from "@luke/features/turn-run";
 import type { INVITATION_ROLE } from "@luke/features/workspace-invitation-wire";
 import { TURN_STATUS } from "@luke/wire";
@@ -68,6 +70,14 @@ export const SERVER_EVENT = {
   AUTOMATION_RUN_START: "automation:run_start",
   GITHUB_APP_INSTALL: "github:app_install",
   HOST_INSTALL: "host:install",
+  TASK_FINISH: "task:finish",
+  AGENT_START_FAIL: "agent:start_fail",
+  GITHUB_ACCOUNT_LINK: "github:account_link",
+  GITHUB_TOKEN_SAVE: "github:token_save",
+  REPOSITORY_PIN: "repository:pin",
+  PROVIDER_KEY_CREATE: "provider_key:create",
+  PULL_REQUEST_ACTION: "pull_request:action",
+  AGENT_SETTINGS_CHANGE: "agent:settings_change",
 } as const;
 
 type ServerEventName = (typeof SERVER_EVENT)[keyof typeof SERVER_EVENT];
@@ -184,7 +194,47 @@ export const SERVER_HOST_KIND = {
   THIS_MAC: "this_mac",
 } as const;
 
+/** Who finished a task: a member, by moving it to Done or Canceled, or the service, on the merge of its work. */
+export const SERVER_TASK_FINISHER = {
+  MEMBER: "member",
+  MERGE: "merge",
+} as const;
+
+/**
+ * Why a coding agent's Start failed after its agent was made: eve or the
+ * runtime could not be reached, the agent's first line could not be written,
+ * the runtime refused the open, or the request was cut short before the
+ * session opened.
+ */
+export const SERVER_AGENT_START_FAILURE = {
+  UNREACHABLE: "unreachable",
+  FIRST_LINE: "first_line",
+  REFUSED: "refused",
+  CUT_SHORT: "cut_short",
+} as const;
+
+/** The pull request changes a member makes through the app that are counted; every other change is left out. */
+export const SERVER_PULL_REQUEST_ACTION = {
+  MERGE: "merge",
+  REVIEW: "review",
+  AUTO_MERGE: "auto_merge",
+  CLOSE: "close",
+} as const;
+
+/** What of an agent a member changed: the model it runs on, or its effort. */
+export const SERVER_AGENT_SETTING = {
+  MODEL: "model",
+  EFFORT: "effort",
+} as const;
+
 type Values<T> = T[keyof T];
+
+/** Where a task came to rest: done or canceled, the two a finish counts. */
+export type ServerTaskFinishStatus = typeof TASK_STATUS.DONE | typeof TASK_STATUS.CANCELED;
+
+export type ServerAgentStartFailure = Values<typeof SERVER_AGENT_START_FAILURE>;
+
+export type ServerAgentStarter = Values<typeof SERVER_AGENT_STARTER>;
 
 /**
  * Exactly what each event carries. A model and an effort are catalog ids the
@@ -264,6 +314,28 @@ export interface ServerEventProperties {
   [SERVER_EVENT.AUTOMATION_RUN_START]: { trigger_kind: AutomationFiringKind };
   [SERVER_EVENT.GITHUB_APP_INSTALL]: Record<string, never>;
   [SERVER_EVENT.HOST_INSTALL]: { kind: Values<typeof SERVER_HOST_KIND> };
+  /** A task moved to Done or Canceled, by a member's own move or by the service on its work's merge. */
+  [SERVER_EVENT.TASK_FINISH]: {
+    status: ServerTaskFinishStatus;
+    by: Values<typeof SERVER_TASK_FINISHER>;
+  };
+  /** A Start whose agent was made and then discarded because its session never opened. */
+  [SERVER_EVENT.AGENT_START_FAIL]: {
+    failure: ServerAgentStartFailure;
+    started_by: Values<typeof SERVER_AGENT_STARTER>;
+    agent_kind: AgentKind;
+  };
+  /** A GitHub account linked to a signed-in account, a sign-up through GitHub left out. */
+  [SERVER_EVENT.GITHUB_ACCOUNT_LINK]: Record<string, never>;
+  [SERVER_EVENT.GITHUB_TOKEN_SAVE]: Record<string, never>;
+  /** A repository pinned or unpinned in the sidebar; the repository is never named. */
+  [SERVER_EVENT.REPOSITORY_PIN]: { pinned: boolean };
+  /** A provider's key or sign-in saved, by the provider's catalog id alone. */
+  [SERVER_EVENT.PROVIDER_KEY_CREATE]: { provider: ProviderKeyProvider };
+  /** A member's own change to a pull request, an agent's through its own tools left out. */
+  [SERVER_EVENT.PULL_REQUEST_ACTION]: { action: Values<typeof SERVER_PULL_REQUEST_ACTION> };
+  /** One counted for each of the model and the effort that a member's change made differ. */
+  [SERVER_EVENT.AGENT_SETTINGS_CHANGE]: { changed: Values<typeof SERVER_AGENT_SETTING> };
 }
 
 /** One event as the service records it. */

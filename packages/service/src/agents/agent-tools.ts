@@ -2198,7 +2198,7 @@ export function runUpdateTask(
         // A move to Done archives the task's idle agents with it, as this agent for its member.
         const updated =
           Object.keys(asWritten).length === 0
-            ? Option.some({ task: read.value.task, archived: [] })
+            ? Option.some({ task: read.value.task, archived: [], statusMoved: false })
             : yield* updateTaskCommitted(userId, taskId, asWritten, undefined, {
                 archivedBy: archiverOf(caller, undefined),
                 idle: idleStandingAgents,

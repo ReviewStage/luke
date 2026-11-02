@@ -2814,7 +2814,9 @@ test("a message to an agent whose session eve no longer runs opens a fresh sessi
   // Counted as failed, with why.
   assert.deepEqual(
     countedWith(agents.teammates.userId, SERVER_EVENT.TURN_END).map((properties) =>
-      "failure" in properties ? [properties.outcome, properties.failure] : undefined,
+      "outcome" in properties && "failure" in properties
+        ? [properties.outcome, properties.failure]
+        : undefined,
     ),
     [[SERVER_TURN_OUTCOME.FAILED, TURN_FAILURE.SESSION_ENDED]],
   );
