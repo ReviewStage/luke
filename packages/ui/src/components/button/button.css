@@ -388,6 +388,18 @@
       luke-button-done-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }
 
+  /* Its hold done, the check fades out as the words fade back over it, on
+     the face's own beat, so the one hands over to the other. */
+  .luke-button-done[data-leaving="true"] {
+    animation: luke-button-done-leave var(--luke-duration-quick) var(--luke-motion-exit) forwards;
+  }
+
+  @keyframes luke-button-done-leave {
+    to {
+      opacity: 0;
+    }
+  }
+
   /* Note that the hold moves nothing; it is a beat the check is waited on for. */
   @keyframes luke-button-done-hold {
     to {

@@ -1848,7 +1848,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
    down. Opening, the card's top edge rises from where it stood to where the
    open card puts it, and its line and the list under it rise with that edge
    as one sheet, the list fading in as it comes up out of the card's foot;
-   closing, the sheet sinks back the same way as the list fades. The distance
+   closing, the sheet sinks back the same way, on the same beat. The distance
    is the list's height, measured as the press lands (`--disclosure-rise`,
    `use-disclosure.ts`). Note that the list travels with the line rather than
    standing still under it, because the card's ground is translucent and a
@@ -1862,11 +1862,16 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
 }
 
 [data-todos-dock][data-disclosure="closing"] {
-  animation: todos-dock-roll-up var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  animation: todos-dock-roll-up var(--luke-duration-pane) var(--luke-motion-pane) forwards;
 }
 
 [data-todos-dock][data-disclosure="closing"] > summary {
-  animation: todos-dock-sink var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  animation: todos-dock-sink var(--luke-duration-pane) var(--luke-motion-pane) forwards;
+}
+
+/* Note that the list's fade is what the fold waits on before it lets the list go, so it runs as long as the sheet sinks, or the sink would be cut off. */
+[data-todos-dock][data-disclosure="closing"] > .luke-disclosure-body {
+  animation: luke-disclosure-leave var(--luke-duration-pane) var(--luke-motion-pane) forwards;
 }
 
 /* Note that each clip names both ends, because a clip cannot be interpolated

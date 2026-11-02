@@ -602,6 +602,7 @@
      row is reached for or open, its room kept so nothing moves as it shows. */
   .luke-list-row-chevron {
     opacity: 0;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-list-row:is(:has(:focus-visible), [data-current="true"]) .luke-list-row-chevron {

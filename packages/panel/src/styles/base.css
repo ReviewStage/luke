@@ -371,6 +371,9 @@ body:has(.app-stage[data-capture="true"]) {
   --luke-late-delay: 0s;
   --luke-hint-delay: 0s;
   --luke-settle-delay: 0s;
+  /* A confirmation stands for a beat and goes (a Saved, a landed check), so a
+     capture holds none rather than catching one wherever the shutter fell. */
+  --luke-confirm-delay: 0s;
   /* Luke blinks and sways on a loop with no end to wait for, so a capture would
      otherwise land wherever in it the shutter happened to fall. Held on its
      first frame, he is the same face in every PNG. The working rows' spinners

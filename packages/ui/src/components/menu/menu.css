@@ -78,11 +78,13 @@
 
   /* A phone's sheet of a menu: the menu's ground and edge, rounded only at
      its top, standing on the window's foot clear of the home bar, risen in
-     on the pane's motion and sunk out on the exit's as its dialog's card
-     fades; the reduced-motion tokens hold both still. Its rows are the
+     and sunk out on the pane's motion, its dialog's card and scrim fading
+     on that same beat; the reduced-motion tokens hold both still. Its rows are the
      menu's at a finger's height, a searchable menu's list capped by the
      sheet's own height alone, and a finger dragging its head carries it
-     down (`useSheetSwipe`), springing back where it is let go short. */
+     down (`useSheetSwipe`), settling back on the pane's motion where it is
+     let go short, since a spring's overshoot would lift it off the window's
+     foot. */
   .luke-menu-sheet {
     --luke-menu-row-height: var(--luke-touch-target);
     --luke-combobox-list-max: none;
@@ -99,15 +101,15 @@
     box-shadow: var(--luke-menu-shadow);
     color: var(--luke-color-text);
     animation: luke-menu-sheet-rise var(--luke-duration-pane) var(--luke-motion-pane);
-    transition: translate var(--luke-duration-fast) var(--luke-motion-exit);
+    transition: translate var(--luke-duration-pane) var(--luke-motion-pane);
   }
 
   .luke-menu-sheet[data-dragging] {
     transition: none;
   }
 
-  [data-ending-style] .luke-menu-sheet {
-    animation: luke-menu-sheet-sink var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  .luke-menu-sheet[data-leaving="true"] {
+    animation: luke-menu-sheet-sink var(--luke-duration-pane) var(--luke-motion-pane) forwards;
   }
 
   /* The head stays put over the rows that scroll under it, and is what a

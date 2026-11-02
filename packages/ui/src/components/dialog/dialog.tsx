@@ -176,7 +176,7 @@ const CARD_LOOK = [
   "room-narrow:data-[size=composer]:-ml-dialog-reach room-narrow:data-[size=composer]:-mr-dialog-reach room-narrow:data-[size=composer]:w-dialog-composer-reach room-narrow:data-[size=composer]:pt-card-inset-snug room-narrow:data-[size=composer]:pr-card-inset-snug room-narrow:data-[size=composer]:pb-card-inset-snug room-narrow:data-[size=composer]:pl-card-inset-snug",
   "data-[size=media]:w-auto data-[size=media]:min-w-dialog-media-min data-[size=media]:max-w-dialog-media-max data-[size=media]:gap-0 data-[size=media]:overflow-hidden data-[size=media]:p-0",
   "data-[size=window]:w-auto data-[size=window]:max-h-none data-[size=window]:max-w-none data-[size=window]:place-self-stretch data-[size=window]:min-h-0 data-[size=window]:min-w-0 data-[size=window]:gap-0 data-[size=window]:rounded-none data-[size=window]:border-0 data-[size=window]:bg-transparent data-[size=window]:p-0 data-[size=window]:shadow-none data-[size=window]:mx-luke-16 data-[size=window]:mb-luke-16 data-[size=window]:mt-dialog-window-top @min-[1024px]/luke-dialog-room:data-[size=window]:mx-luke-48 @min-[1024px]/luke-dialog-room:data-[size=window]:mb-luke-24",
-  "data-[size=sheet]:w-dialog-wide data-[size=sheet]:gap-0 data-[size=sheet]:rounded-none data-[size=sheet]:border-0 data-[size=sheet]:bg-transparent data-[size=sheet]:p-0 data-[size=sheet]:shadow-none data-[size=sheet]:animate-none data-[size=sheet]:data-ending-style:animate-leave",
+  "data-[size=sheet]:w-dialog-wide data-[size=sheet]:gap-0 data-[size=sheet]:rounded-none data-[size=sheet]:border-0 data-[size=sheet]:bg-transparent data-[size=sheet]:p-0 data-[size=sheet]:shadow-none data-[size=sheet]:animate-none data-[size=sheet]:data-ending-style:animate-sheet-leave",
   "data-[expanding=true]:animate-none",
   "data-[dropping=true]:shadow-dialog-drop",
   "data-[nudge=true]:animate-dialog-nudge",
@@ -241,8 +241,9 @@ export function DialogCard({
 /** The dimmed window under a bare dialog, which keeps its own margins (`CARD_LOOK`). */
 const WINDOW_ROOM = "luke-dialog-backdrop p-0";
 
-/** The dimmed window under a sheet, which stands on its foot, centred across it, with no margin. */
-const SHEET_ROOM = "luke-dialog-backdrop items-end justify-items-center p-0";
+/** The dimmed window under a sheet, which stands on its foot, centred across it, with no margin, and dims and clears on the sheet's own beat. */
+const SHEET_ROOM =
+  "luke-dialog-backdrop items-end justify-items-center p-0 animate-sheet-scrim data-ending-style:animate-sheet-leave";
 
 /** The dimmed window's room by the card's size. */
 function roomOf(size: DialogSize): string {

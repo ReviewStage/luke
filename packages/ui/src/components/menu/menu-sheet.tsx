@@ -136,7 +136,7 @@ export function MenuSheetFrame({
   opener?: HTMLElement | undefined;
   /** What takes focus as it opens: a row of the menu's, or its list. */
   initialFocus: React.RefObject<HTMLElement | null>;
-  /** Hands the dialog's card to the hold its owner draws the sheet through its exit with. */
+  /** Hands the sheet to the hold its owner draws it through its exit with. */
   hold?: ((card: HTMLElement | null) => void) | undefined;
   /** What the head names: what the menu acts on, the menu itself, or the submenu standing in its place. */
   name: string;
@@ -156,11 +156,11 @@ export function MenuSheetFrame({
 }): React.JSX.Element {
   const nameId = useId();
   const { sheet, head } = useSheetSwipe(onAway);
-  // Note that the dialog's card is what the menu's exit is waited on, since its fade is what plays as the sheet goes.
+  // Note that the sheet's own sink is what the menu's exit is waited on, since it is marked in the draw that closes it, where the dialog marks its card's fade a draw later, after the hold has already looked.
   const framed = useCallback(
     (node: HTMLDivElement | null) => {
       sheet.current = node;
-      hold?.(node?.closest<HTMLElement>(".luke-dialog") ?? null);
+      hold?.(node);
     },
     [sheet, hold],
   );
@@ -174,7 +174,12 @@ export function MenuSheetFrame({
       onDismiss={onAway}
       onKeyDown={onKeyDown}
     >
-      <div ref={framed} id={id} className="luke-menu-sheet">
+      <div
+        ref={framed}
+        id={id}
+        className="luke-menu-sheet"
+        data-leaving={open ? undefined : "true"}
+      >
         <div className="luke-menu-sheet-head" {...head}>
           <span className="luke-menu-sheet-grip" aria-hidden="true" />
           <div className="luke-menu-sheet-title">
