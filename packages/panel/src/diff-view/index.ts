@@ -1,5 +1,4 @@
 import { MOTION_DELAY_MS } from "@luke/brand";
-import { PRODUCT_NAME } from "@luke/features/product-name";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import { onDrawnThemeChange } from "@luke/ui/appearance";
 import { LANDED, LANDED_ANIMATION, LANDED_ATTRIBUTE, land } from "@luke/ui/landed";
@@ -252,6 +251,17 @@ const LOOK_CSS = `
     cursor: auto;
     text-decoration: none;
   }
+  /* A gap that cannot be opened keeps its arrows' cell, empty, so its words
+     stand where an open gap's do, over the code's column, rather than
+     jumping left into the numbers'. Only the band seen is laid out so, in
+     the numbers' column; Pierre's copy among the code's rows stays hidden. */
+  [data-gutter] [data-separator="line-info-basic"]:not([data-expand-index]) [data-separator-wrapper] {
+    display: grid;
+    grid-template-columns: 100% auto;
+  }
+  [data-gutter] [data-separator="line-info-basic"]:not([data-expand-index]) [data-separator-content] {
+    grid-column: 2;
+  }
   [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.MORE}"]:hover {
     background-color: var(--luke-color-fill-pressed);
   }
@@ -276,6 +286,14 @@ const LOOK_CSS = `
   }
   :host-context(:root:not([data-keyboard="true"])) [${GAP_CONTROL_ATTRIBUTE}]:focus-visible {
     outline: none;
+  }
+  /* A note stands on the code's own ground, its numbers' column too, as
+     the lines around it do, rather than Pierre's context ground, which
+     sets a comment's row apart; a note under a changed line continues that
+     line's band instead (below). */
+  [data-line-annotation],
+  [data-gutter-buffer="annotation"] {
+    --diffs-annotation-bg: var(--diffs-bg);
   }
   /* Lines lit, a comment's or a thread's, light their own rows alone: a
      note under them, the comment being written or a thread, keeps its own
@@ -399,14 +417,6 @@ const FILL_CSS = `
   }
   pre {
     min-height: 100%;
-  }
-  /* A note under one patch's lines, ${PRODUCT_NAME}'s under a Code card's snippet,
-     stands on the code's own ground, its numbers' column too, rather than
-     Pierre's context ground, which sets a comment's row apart in a diff:
-     a snippet's lines are a file's, so none of them stands apart. */
-  [data-line-annotation],
-  [data-gutter-buffer="annotation"] {
-    --diffs-annotation-bg: var(--diffs-bg);
   }
 }
 `;
