@@ -29,10 +29,11 @@ import { createTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
 import { turns } from "@luke/database/schemas/storage";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
 import {
   AGENT_BOUNDS,
+  AGENT_PAYER,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
   type PullRequestState,
@@ -644,6 +645,8 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           planSnapshot: null,
           prompt: "Keep the flaky tests quarantined.",
           repository: `${RELAY.owner}/${RELAY.name}`,
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: AGENT_PAYER.API_KEY,
         });
         const theirs = Option.getOrThrow(made).agent;
         yield* claimRuntimeSession(
@@ -716,6 +719,8 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           planSnapshot: null,
           prompt: "Watch the nightly build.",
           repository: `${RELAY.owner}/${RELAY.name}`,
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: AGENT_PAYER.API_KEY,
         });
         const other = Option.getOrThrow(made).agent.id;
         yield* toSameAgent(automation, other);
