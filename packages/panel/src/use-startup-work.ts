@@ -1,10 +1,10 @@
-import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import type { AppState } from "@luke/host/app-state";
 import { sessionReplayBootstrap } from "@luke/host/app-state";
 import { useCallback, useEffect, useRef } from "react";
 import { appPlatform } from "./app-platform.js";
 import { usePrefetchEditorBundle } from "./bundle-loader.js";
 import { prefetchMarkdownHtmlParser } from "./markdown-html-parser.js";
+import type { SessionReplayWord } from "./session-replay.js";
 import { IDLE_TIMEOUT_MS, useWhenIdle } from "./use-when-idle.js";
 
 /**
@@ -23,25 +23,33 @@ import { IDLE_TIMEOUT_MS, useWhenIdle } from "./use-when-idle.js";
  * one it carries. Every word after that reaches the platform at once, so a
  * halt or a sign-out is never held back, but only when the word differs: a
  * delivery of the document that moved nothing recording reads is not a word.
+ * The workspace the window lists rides on the word too, so a recording is
+ * filed under the workspace it was made in from the moment it is chosen.
  */
 export function useSessionReplay(
   run: AppState["run"] | undefined,
   sessionReplay: AppState["sessionReplay"] | undefined,
+  workspaceId: string | undefined,
 ): void {
   /** The word the platform last heard, so a delivery that moved nothing is not another. */
-  const applied = useRef<SessionReplayBootstrap | undefined>(undefined);
+  const applied = useRef<SessionReplayWord | undefined>(undefined);
   const started = useRef(false);
-  const latest = useRef<SessionReplayBootstrap | undefined>(undefined);
-  const tell = useCallback((word: SessionReplayBootstrap | undefined) => {
+  const latest = useRef<SessionReplayWord | undefined>(undefined);
+  const tell = useCallback((word: SessionReplayWord | undefined) => {
     if (!word || sameWord(applied.current, word)) return;
     applied.current = word;
     appPlatform().applySessionReplay(word);
   }, []);
   useEffect(() => {
     latest.current =
-      run && sessionReplay ? sessionReplayBootstrap({ run, sessionReplay }) : undefined;
+      run && sessionReplay
+        ? {
+            ...sessionReplayBootstrap({ run, sessionReplay }),
+            ...(workspaceId ? { workspaceId } : undefined),
+          }
+        : undefined;
     if (started.current) tell(latest.current);
-  }, [run, sessionReplay, tell]);
+  }, [run, sessionReplay, workspaceId, tell]);
   useWhenIdle(() => {
     started.current = true;
     tell(latest.current);
@@ -49,10 +57,7 @@ export function useSessionReplay(
 }
 
 /** Whether two words on recording say the same thing. */
-function sameWord(
-  before: SessionReplayBootstrap | undefined,
-  after: SessionReplayBootstrap,
-): boolean {
+function sameWord(before: SessionReplayWord | undefined, after: SessionReplayWord): boolean {
   return (
     before !== undefined &&
     before.permitted === after.permitted &&
@@ -60,7 +65,8 @@ function sameWord(
     before.packaged === after.packaged &&
     before.accountId === after.accountId &&
     before.name === after.name &&
-    before.email === after.email
+    before.email === after.email &&
+    before.workspaceId === after.workspaceId
   );
 }
 

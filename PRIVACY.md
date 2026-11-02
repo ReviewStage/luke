@@ -1074,8 +1074,14 @@ or say and nothing from a session can appear in one: no titles, branches, file
 paths, prompts, or error text. Each count also carries Vespin's version, whether
 it is a released build or a development one, whether it came from Vespin for Mac
 or Vespin in a browser tab (`platform`), and which deployment of our
-service recorded it. Settings › Account › "Share usage data" turns these
-counts off (see "Your choices").
+service recorded it. Our service also files them under a workspace, by its id
+alone, from its own record of the workspaces you are a member of, never from
+anything Vespin sends: the one workspace you share with others, or your own
+first workspace if you share none; if you are a member of two or more shared
+workspaces, they carry none. So if you are a member of a team's workspace,
+what you count while working in your own first workspace is filed under the
+team's. Settings › Account › "Share usage data" turns these counts off (see
+"Your choices").
 
 Our service also counts, under the same account, the work done through it:
 a task or a workspace made (with where it was started from), a task finished or
@@ -1172,7 +1178,10 @@ account, which carries your name and email address as you are shown in
 Vespin, so that we can find the recordings of a person who reports a problem;
 deleting your account erases them. Each recording carries Vespin's version,
 whether it is a released build or a development one, and whether it came
-from the Mac app or the web app; only a released build records at all.
+from the Mac app or the web app; only a released build records at all. It is
+also filed under the workspace Vespin's sidebar was showing as it was made, by
+the workspace's id alone, and under the next one when you switch; signing out
+lets it go with your account.
 Each also carries what PostHog's library reports of your device by default:
 its operating system and that system's version, the browser, your language
 and time zone, and the size of your screen. The Mac app sends its recordings
@@ -1380,8 +1389,8 @@ only when you press Send.
   under its own retention policy.
 - PostHog, for usage data and screen recordings from the Mac app, screen
   recordings from Vespin in a browser, and the counts our service makes of the
-  work done through it, grouped by workspace, with each workspace's name and
-  creation date. The counts go through our own service; the
+  work done through it, all grouped by workspace, with each workspace's name
+  and creation date. The counts go through our own service; the
   recordings go from the Mac app to PostHog directly, and from your browser
   through vespin.dev, which passes them on to PostHog.
 - Sentry, for the Mac app's and Vespin in a browser's crash and performance
