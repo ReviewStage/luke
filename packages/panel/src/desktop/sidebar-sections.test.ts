@@ -1455,7 +1455,7 @@ test("under a finger, a section's menu moves it up among the sections", async ()
   );
 });
 
-test("under a finger, a task held in a section moves down within it by its menu", async () => {
+test("under a finger, a task in a section draws no ⋯ and no Pin or Mark done, and held moves down within it by its menu", async () => {
   underAFinger();
   const asked = noneAsked();
   const both: TaskSections = {
@@ -1465,8 +1465,15 @@ test("under a finger, a task held in a section moves down within it by its menu"
   const sidebar = await mountDraggable([INVITES, RETRIES], both, asked);
   const first = sectionTaskIds(both, LAUNCH)[0] === INVITES.id ? INVITES : RETRIES;
   const second = first === INVITES ? RETRIES : INVITES;
+  const press = rowPress(sidebar, first.name);
+  const row = press.parentElement ?? assert.fail("the press stands in its row");
+  assert.ok(row.querySelector('[aria-label="Task actions"]') === null, "the row draws no ⋯");
+  assert.ok(
+    row.querySelector('[role="group"] button') === null,
+    "the row draws no Pin or Mark done",
+  );
 
-  longPress(rowPress(sidebar, first.name));
+  longPress(press);
   act(() => item("Move down").click());
 
   const after = asked.writes.reduce(

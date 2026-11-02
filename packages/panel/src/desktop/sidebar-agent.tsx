@@ -18,6 +18,7 @@ import { agentRow, taskRowName } from "@luke/ui/task-list-model";
 import { useCallback, useMemo, useRef } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { DraftMark } from "../draft-mark.js";
@@ -51,7 +52,8 @@ import { SIDEBAR_ROW_REPOSITORY, SIDEBAR_ROW_TIME } from "./task-card.js";
  * press opens the agent's own page, and it reads in semibold while it ended
  * unseen, as its tab does, or while it is marked unread by hand. Its actions are the agent's one menu
  * (`agent-actions.tsx`'s `agentMenuGroups`), opened alike by
- * the row's ⋯, a right-click, and the menu key: Copy link; Rename, which turns
+ * the row's ⋯, a right-click, a long press, and the menu key, a finger's
+ * row drawing neither its ⋯ nor Pin and Archive, as a task's: Copy link; Rename, which turns
  * the row into its name's field until the edit ends, the new name drawn at
  * once and a refused one saying so under the field it reopens, as a task's
  * row does, and Mark as unread
@@ -150,6 +152,7 @@ export function SidebarAgent({
     item.current = press?.parentElement ?? null;
   }, []);
   const place = useRowPlace();
+  const coarse = useCoarsePointer();
   const { act } = useAct();
   const reads = useAgentReadMarks();
   const isUnread = unread || reads.markedUnread(agent.id);
@@ -263,8 +266,9 @@ export function SidebarAgent({
           hint={editing ? undefined : { Hint: RowHint, label: name }}
           onPress={editing ? undefined : onOpen}
           menu={editing ? undefined : rowMenu("Agent", withRowMoves(groups, place), shown)}
+          more={!coarse}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
-          actions={editing ? null : <RowMarks marks={marks} />}
+          actions={editing || coarse ? null : <RowMarks marks={marks} />}
         />
       </RowHintOptions>
       {actions.dialog}
