@@ -186,7 +186,9 @@ function servedScript(served: string, version: string): string {
  * A computer of the OS given for whole runs of the script: a home of its own,
  * and fakes first on its PATH that answer as that OS, keep what they were
  * asked in one log, and serve a release's tarball from the folder the box
- * keeps them in. The account lingers unless asked otherwise; where it does
+ * keeps them in. Its PATH holds the folder of the command's link, as the
+ * shell the script runs in may hold it while the shell a person types in
+ * later does not. The account lingers unless asked otherwise; where it does
  * not, `loginctl` turns lingering on only where the account may itself, or
  * under `sudo`, which refuses where asked. Where asked, `id` answers that the
  * run is root's; and where a run says `FAKE_STOP_REFUSED`, `systemctl stop`
@@ -242,7 +244,7 @@ const box = (
     ].join("\n"),
   });
   const env: Record<string, string> = {
-    PATH: `${fakes}:${process.env.PATH}`,
+    PATH: `${fakes}:${join(home, ".local/bin")}:${process.env.PATH}`,
     HOME: home,
     LUKE_HOST_SYSTEMD_RUN_DIR: root,
     FAKE_ASKED: asked,
@@ -444,6 +446,7 @@ describe("the host's install script", () => {
 
       expect(answer.status, answer.stderr).toBe(0);
       expect(answer.stdout).toContain("Connected.");
+      expect(answer.stdout).toContain("To remove it: ~/.local/bin/luke-host uninstall");
       expect(readlinkSync(join(computer.releases, "current"))).toBe("versions/0.3.0");
       expect(readlinkSync(computer.link)).toBe(join(computer.releases, "current/bin/luke-host"));
       expect(readFileSync(computer.service, "utf8")).toContain(
@@ -478,7 +481,7 @@ describe("the host's install script", () => {
     expect(answer.status).toBe(2);
     expect(answer.stderr).toContain("The code was denied in Vespin");
     expect(answer.stderr).toContain(
-      `For a new code, run: ${computer.link} connect --origin ${ORIGIN}`,
+      `For a new code, run: ~/.local/bin/luke-host connect --origin ${ORIGIN}`,
     );
     const asked = computer.asked();
     expect(asked).toContain("systemctl --user enable luke-host.service");

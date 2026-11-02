@@ -77,6 +77,10 @@ SYSTEMD_RUN_DIR="${LUKE_HOST_SYSTEMD_RUN_DIR:-/run/systemd/system}"
 MAC_STOP_WAIT_SECONDS="${LUKE_HOST_MAC_STOP_WAIT_SECONDS:-30}"
 # Whether the box is WSL2, which require_supported_os reads from /proc/version.
 ON_WSL=false
+# The command's link as a person types it, which their own shell expands to
+# LINK. Note that it is named by its path whatever this shell's PATH holds,
+# since the shell they type in later may not hold ~/.local/bin.
+TYPED_LINK='~/.local/bin/luke-host'
 
 if [ -t 1 ]; then
   CHECK="$(printf '\033[32m✓\033[0m')"
@@ -396,15 +400,6 @@ remove_other_releases() {
   done
 }
 
-# The command a person at the box types to run the release, by its name where
-# PATH finds it there and by its link otherwise.
-command_name() {
-  case ":${PATH:-}:" in
-    *":$HOME/.local/bin:"*) printf 'luke-host' ;;
-    *) printf '%s' "$LINK" ;;
-  esac
-}
-
 # Connects the box through the release just installed, which prints the link
 # and the code and waits for them to be approved, or answers at once where the
 # box is connected already; ends the script where it is not connected, by the
@@ -413,7 +408,7 @@ connect_box() {
   code=0
   "$LINK" connect --origin "$ORIGIN" || code=$?
   [ "$code" -eq 0 ] && return 0
-  printf '%s This box is not connected yet. Vespin host is installed and follows it once it is. For a new code, run: %s connect --origin %s\n' "$CROSS" "$(command_name)" "$ORIGIN" >&2
+  printf '%s This box is not connected yet. Vespin host is installed and follows it once it is. For a new code, run: %s connect --origin %s\n' "$CROSS" "$TYPED_LINK" "$ORIGIN" >&2
   exit "$code"
 }
 
@@ -549,7 +544,7 @@ main() {
 
   printf '\nConnected. This box gets ready in Vespin, then you can pick it under a task'"'"'s Runs on.\n'
   printf 'To upgrade later, run the same command again.\n'
-  printf 'To remove it: %s uninstall\n' "$(command_name)"
+  printf 'To remove it: %s uninstall\n' "$TYPED_LINK"
   # Note that a systemd service does not keep a WSL distro up: WSL stops it about
   # 15 seconds after its last window closes, unless instanceIdleTimeout is -1.
   if [ "$ON_WSL" = true ]; then
