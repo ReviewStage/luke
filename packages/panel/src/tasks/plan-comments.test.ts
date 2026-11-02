@@ -173,7 +173,7 @@ function drawn(
     onRetry: () => undefined,
     notes,
     start: async (start) => {
-      started.push(start);
+      if (!("page" in start)) started.push(start);
       return { note: "not in this test" };
     },
     act: async (thread, action) => {

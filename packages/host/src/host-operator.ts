@@ -1372,6 +1372,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_COMMENTS, {
           planId: params.planId,
+          ...(params.pageId === undefined ? undefined : { pageId: params.pageId }),
           after: params.after,
         }),
         answerOf(tasksCommentsAnswerSchema, TASK_UNANSWERED),

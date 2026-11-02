@@ -412,6 +412,7 @@ function fakeService(tasks: Task[]): FakeService {
     // The service starts the thread as asked, the member its writer, and holds it on the plan.
     startComment: (planId, start) =>
       Effect.sync(() => {
+        if ("page" in start) throw new Error("the fake holds no page's threads");
         service.commentCalls.push(`start:${planId}:${start.quote}`);
         const thread: PlanCommentThread = {
           id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",

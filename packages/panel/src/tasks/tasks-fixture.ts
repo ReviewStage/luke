@@ -537,7 +537,8 @@ const FIXTURE_COMMENTS_CURSOR = "1";
 
 /**
  * The tasks-comments profile's answer to a read of a plan's comments: the
- * fixture task's threads to a reader starting out, none on any other plan,
+ * fixture task's threads to a reader starting out, none on any other plan
+ * or on a page,
  * and to a reader already caught up a read held, as the service holds one
  * until something moves, which here nothing does. Note that the held read is
  * a promise that never settles (`Promise.race([])`), because one answered at
@@ -548,7 +549,8 @@ function commentsAnswer(
 ): PortActResult<typeof ACT_KIND.TASKS_COMMENTS> | Promise<never> {
   if (payload.after !== PLAN_COMMENTS_CURSOR_START) return Promise.race([]);
   return {
-    threads: payload.planId === FIXTURE_TASK_ID ? FIXTURE_THREADS : [],
+    threads:
+      payload.planId === FIXTURE_TASK_ID && payload.pageId === undefined ? FIXTURE_THREADS : [],
     cursor: FIXTURE_COMMENTS_CURSOR,
   };
 }

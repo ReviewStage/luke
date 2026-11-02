@@ -13,8 +13,9 @@ import type { CustomScheme } from "electron";
  * bearer and answered whole, under the page policy `@luke/features/page-policy`
  * states for every server of a page, with our scripts ahead of it:
  * the find's (`@luke/features/page-find`), which ⌘F in the panel finds
- * through, and the link's (`@luke/features/page-link`), which hands the
- * panel a link out to open in the browser. The
+ * through, the link's (`@luke/features/page-link`), which hands the
+ * panel a link out to open in the browser, and the pick's
+ * (`@luke/features/page-pick`), which hands it the element a comment is on. The
  * privileges mark the scheme standard and secure and nothing more: no fetch
  * from another document, no service worker, no CORS.
  */

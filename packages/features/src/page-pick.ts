@@ -1,0 +1,215 @@
+import { Schema as EffectSchema } from "effect";
+import { PLAN_COMMENT_BOUNDS } from "./plan-comment-wire.js";
+
+/**
+ * page-pick.ts -- a comment's element in a plan's page as drawn: the pick the page's frame runs when a member comments on one of its elements, and the messages the side panel and the frame pass to drive it.
+ *
+ * A page is drawn in a frame sandboxed to its scripts alone, with an opaque
+ * origin, so nothing in the panel reaches its elements. Every server of a
+ * page therefore answers it with one more script of our own ahead of the
+ * agent's HTML (`withPageScripts`), beside the find's and the link's: at the
+ * panel's asking it outlines the element under the pointer, takes the next
+ * press for itself rather than the page's, and posts what was pressed back
+ * to the panel by its path from the document's root, its words, and the
+ * heading of the section it stands in; and it outlines the element a thread
+ * is on and brings it into view, where the version drawn still holds it.
+ * The outline is a stylesheet the document adopts over an attribute set on
+ * the element, so the page's own tree is never rewritten.
+ *
+ * The script runs among the page's own, so whatever the frame posts is the
+ * page's word, not ours: the panel takes a pick only from the frame it drew,
+ * only in the shape below, only while it asked for one, and only while the
+ * window holds a press of the developer's, which a press in the frame hands
+ * the window that framed it (`page-pane.tsx`). A page can still answer a
+ * pick with another element than the one pressed, since its scripts share
+ * the frame with ours; what it gains is a wrong quote on a comment about
+ * itself, since a pick is kept and shown as words and nothing acts on it.
+ */
+
+/** The mark every message of the pick wears, setting it apart from whatever else the page posts. */
+export const PAGE_PICK_TYPE = "luke-page-pick";
+
+/** What the panel asks of the frame. */
+export const PAGE_PICK_ACT = {
+  /** Outline the element under the pointer and take the next press as the pick. */
+  START: "start",
+  /** Stop picking, taking no press. */
+  STOP: "stop",
+  /** Outline the element a path names and bring it into view; an empty path outlines none. */
+  SHOW: "show",
+} as const;
+
+/** A message the panel posts to the frame. */
+export type PagePickAsk =
+  | {
+      readonly type: typeof PAGE_PICK_TYPE;
+      readonly act: typeof PAGE_PICK_ACT.START | typeof PAGE_PICK_ACT.STOP;
+    }
+  | {
+      readonly type: typeof PAGE_PICK_TYPE;
+      readonly act: typeof PAGE_PICK_ACT.SHOW;
+      readonly path: string;
+    };
+
+/** An element picked in the frame, as it posts it: its path, its words, and the heading it stands under. */
+const pickedSchema = EffectSchema.Struct({
+  path: EffectSchema.String.check(
+    EffectSchema.isNonEmpty(),
+    EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_ELEMENT_PATH_CHARS),
+  ),
+  quote: EffectSchema.String.check(
+    EffectSchema.isPattern(/\S/u),
+    EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS),
+  ),
+  section: EffectSchema.String.check(
+    EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_SECTION_CHARS),
+  ),
+});
+
+export type PagePicked = typeof pickedSchema.Type;
+
+/** A message the frame posts to the panel: the element picked, or that the pick was let go, by Escape in the page. */
+export const pagePickAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ type: EffectSchema.Literal(PAGE_PICK_TYPE), picked: pickedSchema }),
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(PAGE_PICK_TYPE),
+    stopped: EffectSchema.Literal(true),
+  }),
+]);
+
+/**
+ * The script the frame runs, ahead of the page's own. It is plain JavaScript
+ * in a string because it runs in the page, apart from every bundle of ours.
+ * Its listeners stand on the window as a press sets out, ahead of every one
+ * the page adds, so while it picks no press reaches the page. An element's
+ * path names it by its id where it has one, and otherwise by its place among
+ * its siblings of its kind, from the body down; one too long to keep names
+ * the nearest element above it that fits. Its words are its text, its
+ * whitespace run together, else its label or alternative text, else its
+ * kind; its section is the last heading at or before it.
+ */
+export const PAGE_PICK_SCRIPT = `(() => {
+  "use strict";
+  const TYPE = ${JSON.stringify(PAGE_PICK_TYPE)};
+  const MAX_PATH = ${PLAN_COMMENT_BOUNDS.MAX_ELEMENT_PATH_CHARS};
+  const MAX_QUOTE = ${PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS};
+  const MAX_SECTION = ${PLAN_COMMENT_BOUNDS.MAX_SECTION_CHARS};
+  const MARK = "data-luke-pick";
+  const PRESSES = ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "dblclick", "auxclick", "contextmenu"];
+  const pick = { on: false, hovered: null, shown: null, styled: false };
+
+  const post = (message) => parent.postMessage(Object.assign({ type: TYPE }, message), "*");
+  const flat = (text) => String(text ?? "").replace(/\\s+/g, " ").trim();
+  const cut = (text, most) => (text.length > most ? text.slice(0, most - 1) + "…" : text);
+
+  const style = () => {
+    if (pick.styled || typeof CSSStyleSheet !== "function") return;
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync("[" + MARK + "] { outline: 2px solid #0a84ff !important; outline-offset: 2px !important; } [" + MARK + "=hover] { cursor: crosshair !important; }");
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    pick.styled = true;
+  };
+
+  // The element hovered or shown moved to another, or to none, each of the two marked for what it now is.
+  const mark = (key, element) => {
+    const was = pick[key];
+    pick[key] = element;
+    for (const each of [was, element]) {
+      if (each === null) continue;
+      const value = each === pick.hovered ? "hover" : each === pick.shown ? "shown" : null;
+      if (value === null) {
+        each.removeAttribute(MARK);
+      } else {
+        style();
+        each.setAttribute(MARK, value);
+      }
+    }
+  };
+
+  const step = (element) => {
+    if (element.id !== "" && typeof CSS !== "undefined" && document.querySelectorAll("#" + CSS.escape(element.id)).length === 1) return "#" + CSS.escape(element.id);
+    const tag = element.tagName.toLowerCase();
+    if (element === document.body || element === document.documentElement) return tag;
+    let place = 1;
+    for (let sibling = element.previousElementSibling; sibling !== null; sibling = sibling.previousElementSibling) {
+      if (sibling.tagName === element.tagName) place += 1;
+    }
+    return tag + ":nth-of-type(" + place + ")";
+  };
+
+  const pathOf = (element) => {
+    const steps = [];
+    for (let at = element; at !== null; at = at.parentElement) {
+      const one = step(at);
+      steps.unshift(one);
+      if (one.startsWith("#") || at === document.body || at === document.documentElement) break;
+    }
+    const path = steps.join(" > ");
+    return path.length <= MAX_PATH || element.parentElement === null ? path.slice(0, MAX_PATH) : pathOf(element.parentElement);
+  };
+
+  const quoteOf = (element) => {
+    const words = flat(element.innerText ?? element.textContent)
+      || flat(element.getAttribute("aria-label"))
+      || flat(element.getAttribute("alt"))
+      || flat(element.getAttribute("title"));
+    return cut(words || "<" + element.tagName.toLowerCase() + ">", MAX_QUOTE);
+  };
+
+  const sectionOf = (element) => {
+    let heading = null;
+    for (const each of document.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
+      if (each === element || each.contains(element) || (each.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0) heading = each;
+      else break;
+    }
+    return heading === null ? "" : cut(flat(heading.textContent), MAX_SECTION);
+  };
+
+  const stop = () => {
+    pick.on = false;
+    mark("hovered", null);
+  };
+
+  const target = (event) => (event.target instanceof Element ? event.target : null);
+
+  addEventListener("pointerover", (event) => {
+    if (pick.on) mark("hovered", target(event));
+  }, true);
+
+  for (const name of PRESSES) {
+    addEventListener(name, (event) => {
+      if (!pick.on) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const element = target(event);
+      if (name !== "click" || element === null) return;
+      stop();
+      post({ picked: { path: pathOf(element), quote: quoteOf(element), section: sectionOf(element) } });
+    }, true);
+  }
+
+  addEventListener("keydown", (event) => {
+    if (!pick.on || event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    stop();
+    post({ stopped: true });
+  }, true);
+
+  addEventListener("message", (event) => {
+    const ask = event.data;
+    if (event.source !== parent || ask === null || typeof ask !== "object" || ask.type !== TYPE) return;
+    if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.START)}) pick.on = true;
+    else if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.STOP)}) stop();
+    else if (ask.act === ${JSON.stringify(PAGE_PICK_ACT.SHOW)} && typeof ask.path === "string") {
+      let element = null;
+      try {
+        element = ask.path === "" ? null : document.querySelector(ask.path);
+      } catch {
+        element = null;
+      }
+      mark("shown", element);
+      element?.scrollIntoView({ block: "center", inline: "nearest" });
+    }
+  });
+})();`;

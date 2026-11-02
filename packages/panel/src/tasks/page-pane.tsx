@@ -7,6 +7,13 @@ import {
   pageFindAnswerSchema,
 } from "@luke/features/page-find";
 import { pageLinkPressSchema } from "@luke/features/page-link";
+import {
+  PAGE_PICK_ACT,
+  PAGE_PICK_TYPE,
+  type PagePickAsk,
+  type PagePicked,
+  pagePickAnswerSchema,
+} from "@luke/features/page-pick";
 import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
@@ -27,8 +34,10 @@ import {
   ChevronRightIcon,
   CodeXmlIcon,
   GLYPH,
+  MessageSquareIcon,
   RotateCwIcon,
 } from "@luke/ui/icons";
+import type { PlanCommentsControl } from "@luke/ui/plan-comments";
 import { Option, Schema } from "effect";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
@@ -47,6 +56,7 @@ import {
 } from "../find-in-tab.js";
 import { openPageInBrowserItem } from "../open-in-browser-item.js";
 import { usePhoneRoom } from "../stage-room.js";
+import { type PageCommentOn, PageComments } from "./plan-comments.js";
 import { opensAsLink, useOpenLink } from "./use-open-link.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
@@ -88,6 +98,16 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * with a find of our own ahead of it (`@luke/features/page-find`), and
  * hears back its tally and its selection, from that frame alone and only
  * in the find's own shape.
+ *
+ * On a task's page the bar's Comments opens the page's comment threads in a
+ * column beside it (`PageComments`), read and written as the plan's are,
+ * naming the page. Its Comment asks the frame to pick an element, which the
+ * frame does with a script of our own ahead of the page
+ * (`@luke/features/page-pick`), handing back what was pressed; the pane
+ * takes that only from the frame it drew, only while it asked, and only
+ * while the window holds a press of the developer's, as it takes a link.
+ * A thread's quote asks the frame to outline its element and bring it into
+ * view. A page an agent on no task showed has no comments.
  */
 
 /** What a frame drawing a page lets it do: run its own scripts, and nothing else. */
@@ -128,6 +148,9 @@ const readFindAnswer = Schema.decodeUnknownOption(pageFindAnswerSchema);
 
 /** Reads a message the frame posted as a link pressed, nothing for anything else the page posts. */
 const readLinkPress = Schema.decodeUnknownOption(pageLinkPressSchema);
+
+/** Reads a message the frame posted as an element picked or a pick let go, nothing for anything else the page posts. */
+const readPick = Schema.decodeUnknownOption(pagePickAnswerSchema);
 
 /** The source's lines as the page's text. */
 function sourceText(lines: CodeLines): string {
@@ -219,6 +242,54 @@ function useFrameLinks(frame: RefObject<HTMLIFrameElement | null>): void {
   }, [frame, open]);
 }
 
+/** What the frame is asked to pick and show for a comment, and who hears what it picks. */
+interface FramePick {
+  /** Whether the frame takes the next press as a comment's element. */
+  readonly picking: boolean;
+  /** The path of the element outlined for the thread whose quote was pressed; none outlined. */
+  readonly shown: string | undefined;
+  readonly onPicked: (picked: PagePicked) => void;
+  /** The pick let go in the page, by Escape. */
+  readonly onStopped: () => void;
+}
+
+/**
+ * The frame's pick for a comment, kept in step with `pick`: asked again each
+ * time the frame loads, a reload or another version, since a new document
+ * holds no pick. Note that an element picked is taken only from the frame
+ * drawn, only while a pick is asked, and only while the window holds a press
+ * of the developer's, because the page's own scripts can post the same
+ * message without one. Answers what the frame's load runs.
+ */
+function useFramePick(frame: RefObject<HTMLIFrameElement | null>, pick: FramePick): () => void {
+  const latest = useRef(pick);
+  latest.current = pick;
+  const post = useCallback(
+    (ask: PagePickAsk) => frame.current?.contentWindow?.postMessage(ask, "*"),
+    [frame],
+  );
+  const sync = useCallback(() => {
+    const { picking, shown } = latest.current;
+    post({ type: PAGE_PICK_TYPE, act: picking ? PAGE_PICK_ACT.START : PAGE_PICK_ACT.STOP });
+    post({ type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.SHOW, path: shown ?? "" });
+  }, [post]);
+  useEffect(sync, [sync, pick.picking, pick.shown]);
+  useEffect(() => {
+    const hear = (event: MessageEvent) => {
+      const framed = frame.current?.contentWindow;
+      if (framed === null || framed === undefined || event.source !== framed) return;
+      const answer = readPick(event.data);
+      if (Option.isNone(answer) || !latest.current.picking) return;
+      if ("stopped" in answer.value) return latest.current.onStopped();
+      if (navigator.userActivation?.isActive !== true) return;
+      latest.current.onPicked(answer.value.picked);
+    };
+    window.addEventListener("message", hear);
+    return () => window.removeEventListener("message", hear);
+  }, [frame]);
+  return sync;
+}
+
 /**
  * Says the focus went into the frame where this window hears it: a click
  * in a frame stirs no event of this document's but the window's blur, so
@@ -239,19 +310,36 @@ function useFrameFocus(frame: RefObject<HTMLIFrameElement | null>): void {
   }, [frame]);
 }
 
+/** No pick asked of the frame, for a page with no comments. */
+const NO_PICK: FramePick = {
+  picking: false,
+  shown: undefined,
+  onPicked: () => undefined,
+  onStopped: () => undefined,
+};
+
 /**
  * The page drawn in its sandboxed frame, found in through the frame (`useFrameFind`), its links
- * out opened outside it (`useFrameLinks`).
+ * out opened outside it (`useFrameLinks`), a comment's element picked in it (`useFramePick`).
  * Note that the frame stands from the start, its ring over it until `onLoad` of the `src` it
  * shows, because the page reads only as the frame loads it, a version stepped to included, and a
  * frame left blank says nothing of that.
  */
-function PageFrame({ title, src }: { title: string; src: string }): React.JSX.Element {
+function PageFrame({
+  title,
+  src,
+  pick = NO_PICK,
+}: {
+  title: string;
+  src: string;
+  pick?: FramePick;
+}): React.JSX.Element {
   const frame = useRef<HTMLIFrameElement>(null);
   const [framedSrc, setFramedSrc] = useState<string>();
   const found = useFrameFind(frame);
   useFrameLinks(frame);
   useFrameFocus(frame);
+  const picked = useFramePick(frame, pick);
   return (
     <div className="page-view-room relative flex min-h-0 flex-1">
       <iframe
@@ -265,6 +353,7 @@ function PageFrame({ title, src }: { title: string; src: string }): React.JSX.El
         onLoad={() => {
           setFramedSrc(src);
           found();
+          picked();
         }}
       />
       {framedSrc === src ? null : (
@@ -430,6 +519,54 @@ function versionStepAction(
 }
 
 /**
+ * Where commenting on the page stands: whether its column is open, whether
+ * the frame is picking an element, the thread being started once one is
+ * picked or the whole page chosen, and the element outlined for a thread.
+ * Closing the column lets go of the pick and the thread being started.
+ */
+function useCommenting() {
+  const [open, setOpen] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [pending, setPending] = useState<PageCommentOn | undefined>(undefined);
+  const [shown, setShown] = useState<string | undefined>(undefined);
+  const begin = useCallback((on: PageCommentOn) => {
+    setPicking(false);
+    setPending(on);
+  }, []);
+  const cancel = useCallback(() => {
+    setPicking(false);
+    setPending(undefined);
+  }, []);
+  const pick: FramePick = useMemo(
+    () => ({
+      picking,
+      shown,
+      onPicked: (element) => begin({ element }),
+      onStopped: () => setPicking(false),
+    }),
+    [picking, shown, begin],
+  );
+  return {
+    open,
+    pending,
+    pick,
+    begin,
+    cancel,
+    toggle: () => {
+      if (open) cancel();
+      setShown(undefined);
+      setOpen(!open);
+    },
+    startPick: () => {
+      setPending(undefined);
+      setShown(undefined);
+      setPicking(true);
+    },
+    show: setShown,
+  };
+}
+
+/**
  * The page's tab: its title, its versions where it has more than one, the
  * source's toggle, a reload, and the page or its source. On a phone, whose
  * task's header names the page, the bar is not drawn: its header's ⋯
@@ -443,6 +580,7 @@ export function PagePane({
   page,
   readSource,
   findActive,
+  comments,
 }: {
   /** The plan the page stands on, or the agent on no task that showed it. */
   place: PagePlace;
@@ -450,11 +588,19 @@ export function PagePane({
   readSource: ReadPageSource;
   /** Whether the panel holds the window's keys, so the tab's find answers ⌘F. */
   findActive: boolean;
+  /** The page's comment threads and who writes them; none for a page with no comments, one an agent on no task showed. */
+  comments?:
+    | {
+        readonly control: PlanCommentsControl;
+        readonly doors: Parameters<typeof PageComments>[0]["doors"];
+      }
+    | undefined;
 }): React.JSX.Element {
   // The version stepped to, none while the newest is followed.
   const [chosen, setChosen] = useState<number | undefined>(undefined);
   const [reloads, setReloads] = useState(0);
   const [view, setView] = useState<PageView>(PAGE_VIEW.PAGE);
+  const commenting = useCommenting();
   const copyWithToast = useCopyToast();
   const sources = usePageSources(readSource);
   const version = chosen === undefined ? page.version : Math.min(chosen, page.version);
@@ -468,6 +614,17 @@ export function PagePane({
   }, [showingSource, source, version, ask]);
   const toggleLabel = showingSource ? "View page" : "View source";
   const toggleView = () => setView(showingSource ? PAGE_VIEW.PAGE : PAGE_VIEW.SOURCE);
+  const commentsLabel = commenting.open ? "Hide comments" : "Show comments";
+  const commentsAction: MenuAction[] =
+    comments === undefined
+      ? []
+      : [
+          {
+            label: commentsLabel,
+            icon: <MessageSquareIcon aria-hidden="true" />,
+            onSelect: commenting.toggle,
+          },
+        ];
   const reload = () => {
     setReloads((was) => was + 1);
     sources.forget();
@@ -516,6 +673,7 @@ export function PagePane({
               ]
             : [],
           [
+            ...commentsAction,
             { label: toggleLabel, icon: <CodeXmlIcon aria-hidden="true" />, onSelect: toggleView },
             reloadAction,
           ],
@@ -566,6 +724,16 @@ export function PagePane({
                     />
                   </div>
                 ) : null}
+                {comments === undefined ? null : (
+                  <Tooltip label={commentsLabel}>
+                    <IconButton
+                      icon={<MessageSquareIcon aria-hidden="true" />}
+                      label={commentsLabel}
+                      pressed={commenting.open}
+                      onClick={commenting.toggle}
+                    />
+                  </Tooltip>
+                )}
                 <Tooltip label={toggleLabel}>
                   <IconButton
                     icon={<CodeXmlIcon aria-hidden="true" />}
@@ -588,20 +756,44 @@ export function PagePane({
             }
           />
         )}
-        {showingSource ? (
-          <PageSource
-            title={page.title}
-            version={`${page.id}@${version}`}
-            read={source ?? { kind: SOURCE_READ.READING }}
-            onRetry={() => ask(version)}
-          />
-        ) : (
-          <PageFrame
-            key={reloads}
-            title={page.title}
-            src={appPlatform().pageFrameUrl({ ...place, pageId: page.id, version })}
-          />
-        )}
+        <div className="page-view-row relative flex min-h-0 flex-1">
+          {showingSource ? (
+            <PageSource
+              title={page.title}
+              version={`${page.id}@${version}`}
+              read={source ?? { kind: SOURCE_READ.READING }}
+              onRetry={() => ask(version)}
+            />
+          ) : (
+            <PageFrame
+              key={reloads}
+              title={page.title}
+              src={appPlatform().pageFrameUrl({ ...place, pageId: page.id, version })}
+              pick={commenting.pick}
+            />
+          )}
+          {comments === undefined || !commenting.open ? null : (
+            <div className="page-comments-column">
+              <PageComments
+                control={comments.control}
+                doors={comments.doors}
+                page={{ id: page.id, version }}
+                picking={commenting.pick.picking}
+                pending={commenting.pending}
+                onComment={() => {
+                  setView(PAGE_VIEW.PAGE);
+                  commenting.startPick();
+                }}
+                onWholePage={() => commenting.begin({ element: undefined })}
+                onCancel={commenting.cancel}
+                onShowElement={(thread) => {
+                  setView(PAGE_VIEW.PAGE);
+                  commenting.show(thread.page?.element);
+                }}
+              />
+            </div>
+          )}
+        </div>
       </Fill>
     </FindScope>
   );

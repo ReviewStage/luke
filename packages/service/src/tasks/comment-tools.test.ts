@@ -3,9 +3,11 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { startPlanCommentThread } from "@luke/database/models/plan-comments";
+import { writePage } from "@luke/database/models/plan-pages";
 import { createTask, savePlanText } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import {
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_SCOPE,
@@ -13,7 +15,7 @@ import {
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
 import { unparsedWire } from "@luke/wire";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { ACTION_RESULT_STATUS } from "../core.js";
 import { OPEN_THREADS_MARKER, openThreadsText, runCommentTool } from "./comment-tools.js";
@@ -23,8 +25,9 @@ import { OPEN_THREADS_MARKER, openThreadsText, runCommentTool } from "./comment-
  * read with what they are on and every comment by its writer, a reply
  * written under its writer beside a teammate's, a resolved thread read only
  * when asked for and taking no reply until reopened, a thread of another
- * plan named as none, and the open threads handed to an agent as one line
- * each. Synthetic accounts and plans.
+ * plan named as none, a page's threads read by naming the page, and the
+ * open threads handed to an agent as one line each. Synthetic accounts and
+ * plans.
  */
 
 const PLAN_TEXT = "## Approach\n\nAdmins can withdraw an invite from the members page.\n";
@@ -132,6 +135,52 @@ it.layer(getTestDB())("the comment tools", (it) => {
           "threads" in resolved && Array.isArray(resolved.threads) && resolved.threads.length === 1,
         );
       }),
+  );
+
+  it.effect("a page's threads are read by naming the page, each with its version and element", () =>
+    Effect.gen(function* () {
+      const { owner, taskId, thread } = yield* openThreadedTask;
+      const writer = asOwner(owner, taskId);
+      const page = Option.getOrThrow(
+        yield* writePage(
+          owner,
+          taskPageOwner(taskId),
+          { title: "Invite funnel", html: "<p>12 sent</p>" },
+          { kind: PAGE_SHOWER.LUKE },
+        ),
+      );
+      const started = yield* startPlanCommentThread(writer.writer, taskId, {
+        clientKey: randomUUID(),
+        page: { id: page.id, version: 1 },
+        element: { path: "body > p", quote: "12 sent", section: "" },
+        words: "Per week?",
+      });
+      assert.ok("answer" in started && "thread" in started.answer);
+
+      const onPage = yield* runCommentTool(
+        AGENT_TOOL.READ_COMMENTS,
+        writer,
+        unparsedWire({ taskId, page: page.id }),
+      );
+      const onPlan = yield* runCommentTool(
+        AGENT_TOOL.READ_COMMENTS,
+        writer,
+        unparsedWire({ taskId }),
+      );
+
+      assert.deepEqual(
+        "threads" in onPage && Array.isArray(onPage.threads)
+          ? onPage.threads.map((each) => [each.thread, each.on, each.page])
+          : onPage,
+        [[started.answer.thread.id, "12 sent", { id: page.id, version: 1, element: "body > p" }]],
+      );
+      assert.deepEqual(
+        "threads" in onPlan && Array.isArray(onPlan.threads)
+          ? onPlan.threads.map((each) => each.thread)
+          : onPlan,
+        [thread.id],
+      );
+    }),
   );
 
   it.effect(

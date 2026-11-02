@@ -367,6 +367,26 @@
   }
 }
 
+/* A page's comments (page-pane.tsx) stand in a column beside the page, a
+   comment card's width and the list's insets wide, past a hairline; in a
+   panel too narrow for both, the column stands over the page instead. */
+.page-comments-column {
+  display: flex;
+  width: calc(var(--comment-card-width) + 2 * var(--luke-space-16));
+  flex: none;
+  border-left: 1px solid var(--luke-color-border);
+  background: var(--luke-color-ground);
+}
+
+@container side-panel (width < 640px) {
+  .page-comments-column {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    border-left: none;
+  }
+}
+
 /* The sheet rounds its corners without clipping what it holds (shell.css), so
    a page's white, or a file's ground in a theme of its own, would stand to a
    square corner at the rounded sheet's. A page's room, its frame or its

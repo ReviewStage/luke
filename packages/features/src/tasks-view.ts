@@ -1101,9 +1101,10 @@ const planCommentFailedSchema = EffectSchema.Struct({
   failure: EffectSchema.Literals(Object.values(PLAN_COMMENT_CALL_FAILURE)),
 });
 
-/** A plan's comments past a cursor, as the window asks it: the plan, and where the window stands. */
+/** A plan's comments, or one of its task's pages', past a cursor, as the window asks it: the plan, the page where it names one, and where the window stands. */
 export const tasksCommentsParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
+  pageId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
   after: EffectSchema.NonEmptyString,
 });
 
