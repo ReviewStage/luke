@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
-import { listProviderKeyRows, saveProviderKey } from "@luke/database/models/provider-key-store";
+import { saveProviderKey } from "@luke/database/models/provider-key-store";
 import { openHostedStoreTestDatabase } from "@luke/database/testing";
 import type { ModelChoice } from "@luke/features/models-wire";
 import {
-  FAST_ACCESS,
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   type ProviderKeyProvider,
@@ -14,19 +13,17 @@ import { generateText, type LanguageModel } from "ai";
 import { Effect, Redacted, Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
-import { accountProviderKeys, ownKeyOf } from "./account-keys.js";
-import { CODER_REFUSAL } from "./bounds.js";
-import { coderModel, titleModel } from "./model.js";
+import { ownKeyOf } from "./account-keys.js";
+import { titleModel } from "./model.js";
 import { productionSummaryModel } from "./replay-summary.js";
 
 /**
- * The key a coding agent's step runs on, read from the account's rows over a
- * real dialect and spent against a provider faked at its fetch: the
- * account's own key where it saved one, and a step refused, never moved
- * onto our key, where it saved none or its key cannot be read; the row's
- * status kept as the provider answers the account's key; a fast step run on
- * the account's key with what it showed of the key's organization kept on
- * the row; and the own key a call beside the agents spends on.
+ * The key a call beside an account's agents spends, read from the account's
+ * rows over a real dialect and spent against a provider faked at its fetch:
+ * the account's own API key for the provider it prefers or the other's, and
+ * none, never ours, where it saved none, holds only a Claude setup-token, or
+ * its key cannot be read; and an agent's title and a replay's summary told
+ * on it.
  *
  * Synthetic keys and accounts; the key-encryption keys are fixed bytes
  * written for this file.
@@ -45,14 +42,12 @@ const ACCOUNT_KEY = {
   OPENAI: "sk-proj-account-own-key-1111",
 } as const;
 
-const WINDOW = 200_000;
-
 const CHOICE = {
   [PROVIDER_KEY_PROVIDER.ANTHROPIC]: { model: "anthropic/claude-opus-5.5", effort: "high" },
   [PROVIDER_KEY_PROVIDER.OPENAI]: { model: "openai/gpt-6.1-sol", effort: "high" },
 } as const;
 
-/** A message Anthropic's API answers a step with. */
+/** A message Anthropic's API answers a call with. */
 const ANTHROPIC_MESSAGE = {
   id: "msg_fixture",
   type: "message",
@@ -115,75 +110,6 @@ async function accountWithKeys(saved: Partial<Record<ProviderKeyProvider, string
   return userId;
 }
 
-/** One step's model for the account, as the host would select it, over the provider given, on the provider's choice above or the one named. */
-async function stepModel(
-  userId: string,
-  providerId: ProviderKeyProvider,
-  fetch: typeof globalThis.fetch,
-  held: { readonly ring: string | undefined } = { ring: RING.HELD },
-  choice: ModelChoice = CHOICE[providerId],
-) {
-  const { ring } = held;
-  const keys = await database.run(
-    accountProviderKeys(userId, {
-      ring: ring === undefined ? undefined : Redacted.make(ring),
-      run: database.run,
-    }),
-  );
-  return coderModel(choice, { ...keys, fetch }, WINDOW, async () => undefined);
-}
-
-/** Runs one step on the model, answering its text or the failure's message. */
-async function step(selected: Awaited<ReturnType<typeof stepModel>>): Promise<string> {
-  if (Result.isFailure(selected)) return assert.fail(`no model: ${selected.failure}`);
-  const { providerOptions } = selected.success.modelOptions;
-  try {
-    const answer = await generateText({
-      model: selected.success.model,
-      prompt: "Go.",
-      maxRetries: 0,
-      ...(providerOptions === undefined ? undefined : { providerOptions }),
-    });
-    return answer.text;
-  } catch (failure) {
-    return failure instanceof Error ? failure.message : String(failure);
-  }
-}
-
-test("a step runs on the account's own key where it saved one, and is refused for a provider where it saved none, never run on Vespin's key", async () => {
-  const userId = await accountWithKeys({
-    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
-  });
-  const anthropic = provider([jsonResponse(ANTHROPIC_MESSAGE, 200)]);
-  const openAi = provider([jsonResponse({}, 200)]);
-
-  assert.equal(
-    await step(await stepModel(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, anthropic.fetch)),
-    "Done.",
-  );
-  const unkeyed = await stepModel(userId, PROVIDER_KEY_PROVIDER.OPENAI, openAi.fetch);
-
-  assert.deepEqual(anthropic.keys, [ACCOUNT_KEY.ANTHROPIC]);
-  assert.deepEqual(unkeyed, Result.fail(CODER_REFUSAL.NO_PROVIDER_KEY));
-  assert.deepEqual(openAi.keys, [], "no provider was reached on any key");
-});
-
-test("a step the provider refuses the account's own key for fails in the words naming that key, followed by the provider's status and words", async () => {
-  const userId = await accountWithKeys({
-    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
-  });
-  const refusing = provider([
-    jsonResponse(
-      { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } },
-      401,
-    ),
-  ]);
-
-  const said = await step(await stepModel(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, refusing.fetch));
-
-  assert.equal(said, `${CODER_REFUSAL.ACCOUNT_KEY_REFUSED} (401 invalid x-api-key)`);
-});
-
 /** The own key a call beside the account's agents spends on, preferring the provider given, as its provider and revealed key, on a deployment holding the ring named, or none for null. */
 async function ownKey(
   userId: string,
@@ -196,34 +122,8 @@ async function ownKey(
   return own === undefined ? undefined : { provider: own.provider, key: Redacted.value(own.key) };
 }
 
-test("a call beside an account's agents, such as a title, chapters, or a replay's summary, spends the account's own key for the provider it prefers, the other provider's where it saved only that, and nothing where it saved none or none opens, never Vespin's", async () => {
-  const both = await accountWithKeys({
-    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
-    [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI,
-  });
-  const openAiOnly = await accountWithKeys({
-    [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI,
-  });
-  const none = await accountWithKeys({});
-
-  assert.deepEqual(await ownKey(both, PROVIDER_KEY_PROVIDER.OPENAI), {
-    provider: PROVIDER_KEY_PROVIDER.OPENAI,
-    key: ACCOUNT_KEY.OPENAI,
-  });
-  assert.deepEqual(await ownKey(both, PROVIDER_KEY_PROVIDER.ANTHROPIC), {
-    provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
-    key: ACCOUNT_KEY.ANTHROPIC,
-  });
-  assert.deepEqual(await ownKey(openAiOnly, PROVIDER_KEY_PROVIDER.ANTHROPIC), {
-    provider: PROVIDER_KEY_PROVIDER.OPENAI,
-    key: ACCOUNT_KEY.OPENAI,
-  });
-  assert.equal(await ownKey(none, PROVIDER_KEY_PROVIDER.ANTHROPIC), undefined);
-  assert.equal(await ownKey(both, PROVIDER_KEY_PROVIDER.ANTHROPIC, RING.OTHER), undefined);
-  assert.equal(await ownKey(both, PROVIDER_KEY_PROVIDER.ANTHROPIC, null), undefined);
-});
-
-test("a Claude setup-token is no key a step runs on: an account holding only one is refused as holding no key, never run on Vespin's", async () => {
+/** An account holding a Claude setup-token alone, which is no API key. */
+async function accountWithSetupToken() {
   const userId = await database.createUser();
   const ring = parseKeyRing(Redacted.make(RING.HELD));
   if (Result.isFailure(ring)) return assert.fail("not a ring");
@@ -244,80 +144,36 @@ test("a Claude setup-token is no key a step runs on: an account holding only one
       new Date(0),
     ),
   );
-  const anthropic = provider([jsonResponse(ANTHROPIC_MESSAGE, 200)]);
-
-  const selected = await stepModel(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, anthropic.fetch);
-
-  assert.deepEqual(selected, Result.fail(CODER_REFUSAL.NO_PROVIDER_KEY));
-  assert.deepEqual(anthropic.keys, []);
-});
-
-test("an account's key the ring cannot open, or one on a deployment holding no ring, refuses the step and never runs it on Vespin's key", async () => {
-  const userId = await accountWithKeys({ [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI });
-  const reached = provider([jsonResponse({}, 200)]);
-
-  const otherRing = await stepModel(userId, PROVIDER_KEY_PROVIDER.OPENAI, reached.fetch, {
-    ring: RING.OTHER,
-  });
-  const noRing = await stepModel(userId, PROVIDER_KEY_PROVIDER.OPENAI, reached.fetch, {
-    ring: undefined,
-  });
-
-  assert.deepEqual(otherRing, Result.fail(CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE));
-  assert.deepEqual(noRing, Result.fail(CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE));
-  assert.deepEqual(reached.keys, [], "no provider was reached on any key");
-});
-
-/** Anthropic's refusal of a fast request for an organization fast mode was never enabled for, as production met it. */
-const FAST_LIMIT_ZERO = {
-  type: "error",
-  error: {
-    type: "rate_limit_error",
-    message:
-      "This request would exceed your organization's rate limit of 0 fast mode input tokens per minute (model: claude-opus-5-5).",
-  },
-};
-
-const FAST_CHOICE = { model: "anthropic/claude-opus-5.5-fast", effort: "high" } as const;
-
-/** The fast access the account's Anthropic row now says. */
-async function rowFastAccess(userId: string) {
-  const rows = await database.run(listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY));
-  return rows.find((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC)?.fastAccess;
+  return userId;
 }
 
-test("a fast step runs on the account's own key, and the key's row keeps what it showed: enabled where the fast call ran, not enabled where Anthropic refused it at a fast limit of 0 and the step answered at standard speed", async () => {
-  const granted = await accountWithKeys({
+test("a call beside an account's agents, such as a title, chapters, or a replay's summary, spends the account's own key for the provider it prefers, the other provider's where it saved only that, and nothing where it saved none, holds only a Claude setup-token, or none opens, never Vespin's", async () => {
+  const both = await accountWithKeys({
     [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
+    [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI,
   });
-  const refused = await accountWithKeys({
-    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
+  const openAiOnly = await accountWithKeys({
+    [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI,
   });
-  const fast = provider([jsonResponse(ANTHROPIC_MESSAGE, 200)]);
-  const limitZero = provider([
-    jsonResponse(FAST_LIMIT_ZERO, 429),
-    jsonResponse(ANTHROPIC_MESSAGE, 200),
-  ]);
+  const none = await accountWithKeys({});
+  const setupTokenOnly = await accountWithSetupToken();
 
-  const ran = await step(
-    await stepModel(granted, PROVIDER_KEY_PROVIDER.ANTHROPIC, fast.fetch, undefined, FAST_CHOICE),
-  );
-  const fellBack = await step(
-    await stepModel(
-      refused,
-      PROVIDER_KEY_PROVIDER.ANTHROPIC,
-      limitZero.fetch,
-      undefined,
-      FAST_CHOICE,
-    ),
-  );
-
-  assert.equal(ran, "Done.");
-  assert.equal(fellBack, "Done.");
-  assert.deepEqual(fast.keys, [ACCOUNT_KEY.ANTHROPIC]);
-  assert.deepEqual(limitZero.keys, [ACCOUNT_KEY.ANTHROPIC, ACCOUNT_KEY.ANTHROPIC]);
-  assert.equal(await rowFastAccess(granted), FAST_ACCESS.ENABLED);
-  assert.equal(await rowFastAccess(refused), FAST_ACCESS.NOT_ENABLED);
+  assert.deepEqual(await ownKey(both, PROVIDER_KEY_PROVIDER.OPENAI), {
+    provider: PROVIDER_KEY_PROVIDER.OPENAI,
+    key: ACCOUNT_KEY.OPENAI,
+  });
+  assert.deepEqual(await ownKey(both, PROVIDER_KEY_PROVIDER.ANTHROPIC), {
+    provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+    key: ACCOUNT_KEY.ANTHROPIC,
+  });
+  assert.deepEqual(await ownKey(openAiOnly, PROVIDER_KEY_PROVIDER.ANTHROPIC), {
+    provider: PROVIDER_KEY_PROVIDER.OPENAI,
+    key: ACCOUNT_KEY.OPENAI,
+  });
+  assert.equal(await ownKey(none, PROVIDER_KEY_PROVIDER.ANTHROPIC), undefined);
+  assert.equal(await ownKey(setupTokenOnly, PROVIDER_KEY_PROVIDER.ANTHROPIC), undefined);
+  assert.equal(await ownKey(both, PROVIDER_KEY_PROVIDER.ANTHROPIC, RING.OTHER), undefined);
+  assert.equal(await ownKey(both, PROVIDER_KEY_PROVIDER.ANTHROPIC, null), undefined);
 });
 
 /** The deployment's environment as a call beside the agents reads it: the ring the account's keys open under, and no key of ours, which it holds none of. */

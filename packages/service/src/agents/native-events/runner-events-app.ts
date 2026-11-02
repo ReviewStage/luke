@@ -68,7 +68,7 @@ import {
 import { providerModelOf } from "../../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { reopenTaskForWork, settleTaskAfterTurn } from "../../tasks/task-finish.js";
-import { isNativeRuntime } from "../coder-host/native-runtime.js";
+import { harnessOf } from "../coder-host/native-runtime.js";
 import { RUNNER_ENDED, runnerEnded, runnerIdled } from "../coder-host/runner-sessions.js";
 import { NativeAgentSessions } from "../coder-host/runtime-sessions.js";
 import { estimatedTokens } from "../coder-host/token-estimate.js";
@@ -298,11 +298,11 @@ export function sandboxAtRunnerEnd(
 const waitingHandedOn = (ended: RunnerEnded, sessionId: string) =>
   Effect.gen(function* () {
     const native = yield* Effect.serviceOption(NativeAgentSessions);
-    const { runtime } = ended;
+    const runtime = harnessOf(ended.runtime);
     const reached =
-      runtime !== undefined && isNativeRuntime(runtime)
-        ? Option.flatMap(native, (service) => service.sessions(runtime, ended.target.userId))
-        : Option.none();
+      runtime === undefined
+        ? Option.none()
+        : Option.flatMap(native, (service) => service.sessions(runtime, ended.target.userId));
     if (Option.isNone(reached)) {
       return yield* Effect.logWarning(
         "runner-events: a launch's waiting lines could not be handed on here",

@@ -15,21 +15,20 @@ import { AGENT_KIND } from "@luke/features/agent-wire";
 import { AUTOMATION_FIRING, type AutomationFiring } from "@luke/features/automation-wire";
 import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TASK_MODE, TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
+import { sessionKey } from "@luke/runtime/vocabulary";
 import { EXPERIMENT } from "@luke/settings";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { Deferred, Effect, ErrorReporter, Fiber, Layer, Option, Result } from "effect";
-import { MESSAGE_ROLE } from "../../core.js";
+import { MESSAGE_ROLE, RUN_EVENT, RUN_TURN_ORIGIN, TURN_ORIGIN, TURN_TRIGGER } from "../../core.js";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { connectAgentApiKeys } from "../../testing/agent-credentials.js";
-import { stampedEveEvent } from "../../testing/eve-events.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
   type InstallationFixture,
   openGithubUser,
 } from "../../testing/github-app-fake.js";
-import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
@@ -40,7 +39,6 @@ import {
   PLAN_REFUSAL,
   RUNTIME_REFUSAL,
 } from "../eve-host/eve-sessions.js";
-import { memoryRelayState, StreamRelay } from "../eve-host/relay.js";
 import { type StartAsk, startAgent } from "./start.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
@@ -125,33 +123,30 @@ function workspaceAsk(workspaceId: string, repository = RELAY_REPOSITORY, key?: 
 }
 
 /**
- * The agent's lines once eve took the first message its Start opened the
- * session with and told of it as its first turn's received message, and
- * whether it has heard from another account by then.
+ * The agent's lines once its first turn took the first message its Start
+ * opened the session with, by the line's own id, as a native harness's
+ * runner names it back, and whether it has heard from another account by
+ * then.
  */
-const openedThroughRelay = (owner: string, conversationId: string, opened: readonly EveMessage[]) =>
+const openedLineTaken = (owner: string, conversationId: string, opened: readonly EveMessage[]) =>
   Effect.gen(function* () {
     const target = { userId: owner, conversationId };
-    const handed = opened[0];
-    assert.ok(handed !== undefined && typeof handed.message === "string");
-    const relay = new StreamRelay({
-      writer: yield* storeWriter({ tools: CODER_TOOL_SET }),
-      now: () => Date.UTC(2026, 9, 23),
-      report: () => Effect.void,
+    const lineId = opened[0]?.lineId;
+    assert.ok(lineId !== undefined);
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    const turnId = randomUUID();
+    yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: turnId });
+    yield* writer.consume(target, {
+      conversationId: sessionKey(conversationId),
+      turnId,
+      sequence: 1,
+      kind: RUN_EVENT.TURN_STARTED,
+      origin: RUN_TURN_ORIGIN.TYPED,
+      trigger: TURN_TRIGGER.ASK,
+      at: 0,
     });
-    const standing = {
-      sessionId: `wrun_${randomUUID()}`,
-      target,
-      turn: EVE_HOST_TURN.TYPED,
-      state: memoryRelayState(),
-    };
-    const turn = { turnId: "turn_0", sequence: 0 };
-    for (const event of [
-      stampedEveEvent({ type: "turn.started", data: turn }, 0),
-      stampedEveEvent({ type: "message.received", data: { ...turn, message: handed.message } }, 0),
-    ]) {
-      yield* relay.handle(event, standing);
-    }
+    const taken = yield* writer.takeAwaitingLine(target, { clientId: lineId, turnId });
+    assert.equal(Result.getOrUndefined(taken)?.length, 1);
 
     const db = yield* Database;
     const lines = yield* db
@@ -323,22 +318,22 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
   );
 
   it.effect(
-    "a fresh agent on eve, whose prompt stands as its first line, the Start's brief sent by its starter, and eve's receipt takes that line rather than writing a typed one, has heard from no one but its starter, so its Mac is still its own, unless the automation's run that started it handed it a webhook's body",
+    "a fresh agent, whose prompt stands as its first line, the Start's brief sent by its starter, which its first turn takes by its id, has heard from no one but its starter, so its Mac is still its own, unless the automation's run that started it handed it a webhook's body",
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId } = yield* openConnectedWorkspace;
-        const openedOnEve = (ask: StartAsk) =>
+        const openedTaken = (ask: StartAsk) =>
           Effect.gen(function* () {
             const { opened, eve } = fakeEve();
             const { agent } = yield* startAgent(eve, owner, ask).pipe(Effect.provide(services));
-            return yield* openedThroughRelay(owner, agent.conversationId, opened);
+            return yield* openedLineTaken(owner, agent.conversationId, opened);
           });
         const ranFor = (firing: AutomationFiring): StartAsk => ({
           ...workspaceAsk(workspaceId),
           automationOrigin: { name: "Triage", firing, prompt: TASK },
         });
 
-        const byHand = yield* openedOnEve(workspaceAsk(workspaceId));
+        const byHand = yield* openedTaken(workspaceAsk(workspaceId));
         assert.deepEqual(
           byHand.lines,
           [
@@ -352,11 +347,11 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
           "the prompt is the conversation's one line",
         );
         assert.equal(byHand.heard, false, "by hand");
-        const scheduled = yield* openedOnEve(
+        const scheduled = yield* openedTaken(
           ranFor({ kind: AUTOMATION_FIRING.SCHEDULE, dueAt: 0 }),
         );
         assert.equal(scheduled.heard, false, "a schedule's run, its owner's prompt alone");
-        const hooked = yield* openedOnEve(ranFor({ kind: AUTOMATION_FIRING.WEBHOOK, bytes: 2 }));
+        const hooked = yield* openedTaken(ranFor({ kind: AUTOMATION_FIRING.WEBHOOK, bytes: 2 }));
         assert.equal(hooked.heard, true, "a webhook's run, its caller's body beside the prompt");
       }),
   );

@@ -1543,7 +1543,7 @@ export function calledAgent(call: Omit<TargetedCall, "callId">): CalledAgent | u
   return model === undefined ? { id, title } : { id, title, model };
 }
 
-/** The fields a delegation's part carries, in the wire's words (`agentDelegationInputSchema`, `agentDelegationOutputSchema`), and the message the brain's worker is handed in the task's place. */
+/** The fields a delegation's part carries: an eve agent's `delegate` call's task, model, effort, and result, and the message the brain's worker is handed in the task's place. */
 const DELEGATION_FIELD = {
   TASK: "task",
   MESSAGE: "message",
