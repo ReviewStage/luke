@@ -2223,7 +2223,7 @@ function linesOf(
  * marks Files changed draws, so a box ticked there counts at once. How many
  * is what the agent published until the changes are read, then theirs, but
  * where the read stopped short of every file, which leaves the published
- * count the whole.
+ * count the whole unless the read already holds more.
  */
 function filesTabCount(
   published: AgentPullRequest | undefined,
@@ -2231,10 +2231,13 @@ function filesTabCount(
 ): readonly CountPart[] | undefined {
   const changes = reads.pullRequest;
   const marks = reads.viewedFiles.marks;
+  // Note that a read cut short counts at least the files it holds, since a push after publishing can outgrow what was published.
   const total =
-    changes === null || (changes.truncated && published !== undefined)
+    changes === null
       ? published?.changedFiles
-      : changes.files.length;
+      : changes.truncated
+        ? Math.max(published?.changedFiles ?? 0, changes.files.length)
+        : changes.files.length;
   if (total === undefined) return undefined;
   const viewed =
     changes === null || marks === undefined

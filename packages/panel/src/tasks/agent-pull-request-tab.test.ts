@@ -5983,6 +5983,14 @@ test("where the read stopped short of every file, the whole is what was publishe
   assert.equal(tabCount(tab, "Files changed"), "3/5 viewed");
 });
 
+test("where the read stopped short of more files than were published, Files changed counts at least those read", async () => {
+  const tab = await draw(
+    viewing(["a.ts", "b.ts"], { changedFiles: 1, truncated: true }).control,
+    PULL_REQUEST_VIEW.FILES,
+  );
+  assert.equal(tabCount(tab, "Files changed"), "2/3 viewed");
+});
+
 /** A comment of the member's own pending review on the invite file, starting a thread of its own on line 12 unless told otherwise. */
 function draftOf(overrides: Partial<PendingReviewComment> = {}): PendingReviewComment {
   return {
