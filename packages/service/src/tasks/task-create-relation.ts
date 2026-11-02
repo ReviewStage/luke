@@ -1,18 +1,20 @@
 /**
  * task-create-relation.ts -- the relation a start makes its task in, confirmed before the start writes and written beside it in the start's own transaction.
  *
- * A task may start related to another (`taskCreateRequestSchema`'s
- * `relation`, or an agent's `create_task`'s, from the new task's side): a
- * sub-task of it, which the start makes as it makes a child of
- * `parentTaskId` (`task-parent.ts`); its parent; or a block on either side. The other task is read as its maker
- * reaches it before anything is written (`relationAsked`), so one out of
- * reach, of another workspace, or named by nothing all read alike as
+ * A task may start related to others (`taskCreateRequestSchema`'s
+ * `relations`, or an agent's `create_task`'s one `relation`, from the new
+ * task's side): a sub-task of one, which the start makes as it makes a
+ * child of `parentTaskId` (`task-parent.ts`); the parent of others; or a
+ * block on either side. Each other task is read as its maker reaches it
+ * before anything is written (`relationAsked`, `relationsAsked`), so one out
+ * of reach, of another workspace, or named by nothing all read alike as
  * unreached, and a start as a task's parent takes that task's repository,
- * as a child takes its parent's, refusing a start that names another. Then,
- * once the task's row stands, the relation is written under the same
+ * as a child takes its parent's, refusing a start that names another, so
+ * every task of the tree a start joins works in one repository. Then, once
+ * the task's row stands, each relation is written under the same
  * transaction (`relationWritten`), through the doors a relation added later
  * goes through (`setTaskParent`, `addTaskBlock`), so their rules hold and
- * the task and its relation land together or not at all. A start as a
+ * the task and its relations land together or not at all. A start as a
  * parent is refused where the other task has a parent already, checked
  * under that task's lock, since a start never takes a parent's place.
  */
@@ -119,6 +121,36 @@ export const relationAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { kind, taskId, repository };
 });
 
+/**
+ * Every relation a start asked other than a sub-task's, confirmed in order
+ * as `relationAsked` confirms one, before anything is written;
+ * `repositoryAsked` is the repository of the tree the start joins as a
+ * sub-task where it joins one, the one it named otherwise, and left out
+ * where it named none. Note that the first task a start is the parent of
+ * names the repository each later one must match, because a start naming
+ * none would otherwise take one tree's repository and join another's.
+ */
+export const relationsAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  workspaceId: string,
+  relations: readonly TaskCreateRelation[],
+  repositoryAsked: string | null | undefined,
+): Effect.fn.Return<
+  readonly TaskCreateRelationAsked[],
+  TaskRelationUnreached | TaskParentRepositoryDiffers | StoreFailure,
+  DatabaseServices
+> {
+  const confirmed: TaskCreateRelationAsked[] = [];
+  let repository = repositoryAsked;
+  for (const relation of relations) {
+    const asked = yield* relationAsked(userId, workspaceId, relation, repository);
+    if (asked === undefined) continue;
+    if (asked.kind === TASK_CREATE_RELATION_KIND.PARENT_OF) repository = asked.repository;
+    confirmed.push(asked);
+  }
+  return confirmed;
+});
+
 /** The other task made the new task's child, under its lock; refused where it has a parent already, and nothing where it is out of reach by now. */
 const parentTaken = (
   userId: string,
@@ -166,32 +198,33 @@ export function relationWritten(
 }
 
 /**
- * Starts the task as `createTaskCommitted` starts one and writes the
+ * Starts the task as `createTaskCommitted` starts one and writes every
  * relation asked beside it in one transaction, through the doors a relation
  * added later goes through (`setTaskParent`, `addTaskBlock`), so their rules
- * hold and the task and its relation land together or not at all; the task
- * alone where none is asked. The task is read again once the relation
- * stands, since the window opens the answer without reading it again, so
- * it must carry the relation. Note that the row's transaction id is the
+ * hold and the task and its relations land together or not at all, one
+ * refused taking back the task and every relation before it; the task alone
+ * where none is asked. The task is read again once the relations stand,
+ * since the window opens the answer without reading it again, so it must
+ * carry them. Note that the row's transaction id is the
  * outer transaction's, which a nested write only marks a savepoint in, so
  * the answer's `txid` still names the one commit a follower waits for.
  */
 export function createTaskRelated(
   userId: string,
   started: NewTask,
-  asked: TaskCreateRelationAsked | undefined,
+  asked: readonly TaskCreateRelationAsked[],
 ): Effect.Effect<
   TaskCommitted<StoredTask>,
   StoreFailure | TaskAssigneeNotMember | TaskCreateRelationRefused,
   DatabaseServices
 > {
-  if (asked === undefined) return createTaskCommitted(userId, started);
+  if (asked.length === 0) return createTaskCommitted(userId, started);
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const created = yield* createTaskCommitted(userId, started);
         const taskId = created.task.task.id;
-        yield* relationWritten(userId, taskId, asked);
+        for (const relation of asked) yield* relationWritten(userId, taskId, relation);
         const read = yield* readTask(userId, taskId);
         // The row was written under this transaction, so a read that misses it is the database breaking its own contract.
         if (Option.isNone(read))

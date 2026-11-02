@@ -27,14 +27,17 @@ import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
 import { tasksProcedures } from "./tasks-procedures.js";
 
 /**
- * A member starting a plan related to another through the hosted oRPC
+ * A member starting a plan related to others through the hosted oRPC
  * router, as the web route answers it, over a real dialect: the plan starts
- * as a sub-task of the other, as its parent, or blocking or blocked by it,
- * and the relation is written with it. A start as a plan's parent is
- * refused where that plan has a parent already, a start naming another
- * repository than the tree's is refused as a sub-task and as a parent
- * alike, and a member who does not reach the other plan is refused, each
- * making nothing. Synthetic accounts, plans, and tokens throughout.
+ * as a sub-task of another, as its parent, or blocking or blocked by it,
+ * through the old door's one `relation` or several at once, and every
+ * relation is written with it. A start naming two parents, a plan twice, or
+ * both doors is refused by its shape, a start as a plan's parent is refused
+ * where that plan has a parent already, taking back the relations before
+ * it, a start naming another repository than the tree's is refused as a
+ * sub-task and as a parent alike, and a member who does not reach every
+ * other plan is refused, each making nothing. Synthetic accounts, plans,
+ * and tokens throughout.
  */
 
 const ORIGIN = "https://luke.test";
@@ -104,6 +107,7 @@ const listedIds = (userId: string) =>
   Effect.map(listTasks(userId), (tasks) => tasks.map((each) => each.id).sort());
 
 it.layer(getTestDB())("a plan started in a relation to another", (it) => {
+  // Note that these starts go through the old door, `relation`, which released desktop builds still send.
   it.effect(
     "a plan starts as a sub-task of the other, as its parent in its repository, or blocking or blocked by it, the relation written with it",
     () =>
@@ -165,6 +169,81 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
   );
 
   it.effect(
+    "a plan starts with several relations, a sub-task of one, the parent of another in its tree's repository, and blocking a third, each written with it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openTokenMember();
+        const workspace = yield* openWorkspace(owner);
+        const inSide = { organizationId: workspace, repository: SIDE_REPOSITORY };
+        const { id: top } = yield* createTask(owner, {
+          ...inSide,
+          name: "Top",
+          githubAccess: GITHUB_ACCESS.TOKEN,
+        });
+        const { id: loose } = yield* createTask(owner, {
+          ...inSide,
+          name: "Loose",
+          githubAccess: GITHUB_ACCESS.TOKEN,
+        });
+        const { id: waiting } = yield* createTask(owner, { organizationId: workspace, name: "W" });
+        const send = yield* starting(new Map([["Bearer owner", owner]]));
+
+        const between = yield* send("Bearer owner", {
+          name: "Between",
+          workspaceId: workspace,
+          relations: [
+            { kind: TASK_CREATE_RELATION_KIND.SUB_TASK_OF, taskId: top },
+            { kind: TASK_CREATE_RELATION_KIND.PARENT_OF, taskId: loose },
+            { kind: TASK_CREATE_RELATION_KIND.BLOCKS, taskId: waiting },
+          ],
+        });
+
+        assert.equal(between.status, 201, JSON.stringify(between.body));
+        const { plan } = between.body;
+        assert.deepEqual(
+          [plan.parentTaskId, plan.repository, plan.blockedBy, plan.blocks],
+          [top, SIDE_REPOSITORY, [], [waiting]],
+        );
+        assert.equal(yield* parentOf(owner, loose), plan.id);
+      }).pipe(Effect.provide(GITHUB_APP_WITH_TOKENS)),
+  );
+
+  it.effect(
+    "a start naming two parents, one plan twice, or both relation doors is refused by its shape, and nothing is made",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openTokenMember();
+        const workspace = yield* openWorkspace(owner);
+        const { id: one } = yield* createTask(owner, { organizationId: workspace, name: "1" });
+        const { id: two } = yield* createTask(owner, { organizationId: workspace, name: "2" });
+        const send = yield* starting(new Map([["Bearer owner", owner]]));
+        const start = (asked: Pick<TaskCreateRequest, "relation" | "relations">) =>
+          send("Bearer owner", { name: "Refused", workspaceId: workspace, ...asked });
+
+        const twoParents = yield* start({
+          relations: [
+            { kind: TASK_CREATE_RELATION_KIND.SUB_TASK_OF, taskId: one },
+            { kind: TASK_CREATE_RELATION_KIND.SUB_TASK_OF, taskId: two },
+          ],
+        });
+        const namedTwice = yield* start({
+          relations: [
+            { kind: TASK_CREATE_RELATION_KIND.BLOCKS, taskId: one },
+            { kind: TASK_CREATE_RELATION_KIND.BLOCKED_BY, taskId: one },
+          ],
+        });
+        const bothDoors = yield* start({
+          relation: { kind: TASK_CREATE_RELATION_KIND.BLOCKS, taskId: one },
+          relations: [{ kind: TASK_CREATE_RELATION_KIND.BLOCKS, taskId: two }],
+        });
+
+        const invalid = { status: 400, body: { error: HOSTED_API_ERROR.INVALID_REQUEST } };
+        assert.deepEqual([twoParents, namedTwice, bothDoors], [invalid, invalid, invalid]);
+        assert.deepEqual(yield* listedIds(owner), [one, two].sort());
+      }).pipe(Effect.provide(GITHUB_APP_WITH_TOKENS)),
+  );
+
+  it.effect(
     "a start as the parent of a plan that has a parent already is refused by name, and nothing is made",
     () =>
       Effect.gen(function* () {
@@ -176,20 +255,29 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
           name: "L",
           parentTaskId: top,
         });
+        const { id: holding } = yield* createTask(owner, { organizationId: workspace, name: "H" });
         const send = yield* starting(new Map([["Bearer owner", owner]]));
 
+        // The block is written first, so the refusal after it must take the block back with the task.
         const held = yield* send("Bearer owner", {
           name: "Between",
           workspaceId: workspace,
-          relation: { kind: TASK_CREATE_RELATION_KIND.PARENT_OF, taskId: leaf },
+          relations: [
+            { kind: TASK_CREATE_RELATION_KIND.BLOCKED_BY, taskId: holding },
+            { kind: TASK_CREATE_RELATION_KIND.PARENT_OF, taskId: leaf },
+          ],
         });
 
         assert.deepEqual(held, {
           status: 409,
           body: { error: HOSTED_API_ERROR.TASK_PARENT_HELD },
         });
-        assert.deepEqual(yield* listedIds(owner), [leaf, top].sort());
+        assert.deepEqual(yield* listedIds(owner), [holding, leaf, top].sort());
         assert.equal(yield* parentOf(owner, leaf), top);
+        assert.deepEqual(
+          yield* readTaskBlocks(owner, holding),
+          Option.some({ blockedBy: [], blocks: [] }),
+        );
       }).pipe(Effect.provide(GITHUB_APP_WITH_TOKENS)),
   );
 
@@ -205,6 +293,7 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
           repository: SIDE_REPOSITORY,
           githubAccess: GITHUB_ACCESS.TOKEN,
         });
+        const { id: plain } = yield* createTask(owner, { organizationId: workspace, name: "P" });
         const send = yield* starting(new Map([["Bearer owner", owner]]));
         const elsewhere = (kind: TaskCreateRelation) =>
           send("Bearer owner", {
@@ -222,10 +311,20 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
           kind: TASK_CREATE_RELATION_KIND.PARENT_OF,
           taskId: side,
         });
+        // Naming no repository, the first plan it is the parent of names the one every other must share.
+        const asParentOfTwoTrees = yield* send("Bearer owner", {
+          name: "Across",
+          workspaceId: workspace,
+          relations: [
+            { kind: TASK_CREATE_RELATION_KIND.PARENT_OF, taskId: side },
+            { kind: TASK_CREATE_RELATION_KIND.PARENT_OF, taskId: plain },
+          ],
+        });
 
         const locked = { status: 409, body: { error: HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED } };
-        assert.deepEqual([asSubTask, asParent], [locked, locked]);
-        assert.deepEqual(yield* listedIds(owner), [side]);
+        assert.deepEqual([asSubTask, asParent, asParentOfTwoTrees], [locked, locked, locked]);
+        assert.deepEqual(yield* listedIds(owner), [plain, side].sort());
+        assert.equal(yield* parentOf(owner, side), null);
       }).pipe(Effect.provide(GITHUB_APP_WITH_TOKENS)),
   );
 
@@ -238,6 +337,11 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
         const workspace = yield* openWorkspace(owner);
         const elsewhere = yield* openWorkspace(owner);
         const { id: side } = yield* createTask(owner, { organizationId: workspace, name: "S" });
+        const strangerWorkspace = yield* openWorkspace(stranger);
+        const { id: own } = yield* createTask(stranger, {
+          organizationId: strangerWorkspace,
+          name: "O",
+        });
         const send = yield* starting(
           new Map([
             ["Bearer owner", owner],
@@ -245,9 +349,14 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
           ]),
         );
 
+        // The stranger's own plan comes first, so reaching it must not carry the start past the owner's.
         const byStranger = yield* send("Bearer stranger", {
           name: "Blocked",
-          relation: { kind: TASK_CREATE_RELATION_KIND.BLOCKED_BY, taskId: side },
+          workspaceId: strangerWorkspace,
+          relations: [
+            { kind: TASK_CREATE_RELATION_KIND.BLOCKS, taskId: own },
+            { kind: TASK_CREATE_RELATION_KIND.BLOCKED_BY, taskId: side },
+          ],
         });
         const acrossWorkspaces = yield* send("Bearer owner", {
           name: "Parent",
@@ -258,7 +367,11 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
         const notFound = { status: 404, body: { error: HOSTED_API_ERROR.NOT_FOUND } };
         assert.deepEqual([byStranger, acrossWorkspaces], [notFound, notFound]);
         assert.deepEqual(yield* listedIds(owner), [side]);
-        assert.deepEqual(yield* listedIds(stranger), []);
+        assert.deepEqual(yield* listedIds(stranger), [own]);
+        assert.deepEqual(
+          yield* readTaskBlocks(stranger, own),
+          Option.some({ blockedBy: [], blocks: [] }),
+        );
         assert.deepEqual(
           yield* readTaskBlocks(owner, side),
           Option.some({ blockedBy: [], blocks: [] }),

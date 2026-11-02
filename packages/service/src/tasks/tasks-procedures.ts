@@ -85,6 +85,7 @@ import { TASK_START_STATUS } from "@luke/features/contract";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
 import {
+  startRelationsOf,
   TASK_BLOCK_CHANGE,
   TASK_BLOCK_RELATION,
   TASK_CREATE_RELATION_KIND,
@@ -138,7 +139,7 @@ import {
 } from "./plan-notes.js";
 import {
   createTaskRelated,
-  relationAsked,
+  relationsAsked,
   type TaskCreateRelationRefused,
 } from "./task-create-relation.js";
 import { type TaskParent, taskParentOf } from "./task-parent.js";
@@ -563,10 +564,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * `parentTaskId` or a relation as its sub-task, takes its parent's
      * repository, place to run, and, where it names none, its assignee
      * (`parentAsked`), confirmed again as any start's repository is; one
-     * started as another's parent takes that plan's repository, and one
-     * started blocking or blocked by another takes nothing of it
-     * (`relationAsked`), and the relation is written in the plan's own
-     * transaction (`createTaskRelated`).
+     * started as others' parent takes their repository, which the tree
+     * shares, and one started blocking or blocked by others takes nothing of
+     * them (`relationsAsked`), and every relation is written in the plan's
+     * own transaction (`createTaskRelated`), so one refused makes nothing.
      */
     create: plans.create.effect(function* ({ input, context }) {
       const { userId, request } = context;
@@ -579,28 +580,33 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           : yield* startedBefore(userId, agent.idempotencyKey, organizationId);
       if (Option.isSome(before)) return { status: TASK_START_STATUS.RETRIED, body: before.value };
       // A retry is answered above first, since its parent may be gone by now, or its device away, while its task stands.
-      const { relation } = input;
+      const relations = startRelationsOf(input);
       // A start as a sub-task of a plan is a start under that parent, which `parentTaskId` names as well.
       const parentTaskId =
         input.parentTaskId ??
-        (relation?.kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF ? relation.taskId : undefined);
+        relations.find((relation) => relation.kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF)
+          ?.taskId;
       const parent =
         parentTaskId === undefined
           ? undefined
           : yield* parentAsked(userId, organizationId, { ...input, parentTaskId });
-      const beside =
-        relation === undefined
-          ? undefined
-          : yield* Effect.catch(
-              relationAsked(userId, organizationId, relation, input.repository),
-              relationRefused,
-            );
-      // A plan in a tree works in the tree's repository: its parent's as a child, and its child's as a parent.
+      // A plan's children share its parent's repository, so a start under a parent holds them to that one.
+      const beside = yield* Effect.catch(
+        relationsAsked(
+          userId,
+          organizationId,
+          relations,
+          parent === undefined ? input.repository : parent.repository,
+        ),
+        relationRefused,
+      );
+      const childOf = beside.find((asked) => asked.kind === TASK_CREATE_RELATION_KIND.PARENT_OF);
+      // A plan in a tree works in the tree's repository: its parent's as a child, and its children's as a parent.
       const repository =
         parent !== undefined
           ? parent.repository
-          : beside?.kind === TASK_CREATE_RELATION_KIND.PARENT_OF
-            ? beside.repository
+          : childOf?.kind === TASK_CREATE_RELATION_KIND.PARENT_OF
+            ? childOf.repository
             : input.repository;
       if (agent !== undefined && (repository === undefined || repository === null)) {
         return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
