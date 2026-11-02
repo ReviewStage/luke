@@ -340,6 +340,8 @@ export function lineSender(
 export interface EndLineParts {
   readonly words: string;
   readonly failed: boolean;
+  /** Why a failed turn failed, as the service's word, which the failure it reports names; none for a stop, or a failure that said no reason. */
+  readonly failure?: AgentFailure | undefined;
 }
 
 /**
@@ -366,10 +368,14 @@ export function endLineParts(
       return { words: "Stopped", failed: false };
     case AGENT_STATUS.FAILED: {
       if (ranDirectly !== undefined)
-        return { words: ranDirectlyWords(ranDirectly.folder, starter), failed: true };
+        return { words: ranDirectlyWords(ranDirectly.folder, starter), failed: true, failure };
       const words =
         failure === undefined ? undefined : agentFailureWords(failure, starter, continuable);
-      return { words: `Failed: ${words ?? "the run ended without saying why"}`, failed: true };
+      return {
+        words: `Failed: ${words ?? "the run ended without saying why"}`,
+        failed: true,
+        failure,
+      };
     }
     case AGENT_STATUS.STARTING:
     case AGENT_STATUS.RUNNING:
@@ -750,9 +756,6 @@ export function unrunnableChoice(
   return model === undefined ? undefined : modelConnectFailure(model);
 }
 
-/** What an agent our key paid for says to a message, since it never moves to another payer. */
-const LUKE_PAID_REFUSAL = `${PRODUCT_NAME}'s key no longer runs agents. Continue in a new one.`;
-
 /** The one sentence a missing credential says: the harness to connect, by the provider the service named, and what it unblocks. */
 function credentialMissingWords(
   provider: ModelProvider | undefined,
@@ -1086,13 +1089,6 @@ export function messageFailureNote(
         refused.refusedDevice,
       ),
     );
-  }
-  // Note that an agent our key paid for is refused whatever is connected now, so Settings mends nothing.
-  if (
-    refused.failure === AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING &&
-    payer === AGENT_PAYER.LUKE
-  ) {
-    return callFailure(LUKE_PAID_REFUSAL);
   }
   const theirs = starter === undefined ? undefined : starterKeyWords(refused.failure, starter);
   if (theirs !== undefined) return callFailure(theirs);

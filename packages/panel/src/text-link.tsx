@@ -4,17 +4,18 @@ import type { ReactNode } from "react";
 import { opensAsLink } from "./tasks/use-open-link.js";
 
 /**
- * text-link.tsx -- a plain link in written words, drawn one way in every place that draws words: its label underlined quietly in the words' own ink, a bare address cut to its host and path with a small ↗, the whole address in the window's hint.
+ * text-link.tsx -- a plain link in written words, drawn one way in every place that draws words: its label underlined quietly in the words' own ink, a bare address cut to its host and path, the whole address in the window's hint.
  *
  * A link the window knows better, a mention, is drawn as its chip
  * (`tasks/mention-chip.tsx`) before it ever reaches here; what is left
  * is a page the window has no chip for. Both Markdown renderers draw it
  * through this one element, a transcript's (`tasks/transcript-blocks.tsx`)
  * and a plan's (`markdown-message.tsx`), and the plan's editor gives its
- * link mark the same class, so a link reads alike wherever it is written.
+ * link mark the same classes, so a link reads alike wherever it is written.
  * Where words are their own address (`@luke/ui/link-face`), they say it as
- * a reader names a page, and the ↗ says a press leaves the window, as a
- * chip's press stays in it. What it looks like is `@luke/ui`'s underlined
+ * a reader names a page. Note that it wears no ↗, because every link that
+ * is no chip leaves the window, so the arrow would say nothing the
+ * underline does not. What it looks like is `@luke/ui`'s underlined
  * TextLink; what is the window's own is here: the face, the hint, and the
  * press that opens the address through the app rather than the page.
  *
@@ -59,7 +60,6 @@ export function TextLink({
       <SharedTextLink
         href={opens ? href : undefined}
         look={TEXT_LINK_LOOK.UNDERLINED}
-        external={face?.shortened === true}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();

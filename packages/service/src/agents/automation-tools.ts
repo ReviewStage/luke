@@ -12,6 +12,7 @@ import { readSchedule, SCHEDULE_REFUSAL } from "@luke/features/automation-schedu
 import {
   AUTOMATION_ACTION,
   AUTOMATION_BOUNDS,
+  AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS,
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
@@ -34,7 +35,7 @@ import { PRODUCT_NAME } from "@luke/features/product-name";
 import { TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
 import { isRecord } from "@luke/wire";
 import { describeWire } from "@luke/wire/effect";
-import { Clock, Effect, Option, Result, Schema } from "effect";
+import { Clock, Effect, Option, Result, Schema, Struct } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   changeAutomationAs,
@@ -119,8 +120,8 @@ export const AUTOMATION_TOOL_REFUSAL = {
     "A personal automation is its creator's alone, and a workspace's its creator's, owners', and " +
     "admins'; only its toggle is open to more of the workspace.",
   NO_REPOSITORY:
-    "Not made: name the repositories its runs work in, as owner/name, the first where each run " +
-    "starts; you work in none to take as its own.",
+    "Not run: a GitHub trigger fires on events of the automation's repositories, so name at " +
+    "least one, as owner/name.",
   NOT_REACHABLE:
     "Not run: the GitHub installation connected to the workspace does not reach one of those " +
     "repositories; name ones it reaches.",
@@ -163,90 +164,60 @@ const AUTOMATION_ID = describeWire(
   `The automation's id, as ${AGENT_TOOL.LIST_AUTOMATIONS} or ${AGENT_TOOL.CREATE_AUTOMATION} answered it.`,
 );
 
-const NAME = describeWire(
-  automationCreateRequestSchema.fields.name,
-  `Its name, as the automations page lists it, at most ${AUTOMATION_BOUNDS.MAX_NAME_CHARS} characters.`,
-);
-
 const PROMPT = describeWire(
   automationActionSchema.fields.prompt,
-  "What each run's new agent is told to do, as its first message, at most " +
-    `${AUTOMATION_BOUNDS.MAX_PROMPT_CHARS} characters: whole and standing alone, since no one ` +
-    `watches a run and, unless agentId is set, it remembers no run before it. ${PRODUCT_NAME} adds a line beneath it saying what ` +
-    "fired the run.",
+  "Each run's first message; make it stand alone, since no one watches a run.",
 );
 
 const TRIGGER = describeWire(
   Schema.Union([scheduleTriggerSchema, githubTriggerSchema, sentryTriggerSchema]),
-  "What fires it: a schedule, five-field cron read in an IANA time zone, at most once every " +
-    'fifteen minutes, such as {"kind":"schedule","cron":"0 9 * * 1","timezone":"Europe/London"}; ' +
-    `an event of its repositories the ${PRODUCT_NAME} GitHub App hears, such as ` +
-    '{"kind":"github","event":"pull-request-opened"}, narrowed by labels, branches, senders ' +
-    "(people alone where left out), moments, drafts, and forks; or an event of the Sentry " +
-    `organization that installed ${PRODUCT_NAME}'s Sentry integration on the workspace (Workspace settings ` +
-    '› Integrations › Sentry), such as {"kind":"integration","provider":"sentry",' +
-    '"event":"alert-triggered","filters":{"project":["web"],"level":["error","fatal"]}}. ' +
-    "alert-triggered, the one to prefer, fires when a Sentry issue alert rule whose action is " +
-    `"Send a notification via ${PRODUCT_NAME}" fires; issue-created fires on every new issue in that ` +
-    "organization. Its filters keep it to the projects (by slug), environments, and levels " +
-    "named: any value within a field matches, every field named must, case aside. A webhook is " +
-    "made only on the automations page, which shows its secret once.",
+  "cron: five fields in an IANA timezone, at most every fifteen minutes. GitHub senders " +
+    "default to people, moments (pull-request-updated only) to all, drafts and forks to false. " +
+    "Sentry: prefer alert-triggered, fired by an alert rule whose action is " +
+    `"Send a notification via ${PRODUCT_NAME}"; issue-created fires on every new issue. A ` +
+    "filter matches any of its values, and every filter given must. Webhooks are made only on " +
+    "the automations page.",
 );
 
 const REPOSITORIES = describeWire(
   automationCreateRequestSchema.fields.repositories.schema,
-  "The repositories its runs work in, as owner/name, the first where each run starts; each " +
-    "must be one the workspace's GitHub installation reaches.",
+  "owner/name, reached by the workspace's GitHub installation; runs start in the first. [] " +
+    "for none, which a GitHub trigger cannot take. Create defaults to the one you work in, if any.",
 );
 
 const MODEL = describeWire(
   modelChoiceSchema.fields.model,
-  `The model each run's agent runs on, by its catalog id as ${AGENT_TOOL.LIST_MODELS} lists it; ` +
-    "given with the effort or not at all, and the creator's default as each run starts where " +
-    "left out.",
-);
-
-const EFFORT = describeWire(
-  modelChoiceSchema.fields.effort,
-  "The reasoning effort, as the model lists it; given with the model or not at all.",
+  `Catalog id from ${AGENT_TOOL.LIST_MODELS}, given with effort; neither for the creator's default.`,
 );
 
 const SERVERS = describeWire(
   disabledServersSchema,
-  "The connections (MCP servers) each run's agent is not handed, the whole list, each by its " +
-    "connection name as your instructions list your connections (neon, sentry, notion-2); every " +
-    "connection of the creator's is handed where none are named, and a name that is no " +
-    "connection's is refused. A connection the prompt names with an @ is handed even where it is " +
-    "listed here.",
+  "Connections, as your instructions name them, each run's agent is not handed; the whole list.",
 );
 
 const GUARDS = describeWire(
   automationGuardsSchema,
-  "How far it may go: maxConcurrentRuns, its agents at work at once (1 to " +
-    `${AUTOMATION_BOUNDS.MAX_CONCURRENT_RUNS}), past which a firing is skipped, and dailyRunCap, ` +
-    `the runs it may start in a day (1 to ${AUTOMATION_BOUNDS.MAX_DAILY_RUNS}); 1 and 10 where ` +
-    "left out. A Sentry trigger also takes subjectCooldownHours, the hours before the same " +
-    `Sentry issue may start another run (1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}), ` +
-    `${AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS} where left out.`,
+  `maxConcurrentRuns 1 to ${AUTOMATION_BOUNDS.MAX_CONCURRENT_RUNS}, default ` +
+    `${AUTOMATION_DEFAULT_GUARDS.maxConcurrentRuns}; dailyRunCap 1 to ` +
+    `${AUTOMATION_BOUNDS.MAX_DAILY_RUNS}, default ${AUTOMATION_DEFAULT_GUARDS.dailyRunCap}; ` +
+    `subjectCooldownHours, per Sentry issue, 1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}, ` +
+    `default ${AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS}.`,
 );
 
 const SCOPE = describeWire(
   automationScopeSchema,
-  "Whose it is: personal, its creator's alone, which the workspace's owners and admins see and " +
-    "pause; or workspace, which every member sees, runs, and pauses. personal where left out.",
+  "personal, the default, is its creator's; workspace is every member's.",
 );
 
 const ARCHIVE_SUCCESSFUL = describeWire(
   Schema.Boolean,
-  "Whether each run's agent is archived once it finishes without failing and leaves no thread " +
-    "open; false where left out.",
+  "Archive each run's agent once it succeeds and leaves no thread open.",
 );
 
 const AGENT_ID = describeWire(
-  wireUuidSchema,
-  "An agent of your workspace to hand every run to as a message, by the id " +
-    `${AGENT_TOOL.LIST_AGENTS} answered, so each run remembers the ones before; left out, each ` +
-    "run starts a new agent.",
+  Schema.NullOr(wireUuidSchema),
+  `Hand every run to this agent, by its ${AGENT_TOOL.LIST_AGENTS} id, so runs share its ` +
+    "memory; null for a new agent each run, the default.",
 );
 
 const LIST_AUTOMATIONS_INPUT = Schema.Struct({
@@ -259,52 +230,34 @@ const LIST_AUTOMATIONS_INPUT = Schema.Struct({
   ),
 });
 
-const CREATE_AUTOMATION_INPUT = Schema.Struct({
-  name: NAME,
+/** An automation as both tools take it: create needs its name, prompt, and trigger, and update takes any of them. */
+const AUTOMATION_FIELDS = {
+  name: automationCreateRequestSchema.fields.name,
   prompt: PROMPT,
   trigger: TRIGGER,
-  repositories: Schema.optionalKey(
-    describeWire(
-      automationCreateRequestSchema.fields.repositories.schema,
-      "The repositories its runs work in, as owner/name, the first where each run starts; each " +
-        "must be one the workspace's GitHub installation reaches. The one you work in where left out.",
-    ),
-  ),
-  model: Schema.optionalKey(MODEL),
-  effort: Schema.optionalKey(EFFORT),
-  disabledServers: Schema.optionalKey(SERVERS),
-  agentId: Schema.optionalKey(AGENT_ID),
-  guards: Schema.optionalKey(GUARDS),
-  scope: Schema.optionalKey(SCOPE),
-  archiveSuccessful: Schema.optionalKey(ARCHIVE_SUCCESSFUL),
-});
+  repositories: REPOSITORIES,
+  model: MODEL,
+  effort: modelChoiceSchema.fields.effort,
+  disabledServers: SERVERS,
+  agentId: AGENT_ID,
+  guards: GUARDS,
+  scope: SCOPE,
+  archiveSuccessful: ARCHIVE_SUCCESSFUL,
+};
+
+const CREATE_AUTOMATION_INPUT = Schema.Struct(
+  Struct.mapOmit(AUTOMATION_FIELDS, ["name", "prompt", "trigger"], Schema.optionalKey),
+);
 
 const UPDATE_AUTOMATION_INPUT = Schema.Struct({
   automationId: AUTOMATION_ID,
-  name: Schema.optionalKey(NAME),
   enabled: Schema.optionalKey(
     describeWire(
       Schema.Boolean,
-      "false to pause it, so nothing fires it, and true to resume it; a schedule resumed is " +
-        "next due from now, with nothing missed run late.",
+      "false pauses it, true resumes it; missed firings are not run late.",
     ),
   ),
-  prompt: Schema.optionalKey(PROMPT),
-  trigger: Schema.optionalKey(TRIGGER),
-  repositories: Schema.optionalKey(REPOSITORIES),
-  model: Schema.optionalKey(MODEL),
-  effort: Schema.optionalKey(EFFORT),
-  disabledServers: Schema.optionalKey(SERVERS),
-  agentId: Schema.optionalKey(
-    describeWire(
-      Schema.NullOr(wireUuidSchema),
-      `An agent of your workspace to hand every run to, by the id ${AGENT_TOOL.LIST_AGENTS} ` +
-        "answered; null for a new agent each run.",
-    ),
-  ),
-  guards: Schema.optionalKey(GUARDS),
-  scope: Schema.optionalKey(SCOPE),
-  archiveSuccessful: Schema.optionalKey(ARCHIVE_SUCCESSFUL),
+  ...Struct.map(AUTOMATION_FIELDS, Schema.optionalKey),
 });
 
 const DELETE_AUTOMATION_INPUT = Schema.Struct({ automationId: AUTOMATION_ID });
@@ -337,7 +290,7 @@ export const CREATE_AUTOMATION_TOOL = {
   description:
     "Make an automation in your workspace for the developer you work for, as the automations " +
     `page would: each time its trigger fires, ${PRODUCT_NAME} starts an agent on its prompt, in its ` +
-    "repositories, on its creator's keys and connections, with no task and no one watching, or " +
+    "repositories or in none, on its creator's keys and connections, with no task and no one watching, or " +
     "hands the run to the one agent named. It is on as it is made, and runs as the developer. " +
     `One fired by Sentry needs ${PRODUCT_NAME}'s Sentry integration installed on the workspace first. ` +
     "Make one when the developer asks for it, never otherwise on your own, and read " +
@@ -351,8 +304,6 @@ export const UPDATE_AUTOMATION_TOOL = {
   description:
     "Change an automation of your workspace, by its id as " +
     `${AGENT_TOOL.LIST_AUTOMATIONS} answered it, as its editor on the automations page would: ` +
-    "pause or resume it, rename it, or give it a new prompt, trigger, repositories, model and " +
-    "effort, switched-off connections, the agent its runs land on, guards, scope, or archiving; " +
     "what you leave out stands, and a trigger given replaces the one standing whole, a switch " +
     `to Sentry needing ${PRODUCT_NAME}'s Sentry integration installed on the workspace. Change one only ` +
     "where the developer asked for it. Answers `accepted` with the automation as it now " +
@@ -678,7 +629,7 @@ export function runCreateAutomation(
       );
       if (Result.isFailure(landing)) return agentToolRejected(landing.failure);
       const worked = yield* workedRepository(call.caller);
-      const repositories = made.repositories ?? (worked === null ? undefined : [worked]);
+      const repositories = made.repositories ?? (worked === null ? [] : [worked]);
       const action: AutomationAction = {
         kind: AUTOMATION_ACTION.AGENT,
         prompt: made.prompt,
@@ -691,7 +642,7 @@ export function runCreateAutomation(
         userId,
         {
           workspaceId: workspace.value,
-          ...(repositories === undefined ? undefined : { repositories }),
+          repositories,
           name: made.name,
           trigger: made.trigger,
           action,
@@ -713,10 +664,6 @@ export function runCreateAutomation(
           made.scope === AUTOMATION_SCOPE.WORKSPACE
         ) {
           return agentToolRejected(AUTOMATION_TOOL_REFUSAL.WORKSPACE_SCOPE);
-        }
-        // Note that a create on a workspace with no repositories is refused as malformed, and is said as the repositories it lacks.
-        if (refusal.error === HOSTED_API_ERROR.INVALID_REQUEST && repositories === undefined) {
-          return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_REPOSITORY);
         }
         return agentToolRejected(refusalWords(refusal));
       }

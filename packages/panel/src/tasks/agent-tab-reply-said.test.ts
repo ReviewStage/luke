@@ -3,16 +3,19 @@
 import assert from "node:assert/strict";
 import type { AgentMessagesAnswerView, AgentTranscriptPage } from "@luke/features/agent-view";
 import {
+  AGENT_FAILURE,
   AGENT_STATUS,
   type AgentStatus,
   type AgentSummary,
   type AgentTranscriptMessage,
 } from "@luke/features/agent-wire";
+import { type ShownFailureSentry, sendShownFailure } from "@luke/features/shown-failure";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { installShownFailureReporter } from "../failure-report.js";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -25,7 +28,8 @@ import type { TranscriptFollower } from "./use-agent-transcript.js";
  * whole: the transcript is no live region, so the chunks it streams in are
  * not heard, and the page that says the turn completed says the reply
  * once, politely, by who sent it and its first sentence; a turn that fails
- * says its end line once as it lands. Synthetic transcript throughout.
+ * says its end line once as it lands, and reports why by the service's word
+ * for it and the agent it is about. Synthetic transcript throughout.
  */
 
 declare global {
@@ -277,4 +281,45 @@ test("a worker's reply is said once whole, under the worker's name", async () =>
   const tab = await runningTab(page("The writers", AGENT_STATUS.RUNNING, "1:1"), true);
   await tab.answer(page("The writers quote every field.", AGENT_STATUS.COMPLETED, "1:2"));
   assert.equal(announcedPolitely(), `Reply from ${WORKER_TASK}: The writers quote every field.`);
+});
+
+test("a failed turn's end line reports the service's word for why, and the agent and task it is about, once", async () => {
+  const reported: Readonly<Record<string, unknown>>[] = [];
+  const recording: ShownFailureSentry = {
+    captureException: () => "",
+    logger: {
+      warn: (_message, attributes) => reported.push(attributes),
+      error: (_message, attributes) => reported.push(attributes),
+    },
+    getActiveSpan: () => undefined,
+    getCurrentScope: () => ({
+      getPropagationContext: () => ({ traceId: "0af7651916cd43dd8448eb211c80319c" }),
+    }),
+  };
+  const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
+  try {
+    const failed = { ...AGENT, status: AGENT_STATUS.FAILED };
+    const tab = await runningTab(
+      {
+        ...page("The retry", AGENT_STATUS.FAILED, "1:1"),
+        failureReason: AGENT_FAILURE.PROVIDER_KEY,
+      },
+      false,
+      failed,
+    );
+    // A tab drawn again, as its row is read anew, reports the same failure no more.
+    await tab.row({ ...failed, title: "Retry audit, renamed" });
+  } finally {
+    uninstall();
+  }
+
+  assert.deepEqual(
+    reported.map((attributes) => [
+      attributes["failure.surface"],
+      attributes["failure.code"],
+      attributes["agent.id"],
+      attributes["task.id"],
+    ]),
+    [["agent.turn", "provider_key", AGENT.id, "plan-1"]],
+  );
 });

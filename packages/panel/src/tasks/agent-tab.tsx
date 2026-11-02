@@ -2,8 +2,10 @@ import { AGENT_TOOL } from "@luke/features/agent-tools";
 import { TRANSCRIPT_KIND } from "@luke/features/agent-view";
 import {
   AGENT_BRIEF,
+  AGENT_FAILURE,
   AGENT_STATUS,
   type AgentBrief,
+  type AgentFailure,
   type AgentOrigin,
   type AgentPullRequestAnswer,
   type AgentStatus,
@@ -18,7 +20,11 @@ import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/
 import { threadLineWords } from "@luke/features/inbox-wire";
 import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/models-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import {
+  FAILURE_CONDITION,
+  FAILURE_SURFACE,
+  type FailureAbout,
+} from "@luke/features/shown-failure";
 import type { TaskStatus } from "@luke/features/task-wire";
 import {
   CALL_KIND,
@@ -344,6 +350,14 @@ const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 
 /** The height a transcript's row is taken to have before it is drawn and measured, in pixels: a short turn's, with the log's step before it (`--luke-space-12`), which a row holds itself (tasks.css's `.agent-log-row-next`). */
 const ROW_ESTIMATE_PX = 172;
+
+/**
+ * The cause a failed turn is reported under, one per failure word, so a tab
+ * drawn again finds the report it made rather than making another.
+ */
+const TURN_FAILURE_CAUSE: ReadonlyMap<AgentFailure, { readonly code: AgentFailure }> = new Map(
+  Object.values(AGENT_FAILURE).map((failure) => [failure, { code: failure }]),
+);
 
 /** What the tab says where its transcript could not be read. */
 const TRANSCRIPT_FAILED_LINE = "The transcript could not be read.";
@@ -1622,11 +1636,14 @@ function AgentEndLine({
   endReason,
   keyProvider,
   onOpenApiKeys,
+  about,
 }: {
   ended: EndLineParts;
   endReason: FailureReason | undefined;
   keyProvider: ModelProvider | undefined;
   onOpenApiKeys: (() => void) | undefined;
+  /** The agent and task the failure is about, which its copied details name. */
+  about: FailureAbout;
 }): React.JSX.Element {
   // Note that a key refused is mended at its harness's row in Settings, so its line offers that row after the words.
   const remedy =
@@ -1647,7 +1664,11 @@ function AgentEndLine({
         <FailureNote
           failure={failureShown({
             surface: FAILURE_SURFACE.AGENT_TURN,
-            cause: endReason ?? FAILURE_CONDITION.UNREAD,
+            // Note that the service's word for the failure is its code, so a report names what failed rather than what mends it.
+            cause:
+              (ended.failure === undefined ? undefined : TURN_FAILURE_CAUSE.get(ended.failure)) ??
+              FAILURE_CONDITION.UNREAD,
+            about,
           })}
           time={FAILURE_NOTE_TIME.PAST}
         >
@@ -1698,6 +1719,7 @@ function AgentEndRow({
   endReason,
   keyProvider,
   onOpenApiKeys,
+  about,
   press,
   centred = false,
 }: {
@@ -1705,6 +1727,7 @@ function AgentEndRow({
   endReason: FailureReason | undefined;
   keyProvider: ModelProvider | undefined;
   onOpenApiKeys: (() => void) | undefined;
+  about: FailureAbout;
   press: ReactNode;
   /** Whether it stands in the empty state's own centred column, centred as its column is. */
   centred?: boolean;
@@ -1719,6 +1742,7 @@ function AgentEndRow({
         endReason={endReason}
         keyProvider={keyProvider}
         onOpenApiKeys={onOpenApiKeys}
+        about={about}
       />
       {press}
     </div>
@@ -2156,6 +2180,7 @@ function AgentTranscriptView({
   readerId,
   agentId,
   taskId,
+  failureAbout,
   replay,
   endPress,
   endTrail,
@@ -2218,6 +2243,8 @@ function AgentTranscriptView({
   agentId?: string | undefined;
   /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
   taskId?: string | undefined;
+  /** What a failed turn's report names, where it is not the agent and task above, as a worker's names its agent's. */
+  failureAbout?: FailureAbout | undefined;
   /** Where a replay its first message holds is drawn as its own card, between the brief and the note (`replay-card.tsx`); none where no replay is read, as on a worker's tab. */
   replay?: ReplayPlace | undefined;
   /** What the end line's row ends on, after its words: Continue in new agent (`continue-agent.tsx`); nothing where it has no end line. */
@@ -2409,6 +2436,7 @@ function AgentTranscriptView({
                         endReason={endReason}
                         keyProvider={keyProvider}
                         onOpenApiKeys={onOpenApiKeys}
+                        about={failureAbout ?? { agentId, taskId }}
                         press={endPress}
                       />
                     )}
@@ -2465,6 +2493,7 @@ function AgentTranscriptView({
               endReason={endReason}
               keyProvider={keyProvider}
               onOpenApiKeys={onOpenApiKeys}
+              about={failureAbout ?? { agentId, taskId }}
               press={endPress}
               centred
             />
@@ -3339,6 +3368,7 @@ export function AgentSubagentTab({
               sessionStarting={status === AGENT_STATUS.STARTING}
               startedAt={shown ? transcript.runStartedAt : undefined}
               ended={transcript.pages === 0 ? undefined : endLineParts(status, transcript.failure)}
+              failureAbout={{ agentId, taskId: owner?.planId ?? undefined, callId }}
               onRetry={transcript.onRetry}
               onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
               olderFailed={transcript.olderFailed}

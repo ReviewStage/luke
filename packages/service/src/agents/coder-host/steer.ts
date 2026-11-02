@@ -61,7 +61,6 @@ import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../menti
 import { readMentioned } from "../mentioned-reads.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
-import { isNativeRuntime } from "./native-runtime.js";
 import { failedCallRefusal } from "./runtime-sessions.js";
 import { agentStatusOf } from "./status.js";
 
@@ -106,9 +105,7 @@ import { agentStatusOf } from "./status.js";
  * Who reaches eve is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
  * deployment for the account, which the coder channel's table admits for
- * exactly this message (`coder-host/channel.ts`). An agent on eve takes no
- * message either: eve runs no agent any more, so it is refused as ended,
- * and only a new agent started from it goes on from its work. An archived agent takes
+ * exactly this message (`coder-host/channel.ts`). An archived agent takes
  * no message, and is refused as one that names nothing, since every list
  * leaves it out until it is brought back; it is read again under the
  * conversation's dispatch claim just before the send, which is taken under
@@ -357,14 +354,9 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   if (Option.isNone(routing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { runtime, payer } = routing.value;
   if (!writesToAgent(userId, agent, payer)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  // Note that eve runs no agent any more, so one on it takes no words and is refused as ended, before
-  // GitHub is asked or a line is written: only a new agent, started from it, goes on from its work.
-  if (!isNativeRuntime(runtime)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
   // Note that our key pays for no coding agent, so an agent on its starter's API key whose starter
   // keeps none for its model now is refused by name and never moved to another payer.
-  const missing = yield* hostedStoreOrUnavailable(
-    messageCredentialMissing(agent, { runtime, payer }),
-  );
+  const missing = yield* hostedStoreOrUnavailable(messageCredentialMissing(agent, { payer }));
   if (missing !== undefined) return yield* Effect.fail(credentialMissing(missing));
   if (yield* Effect.fromResult(read.repeated)) return { outcome: STEER_OUTCOME.REPEATED };
   const held = yield* Effect.fromResult(read.task);

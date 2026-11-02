@@ -5,7 +5,6 @@ import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import {
   AGENT_BRIEF,
-  AGENT_DELEGATE_TOOL,
   AGENT_KIND,
   AGENT_MACHINE,
   AGENT_MESSAGE_LEAD,
@@ -26,7 +25,6 @@ import { CODER } from "./bounds.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { NATIVE_SKILLS_PATH } from "./native-skills.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
-import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 const AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
@@ -134,29 +132,21 @@ const CHECKS_WAIT = {
   /** What ends Claude Code's wait: GitHub's message, which its CLI takes as its next turn, or the wakeup. */
   TOLD_AS_TURN:
     "Once every check on the commit you pushed has finished, GitHub tells you so in a message, which comes to you as your next turn without waiting on the wakeup; where that message has already come, do not wait.",
-  /** What ends the wait: GitHub's message, or the wait running out without it. */
-  TOLD: "Once every check on the commit you pushed has finished, GitHub tells you so in a message, which ends the wait early as any message does; where that message has already come, do not wait.",
 } as const;
 
 /**
- * What the agent does about its pull request's checks: waits on them and
- * fixes what fails, for at most `CODER.CI_FIX_ROUNDS` rounds, where its
- * token reads them, with `gh pr`, or over GitHub's REST API alone where its
- * credential is its starter's own token, which the firewall sets on the
- * repository's REST paths and never on GraphQL, which `gh pr` speaks; says
- * so where it cannot, since the installation has not granted the App the
- * read (`github-app.ts`'s `CI_READ_PERMISSIONS`).
+ * What the agent is told where its credential does not read its pull
+ * request's checks, since the installation has not granted the App the read
+ * (`github-app.ts`'s `CI_READ_PERMISSIONS`); each harness's words say how it
+ * waits on them and fixes what fails where it does (`ToolWords.checks`).
  */
 const CHECKS_WORDS = {
-  readable: `After you push and open or update a pull request, wait on its checks rather than watching them, which keeps your sandbox up for the whole run: ${CHECKS_WAIT.NEVER_WATCH}, and wait with \`${CODER_TOOL.SLEEP}\` for the longest one wait may be. ${CHECKS_WAIT.TOLD} Then, or once a wait runs out without that message, read them once with \`gh pr checks <number>\`, and where some are still running, wait again. When a check fails, read why with \`gh run view <run-id> --log-failed\`, or the failing check's own details, fix the cause, push, and wait again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
-  rest: `After you push and open or update a pull request, wait on its checks rather than watching them, which keeps your sandbox up for the whole run: ${CHECKS_WAIT.NEVER_WAIT}, and wait with \`${CODER_TOOL.SLEEP}\` for the longest one wait may be. ${CHECKS_WAIT.TOLD} Then, or once a wait runs out without that message, read its checks on the commit you pushed once with \`gh api repos/{owner}/{repo}/commits/<sha>/check-runs\` and \`gh api repos/{owner}/{repo}/commits/<sha>/status\`, and where some are still running, wait again. When a check fails, read why with \`gh api repos/{owner}/{repo}/actions/jobs/<job-id>/logs\`, its job listed by \`gh api "repos/{owner}/{repo}/actions/runs?head_sha=<sha>"\` and \`gh api repos/{owner}/{repo}/actions/runs/<run-id>/jobs\`, or the failing check's own details, fix the cause, push, and wait again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
   unreadable:
     "Your credential does not read the checks on a pull request in this repository, so do not try to watch them, and say in your final message that CI was not watched.",
 } as const;
 
-/** The harnesses whose instructions differ in the tools they name: eve, which runs ours, and Claude Code and Codex, which each run their own. */
+/** The harnesses whose instructions differ in the tools they name: Claude Code and Codex, which each run their own. */
 export const CODER_HARNESS = {
-  EVE: CONVERSATION_RUNTIME.EVE,
   CLAUDE_CODE: CONVERSATION_RUNTIME.CLAUDE_CODE,
   CODEX: CONVERSATION_RUNTIME.CODEX,
 } as const;
@@ -216,8 +206,7 @@ const NATIVE_INTEGRATION_WORDS = `The services the developer connected, such as 
  * whose tabs the developer watches and may take over: for what the
  * developer should see or help with, while a throwaway check of its own
  * work stays on the sandbox's Playwright, run from the harness's own shell
- * (`shell`), which leaves no tab behind. eve's agent and a native one are
- * offered the same tool, a native one over our MCP server.
+ * (`shell`), which leaves no tab behind. It is offered over our MCP server.
  */
 function browserWords(shell: string): string {
   return `## Your browser
@@ -227,7 +216,7 @@ function browserWords(shell: string): string {
 `;
 }
 
-/** What eve and Codex tell an agent of what it started: their runners end it with the turn. */
+/** What Codex tells an agent of what it started: its runner ends it with the turn. */
 const STOPS_AT_TURN_END = "Everything you start stops when your turn ends.";
 
 /**
@@ -240,7 +229,7 @@ const SCHEDULE_WAKEUP_WORDS =
   "wait with ScheduleWakeup for about as long as the checks usually take, though its description speaks of a /loop you are not in: its `prompt` is what to do once it fires, such as `Read the checks on pull request #<number>`, its `noop` is false, and its `reason` is one short sentence";
 
 /**
- * Each harness's words. eve's are our own tools. Claude Code owns the
+ * Each harness's words. Claude Code owns the
  * shell, the files, the web, skills, to-dos, waiting, and its subagents
  * (the `Agent` tool), so a Claude Code agent is told of those by the names
  * Claude Code gives them, and never of ours that it is not offered; the
@@ -254,26 +243,6 @@ const SCHEDULE_WAKEUP_WORDS =
  * fetched whole as it opens (`runner-sessions.ts`).
  */
 const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
-  [CODER_HARNESS.EVE]: {
-    checkout: `Every \`bash\` command already starts in the checkout, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`write_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from the checkout, and an absolute path is taken as written. \`apply_patch\`'s paths are relative to the checkout, and it refuses an absolute one. The checkout opens one commit deep, so a turn that only reads the code starts fast: your first write, and the first \`bash\` command that is more than a plain read, such as any \`git\` or \`gh\` command or a script, fetches the rest of its history before it runs.`,
-    sandbox: `Every \`bash\` command starts in \`${CODER.CHECKOUT_PATH}\`, an empty folder that is yours to work in, in a fresh shell; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`write_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from it, and an absolute path is taken as written.`,
-    serve:
-      "Start the app with `bash`, which keeps a server running in the background while your turn lasts",
-    started: STOPS_AT_TURN_END,
-    readFile: "`read_file`",
-    glob: "`glob`",
-    searchWeb: `Search the public web with \`${CODER_TOOL.WEB_SEARCH}\` and read a page it found with \`${CODER_TOOL.READ_WEB_PAGE}\``,
-    skills: `A word like \`/name\` in the developer's message names one of your skills, listed under Available skills: the repository's, or one your developer installed into ${PRODUCT_NAME}. Call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers. The list is your skills as your session began, so where \`${CODER_TOOL.LOAD_SKILL}\` knows no such skill, it may be one the repository added since: fetch the default branch and read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on it, and follow that instead.`,
-    installedSkills: `A word like \`/name\` in the developer's message names one of the skills your developer installed into ${PRODUCT_NAME}, listed under Available skills: call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers.`,
-    browser: browserWords("`bash`"),
-    todos: `For work of more than a couple of steps, keep your to-dos with \`${TODOS_TOOL.name}\`, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.`,
-    checks: { readable: CHECKS_WORDS.readable, rest: CHECKS_WORDS.rest },
-    worker: ({ reads, readOnly, keeps }) =>
-      `\`${AGENT_DELEGATE_TOOL}\` hands one scoped job to ${reads} its answer reaches you on its own as that worker's result, so keep working while it runs; several calls in one step run at once, and a call with a worker's taskId sends that worker more. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep ${keeps} to yourself: ${readOnly} Where the developer connected ${INTEGRATION_NAMES_SAID}, a worker reads it too, and changes something there only when its job explicitly asks it to. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list. A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return, and any constraints.`,
-    integrations: "",
-    // Note that eve runs in no Mac of the developer's, so its words never say this.
-    ownSandbox: "",
-  },
   [CODER_HARNESS.CLAUDE_CODE]: {
     checkout: `Your own tools start there: every Bash command runs in the checkout, and Read, Edit, Write, Glob, and Grep resolve a relative path from it. ${COMMAND_DESCRIPTION_INSTRUCTION} The checkout holds the repository's whole history.`,
     sandbox: `Your own tools start in \`${CODER.CHECKOUT_PATH}\`, an empty folder that is yours to work in: every Bash command runs there, and Read, Write, Glob, and Grep resolve a relative path from it. ${COMMAND_DESCRIPTION_INSTRUCTION}`,
@@ -1051,7 +1020,7 @@ export function coderInstructions(
   coAuthor: string | undefined = undefined,
   startBranch: string | null = null,
   memberToken = false,
-  harness: CoderHarness = CODER_HARNESS.EVE,
+  harness: CoderHarness = CODER_HARNESS.CLAUDE_CODE,
   kind: AgentKind = AGENT_KIND.CODER,
   memoryOn = false,
   machine: CoderMachine = SANDBOX_MACHINE,
@@ -1154,8 +1123,8 @@ export interface AgentInstructionsContext {
 /**
  * The instructions for the agent its row names, on any harness: its brief
  * (`agentBriefOf`), its task's link, its start branch, its credential,
- * and its kind read from the row, so an eve session and a native one are
- * worded alike for the same agent.
+ * and its kind read from the row, so every session of the agent is worded
+ * alike.
  */
 export function agentCoderInstructions(agent: Agent, context: AgentInstructionsContext): string {
   const taskLink =
@@ -1184,51 +1153,4 @@ export function agentCoderInstructions(agent: Agent, context: AgentInstructionsC
       sharedFiles: context.place?.sharedFiles ?? SANDBOX_MACHINE.sharedFiles,
     },
   );
-}
-
-/** What a worker's instructions say of where it reads: the agent's checkout, or the working folder of an agent with no repository. */
-interface WorkerPlaceWords {
-  /** Where the agent's files stand and what is in them. */
-  readonly where: string;
-  /** What of the history the worker reads, after the sentence that its shell has no network; nothing where there is none. */
-  readonly history: string;
-  /** What never goes into a web search. */
-  readonly privateWords: string;
-  /** What state its commands must leave as it is. */
-  readonly state: string;
-}
-
-const WORKER_CHECKOUT_WORDS: WorkerPlaceWords = {
-  where: `The agent's repository is checked out at \`${CODER.CHECKOUT_PATH}\`, with the agent's own uncommitted edits in it.`,
-  history:
-    "; the checkout's history is fetched for you ahead of a command that reads it, so `git log` and `git blame` read it whole",
-  privateWords: "the repository's code, names, or paths",
-  state: "the checkout's state",
-};
-
-const WORKER_FOLDER_WORDS: WorkerPlaceWords = {
-  where: `The agent's working folder is \`${CODER.CHECKOUT_PATH}\`, with what the agent wrote in it; nothing is checked out there and there is no history to read.`,
-  history: "",
-  privateWords: "private names or words",
-  state: "the folder's state",
-};
-
-/**
- * The instructions a worker runs under: one slice of the agent's work,
- * read-only, answered whole, worded for the agent's repository, or for its
- * working folder where it has none. What holds the worker to reading is
- * its tools, not these words: its shell has no network and its history is
- * fetched for it (`apps/dev/subagents/worker/tools/bash.ts`), and it is
- * offered no `run_on_mac`, `browser`, or `show_image`
- * (`../agent-runtime/tools.ts`).
- */
-export function coderWorkerInstructions(repository: string | null): string {
-  const place = repository === null ? WORKER_FOLDER_WORDS : WORKER_CHECKOUT_WORDS;
-  return `You do one job for an agent, who hands it to you and reads what you return. You never speak to the developer, and you ask nobody anything: if the job is unclear, do the most likely reading and say which one you took.
-
-${place.where} Every \`bash\` command starts there, in a fresh shell, so give it paths relative to that folder and never open a command with a \`cd\` into it. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from it, and an absolute path is taken as written. Your shell has no network: nothing it runs reaches GitHub or the internet, so a fetch, a push, \`gh\`, a download, or an install fails${place.history}. Search the public web with \`${CODER_TOOL.WEB_SEARCH}\` and read a page with \`${CODER_TOOL.READ_WEB_PAGE}\` where the job needs it, and never put ${place.privateWords} into a query: a search is public.
-
-You read and you never change anything: run no command that edits a file, stages, commits, installs, or changes ${place.state}, since the agent and other workers are reading the same tree; and you cannot push, open a pull request, run a command on the developer's Mac, or drive a browser, so never try to. Where the developer connected ${INTEGRATION_NAMES_SAID}, you may read it with \`connection_search\` and \`connection_execute\`; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
-
-Return a complete result that answers the job, grounded in what you read: file paths with line numbers, and the commands you ran with what they printed where it matters. Say plainly what you could not confirm. Never print a credential or a token.`;
 }

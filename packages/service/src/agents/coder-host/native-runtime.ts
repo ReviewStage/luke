@@ -1,9 +1,10 @@
 /**
  * native-runtime.ts -- the native harnesses a coding agent's conversation may run on, and the sessions we mint for them, told apart by their ids.
  *
- * A conversation's `runtime` (`conversations.runtime`) says which
- * implementation of `AgentSessions` answers it: eve, or one of the native
- * harnesses here. A native harness's session is our own, minted as it
+ * A conversation's `runtime` (`conversations.runtime`) says which native
+ * harness answers it (`harnessOf`), and one that names none, on eve or from
+ * before the column, ran on eve, which runs nothing any more: its session
+ * has ended for good. A native harness's session is our own, minted as it
  * opens with the harness's prefix (`runner-sessions.ts`), so a call that
  * names a session and no conversation, a cancel or a reset, is answered by
  * the implementation that minted it. This module reaches nothing, so the
@@ -30,7 +31,15 @@ export function nativeRuntimeOfSession(sessionId: string): NativeRuntime | undef
   return undefined;
 }
 
-/** Whether the runtime is a native harness rather than eve. */
-export function isNativeRuntime(runtime: ConversationRuntime): runtime is NativeRuntime {
-  return runtime !== CONVERSATION_RUNTIME.EVE;
+/**
+ * The native harness a conversation runs on, or none where its session has
+ * ended for good: one on eve, or from before the runtime column, which eve
+ * ran. This is the one place a conversation's runtime is told apart; every
+ * caller reads none as an agent whose session ended, which nothing reaches
+ * again and only a new agent goes on from.
+ */
+export function harnessOf(runtime: ConversationRuntime | undefined): NativeRuntime | undefined {
+  return runtime === CONVERSATION_RUNTIME.CLAUDE_CODE || runtime === CONVERSATION_RUNTIME.CODEX
+    ? runtime
+    : undefined;
 }

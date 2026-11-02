@@ -28,7 +28,7 @@ import { macListening } from "./mac-command.js";
 
 /** What of an agent decides which of our tools it is offered: what narrows them, and whether it runs on a provider's own harness. */
 export interface LukeToolsOfferedTo {
-  readonly agent: Pick<Agent, "repository" | "kind" | "machine">;
+  readonly agent: Pick<Agent, "repository" | "machine">;
   /** Whether the agent runs on Claude Code or Codex rather than eve. */
   readonly native: boolean;
   /** Whether the agent's starter has Memory on. */

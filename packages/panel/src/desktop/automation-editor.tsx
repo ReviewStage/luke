@@ -359,7 +359,7 @@ const NO_MATCH = {
 const SAVE_REFUSAL_WORDS = {
   [AUTOMATION_CALL_FAILURE.UNANSWERED]: "The automation could not be saved. Try again.",
   [AUTOMATION_CALL_FAILURE.NOT_FOUND]: "This automation, or its workspace, is gone.",
-  [AUTOMATION_CALL_FAILURE.NO_REPOSITORY]: "Choose the repository it works in.",
+  [AUTOMATION_CALL_FAILURE.NO_REPOSITORY]: "Choose the repository whose events start it.",
   [AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]: `${PRODUCT_NAME} cannot reach that repository from this workspace on GitHub.`,
   [AUTOMATION_CALL_FAILURE.INVALID]:
     "The automation could not be saved as written. Check its schedule and prompt.",
@@ -2044,9 +2044,11 @@ function RunsGroup({
         description={
           taskBacked
             ? "Its task's repository."
-            : also.length === 0
-              ? undefined
-              : `Runs start here, and also work in ${andList(also)}.`
+            : draft.repository === null && draft.triggerKind !== AUTOMATION_TRIGGER.GITHUB
+              ? "Runs work in no repository, for work that touches no code."
+              : also.length === 0
+                ? undefined
+                : `Runs start here, and also work in ${andList(also)}.`
         }
         error={inputProblem(problems[DRAFT_FIELD.REPOSITORY])}
       >
@@ -2061,6 +2063,12 @@ function RunsGroup({
               value={draft.repository}
               chooser={repositories}
               onChoose={(repository) => onDraft(withRepository(draft, repository))}
+              onClear={
+                // A GitHub trigger is fired by its repository's events, so it never stands on none.
+                draft.triggerKind === AUTOMATION_TRIGGER.GITHUB
+                  ? undefined
+                  : () => onDraft(withRepository(draft, null))
+              }
             />
           )
         }

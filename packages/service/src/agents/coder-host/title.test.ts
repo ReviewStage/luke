@@ -4,18 +4,33 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { type Agent, createAgent, readAgent, renameAgent } from "@luke/database/models/agent-store";
 import { createTask, readTask } from "@luke/database/models/task-store";
+import { storeWriter } from "@luke/database/models/writer";
 import { messages } from "@luke/database/schemas/storage";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { firstMessageText, REPLAY_STEP_KIND } from "@luke/features/agent-replay";
+import { AGENT_PAYER } from "@luke/features/agent-wire";
 import { AUTOMATION_FIRING, GITHUB_TRIGGER_EVENT } from "@luke/features/automation-wire";
+import { sessionKey } from "@luke/runtime/vocabulary";
 import { MESSAGE_ROLE } from "@luke/wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import { MockLanguageModelV4 } from "ai/test";
-import { Clock, Effect, Option } from "effect";
-import { TURN_TRIGGER, userMetadataOf } from "../../core.js";
+import { Clock, Effect, Option, Result } from "effect";
+import {
+  AssistantMessageBuilder,
+  MESSAGE_CHANNEL,
+  RUN_EVENT,
+  RUN_STATUS,
+  RUN_TURN_ORIGIN,
+  TURN_ORIGIN,
+  TURN_TRIGGER,
+  userMetadataOf,
+} from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { openGithubUser } from "../../testing/github-app-fake.js";
 import { titleNativeAgent } from "../native-events/native-title.js";
 import { titleAgent } from "./title.js";
+import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
  * title.test.ts -- an automation's run is named from the automation's prompt
@@ -358,6 +373,232 @@ it.layer(getTestDB())("an agent's title", (it) => {
         assert.match(asked[0] ?? "", /Expire teammate invitations after a week/u);
         assert.match(asked[0] ?? "", /Also send a reminder the day before/u);
         assert.doesNotMatch(asked[0] ?? "", /billing|luke:replay|You continue the work/u);
+      }),
+  );
+});
+
+/** The developer's plan, which an agent's first turn opens on. */
+const PLAN_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
+
+/** Another agent's message as `message_agent` steers one in: its words, which are no task of the developer's. */
+const AGENT_MESSAGE =
+  "Message · [@Invite emails](https://vespin.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) to you:\n\nThe invite table is mine, leave it.";
+
+/** The agent that sends `AGENT_MESSAGE`, as its line's row keeps it. */
+const MESSAGE_SENDING_AGENT = {
+  kind: MESSAGE_SENDER.AGENT,
+  agentId: "7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+  name: "Invite emails",
+  model: "anthropic/claude-opus-5.5",
+} as const;
+
+/**
+ * An agent of the owner's on Claude Code, and its conversation journaled as
+ * the store writer journals a native harness's turns: lines written
+ * awaiting their turn, taken by the turn that opens on them or one under
+ * way, the agent's answers, and each turn's end.
+ */
+const journaledAgent = Effect.gen(function* () {
+  const owner = yield* openGithubUser();
+  const organizationId = yield* openWorkspace(owner);
+  const started = yield* createAgent(owner, {
+    taskId: null,
+    organizationId,
+    planSnapshot: null,
+    prompt: PLAN_TEXT,
+    idempotencyKey: randomUUID(),
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    repository: null,
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+    payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+  });
+  const agent = Option.getOrThrow(started).agent;
+  const target = { userId: owner, conversationId: agent.conversationId };
+  const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+  let lines = 0;
+  const sequences = new Map<string, number>();
+  const next = (turnId: string) => {
+    const sequence = (sequences.get(turnId) ?? 0) + 1;
+    sequences.set(turnId, sequence);
+    return { conversationId: sessionKey(target.conversationId), turnId, sequence };
+  };
+  /** A line written awaiting its turn, the developer's or another agent's message: its id. */
+  const line = (sender: "developer" | "agent") =>
+    Effect.gen(function* () {
+      lines += 1;
+      const clientKey = `line-${lines}`;
+      const written = yield* writer.writeAwaitingLine(
+        target,
+        sender === "developer"
+          ? { text: PLAN_TEXT, clientKey, sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner } }
+          : {
+              text: AGENT_MESSAGE,
+              clientKey,
+              sender: MESSAGE_SENDING_AGENT,
+              metadata: { channel: MESSAGE_CHANNEL.AGENT_MESSAGE },
+            },
+        Effect.succeed(true),
+      );
+      assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
+      return sentLineId(clientKey);
+    });
+  /** A turn opened, taking the line given first, which opens it. */
+  const opened = (turnId: string, lineId: string) =>
+    Effect.gen(function* () {
+      yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: turnId });
+      yield* writer.consume(target, {
+        ...next(turnId),
+        kind: RUN_EVENT.TURN_STARTED,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
+        at: 0,
+      });
+      yield* taken(turnId, lineId);
+    });
+  /** A line taken by the turn under way. */
+  const taken = (turnId: string, lineId: string) =>
+    Effect.map(writer.takeAwaitingLine(target, { clientId: lineId, turnId }), (took) =>
+      assert.equal(Result.getOrUndefined(took)?.length, 1),
+    );
+  /** The turn's answer, a step for each of the words given, and its end. */
+  const answered = (turnId: string, words: readonly string[]) =>
+    Effect.gen(function* () {
+      const answer = new AssistantMessageBuilder();
+      for (const said of words) {
+        answer.stepStart();
+        answer.text(said);
+      }
+      yield* writer.consume(target, {
+        ...next(turnId),
+        kind: RUN_EVENT.MESSAGE_COMPLETED,
+        message: answer.finish(randomUUID()),
+      });
+      yield* writer.consume(target, {
+        ...next(turnId),
+        kind: RUN_EVENT.TURN_ENDED,
+        status: RUN_STATUS.SUCCEEDED,
+        responseIds: [],
+        at: 0,
+      });
+    });
+  /** The agent's first turn: the developer's plan, read and answered. */
+  const firstTurn = Effect.gen(function* () {
+    const turnId = randomUUID();
+    yield* opened(turnId, yield* line("developer"));
+    yield* answered(turnId, [
+      "Read the guide first.",
+      "The guide is read; the plan fits the code.",
+    ]);
+  });
+  /** What a title model was asked when it named the agent. */
+  const askedTitling = Effect.gen(function* () {
+    const { model, asked } = scriptedTitleModel("Teammate invitations by email");
+    yield* titleAgent(model, target, agent);
+    return asked.join("\n");
+  });
+  return { owner, agent, line, opened, taken, answered, firstTurn, askedTitling };
+});
+
+it.layer(getTestDB())("a title named from the recent exchange", (it) => {
+  it.effect(
+    "another agent's message opening a turn of its own leaves the agent named from the developer's words and the answer to them alone",
+    () =>
+      Effect.gen(function* () {
+        const journal = yield* journaledAgent;
+        yield* journal.firstTurn;
+        const noticed = randomUUID();
+        yield* journal.opened(noticed, yield* journal.line("agent"));
+        yield* journal.answered(noticed, ["Understood."]);
+
+        const asked = yield* journal.askedTitling;
+
+        assert.ok(asked.includes("Invite a teammate by email."), asked);
+        assert.ok(!asked.includes("the invite table is mine"), asked);
+        assert.ok(asked.includes("The guide is read; the plan fits the code."), asked);
+        assert.ok(!asked.includes("Understood."), asked);
+        const titled = Option.getOrThrow(yield* readAgent(journal.owner, journal.agent.id));
+        assert.equal(titled.title, "Teammate invitations by email");
+      }),
+  );
+
+  it.effect(
+    "another agent's message steered into the developer's own turn leaves that turn's answer to name the agent from",
+    () =>
+      Effect.gen(function* () {
+        const journal = yield* journaledAgent;
+        const turnId = randomUUID();
+        yield* journal.opened(turnId, yield* journal.line("developer"));
+        yield* journal.taken(turnId, yield* journal.line("agent"));
+        yield* journal.answered(turnId, ["The guide is read; the plan fits the code."]);
+
+        const asked = yield* journal.askedTitling;
+
+        assert.ok(asked.includes("The guide is read; the plan fits the code."), asked);
+      }),
+  );
+
+  it.effect(
+    "a title's recent window opening on agents' messages steered into the developer's turn keeps that turn's answer",
+    () =>
+      Effect.gen(function* () {
+        const journal = yield* journaledAgent;
+        const turnId = randomUUID();
+        yield* journal.opened(turnId, yield* journal.line("developer"));
+        // Eight messages steered in leave the developer's line before the recent window of eight.
+        for (let at = 0; at < 8; at += 1) {
+          yield* journal.taken(turnId, yield* journal.line("agent"));
+        }
+        yield* journal.answered(turnId, ["The guide is read; the plan fits the code."]);
+
+        const asked = yield* journal.askedTitling;
+
+        assert.ok(asked.includes("The guide is read; the plan fits the code."), asked);
+      }),
+  );
+
+  it.effect(
+    "a title's recent window opening on another agent's message leaves the answer to it out",
+    () =>
+      Effect.gen(function* () {
+        const journal = yield* journaledAgent;
+        yield* journal.firstTurn;
+        // The second turn takes five messages in, the third one more, so the recent window of eight opens on a message.
+        const second = randomUUID();
+        yield* journal.opened(second, yield* journal.line("agent"));
+        for (let at = 0; at < 4; at += 1) {
+          yield* journal.taken(second, yield* journal.line("agent"));
+        }
+        yield* journal.answered(second, ["Understood."]);
+        const third = randomUUID();
+        yield* journal.opened(third, yield* journal.line("agent"));
+        yield* journal.answered(third, ["Understood."]);
+
+        const asked = yield* journal.askedTitling;
+
+        assert.ok(asked.includes("Invite a teammate by email."), asked);
+        assert.ok(!asked.includes("Understood."), asked);
+      }),
+  );
+
+  it.effect(
+    "a title leaves out the answer to a turn another agent's message opened, though the messages it took in push that message out of the recent window",
+    () =>
+      Effect.gen(function* () {
+        const journal = yield* journaledAgent;
+        yield* journal.firstTurn;
+        // A message opens the second turn, and the eight it takes in mid-run leave it before the recent window of eight.
+        const second = randomUUID();
+        yield* journal.opened(second, yield* journal.line("agent"));
+        for (let at = 0; at < 8; at += 1) {
+          yield* journal.taken(second, yield* journal.line("agent"));
+        }
+        yield* journal.answered(second, ["Understood."]);
+
+        const asked = yield* journal.askedTitling;
+
+        assert.ok(asked.includes("Invite a teammate by email."), asked);
+        assert.ok(!asked.includes("Understood."), asked);
       }),
   );
 });

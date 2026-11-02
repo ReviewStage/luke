@@ -16,7 +16,7 @@ import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "../testing/composer.js";
-import { layContainersAt, shown } from "../testing/container-width.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -145,37 +145,40 @@ test("at 220px wide, while a turn runs, the ⋯ offers every press it hid", asyn
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent,
   );
-  assert.deepEqual(offered, ["Attach files", "Integrations", "62% of context used", "Dictate"]);
+  assert.deepEqual(offered, ["Attachment", "MCP servers", "62% of context used", "Dictate"]);
 });
 
-test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so the ⋯ offers no Attach files", async () => {
+test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so the ⋯ offers none of its rows", async () => {
   const box = await drawnAt(CARD.NARROW);
   act(() => box.press("Composer actions").click());
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent,
   );
-  assert.deepEqual(offered, ["Integrations", "62% of context used", "Dictate"]);
+  assert.deepEqual(offered, ["62% of context used", "Dictate"]);
 });
 
-test("Integrations chosen from the ⋯ opens the servers popover its hidden press would have, and Escape hands the keyboard back to the ⋯", async () => {
-  const box = await drawnAt(CARD.NARROWEST);
-  act(() => box.press("Composer actions").click());
-  const servers = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (item) => item.textContent === "Integrations",
+test("the + raises a menu of Attachment and MCP servers, whose servers popover stands beside the menu with its search holding the keyboard, and Escape there goes back to the row", async () => {
+  const box = await drawnAt(CARD.WIDE);
+  act(() => box.press("Add files and more").click());
+  const rows = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+  assert.deepEqual(
+    rows.map((item) => item.textContent),
+    ["Attachment", "MCP servers"],
   );
-  act(() => servers?.click());
+  const servers = rows[1] ?? assert.fail("MCP servers stands");
+  act(() => servers.click());
 
   const popover =
-    box.container.querySelector<HTMLElement>(".agent-servers [role='dialog']") ??
+    document.querySelector<HTMLElement>(".luke-menu-panel [role='dialog']") ??
     assert.fail("the servers popover stands");
-  assert.equal(shown(popover), true);
   const search = popover.querySelector<HTMLInputElement>("input") ?? assert.fail("it searches");
-  act(() => search.focus());
+  assert.equal(document.activeElement, search);
   await act(async () => {
     search.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
-  assert.equal(box.container.querySelector(".agent-servers [role='dialog']"), null);
-  assert.equal(document.activeElement?.getAttribute("aria-label"), "Composer actions");
+  assert.equal(document.querySelector(".luke-menu-panel"), null);
+  assert.equal(document.activeElement, servers);
+  assert.equal(box.container.querySelector('button[aria-label="Integrations"]'), null);
 });
 
 test("the ⋯'s menu closes once the card changes width, as a panel dragged narrower would, so it never offers a stale set of presses", async () => {
@@ -188,11 +191,11 @@ test("the ⋯'s menu closes once the card changes width, as a panel dragged narr
       .filter((item) => item.closest("[inert]") === null)
       .map((item) => item.textContent);
   act(() => box.press("Composer actions").click());
-  assert.deepEqual(offered(), ["Integrations", "62% of context used", "Dictate"]);
+  assert.deepEqual(offered(), ["62% of context used", "Dictate"]);
 
   // Laid out again at the same width, as a scroll would, it stays.
   act(() => relayout());
-  assert.equal(offered().length, 3);
+  assert.equal(offered().length, 2);
 
   width.mockReturnValue(DOMRect.fromRect({ width: CARD.NARROWEST }));
   act(() => relayout());
