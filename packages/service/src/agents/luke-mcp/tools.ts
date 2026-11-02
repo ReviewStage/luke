@@ -45,7 +45,7 @@ import {
   reserveTurnPlanNotes,
   settleTurnPlanNotes,
 } from "@luke/database/models/agent-store";
-import { AGENT_KIND, AGENT_MACHINE } from "@luke/features/agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { CHANNEL_TOOL } from "@luke/features/channel-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { pictureTypeSchema } from "@luke/features/picture-wire";
@@ -124,7 +124,6 @@ import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
 import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
 import {
   CODER_TOOL,
-  kindToolsOf,
   machineToolsOf,
   type OfferedBeside,
   repositoryToolsOf,
@@ -133,7 +132,6 @@ import {
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import { RECALL_TOOL, REMEMBER_TOOL } from "../memory-tools.js";
-import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
 
@@ -406,7 +404,6 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   agentTool(MESSAGE_AGENT_TOOL),
   agentTool(UPDATE_AGENT_TOOL),
   agentTool(LIST_MODELS_TOOL),
-  agentTool(LIST_OPEN_ASKS_TOOL),
   // Tasks and sections.
   agentTool(LIST_TASKS_TOOL),
   agentTool(READ_TASK_TOOL),
@@ -435,17 +432,15 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
 ]);
 
 /** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
-export type LukeMcpOfferedTo = Pick<Agent, "repository" | "kind" | "machine">;
+export type LukeMcpOfferedTo = Pick<Agent, "repository" | "machine">;
 
 /** The workspace's shared memory, which eve offers only where the agent's starter turned Memory on (`apps/dev/tools/remember.ts`'s `memoryOffered`). */
 const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL];
 
-/** The tools eve offers some agents and not others: each one some agent's repository, kind, starter, or starter's Memory withholds. */
+/** The tools eve offers some agents and not others: each one some agent's repository, starter, or starter's Memory withholds. */
 const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...MEMORY_TOOLS,
   ...repositoryToolsOf({ repository: "any" }),
-  ...kindToolsOf({ kind: AGENT_KIND.OPERATOR }),
-  ...kindToolsOf({ kind: AGENT_KIND.CODER }),
   ...starterToolsOf({ underPilot: false }),
   ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
 ]);
@@ -453,7 +448,7 @@ const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
 /**
  * Whether the server lists a tool to an agent: every tool eve offers every
  * agent, and each narrowed one where eve offers it to this agent, by its
- * repository, its kind, whether a pilot started it, and whether
+ * repository, whether a pilot started it, and whether
  * its starter has Memory on (`beside`), the same rules eve's tool files read
  * at each turn. Note that a harness reads the list as its launch begins, so
  * an agent is narrowed launch by launch, as eve's is turn by turn, and that
@@ -467,7 +462,6 @@ export function offeredLukeMcpTool(
   const offered: ReadonlySet<string> = new Set<string>([
     ...(beside.memoryOn ? MEMORY_TOOLS : []),
     ...repositoryToolsOf(agent),
-    ...kindToolsOf(agent),
     ...starterToolsOf(beside),
     ...machineToolsOf(agent),
   ]);

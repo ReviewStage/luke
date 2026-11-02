@@ -1,7 +1,6 @@
 import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import {
   AGENT_BOUNDS,
-  AGENT_KIND,
   type AgentStatus,
   type AgentSummary,
   type TasklessAgent,
@@ -259,9 +258,8 @@ function AgentPageBar({
           unread: unseen || reads.markedUnread(agent.id),
           onMark: (next: boolean) => reads.mark(listed, next),
         };
-  // Note that an archived agent offers neither a pin nor a section, as an archived task, and Luke never does.
-  const own =
-    listed !== undefined && agent.archivedAt === undefined && agent.kind !== AGENT_KIND.OPERATOR;
+  // Note that an archived agent offers neither a pin nor a section, as an archived task.
+  const own = listed !== undefined && agent.archivedAt === undefined;
   const agentPin = own
     ? {
         pinned: listed.pinnedAt !== undefined,

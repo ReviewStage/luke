@@ -20,8 +20,7 @@ import { useHeldChannels } from "./use-channels.js";
  *
  * Read from main's document, which every window holds: every task's title,
  * the agents each task's row names, as their tabs name them
- * (`agentName`, so an operator is Luke and an untitled agent goes by its
- * model), and the models they run on, the agents with no task the list
+ * (`agentName`, so an untitled agent goes by its model), and the models they run on, the agents with no task the list
  * carries, theirs, and the automations that started them, the active task's
  * pages, each task's key, the Inbox items waiting, and the agents an
  * automation started with no task; from the directories standing around

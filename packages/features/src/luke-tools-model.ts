@@ -67,10 +67,6 @@ const LUKE_TOOL_WORDS = {
     group: LUKE_TOOL_GROUP.THREADS,
     summary: "Withdraws an ask it no longer needs answered",
   },
-  [AGENT_TOOL.LIST_OPEN_ASKS]: {
-    group: LUKE_TOOL_GROUP.THREADS,
-    summary: "Lists every open ask to its member across their agents",
-  },
   [AGENT_TOOL.CREATE_CHANNEL]: {
     group: LUKE_TOOL_GROUP.THREADS,
     summary: "Makes a channel in the workspace",

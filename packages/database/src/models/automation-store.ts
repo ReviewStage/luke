@@ -1,4 +1,3 @@
-import { AGENT_KIND } from "@luke/features/agent-wire";
 import {
   AUTOMATION_FIRING,
   AUTOMATION_RUN_STATUS,
@@ -34,7 +33,6 @@ import {
   exists,
   gte,
   inArray,
-  isNotNull,
   isNull,
   lte,
   notExists,
@@ -51,7 +49,6 @@ import { member } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { conversations } from "../schemas/storage.js";
-import { agentGivenNameSql } from "./agent-name.js";
 import { noOpenPullRequest } from "./agent-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
@@ -125,7 +122,7 @@ export interface NewAutomation {
   readonly id?: string;
   /** The workspace it stands on, which the account must be a member of. */
   readonly organizationId: string;
-  /** The repositories its runs work in; none for one whose runs go to its owner's operator. */
+  /** The repositories its runs work in. */
   readonly repositories?: readonly string[] | undefined;
   readonly name: string;
   readonly trigger: AutomationTrigger;
@@ -446,62 +443,6 @@ const writeAutomation = SqlSchema.findAll({
     ),
 });
 
-/** Re-aims the member's automations aimed at any of their archived operators in the workspace, however each was archived, at the one standing. */
-const reaimAutomations = SqlSchema.findAll({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    workspaceId: Schema.String,
-    toAgentId: Schema.String,
-    now: Schema.Date,
-  }),
-  Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, workspaceId, toAgentId, now }) =>
-    Database.use((db) =>
-      db
-        .update(automation)
-        .set({ targetAgentId: toAgentId, updatedAt: now })
-        .where(
-          and(
-            eq(automation.userId, userId),
-            eq(automation.targetKind, AUTOMATION_TARGET.SAME_AGENT),
-            inArray(
-              automation.targetAgentId,
-              queryBuilder
-                .select({ id: agentTable.id })
-                .from(agentTable)
-                .where(
-                  and(
-                    eq(agentTable.userId, userId),
-                    eq(agentTable.organizationId, workspaceId),
-                    eq(agentTable.kind, AGENT_KIND.OPERATOR),
-                    isNotNull(agentTable.archivedAt),
-                  ),
-                ),
-            ),
-          ),
-        )
-        .returning({ id: automation.id }),
-    ),
-});
-
-const findAimedAt = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, agentId }) =>
-    Database.use((db) =>
-      db
-        .select({ id: automation.id })
-        .from(automation)
-        .where(
-          and(
-            eq(automation.userId, userId),
-            eq(automation.targetKind, AUTOMATION_TARGET.SAME_AGENT),
-            eq(automation.targetAgentId, agentId),
-          ),
-        ),
-    ),
-});
-
 const removeAutomation = SqlSchema.findAll({
   Request: AutomationKeySchema,
   Result: WrittenSchema,
@@ -581,8 +522,7 @@ function historyOf(userId: string, automationId: string): SQL {
 const HISTORY_COLUMNS = {
   ...RUN_COLUMNS,
   agentConversationId: agentTable.conversationId,
-  // The name the agent goes by: Luke for an operator, else its title.
-  agentTitle: sql<string | null>`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+  agentTitle: agentTable.title,
   agentCreatedAt: agentTable.createdAt,
   agentUserId: agentTable.userId,
 };
@@ -1198,53 +1138,6 @@ export function createAutomationCommitted(
       txid,
     }));
   });
-}
-
-/** What aiming a member's operator its heartbeat takes: the operator, the workspace it stands in, and the heartbeat to make where none is aimed at it. */
-export interface OperatorHeartbeat {
-  readonly operatorId: string;
-  readonly workspaceId: string;
-  readonly heartbeat: NewAutomation;
-}
-
-/**
- * The member's automations aimed at any of their archived operators in the
- * workspace re-aimed at the one standing, and the heartbeat made where none
- * is then aimed at it, in one transaction: answers the automations aimed at
- * the operator after, by id, or nothing where the heartbeat's place is one
- * the account does not reach. Note that it re-aims by member and workspace
- * rather than by the operator a Reset retired, because an operator archived
- * by hand, by the archive or `update_agent`, is replaced by the next ensure
- * with no Reset to name it, and its heartbeat would otherwise stay aimed at
- * it beside a second. Note too that its caller runs it only for the ensure
- * that made the operator, which one ensure alone is, so a heartbeat the
- * member deleted is never made again by a repeat ensure.
- */
-export function aimOperatorHeartbeat(
-  userId: string,
-  aimed: OperatorHeartbeat,
-): TaskStoreEffect<Option.Option<readonly string[]>> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        const now = yield* DateTime.nowAsDate;
-        yield* reaimAutomations({
-          userId,
-          workspaceId: aimed.workspaceId,
-          toAgentId: aimed.operatorId,
-          now,
-        });
-        const standing = yield* findAimedAt({ userId, agentId: aimed.operatorId });
-        if (standing.length > 0) return Option.some(standing.map((row) => row.id));
-        const made = yield* createAutomationCommitted(userId, {
-          ...aimed.heartbeat,
-          targetKind: AUTOMATION_TARGET.SAME_AGENT,
-          targetAgentId: aimed.operatorId,
-        });
-        return Option.map(made, (written) => [written.automation.id]);
-      }),
-    ),
-  );
 }
 
 /** Which automations a list reads: one workspace's, or every one the account may read where it names none. */

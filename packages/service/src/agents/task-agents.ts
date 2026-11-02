@@ -14,7 +14,6 @@ import {
 import { devicesNamed } from "@luke/database/models/device-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
-  AGENT_KIND,
   AGENT_STATUS,
   type AgentPullRequest,
   type AgentStatus,
@@ -89,7 +88,6 @@ function agentLine(
     line: {
       id: agent.id,
       title: agent.title,
-      ...(agent.kind === AGENT_KIND.OPERATOR ? { kind: agent.kind } : undefined),
       model: agent.model,
       effort: agent.effort,
       status,

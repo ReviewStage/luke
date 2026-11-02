@@ -1044,8 +1044,8 @@ function transcriptSteps(
 
 /**
  * Where a Start puts its agent: a task, or a workspace with no task and the
- * repository the agent clones there, or none, where the member's operator
- * and any coder handed words alone stand (`start.ts`'s `landingOf`); an
+ * repository the agent clones there, or none, where any coder handed words
+ * alone stands (`start.ts`'s `landingOf`); an
  * agent it is started from must stand in the same place.
  */
 export type StartWhere =

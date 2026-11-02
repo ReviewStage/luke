@@ -29,8 +29,6 @@ import {
   agentMessagesAnswerViewSchema,
   agentMessagesParamsSchema,
   agentModelsAnswerSchema,
-  agentOperatorEnsureAnswerViewSchema,
-  agentOperatorEnsureParamsSchema,
   agentOverviewChecksAnswerViewSchema,
   agentOverviewConversationAnswerViewSchema,
   agentOverviewPullRequestAnswerViewSchema,
@@ -180,9 +178,6 @@ export const agentActsContract = {
   [AGENT_ACT_KIND.AGENTS_PIN]: actProcedure("Could not pin the agent on this system.")
     .input(exactInput(agentPinParamsSchema))
     .output(EffectSchema.flip(agentAgentAnswerSchema)),
-  [AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR]: actProcedure("Could not reach Luke on this system.")
-    .input(exactInput(agentOperatorEnsureParamsSchema))
-    .output(EffectSchema.flip(agentOperatorEnsureAnswerViewSchema)),
   [AGENT_ACT_KIND.AGENTS_DELETE]: actProcedure("Could not delete the agent on this system.")
     .input(exactInput(agentStopParamsSchema))
     .output(EffectSchema.flip(agentDeleteAnswerViewSchema)),

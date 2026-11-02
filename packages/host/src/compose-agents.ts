@@ -16,7 +16,6 @@ import {
   type AgentLukeToolsAnswerView,
   type AgentMessagesAnswerView,
   type AgentModelsAnswer,
-  type AgentOperatorEnsureAnswerView,
   type AgentOverviewChecksAnswerView,
   type AgentOverviewConversationAnswerView,
   type AgentOverviewPullRequestAnswerView,
@@ -45,7 +44,6 @@ import {
   agentListParamsSchema,
   agentMessageParamsSchema,
   agentMessagesParamsSchema,
-  agentOperatorEnsureParamsSchema,
   agentPageParamsSchema,
   agentPartParamsSchema,
   agentPictureParamsSchema,
@@ -212,7 +210,6 @@ export type AgentClient = Pick<
   | "changeQueue"
   | "archive"
   | "pin"
-  | "ensureOperator"
   | "stop"
   | "rewind"
   | "delete"
@@ -841,18 +838,6 @@ function composed(
           agentWritten(asked(client.pin(agentId, request))),
         );
         return carried<AgentAgentAnswer>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_ENSURE_OPERATOR]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId, ...request } = yield* readParams(
-          agentOperatorEnsureParamsSchema,
-          params,
-          "ensuring the operator names its workspace",
-        );
-        const answer = yield* asked(client.ensureOperator(workspaceId, request));
-        // Note that a made operator is waited for on the list, so its row stands once the window hears its id.
-        if ("txid" in answer) yield* listed(answer.txid);
-        return carried<AgentOperatorEnsureAnswerView>(answer);
       }),
     [GATEWAY_METHOD.AGENTS_STOP]: (params) =>
       Effect.gen(function* () {

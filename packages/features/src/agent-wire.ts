@@ -193,16 +193,13 @@ export type NativeAgentRuntime = (typeof NATIVE_AGENT_RUNTIMES)[number];
 
 /**
  * What kind of agent a row is: a coder, which every agent started on work is;
- * a pilot, which stands on a task worked in pilot mode (`TASK_MODE.PILOT`),
+ * or a pilot, which stands on a task worked in pilot mode (`TASK_MODE.PILOT`),
  * breaks it into child tasks, and runs coders on them, started on its task
- * and repository as a coder is; or a member's operator, the one agent per
- * member per workspace that manages their other agents, started blank with
- * no task and no repository.
+ * and repository as a coder is.
  */
 export const AGENT_KIND = {
   CODER: "coder",
   PILOT: "pilot",
-  OPERATOR: "operator",
 } as const;
 
 export type AgentKind = (typeof AGENT_KIND)[keyof typeof AGENT_KIND];
@@ -316,17 +313,6 @@ export function deviceStanding(ageMs: number | undefined, readFailed: boolean): 
   if (ageMs !== undefined && ageMs <= MAC_PRESENCE.FRESH_MS) return DEVICE_STANDING.ONLINE;
   return readFailed ? DEVICE_STANDING.UNKNOWN : DEVICE_STANDING.OFFLINE;
 }
-
-/**
- * The whole of what an operator answers a heartbeat that found nothing for
- * its member: a turn whose reply is exactly this, and nothing more, is a
- * quiet turn, which leaves its member no unseen dot and no notice, and whose
- * reply the panel does not draw. A reply that only mentions it is no quiet one.
- */
-export const OPERATOR_QUIET_REPLY = "HEARTBEAT_OK";
-
-/** The most characters of the time zone an operator's ensure names, an IANA zone's name. */
-const OPERATOR_TIME_ZONE_MAX_CHARS = 64;
 
 /** What an agent was handed as its first message: the task's document, a prompt the developer wrote in its place, or nothing, for an agent started blank, whose first words come later, typed or spoken. */
 export const AGENT_BRIEF = {
@@ -876,13 +862,9 @@ export const agentSummarySchema = EffectSchema.Struct({
   runtime: EffectSchema.optionalKey(EffectSchema.Literals(NATIVE_AGENT_RUNTIMES)),
   /** The agent's title as its tab shows it; null until one is generated, and after a rename cleared it, when the tab shows the model's name. */
   title: EffectSchema.NullOr(EffectSchema.String),
-  /** What kind of agent it is, said only of a member's operator, which the panel draws as Luke in a row of his own; absent for a coder, and from a service before operators. */
-  kind: EffectSchema.optionalKey(agentKindSchema),
   /**
    * True where the agent is its task's pilot, which a breakdown's answer goes
-   * to. Note that a pilot is said here rather than in `kind`, because a
-   * desktop from before pilots decodes `kind` as a coder or an operator alone
-   * and would read no summary that named one; absent for every other agent.
+   * to; absent for every other agent.
    */
   pilot: EffectSchema.optionalKey(EffectSchema.Literal(true)),
   /** Where its runner runs, said only of a local agent on its starter's device; absent for one in a sandbox, and from a service older than it. */
@@ -907,14 +889,6 @@ export const agentSummarySchema = EffectSchema.Struct({
   /** Epoch milliseconds the agent was started. */
   createdAt: countedNumber,
   status: EffectSchema.Literals(Object.values(AGENT_STATUS)),
-  /**
-   * True where the agent is a member's operator whose newest turn's reply is
-   * its quiet reply alone (`OPERATOR_QUIET_REPLY`): a heartbeat that found
-   * nothing, whose end leaves no unseen dot and no notice. Absent for every
-   * other turn, from the held reads, which do not read it, and from a service
-   * before heartbeats.
-   */
-  quietTurn: EffectSchema.optionalKey(EffectSchema.Literal(true)),
   /**
    * The newest turn the status is read from, by the service's own id for
    * it; nothing before the first turn. A message that opens a new turn moves
@@ -1060,33 +1034,6 @@ export const agentAnswerSchema = EffectSchema.Struct({
 export const agentMessageAnswerSchema = EffectSchema.Struct({
   agent: agentSummarySchema,
   txid: EffectSchema.optionalKey(EffectSchema.String),
-});
-
-/**
- * The asking member's operator in a workspace ensured (PUT
- * `/api/workspaces/{id}/operator`): the one standing, or a fresh one made
- * blank where none stands, or, with `reset`, the standing one archived, its
- * transcript kept, and a fresh one made in its place; or, with `restore`,
- * the member's own operator a Reset archived, by its id, brought back in
- * place of the one standing, which is archived, as Reset's Undo asks.
- * `timeZone` is the
- * IANA zone the client runs in, which the heartbeat an ensure that makes the
- * operator aims at it is read in; UTC where it is absent or does not read.
- */
-export const operatorEnsureRequestSchema = EffectSchema.Struct({
-  reset: EffectSchema.optionalKey(EffectSchema.Boolean),
-  restore: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
-  timeZone: EffectSchema.optionalKey(
-    EffectSchema.String.check(EffectSchema.isMaxLength(OPERATOR_TIME_ZONE_MAX_CHARS)),
-  ),
-});
-
-export type OperatorEnsureRequest = typeof operatorEnsureRequestSchema.Type;
-
-/** The operator an ensure answers, by its id, and the transaction its row went in where this ensure made it. */
-export const operatorEnsureAnswerSchema = EffectSchema.Struct({
-  agentId: EffectSchema.String,
-  txid: EffectSchema.optionalKey(agentTxidSchema),
 });
 
 /** An agent deleted for good (DELETE), as a task's delete answers: with the transaction its row went in, which the host waits to see on the followed list. */

@@ -71,20 +71,20 @@ const SAVED: AutomationSummary = {
 };
 
 test("an automation the service took with no repository, aimed at one agent, saves a new schedule with none chosen, until its runs go elsewhere", () => {
-  const operator = "9a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
-  const heartbeat: AutomationSummary = {
+  const agentId = "9a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+  const checkIn: AutomationSummary = {
     ...SAVED,
-    name: "Luke's heartbeat",
+    name: "Weekday check-in",
     scope: AUTOMATION_SCOPE.PERSONAL,
     repositories: [],
-    target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: operator },
+    target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId },
   };
-  const opened = automationDraft(heartbeat, DEFAULTS);
+  const opened = automationDraft(checkIn, DEFAULTS);
   const later = { ...opened, schedule: scheduleDraftOf("0 10,17 * * 1-5") };
   const elsewhere = { ...later, target: AUTOMATION_TARGET.NEW_AGENT };
 
-  assert.deepEqual(draftProblems(later, repositoryHeld(later, heartbeat), NOW), {});
-  assert.deepEqual(changeOf(later, heartbeat, DEFAULTS), {
+  assert.deepEqual(draftProblems(later, repositoryHeld(later, checkIn), NOW), {});
+  assert.deepEqual(changeOf(later, checkIn, DEFAULTS), {
     trigger: {
       kind: AUTOMATION_TRIGGER.SCHEDULE,
       cron: "0 10,17 * * 1-5",
@@ -92,7 +92,7 @@ test("an automation the service took with no repository, aimed at one agent, sav
     },
   });
   assert.equal(
-    draftProblems(elsewhere, repositoryHeld(elsewhere, heartbeat), NOW)[DRAFT_FIELD.REPOSITORY],
+    draftProblems(elsewhere, repositoryHeld(elsewhere, checkIn), NOW)[DRAFT_FIELD.REPOSITORY],
     "Choose the repository it works in.",
   );
   assert.equal(

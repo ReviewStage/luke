@@ -12,13 +12,12 @@ import {
   type QueryError,
   queryBuilder,
 } from "@luke/database/core/query";
-import { agentAutomationNameSql, agentGivenNameSql } from "@luke/database/models/agent-name";
+import { agentAutomationNameSql } from "@luke/database/models/agent-name";
 import { agentUnderPilot } from "@luke/database/models/agent-store";
 import { automationReadableBy } from "@luke/database/models/automation-store";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import {
   AGENT_WORKSPACE,
-  agentNoTeammatesOperator,
   agentReachableBy,
   agentSeenBy,
   agentVisibleTo,
@@ -196,8 +195,6 @@ export const INBOX_POST_REFUSAL = {
   NO_CHANNEL: "no-channel",
   /** The post addresses its ask to an account that is no member of the agent's workspace. */
   NO_ADDRESSEE: "no-addressee",
-  /** The post is an operator's and addresses its ask to anyone but its own member, the one account that sees its threads. */
-  NOT_ITS_MEMBER: "not-its-member",
   /** The agent is under a pilot (`agentUnderPilot`), which posts the threads the developer reads in its place. */
   UNDER_PILOT: "under-pilot",
   /** The post addresses its ask to a member of the workspace who may not read its thread (`itemVisibleTo`): one who sees not the agent, or not its task, as their GitHub access stands. */
@@ -564,19 +561,13 @@ const AgentKeySchema = Schema.Struct({ userId: Schema.String, agentId: Schema.St
 /** An item row's workspace: the column itself, never null since `20261015062923_organization_not_null`, so a membership check reaches its indexes. */
 const ITEM_WORKSPACE = sql<string>`${inboxItem.organizationId}`;
 
-/** The condition that the item a statement reads names no agent, or one the account sees as its GitHub access allows (`agentSeenBy`) and that is no teammate's operator, whose asks are its member's alone (`agentNoTeammatesOperator`). */
+/** The condition that the item a statement reads names no agent, or one the account sees as its GitHub access allows (`agentSeenBy`). */
 function itemAgentSeenBy(userId: string): SQL {
   const seen = exists(
     queryBuilder
       .select({ one: agentTable.id })
       .from(agentTable)
-      .where(
-        and(
-          eq(agentTable.id, inboxItem.agentId),
-          agentSeenBy(userId),
-          agentNoTeammatesOperator(userId),
-        ),
-      ),
+      .where(and(eq(agentTable.id, inboxItem.agentId), agentSeenBy(userId))),
   );
   return sql`(${isNull(inboxItem.agentId)} or ${seen})`;
 }
@@ -1128,8 +1119,7 @@ function tasklessWaiting(userId: string) {
 /**
  * The condition that the agent of an item with no task works in a
  * repository, unless the reader asked to be carried those of agents that
- * work in none (`ACCOUNT_INBOX_REPOSITORYLESS`), the member's operator above
- * all. Note that a build from before it reads the repository as a string,
+ * work in none (`ACCOUNT_INBOX_REPOSITORYLESS`). Note that a build from before it reads the repository as a string,
  * so one null would fail its whole read.
  */
 function repositoryCarried(repositoryless: boolean): SQL | undefined {
@@ -1198,10 +1188,7 @@ const findWaitingItems = SqlSchema.findAll({
           id: inboxItem.id,
           taskId: inboxItem.taskId,
           agentId: inboxItem.agentId,
-          // The name the agent goes by: Luke for an operator, else its title.
-          agentTitle: sql<
-            string | null
-          >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+          agentTitle: agentTable.title,
           agentModel: agentTable.model,
           startedBy: agentTable.userId,
           waitsOn: WAITS_ON,
@@ -1221,7 +1208,7 @@ const findWaitingItems = SqlSchema.findAll({
     ),
 });
 
-/** One open item of an agent with no task as the account's read carries it, with its automation and repository where a task's item names its task, and its agent's kind, which sets the member's operator apart. */
+/** One open item of an agent with no task as the account's read carries it, with its automation and repository where a task's item names its task, and its agent's kind. */
 const TasklessRowSchema = Schema.Struct({
   id: Schema.String,
   agentId: Schema.String,
@@ -1254,10 +1241,7 @@ const findTasklessWaitingItems = SqlSchema.findAll({
           id: inboxItem.id,
           agentId: inboxItem.agentId,
           agentKind: agentTable.kind,
-          // The name the agent goes by: Luke for an operator, else its title.
-          agentTitle: sql<
-            string | null
-          >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+          agentTitle: agentTable.title,
           agentModel: agentTable.model,
           startedBy: agentTable.userId,
           waitsOn: WAITS_ON,
@@ -1374,8 +1358,7 @@ const findAutomationsWithItems = SqlSchema.findAll({
 /** How an agent with no task holding items is named, as an open item of it names it (`findTasklessWaitingItems`), its automation only to a reader who may read it. */
 const AGENT_HOLDING_NAMING = {
   agentKind: agentTable.kind,
-  // The name the agent goes by: Luke for an operator, else its title.
-  agentTitle: sql<string | null>`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+  agentTitle: agentTable.title,
   agentModel: agentTable.model,
   automationId: automation.id,
   automationName: automation.name,
@@ -1464,10 +1447,7 @@ export function accountInboxLiveStatements(
           id: inboxItem.id,
           planId: inboxItem.taskId,
           agentId: inboxItem.agentId,
-          // The name the agent goes by: Luke for an operator, else its title.
-          agentTitle: sql<
-            string | null
-          >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+          agentTitle: agentTable.title,
           agentModel: agentTable.model,
           startedBy: agentTable.userId,
           waitsOn: WAITS_ON,
@@ -1490,10 +1470,7 @@ export function accountInboxLiveStatements(
           id: inboxItem.id,
           agentId: inboxItem.agentId,
           agentKind: agentTable.kind,
-          // The name the agent goes by: Luke for an operator, else its title.
-          agentTitle: sql<
-            string | null
-          >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+          agentTitle: agentTable.title,
           agentModel: agentTable.model,
           startedBy: agentTable.userId,
           waitsOn: WAITS_ON,
@@ -2374,7 +2351,7 @@ const findWorkspaceChannel = SqlSchema.findOneOption({
  * agent: the channel it names, refused where that is no open channel of the
  * agent's workspace, so one archived since the agent chose it takes nothing;
  * and the member it is addressed to, refused where they are no member of
- * that workspace, for an operator anyone but its own member, or one who may
+ * that workspace, or one who may
  * not read the thread, since its agent or its task is hidden from them
  * (`agentVisibleTo`, which `itemVisibleTo` reads alike). Note that an ask
  * addressed to someone who never sees it would wait on them unseen.
@@ -2396,10 +2373,6 @@ function placeOf(
       if (Option.isNone(found)) return Result.fail(INBOX_POST_REFUSAL.NO_CHANNEL);
     }
     if (post.addresseeId !== undefined) {
-      const operator = locked.kind === AGENT_KIND.OPERATOR;
-      if (operator && post.addresseeId !== agent.userId) {
-        return Result.fail(INBOX_POST_REFUSAL.NOT_ITS_MEMBER);
-      }
       const member = yield* isWorkspaceMember(post.addresseeId, organizationId);
       if (!member) return Result.fail(INBOX_POST_REFUSAL.NO_ADDRESSEE);
       const sees = yield* findReachedAgent({ userId: post.addresseeId, agentId: agent.agentId });
@@ -2721,12 +2694,12 @@ const ChannelThreadRowSchema = Schema.Struct({
 
 /**
  * The thread's agent as its post names it, as the account's read names one:
- * the name it goes by, Luke for an operator, else its title; its model; and
+ * its title; its model; and
  * the automation whose run started it, which an untitled one goes by. Note
  * that a channel holds threads of every task of the workspace, which no
  * read of one task's agents the window holds can name.
  */
-const THREAD_AGENT = sql<unknown>`(select jsonb_build_object('title', coalesce(${agentGivenNameSql({ kind: qualified(agentTable, agentTable.kind) })}, ${qualified(agentTable, agentTable.title)}), 'model', ${qualified(agentTable, agentTable.model)}, 'automationName', ${agentAutomationNameSql({ automationOrigin: qualified(agentTable, agentTable.automationOrigin) })}) from ${agentTable} where ${qualified(agentTable, agentTable.id)} = ${qualified(inboxItem, inboxItem.agentId)})`;
+const THREAD_AGENT = sql<unknown>`(select jsonb_build_object('title', ${qualified(agentTable, agentTable.title)}, 'model', ${qualified(agentTable, agentTable.model)}, 'automationName', ${agentAutomationNameSql({ automationOrigin: qualified(agentTable, agentTable.automationOrigin) })}) from ${agentTable} where ${qualified(agentTable, agentTable.id)} = ${qualified(inboxItem, inboxItem.agentId)})`;
 
 /** Whether the item holds an ask open that waits on the reader: what a channel's count counts and its stream always carries. */
 function askingReader(userId: string): SQL<boolean> {
@@ -4350,110 +4323,5 @@ export function accountInboxAgents(
       ...(workspaceId === null ? undefined : { workspaceId }),
       updatedAt: row.updatedAt.getTime(),
     })),
-  );
-}
-
-/** One open item of a member's own agent as an operator reads it: the item, its agent, its task, and the ask that waits where one does. */
-const MemberAskRowSchema = Schema.Struct({
-  id: Schema.String,
-  key: Schema.String,
-  title: Schema.String,
-  agentId: Schema.String,
-  agentKind: Schema.Literals(Object.values(AGENT_KIND)),
-  agentTitle: Schema.NullOr(Schema.String),
-  agentModel: Schema.String,
-  agentAutomationName: Schema.NullOr(Schema.String),
-  taskId: Schema.NullOr(Schema.String),
-  taskName: Schema.NullOr(Schema.String),
-  askType: Schema.NullOr(Schema.String),
-  askText: Schema.NullOr(Schema.String),
-  updatedAt: InstantColumnSchema,
-});
-
-type MemberAskRow = typeof MemberAskRowSchema.Type;
-
-/** One open item waiting on a member, as `memberOpenAsks` answers it: the ask that waits by its kind, null for a notice that waits only to be read, and its agent's words. */
-export type MemberOpenAsk = Omit<MemberAskRow, "askType"> & {
-  readonly askType: InboxAsk["type"] | null;
-};
-
-/** Another message of the same item, read beside the one a statement reads, under its own name. */
-const LATEST = "latest";
-const latest = alias(inboxMessage, LATEST);
-
-const ASK_TYPES: ReadonlySet<string> = new Set(Object.values(INBOX_ASK));
-
-/** Whether a version 5 ask's type read from its JSON is one the wire names. */
-const isAskType = (type: string): type is InboxAsk["type"] => ASK_TYPES.has(type);
-
-/** The ask an open item waits on, by the type its open ask message names; none for a notice, and for a type a newer deployment wrote. */
-function askTypeOf(row: MemberAskRow): InboxAsk["type"] | null {
-  return row.askType !== null && isAskType(row.askType) ? row.askType : null;
-}
-
-/** The words an open item waits with: its open ask's, else its agent's latest on its thread, as a notice's. */
-const ASK_WORDS = sql<
-  string | null
->`coalesce(${inboxMessage.text}, (select ${latest.text} from ${inboxMessage} as ${sql.identifier(LATEST)} where ${latest.itemId} = ${ITEM_ID} and ${latest.author} = ${INBOX_MESSAGE_AUTHOR.AGENT} order by ${latest.createdAt} desc limit 1))`;
-
-const findMemberOpenAsks = SqlSchema.findAll({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    workspaceId: Schema.String,
-    limit: Schema.Number,
-  }),
-  Result: MemberAskRowSchema,
-  execute: ({ userId, workspaceId, limit }) =>
-    Database.use((db) =>
-      db
-        .select({
-          id: inboxItem.id,
-          key: inboxItem.key,
-          title: inboxItem.title,
-          agentId: inboxItem.agentId,
-          agentKind: agentTable.kind,
-          agentTitle: agentTable.title,
-          agentModel: agentTable.model,
-          agentAutomationName: agentAutomationNameSql(agentTable),
-          taskId: inboxItem.taskId,
-          taskName: task.name,
-          askType: sql<string | null>`${inboxMessage.ask}->>'type'`,
-          askText: ASK_WORDS,
-          updatedAt: inboxItem.updatedAt,
-        })
-        .from(inboxItem)
-        .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
-        .leftJoin(task, eq(task.id, inboxItem.taskId))
-        .leftJoin(inboxMessage, eq(inboxMessage.id, inboxItem.openAskMessageId))
-        .where(
-          and(
-            sql`${WAITS_ON} = ${userId}`,
-            eq(inboxItem.organizationId, workspaceId),
-            itemVisibleTo(userId),
-            eq(inboxItem.status, INBOX_STATUS.OPEN),
-          ),
-        )
-        .orderBy(...LATEST_FIRST)
-        .limit(limit),
-    ),
-});
-
-/**
- * Every item still open in the workspace that waits on the member
- * (`WAITS_ON`), whichever agent and task it is on, the latest changed first
- * and at most `limit`: what the member's operator reads across their agents,
- * as an agent's own read reads only its own threads. An item a teammate's
- * agent addressed to the member is among them, and one the member's own
- * agent addressed to a teammate, or that waits on a teammate assigned its
- * task, is not, nor one of a workspace the member has left. A notice, which
- * asks nothing, is read with its agent's latest words.
- */
-export function memberOpenAsks(
-  userId: string,
-  workspaceId: string,
-  limit: number,
-): InboxStoreEffect<readonly MemberOpenAsk[]> {
-  return Effect.map(findMemberOpenAsks({ userId, workspaceId, limit }), (rows) =>
-    rows.map((row) => ({ ...row, askType: askTypeOf(row) })),
   );
 }

@@ -439,49 +439,6 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
   );
 
   it.effect(
-    "an operator's untagged lines are its owner's, so its opening and its owner's early lines leave it theirs",
-    () =>
-      Effect.gen(function* () {
-        const { starter, workspace } = yield* people;
-        const operator = yield* openAgent(starter, workspace, null, AGENT_KIND.OPERATOR);
-        yield* sendLine(starter, operator.conversationId, 1);
-        yield* sendLine(starter, operator.conversationId, 2);
-        yield* sendLine(starter, operator.conversationId, 3, {
-          kind: MESSAGE_SENDER.MEMBER,
-          userId: starter,
-        });
-        const target = { userId: starter, conversationId: operator.conversationId };
-        assert.equal(yield* heardFromAnotherAccount(target), false);
-      }),
-  );
-
-  it.effect(
-    "an operator still hears another account: a teammate's line, or a line from their agent",
-    () =>
-      Effect.gen(function* () {
-        const { starter, teammate, workspace } = yield* people;
-        const messaged = yield* openAgent(starter, workspace, null, AGENT_KIND.OPERATOR);
-        yield* sendLine(starter, messaged.conversationId, 1);
-        yield* sendLine(starter, messaged.conversationId, 2, {
-          kind: MESSAGE_SENDER.MEMBER,
-          userId: teammate,
-        });
-        const theirs = yield* openAgent(teammate, workspace);
-        // A member stands one operator per workspace, so the second is in a workspace of its own.
-        const elsewhere = yield* openWorkspace(starter);
-        const reached = yield* openAgent(starter, elsewhere, null, AGENT_KIND.OPERATOR);
-        yield* sendLine(starter, reached.conversationId, 1);
-        yield* sendLine(starter, reached.conversationId, 2, {
-          kind: MESSAGE_SENDER.AGENT,
-          agentId: theirs.id,
-        });
-        for (const { conversationId } of [messaged, reached]) {
-          assert.equal(yield* heardFromAnotherAccount({ userId: starter, conversationId }), true);
-        }
-      }),
-  );
-
-  it.effect(
     "an automation's line from before its line said what fired it counts where a run handed to the agent was a webhook's, and not where it was a schedule's or one whose send was refused, as does the untagged opening of an agent a webhook's run started",
     () =>
       Effect.gen(function* () {

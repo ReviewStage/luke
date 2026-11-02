@@ -29,7 +29,6 @@ import {
   type AgentMessageAnswerView,
   type AgentMessagesAnswerView,
   type AgentModelsAnswer,
-  type AgentOperatorEnsureAnswerView,
   type AgentOverviewChecksAnswerView,
   type AgentOverviewConversationAnswerView,
   type AgentOverviewPullRequestAnswerView,
@@ -76,7 +75,6 @@ import {
   agentServersRequestSchema,
   agentStartRequestOnWire,
   type LocalAgentRefusal,
-  type OperatorEnsureRequest,
   type RefusedDevice,
   TRANSCRIPT_PARTS_QUERY,
 } from "./agent-wire.js";
@@ -1025,17 +1023,6 @@ export class HostedAgentClient {
   }
 
   /** One change of an agent, answering it as it then stands. */
-  /** Ensures the account's operator in a workspace, Luke, or with `reset` archives the one standing and makes a fresh one: its id, or why there is none. */
-  ensureOperator(
-    workspaceId: string,
-    request: OperatorEnsureRequest,
-  ): Effect.Effect<AgentOperatorEnsureAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.agents.ensureOperator, { params: { id: workspaceId }, body: request }),
-      START_REFUSALS,
-    );
-  }
-
   #change(
     agentId: string,
     body: AgentChangeRequest,

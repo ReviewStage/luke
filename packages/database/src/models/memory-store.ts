@@ -86,7 +86,7 @@ export type MemoryOutcome =
   | { readonly kind: MemoryWritten; readonly memory: StoredMemory }
   | { readonly kind: typeof MEMORY_OUTCOME.NOT_FOUND | typeof MEMORY_OUTCOME.FULL };
 
-/** How a keep stands to private memories: whether it keeps one, and whether the keeper's agent reaches private memories at all, which only the member's operator does. */
+/** How a keep stands to private memories: whether it keeps one, and whether the keeper reaches private memories at all. */
 export interface MemoryKeep {
   readonly privately?: boolean;
   readonly readsPrivate?: boolean;

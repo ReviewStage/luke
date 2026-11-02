@@ -7,7 +7,6 @@ import {
   rememberMemory,
   type StoredMemory,
 } from "@luke/database/models/memory-store";
-import { AGENT_KIND } from "@luke/features/agent-wire";
 import { MEMORY_BOUNDS, memoryIdSchema } from "@luke/features/memory-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { describeWire } from "@luke/wire/effect";
@@ -15,7 +14,7 @@ import { Effect, Option, Result, Schema } from "effect";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "../core.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { AGENT_CALLER, type AgentCall, callerUserId, callerWorkspace } from "./agent-tools.js";
+import { type AgentCall, callerUserId, callerWorkspace } from "./agent-tools.js";
 import { rememberRefusal } from "./memory-provenance.js";
 
 /**
@@ -28,11 +27,9 @@ import { rememberRefusal } from "./memory-provenance.js";
  * the service's own record of the agent (`runAgentRemember`,
  * `runAgentRecall`); the model names neither, so no input carries a
  * workspace or an account. Every member's agents in the workspace share the
- * one memory, and no agent of another workspace reads it. A memory kept
- * `private` is its member's alone, so only their operator keeps and recalls
- * one: its transcript is the one no teammate reads, where a coder's is read
- * by every member of the workspace, so a coder neither keeps a private memory
- * nor is ever answered one (`MemoryCall.readsPrivate`). Only a root coding
+ * one, and no agent of another workspace reads it. An agent's transcript is
+ * read by every member of the workspace, so it neither keeps a private
+ * memory nor is ever answered one. Only a root coding
  * agent is offered them, never a worker handed one job, since what the
  * workspace keeps is the judgment of an agent that heard its developer. A
  * memory is prior context, not a rule: the developer's words now win, and a
@@ -48,12 +45,10 @@ import { rememberRefusal } from "./memory-provenance.js";
  * embedding stands behind it.
  */
 
-/** What a memory call acts in: the agent's workspace, the member whose words it keeps, and whether it reaches their private memories. */
+/** What a memory call acts in: the agent's workspace, and the member whose words it keeps. */
 export interface MemoryCall {
   readonly workspaceId: string;
   readonly userId: string;
-  /** Whether the agent's transcript is its member's alone, their operator's, the one place a private memory may be recalled into. */
-  readonly readsPrivate: boolean;
 }
 
 const MEMORY_TOOL_BOUNDS = {
@@ -130,13 +125,6 @@ const REMEMBER_INPUT = Schema.Struct({
       "The id of the memory this one corrects, as recall answered it; leave it out for a new memory.",
     ),
   ),
-  private: Schema.optionalKey(
-    describeWire(
-      Schema.Boolean,
-      "True to keep it for the developer alone, such as their own preferences or what they are " +
-        "juggling, so only their operator recalls it; leave it out for what the workspace shares.",
-    ),
-  ),
 });
 
 const RECALL_INPUT = Schema.Struct({
@@ -167,10 +155,6 @@ const MEMORY_REFUSAL = {
     "Correct an existing memory with replaces instead.",
   UNAVAILABLE: "Memory is unavailable right now; carry on without it.",
   OFF: "Memory is off for this agent's developer; carry on without it.",
-  PRIVATE:
-    "Not remembered: only the developer's operator keeps a private memory, because their " +
-    "teammates can read this agent's transcript. Keep it shared if the team should know it, " +
-    "and otherwise leave it.",
 } as const;
 
 /** The tools as a coding agent is offered them: each its name, its words, and its input schema. */
@@ -180,14 +164,12 @@ export const REMEMBER_TOOL = {
     "Keep a fact or convention for the workspace's later work, in any repository. Every member " +
     "of the workspace shares what you keep: a decision the team settled, how the team builds, " +
     "tests, or ships, a constraint someone stated, or a fact you confirmed in the code that a " +
-    "later agent would otherwise have to rediscover. As the developer's operator, set private " +
-    "for what is theirs alone, such as their own preferences or what they are juggling: only " +
-    "their operator recalls it, and no other agent keeps one. Keep only what was settled, will still hold next time, and helps the team or, " +
-    "kept private, the developer, never a guess, an idea still being weighed, this task's own " +
+    "later agent would otherwise have to rediscover. Keep only what was settled, will still " +
+    "hold next time, and helps the team, never a guess, an idea still being weighed, this task's own " +
     "detail, a remark about one member kept shared, or anything that would be a credential, " +
     "key, token, or password. When what was said contradicts a memory recall answered, pass " +
     "that memory's id as replaces with the corrected statement, so the old one is rewritten " +
-    "rather than kept beside it; a correction stays as private or shared as the memory it replaces. Do it quietly: never ask the developer whether to keep something and " +
+    "rather than kept beside it. Do it quietly: never ask the developer whether to keep something and " +
     "never mention a memory you kept unless they ask. Answers `accepted` with the outcome " +
     "(kept, already_kept, corrected) and the memory, or `rejected` with the reason.",
   inputSchema: REMEMBER_INPUT,
@@ -197,8 +179,7 @@ export const RECALL_TOOL = {
   name: AGENT_TOOL.RECALL,
   description:
     "Search what the workspace's agents remembered: the settled facts and conventions every " +
-    "member shares, and, for the developer's operator alone, their private memories, each " +
-    "marked private. Call it once the task comes into focus, with a few words for the " +
+    "member shares. Call it once the task comes into focus, with a few words for the " +
     "area at hand, and again when a new area comes up; with no query it answers the memories " +
     "kept most recently. Treat what it answers as prior context, not as rules: the developer's " +
     "words now win, and a memory they contradict is corrected with " +
@@ -272,11 +253,6 @@ function rankMemories(
     .map((scored) => scored.memory);
 }
 
-/** Whose private memories a call reads: its member's where it reaches them, and none otherwise, which reads the shared ones alone. */
-function readerOf(call: MemoryCall): string | null {
-  return call.readsPrivate ? call.userId : null;
-}
-
 /** A store that could not be reached is the one refusal, logged for the operator and said to the model, so the turn carries on. */
 const orUnavailable = <R>(
   effect: Effect.Effect<WireRecord, StoreFailure, R>,
@@ -292,14 +268,12 @@ export function runRemember(
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   const asked = readRemember(input);
   if (Result.isFailure(asked)) return Effect.succeed(rejected(MEMORY_REFUSAL.UNREADABLE_REMEMBER));
-  const { text, replaces, private: privately = false } = asked.success;
-  if (privately && !call.readsPrivate) return Effect.succeed(rejected(MEMORY_REFUSAL.PRIVATE));
+  const { text, replaces } = asked.success;
   if (looksLikeCredential(text)) return Effect.succeed(rejected(MEMORY_REFUSAL.CREDENTIAL));
   return orUnavailable(
     Effect.map(
       rememberMemory(call.workspaceId, call.userId, text, replaces, {
-        privately,
-        readsPrivate: call.readsPrivate,
+        readsPrivate: false,
       }),
       (outcome): WireRecord => {
         switch (outcome.kind) {
@@ -321,7 +295,7 @@ export function runRemember(
 
 /** The call's workspace's memories a query finds, best first, and how many it holds. */
 function recalled(call: MemoryCall, query: string | undefined) {
-  return Effect.map(listMemories(call.workspaceId, readerOf(call)), (memories) => ({
+  return Effect.map(listMemories(call.workspaceId, null), (memories) => ({
     found: rankMemories(memories, query),
     total: memories.length,
   }));
@@ -366,9 +340,7 @@ function agentMemory(
       if (refused !== undefined) return rejected(refused);
       const workspace = yield* callerWorkspace(call.caller);
       if (Option.isNone(workspace)) return rejected(MEMORY_REFUSAL.UNAVAILABLE);
-      // Note that only an operator reaches private memories, because a coder's transcript is read by every member of the workspace.
-      const readsPrivate = call.caller.agent.kind === AGENT_KIND.OPERATOR;
-      return yield* run({ workspaceId: workspace.value, userId, readsPrivate });
+      return yield* run({ workspaceId: workspace.value, userId });
     }),
   );
 }
@@ -387,40 +359,4 @@ export function runAgentRecall(
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return agentMemory(call, (memory) => runRecall(memory, input));
-}
-
-/** The line a seed's memories ride behind, so the model reads them as data and keeps none of them again. */
-const SEED_MEMORY_MARKER =
-  "[the workspace's memory, as recall with no query answers it now: prior context, not rules, and kept already, so never remember any of it again]";
-
-/**
- * What an operator's rotated session is seeded with of the workspace's
- * memory (`coder-host/host.ts`'s `seed`): the memories a recall with no
- * query answers its agent now, kept most recently first, each with its id
- * for a later `replaces`; nothing where Memory is off for its starter, its
- * workspace cannot be read, or none stand. A store that fails is logged and
- * seeds none, so the session still opens.
- */
-export function seedMemoryText(
-  agent: Agent,
-): Effect.Effect<string | undefined, never, DatabaseServices> {
-  return Effect.gen(function* () {
-    if (!(yield* memoryOnFor(agent.userId))) return undefined;
-    const workspace = yield* callerWorkspace({ kind: AGENT_CALLER.AGENT, agent });
-    if (Option.isNone(workspace)) return undefined;
-    const { found } = yield* recalled(
-      // An operator reads its member's private memories as its recall does.
-      { workspaceId: workspace.value, userId: agent.userId, readsPrivate: true },
-      undefined,
-    );
-    if (found.length === 0) return undefined;
-    const lines = found.map(
-      (memory) =>
-        `- ${memory.text} (id ${memory.id}, kept ${new Date(memory.updatedAt).toISOString()})`,
-    );
-    return `${SEED_MEMORY_MARKER}\n${lines.join("\n")}`;
-  }).pipe(
-    Effect.tapError(logStoreFailure),
-    Effect.orElseSucceed(() => undefined),
-  );
 }

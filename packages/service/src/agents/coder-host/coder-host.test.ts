@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   type AgentBriefText,
   createAgent,
@@ -11,16 +10,13 @@ import {
   hasRepository,
   latestTurnsOf,
   readAgent,
-  recordAgentCompaction,
   recordAgentPublished,
-  recordAgentStep,
   writeDelegation,
 } from "@luke/database/models/agent-store";
 import { fillChildTitle } from "@luke/database/models/child-titles";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { rewindConversation } from "@luke/database/models/conversation-rewind";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
-import { unreadOperatorNotices, writeOperatorNotice } from "@luke/database/models/operator-notices";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import {
   readPlanCommentThreads,
@@ -28,17 +24,9 @@ import {
 } from "@luke/database/models/plan-comments";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { createTask, readTask, savePlanText, updateTask } from "@luke/database/models/task-store";
-import {
-  type ConversationTarget,
-  type LineSender,
-  storeWriter,
-} from "@luke/database/models/writer";
+import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
-import {
-  CONVERSATION_KIND,
-  MESSAGE_SENDER,
-  OPERATOR_NOTICE_KIND,
-} from "@luke/database/storage-vocabulary";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   getTestDB,
   joinWorkspace,
@@ -49,7 +37,6 @@ import {
 import {
   AGENT_ATTACHMENT_TYPE,
   AGENT_CURSOR_START,
-  AGENT_KIND,
   AGENT_STATUS,
   type AgentTranscriptMessage,
   CHECK_SUMMARY,
@@ -59,12 +46,12 @@ import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_STATUS, INBOX_TOOL } from "@luke/fea
 import { agentTranscriptLiveRowsSchema, LIVE_POLL } from "@luke/features/live-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
+import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import {
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
 } from "@luke/features/plan-comment-wire";
-import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { planSections } from "@luke/features/plan-document";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
@@ -73,7 +60,6 @@ import {
   transcriptWindowRowSchema,
   windowMessagesOf,
 } from "@luke/features/transcript-window";
-import { EXPERIMENT } from "@luke/settings";
 import { sentLineId } from "@luke/wire/host-ids";
 import { noNetwork } from "@luke/wire/testing";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
@@ -115,12 +101,8 @@ import { eveContent, keptHandedImages } from "../attached-files.js";
 import { BROWSER_TOOL_STATUS } from "../browser/browser-tool.js";
 import { EVE_HOST_ATTRIBUTE, EVE_HOST_REFUSAL, EVE_HOST_TURN } from "../eve-host/bounds.js";
 import { memoryRelayState } from "../eve-host/relay.js";
-import { runRemember } from "../memory-tools.js";
-import { DESK_LEAD } from "../operator-desk.js";
 import type { RepositorySandbox } from "../repository-shell.js";
-import { STEWARD_ACT } from "../steward.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
-import { contextWindowOf } from "./context.js";
 import { type CoderHost, coderHost } from "./host.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import type { ProviderKeys } from "./model.js";
@@ -142,7 +124,7 @@ import {
   transcriptLiveStatements,
   transcriptWindowLiveStatements,
 } from "./transcript-live.js";
-import { FLUSH_LINE, handedAfterCompaction, type TurnHanded } from "./turn-context.js";
+import { handedAfterCompaction, type TurnHanded } from "./turn-context.js";
 
 /**
  * The coding-agent host through the same functions the coder project's
@@ -288,19 +270,18 @@ const openAgent = (
     };
   });
 
-/** The member's operator in the workspace, blank with no task and no repository, its session claimed as the hook claims it. */
-const openOperator = (host: CoderHost, userId: string, workspaceId: string) =>
+/** An agent of the member's in the workspace, on no task and no repository and handed a prompt, its session claimed as the hook claims it. */
+const openTasklessAgent = (host: CoderHost, userId: string, workspaceId: string) =>
   Effect.gen(function* () {
     const started = yield* createAgent(userId, {
       taskId: null,
       organizationId: workspaceId,
-      idempotencyKey: `operator-${randomUUID()}`,
+      idempotencyKey: `taskless-${randomUUID()}`,
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       planSnapshot: null,
-      prompt: null,
+      prompt: "Answer the open comments.",
       repository: null,
-      kind: AGENT_KIND.OPERATOR,
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
@@ -335,10 +316,6 @@ const openThread = (userId: string, taskId: string) =>
     assert.ok("answer" in started && "thread" in started.answer);
     return started.answer.thread.id;
   });
-
-/** Memory turned on for the account, as Settings › Experimental turns it on. */
-const memoryOn = (userId: string) =>
-  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } });
 
 /** A GitHub where the developer reaches the agent's repository through one installation, granting the App what the test says; the fixture's own grant when unsaid. */
 const reachingRelay = (permissions?: Readonly<Record<string, string>>) =>
@@ -588,7 +565,7 @@ const windowOf = (target: ConversationTarget, readerId = target.userId) =>
     );
   });
 
-// The catalog every host read reaches but a test that names its own; a turn's message reads it for the window an operator's flush is measured against.
+// The catalog every host read reaches but a test that names its own.
 it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
   "the coding-agent host",
   (it) => {
@@ -1544,39 +1521,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "an operator takes notes on its member's own task, and its notes on a teammate's task are refused and save nothing",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const userId = yield* openGithubUser();
-          const teammate = yield* openGithubUser();
-          const own = yield* startTask(userId, { name: "Seat billing" });
-          yield* joinWorkspace(own.workspaceId, teammate);
-          const theirs = yield* createTask(teammate, {
-            name: "Teammate's invites",
-            organizationId: own.workspaceId,
-          });
-          const operator = yield* openOperator(host, userId, own.workspaceId);
-          const before = Option.getOrThrow(yield* readTask(teammate, theirs.id));
-          const notes = [{ kind: "add", section: "Approach", text: "- Ship it." }];
-          const edit = (taskId: string) =>
-            host.editPlan(operator.admitted, unparsedWire({ taskId, notes }), 0, noSandbox);
-
-          const onOwn = yield* edit(own.id);
-          const onTheirs = yield* edit(theirs.id);
-
-          assert.deepEqual(onOwn, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 1 });
-          assert.equal(onTheirs.status, ACTION_RESULT_STATUS.REJECTED);
-          assert.ok(
-            onTheirs.status === ACTION_RESULT_STATUS.REJECTED &&
-              onTheirs.reason.startsWith(STEWARD_ACT.CHANGE),
-          );
-          const after = Option.getOrThrow(yield* readTask(teammate, theirs.id));
-          assert.equal(after.text, before.text);
-        }),
-    );
-
-    it.effect(
       "an agent's notes naming no task, or a task of another workspace its member is also in, are refused and save nothing",
       () =>
         Effect.gen(function* () {
@@ -1677,7 +1621,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "an agent's comment call naming no task or a task of another workspace is refused, as is an operator's reply on a teammate's task, which it still reads, and none changes the thread",
+      "an agent's comment call naming no task or a task of another workspace is refused and changes no thread, and it reads a teammate's task's comments",
       () =>
         Effect.gen(function* () {
           const host = yield* hostOverStore();
@@ -1695,15 +1639,14 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           });
           const thread = yield* openThread(teammate, theirs.id);
           const outsideThread = yield* openThread(userId, elsewhere.id);
-          const operator = yield* openOperator(host, userId, own.workspaceId);
+          const agent = yield* openTasklessAgent(host, userId, own.workspaceId);
           const reply = (input: Readonly<Record<string, string>>) =>
-            host.comment(operator.admitted, CODER_TOOL.REPLY_TO_COMMENT, unparsedWire(input));
+            host.comment(agent.admitted, CODER_TOOL.REPLY_TO_COMMENT, unparsedWire(input));
 
           const unnamed = yield* reply({ thread, words: "Done." });
           const outside = yield* reply({ taskId: elsewhere.id, thread: outsideThread, words: "x" });
-          const onTheirs = yield* reply({ taskId: theirs.id, thread, words: "Done." });
           const read = yield* host.comment(
-            operator.admitted,
+            agent.admitted,
             CODER_TOOL.READ_COMMENTS,
             unparsedWire({ taskId: theirs.id }),
           );
@@ -1716,12 +1659,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             status: ACTION_RESULT_STATUS.REJECTED,
             reason: COMMENT_TOOL_REFUSAL.NO_TASK,
           });
-          assert.equal(onTheirs.status, ACTION_RESULT_STATUS.REJECTED);
-          assert.ok(
-            onTheirs.status === ACTION_RESULT_STATUS.REJECTED &&
-              typeof onTheirs.reason === "string" &&
-              onTheirs.reason.startsWith(STEWARD_ACT.CHANGE),
-          );
           assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
           for (const [owner, taskId] of [
             [teammate, theirs.id],
@@ -2292,317 +2229,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "an operator's turn opens on its desk the first time, not again while nothing on it changed, and again once one of its member's agents opened a pull request or failed; no other agent's turn carries a desk",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const {
-            userId,
-            agent,
-            admitted: coderAdmitted,
-            auth,
-            sessionId,
-          } = yield* openAgent(host);
-          const workspace = agent.organizationId;
-          const operator = yield* openOperator(host, userId, workspace);
-          const typed = (handed: TurnHanded) =>
-            host.turnMessage(
-              operator.admitted,
-              { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
-              handed,
-            );
-          const desked = (text: string | undefined) => text?.includes(DESK_LEAD) === true;
-
-          const first = yield* typed({});
-          assert.ok(desked(first.text), first.text ?? "");
-          assert.ok(first.text?.includes(`/agent/${agent.id})`), first.text ?? "");
-          const unchanged = yield* typed(first.handed);
-          assert.ok(!desked(unchanged.text), unchanged.text ?? "");
-
-          // One of the member's agents opens a pull request: the desk changed, so it is handed again, once.
-          yield* recordAgentPublished(userId, agent.id, {
-            number: 42,
-            title: "Fix the refresh",
-            url: "https://github.com/acme/relay/pull/42",
-            state: PULL_REQUEST_STATE.OPEN,
-            checks: CHECK_SUMMARY.PASSING,
-            additions: 12,
-            deletions: 3,
-            changedFiles: 2,
-          });
-          const opened = yield* typed(unchanged.handed);
-          assert.ok(opened.text?.includes("[@#42 Fix the refresh]"), opened.text ?? "");
-          assert.ok(!desked((yield* typed(opened.handed)).text));
-
-          // Its turn fails: the desk names it among the failed.
-          const session = { id: sessionId, auth, turn: { id: "turn_0" } };
-          const state = memoryRelayState();
-          for (const event of codingTurn("turn_0", "turn.failed")) {
-            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-            yield* host.relay(event, coderAdmitted, session as never, state, {});
-          }
-          const failed = yield* typed(opened.handed);
-          assert.ok(desked(failed.text), failed.text ?? "");
-          assert.ok(failed.text?.includes("Failed (1):"), failed.text ?? "");
-
-          // A coder's turn carries no desk.
-          const coderTurn = yield* host.turnMessage(
-            coderAdmitted,
-            { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
-            {},
-          );
-          assert.ok(!desked(coderTurn.text), coderTurn.text ?? "");
-        }),
-    );
-
-    it.effect(
-      "an operator's desk hands what its member's agents did since its last turn once, marks it read, and hands nothing again while nothing new stands",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const {
-            userId,
-            agent,
-            admitted: coderAdmitted,
-            auth,
-            sessionId,
-          } = yield* openAgent(host);
-          const workspace = agent.organizationId;
-          const operator = yield* openOperator(host, userId, workspace);
-          const typed = (handed: TurnHanded) =>
-            host.turnMessage(
-              operator.admitted,
-              { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
-              handed,
-            );
-          const noticed = (text: string | undefined) =>
-            text?.includes("New since your last turn") === true;
-          const first = yield* typed({});
-          assert.ok(!noticed(first.text), first.text ?? "");
-
-          // The member's agent ends a turn through the relay, and again: one notice of it.
-          const session = { id: sessionId, auth, turn: { id: "turn_0" } };
-          for (const turnId of ["turn_0", "turn_1"]) {
-            const state = memoryRelayState();
-            for (const event of codingTurn(turnId, "turn.completed")) {
-              // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-              yield* host.relay(event, coderAdmitted, session as never, state, {});
-            }
-          }
-          const told = yield* typed(first.handed);
-          const text = told.text ?? "";
-          assert.ok(noticed(text), text);
-          assert.ok(text.includes(`/agent/${agent.id})`), text);
-          assert.equal(text.split("a turn ended").length - 1, 1, text);
-
-          // Handed once: the notices are read, and a desk with nothing new hands nothing.
-          assert.deepEqual(yield* unreadOperatorNotices(operator.agent.id, 10), []);
-          const after = yield* typed(told.handed);
-          assert.ok(!after.text?.includes(DESK_LEAD), after.text ?? "");
-        }),
-    );
-
-    it.effect(
-      "an operator's desk shows a section's newest rows and counts the rest, and leaves out a teammate's agents",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const userId = yield* openGithubUser();
-          const teammate = yield* openGithubUser();
-          const task = yield* startTask(userId, {
-            name: "Teammate invitations",
-            repository: "acme/relay",
-          });
-          yield* joinWorkspace(task.workspaceId, teammate);
-          const started = (starter: string, title: string) =>
-            Effect.gen(function* () {
-              // Each a second after the last, so newest first is one order, and none yet reads as never started.
-              yield* TestClock.adjust("1 second");
-              const made = yield* createAgent(starter, {
-                taskId: task.id,
-                title,
-                idempotencyKey: randomUUID(),
-                model: "anthropic/claude-opus-5.5",
-                effort: "high",
-                planSnapshot: PLAN_TEXT,
-                prompt: null,
-                repository: "acme/relay",
-              });
-              return Option.getOrThrow(made).agent;
-            });
-          const own = [];
-          for (let index = 0; index < 9; index += 1)
-            own.push(yield* started(userId, `Invite ${index}`));
-          const teammates = yield* started(teammate, "Teammate's invite");
-          const operator = yield* openOperator(host, userId, task.workspaceId);
-          // Each of the member's agents opened an ask, the oldest first, so nine rows stand for the notices' eight.
-          for (const [index, each] of own.entries()) {
-            yield* writeOperatorNotice(
-              { agentId: each.id },
-              OPERATOR_NOTICE_KIND.INBOX_ASK,
-              new Date(Date.UTC(2026, 9, 22, 9, index)),
-            );
-          }
-
-          const desk =
-            (yield* host.turnMessage(
-              operator.admitted,
-              { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
-              {},
-            )).text ?? "";
-          const named = (agent: { readonly title: string | null }) =>
-            desk.includes(`[@${agent.title ?? ""}]`);
-          assert.ok(desk.includes("and 1 more"), desk);
-          assert.ok(own.slice(1).every(named), desk);
-          assert.ok(!named(own[0] ?? teammates), "the oldest is the one counted");
-          assert.ok(!named(teammates), "a teammate's agent is no row of the desk");
-          // The notice only counted stays unread for the next turn; the eight shown are read.
-          const left = yield* unreadOperatorNotices(operator.agent.id, 20);
-          assert.deepEqual(
-            left.map(({ agentId }) => agentId),
-            [own[0]?.id],
-          );
-        }),
-    );
-
-    it.effect(
-      "an operator whose last step passed the flush mark is told once to keep what is durable before its history is summarised, never with Memory off, on a fresh history, or on a turn its heartbeat opens, and again only after eve compacted it",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const { userId, agent } = yield* openAgent(host);
-          const workspace = agent.organizationId;
-          const operator = yield* openOperator(host, userId, workspace);
-          const typed = (handed: TurnHanded) =>
-            host.turnMessage(
-              operator.admitted,
-              { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
-              handed,
-            );
-          const told = (message: { readonly text: string | undefined }) =>
-            message.text?.includes(FLUSH_LINE) === true;
-          const windowTokens = contextWindowOf(
-            CATALOG,
-            operator.agent.model,
-            operator.agent.contextWindow,
-          );
-          // The newest step the row holds, ended at the share of the window given.
-          const stepAt = (share: number, at: number) =>
-            recordAgentStep(userId, operator.agent.id, {
-              inputTokens: Math.ceil(windowTokens * share),
-              outputTokens: 0,
-              systemPromptTokens: 0,
-              toolDefinitionTokens: 0,
-              briefTokens: 0,
-              at,
-            });
-
-          yield* stepAt(0.85, 1_000);
-          // A fresh session's first turn measures nothing of its own history yet.
-          const first = yield* typed({});
-          assert.ok(!told(first), first.text ?? "");
-          // Memory off, the operator keeps nothing, so it is told nothing.
-          assert.ok(!told(yield* typed(first.handed)));
-
-          yield* memoryOn(userId);
-          yield* stepAt(0.5, 2_000);
-          assert.ok(!told(yield* typed(first.handed)), "below the mark");
-          yield* stepAt(0.85, 3_000);
-          // A turn its heartbeat opens may keep nothing, so it is not told, and the member's next turn is.
-          const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-          const lineFrom = (sender: LineSender, clientKey: string) =>
-            writer.writeAwaitingLine(
-              { userId, conversationId: operator.agent.conversationId },
-              { text: "Look over what changed today.", clientKey, sender },
-              Effect.succeed(true),
-            );
-          yield* lineFrom({ kind: MESSAGE_SENDER.AUTOMATION, name: "Luke's heartbeat" }, "beat");
-          const beat = yield* typed(first.handed);
-          assert.ok(!told(beat), beat.text ?? "");
-          yield* lineFrom({ kind: MESSAGE_SENDER.MEMBER, userId }, "member");
-          const flushed = yield* typed(beat.handed);
-          assert.ok(told(flushed), flushed.text ?? "");
-          assert.ok(!told(yield* typed(flushed.handed)), "told once");
-          // A coder past the mark is told nothing.
-          const coder = yield* openAgent(host);
-          const coderTurn = yield* host.turnMessage(
-            coder.admitted,
-            { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
-            { opened: true },
-          );
-          assert.ok(!told(coderTurn), coderTurn.text ?? "");
-
-          // eve compacts: the step before it measured the folded history, and the next past the mark is told again.
-          yield* recordAgentCompaction(userId, operator.agent.id, new Date(4_000));
-          const compacted = handedAfterCompaction(flushed.handed);
-          const after = yield* typed(compacted);
-          assert.ok(!told(after));
-          assert.ok(!told(yield* typed(after.handed)), "the step before the compaction");
-          yield* stepAt(0.85, 5_000);
-          assert.ok(told(yield* typed(after.handed)));
-        }),
-    );
-
-    it.effect(
-      "an operator's session opened afresh is seeded with what was said and then the workspace's memory, newest first, where its member has Memory on, and a coder's with what was said alone",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const {
-            userId,
-            agent,
-            admitted: coderAdmitted,
-            auth: coderAuth,
-            sessionId: coderSession,
-          } = yield* openAgent(host);
-          const workspace = agent.organizationId;
-          const operator = yield* openOperator(host, userId, workspace);
-          const kept = {
-            tests: "The web server's store tests run on PGlite through test:store.",
-            deploys: "Deployments go out from the main branch through Vercel.",
-          };
-          // Something said in each conversation, so each fresh session has a seed.
-          for (const [admitted, auth, sessionId] of [
-            [operator.admitted, operator.auth, operator.sessionId],
-            [coderAdmitted, coderAuth, coderSession],
-          ] as const) {
-            const session = { id: sessionId, auth, turn: { id: "turn_0" } };
-            const state = memoryRelayState();
-            for (const event of codingTurn("turn_0", "turn.completed")) {
-              // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-              yield* host.relay(event, admitted, session as never, state, {});
-            }
-          }
-          const seedOf = (auth: SessionAuth) =>
-            Effect.gen(function* () {
-              const starting = yield* host.admitStarting(auth, mintSession());
-              assert.ok(Result.isSuccess(starting));
-              return (yield* host.seed(starting.success)) ?? "";
-            });
-          const call = { workspaceId: workspace, userId, readsPrivate: false };
-          yield* runRemember(call, { text: kept.tests });
-          yield* TestClock.adjust("1 second");
-          yield* runRemember(call, { text: kept.deploys });
-
-          const off = yield* seedOf(operator.auth);
-          assert.match(off, /The guide is read; the plan fits the code\./u);
-          assert.ok(!off.includes(kept.tests), "Memory off seeds none of it");
-
-          yield* memoryOn(userId);
-          const seeded = yield* seedOf(operator.auth);
-          const said = seeded.indexOf("The guide is read");
-          const newest = seeded.indexOf(kept.deploys);
-          const older = seeded.indexOf(kept.tests);
-          assert.ok(said >= 0 && said < newest && newest < older, seeded);
-          assert.ok(seeded.includes("never remember any of it again"), seeded);
-          assert.ok(
-            !(yield* seedOf(coderAuth)).includes(kept.tests),
-            "a coder's seed holds no memory",
-          );
-        }),
-    );
-
-    it.effect(
       "the turn after one spoken on a call says the call's words no longer hold, as it does after a compaction kept only that, and the turn after it says nothing of them",
       () =>
         Effect.gen(function* () {
@@ -2611,11 +2237,11 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const typedOn = (handed: TurnHanded) =>
             host.turnMessage(admitted, { kind: EVE_HOST_TURN.TYPED, turnId: undefined }, handed);
 
-          const after = yield* typedOn({ spoken: true, opened: true });
+          const after = yield* typedOn({ spoken: true });
           assert.ok(after.text?.startsWith("This turn is typed"), after.text ?? "");
           const next = yield* typedOn(after.handed);
           assert.ok(!next.text?.includes("This turn is"), next.text ?? "");
-          const compacted = yield* typedOn(handedAfterCompaction({ spoken: true, opened: true }));
+          const compacted = yield* typedOn(handedAfterCompaction({ spoken: true }));
           assert.ok(compacted.text?.startsWith("This turn is typed"), compacted.text ?? "");
         }),
     );

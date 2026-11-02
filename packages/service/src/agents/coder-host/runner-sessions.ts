@@ -176,12 +176,7 @@ import { holdingRunner, holdingRunnerIfFree } from "./runner-lease.js";
 import { type NativeSessions, RUNNER_CHOICE } from "./runtime-sessions.js";
 import { nativeSkills } from "./skills.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
-import {
-  coderTurnMessage,
-  deskHandedRead,
-  readNativeTurnHanded,
-  recordNativeTurnHanded,
-} from "./turn-message.js";
+import { coderTurnMessage, readNativeTurnHanded, recordNativeTurnHanded } from "./turn-message.js";
 
 /** What the sessions reach: the store, GitHub, Vercel, the agent's machine, the image, the runner's bundle, and the deployment's key ring. */
 export type RunnerServices =
@@ -836,21 +831,11 @@ export const runnerSessions = <
         };
         const now = yield* Clock.currentTimeMillis;
         const turn = { kind: sent.turn, turnId: undefined };
-        const opened = yield* coderTurnMessage(
-          admitted,
-          agent,
-          turn,
-          handed,
-          now,
-          Effect.succeed(false),
-        );
+        const opened = yield* coderTurnMessage(admitted, agent, turn, handed, now);
         const { content } = sent.line;
         const ahead: readonly ContentBlock[] =
           opened.text === undefined ? [] : [{ type: "text", text: opened.text }];
-        const taken = Effect.andThen(
-          recordNativeTurnHanded(target, opened.handed),
-          deskHandedRead(agent, opened),
-        );
+        const taken = recordNativeTurnHanded(target, opened.handed);
         return { line: { ...sent.line, content: [...ahead, ...content] }, taken };
       });
 

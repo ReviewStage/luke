@@ -227,7 +227,7 @@ const seedAccount = (userId: string, sharedWorkspace: string) =>
       userId,
       agentModel: "anthropic/claude-opus-5.5",
       agentEffort: "high",
-      experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.OPERATOR]: false },
+      experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.PILOT]: false },
     });
     const [made] = yield* db
       .insert(automation)

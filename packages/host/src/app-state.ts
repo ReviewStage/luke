@@ -184,13 +184,12 @@ export interface AppInboxTaskHolding {
  * the developer: the item as a task's are, the agent as its row names it
  * now, and the automation and repository standing where a task would; the
  * automation, and its name, null where the reader may not read it or none
- * stands, and the repository null for an agent that works in none, the
- * member's operator above all.
+ * stands, and the repository null for an agent that works in none.
  */
 export interface AppInboxTasklessItem extends AppInboxWaitingItem {
   /** When the item last changed, by the service's clock, which a follow of its agent's inbox is current once it holds. */
   updatedAt: number;
-  /** What kind of agent posted it, which sets the member's operator apart; absent from a service before it, which reads as a coder. */
+  /** What kind of agent posted it; absent from a service before it, which reads as a coder. */
   agentKind?: AgentKind;
   agentTitle: string | null;
   agentModel: string;

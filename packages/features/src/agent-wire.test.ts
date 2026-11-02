@@ -64,7 +64,7 @@ test("an agent's kind this build knows reads as itself, and one a later service 
   const read = Schema.decodeUnknownSync(agentKindSchema);
 
   assert.deepEqual(
-    ["operator", "pilot", "navigator"].map((kind) => read(kind)),
-    ["operator", "pilot", "coder"],
+    ["coder", "pilot", "navigator"].map((kind) => read(kind)),
+    ["coder", "pilot", "coder"],
   );
 });

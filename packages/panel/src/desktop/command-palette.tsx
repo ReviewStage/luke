@@ -65,7 +65,6 @@ import type { TasklessAgent } from "@luke/features/agent-wire";
 import { automationTriggerText } from "@luke/features/automation-list-model";
 import type { AutomationSummary } from "@luke/features/automation-wire";
 import type { Channel } from "@luke/features/channel-wire";
-import { OPERATOR_NAME } from "@luke/features/model-label";
 import { formatCount } from "@luke/features/number-format";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
@@ -121,7 +120,6 @@ import {
   NoteLine,
   Shortcut,
   useMinute,
-  WingFace,
 } from "@luke/ui";
 import { ACTOR_KIND, type Actor, actorName, assigneeFace } from "@luke/ui/actor-model";
 import {
@@ -221,7 +219,6 @@ import { useCapability, useExperimentChoices } from "../use-app-state.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
-import { type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, inboxEntries } from "./main-tabs.js";
 import {
   ADD_SECTION,
@@ -321,14 +318,8 @@ const NO_ARCHIVE_ASKS = { agentId: "", asked: 0 };
 /** Nothing to move: a terminal opened from ⌘K stands in the side panel, as one opened from the panel's "+" does. */
 const noFocusMove = (): void => undefined;
 
-/** The group Ask Luke stands alone in, above every kind's, under no heading. */
-const ASK_LUKE_GROUP = "ask-luke";
-
 /** What the list says where no row stands and no source is still to answer, as every menu says it. */
 const NOTHING_MATCHES = noMatchWords(TERM.RESULT);
-
-/** What the row that opens Luke says, as his chord's command names it. */
-const ASK_LUKE_LABEL = appCommandLabel(APP_COMMAND.ASK_LUKE);
 
 /** How far the read of the open task's files has come: asked, listed, or not listed and why. */
 const FILES_READ = {
@@ -1327,7 +1318,6 @@ function actionRows(
         LISTED_COMMANDS.includes(command) &&
         command !== APP_COMMAND.COMMAND_PALETTE &&
         command !== APP_COMMAND.COPY_LINK &&
-        command !== APP_COMMAND.ASK_LUKE &&
         appCommandOffered(command),
     )
     .map((command) => {
@@ -1594,8 +1584,7 @@ function taskCommandRows(
  * U and P on what is open, while no sidebar row has the keyboard, whose
  * own answer over these (`useFocusedRowKeys`): the plan on screen, marked
  * read or unread and pinned as its menus do, or the agent whose page
- * stands, the pin only while it is not archived and is no Luke, whose row
- * offers none. Note that the Inbox's U
+ * stands, the pin only while it is not archived. Note that the Inbox's U
  * is its chosen item's (`use-inbox-read-marks.ts`), so nothing here stands
  * while the Inbox does.
  */
@@ -1606,7 +1595,7 @@ function useOpenThingKeys(tasks: TasksControl, reads: ReadMarks, agentReads: Age
   const standing =
     agent === undefined
       ? undefined
-      : withoutLuke(tasks.listedAgents.standing).find((each) => each.id === agent.id);
+      : tasks.listedAgents.standing.find((each) => each.id === agent.id);
   const toggleRead =
     task !== undefined
       ? () => reads.mark(task, !reads.markedUnread(task.id))
@@ -1624,7 +1613,7 @@ function useOpenThingKeys(tasks: TasksControl, reads: ReadMarks, agentReads: Age
   useAppCommand(APP_COMMAND.PIN, togglePin);
 }
 
-/** The agent on no task whose page stands, archived or not; none while no agent's page stands, or while Luke's does, who is not archived. */
+/** The agent on no task whose page stands, archived or not; none while no agent's page stands. */
 function openAgentOf(tasks: TasksControl): TasklessAgent | undefined {
   const { agentId } = tasks.agentView;
   const { standing, archived } = tasks.listedAgents;
@@ -1937,11 +1926,10 @@ const PaletteDialog = memo(function PaletteDialog({
     setChosenUnder({ opening, filter });
     setSelected(FIRST_ROW);
   }
-  // Whether the row chosen is a command's, Ask Luke's among them, which Return runs rather than opens.
+  // Whether the row chosen is a command's, which Return runs rather than opens.
   const runs = groups.some(
     (group) =>
-      (group.id === PALETTE_FILTER.COMMANDS || group.id === ASK_LUKE_GROUP) &&
-      group.items.some((item) => item.id === selected),
+      group.id === PALETTE_FILTER.COMMANDS && group.items.some((item) => item.id === selected),
   );
   return (
     <CommandDialog
@@ -1964,41 +1952,6 @@ const PaletteDialog = memo(function PaletteDialog({
  * is something to run. A palette standing when that ends is taken down in
  * the render that finds it gone. It opens on All with nothing typed.
  */
-/** The window's tasks with Luke left out of the agents listed, since Ask Luke stands for him. */
-function withoutLukeIn(tasks: TasksControl): TasksControl {
-  return {
-    ...tasks,
-    // Note that a Luke a Reset retired is left out too, since he is known by his kind and the row he stood in now opens his successor.
-    listedAgents: {
-      standing: withoutLuke(tasks.listedAgents.standing),
-      archived: withoutLuke(tasks.listedAgents.archived),
-    },
-  };
-}
-
-/**
- * Ask Luke, the palette's first row while the account has Luke: it opens his
- * page, or asks his ensure again where it failed, with his chord at its end.
- */
-function askLukeRow(
-  operator: LukeOperator,
-  onTasks: (run: () => void) => void,
-  choose: (run: () => void) => void,
-  tasks: TasksControl,
-): PaletteRow {
-  const { agentId } = operator;
-  return {
-    icon: <WingFace />,
-    label: ASK_LUKE_LABEL,
-    command: APP_COMMAND.ASK_LUKE,
-    terms: [ASK_LUKE_LABEL, OPERATOR_NAME],
-    onChoose: () =>
-      agentId === undefined
-        ? choose(operator.retry)
-        : onTasks(() => tasks.agentView.onOpen(agentId)),
-  };
-}
-
 export function CommandPalette({
   available,
   tab,
@@ -2137,7 +2090,7 @@ export function CommandPalette({
   }, [open, sought, query]);
 
   // Note that no key pressed in the palette goes on to the window, which the
-  // dialog sees to, because the window's Escape would stop Luke mid-reply and
+  // dialog sees to, because the window's Escape would stop an agent mid-reply and
   // a window chord would change what stands behind the palette. Escape itself
   // is the dialog's, which closes the palette alone.
   const keyDown = useCallback(
@@ -2169,18 +2122,6 @@ export function CommandPalette({
   );
 
   const tokens = searchTokens(sought);
-  // Luke leads the list as Ask Luke, so the rows that list agents leave him out.
-  const operator = useLukeOperator({
-    accountId: tasks.me,
-    workspaceId: tasks.signedIn ? tasks.workspace?.id : undefined,
-  });
-  const listedTasks = useMemo(() => withoutLukeIn(tasks), [tasks]);
-  const askLuke = operator === undefined ? undefined : askLukeRow(operator, onTasks, choose, tasks);
-  const askLukeShown =
-    open &&
-    askLuke !== undefined &&
-    (filter === PALETTE_FILTER.ALL || filter === PALETTE_FILTER.COMMANDS) &&
-    (tokens.length === 0 || rowScore(askLuke, sought) > 0);
   // The listed workspace's members, read once for it, name a task's assignee by face.
   const membersRead = useWorkspaceMembersRead(tasks.workspace);
   const originOf = useTaskOrigin();
@@ -2194,7 +2135,7 @@ export function CommandPalette({
     () =>
       tasksShown
         ? taskRows(
-            listedTasks,
+            tasks,
             members,
             (id) => onTasks(() => tasks.onSelect(id)),
             (id) => onTasks(() => tasks.agentView.onOpen(id)),
@@ -2202,14 +2143,14 @@ export function CommandPalette({
             originOf,
           )
         : [],
-    [tasksShown, listedTasks, members, onTasks, tasks, originOf],
+    [tasksShown, tasks, members, onTasks, tasks, originOf],
   );
   const reads = useReadMarks();
   const renameOffer = useTaskRenameOffer();
   const agentReads = useAgentReadMarks();
   useOpenThingKeys(tasks, reads, agentReads);
   // The open agent's Archive, asked of `OpenAgentArchive` by the agent it was chosen for.
-  const openAgent = openAgentOf(listedTasks);
+  const openAgent = openAgentOf(tasks);
   const [archiveAsks, setArchiveAsks] = useState<{ agentId: string; asked: number }>(
     NO_ARCHIVE_ASKS,
   );
@@ -2348,9 +2289,9 @@ export function CommandPalette({
         ...copyLinkRows(links.linksAt(fromPanel), (held) => choose(() => links.copy(held))),
         ...actionRows(openThingCommands(tasks), runCommand, experiments),
         ...readMarkRows(tasks, reads, choose),
-        ...agentReadMarkRows(listedTasks, agentReads, choose),
+        ...agentReadMarkRows(tasks, agentReads, choose),
         ...taskPinRows(tasks, reads, choose),
-        ...agentPinRows(listedTasks, choose),
+        ...agentPinRows(tasks, choose),
         ...taskCommandRows(tasks, reads, renameOffer, choose),
         ...agentArchiveRows(openAgent, askArchive, choose),
         ...panelTabRows(tasks, onTasks),
@@ -2431,17 +2372,13 @@ export function CommandPalette({
     const sections = kinds
       .map((kind) => ({ kind, rows: rowsFor(kind), notice: noticeFor(kind) }))
       .filter((section) => section.rows.length > 0 || section.notice !== undefined);
-    // Note that Ask Luke, where it stands, is the first row, so the first row chosen as the palette opens is his.
-    let place = askLukeShown ? 1 : 0;
+    let place = 0;
     const items = (rows: readonly PaletteRow[]): CommandItem[] =>
       rows.map((row) => {
         place += 1;
         return paletteItem(row, String(place), sought, tokens);
       });
     return [
-      ...(askLukeShown && askLuke !== undefined
-        ? [{ id: ASK_LUKE_GROUP, items: [paletteItem(askLuke, FIRST_ROW, sought, tokens)] }]
-        : []),
       ...sections.map((section) => ({
         id: section.kind,
         label: labels[section.kind],

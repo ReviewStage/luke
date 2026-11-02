@@ -29,7 +29,6 @@ import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.
 import { handleMaintenanceSweep } from "./maintenance-sweep.js";
 import { sweepNativeSandboxes } from "./native-sandbox-sweep.js";
 import { sweepNativeWakeups } from "./native-wakeup-sweep.js";
-import { sweepOperatorWakes } from "./operator-wake-sweep.js";
 import { sweepSandboxRetention } from "./sandbox-retention-sweep.js";
 import { sweepTerminalLeases } from "./terminal-lease-sweep.js";
 
@@ -104,8 +103,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     sweepNativeWakeups: (now) =>
       sweepNativeWakeups(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepAgentQueues: () => sweepAgentQueues(eveFor).pipe(Effect.provideContext(startContext)),
-    sweepOperatorWakes: (now) =>
-      sweepOperatorWakes(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     purgeWithdrawnLines: (now) => purgeWithdrawnLines(now),
     sweepAutomations: (now) =>
       sweepAutomations(eveFor, now).pipe(Effect.provideContext(startContext)),

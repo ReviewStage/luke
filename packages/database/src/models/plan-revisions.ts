@@ -23,7 +23,6 @@ import { agentTable } from "../schemas/agent.js";
 import { user } from "../schemas/auth.js";
 import { planRevision } from "../schemas/plan-revision.js";
 import { task } from "../schemas/task.js";
-import { agentGivenNameSql } from "./agent-name.js";
 import { InstantColumnSchema } from "./columns.js";
 import { taskReachableBy } from "./workspace-store.js";
 
@@ -234,10 +233,7 @@ const findLastEdit = SqlSchema.findOneOption({
           at: planRevision.at,
           agentId: planRevision.agentId,
           agentModel: agentTable.model,
-          // The name the agent goes by: Luke for an operator, else its title.
-          agentTitle: sql<
-            string | null
-          >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+          agentTitle: agentTable.title,
         })
         .from(planRevision)
         .leftJoin(agentTable, eq(agentTable.id, planRevision.agentId))
@@ -283,10 +279,7 @@ const findRevisionLines = SqlSchema.findAll({
           editorName: user.name,
           at: planRevision.at,
           agentModel: agentTable.model,
-          // The name the agent goes by: Luke for an operator, else its title.
-          agentTitle: sql<
-            string | null
-          >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+          agentTitle: agentTable.title,
           agentId: planRevision.agentId,
           seq: planRevision.seq,
           startedAt: planRevision.startedAt,

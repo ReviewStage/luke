@@ -13,7 +13,6 @@ import {
   AGENT_ARCHIVER,
   AGENT_DELEGATE_TOOL,
   AGENT_FAILURE,
-  AGENT_KIND,
   AGENT_PAYER,
   AGENT_RUNTIME,
   AGENT_SENDER,
@@ -21,7 +20,6 @@ import {
   type AgentArchivedBy,
   type AgentAttachment,
   type AgentFailure,
-  type AgentKind,
   type AgentPayer,
   type AgentPullRequest,
   type AgentPullRequestAnswer,
@@ -35,7 +33,6 @@ import {
   type ContextWindow,
   LOCAL_AGENT_REFUSAL,
   type LocalAgentRefusal,
-  OPERATOR_QUIET_REPLY,
   PART_CUT_FIELD,
   type PartCut,
   PULL_REQUEST_STATE,
@@ -263,15 +260,13 @@ export function agentActorState(status: AgentStatus): ActorState {
 }
 
 /**
- * An agent as its tile draws it: its harness, read off its model, or Luke's
- * face for a member's operator, known by its kind, wearing where it stands
+ * An agent as its tile draws it: its harness, read off its model, wearing where it stands
  * (at rest where that is not known), under the name it goes by.
  */
 export function agentActor(
   agent: {
     readonly model: string;
     readonly status?: AgentStatus | undefined;
-    readonly kind?: AgentKind | undefined;
   },
   name: string,
 ): Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }> {
@@ -279,7 +274,6 @@ export function agentActor(
     kind: ACTOR_KIND.AGENT,
     name,
     provider: providerOf(agent.model),
-    ...(agent.kind === AGENT_KIND.OPERATOR ? { operator: true } : undefined),
     state:
       agent.status === undefined
         ? ACTOR_STATE.REST
@@ -2180,13 +2174,6 @@ export interface PlacedMessage {
   readonly arrived: readonly AgentTranscriptMessage[];
 }
 
-/** Whether a turn's reply is the operator's quiet reply alone, a heartbeat that found nothing, which leaves the developer nothing to read. */
-function isQuietReply(message: AgentTranscriptMessage): boolean {
-  return (
-    message.role === MESSAGE_ROLE.ASSISTANT && messageWords(message).trim() === OPERATOR_QUIET_REPLY
-  );
-}
-
 /**
  * The rows with each line that follows the newest turn while it is still
  * open placed in that turn after the steps it has begun, as a line it takes
@@ -2221,20 +2208,12 @@ function steeringPlaced(
  * order the service keeps, where the journal closed behind it. A line whose
  * journal is not among the rows, as when its page is still to land, stands
  * where the order puts it, as every line does from a service older than it.
- * In a member's operator's transcript (`quiet`), a turn whose reply is its
- * quiet reply alone is left out, so a heartbeat that found nothing draws no
- * reply, and a line it took in stands where the order puts it; every other
- * agent's reply is placed whatever it says.
  */
 export function placedMessages(
   messages: readonly AgentTranscriptMessage[],
-  quiet = false,
   unsent: (id: string) => boolean = () => false,
 ): readonly PlacedMessage[] {
-  const shown = steeringPlaced(
-    quiet ? messages.filter((message) => !isQuietReply(message)) : messages,
-    unsent,
-  );
+  const shown = steeringPlaced(messages, unsent);
   const journals = new Set(
     shown.filter((message) => message.role === MESSAGE_ROLE.ASSISTANT).map((each) => each.id),
   );
@@ -2418,17 +2397,14 @@ const SENTENCE_END = /[.!?](?=\s|$)/u;
  * What a turn that finished replied, as a reader hears it: its newest
  * reply's last stretch of words, after the turn's last call, cut to its
  * first sentence, or to its first words where that runs on. Nothing where
- * there is no reply, no words follow its last call, as a turn that ended on
- * a call, or it is an operator's quiet reply (`quiet`), which leaves its
- * member nothing to read.
+ * there is no reply, or no words follow its last call, as a turn that ended
+ * on a call.
  */
 export function finishedReplyLead(
   messages: readonly AgentTranscriptMessage[],
-  quiet: boolean,
 ): { readonly messageId: string; readonly lead: string } | undefined {
   const reply = messages.findLast((message) => message.role === MESSAGE_ROLE.ASSISTANT);
   if (reply === undefined) return undefined;
-  if (quiet && isQuietReply(reply)) return undefined;
   // Note that only words after the turn's last call are its reply, because words before it were the turn under way.
   const parts = agentParts(reply);
   const lastCall = parts.findLastIndex((part) => part.kind === AGENT_PART.TOOL);

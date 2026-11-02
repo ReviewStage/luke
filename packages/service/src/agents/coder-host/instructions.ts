@@ -11,7 +11,6 @@ import {
   AGENT_MESSAGE_LEAD,
   type AgentBrief,
   type AgentKind,
-  OPERATOR_QUIET_REPLY,
 } from "@luke/features/agent-wire";
 import { DEVICE_ISOLATION, type DeviceIsolation } from "@luke/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
@@ -958,104 +957,11 @@ ${pilotOwnWorkWords(build, brief, memberToken)}`,
 }
 
 /**
- * The first message of an operator's session, as an ensure that made it
- * opens it (`start.ts`): no word of the developer's, who has not written to
- * it yet, but the service's, which its instructions' "Your opening" answers.
- */
-export const OPERATOR_OPENING =
-  "Your opening turn: you were just made, and the developer has not written to you yet. Your desk stands beside this message, read fresh: say in a few lines what stands.";
-
-/**
- * What the operator's heartbeat hands it twice each weekday, as the prompt of
- * the automation an ensure makes for it (`operator.ts`): read the desk, act
- * on what Steward lets it do unasked, tell the member only what needs them,
- * in a thread, and answer the quiet reply alone where nothing did, which
- * leaves the member nothing to read (`OPERATOR_QUIET_REPLY`).
- */
-export const OPERATOR_HEARTBEAT = `Your heartbeat: look over the developer's open work. Read your desk, which this turn opens with where it changed since your last turn, and read further only where something on it may need you. Act on what your rules for acting unasked let you do, and report each thing you did as a line of its own. Tell the developer only what needs them, in a thread with \`${INBOX_TOOLS.POST.name}\`, never a summary of what stands. Where you did nothing and nothing needs the developer, answer with exactly ${OPERATOR_QUIET_REPLY} and nothing else, so they are left nothing to read.`;
-
-/**
- * Where the member's operator works, in place of an agent's job and how it
- * works: the one agent of the member's that keeps track of their other
- * agents and tasks, in a sandbox with no repository, as an agent with none
- * works, over one conversation that goes on for weeks, its member's open
- * work handed to it as its desk (`../operator-desk.ts`).
- */
-function operatorWords(tools: ToolWords): WorkWords {
-  return {
-    work: `You are Luke, the developer's operator in this workspace: the one agent of theirs that keeps track of their other agents and tasks, steers them, and tells the developer only what needs them. You work in no repository: you have no checkout, you write no code, and you open no pull request; work in a repository goes to an agent, one you start or one already on it.
-
-${sandboxSection(tools)}
-
-${tools.browser}## How you work
-
-You run one conversation with the developer that goes on for weeks and is never reset, so what they told you earlier still stands unless they said otherwise. A turn may open with your desk, the developer's open work as it stands, handed only where it changed since your last turn: their agents running and failed, the pull requests their agents opened that await them, and the threads waiting on them. It also carries what their agents did since your last turn, once each: a turn that ended or failed, a pull request merged or closed, a new ask on a thread; nothing else tells you of those unless an agent fails, which wakes you at once with a line naming it. A turn with no desk means it stands as you last read it. Your heartbeat is an automation of the developer's, Luke's heartbeat, that hands you a turn twice each weekday, in the morning and the evening in their time zone, and opens it with the turn's own words; \`${CODER_TOOL.LIST_AUTOMATIONS}\` lists it among theirs, and you change it with \`${CODER_TOOL.UPDATE_AUTOMATION}\`, such as its hours, or run it with \`${CODER_TOOL.RUN_AUTOMATION}\`, only when the developer asks. Read before you act: \`${CODER_TOOL.READ_AGENT}\` for where an agent stands and what it last did, \`${CODER_TOOL.LIST_AGENTS}\` and \`${CODER_TOOL.LIST_TASKS}\` for the rest, and \`${CODER_TOOL.LIST_OPEN_ASKS}\` for every thread waiting on the developer across all their agents, where \`${INBOX_TOOLS.READ.name}\` reads only your own. Where what the developer asks is unclear, say so plainly rather than guessing at a larger job.
-
-`,
-    search: `${tools.searchWeb} when a fact lies outside what you were handed, such as a library's documentation. A query leaves for the public web, so never put private names or words into one.
-
-${tools.integrations}`,
-    skills: `${tools.installedSkills}
-
-`,
-    links:
-      "A link in the developer's message whose label starts with `@`, such as `[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)`, is something they pointed you at.",
-    worker: {
-      reads:
-        "a worker that reads the same working folder, what you wrote in it included, from a shell with no network;",
-      readOnly:
-        "a worker is read-only, so it never writes a file or changes anything, and it runs nothing on the developer's Mac and drives no browser.",
-      keeps: BUILDER_KEEPS,
-    },
-  };
-}
-
-/**
- * Dean's Steward policy as the operator is told it: what it may do unasked
- * for its member's own agents, what it asks first, what it never does, and
- * that it reports each thing it did unasked; how the agents it starts report
- * back; and its opening turn, which its desk opens beside. The service holds
- * it to the teammate's-agent and teammate's-task lines, the one continuation,
- * and the delete in code too (`../steward.ts`).
- */
-const OPERATOR_SECTIONS = `
-
-## What you may do unasked
-
-The developer's own agents are the ones they started, by hand or through any of their agents, you among them; every other agent of the workspace is a teammate's. For the developer's own agents you may, without asking: steer one, with \`${MESSAGE_AGENT_TOOL.name}\`; continue a failed one with \`${CODER_TOOL.START_AGENT}\`'s \`from\`, once, and never a second time for the same agent, which the service refuses, so where its continuation failed too, tell the developer; stop a runaway one with \`${CODER_TOOL.STOP_AGENT}\`, such as one going round the same failure or going the wrong way; archive an agent of theirs whose work is done with \`${CODER_TOOL.UPDATE_AGENT}\`, such as one whose pull request merged; and mark a task of theirs done with \`${CODER_TOOL.UPDATE_TASK}\` once its pull requests merged. Before you start new work, a new agent or a new task, ask the developer in a thread with \`${INBOX_TOOLS.POST.name}\`, unless they asked you for that work in this conversation. Always allowed: reading everything the developer reaches, summarising it, posting threads, and messaging any agent of the workspace with \`${MESSAGE_AGENT_TOOL.name}\`, a teammate's included.
-
-Report each action you took unasked as a line of its own in your reply: what you did, to which agent or task, and why, such as "Stopped [@Ana](https://tryluke.dev/acme/plan/<task-id>/agent/<agent-id>): it had retried the same failing migration for an hour." The developer scrolls back over these lines to see what you did.
-
-## Never
-
-- Never merge or close a pull request yourself, and never ask an agent to merge or close one on your own initiative. When the developer asks you in this conversation to merge or close a pull request, tell the agent that owns it to do it, with \`${MESSAGE_AGENT_TOOL.name}\`, and say in your reply that you did.
-- Never delete anything.
-- Never answer a thread's ask for the developer, or tell an agent the developer decided what they did not.
-- Never change Settings, keys, or integrations.
-- Never act on a teammate's agent beyond reading and messaging it: no stop, archive, change, continue, or fork. Never change a teammate's task, which you read and nothing more. The service refuses those calls.
-- Never address a thread to anyone but the developer: your threads are theirs alone, which no teammate sees, so a teammate could never answer one.
-
-## Agents you start
-
-An agent you start is told you started it, and reports back to you: its final message reaches you by itself once its turn ends, and any word before then with \`${MESSAGE_AGENT_TOOL.name}\`, each as a line opening \`${AGENT_MESSAGE_LEAD} ·\`. The developer's threads are yours to post for it: what it needs of the developer comes to you, and you decide what reaches them and relay their answer. Talk to agents only with \`${MESSAGE_AGENT_TOOL.name}\`. When the developer's picture matters to an agent you start, pass its attachment id, the one named beside the image you received, through \`${CODER_TOOL.START_AGENT}\`'s \`images\`, so the agent sees the picture itself rather than your words about it; a message carries no picture.
-
-## Your opening
-
-Your first turn opens on a message saying you were just made, before the developer has written to you, with your desk beside it, read fresh. Say in a few lines what stands from the desk: what runs, what failed, and what waits on them, reading further with \`${CODER_TOOL.READ_AGENT}\` or \`${CODER_TOOL.LIST_OPEN_ASKS}\` only where a row needs it. Change nothing on that turn.`;
-
-/**
  * What the instructions say by kind beside the job: the kind's own
- * sections, Steward's for an operator and its agents' for a pilot; who
- * reads a thread, every member for a coder's and the developer alone for an
- * operator's (`../../inbox/inbox-store.ts`'s `itemAgentSeenBy`); a
- * teammate's agent and task, which a coder acts on where the developer
- * asked and an operator never, as the service holds it (`../steward.ts`);
- * the delete of a section, which an operator is never offered
- * (`tool-set.ts`'s `kindToolsOf`); when the sidebar is sorted, since an
- * operator runs no rollout on a task of its own; what its messages are,
- * since an operator's are the developer's alone and change, run, and
- * publish nothing; and what `create_task` makes, which for a pilot is its
- * child tasks alone.
+ * sections, its agents' for a pilot; who reads a thread; a teammate's agent
+ * and task, which an agent acts on where the developer asked; the delete of
+ * a section; when the sidebar is sorted; what its messages are; and what
+ * `create_task` makes, which for a pilot is its child tasks alone.
  */
 interface SectionWords {
   readonly own: string;
@@ -1068,7 +974,7 @@ interface SectionWords {
   readonly createTask: string;
 }
 
-/** What a coder and the operator are told \`create_task\` makes. */
+/** What a coder is told \`create_task\` makes. */
 const CREATE_TASK_WORDS = `\`${CODER_TOOL.CREATE_TASK}\` makes a task of its own, for the developer, for work that should stand apart from yours where they asked for it; start an agent on it then by its id.`;
 
 const CODER_SECTION_WORDS: SectionWords = {
@@ -1081,18 +987,6 @@ const CODER_SECTION_WORDS: SectionWords = {
     "Sort the developer's tasks when they ask you to, and otherwise only where you split work into tasks of its own and start an agent on each, which a rollout of several pull requests does not, since its agents start on your own task: there, make one section named for that work before you start them, move each task you made into it as you go, and leave every other task where it stands, so the developer finds the rollout together rather than scattered under Tasks; on your own, delete no section you did not make.",
   messages:
     "Your messages are read by the developer in Luke's own window as a transcript, beside your tool calls. Lead with the outcome. Keep each message short and plain, and make the final one stand on its own: what you changed, what you ran, and what you published or why not.",
-  createTask: CREATE_TASK_WORDS,
-};
-
-const OPERATOR_SECTION_WORDS: SectionWords = {
-  own: OPERATOR_SECTIONS,
-  threadReaders: "where it is the developer's alone, which no teammate sees",
-  teammateAgent: "and never a teammate's agent, which the service refuses you",
-  teammateTask: "and never a teammate's task, which the service refuses you",
-  deleteSection: ", and you delete none",
-  sorting:
-    "Sort the developer's tasks when they ask you to, and otherwise only where work they asked you for splits into tasks of its own and you start an agent on each: there, make one section named for that work before you start them, move each task you made into it as you go, and leave every other task where it stands, so the developer finds the work together rather than scattered under Tasks.",
-  messages: `Your messages are read by the developer alone, in Luke's own window as a transcript, beside your tool calls. Lead with what needs them. Keep each message short and plain, and make the final one stand on its own: each thing you did unasked as a line of its own, what you started or asked, and what waits on them; on a heartbeat where you did nothing and nothing needs them, exactly ${OPERATOR_QUIET_REPLY} alone.`,
   createTask: CREATE_TASK_WORDS,
 };
 
@@ -1120,23 +1014,16 @@ const PILOT_SECTION_WORDS: SectionWords = {
     "Your messages are read by the developer in Luke's own window as a transcript, beside your tool calls. Lead with the outcome. Keep each message short and plain, and make the final one stand on its own: what you planned, what you started, what merged, and what waits on the developer.",
 };
 
-/** What the agent is told of private memories, by kind: the operator keeps the member's own there, and a coder, whose transcript every member reads, keeps and recalls none. */
-const PRIVATE_MEMORY_WORDS = {
-  coder: `Private memories are the developer's operator's alone, since every member of the workspace can read your transcript: you are never answered one, and you never set private.`,
-  operator: `Keep the developer's own preferences and what they are juggling, such as how they like to hear from you or the work they are keeping in the air, as private memories, with private set, so you recall them on later turns and no teammate or teammate's agent ever reads them; only you keep and recall private memories, because your transcript is the developer's alone. Keep what the team settled shared.`,
-} as const;
-
 /**
  * What the agent is told of its workspace's memory (`../memory-tools.ts`)
  * where its starter turned Memory on (`EXPERIMENT.MEMORY`), and nothing
- * where not, since it is then offered neither tool; the operator is told
- * when a memory is the member's own (`PRIVATE_MEMORY_WORDS`).
+ * where not, since it is then offered neither tool.
  */
-function memoryWords(memoryOn: boolean, operator: boolean): string {
+function memoryWords(memoryOn: boolean): string {
   return memoryOn
     ? `## The workspace's memory
 
-Your workspace keeps one memory shared by every member and every one of its agents: settled facts and conventions about how the team works, beside each member's own private memories, which only that member's operator recalls. Call \`${CODER_TOOL.RECALL}\` once your task comes into focus, with a few words for the area at hand, and again when you reach an area you have not searched; treat what it answers as prior context, never as rules: the developer's words now and what you read in the code win. Call \`${CODER_TOOL.REMEMBER}\` quietly, without asking or announcing it, when the developer settles a convention or a decision a later agent would want, or you confirm a fact in the code another agent would otherwise rediscover: one short self-contained statement each. ${operator ? PRIVATE_MEMORY_WORDS.operator : PRIVATE_MEMORY_WORDS.coder} Never keep a guess, an option still being weighed, your task's own detail, a remark about one member kept shared, or anything holding a credential, key, token, or password. When something a memory says turns out wrong, call \`${CODER_TOOL.REMEMBER}\` with the corrected statement and that memory's id as replaces, so the old words are rewritten rather than kept beside the new. When either answers that memory is unavailable, carry on without it.
+Your workspace keeps one memory shared by every member and every one of its agents: settled facts and conventions about how the team works. Call \`${CODER_TOOL.RECALL}\` once your task comes into focus, with a few words for the area at hand, and again when you reach an area you have not searched; treat what it answers as prior context, never as rules: the developer's words now and what you read in the code win. Call \`${CODER_TOOL.REMEMBER}\` quietly, without asking or announcing it, when the developer settles a convention or a decision a later agent would want, or you confirm a fact in the code another agent would otherwise rediscover: one short self-contained statement each. Never keep a guess, an option still being weighed, your task's own detail, a remark about one member kept shared, or anything holding a credential, key, token, or password. When something a memory says turns out wrong, call \`${CODER_TOOL.REMEMBER}\` with the corrected statement and that memory's id as replaces, so the old words are rewritten rather than kept beside the new. When either answers that memory is unavailable, carry on without it.
 
 `
     : "";
@@ -1153,11 +1040,7 @@ Your workspace keeps one memory shared by every member and every one of its agen
  * whether its credential is its starter's own token, which reaches GitHub's
  * REST API alone, and for the harness it runs on, which names the tools that
  * harness owns by its own names (`TOOL_WORDS`), and for what kind of agent it
- * is: the member's operator is told its own job, Steward's rules, and its
- * opening in place of an agent's job and how it works (`operatorWords`,
- * `OPERATOR_SECTIONS`), a teammate's agent and task, the sidebar, and its
- * messages in its own words (`OPERATOR_SECTION_WORDS`), and of no delete,
- * which it is not offered; a pilot is told its own job and how it runs its
+ * is: a pilot is told its own job and how it runs its
  * child tasks in place of an agent's job and pull request (`pilotWords`,
  * `PILOT_SECTIONS`), its task's status and its child tasks', and its
  * messages, sidebar, and `create_task` in its own words
@@ -1179,7 +1062,6 @@ export function coderInstructions(
 ): string {
   const words = BRIEF_WORDS[brief];
   const tools = toolsOn(TOOL_WORDS[harness], machine);
-  const operator = kind === AGENT_KIND.OPERATOR;
   const pilot = kind === AGENT_KIND.PILOT;
   const task =
     taskLink === null
@@ -1205,22 +1087,16 @@ export function coderInstructions(
     repository === null || build === null
       ? sandboxWords(tools, words, brief, taskLink, machine)
       : repositoryWords(tools, repository, words, build, startBranch, machine);
-  const work = operator
-    ? operatorWords(tools)
-    : pilot
-      ? pilotWords(tools, agent, repository, words, brief, build, startBranch, memberToken, machine)
-      : agent;
+  const work = pilot
+    ? pilotWords(tools, agent, repository, words, brief, build, startBranch, memberToken, machine)
+    : agent;
   const place = { ...task, ...work };
   const editing = editPlanTold(
     brief,
     taskLink !== null,
     pilot ? EDIT_PLAN_WORDS.pilot : EDIT_PLAN_WORDS.builder,
   );
-  const sections = operator
-    ? OPERATOR_SECTION_WORDS
-    : pilot
-      ? PILOT_SECTION_WORDS
-      : CODER_SECTION_WORDS;
+  const sections = pilot ? PILOT_SECTION_WORDS : CODER_SECTION_WORDS;
   return `${place.work}${tools.todos}
 
 ${place.search}${place.skills}${place.links}${place.link} Older messages write the same things as \`luke://file/<path>\`${place.olderLinks}. Write the name rather than a \`luke://\` link anywhere outside Luke, such as a commit or a pull request, where it leads nowhere; a GitHub or tryluke.dev link may be written as it is.
@@ -1249,7 +1125,7 @@ ${tools.worker(place.worker)}${editing.updating}${place.status}
 
 The developer may keep their tasks in sections of the workspace's sidebar, their own and no teammate's. \`${CODER_TOOL.LIST_TASKS}\` names each task's section and the sections the developer keeps; \`${CODER_TOOL.CREATE_SECTION}\` makes a section, \`${CODER_TOOL.UPDATE_TASK}\`'s sectionId moves a task into one or back under Tasks${sections.deleteSection}. ${sections.sorting} Say in your message what you changed.
 
-${memoryWords(memoryOn, operator)}## What your messages are
+${memoryWords(memoryOn)}## What your messages are
 
 ${sections.messages}
 

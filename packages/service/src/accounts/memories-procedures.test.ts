@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { rememberMemory } from "@luke/database/models/memory-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { type MemoriesAnswer, memoriesAnswerSchema } from "@luke/features/memory-wire";
@@ -70,8 +71,7 @@ const openTeam = Effect.gen(function* () {
       ),
   });
   const ask = (request: Request) => answer(procedures, request);
-  const keep = (userId: string, text: string) =>
-    runRemember({ workspaceId, userId, readsPrivate: false }, { text });
+  const keep = (userId: string, text: string) => runRemember({ workspaceId, userId }, { text });
   return { owner, teammate, outsider, workspaceId, ask, keep };
 });
 
@@ -154,10 +154,7 @@ it.layer(getTestDB())("the memories procedures", (it) => {
       Effect.gen(function* () {
         const { owner, teammate, workspaceId, ask, keep } = yield* openTeam;
         yield* keep(owner, TESTS_RUN);
-        yield* runRemember(
-          { workspaceId, userId: teammate, readsPrivate: true },
-          { text: DEPLOYS, private: true },
-        );
+        yield* rememberMemory(workspaceId, teammate, DEPLOYS, undefined, { privately: true });
 
         const asTeammate = memoriesOf(yield* ask(readMemories(teammate, workspaceId))).memories;
         const privateOne = asTeammate.find((memory) => memory.private);
@@ -200,7 +197,7 @@ it.layer(getTestDB())("the memories procedures", (it) => {
         const ownForgotten = yield* ask(forget(teammate, workspaceId, deploys.id));
         const again = yield* ask(forget(teammate, workspaceId, deploys.id));
         const recalled = yield* runRecall(
-          { workspaceId, userId: owner, readsPrivate: false },
+          { workspaceId, userId: owner },
           { query: "deployments release" },
         );
         const byOwner = yield* ask(forget(owner, workspaceId, testsRun.id));

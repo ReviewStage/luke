@@ -13,7 +13,6 @@ import {
   UI_PART_STATE,
   UI_PART_TYPE,
 } from "@luke/features/turn-run";
-import { causeKind } from "@luke/runtime/effect";
 import {
   type AgentMessageMetadata,
   type AutomationLineMetadata,
@@ -73,12 +72,7 @@ import {
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
-import {
-  CONVERSATION_KIND,
-  MESSAGE_SENDER,
-  OPERATOR_NOTICE_KIND,
-  type OperatorNoticeKind,
-} from "../storage-vocabulary.js";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "../storage-vocabulary.js";
 import { type HandedFile, lineParts, receivedPartsOf } from "./attached-file-parts.js";
 import {
   EpochMillisColumnSchema,
@@ -95,7 +89,6 @@ import {
   waitingOutDispatchClaim,
 } from "./dispatch-claim.js";
 import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
-import { writeOperatorNotice } from "./operator-notices.js";
 
 /**
  * The store writer: the one path by which a `messages` or `turns` row is
@@ -1044,12 +1037,6 @@ interface WriterContext {
    */
   readonly journals: Map<string, HeldJournal>;
   /**
-   * The notices this write's coding agent turns that settled leave for its
-   * member's operator, each written once the write's transaction is done
-   * (`noticesAfterSettle`), by the kind it is and when it settled.
-   */
-  readonly notices: { kind: OperatorNoticeKind; at: Date }[];
-  /**
    * The coding agent turns this write settled, each told the runtime's
    * `SettledTurnListener` once the write's transaction is done
    * (`settledAfterCommit`).
@@ -1058,7 +1045,7 @@ interface WriterContext {
 }
 
 /** What a locked write leaves for once its transaction is done. */
-type AfterCommit = Pick<WriterContext, "notices" | "settled">;
+type AfterCommit = Pick<WriterContext, "settled">;
 
 /** What one of this writer's statements answers: an effect over the transaction it runs in. */
 type Write<Result> = Effect.Effect<Result, StoreFailure, DatabaseServices>;
@@ -1371,13 +1358,8 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
     ),
     responseIds: event.responseIds,
   });
-  // A coding agent's own turn that settled is told its member's operator, once the write is done.
+  // A coding agent's own turn that settled is told the runtime's listener, once the write is done.
   if (context.kind === CONVERSATION_KIND.AGENT) {
-    const kind =
-      status === TURN_STATUS.FAILED
-        ? OPERATOR_NOTICE_KIND.TURN_FAILED
-        : OPERATOR_NOTICE_KIND.TURN_SETTLED;
-    context.notices.push({ kind, at: settledAt });
     const { startedAt, queuedAt } = standing.value;
     context.settled.push({
       userId: context.target.userId,
@@ -2124,36 +2106,6 @@ const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(fun
 });
 
 /**
- * The notices a write's settled coding agent turns leave for its member's
- * operator (`operator-notices.ts`), written once the write's transaction is
- * done, so the settle neither waits on them under its lock nor fails with
- * them. Each runs in a transaction of its own, a savepoint where the write
- * itself ran inside a caller's, so one that fails is rolled back alone and
- * only logged: a notice never fails or holds the path it rides on.
- */
-function noticesAfterSettle(
-  client: SqlClient.SqlClient,
-  target: ConversationTarget,
-  notices: WriterContext["notices"],
-): Effect.Effect<void, never, DatabaseServices> {
-  return Effect.forEach(
-    notices,
-    ({ kind, at }) =>
-      client
-        .withTransaction(writeOperatorNotice({ conversationId: target.conversationId }, kind, at))
-        .pipe(
-          Effect.catchCause((cause) =>
-            Effect.logWarning("an operator's notice of a settled turn was not written", {
-              kind,
-              failure: causeKind(cause),
-            }),
-          ),
-        ),
-    { discard: true },
-  );
-}
-
-/**
  * The settled coding agent turns a write leaves, told the runtime's listener
  * once the write's transaction is done, so the settle never waits on what
  * hears of it; a runtime with no listener tells no one.
@@ -2210,7 +2162,7 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
     absent: () => A,
   ): Effect.Effect<A, StoreFailure | E, DatabaseServices> {
     return Effect.flatMap(SqlClient.SqlClient, (client) => {
-      const after: AfterCommit = { notices: [], settled: [] };
+      const after: AfterCommit = { settled: [] };
       return client
         .withTransaction(
           Effect.gen(function* () {
@@ -2218,10 +2170,7 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
             return yield* lockedWrite(target, row, after, write, absent);
           }),
         )
-        .pipe(
-          Effect.tap(() => noticesAfterSettle(client, target, after.notices)),
-          Effect.tap(() => settledAfterCommit(after.settled)),
-        );
+        .pipe(Effect.tap(() => settledAfterCommit(after.settled)));
     });
   }
 

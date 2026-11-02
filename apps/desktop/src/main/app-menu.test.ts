@@ -41,7 +41,6 @@ describe("the menu bar's gate", () => {
     assert.deepEqual(labelsOf(appMenuTemplate("Luke"), "Go"), [
       "Command Palette",
       "-",
-      "Ask Luke",
       "Inbox",
       "Tasks",
       "Automations",
@@ -61,7 +60,7 @@ describe("the menu bar's gate", () => {
     const withoutInbox = appMenuTemplate(
       "Luke",
       undefined,
-      (command) => command !== APP_COMMAND.INBOX && command !== APP_COMMAND.ASK_LUKE,
+      (command) => command !== APP_COMMAND.INBOX,
     );
     assert.deepEqual(labelsOf(withoutInbox, "Go"), [
       "Command Palette",
@@ -83,7 +82,6 @@ describe("the menu bar's gate", () => {
       "Luke",
       undefined,
       (command) =>
-        command !== APP_COMMAND.ASK_LUKE &&
         command !== APP_COMMAND.INBOX &&
         command !== APP_COMMAND.TASKS &&
         command !== APP_COMMAND.AUTOMATIONS,
@@ -111,7 +109,7 @@ describe("the menu bar's drawer", () => {
     );
 
     show();
-    show({ experiments: experimentsOn(EXPERIMENT.OPERATOR), capabilities: [] });
+    show({ experiments: experimentsOn(EXPERIMENT.PILOT), capabilities: [] });
 
     const update = {
       act: "restart",

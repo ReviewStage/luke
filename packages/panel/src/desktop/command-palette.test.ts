@@ -2,12 +2,7 @@
 
 import assert from "node:assert/strict";
 import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import {
-  AGENT_KIND,
-  AGENT_STATUS,
-  CHECK_SUMMARY,
-  PULL_REQUEST_STATE,
-} from "@luke/features/agent-wire";
+import { AGENT_STATUS, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -62,13 +57,7 @@ import {
   type InboxChoice,
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
-import {
-  fakeActPort,
-  fakeActPortAnswering,
-  fakeAppBridge,
-  refusedOnPort,
-  type SentPortAct,
-} from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   DESKTOP_CAPABILITIES,
@@ -2745,105 +2734,6 @@ test("⌘K still offers Show inbox for a task an item waits on while its agents 
   await paletteUnderState(tasks);
   chooseFilter("Commands");
   assert.ok(rows().includes("Show inbox"), "a waiting item holds the Inbox");
-});
-
-/** Answers Luke's ensure with his id, every other act with nothing, and keeps every act sent. */
-function servingLuke(agentId: string): SentPortAct[] {
-  const sent: SentPortAct[] = [];
-  fakeActPortAnswering((request) => {
-    sent.push(request);
-    return Promise.resolve(
-      request.kind === ACT_KIND.AGENTS_ENSURE_OPERATOR ? { agentId } : undefined,
-    );
-  });
-  return sent;
-}
-
-test("⌘K's first entry is Ask Luke while the account has the operator on, which opens his page, and he is not listed again, nor a Luke a Reset retired", async () => {
-  const lukeId = "6a1f0c2e-0000-4000-8000-0000000000a1";
-  servingLuke(lukeId);
-  const opened: string[] = [];
-  const tasks = tasksControl({
-    workspace: ACME,
-    workspaces: [ACME],
-    listedAgents: {
-      standing: [
-        {
-          id: lukeId,
-          planId: null,
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          title: "Orla",
-          kind: AGENT_KIND.OPERATOR,
-          createdAt: 1,
-          status: AGENT_STATUS.COMPLETED,
-          turnId: null,
-          automationId: null,
-          workspaceId: ACME.id,
-          repository: null,
-          activityAt: 2,
-        },
-      ],
-      archived: [
-        {
-          id: "6a1f0c2e-0000-4000-8000-0000000000a0",
-          planId: null,
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          title: "Ines",
-          kind: AGENT_KIND.OPERATOR,
-          createdAt: 0,
-          status: AGENT_STATUS.COMPLETED,
-          turnId: null,
-          archivedAt: 1,
-          automationId: null,
-          workspaceId: ACME.id,
-          repository: null,
-          activityAt: 1,
-        },
-      ],
-    },
-  });
-  handState(experimentsOn(EXPERIMENT.OPERATOR));
-  await paletteUnderState({
-    ...tasks,
-    agentView: { ...tasks.agentView, onOpen: (agentId) => void opened.push(agentId) },
-  });
-  await settle();
-
-  assert.equal(rows()[0], "Ask Luke");
-  assert.deepEqual(
-    footer(),
-    ["↑↓ Select", "⏎ Run", "←→ Filter"],
-    "Ask Luke is a command, which runs",
-  );
-  chooseFilter("Commands");
-  assert.equal(rows()[0], "Ask Luke");
-  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Run", "←→ Filter"]);
-  chooseFilter("All");
-  assert.ok(
-    !rows().some((row) => row.startsWith("Orla")),
-    "Luke is not listed again by his agent's name",
-  );
-  type("Ines");
-  assert.ok(!rows().some((row) => row.startsWith("Ines")), "a Luke a Reset retired is not listed");
-  type("");
-  press("Ask Luke");
-  await settle();
-  assert.deepEqual(opened, [lukeId]);
-});
-
-test("⌘K offers no Ask Luke and ensures nothing while the account has the operator off", async () => {
-  const sent = servingLuke("6a1f0c2e-0000-4000-8000-0000000000a1");
-  handState({});
-  await paletteUnderState(tasksControl({ workspace: ACME, workspaces: [ACME] }));
-  await settle();
-
-  assert.ok(!rows().includes("Ask Luke"));
-  assert.deepEqual(
-    sent.filter((request) => request.kind === ACT_KIND.AGENTS_ENSURE_OPERATOR),
-    [],
-  );
 });
 
 test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no issues of its own, and its Inbox filter finds threads under Channels", async () => {

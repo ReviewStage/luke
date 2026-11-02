@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AGENT_KIND } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -20,9 +19,7 @@ import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { automation, automationRun } from "../../schemas/automation.js";
 import { getTestDB, plansOf } from "../../testing/index.js";
-import { archiveAgent, createAgent } from "../agent-store.js";
 import {
-  aimOperatorHeartbeat,
   automationRunsSince,
   claimAutomationRun,
   claimDueAutomations,
@@ -92,106 +89,6 @@ const nightly = (organizationId: string): NewAutomation => ({
 });
 
 it.layer(getTestDB())("the automation store", (it) => {
-  it.effect(
-    "an operator's heartbeat re-aims the member's own automations aimed at their archived operator in the workspace, a teammate's left as they stood, and is made only where none is then aimed at it",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openAccount;
-        const teammate = yield* openAccount;
-        const workspaceId = yield* openWorkspace(owner);
-        const existing = Option.getOrThrow(
-          yield* createAutomation(owner, { ...nightly(workspaceId), nextRunAt: null }),
-        );
-        const workspace = existing.organizationId;
-        const db = yield* Database;
-        const now = yield* DateTime.nowAsDate;
-        yield* db.insert(member).values({
-          id: randomUUID(),
-          organizationId: workspace,
-          userId: teammate,
-          role: "member",
-          createdAt: now,
-        });
-        const operatorOf = (userId: string) =>
-          Effect.map(
-            createAgent(userId, {
-              taskId: null,
-              organizationId: workspace,
-              planSnapshot: null,
-              prompt: null,
-              kind: AGENT_KIND.OPERATOR,
-              idempotencyKey: randomUUID(),
-              model: "anthropic/claude-opus-5.5",
-              effort: "high",
-              repository: null,
-            }),
-            (made) => Option.getOrThrow(made).agent.id,
-          );
-        // Archived by hand, as the archive or update_agent does it, with no Reset to name it.
-        const archived = (userId: string, agentId: string) =>
-          Effect.asVoid(archiveAgent(userId, agentId, true));
-        const retired = yield* operatorOf(owner);
-        yield* archived(owner, retired);
-        const fresh = yield* operatorOf(owner);
-        const aimedAt = (userId: string, agentId: string) =>
-          Effect.map(
-            createAutomation(userId, {
-              ...nightly(workspaceId),
-              organizationId: workspace,
-              repositories: [],
-              nextRunAt: null,
-              targetKind: AUTOMATION_TARGET.SAME_AGENT,
-              targetAgentId: agentId,
-            }),
-            (made) => Option.getOrThrow(made).id,
-          );
-        const owners = yield* aimedAt(owner, retired);
-        const teammates = yield* aimedAt(teammate, retired);
-        const heartbeat: NewAutomation = {
-          ...nightly(workspaceId),
-          organizationId: workspace,
-          repositories: [],
-          nextRunAt: null,
-        };
-
-        const reaimed = yield* aimOperatorHeartbeat(owner, {
-          operatorId: fresh,
-          workspaceId: workspace,
-          heartbeat,
-        });
-
-        assert.deepEqual(reaimed, Option.some([owners]), "re-aimed, and none made beside it");
-        const targetOf = (userId: string, id: string) =>
-          Effect.map(
-            readAutomation(userId, id),
-            Option.map((row) => row.targetAgentId),
-          );
-        assert.deepEqual(yield* targetOf(owner, owners), Option.some(fresh));
-        assert.deepEqual(yield* targetOf(teammate, teammates), Option.some(retired));
-
-        assert.ok(yield* deleteAutomation(owner, owners));
-        yield* archived(owner, fresh);
-        const another = yield* operatorOf(owner);
-        const made = Option.getOrThrow(
-          yield* aimOperatorHeartbeat(owner, {
-            operatorId: another,
-            workspaceId: workspace,
-            heartbeat,
-          }),
-        );
-        assert.equal(made.length, 1);
-        const [madeId = ""] = made;
-        assert.deepEqual(
-          Option.map(yield* readAutomation(owner, madeId), (row) => [
-            row.targetKind,
-            row.targetAgentId,
-            row.repositories,
-          ]),
-          Option.some([AUTOMATION_TARGET.SAME_AGENT, another, []]),
-        );
-      }),
-  );
-
   it.effect(
     "a webhook automation reads for a call while its owner is a member of its workspace, and its run keeps the body for the sweep alone",
     () =>

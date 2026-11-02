@@ -460,8 +460,7 @@ export function automationDraft(
 /**
  * Whether the automation a draft opened as needs no repository chosen: one
  * on a task, whose repository is its task's, and one the service took with
- * none, which only one aimed at its owner's operator is, such as the
- * operator's heartbeat, for as long as its runs still go to that agent.
+ * none, for as long as its runs still go to the agent it was aimed at.
  */
 export function repositoryHeld(
   draft: AutomationDraft,

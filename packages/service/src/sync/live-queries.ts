@@ -144,8 +144,8 @@ export const sidebarLive = defineLiveQuery({
  * starting or settling names the workspace; the account's pins, its
  * memberships, and what admits it to a repository name the account. Note
  * that a message wakes no task list, because a streamed step rewrites one
- * every moment and names only its conversation: an awaiting line or an
- * operator's quiet reply that moves with no turn starting or settling shows
+ * every moment and names only its conversation: an awaiting line that moves
+ * with no turn starting or settling shows
  * at the hold's end, as do the rename of someone the list names who has left
  * every workspace and a Mac's last beat, which wakes nothing.
  */

@@ -26,7 +26,7 @@ type AgentKind = (typeof agentTable.$inferInsert)["kind"];
  * rather than starting a session: an agent of the member's, with its own
  * conversation, and an item open under a fresh key, holding its message's
  * ask open, or open as a notice whose message asks nothing. An agent with
- * no task, a member's operator among them, is written the same way.
+ * no task is written the same way.
  */
 
 /** An agent of the member's on the task, or on none, of the kind given where one is, with its own conversation; its id. */

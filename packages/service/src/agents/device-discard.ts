@@ -2,7 +2,7 @@
  * device-discard.ts -- an archived local agent let go of on its device: a discard line, which stops its runner and removes its folder.
  *
  * Every archive lets a local agent go here once the archive stands: by hand
- * or by an operator's Reset (`session-sandboxes.ts`'s `stoppedInBackground`),
+ * (`session-sandboxes.ts`'s `stoppedInBackground`),
  * by an automation's sweep of its finished runs, and by an agent's
  * `update_agent`. The line is queued under the agent's runner lease, as
  * every line of its is (`device-agent-store.ts`'s header), and only while the

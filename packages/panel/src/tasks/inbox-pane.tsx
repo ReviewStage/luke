@@ -52,7 +52,6 @@ import {
   Tooltip,
   useMenu,
   useMinute,
-  WingFace,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -140,7 +139,6 @@ import {
   inboxSettledStanding,
   itemWorkspaceId,
   knownAsk,
-  operatorHolder,
   readersItem,
   sentStamp,
 } from "./inbox-model.js";
@@ -1284,12 +1282,10 @@ function Crumbs({
   titleShown: boolean;
 }): React.JSX.Element {
   const automation = useAutomationCrumb(holder, doors.onOpenHolder);
-  // Note that Luke stands under nothing but himself, so his path reads Luke › title rather than naming him twice.
-  const operator = operatorHolder(holder);
   const crumbs: Crumb[] = [
-    taskCrumb(holder, doors) ?? (operator ? undefined : automation),
+    taskCrumb(holder, doors) ?? automation,
     // Note that once the title joins the path the agent's crumb keeps its size, so a narrow bar cuts the task's crumb short first and then the title.
-    agentCrumb(holder, by, titleShown),
+    agentCrumb(by, titleShown),
     { label: title, current: true, shown: titleShown },
   ].filter((crumb) => crumb !== undefined);
   return (
@@ -1313,13 +1309,12 @@ function taskCrumb(holder: InboxHolder, doors: InboxPaneDoors): Crumb | undefine
   };
 }
 
-/** The path's agent crumb, wearing its mark, or Luke's face for Luke's own, and hanging its card, which opens its tab; `fixed` keeps its size where the crumbs after it give way first. */
-function agentCrumb(holder: InboxHolder, by: ItemAgent, fixed = false): Crumb {
+/** The path's agent crumb, wearing its mark and hanging its card, which opens its tab; `fixed` keeps its size where the crumbs after it give way first. */
+function agentCrumb(by: ItemAgent, fixed = false): Crumb {
   const { name, agent } = by.subject;
-  const operator = operatorHolder(holder);
   return {
     label: name,
-    glyph: operator ? <WingFace /> : tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
+    glyph: tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
     hint: name,
     card: <AgentCard subject={by.subject} models={by.models} />,
     onPress: () => by.onOpen(),
@@ -1342,7 +1337,7 @@ function PhoneHolder({
   by: ItemAgent;
   doors: InboxPaneDoors;
 }): React.JSX.Element {
-  return <Breadcrumbs label="Path" crumbs={[taskCrumb(holder, doors) ?? agentCrumb(holder, by)]} />;
+  return <Breadcrumbs label="Path" crumbs={[taskCrumb(holder, doors) ?? agentCrumb(by)]} />;
 }
 
 /**
