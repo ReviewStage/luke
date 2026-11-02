@@ -714,11 +714,11 @@ your Mac").
 ### From a plan to a pull request
 
 A task with a repository can be handed to an agent: a cloud session of
-Vespin's eve service (`apps/dev`), which checks the repository out in a Vercel
+Claude Code or Codex, which checks the repository out in a Vercel
 Sandbox of its own, implements the plan given as its first message, runs the
 repository's checks, and decides whether to open a pull request. Started
 instead on a prompt the developer wrote, it is handed that prompt as its first
-message and never the plan, and works in the task's repository the same way. The service,
+message and never the plan, and works in the task's repository the same way. How it runs,
 its routes, and what it is told are described in
 `packages/service/README.md` under "The agent service" and "The
 agent routes"; the desktop's Start button ("The Tasks tab" above),
@@ -773,7 +773,7 @@ Copy copies the new document.
 - **Start.** The service refuses to start an agent on a task with no
   repository (`no-repository`, 409), on one the Vespin GitHub App no longer
   reaches for the workspace (`repository-not-reachable`, 403), and answers
-  `unavailable` where eve did not take the session; the reason is said
+  `unavailable` where the agent's session could not be started; the reason is said
   beside the button until the next press. An agent that ends `failed` or
   `cancelled` says so in its tab's head, and anything it pushed stays.
 
@@ -821,12 +821,12 @@ changes when a check is run, not when one is planned.
   covers repository checks, types, lint, the hermetic unit and store tests,
   and the builds.
 - The tab's calls and agents are held by hermetic tests at the model and
-  transport boundaries (fake OpenAI, fake eve, scripted model, a scripted
+  transport boundaries (fake OpenAI, a fake of the agents' sessions, a scripted
   GitHub and a sandbox double, PGlite):
   - an agent's checkout of the task's repository, with the token at
     the firewall for the clone alone, and every refusal checking nothing out
     (`packages/service/src/agents/coder-host/checkout.test.ts`); and the
-    Start, list, messages, and Stop routes over a fake eve
+    Start, list, messages, and Stop routes over a fake of the agents' sessions
     (`packages/service/src/agents/agents-app.test.ts`);
   - re-attaching and resuming on the same task;
   - Copy's Markdown, at the store's largest document;
@@ -854,11 +854,9 @@ changes when a check is run, not when one is planned.
   the synthetic task list with none open (`app-smoke-expanded.png`, the
   window opening on Tasks), but neither
   capture has been taken yet.
-- **An agent.** No agent has run against a real provider, a
-  real checkout, a push, or a pull request. The coder eval
-  (`apps/dev/evals/coder.eval.ts`) runs one turn under a scripted model
-  that calls no tool, so no sandbox opens and no repository is checked out,
-  and the `dev` service's sandbox `prepare` has not been run on Vercel.
+- **An agent.** No test runs an agent against a real provider, a
+  real checkout, a push, or a pull request: the tests reach a coding agent's
+  sessions through a fake of its harness.
 
 ### Known limitations
 
