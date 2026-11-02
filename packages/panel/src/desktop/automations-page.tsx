@@ -790,6 +790,9 @@ function RunsPage({
           mine={mine}
           now={now}
           onOpenAgent={(agentId) => tasks.agentView.onOpen(agentId)}
+          onOpenAutomation={(automationId) =>
+            view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId })
+          }
         />
       ) : null}
     </CollectionPage>

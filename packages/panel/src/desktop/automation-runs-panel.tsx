@@ -42,6 +42,7 @@ import { GLYPH } from "@luke/ui/icons";
 import { ClockIcon, ExternalLinkIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, automationRunActor } from "../actor-ref.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { unreadShown } from "../failure-report.js";
 import { centreWithin, scrollerOf } from "../scroll-within.js";
@@ -67,7 +68,8 @@ const RUNS = "Runs";
  * where its agent stands or why it did not start, and when it fired. A run
  * that started an agent opens that agent's page; one that started none opens
  * the subject it is about where it names one, in its provider, which its
- * right-click offers too, and is no press otherwise. A new
+ * right-click offers too, and its automation otherwise, the setup where
+ * whatever kept it from starting is mended. A new
  * automation has no runs yet, and the panel, empty, says how to have one.
  * A narrow room, a phone's, has no room beside the setup, so there the
  * runs are a screen of their own the whole width (`AutomationRunsScreen`),
@@ -115,7 +117,7 @@ function subjectLink(run: AutomationRunSummary): { url: string; label: string } 
   return { url: firing.subject.url, label: `Open in ${TRIGGER_CATALOG[firing.provider].name}` };
 }
 
-/** One run's row, a press opening its agent where it started one, or else its subject where it names one, and its ⋯ and right-click offering its Copy link and its subject; a run that opens nothing is no press. A row among many automations' runs names its automation on a line of its own. */
+/** One run's row, a press opening its agent where it started one, or else its subject where it names one, or else its automation, and its ⋯ and right-click offering its Copy link and its subject; under a finger it draws no ⋯, its menu a long press away. A row among many automations' runs names its automation on a line of its own. */
 export function RunRow({
   run,
   keyHolder,
@@ -124,6 +126,7 @@ export function RunRow({
   linked,
   now,
   onOpenAgent,
+  onOpenAutomation,
 }: {
   run: AutomationRunSummary;
   keyHolder: string | undefined;
@@ -134,13 +137,16 @@ export function RunRow({
   linked: boolean;
   now: number;
   onOpenAgent: (agentId: string) => void;
+  /** Opens the automation it is a run of, for a run with nothing of its own to open. */
+  onOpenAutomation: () => void;
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(run)];
   const line = automationRunLine(run, keyHolder);
   const linkItem = useCopyLinkItem();
   const openLink = useOpenLink();
+  const coarse = useCoarsePointer();
   const { agent } = run;
-  // Note that every run offers its link, one that started no agent too, because a run's own link opens it, and a run with no menu has no ⋯ track, so its time would stand out of line with the others'.
+  // Note that every run offers its link, one that started no agent too, because a run's own link opens it.
   const copyLink =
     automationId === undefined
       ? undefined
@@ -196,10 +202,12 @@ export function RunRow({
         agent !== null
           ? () => onOpenAgent(agent.id)
           : subject === undefined
-            ? undefined
+            ? onOpenAutomation
             : () => openLink(subject.url)
       }
       menu={rowMenu(RUN_THING, groups)}
+      // Note that every run opens something, so under a finger none draws its ⋯ and every time stands at the row's end, in one column.
+      more={!coarse}
     />
   );
 }
@@ -242,6 +250,8 @@ interface RunsShown {
   runs: RunsRead;
   onRetry: () => void;
   onOpenAgent: (agentId: string) => void;
+  /** Opens the automation's setup, for a run with nothing of its own to open. */
+  onOpenSetup: () => void;
 }
 
 /**
@@ -260,6 +270,7 @@ function RunsBody({
   runs,
   onRetry,
   onOpenAgent,
+  onOpenSetup,
 }: RunsShown & { headed: boolean }): React.JSX.Element {
   const now = useMinute();
   const body = useRef<HTMLDivElement | null>(null);
@@ -302,6 +313,7 @@ function RunsBody({
                   linked={run.id === linkedRun}
                   now={now}
                   onOpenAgent={onOpenAgent}
+                  onOpenAutomation={onOpenSetup}
                 />
               ))}
             </List>
