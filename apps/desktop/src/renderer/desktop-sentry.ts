@@ -27,15 +27,6 @@ import type { PanelSpanRecorder } from "@luke/panel/panel-spans";
 export const BLANK_WINDOW = { FIRST_READ: "first_read", RENDER: "render" } as const;
 export type BlankWindow = (typeof BLANK_WINDOW)[keyof typeof BLANK_WINDOW];
 
-/** What a window's SDK watches beyond what every window's does. */
-export interface DesktopSentryOptions {
-  /**
-   * Whether a page held busy past the SDK's threshold is reported as the
-   * window freezing: the panel's alone, the one window a person waits on.
-   */
-  readonly reportsFreezes: boolean;
-}
-
 /** What the window reports through once the SDK stands. */
 export interface DesktopSentry {
   /** Reports a window that could draw nothing, and why. */
@@ -67,10 +58,10 @@ export interface DesktopSentryReports {
 const EARLY_REPORTS_KEPT = 20;
 
 /** Loads and starts the SDK, answering nothing where it could not load, which leaves the window running and reporting nothing. */
-async function loadedSentry(options: DesktopSentryOptions): Promise<DesktopSentry | undefined> {
+async function loadedSentry(): Promise<DesktopSentry | undefined> {
   try {
     const { initDesktopSentry } = await import("./desktop-sentry-sdk");
-    return initDesktopSentry(options);
+    return initDesktopSentry();
   } catch (error) {
     console.warn("Sentry's SDK could not load; this window reports nothing.", error);
     return undefined;
@@ -82,12 +73,9 @@ async function loadedSentry(options: DesktopSentryOptions): Promise<DesktopSentr
  * `load` is called: every report said before the SDK stands is kept for it,
  * up to a few, and an SDK that could not load drops them all.
  */
-export function startDesktopSentry(options: DesktopSentryOptions): DesktopSentryReports {
+export function startDesktopSentry(): DesktopSentryReports {
   const asked = Promise.withResolvers<void>();
-  const { say, settled } = reportsOnceStarted(
-    asked.promise.then(() => loadedSentry(options)),
-    EARLY_REPORTS_KEPT,
-  );
+  const { say, settled } = reportsOnceStarted(asked.promise.then(loadedSentry), EARLY_REPORTS_KEPT);
   return {
     reportBlankWindow: (error, why) => {
       say((sentry) => sentry.reportBlankWindow(error, why));
