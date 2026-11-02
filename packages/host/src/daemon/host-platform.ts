@@ -88,6 +88,7 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
     formerlyDirect: options.os.formerlyDirect,
     storesOwned: options.os.storesOwned,
     deviceName: options.os.deviceName(),
+    deviceMachine: options.os.machine(),
     devicePlatform: options.os.platform,
     // Note that a host runs every agent straight on the box and lets go of an archived agent's folder (`discard`).
     deviceIsolation: DEVICE_ISOLATION.DIRECT,

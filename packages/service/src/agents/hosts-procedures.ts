@@ -141,6 +141,8 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
           ...(row.setupFailure === null ? undefined : { setupFailure: row.setupFailure }),
           ...(row.update === null ? undefined : { update: row.update }),
           ...(row.updateFailure === null ? undefined : { updateFailure: row.updateFailure }),
+          ...(row.machineId === null ? undefined : { machineId: row.machineId }),
+          ...(row.model === null ? undefined : { model: row.model }),
           // Note that a register always writes the home folder and nothing else does, so a host with none has not called in since it joined.
           calledIn: row.home !== null,
         })),

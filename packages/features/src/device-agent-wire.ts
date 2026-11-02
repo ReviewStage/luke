@@ -214,6 +214,36 @@ export const DEVICE_ARCH = {
 
 export type DeviceArch = (typeof DEVICE_ARCH)[keyof typeof DEVICE_ARCH];
 
+/** The most characters of a machine's model as its host reports it. */
+export const DEVICE_MODEL_MAX_CHARS = 200;
+
+/**
+ * Which machine a device runs on, as its host reports it at its own
+ * enroll, its pairing's start, and every register: a keyed SHA-256 of the
+ * OS's own id for the machine, in lower-case hex, never the id itself
+ * (`@luke/host/node`'s `machine-identity.ts`), so every install on one
+ * machine names the same one and two machines of one name differ; and on a
+ * Mac its model as a person reads it ("MacBook Air (M2, 2022)"). Each is
+ * absent where the host could not read it, and from a host older than it.
+ * Note that the id is held to a digest's shape, so a host that sent the
+ * OS's own id by mistake is refused rather than stored.
+ */
+export const deviceMachineFields = {
+  machineId: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{64}$/u)),
+  ),
+  model: EffectSchema.optionalKey(
+    EffectSchema.String.check(
+      EffectSchema.isMinLength(1),
+      EffectSchema.isMaxLength(DEVICE_MODEL_MAX_CHARS),
+    ),
+  ),
+};
+
+const deviceMachineSchema = EffectSchema.Struct(deviceMachineFields);
+
+export type DeviceMachine = typeof deviceMachineSchema.Type;
+
 /** A line's payload or a request's arguments: a JSON object whose shape its kind's reader holds. */
 export const deviceAgentObjectSchema = EffectSchema.Record(
   EffectSchema.String,
@@ -428,12 +458,14 @@ const deviceField = { deviceId: wireUuidSchema };
  * (`DEVICE_SETUP`), and for one that failed, in words of its own naming no
  * secret, why; it names none once ready, so a service from before the
  * field, which refuses it, only misses a device it would never have listed.
+ * It names the machine it runs on where it read it (`deviceMachineFields`).
  */
 export const deviceAgentRegisterRequestSchema = EffectSchema.Struct({
   ...deviceField,
   name: EffectSchema.String.check(EffectSchema.isMinLength(1), EffectSchema.isMaxLength(200)),
   platform: EffectSchema.Literals(Object.values(DEVICE_PLATFORM)),
   arch: EffectSchema.Literals(Object.values(DEVICE_ARCH)),
+  ...deviceMachineFields,
   isolation: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_ISOLATION))),
   home: macPath,
   claudeExecutable: macPath,

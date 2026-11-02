@@ -36,6 +36,7 @@ const machine = Effect.sync(() => ({
   name: DARWIN_HOST.deviceName(),
   platform: DARWIN_HOST.platform,
   arch: DEVICE_ARCH.ARM64,
+  ...DARWIN_HOST.machine(),
 }));
 
 /** How long the command may take; `SMAppService` answers at once. */

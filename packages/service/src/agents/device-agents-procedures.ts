@@ -59,7 +59,7 @@ import {
   openDeviceAgentLaunches,
   stepDeviceAgentLaunch,
 } from "@luke/database/models/device-agent-store";
-import { beatDevice, registerDevice } from "@luke/database/models/device-store";
+import { beatDevice, machineColumns, registerDevice } from "@luke/database/models/device-store";
 import {
   HOST_PAIRING,
   type HostPairingOpening,
@@ -216,9 +216,13 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
         return yield* Effect.fail(HOSTED_REFUSAL.QUOTA_EXHAUSTED);
       }
       const poll = mintHostSecret(HOST_WIRE.POLL_SECRET_PREFIX);
+      const { name, platform, arch } = input;
+      // Note that the pairing keeps no machine the start named, since the box's first register follows its approve at once and names it again.
       const userCode = yield* openedPairing({
         pollSecretHash: poll.hash,
-        ...input,
+        name,
+        platform,
+        arch,
         version: context.hostVersion,
         ip: ip ?? null,
       });
@@ -258,6 +262,7 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
           id: input.deviceId,
           version,
           secretHash: minted.hash,
+          ...machineColumns(input),
           ...(machine === undefined ? undefined : { machine }),
         }),
       );
