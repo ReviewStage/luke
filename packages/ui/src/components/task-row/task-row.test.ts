@@ -49,7 +49,7 @@ function drawList(opened: string[], chosen: ReadonlySet<string>[]): HTMLElement 
         taskId: id,
         name,
         cells: RELATED_TASK_CELLS,
-        content: { [TASK_ROW_CELL.END]: `${name} kind` },
+        content: { [TASK_ROW_CELL.RELATION]: `${name} kind` },
         onOpen: () => opened.push(id),
         ...more,
       });

@@ -134,7 +134,6 @@ import {
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
 import { scriptedHarness } from "../../testing/native-harness-fake.js";
-import { nativeRelayFake } from "../../testing/native-relay-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
@@ -245,9 +244,10 @@ const writer = await database.run(storeWriter({ tools: CODER_TOOL_SET }));
 let minted = 0;
 let installations = 0;
 
+/** A Claude Code session's id, as every agent the suite starts runs on that harness. */
 function sessionId(): string {
   minted += 1;
-  return `wrun_01P${String(minted).padStart(22, "0")}`;
+  return `${NATIVE_SESSION_PREFIX.claude_code}${String(minted).padStart(22, "0")}`;
 }
 
 /** The host over the suite's store, acting at eve's door as the deployment where `acting` says, its summaries written on the model given. */
@@ -3026,58 +3026,6 @@ test("an agent whose starter has left the workspace archives no agent of it", as
   );
   const read = await database.run(readAgent(agents.teammates.userId, agents.teammates.id));
   assert.equal(Option.getOrThrow(read).archivedAt, null);
-});
-
-test("a direct message and stop_agent reach a teammate's Claude Code agent through the web's relay, as an eve app's tools reach one, acting for its starter and the caller, and eve hears nothing of it", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
-  const started = await database.run(
-    createAgent(agents.teammates.userId, {
-      ...AGENT_CHOICE,
-      idempotencyKey: randomUUID(),
-      taskId: tasks.billing,
-      planSnapshot: "# Billing",
-      prompt: null,
-      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-      payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
-    }),
-  );
-  assert.ok(Option.isSome(started));
-  const native: StartedAgent = {
-    userId: agents.teammates.userId,
-    conversationId: started.value.agent.conversationId,
-    id: started.value.agent.id,
-    name: started.value.agent.title ?? AGENT_CHOICE_NAME,
-    sessionId: `${NATIVE_SESSION_PREFIX.claude_code}000000000001-${randomUUID()}`,
-  };
-  assert.equal(
-    await database.run(claimRuntimeSession(native, native.sessionId, new Date(NOW))),
-    true,
-  );
-  const eve = await fakeCoderEve(workspaceId);
-  const relay = await database.run(nativeRelayFake());
-  const host = hostOf(true);
-  const call = await peerCaller(host, agents.caller, Layer.merge(eve.services, relay.layer));
-
-  const sent = await directMessage(
-    host,
-    agents.caller,
-    native,
-    Layer.merge(eve.services, relay.layer),
-  );
-  assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
-  await turnOn(native, false);
-  const stopped = await call(CODER_TOOL.STOP_AGENT, { agentId: native.id }, "call-2");
-  assert.equal(stopped.stopped, true, JSON.stringify(stopped));
-
-  assert.deepEqual(
-    relay.heard.map(({ call, runtime, account, names }) => [call, runtime, account, names]),
-    [
-      ["send", "claude_code", native.userId, native.sessionId],
-      ["cancel", "claude_code", agents.caller.userId, `${native.sessionId}:turn_0`],
-    ],
-  );
-  assert.deepEqual(eve.sent, []);
-  await relay.dispose();
 });
 
 test("stop_agent stops a teammate's running agent on another task by eve's cancel of its turn, which the list then reads as cancelled, and answers a call run again as stopped with no second cancel", async () => {

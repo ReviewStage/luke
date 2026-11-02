@@ -105,9 +105,9 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * starter's Claude plan. eve and the native harness are each a fake that
  * writes down every call, so a test reads which of the two each call
  * reached and what it was handed. The eve agent is refused as ended, since
- * eve runs no agent any more: a launch or a message reaches nothing, while
- * a Stop or a retire of its session still reaches eve; the Claude Code
- * agent's calls reach the harness,
+ * eve runs no agent any more: a launch or a message reaches nothing, and a
+ * Stop or a retire of its session is answered as nothing running; the
+ * Claude Code agent's calls reach the harness,
  * acting for its starter, and eve hears nothing of them. That holds for the
  * router itself, for every composition a route, the deployment, the agent
  * doors, and the planner's tools wrap their eve in, and for the paths that
@@ -338,7 +338,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "an eve agent's launch and message are refused as ended and reach nothing, while a Stop and a retire of its session still reach eve, and a Claude Code agent's every call reaches the harness acting for its starter, whoever calls",
+      "an eve agent's launch and message are refused as ended, and a Stop and a retire of its session answered as nothing running, with eve hearing none of it, and a Claude Code agent's every call reaches the harness acting for its starter, whoever calls",
       () =>
         Effect.gen(function* () {
           const { owner, teammate, taskId } = yield* openTeam;
@@ -359,14 +359,18 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             yield* sessions.send("wrun_eve", messageTo(onEve, "And the emails.")),
             retired,
           );
-          yield* sessions.cancel("wrun_eve", "turn-1");
-          yield* sessions.reset("wrun_eve");
-          assert.deepEqual(eve.calls, ["cancel:wrun_eve:turn-1", "reset:wrun_eve"]);
+          assert.deepEqual(yield* sessions.cancel("wrun_eve", "turn-1"), {
+            outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN,
+          });
+          assert.deepEqual(yield* sessions.reset("wrun_eve"), {
+            outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION,
+          });
+          assert.deepEqual(eve.calls, []);
           assert.deepEqual(claudeCode.calls, []);
 
           const nativeSession = yield* everyCall(sessions, onClaudeCode);
           assert.deepEqual(heard(claudeCode), ["open", "send", "cancel", "reset"]);
-          assert.equal(eve.calls.length, 2);
+          assert.deepEqual(eve.calls, []);
           // A launch and a message act for the agent's starter, whose plan pays; a cancel or reset for the caller, as eve's does.
           assert.deepEqual(actingFor, [owner, owner, teammate, teammate]);
           // The session the harness opened is the conversation's record, as eve's door records eve's.
@@ -664,7 +668,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Stop names the turn under way: eve's by eve's id, as before, and a Claude Code agent's by the turn's own",
+      "a Stop names a Claude Code agent's turn under way by the turn's own id, and finds none under way on an eve agent's session, which eve is never asked of",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
@@ -706,7 +710,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             Effect.provide(native),
           );
 
-          assert.deepEqual(eve.calls, ["cancel:wrun_eve:turn_3"]);
+          assert.deepEqual(eve.calls, []);
           assert.deepEqual(claudeCode.calls, [`cancel:${nativeSession}:${nativeTurn}`]);
         }),
     );

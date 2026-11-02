@@ -116,6 +116,14 @@ const CODEX_ITEMS: readonly {
     line: ["Searched the web for", "banker's rounding in JavaScript"],
     body: ["type: search"],
   },
+  {
+    name: "a picture looked at",
+    tool: "imageView",
+    input: { path: "/tmp/luke/home.png" },
+    output: "[image]",
+    line: ["Read", "/tmp/luke/home.png"],
+    body: ["/tmp/luke/home.png", "[image]"],
+  },
 
   {
     name: "a wait on subagents",

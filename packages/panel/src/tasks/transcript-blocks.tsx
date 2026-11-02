@@ -1016,6 +1016,8 @@ const CALL_ICON = {
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,
+  [CALL_KIND.WORKER_MESSAGE]: SendIcon,
+  [CALL_KIND.STOP_BACKGROUND]: CircleStopIcon,
   [CALL_KIND.LIST_AGENTS]: LayoutListIcon,
   [CALL_KIND.READ_AGENT]: ScrollTextIcon,
   [CALL_KIND.MESSAGE_AGENT]: SendIcon,

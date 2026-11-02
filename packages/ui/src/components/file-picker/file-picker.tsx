@@ -8,6 +8,11 @@ import { type JSX, useRef } from "react";
  * menu row, a command). The picker is cleared after each pick, so the same
  * file can be picked again once it was taken off; `onFiles` hears the files
  * in the order the picker handed them, at most one where `multiple` is off.
+ *
+ * The input is left out of the screen recording whole (`ph-no-capture`),
+ * because the recorder masks what is typed into a field but reports a file
+ * input's value, the picked file's name, in clear as it changes, before the
+ * input is cleared.
  */
 
 export interface FilePickerOptions {
@@ -38,6 +43,7 @@ export function useFilePicker({
       <input
         ref={element}
         type="file"
+        className="ph-no-capture"
         accept={accept}
         multiple={multiple}
         hidden

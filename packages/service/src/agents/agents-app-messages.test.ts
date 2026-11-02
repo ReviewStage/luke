@@ -88,7 +88,6 @@ import {
   AGENT_STOP,
   agentStartedOn,
   countedWith,
-  deploymentFor,
   fakeEve,
   messageAs,
   messagedAgent,
@@ -296,7 +295,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "over a browser's session cookie a Stop, an Archive, and the task's archive each cancel the turn under way as the deployment acting for the cookie's account",
+    "over a browser's session cookie a Stop, an Archive, and the task's archive each cancel the turn under way through its harness acting for the cookie's account",
     () =>
       Effect.gen(function* () {
         const stopped = yield* messagedAgent(fakeEve(), { running: true });
@@ -332,7 +331,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         for (const { eve, owner, sessionId } of [stopped, archived, withTask]) {
           assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
-          assert.deepEqual(eve.cancelledAs, [deploymentFor(owner)]);
+          assert.deepEqual(eve.cancelledAs, [harnessFor(owner)]);
         }
         assert.notEqual(
           Option.getOrThrow(yield* readAgent(archived.owner, archived.agent.id)).archivedAt,
@@ -428,7 +427,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a teammate's session cookie messages the owner's agent through its harness acting for the owner, and stops it and deletes its task as the deployment acting for the teammate and never for the owner the rows name",
+    "a teammate's session cookie messages the owner's agent through its harness acting for the owner, and stops it and deletes its task through the harness acting for the teammate and never for the owner the rows name",
     () =>
       Effect.gen(function* () {
         // An idle agent of the owner's, which the teammate messages.
@@ -469,9 +468,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           true,
         );
         assert.deepEqual(stopped.eve.cancelled, [[stopped.sessionId, "turn_0"]]);
-        assert.deepEqual(stopped.eve.cancelledAs, [deploymentFor(stopped.other)]);
+        assert.deepEqual(stopped.eve.cancelledAs, [harnessFor(stopped.other)]);
         assert.deepEqual(stopped.eve.reset, [stopped.sessionId]);
-        assert.deepEqual(stopped.eve.resetAs, [deploymentFor(stopped.other)]);
+        assert.deepEqual(stopped.eve.resetAs, [harnessFor(stopped.other)]);
       }),
   );
 

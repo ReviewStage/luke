@@ -179,8 +179,8 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
  * repository or where it runs offers it, `run_on_mac` where no one but its
  * starter has put words into it, and `save_memory` and `search_memory` where
  * its starter has Memory on, the same rules eve's tool files read as each
- * turn starts (`apps/dev/host.ts`'s `offeredRepositoryTools`,
- * `offeredMacTools`, and `memoryOffered`).
+ * turn starts (`apps/dev/host.ts`'s `offeredRepositoryTools` and
+ * `memoryOffered`).
  */
 export function offeredCoderTools(
   agent: CoderOfferedTo,

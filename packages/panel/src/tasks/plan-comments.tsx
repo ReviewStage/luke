@@ -101,6 +101,7 @@ import {
   usePlanCommentsControl as usePlanCommentsControlOrUndefined,
 } from "@luke/ui/plan-comments";
 import { UNREPORTED } from "@luke/ui/reported-failure";
+import { writeWithheldSheet } from "@luke/ui/session-replay-marks";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -1881,7 +1882,12 @@ function blockAt(
  * the bubble over words selected. Drawn inside the body, which it measures,
  * from the scroller around it, whose width says whether a margin fits.
  */
-/** The sheet naming the open thread's words in the editor, built once; a constructed sheet, since the window's policy takes no inline style. */
+/**
+ * The sheet naming the open thread's words in the editor, built once; a
+ * constructed sheet, since the window's policy takes no inline style. It
+ * names the thread's id, so it is written withheld from the screen
+ * recording (`@luke/ui/session-replay-marks`), from before it is adopted.
+ */
 let openThreadSheet: CSSStyleSheet | undefined;
 
 /** The open thread's words drawn open in the editor, as the read view draws its marks with `data-active`; none where no thread is open. */
@@ -1889,10 +1895,12 @@ function editorOpenThread(thread: string | undefined): void {
   if (!("CSSStyleSheet" in globalThis) || !("adoptedStyleSheets" in document)) return;
   if (openThreadSheet === undefined) {
     openThreadSheet = new CSSStyleSheet();
+    writeWithheldSheet(openThreadSheet, "");
     document.adoptedStyleSheets = [...document.adoptedStyleSheets, openThreadSheet];
   }
   // Note that a thread's id is the service's UUID, which a selector takes as it is; the rule draws the edge whole, so words inside another thread's mark, which draws none of its own, show it too.
-  openThreadSheet.replaceSync(
+  writeWithheldSheet(
+    openThreadSheet,
     thread === undefined
       ? ""
       : `.plan-document-text .${COMMENT_MARK_CLASS}[data-threads~="${thread}"] { padding-bottom: 1px; border-bottom: 1.5px solid var(--comment-mark-active-edge); background: var(--comment-mark-active); }`,

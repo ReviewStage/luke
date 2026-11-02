@@ -179,9 +179,11 @@ export const RETIRED_TOOL = {
  * `Monitor`, `ScheduleWakeup`). Its to-dos are the CLI's task list, one
  * task created, updated, listed, and read at a time (the four `Task*`
  * tools, which replaced `TodoWrite`'s whole list in CLI 2.1.304; an older
- * transcript still names `TodoWrite`). Its transcript stores each call under
- * this name; a call to our own MCP server is stored under our tool's
- * name (`CLAUDE_CODE_LUKE_TOOL_PREFIX`).
+ * transcript still names `TodoWrite`). It stops what it started in the
+ * background with `TaskStop`, and sends one of its subagents more with
+ * `SendMessage`. Its transcript stores each call under this name; a call to
+ * our own MCP server is stored under our tool's name
+ * (`CLAUDE_CODE_LUKE_TOOL_PREFIX`).
  */
 export const CLAUDE_CODE_TOOL = {
   BASH: "Bash",
@@ -198,7 +200,9 @@ export const CLAUDE_CODE_TOOL = {
   TASK_UPDATE: "TaskUpdate",
   TASK_LIST: "TaskList",
   TASK_GET: "TaskGet",
+  TASK_STOP: "TaskStop",
   AGENT: "Agent",
+  SEND_MESSAGE: "SendMessage",
   SKILL: "Skill",
   MONITOR: "Monitor",
   SCHEDULE_WAKEUP: "ScheduleWakeup",
@@ -220,7 +224,8 @@ export const CLAUDE_CODE_LUKE_TOOL_PREFIX = "mcp__luke__";
  * Codex's own work, by the type of the app-server item that does it (its
  * todo list by its own name, since Codex reports it as the turn's plan
  * rather than as an item), which a coding agent running on Codex does in
- * place of our shell, file, search, todo, and delegation tools. Its
+ * place of our shell, file, search, todo, and delegation tools, and a
+ * picture it looked at with `view_image`. Its
  * transcript stores each under this name; a call to our own MCP server is
  * stored under our tool's name (`CODEX_LUKE_MCP_SERVER`), and a call to
  * any other MCP server as `mcpToolCall`.
@@ -232,6 +237,7 @@ export const CODEX_TOOL = {
   WEB_SEARCH: "webSearch",
   TODO_LIST: "todoList",
   SUBAGENT: "collabAgentToolCall",
+  IMAGE_VIEW: "imageView",
 } as const;
 
 /** The name Codex knows our MCP server by (`mcp_servers.luke`): its calls are our tools. */

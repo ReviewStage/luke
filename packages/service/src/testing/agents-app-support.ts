@@ -44,6 +44,7 @@ import { agentPullRequestProcedures } from "../agents/agent-pull-request-procedu
 import { agentsApp } from "../agents/agents-app.js";
 import { agentsProcedures } from "../agents/agents-procedures.js";
 import { CODER } from "../agents/coder-host/bounds.js";
+import { NATIVE_SESSION_PREFIX } from "../agents/coder-host/native-runtime.js";
 import { instancePublishedCache } from "../agents/coder-host/published.js";
 import type { SummaryModelOf } from "../agents/coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -285,7 +286,8 @@ export function fakeEve(
           );
         }
         sessions += 1;
-        const sessionId = `wrun_01M${String(sessions).padStart(22, "0")}`;
+        // A Claude Code session's id, as every agent here runs on its harness, so a Stop or a retire reaches the harness too.
+        const sessionId = `${NATIVE_SESSION_PREFIX.claude_code}${String(sessions).padStart(22, "0")}`;
         opened.push({ authorization, message, sessionId });
         return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId });
       }),

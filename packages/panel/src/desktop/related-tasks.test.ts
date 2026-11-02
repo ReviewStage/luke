@@ -22,10 +22,11 @@ import { RelatedTasks } from "./related-tasks.js";
 
 /**
  * related-tasks.test.ts -- a task's related tasks, drawn on their own as the
- * Tasks page's List draws a task: each row ends with a chip for each of its
- * open pull requests, a draft among them and a merged one left out, then
- * what its owner stands at its end, and its sub-tasks' count stands however
- * narrow the list; a press on a row opens its task, and a finger's row
+ * Tasks page's List draws a task: each row is led by what its owner stands
+ * there, its relation, and ends with a chip for each of its open pull
+ * requests, a draft among them and a merged one left out, and its
+ * sub-tasks' count stands however narrow the list; a press on a row opens
+ * its task, and a finger's row
  * draws no ⋯, its menu a long press away.
  * Synthetic tasks.
  */
@@ -97,7 +98,7 @@ const TASK: TaskSummary = {
   },
 };
 
-test("a related task's row ends with its open pull requests and its owner's end, and a press opens it", () => {
+test("a related task's row is led by its owner's relation and ends with its open pull requests, and a press opens it", () => {
   const opened: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -117,7 +118,7 @@ test("a related task's row ends with its open pull requests and its owner's end,
         createElement(RelatedTasks, {
           tasks,
           label: "Related tasks",
-          rows: [{ task: TASK, end: "Blocks" }],
+          rows: [{ task: TASK, relation: "Blocks" }],
         }),
       ),
     ),
@@ -129,7 +130,7 @@ test("a related task's row ends with its open pull requests and its owner's end,
     (chip) => chip.textContent,
   );
   assert.deepEqual(chips, ["#612", "#611"]);
-  assert.equal(row.querySelector("[data-cell='end']")?.textContent, "Blocks");
+  assert.equal(row.querySelector("[data-cell='relation']")?.textContent, "Blocks");
 
   act(() => row.querySelector<HTMLButtonElement>("[data-card-press]")?.click());
   assert.deepEqual(opened, ["t-42"]);

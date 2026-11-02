@@ -59,6 +59,10 @@ export const CALL_KIND = {
   WORKER: "worker",
   WORKER_WAIT: "worker-wait",
   WORKER_CANCEL: "worker-cancel",
+  /** More sent to one of a native harness's subagents (Claude Code's `SendMessage`), its row naming the subagent. */
+  WORKER_MESSAGE: "worker-message",
+  /** A background command, monitor, or subagent stopped (Claude Code's `TaskStop`), its row naming it by its id. */
+  STOP_BACKGROUND: "stop-background",
   LIST_AGENTS: "list-agents",
   READ_AGENT: "read-agent",
   MESSAGE_AGENT: "message-agent",
@@ -155,6 +159,8 @@ export const CALL_WORDS = {
   [CALL_KIND.WORKER]: { verb: "Asked the worker", code: false },
   [CALL_KIND.WORKER_WAIT]: { verb: "Waited for the worker", code: false },
   [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped the worker", code: false },
+  [CALL_KIND.WORKER_MESSAGE]: { verb: "Messaged the worker", code: false },
+  [CALL_KIND.STOP_BACKGROUND]: { verb: "Stopped", code: true },
   [CALL_KIND.LIST_AGENTS]: { verb: "Listed the agents", code: false },
   [CALL_KIND.READ_AGENT]: { verb: "Read the agent", code: false },
   [CALL_KIND.MESSAGE_AGENT]: { verb: "Messaged the agent", code: false },

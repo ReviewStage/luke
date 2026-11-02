@@ -72,7 +72,7 @@ import {
 import type { McpToolSchema } from "../../integrations/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
-import type { OfferedBeside } from "../coder-host/tool-set.js";
+import { CODER_TOOL, type OfferedBeside } from "../coder-host/tool-set.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { memoryOnFor } from "../memory-tools.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
@@ -239,6 +239,34 @@ function toolResult(tool: LukeMcpTool, result: LukeMcpToolResult): McpToolCallRe
  */
 const TOOL_META = { "anthropic/maxResultSizeChars": 500_000 } as const;
 
+/**
+ * The tools an agent calls on almost every run, which Claude Code lists in
+ * its prompt from the first turn rather than deferring behind its tool
+ * search, where the first call of each costs a `ToolSearch` step first:
+ * `_meta['anthropic/alwaysLoad']`, the pinned Agent SDK's per-tool form of
+ * `defer_loading: false` (its `McpHttpServerConfig.alwaysLoad`). Note that
+ * every tool loaded so costs its definition on every turn, so the rarely
+ * called ones (`look_at_picture`, the automations, the sections) stay
+ * deferred.
+ */
+const ALWAYS_LOADED_TOOLS: ReadonlySet<string> = new Set([
+  CODER_TOOL.POST_THREAD,
+  CODER_TOOL.READ_THREADS,
+  CODER_TOOL.WITHDRAW_ASK,
+  CODER_TOOL.OPEN_PULL_REQUEST,
+  CODER_TOOL.EDIT_PLAN,
+  CODER_TOOL.UPDATE_TASK,
+  CODER_TOOL.READ_TASK,
+  CODER_TOOL.SHOW_IMAGE,
+  CODER_TOOL.SHOW_PAGE,
+  CODER_TOOL.MESSAGE_AGENT,
+  CODER_TOOL.LIST_AGENTS,
+  CODER_TOOL.START_AGENT,
+]);
+
+/** What a listed tool declares: `TOOL_META`, and loaded from the first turn where it is one of `ALWAYS_LOADED_TOOLS`. */
+const ALWAYS_LOADED_META = { ...TOOL_META, "anthropic/alwaysLoad": true } as const;
+
 /** What an agent whose row is gone is offered by: no repository, on our own machine. */
 const NO_AGENT_OFFERED: LukeMcpOfferedTo = { repository: null, machine: AGENT_MACHINE.VERCEL };
 
@@ -355,7 +383,7 @@ function listLukeTools(
             name,
             description: words,
             inputSchema: tool.inputSchema,
-            _meta: TOOL_META,
+            _meta: ALWAYS_LOADED_TOOLS.has(name) ? ALWAYS_LOADED_META : TOOL_META,
           })),
         ),
         (tools) => Result.succeed({ tools }),

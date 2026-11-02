@@ -27,8 +27,8 @@ PR says nothing about the Mac and there is no macOS check to wait for.
 Application logic lives in `packages/`. An app holds what is specific to
 its platform or deployment and nothing else: Electron's main and preload
 processes, the window and page roots, the Vercel function routes under
-`apps/web/server/routes/`, the deployment shell beside them, the agents' eve
-apps, `apps/dev`, and build and release scripts. A React component, control, or
+`apps/web/server/routes/`, the deployment shell beside them, and build and
+release scripts. A React component, control, or
 repeated UI shape must live in `packages/ui` whatever app mounts it, even one
 app alone, with no exceptions, and a duplicate is folded into one; an app or
 `packages/panel` must compose those components and never hand-builds a control
@@ -176,7 +176,6 @@ reader alone. Move a rule from `[review]` to a check wherever one can hold it.
 pnpm exec vitest run <path>              # the file you changed
 pnpm check:affected                      # what changed since origin/main, from cache
 ./scripts/check.sh                       # everything CI runs bar Postgres
-pnpm --filter @luke/web test:agent       # the coder's offline eval, by hand
 ```
 
 - `[review]` Run the test files you touched, then push: CI runs the rest and
@@ -340,10 +339,9 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   end this row is an Effect transaction in TanStack DB.
 - **`packages/features/src/hosted-link.ts`** — oRPC's `OpenAPILink` awaits a promise from its `fetch`, so the account call runs there on the services the asking fiber handed it; what would end this row is an Effect transport in oRPC's link.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
-  `packages/database/src/testing/hosted-store-database.ts`,
-  `apps/dev/evals/coder.eval.ts`, and
+  `packages/database/src/testing/hosted-store-database.ts`, and
   `packages/wire/src/testing/effect.ts` each build a runner (a
-  `ManagedRuntime` over a throwaway database) so a suite or an offline eval still written on `node:assert` or a
+  `ManagedRuntime` over a throwaway database) so a suite still written on `node:assert` or a
   plain fixture can hold a promise where an effect is described; a test body is
   its own edge.
 

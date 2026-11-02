@@ -114,8 +114,8 @@ function watched(input: WireValue | undefined): string {
  * it changed, a search as `glob` or `grep`, a page and a web search as
  * `read_web_page` and `web_search`, the list as `write_todos`, a skill as
  * `load_skill`, and a monitor as the command it watches. A subagent's
- * call, a scheduled wakeup, and a call on the CLI's task list keep their
- * names.
+ * call, a message to one, a scheduled wakeup, a stop of what runs in the
+ * background, and a call on the CLI's task list keep their names.
  */
 const CLAUDE_CODE_CALLS: Record<
   (typeof CLAUDE_CODE_TOOL)[keyof typeof CLAUDE_CODE_TOOL],
@@ -209,6 +209,10 @@ const CLAUDE_CODE_CALLS: Record<
   [CLAUDE_CODE_TOOL.TASK_UPDATE]: (call) => call,
   [CLAUDE_CODE_TOOL.TASK_LIST]: (call) => call,
   [CLAUDE_CODE_TOOL.TASK_GET]: (call) => call,
+  // Note that a stop keeps its name, because it stops a background command, a monitor, or a subagent alike, so no one eve call does what it does.
+  [CLAUDE_CODE_TOOL.TASK_STOP]: (call) => call,
+  // Note that a message to a subagent keeps its name, because it continues the subagent's delegation rather than starting one, so it draws as a row of its own.
+  [CLAUDE_CODE_TOOL.SEND_MESSAGE]: (call) => call,
   // Note that a subagent's call keeps its name, which the tab draws as a delegation's row, its model named as the catalog names Anthropic's.
   [CLAUDE_CODE_TOOL.AGENT]: (call) => ({ ...call, input: withMaker(call.input, ANTHROPIC) }),
 };
@@ -324,7 +328,8 @@ function codexSubagentAnswer(output: WireValue | undefined): WireValue | undefin
 /**
  * Codex's items, each read as the eve call that does what it does: a
  * command as `bash`, a file change as an `apply_patch` of its files, a web
- * search as `web_search`, and the turn's plan as `write_todos`. A call to
+ * search as `web_search`, a picture looked at as `read_file` of it, as
+ * Claude Code's Read of one is, and the turn's plan as `write_todos`. A call to
  * an MCP server other than ours is named by its server and its tool, which
  * the generic row draws, its arguments as its input. A spawn of a subagent
  * is read as Claude Code's `Agent`, the one name the tab draws a native
@@ -347,6 +352,11 @@ const CODEX_CALLS: Record<(typeof CODEX_TOOL)[keyof typeof CODEX_TOOL], NativeCa
     tool: AGENT_TOOL.WEB_SEARCH,
     input: { query: inputString(input, "query") ?? "" },
     output,
+  }),
+  [CODEX_TOOL.IMAGE_VIEW]: ({ input, output }) => ({
+    tool: AGENT_TOOL.READ_FILE,
+    input: { filePath: inputString(input, "path") ?? "" },
+    output: wordsUnder(output, "content"),
   }),
   [CODEX_TOOL.TODO_LIST]: ({ input, output }) => ({
     tool: AGENT_TOOL.WRITE_TODOS,

@@ -100,10 +100,6 @@
           "dest": "/api/default.js?route=account/integrations/connected"
         },
         {
-          "src": "/api/agents/native-sessions",
-          "dest": "/api/default.js?route=agents/native-sessions"
-        },
-        {
           "src": "/api/agents/runner-events",
           "dest": "/api/default.js?route=agents/runner-events"
         },
@@ -300,25 +296,6 @@
           "dest": "/changelog/$1.html"
         }
       ]
-    },
-    "dev": {
-      "root": "apps/dev",
-      "framework": "eve",
-      "installCommand": "pnpm install --frozen-lockfile --filter @luke/coder...",
-      "buildCommand": "export EVE_PUBLIC_ROUTE_PREFIX=/eve/coder && pnpm exec eve build",
-      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/dev :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json",
-      "routes": [
-        {
-          "src": "^/eve/coder/v1/(.*)$",
-          "transforms": [
-            {
-              "type": "request.path",
-              "op": "set",
-              "args": "/eve/v1/$1"
-            }
-          ]
-        }
-      ]
     }
   },
   "crons": [
@@ -340,12 +317,6 @@
       ],
       "destination": {
         "service": "web"
-      }
-    },
-    {
-      "source": "/eve/coder/v1/(.*)",
-      "destination": {
-        "service": "dev"
       }
     },
     {
