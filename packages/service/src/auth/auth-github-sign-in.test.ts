@@ -176,7 +176,11 @@ test("a first GitHub sign-in is counted once as a sign-up under the new account,
   assert.ok(session);
 
   assert.deepEqual(first.counts, [
-    { name: "account:sign_up", userId: session.user.id, properties: { method: "github" } },
+    {
+      name: "account:sign_up",
+      actor: { userId: session.user.id },
+      properties: { method: "github" },
+    },
   ]);
   assert.deepEqual((await signInCounted(auth)).counts, []);
 });
