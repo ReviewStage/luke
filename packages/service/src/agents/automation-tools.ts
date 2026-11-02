@@ -51,6 +51,7 @@ import {
   type WireRecord,
   wireUuidSchema,
 } from "../core.js";
+import { SERVER_AUTOMATION_SOURCE } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { type HostedRefusal, hostedStoreOrUnavailable } from "../http/http-effect.js";
 import type { StoreFailure } from "../http/store-failure.js";
@@ -701,6 +702,7 @@ export function runCreateAutomation(
             ? undefined
             : { archiveSuccessful: made.archiveSuccessful }),
         },
+        SERVER_AUTOMATION_SOURCE.AGENT,
         id,
       ).pipe(Effect.result);
       if (Result.isFailure(written)) {

@@ -75,6 +75,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import {
   recordServerEvent,
   SERVER_AGENT_START_KIND,
+  SERVER_AGENT_STARTER,
   SERVER_EVENT,
 } from "../../events/server-events.js";
 import { GitHubApp } from "../../github/github-app.js";
@@ -1346,6 +1347,13 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
           ? SERVER_AGENT_START_KIND.CONTINUE
           : SERVER_AGENT_START_KIND.FORK,
     is_from_automation: automationRun(ask) !== undefined,
+    // An agent's `start_agent` names its starter, an automation's run names its run, and a member's Start neither.
+    started_by:
+      ask.startedBy !== undefined
+        ? SERVER_AGENT_STARTER.AGENT
+        : automationRun(ask) !== undefined
+          ? SERVER_AGENT_STARTER.AUTOMATION
+          : SERVER_AGENT_STARTER.MEMBER,
     has_task: ask.taskId !== null,
     agent_kind: agent.kind,
   });

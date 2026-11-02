@@ -112,7 +112,13 @@ import {
   TURN_TRIGGER,
   type WireRecord,
 } from "../../core.js";
-import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
+import {
+  recordingProductAnalytics,
+  SERVER_AGENT_STARTER,
+  SERVER_AUTOMATION_SOURCE,
+  SERVER_EVENT,
+  SERVER_TURN_OUTCOME,
+} from "../../events/server-events.js";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
 import { postInboxThread } from "../../inbox/inbox-store.js";
 import {
@@ -210,11 +216,14 @@ const SMALL_WINDOW = { model: "anthropic/claude-sonnet-4.9", tokens: 60_000 } as
 /** What the agents' tools counted, across the file; a test reads its own account's, from where it began. */
 const ANALYTICS = recordingProductAnalytics();
 
+/** The properties of each of one event the account was counted for, in order. */
+const countedWith = (userId: string, name: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === name)
+    .map((event) => event.properties);
+
 /** How many tasks the account was counted as making. */
-const tasksCounted = (userId: string) =>
-  ANALYTICS.recorded.filter(
-    (event) => event.userId === userId && event.name === SERVER_EVENT.TASK_CREATE,
-  ).length;
+const tasksCounted = (userId: string) => countedWith(userId, SERVER_EVENT.TASK_CREATE).length;
 
 const CATALOG: readonly OfferedModel[] = [
   {
@@ -795,6 +804,7 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), caller, eve.services);
   const prompt = "Write the migration that adds the invitation's expiry.";
+  const startsBefore = countedWith(caller.userId, SERVER_EVENT.AGENT_START).length;
 
   const started = await call(
     CODER_TOOL.START_AGENT,
@@ -834,6 +844,13 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.ok(isRecord(again.agent));
   assert.equal(again.agent.id, startedId);
   assert.equal(eve.sent.length, 1, "the same call run again starts no second agent");
+  // Counted once under its starter's member, as an agent's start rather than theirs.
+  assert.deepEqual(
+    countedWith(caller.userId, SERVER_EVENT.AGENT_START)
+      .slice(startsBefore)
+      .map((properties) => ("started_by" in properties ? properties.started_by : undefined)),
+    [SERVER_AGENT_STARTER.AGENT],
+  );
 });
 
 test("start_agent on a task that runs on another member's device is refused in words that name the device and its owner, starting nothing", async () => {
@@ -2794,6 +2811,13 @@ test("a message to an agent whose session eve no longer runs opens a fresh sessi
   assert.match(String(opened[0]?.[2]), new RegExp(NOTE, "u"));
   const settled = [turnId, TURN_STATUS.FAILED, TURN_FAILURE.SESSION_ENDED];
   assert.deepEqual(await newestTurnOf(agents.teammates), settled);
+  // Counted as failed, with why.
+  assert.deepEqual(
+    countedWith(agents.teammates.userId, SERVER_EVENT.TURN_END).map((properties) =>
+      "failure" in properties ? [properties.outcome, properties.failure] : undefined,
+    ),
+    [[SERVER_TURN_OUTCOME.FAILED, TURN_FAILURE.SESSION_ENDED]],
+  );
 
   const again = await directMessage(host, agents.caller, agents.teammates, eve.services, "call-2");
   assert.equal(again.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(again));
@@ -4052,6 +4076,10 @@ test("list_automations, create_automation, update_automation, and delete_automat
   const id = automation.id;
   // The same call run again names the automation it made, and makes no second one.
   assert.equal(automationOf(await call(CODER_TOOL.CREATE_AUTOMATION, made, "call-make")).id, id);
+  // Counted once, as the agent's automation rather than its starter's own.
+  assert.deepEqual(countedWith(agents.caller.userId, SERVER_EVENT.AUTOMATION_CREATE), [
+    { trigger_kind: "schedule", source: SERVER_AUTOMATION_SOURCE.AGENT },
+  ]);
   const listed = await call(CODER_TOOL.LIST_AUTOMATIONS, {});
   assert.ok(Array.isArray(listed.automations));
   assert.deepEqual(
