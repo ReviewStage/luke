@@ -536,6 +536,7 @@ test("with Open a task once it starts off, New task starts the task and its agen
         prompt: "Dark mode",
         attachments: [],
         choice: undefined,
+        disabledServers: [],
       },
     });
   });
@@ -2831,7 +2832,7 @@ async function startAgentTask(tab: ReturnType<typeof mount>) {
   let note: Failure | undefined = { reason: FAILURE_REASON.OTHER, text: "unanswered" };
   await act(async () => {
     note = await tab.control().newTask.start("", "acme/web", undefined, {
-      handed: { idempotencyKey: AGENT_KEY, prompt, attachments: [], choice },
+      handed: { idempotencyKey: AGENT_KEY, prompt, attachments: [], choice, disabledServers: [] },
     });
   });
   tab.stand({ tasks: AGENT_TASK });
@@ -3021,7 +3022,13 @@ test("New task's agent start opens its page at once on the words as its agent's 
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);
   act(() => {
     note = tab.control().newTask.start("", "acme/web", undefined, {
-      handed: { idempotencyKey: AGENT_KEY, prompt, attachments: [], choice: undefined },
+      handed: {
+        idempotencyKey: AGENT_KEY,
+        prompt,
+        attachments: [],
+        choice: undefined,
+        disabledServers: [],
+      },
     });
   });
 
@@ -3050,7 +3057,13 @@ test("what the developer opened while New task's agent start was out, a page and
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);
   act(() => {
     note = tab.control().newTask.start("", "acme/web", undefined, {
-      handed: { idempotencyKey: AGENT_KEY, prompt: "Fix it.", attachments: [], choice: undefined },
+      handed: {
+        idempotencyKey: AGENT_KEY,
+        prompt: "Fix it.",
+        attachments: [],
+        choice: undefined,
+        disabledServers: [],
+      },
     });
   });
   act(() => tab.control().automationsView.onOpen());
@@ -3078,7 +3091,13 @@ test("New task's agent start opens no draft beside its agent while the task stan
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);
   act(() => {
     note = tab.control().newTask.start("", "acme/web", undefined, {
-      handed: { idempotencyKey: AGENT_KEY, prompt: "Fix it.", attachments: [], choice: undefined },
+      handed: {
+        idempotencyKey: AGENT_KEY,
+        prompt: "Fix it.",
+        attachments: [],
+        choice: undefined,
+        disabledServers: [],
+      },
     });
   });
   // Main opens the task before the start answers, its row listed and its agent not yet.
@@ -3115,6 +3134,7 @@ test("New task's agent start refused after its page opened opens the card again 
     prompt: "Make the sidebar keep its folds.",
     attachments: [],
     choice: undefined,
+    disabledServers: [],
   };
   const card = {
     repository: "acme/web",
@@ -3161,6 +3181,7 @@ test("Create with an agent opens New task's card for an automation's agent over 
     prompt: "# Create an automation",
     attachments: [],
     choice: undefined,
+    disabledServers: [],
   };
   const card = {
     purpose: NEW_TASK_PURPOSE.AUTOMATION,

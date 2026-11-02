@@ -230,6 +230,7 @@ test("Return in the welcome's composer starts the task in the listed workspace, 
     prompt: "Make the sidebar keep its folds.",
     attachments: [],
     choice: undefined,
+    disabledServers: [],
   });
   assert.ok(idempotencyKey, "the agent's start carries the card's key");
   assert.equal(started.length, 1);

@@ -284,7 +284,7 @@ test("the card, named New task, holds the composer with its words focused, the r
   assert.equal(document.activeElement, card.field());
   assert.equal(card.placeholder(), "Describe the task");
   assert.equal(controls.includes("Plan with Vespin first"), false, "no Plan toggle stands");
-  for (const each of ["Attach files", "acme/web", "Start a task with no agent"]) {
+  for (const each of ["Add files and more", "acme/web", "Start a task with no agent"]) {
     assert.ok(controls.includes(each), `${each} stands in the card`);
   }
   const name = card.dialog()?.getAttribute("aria-labelledby") ?? assert.fail("the card is named");
@@ -315,6 +315,7 @@ test("Return starts the task without planning, Untitled, on the repository last 
     prompt: "Make the sidebar keep its folds.",
     attachments: [],
     choice: undefined,
+    disabledServers: [],
   });
   assert.ok(idempotencyKey, "the agent's start carries the card's key");
 });
@@ -353,17 +354,52 @@ test("Fast on a model nothing pays for lands on its harness's row in Settings, a
   assert.equal(chip.textContent?.includes("Fast"), false);
 });
 
-test("a server whose sign-in expired is offered nowhere in the card, which hands an agent no servers", async () => {
+test("a server switched off from the + menu's MCP servers is handed to the agent's start, and a refused card opened again keeps it off", async () => {
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_STATUS]: () =>
       Promise.resolve({
-        integrations: { ...UNAVAILABLE, [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.EXPIRED },
+        integrations: {
+          ...UNAVAILABLE,
+          [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.CONNECTED,
+        },
       }),
   });
-  const card = await mount();
+  const card = await mount("The service is down.");
+  const slackSwitch = async () => {
+    act(() => card.button("Add files and more").click());
+    const rows = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    assert.deepEqual(
+      rows.map((row) => row.textContent),
+      ["Attachment", "MCP servers"],
+    );
+    act(() => rows[1]?.click());
+    await settle();
+    return (
+      document.querySelector<HTMLButtonElement>(
+        '[role="switch"][aria-label="Slack for this agent"]',
+      ) ?? assert.fail("the servers popover offers Slack's switch")
+    );
+  };
+  const slack = await slackSwitch();
+  assert.equal(
+    slack.getAttribute("aria-checked"),
+    "true",
+    "every server stands on as the card opens",
+  );
+  act(() => slack.click());
+  await card.press("Escape", document.activeElement as HTMLElement);
+  await card.press("Escape", document.activeElement as HTMLElement);
+  card.type("Post the release notes");
+  await card.key("Enter");
   await settle();
 
-  assert.equal(card.dialog()?.textContent?.includes("sign-in expired"), false);
+  assert.deepEqual(card.agents[0]?.disabledServers, [INTEGRATION_PROVIDER.SLACK]);
+  assert.equal(
+    card.note()?.includes("The service is down."),
+    true,
+    "the card opens again on the refusal",
+  );
+  assert.equal((await slackSwitch()).getAttribute("aria-checked"), "false");
 });
 
 test("Command-Return while a file is still being read starts no bare task", async () => {
