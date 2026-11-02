@@ -231,7 +231,6 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
               title: QUEUE.title,
               mention: mentionOf(agent, QUEUE.title, first.id),
               status: INBOX_STATUS.OPEN,
-              waits: true,
               thread: [
                 {
                   from: "you",
@@ -366,26 +365,25 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
   );
 
   it.effect(
-    "a decide and an answer are always heard back, even where the post says not to wait, and a do only where it says so",
+    "every ask is heard back, a do as a decide and an answer, and an older post's waits is taken and changes nothing",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
         const cases = [
-          ["decide", QUEUE.ask, undefined, true],
-          ["decide-quiet", QUEUE.ask, false, true],
-          ["answer", { type: INBOX_ASK.ANSWER }, undefined, true],
-          ["answer-quiet", { type: INBOX_ASK.ANSWER }, false, true],
-          ["do", SETTINGS.ask, undefined, false],
-          ["do-waits", SETTINGS.ask, true, true],
+          ["decide", QUEUE.ask, undefined],
+          ["answer", { type: INBOX_ASK.ANSWER }, undefined],
+          ["do", SETTINGS.ask, undefined],
+          ["do-quiet", SETTINGS.ask, false],
         ] as const;
         for (const [key, ask, waits] of cases) {
           const value = { key, title: key, body: "Words.", ask };
-          yield* post(agent, waits === undefined ? value : { ...value, waits });
+          const posted = yield* post(agent, waits === undefined ? value : { ...value, waits });
+          assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, key);
         }
         const items = yield* taskInboxItems(agent.userId, agent.taskId);
         assert.deepEqual(
           cases.map(([key]) => [key, items.find((item) => item.key === key)?.needsReply]),
-          cases.map(([key, , , waits]) => [key, waits]),
+          cases.map(([key]) => [key, true]),
         );
       }),
   );
