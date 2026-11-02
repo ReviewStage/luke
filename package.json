@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/ReviewStage/vespin"
   },
-  "description": "Vespin is a macOS app for planning a feature by voice before you hand it to a coding agent",
+  "description": "Vespin is an inbox for all your coding agents.",
   "packageManager": "pnpm@10.34.5",
   "engines": {
     "node": ">=24.0.0"

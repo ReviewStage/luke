@@ -1,8 +1,8 @@
 # Privacy
 
-Last updated: 27 October 2026
+Last updated: 2 November 2026
 
-Vespin is a macOS app for planning a feature. This policy explains
+Vespin is an inbox for all your coding agents. This policy explains
 what we collect, who we send it to, and how to turn it off.
 
 ## In short
@@ -27,9 +27,9 @@ what we collect, who we send it to, and how to turn it off.
 - **Commands on your Mac.** Agents can run commands on your Mac, and
   what those commands print leaves it. See "Commands agents run on your Mac"
   under [What we collect](#what-we-collect).
-- **Off switches.** Turn off "Share usage data" in Settings › Account, turn
-  off "Let agents run commands on this Mac", disconnect any integration, or
-  delete your account, which erases what our service keeps under it. See
+- **Off switches.** Turn off "Share usage data" in Settings › Account, set
+  "Let agents run commands on this Mac" to Never, disconnect any integration,
+  or delete your account, which erases what our service keeps under it. See
   [Your choices](#your-choices).
 
 ## What we collect
@@ -1677,8 +1677,8 @@ and error, performance, and agent reports by Sentry.
   download, and off in a Vespin you build and run from its source, which sends
   no usage counts unless you turn it on. It does not stop the counts our
   service makes of the work done through it.
-- Turn off Settings › This Mac › "Let agents run commands on this Mac" to stop
-  agents running commands on that Mac; it is set on each Mac apart, and
+- Set Settings › This Mac › "Let agents run commands on this Mac" to Never to
+  stop agents running commands on that Mac; it is set on each Mac apart, and
   signing out stops it too.
 - Switch an integration off for one agent in its message box's MCP
   menu, or disconnect it for every agent in Settings › Integrations.

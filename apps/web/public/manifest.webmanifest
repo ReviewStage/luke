@@ -2,7 +2,7 @@
   "id": "/app",
   "name": "Vespin",
   "short_name": "Vespin",
-  "description": "Plan a feature out loud with Vespin before a coding agent builds it.",
+  "description": "Vespin is an inbox for all your coding agents.",
   "start_url": "/app",
   "scope": "/",
   "display": "standalone",
