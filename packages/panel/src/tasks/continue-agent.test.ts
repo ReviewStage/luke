@@ -328,6 +328,7 @@ test("the end line's words and whether it tells of a failure come apart, and nam
       words:
         "This agent ran on your Mac before Vespin gave each agent a folder of its own, so it can't start there again. Its unpushed work is still in /Users/ada/.vespin/agents/agent-1/repository. Continue in a new agent to carry on.",
       failed: true,
+      failure: AGENT_FAILURE.SESSION_ENDED,
     },
   );
   // Note that a teammate is told whose Mac holds the work, not pointed at their own.
