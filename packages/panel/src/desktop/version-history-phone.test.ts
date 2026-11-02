@@ -14,6 +14,7 @@ import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import type { VersionHistoryControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { longPress, underAFinger } from "../testing/finger.js";
 import { menuItems, pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -149,6 +150,20 @@ test("on a phone the versions are headed by the way out alone, named for the ste
   assert.equal(view.querySelectorAll('nav[aria-label="Versions"] h1').length, 1);
   pressInPhoneHead(view, "version-log", "Back");
   assert.deepEqual(exits, ["exit"]);
+});
+
+test("under a finger a version's row draws no ⋯, and held it offers its menu", () => {
+  underAFinger();
+  const { view } = drawn(SHELL_ROOM.NARROW, { listed: true });
+  const rows = [...view.querySelectorAll<HTMLElement>('[aria-label="Version list"] li > button')];
+  const older = rows.at(-1) ?? assert.fail("the older version has a row");
+  assert.ok(view.querySelector('[aria-label="Version actions"]') === null, "no row draws a ⋯");
+
+  longPress(older);
+  const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
+    (each) => each.textContent,
+  );
+  assert.ok(offered.includes("Restore this version"), "the long press offers Restore");
 });
 
 test("on a phone a revision's sections are headed by the way back to every version, which closes them, in place of the All versions row", () => {
