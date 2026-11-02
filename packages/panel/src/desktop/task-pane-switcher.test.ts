@@ -287,7 +287,7 @@ test("on a phone a task is headed by one row, the way back named for the page it
   assert.deepEqual(menu.slice(0, 3), ["*Overview", "Agents", "Activity"], "the views come first");
   assert.ok(menu.includes("Rename") && menu.includes("Permanently delete"), "then the task's own");
   assert.equal(page.labelled("Title actions"), false, "the plan's title draws no second ⋯");
-  assert.equal(page.labelled("Overview actions"), false, "the column draws no ⋯ of Overview's");
+  assert.equal(page.labelled(`${TASK.name} actions`), false, "the column draws no ⋯ of Overview's");
 
   page.back();
   assert.deepEqual(page.told, ["away"], "the way back goes where the shell says, pushing nothing");
@@ -327,7 +327,7 @@ test("on a phone Agents shuts the panel by its own toggle and shows an agent's t
   assert.deepEqual(shut.told, [`column "${MAIN_TAB.OVERVIEW}"`, "toggle"]);
 });
 
-test("on a phone ⌘K's Change repository shows Overview from under the panel, and the repository crumb opens its menu only once the plan is in sight", async () => {
+test("on a phone ⌘K's Change repository shows Overview from under the panel, and opens the repository's menu under the plan's path only once the plan is in sight", async () => {
   const page = mount(SHELL_ROOM.NARROW, true);
   page.choose("Activity");
   assert.deepEqual(page.rows(), ["Inbox", "Comments"]);
@@ -338,10 +338,10 @@ test("on a phone ⌘K's Change repository shows Overview from under the panel, a
   assert.deepEqual(page.told, [`column "${MAIN_TAB.OVERVIEW}"`], "Overview is shown");
   page.draw(false, SIDE_PANEL_TAB.COMMENTS, 1);
   await act(async () => undefined);
-  const chip = [
-    ...page.container.querySelectorAll<HTMLButtonElement>(".plan-task-path button"),
-  ].find((each) => each.textContent?.includes("Choose a repository"));
-  assert.equal(chip?.getAttribute("aria-expanded"), "true", "the chip's menu opens for the ask");
+  assert.ok(
+    page.container.querySelector('.plan-task-path [role="dialog"][aria-label="Repository"]'),
+    "the repository's menu opens for the ask",
+  );
 });
 
 test("on a phone Activity closes a tab from its row, as the strip's × did, without showing it", () => {
@@ -424,7 +424,7 @@ test("a wide window keeps the panel's strip and the column's toolbar, the task's
   const page = mount(SHELL_ROOM.WIDE, true);
   assert.equal(page.container.querySelector(".task-head"), null);
   assert.ok(page.container.querySelector(".side-panel-tabs"), "the panel keeps its strip");
-  assert.ok(page.labelled("Overview actions"), "Overview keeps the task's ⋯");
+  assert.ok(page.labelled(`${TASK.name} actions`), "the task's first tab keeps the task's ⋯");
   assert.equal(page.labelled("Task actions"), false, "the column's toolbar draws none");
 });
 

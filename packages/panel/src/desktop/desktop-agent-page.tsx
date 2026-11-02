@@ -315,7 +315,6 @@ function AgentPageBar({
       <PhoneHead place="agent" start={<PhoneBack back={phone.back} />} title={title} end={more} />
     );
   }
-  // The page's bar names it and keeps its acts.
   return (
     <Toolbar
       title={title}

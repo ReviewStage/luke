@@ -15,15 +15,12 @@ import { taskKey } from "@luke/features/workspace-key";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BREADCRUMB_POPUP,
   Breadcrumbs,
   CHIP_LOOK,
   CHIP_WIDTH,
   type Crumb,
   ErrorState,
   FailureNote,
-  FrameHead,
-  type FrameHeadTask,
   GAP,
   Inline,
   type MenuRow,
@@ -46,17 +43,13 @@ import { memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
 import { Picker } from "../settings/picker-row.js";
 import { useTaskCard } from "./chip-cards.js";
-import {
-  type RepositoryChooser,
-  type RepositoryMenu,
-  useRepositoryMenu,
-} from "./repository-chip.js";
+import { type RepositoryChooser, useRepositoryMenu } from "./repository-chip.js";
 import { TaskRelationAsked, type TaskRelationsDoor } from "./task-relation-menu.js";
 
 /**
  * task-standing.tsx -- a task's head over its plan: the path to it, then the chips that say and change where it stands, how much it matters, and who is on it.
  *
- * Over the title stands the task's path (`TaskPath`), where the task's head over its column does not name the task already (a phone), a caption-size
+ * Over the title stands the task's path (`TaskPath`), a caption-size
  * `Breadcrumbs`: its repository, the owner's picture and `owner/name`, or
  * Choose a repository while the task has none, which drops the search over
  * every repository the workspace reaches (`repository-chip.tsx`), and which
@@ -318,23 +311,6 @@ function parentOf(task: Task, tasks: readonly TaskSummary[]): TaskSummary | unde
   return parentId === undefined ? undefined : tasks.find((each) => each.id === parentId);
 }
 
-/**
- * The tasks the open one is a child of, as the workspace's tasks list them,
- * eldest first; none for a task at the top. Note that a task met twice ends
- * the walk, so a parent the list holds in a loop names each task once.
- */
-function ancestorsOf(task: Task, tasks: readonly TaskSummary[]): readonly TaskSummary[] {
-  const found: TaskSummary[] = [];
-  const met = new Set([task.id]);
-  for (let at = parentOf(task, tasks); at !== undefined && !met.has(at.id); ) {
-    met.add(at.id);
-    found.unshift(at);
-    const parentId = at.parentTaskId;
-    at = parentId === undefined ? undefined : tasks.find((each) => each.id === parentId);
-  }
-  return found;
-}
-
 /** The parent's crumb: its status mark, then its key and name, which opens it and hangs its card. */
 function useParentCrumb(
   parent: TaskSummary | undefined,
@@ -359,21 +335,6 @@ function keyCrumb(task: Task, workspaceName: string): Crumb | undefined {
   return { label: taskKey(workspaceName, task.number), current: true, fixed: true };
 }
 
-/** The refusal of the last repository pick, said under the path, or alone where the path is not drawn. */
-function RepositoryRefusal({ note }: { note: string }): React.JSX.Element {
-  return (
-    <FailureNote
-      failure={failureShown({
-        surface: FAILURE_SURFACE.REPOSITORY_PIN,
-        cause: FAILURE_CONDITION.REFUSED,
-        refused: true,
-      })}
-    >
-      {note}
-    </FailureNote>
-  );
-}
-
 /** The path's line: its crumbs, the menu a crumb drops hung from the line's own box, and the refusal of the last pick under it. */
 function PathLine({
   crumbs,
@@ -396,25 +357,22 @@ function PathLine({
         <Breadcrumbs label={PATH_LABEL} crumbs={drawn} />
         {menu}
       </div>
-      {note === undefined ? null : <RepositoryRefusal note={note} />}
+      {note === undefined ? null : (
+        <FailureNote
+          failure={failureShown({
+            surface: FAILURE_SURFACE.REPOSITORY_PIN,
+            cause: FAILURE_CONDITION.REFUSED,
+            refused: true,
+          })}
+        >
+          {note}
+        </FailureNote>
+      )}
     </div>
   );
 }
 
-/** The repository's crumb, which drops its menu, named by the repository or the pick it waits on. */
-function repositoryCrumb(menu: RepositoryMenu, repository: Task["repository"]): Crumb {
-  return {
-    label: menu.label,
-    glyph: menu.glyph,
-    hint: menu.open ? undefined : (repository ?? undefined),
-    card: menu.card,
-    popup: BREADCRUMB_POPUP.DIALOG,
-    expanded: menu.open,
-    onPress: menu.press,
-  };
-}
-
-/** The path led by the task's repository, whose crumb drops the repository's menu (`useRepositoryMenu`). */
+/** The path led by the task's repository as plain words, whose menu (`useRepositoryMenu`) opens only where the page asks, under the path: ⌘K's and a task row's Change repository. */
 function RepositoryPath({
   task,
   door,
@@ -432,7 +390,8 @@ function RepositoryPath({
     onAsked: door.onAsked,
     align: POPOVER_ALIGN.START,
   });
-  const repository = repositoryCrumb(menu, task.repository);
+  // Note that the crumb is kept, because words that name the repository must not be folded away, yet it may still be cut short, so a long name never pushes the key out of the path.
+  const repository: Crumb = { label: menu.label, glyph: menu.glyph, kept: true };
   return (
     <PathLine crumbs={[repository, ...rest]} room={menu.room} menu={menu.menu} note={door.note} />
   );
@@ -461,119 +420,6 @@ export function TaskPath({
   ) : (
     // Keyed by the task, so another task starts the crumb's menu afresh and the same task keeps it.
     <RepositoryPath key={task.id} task={task} door={door.repository} rest={rest} />
-  );
-}
-
-/**
- * What stands over the title where the path does not, because the window's
- * title bar names the task (`TaskFrameHead`): the refusal of the last
- * repository pick, which that bar's crumb has no line to say, and nothing
- * otherwise.
- */
-export function TaskPathRefusal({ door }: { door: TaskStandingDoor }): React.JSX.Element | null {
-  const note = door.repository?.note;
-  return note === undefined ? null : (
-    <div className="mb-luke-4">
-      <RepositoryRefusal note={note} />
-    </div>
-  );
-}
-
-/** A task as its head over the column names it: its mark, name, and key, its press, and its card. */
-function frameTask(
-  task: {
-    readonly name: string;
-    readonly status?: TaskStatus | undefined;
-    readonly number?: number | undefined;
-  },
-  workspaceName: string,
-  onOpen: () => void,
-  card?: ReactNode,
-): FrameHeadTask {
-  return {
-    name: task.name,
-    taskKey: task.number === undefined ? undefined : taskKey(workspaceName, task.number),
-    status: task.status,
-    onOpen,
-    card,
-  };
-}
-
-/**
- * The task's head over its column (`FrameHead`): its repository's
- * crumb where the page hands the repository's doors, plain words with the
- * repository's mark and no press; the tasks it is a child of, eldest first,
- * each opening its own task, the parent hanging its card; then the task,
- * whose press is `onOpen`, its Overview. Note that ⌘K's and a task row's
- * Change repository open the repository's menu from this head's box, under
- * the crumb, because the plan draws no path of its own beside this head
- * (`PlanBody`'s `path`), so one ask never opens two menus, and the crumb
- * itself opens nothing.
- */
-export function TaskFrameHead({
-  task,
-  shown,
-  door,
-  onOpen,
-}: {
-  task: Task;
-  /** The task as the list draws it now, its name and status. */
-  shown: Pick<TaskSummary, "name" | "status">;
-  door: TaskStandingDoor;
-  onOpen: () => void;
-}): React.JSX.Element {
-  const ancestors = ancestorsOf(task, door.tasks ?? []);
-  const parentCard = useTaskCard(ancestors.at(-1)?.id);
-  const { workspaceName, onOpenTask } = door;
-  const drawn = {
-    ancestors: ancestors.map((each, at) =>
-      frameTask(
-        each,
-        workspaceName,
-        () => onOpenTask?.(each.id),
-        at === ancestors.length - 1 ? parentCard : undefined,
-      ),
-    ),
-    head: frameTask({ ...shown, number: task.number }, workspaceName, onOpen),
-  };
-  return door.repository === undefined ? (
-    <FrameHead ancestors={drawn.ancestors} task={drawn.head} />
-  ) : (
-    // Keyed by the task, so another task starts the crumb's menu afresh and the same task keeps it.
-    <RepositoryFrameHead key={task.id} task={task} door={door.repository} {...drawn} />
-  );
-}
-
-/** The title bar's head led by the task's repository as plain words, whose menu (`useRepositoryMenu`) opens only where the page asks, under it. */
-function RepositoryFrameHead({
-  task,
-  door,
-  ancestors,
-  head,
-}: {
-  task: Task;
-  door: TaskRepositoryDoor;
-  ancestors: readonly FrameHeadTask[];
-  head: FrameHeadTask;
-}): React.JSX.Element {
-  const menu = useRepositoryMenu({
-    value: task.repository,
-    chooser: door.chooser,
-    onChoose: door.onChoose,
-    openRequest: door.openRequest,
-    onAsked: door.onAsked,
-    align: POPOVER_ALIGN.START,
-  });
-  // Note that the crumb is kept, because a press that drops a menu was never folded away and words that name the repository must not be, yet it may still be cut short, so a long name never pushes the task out of the bar.
-  const repository: Crumb = { label: menu.label, glyph: menu.glyph, kept: true };
-  return (
-    <FrameHead
-      repository={repository}
-      ancestors={ancestors}
-      task={head}
-      room={menu.room}
-      menu={menu.menu}
-    />
   );
 }
 

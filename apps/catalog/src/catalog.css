@@ -921,6 +921,16 @@ body {
   background: var(--luke-color-sidebar);
 }
 
+/* A pane's head row on the window's frame, a column wide, on the frame's
+   own colour, as a search over a list stands there. */
+.catalog-frame-row {
+  width: 320px;
+  max-width: 100%;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-sidebar);
+}
+
 /* A failure's mark at a tab's end, as an app draws its own: the alert in
    the danger colour, a size under the glyph it follows. */
 .catalog-end-mark {

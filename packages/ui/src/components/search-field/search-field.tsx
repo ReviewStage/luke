@@ -45,7 +45,10 @@ import type { ComboboxField } from "../combobox/use-combobox-field.js";
  *
  * It stands as a well of its own, or as the head row of a menu it filters:
  * no edge but a hairline under it, and no ring, since the caret is always
- * in it while the menu stands.
+ * in it while the menu stands. A well standing on the window's frame rather
+ * than in a sheet (a pane's head row over its sheet) takes the sheet's own
+ * ground, since the hover fill a well wears inside a sheet all but vanishes
+ * on the frame's.
  *
  * Its field is shadcn/ui's input (`../../shadcn/input.tsx`, on Base UI),
  * bare inside the well, which stays a `<label>` so a press anywhere on it
@@ -57,9 +60,10 @@ import type { ComboboxField } from "../combobox/use-combobox-field.js";
  * test finds them by.
  */
 
-/** How a search stands: a well among other controls, or a menu's head row. */
+/** How a search stands: a well among other controls in a sheet, a well on the window's frame, or a menu's head row. */
 export const SEARCH_FIELD_LOOK = {
   WELL: "well",
+  FRAME: "frame",
   MENU: "menu",
 } as const;
 
@@ -72,6 +76,7 @@ const SEARCH_WELL =
 /** Each look's classes over the well's: a menu's head row is a menu row tall, with only a hairline under it and no ring. */
 const SEARCH_LOOK_CLASS = {
   [SEARCH_FIELD_LOOK.WELL]: undefined,
+  [SEARCH_FIELD_LOOK.FRAME]: "bg-ground",
   [SEARCH_FIELD_LOOK.MENU]:
     "h-menu-search rounded-none border-0 border-b bg-transparent px-luke-12 outline-none [&>svg]:size-menu-glyph",
 } as const satisfies Record<SearchFieldLook, string | undefined>;
