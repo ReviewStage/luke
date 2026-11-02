@@ -2,6 +2,7 @@ import type {
   DeviceAgentLineKind,
   DeviceAgentObject,
   DeviceAgentRequestKind,
+  DeviceLaunchStep,
 } from "@luke/features/device-agent-wire";
 import { sql } from "drizzle-orm";
 import { bigint, index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
@@ -37,7 +38,11 @@ import { device } from "./device.js";
  * after its answer was lost is answered again, never its secrets.
  * `exit_code` is the runner's
  * as the Mac settled its launch line; null until then and for every other
- * kind.
+ * kind. `launch_step` is the step the Mac reported its launch of a claimed
+ * launch line has reached (`DEVICE_LAUNCH_STEP`), only ever moved forward,
+ * which the agent's transcript words until its harness's first event; null
+ * before the Mac reports one, from a Mac that reports none, and for every
+ * other kind.
  */
 export const deviceAgentLine = pgTable(
   "device_agent_line",
@@ -68,6 +73,8 @@ export const deviceAgentLine = pgTable(
     settledAt: timestamptz("settled_at"),
     /** The runner's exit code, as the Mac settled a launch line; null otherwise. */
     exitCode: integer("exit_code"),
+    /** The step the Mac reported its launch of a claimed launch line has reached; null before it reports one and for every other kind. */
+    launchStep: text("launch_step").$type<DeviceLaunchStep>(),
   },
   (table) => [
     // A Mac reads its unclaimed lines.

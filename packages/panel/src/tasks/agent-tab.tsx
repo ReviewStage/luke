@@ -146,6 +146,7 @@ import {
   providerOf,
   SENT_LINE_STATE,
   type SentLine,
+  type StartingLaunch,
   settledPlanEdits,
   sidebarCallIds,
   type TurnStretch,
@@ -154,10 +155,10 @@ import {
   transcriptRowKey,
   turnStretches,
   unreadOpeningLine,
-  WORKING_PHASE_WORDS,
   workerLines,
   workerStatusOf,
   workerToolState,
+  workingLineWords,
 } from "./agent-model.js";
 import {
   AgentPicturesProvider,
@@ -286,7 +287,8 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * names the chip that opens the skill's file (`skill-chip.tsx`), as a
  * "Loaded skill" row opens it too, hanging the same card; and while
  * the agent may still write, a shimmering line stands at the end saying
- * what it is doing, "Starting…" until its turn opens, "Thinking…" until
+ * what it is doing, "Starting…" until its turn opens, or, for an agent on a
+ * host, what its launch waits on there, "Thinking…" until
  * the turn draws its first row, and "Working…" after (`agentWorkingPhase`),
  * counting how long the run has gone where the service said when it began
  * (`working-time.tsx`), as a running worker's row counts beside its
@@ -2148,6 +2150,7 @@ function AgentTranscriptView({
   working,
   pageRuns = false,
   sessionStarting = false,
+  starting,
   rewindOut = false,
   startedAt,
   ended,
@@ -2192,6 +2195,8 @@ function AgentTranscriptView({
   pageRuns?: boolean;
   /** Whether the agent's session has not run its first turn yet, which its working line says. */
   sessionStarting?: boolean;
+  /** Where a local agent's launch stands while it starts, which its working line says in place of "Starting…"; none for one in the cloud, or where its page said none. */
+  starting?: StartingLaunch | undefined;
   /** Whether a rewind is out, which its working line says until the service answers. */
   rewindOut?: boolean;
   /** When the run under way began, which the working line counts from; none where unknown, when the line only shimmers. */
@@ -2399,9 +2404,10 @@ function AgentTranscriptView({
                 {working ? (
                   <WorkingLine
                     startedAt={startedAt}
-                    words={
-                      WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting, rewindOut)]
-                    }
+                    words={workingLineWords(
+                      agentWorkingPhase(messages, sessionStarting, rewindOut),
+                      starting,
+                    )}
                   />
                 ) : null}
                 {ended === undefined && endTrail === undefined ? null : (
@@ -2760,6 +2766,15 @@ function AgentTabView({
                     pageRuns={pageRuns}
                     rewindOut={composer.rewindOut}
                     sessionStarting={agent.status === AGENT_STATUS.STARTING}
+                    starting={
+                      transcript.launch === undefined
+                        ? undefined
+                        : {
+                            launch: transcript.launch,
+                            host: agent.mac?.name,
+                            runtime: agent.runtime,
+                          }
+                    }
                     // Note that the line counts from the lines themselves, from the press of the line that opened the turn, and while a rewind goes from its press, never from the task list's run, which a line sent does not wake.
                     startedAt={
                       !counts

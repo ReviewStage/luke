@@ -222,6 +222,7 @@ const followingDevice = (
               if (answer !== undefined && "line" in answer) service.held.add(answer.line.id);
             }),
         ),
+      lineStep: () => Effect.succeed(true),
       settleLine: (
         _deviceId: string,
         id: string,

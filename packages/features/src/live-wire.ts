@@ -384,13 +384,14 @@ export type TaskRecordLiveRows = typeof taskRecordLiveRowsSchema.Type;
  * cursor is read from, which move where the service's held read would wake
  * (`packages/service/src/agents/coder-host/transcript-live.ts`): its
  * messages, its turns, its conversation's journal revision and title, the
- * agent's title, and its workers' titles and delegations; and its newest
+ * agent's title, its workers' titles and delegations, its queue, and a
+ * device agent's newest launch line; and its newest
  * messages themselves as rows (`window`, `windowParts`), which the reader
  * draws as they arrive; to a reader that names a cursor, only those written
  * or amended past it, which it joins by message id onto the ones it holds.
  * What stands beside them on a page, the agent's
- * status, cost, and workers, is still read from the service, once the
- * turns, titles, or workers move. The service answers
+ * status, cost, workers, and where its launch stands, is still read from
+ * the service, once the turns, titles, workers, queue, or launch move. The service answers
  * `not-found` for an agent the account does not reach, and `unavailable`
  * where its deployment's Realtime is misconfigured, which the desktop
  * answers by asking again.
@@ -408,6 +409,8 @@ export const agentTranscriptLiveAnswerSchema = EffectSchema.Struct({
     windowParts: sealedLiveQuerySchema,
     /** The agent's queue as its revision, which every change to the queue moves on; absent from a service older than the queue. */
     queueRevision: EffectSchema.optionalKey(sealedLiveQuerySchema),
+    /** A device agent's newest launch line, as its claim, its step, and its settling stand; absent from a service older than it. */
+    launch: EffectSchema.optionalKey(sealedLiveQuerySchema),
   }),
 });
 
@@ -448,6 +451,17 @@ export const agentTranscriptLiveRowsSchema = EffectSchema.Struct({
   /** The agent's queue as its revision, a row at most, none before its first change and from a service older than the queue. */
   queueRevision: EffectSchema.optionalKey(
     EffectSchema.Array(EffectSchema.Struct({ revision: countedNumber })),
+  ),
+  /** A device agent's newest launch line, a row at most: its id, the step its host reported, and whether it is claimed and settled; none for an agent in the cloud and on a worker's transcript, and absent from a service older than it. */
+  launch: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      EffectSchema.Struct({
+        id: EffectSchema.String,
+        step: EffectSchema.NullOr(EffectSchema.String),
+        claimed: EffectSchema.Boolean,
+        settled: EffectSchema.Boolean,
+      }),
+    ),
   ),
 });
 

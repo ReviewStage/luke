@@ -57,6 +57,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import {
+  ACME,
   AGENT,
   ASKING_ID,
   answeredBy,
@@ -77,6 +78,7 @@ import {
   EXPIRY_ASK,
   faceKind,
   footWords,
+  GENERAL,
   handFiles,
   heldMessages,
   hoveredCard,
@@ -408,6 +410,43 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
   assert.deepEqual(viewer(), ["The form before.png", "2 of 3"]);
   key("ArrowLeft");
   assert.deepEqual(viewer(), ["The pull request tab.png", "1 of 3"]);
+});
+
+test("a picture of an item stays open in its viewer while a new thread lands in its channel, and while a channel made redraws its words", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  world.listedWorkspace = ACME;
+  const channels = (...open: (typeof GENERAL)[]) => ({
+    [ACME.id]: { rows: { open, archived: [] } },
+  });
+  world.channels = channels(GENERAL);
+  const shot = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c77";
+  const address = inboxAttachmentAddress(
+    { kind: LINK_PLACE.INBOX_ITEM, planId: BILLING.id, itemId: THRESHOLD.id },
+    shot,
+    "acme",
+  );
+  world.inboxes.set(BILLING.id, [
+    { ...saying(THRESHOLD, `![The form](${address})`), channelId: GENERAL.id },
+    RETRY,
+  ]);
+  const { page } = mount([], { chosen: ON_THRESHOLD, channels: true });
+  await settle();
+  for (const land of world.imageReads.splice(0)) land();
+  await settle();
+  const press = page.querySelector<HTMLButtonElement>('button[aria-label="Enlarge The form"]');
+  assert.ok(press, "the picture is pressed to enlarge it");
+  act(() => press.click());
+  // The channel's row moves with the thread posted, its name and link as they were.
+  act(() => world.deliverChannels(channels({ ...GENERAL, latestPostedAt: 9_000, threads: 2 })));
+  await settle();
+  const shown = () =>
+    document.querySelector<HTMLImageElement>('[role="dialog"] .luke-zoom-image')?.alt;
+  assert.equal(shown(), "The form.png", "the viewer stays open as the thread lands");
+  // A channel made is a new name the words chip, so they are drawn again whole.
+  const made = { ...GENERAL, id: "c0ffee00-0000-4000-8000-000000000002", name: "billing" };
+  act(() => world.deliverChannels(channels(GENERAL, made)));
+  await settle();
+  assert.equal(shown(), "The form.png", "the viewer stays open as its words are drawn again");
 });
 
 test("a recording an agent's words draw plays where it stands, left out of the replay, and its Expand opens the viewer a picture does, which plays it and walks on to the picture drawn with it", async () => {

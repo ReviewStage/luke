@@ -190,6 +190,7 @@ const following = (input: {
           : Effect.never,
       claimLine: (_deviceId: string, id: string) =>
         Effect.succeed(launches.find((each) => each.line.id === id)),
+      lineStep: () => Effect.succeed(true),
       // Note that the service refuses every settle, so a launch kept from an earlier run stays kept.
       settleLine: () => Effect.succeed(false),
       requests: () => Effect.never,

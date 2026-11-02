@@ -282,6 +282,7 @@ function transcriptAnswer(
     ...(page.usage === undefined ? undefined : { usage: page.usage }),
     ...(page.context === undefined ? undefined : { context: page.context }),
     ...(page.queue === undefined ? undefined : { queue: page.queue }),
+    ...(page.launch === undefined ? undefined : { launch: page.launch }),
   };
 }
 

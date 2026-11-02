@@ -95,7 +95,7 @@ export const SERVER_AGENT_HARNESS = {
  * the runner already up (`warm`), the runner launched again in a sandbox
  * still up (`relaunched`), the sandbox resumed from its snapshot first
  * (`resumed`), or a fresh sandbox opened where the snapshot was gone
- * (`fresh`). What the warm window (`CODER.RUNNER_WARM`) is tuned by.
+ * (`fresh`). What each machine's warm window (`CODER.RUNNER_WARM`) is tuned by.
  */
 export const SERVER_HANDOFF_PATH = {
   WARM: "warm",

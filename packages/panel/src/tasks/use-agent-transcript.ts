@@ -11,6 +11,7 @@ import {
 import {
   type AgentContext,
   type AgentFailure,
+  type AgentLaunch,
   type AgentPayer,
   type AgentStatus,
   type AgentSubagentStanding,
@@ -146,6 +147,8 @@ export interface AgentTranscriptControl {
   subagents: ReadonlyMap<string, AgentSubagentStanding>;
   /** The messages queued behind the agent's turn and the queue's pause, as the last page said; none while none is queued, and on a worker's. */
   queue: AgentQueue | undefined;
+  /** Where the launch a local agent waits on stands, as the last page said; none for one in the cloud, once the launch's turn opened, and on a worker's. */
+  launch: AgentLaunch | undefined;
   /** Whether a read is out, with nothing held yet to draw. */
   reading: boolean;
   /** Whether the last read did not answer, so the tab offers to try again. */
@@ -180,6 +183,7 @@ interface Held {
   delegations: ReadonlyMap<string, number>;
   subagents: ReadonlyMap<string, AgentSubagentStanding>;
   queue: AgentQueue | undefined;
+  launch: AgentLaunch | undefined;
   /** The rewind the newest page held was read at; none before a page landed or where the transcript was never rewound. */
   rewound: number | undefined;
   failed: boolean;
@@ -207,6 +211,7 @@ function fresh(transcript: AgentTranscriptKey): Held {
     delegations: new Map(),
     subagents: new Map(),
     queue: undefined,
+    launch: undefined,
     rewound: undefined,
     failed: false,
     failedWith: undefined,
@@ -301,6 +306,7 @@ function joined(was: Held, page: HeardTranscriptPage): Held {
       sameStanding,
     ),
     queue: page.queue,
+    launch: page.launch,
     failed: false,
     failedWith: undefined,
   };
@@ -465,6 +471,7 @@ export function useAgentTranscript(input: {
     delegations: held.delegations,
     subagents: held.subagents,
     queue: held.queue,
+    launch: held.launch,
     reading: shown && !held.failed && held.messages.length === 0 && writing,
     failed: held.failed,
     failedWith: held.failedWith,

@@ -22,7 +22,7 @@ import {
   storeWriter,
 } from "@luke/database/models/writer";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
-import { AGENT_PAYER, type AgentPayer } from "@luke/features/agent-wire";
+import { AGENT_MACHINE, AGENT_PAYER, type AgentPayer } from "@luke/features/agent-wire";
 import { redactCredentials } from "@luke/features/credential-redaction";
 import {
   PROVIDER_KEY_KIND,
@@ -314,18 +314,21 @@ const waitingHandedOn = (ended: RunnerEnded, sessionId: string) =>
   });
 
 /**
- * A launch's IDLE as the sandbox hears it, where the warm window is zero
- * (`CODER.RUNNER_WARM`): the warm runner retired at once
- * (`../coder-host/runner-sessions.ts`'s `runnerIdled`), so its END stops the
- * sandbox. With a window, the sweep retires it past the window instead. A
- * retire that fails is said in the log and passed over, because the sweep
- * retires the runner once its grace passes.
+ * A launch's IDLE as the sandbox hears it, where the sandbox's warm window
+ * is zero (`CODER.RUNNER_WARM`), which a device's IDLE reads too: the warm
+ * runner retired at once (`../coder-host/runner-sessions.ts`'s
+ * `runnerIdled`), so its END stops the sandbox. With a window, the sweep
+ * retires it past the window instead. A retire that fails is said in the
+ * log and passed over, because the sweep retires the runner once its grace
+ * passes.
  */
 export function sandboxAtRunnerIdle(
   idled: RunnerEnded,
 ): Effect.Effect<void, never, DatabaseServices> {
   const { sessionId } = idled;
-  if (sessionId === undefined || !Duration.isZero(CODER.RUNNER_WARM)) return Effect.void;
+  if (sessionId === undefined || !Duration.isZero(CODER.RUNNER_WARM[AGENT_MACHINE.VERCEL])) {
+    return Effect.void;
+  }
   return runnerIdled({ target: idled.target, sessionId, sequence: idled.sequence }).pipe(
     Effect.provide(FetchHttpClient.layer),
     Effect.asVoid,

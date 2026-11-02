@@ -16,7 +16,7 @@
  * eve's sandboxes are never looked at past their name, and a run still
  * going, or waiting on a wakeup (whose turn stays running), keeps its
  * sandbox. A runner still up after its run ended
- * is warm (`CODER.RUNNER_WARM`), or a newer launch a message started since:
+ * is warm (the sandbox's `CODER.RUNNER_WARM`), or a newer launch a message started since:
  * once the run has stood idle past the warm window, the sweep asks it to end
  * (`retireWarmRunner`), which a runner that took a message since declines,
  * and its END stops the sandbox. The stop is as the END's: the repository's credential taken off the firewall,
@@ -51,6 +51,7 @@ import {
 import { readNativeRunStanding } from "@luke/database/models/agent-store";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { redactCredentials } from "@luke/features/credential-redaction";
 import { TURN_FAILURE } from "@luke/features/turn-run";
 import { Cause, Data, Duration, Effect, ErrorReporter, Option, Result, type Schema } from "effect";
@@ -112,7 +113,7 @@ const NOTHING_SWEPT: NativeSandboxSweepOutcome = {
 
 const SANDBOX_ENDING = {
   STOPPED: "stopped",
-  /** Its runner was warm past `CODER.RUNNER_WARM`, and was asked to end, which its END's stop follows. */
+  /** Its runner was warm past the sandbox's `CODER.RUNNER_WARM`, and was asked to end, which its END's stop follows. */
   RETIRED: "retired",
   HELD: "held",
   FAILED: "failed",
@@ -330,14 +331,14 @@ const runEnded = (
 
 /**
  * A runner still up after its run ended, asked to end once the run has
- * stood idle past `CODER.RUNNER_WARM`, and left warm before that.
+ * stood idle past the sandbox's `CODER.RUNNER_WARM`, and left warm before that.
  * `retireWarmRunner` reads the runner again under its lease, and the runner
  * ends only where it is still warm, so a message sent since keeps it. A
  * retire Vercel did not take is left for the next sweep.
  */
 const retiredPastWarm = (api: VercelSandboxApi, sandbox: NativeSandbox, now: Date) =>
   Effect.gen(function* () {
-    const ended = yield* runEnded(sandbox, now, CODER.RUNNER_WARM);
+    const ended = yield* runEnded(sandbox, now, CODER.RUNNER_WARM[AGENT_MACHINE.VERCEL]);
     if (Option.isNone(ended)) return SANDBOX_ENDING.LEFT;
     const retired = yield* Effect.result(
       retireWarmRunner({ ...sandbox, userId: ended.value.userId }),

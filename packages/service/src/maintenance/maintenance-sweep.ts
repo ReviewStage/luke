@@ -14,6 +14,7 @@ import {
   jsonResponse,
 } from "../http/http.js";
 import type { DeviceLeaseSweepOutcome } from "./device-lease-sweep.js";
+import type { DeviceWarmSweepOutcome } from "./device-warm-sweep.js";
 import type { EveSandboxSweepOutcome } from "./eve-sandbox-sweep.js";
 import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
 import type { NativeWakeupSweepOutcome } from "./native-wakeup-sweep.js";
@@ -25,7 +26,8 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * will. A task deleted seven days ago has its conversation purged, a
  * turn whose end eve never told the relay is settled as
  * abandoned, a local agent's open run is taken from a device that stopped
- * beating for its lease, its turn ended naming the device, the Vercel
+ * beating for its lease, its turn ended naming the device, a local agent's
+ * runner left warm past its device's window is retired, the Vercel
  * Sandboxes of the eve sessions Fullspin let go of are deleted, a coding agent's
  * sandbox no developer's terminal holds any more is stopped, a native
  * agent's sandbox whose run ended and no terminal holds is stopped where the
@@ -47,7 +49,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
-/** The nineteen sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The eighteen sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -55,6 +57,8 @@ interface MaintenanceSweeps {
   sweepAbandonedTurns: (now: number) => SweepRead<number>;
   /** Takes every open launch of the devices that have not beaten within their lease from them, a sweep's worth, its turn ended naming the device. */
   sweepDeviceLeases: (now: number) => SweepRead<DeviceLeaseSweepOutcome>;
+  /** Retires the local agents' runners left warm past their device's window, or past its grace on a host waiting to update, a sweep's worth. */
+  sweepDeviceWarmRunners: (now: number) => SweepRead<DeviceWarmSweepOutcome>;
   /** Deletes the Vercel Sandboxes of the next eve sessions queued for it, a sweep's worth. */
   sweepSandboxes: (now: number) => SweepRead<SessionSandboxSweepOutcome>;
   /** Stops the coding agents' sandboxes whose terminal lease lapsed past its grace, a sweep's worth. */
@@ -86,7 +90,7 @@ interface MaintenanceSweeps {
 }
 
 /**
- * How a run is told to the sweep's cron monitor: around the nineteen sweeps once
+ * How a run is told to the sweep's cron monitor: around the eighteen sweeps once
  * the call is the cron's own. A call that is not the cron's, or one a
  * deployment without its secret cannot authenticate, is not a run and tells
  * it nothing, so a stranger cannot report a run that failed.
@@ -109,6 +113,8 @@ interface MaintenanceSweepAnswer {
   abandoned: Swept<number>;
   /** What the sweep over the devices whose lease lapsed did. */
   deviceLeases: Swept<DeviceLeaseSweepOutcome>;
+  /** What the sweep over the local agents' warm runners did. */
+  deviceWarmRunners: Swept<DeviceWarmSweepOutcome>;
   /** What the sweep over the queued sessions' sandboxes did. */
   sandboxes: Swept<SessionSandboxSweepOutcome>;
   /** What the sweep over the lapsed terminal leases did. */
@@ -165,7 +171,7 @@ const isolated = <A>(name: string, sweep: SweepRead<A>): SweepRead<Swept<A>> =>
     ),
   );
 
-/** The nineteen sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
+/** The eighteen sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
 const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
   sweeps: MaintenanceSweeps,
 ): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
@@ -174,6 +180,10 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     purged: yield* isolated("purgeCleared", sweeps.purgeCleared(now)),
     abandoned: yield* isolated("sweepAbandonedTurns", sweeps.sweepAbandonedTurns(now)),
     deviceLeases: yield* isolated("sweepDeviceLeases", sweeps.sweepDeviceLeases(now)),
+    deviceWarmRunners: yield* isolated(
+      "sweepDeviceWarmRunners",
+      sweeps.sweepDeviceWarmRunners(now),
+    ),
     sandboxes: yield* isolated("sweepSandboxes", sweeps.sweepSandboxes(now)),
     terminals: yield* isolated("sweepTerminalLeases", sweeps.sweepTerminalLeases(now)),
     nativeSandboxes: yield* isolated("sweepNativeSandboxes", sweeps.sweepNativeSandboxes(now)),

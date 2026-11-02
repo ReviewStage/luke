@@ -824,6 +824,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
         assert.deepEqual(Object.keys(answer.queries).toSorted(), [
           "agent",
           "conversation",
+          "launch",
           "messages",
           "queueRevision",
           "turns",

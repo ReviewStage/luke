@@ -21,7 +21,8 @@ import { wireUuidSchema } from "./service-wire.js";
  * so a new agent's paths follow the account and the CLI follows each app
  * update; it beats its presence while it runs local agents, which is what
  * offers This Mac at Start; it holds a read for its lines and one for its
- * requests, each answered as soon as one waits, claims each by its id, and
+ * requests, each answered as soon as one waits, claims each by its id, says
+ * which step a launch it claimed has reached (`DEVICE_LAUNCH_STEP`), and
  * settles a line or answers a request. Its register and its beats say which
  * harnesses the Mac is signed in to itself (`deviceSignedInSchema`), which a
  * local agent's launch prefers to the account's saved credential. Claiming a launch line hands its
@@ -60,6 +61,29 @@ export const DEVICE_AGENT_LINE_KIND = {
 
 export type DeviceAgentLineKind =
   (typeof DEVICE_AGENT_LINE_KIND)[keyof typeof DEVICE_AGENT_LINE_KIND];
+
+/**
+ * Where a host's launch of a local agent stands, as the host reports it on
+ * the launch line it claimed (`deviceAgentStepRequestSchema`), in the order
+ * a launch passes them, which is the order a report moves the line's step
+ * along and never back. The agent's transcript words what it waits on from
+ * it until the harness's first event opens its turn. A step travels as one
+ * word of this set and never as free text, so no path, command's output, or
+ * credential rides with it.
+ */
+export const DEVICE_LAUNCH_STEP = {
+  /** The agent's folder made, its GitHub token fetched, and its Git set up. */
+  PREPARING: "preparing",
+  /** The agent's repository being made, where its folder holds none. */
+  FETCHING: "fetching",
+  /** The runner, and the harness it runs, Claude Code or Codex, starting. */
+  STARTING: "starting",
+} as const;
+
+export type DeviceLaunchStep = (typeof DEVICE_LAUNCH_STEP)[keyof typeof DEVICE_LAUNCH_STEP];
+
+/** A launch's steps in the order a launch passes them. */
+export const DEVICE_LAUNCH_STEPS: readonly DeviceLaunchStep[] = Object.values(DEVICE_LAUNCH_STEP);
 
 /** What one of an agent's tools asks of its Mac. */
 export const DEVICE_AGENT_REQUEST_KIND = {
@@ -484,6 +508,19 @@ export const deviceAgentSettleRequestSchema = EffectSchema.Struct({
   exitCode: EffectSchema.optionalKey(EffectSchema.Int),
   /** Why a launch was settled unstarted, where the device names why; a device from before it names none. */
   refusal: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_LAUNCH_REFUSAL))),
+});
+
+/**
+ * A launch line's step reported: its id, and where the host's launch of it
+ * stands now (`DEVICE_LAUNCH_STEP`). The service keeps it only on a launch
+ * line of the device's it claimed and has not settled, and only where it
+ * moves the line's step forward, so a report that lands late never takes it
+ * back.
+ */
+export const deviceAgentStepRequestSchema = EffectSchema.Struct({
+  ...deviceField,
+  id: wireUuidSchema,
+  step: EffectSchema.Literals(DEVICE_LAUNCH_STEPS),
 });
 
 /** A request answered: its id, and the answer of its kind, a read's bytes in base64. */

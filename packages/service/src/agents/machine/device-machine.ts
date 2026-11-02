@@ -27,7 +27,8 @@
  * their order of commit and only the lease keeps two from interleaving
  * (`device-agent-store.ts`'s header). The other calls queue no line: the Mac
  * has no firewall Fullspin sets, so `setCredential` does nothing, and nothing
- * to stop, resume, or throw away, since a warm runner ends by itself at its
+ * to stop, resume, or throw away, since a warm runner is retired past its
+ * window (`../../maintenance/device-warm-sweep.ts`), or ends by itself at its
  * idle cap, settling its line; the agent's folder goes from its device only
  * once the agent is archived (`../device-discard.ts`).
  *
