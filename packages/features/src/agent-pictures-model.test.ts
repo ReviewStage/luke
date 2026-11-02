@@ -46,6 +46,14 @@ test("a shown set is each picture the call asked for, with what it was kept as o
   ]);
 });
 
+test("one picture shown bare, its path and caption with no list around them, is a set of that one", () => {
+  const input = { path: "artifacts/members.png", caption: "Members page" };
+
+  assert.deepEqual(shownPicturesOf(input, { status: "accepted", pictures: [MEMBERS] }), [
+    { picture: MEMBERS, name: "members", caption: "Members page" },
+  ]);
+});
+
 test("an integration's answer names its kept pictures and the ones it left out, by the remote tool, and an image resource's too", () => {
   const answer = [
     { type: "text", text: "2 images extracted from NW-482" },

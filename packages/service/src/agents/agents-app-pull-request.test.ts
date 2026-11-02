@@ -35,6 +35,7 @@ import {
   AGENT_PULL_REQUEST_VIEWED,
   type Answer,
   countedFor,
+  countedWith,
   openTask,
   PUBLISHED,
   PULL_REQUEST_NODE_ID,
@@ -450,6 +451,12 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
             ["dequeuePullRequest", { id }],
           ],
         );
+        // Only the merge and each auto-merge turned on are counted, under the member; turning it off and leaving the queue are not.
+        assert.deepEqual(countedWith(other, SERVER_EVENT.PULL_REQUEST_ACTION), [
+          { action: "merge" },
+          { action: "auto_merge" },
+          { action: "auto_merge" },
+        ]);
       }),
   );
 
@@ -489,6 +496,9 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
             ["updatePullRequest", { id, title: "Expire invitations weekly" }],
           ],
         );
+        assert.deepEqual(countedWith(other, SERVER_EVENT.PULL_REQUEST_ACTION), [
+          { action: "close" },
+        ]);
       }),
   );
 
@@ -970,6 +980,10 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
             },
           ],
           ["add", { id: PULL_REQUEST_NODE_ID, event: "APPROVE" }],
+        ]);
+        // The review GitHub took is counted, and the one it refused is not.
+        assert.deepEqual(countedWith(other, SERVER_EVENT.PULL_REQUEST_ACTION), [
+          { action: "review" },
         ]);
         assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
       }),

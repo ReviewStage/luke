@@ -765,20 +765,26 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       }),
   );
 
-  it.effect("every tool declares the most of its result Claude Code takes whole", () =>
-    Effect.gen(function* () {
-      const fetch = yield* standing;
-      const agent = yield* agentWithBearer;
-      const client = yield* connected(fetch, agent.bearer);
+  it.effect(
+    "every tool declares the most of its result Claude Code takes whole, and only the ones called on almost every run load from the first turn",
+    () =>
+      Effect.gen(function* () {
+        const fetch = yield* standing;
+        const agent = yield* agentWithBearer;
+        const client = yield* connected(fetch, agent.bearer);
 
-      const listed = yield* Effect.promise(() => client.listTools());
-      yield* Effect.promise(() => client.close());
+        const listed = yield* Effect.promise(() => client.listTools());
+        yield* Effect.promise(() => client.close());
 
-      assert.ok(listed.tools.length > 0);
-      for (const tool of listed.tools) {
-        assert.equal(tool._meta?.["anthropic/maxResultSizeChars"], 500_000, tool.name);
-      }
-    }),
+        assert.ok(listed.tools.length > 0);
+        for (const tool of listed.tools) {
+          assert.equal(tool._meta?.["anthropic/maxResultSizeChars"], 500_000, tool.name);
+        }
+        const loaded = (name: string) =>
+          listed.tools.find((tool) => tool.name === name)?._meta?.["anthropic/alwaysLoad"];
+        assert.equal(loaded("edit_plan"), true);
+        assert.equal(loaded("look_at_picture"), undefined);
+      }),
   );
 
   it.effect("show_page reads the page the agent names by its path from the agent's sandbox", () =>

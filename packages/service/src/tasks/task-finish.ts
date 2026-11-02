@@ -6,10 +6,12 @@ import {
   finishTaskWork,
   type TaskArchivedAgent,
 } from "@luke/database/models/task-store";
+import { TASK_STATUS } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { Effect, Option } from "effect";
 import { idleStandingAgents, standsStopped } from "../agents/coder-host/stop.js";
 import { discardedOrLogged } from "../agents/device-discard.js";
+import { recordServerEvent, SERVER_EVENT, SERVER_TASK_FINISHER } from "../events/server-events.js";
 
 /**
  * task-finish.ts -- a task's status following its work: done once the work is finished, in progress again once an agent takes it up.
@@ -65,6 +67,18 @@ function logged<A>(what: string, move: Effect.Effect<A, unknown, DatabaseService
   );
 }
 
+/** A finish counted under the account it was made for, where the task moved. */
+function finishCounted<E, R>(userId: string, finish: Effect.Effect<boolean, E, R>) {
+  return Effect.flatMap(finish, (moved) =>
+    moved
+      ? recordServerEvent(SERVER_EVENT.TASK_FINISH, userId, {
+          status: TASK_STATUS.DONE,
+          by: SERVER_TASK_FINISHER.MERGE,
+        })
+      : Effect.void,
+  );
+}
+
 /** The agents a task's Done archived let go of on their devices, under the members who started them; each failure logged. */
 function letGo(archived: readonly TaskArchivedAgent[]) {
   return Effect.forEach(archived, discardedOrLogged, { discard: true });
@@ -75,7 +89,10 @@ export function settleTaskIfFinished(
   userId: string,
   taskId: string,
 ): Effect.Effect<void, never, DatabaseServices> {
-  return logged("a task's finish", finishTaskWork(userId, taskId, standsStopped));
+  return logged(
+    "a task's finish",
+    finishCounted(userId, finishTaskWork(userId, taskId, standsStopped)),
+  );
 }
 
 /**
@@ -115,8 +132,8 @@ export function settleAgentTaskIfFinished(
     "a task's finish",
     Effect.flatMap(readAgent(userId, agentId), (agent) =>
       Option.isSome(agent) && agent.value.taskId !== null
-        ? finishTaskWork(userId, agent.value.taskId, standsStopped)
-        : Effect.succeed(false),
+        ? finishCounted(userId, finishTaskWork(userId, agent.value.taskId, standsStopped))
+        : Effect.void,
     ),
   );
 }

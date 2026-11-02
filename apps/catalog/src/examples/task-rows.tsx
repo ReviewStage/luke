@@ -8,12 +8,13 @@ import {
 import {
   AVATAR_SIZE,
   Avatar,
-  Badge,
   BlockedMark,
+  BUTTON_SIZE,
   CHIP_LOOK,
   CHIP_SIZE,
   Chip,
   ChipName,
+  IconButton,
   type ListRowNest,
   type MenuEntry,
   PencilIcon,
@@ -22,6 +23,7 @@ import {
   RELATED_TASK_CELLS,
   STATUS_TONE,
   TASK_ROW_CELL,
+  TASK_ROW_EDGES,
   TaskPriorityMark,
   TaskRow,
   TaskRowDraft,
@@ -33,23 +35,35 @@ import {
   TrashIcon,
   UnassignedAvatar,
 } from "@luke/ui";
-import { useState } from "react";
+import { GLYPH, HandIcon, OctagonMinusIcon } from "@luke/ui/icons";
+import { type ReactNode, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * task-rows.tsx -- a task's related tasks as a list of their own: each row
- * as the Tasks page's List draws it, its priority, key, and status before
- * its name, its assignee and its open pull requests after it, then the
- * relation's kind and its ⋯; a blocked task wearing its stop sign beside its
- * name and a parent its count of finished sub-tasks; one row nested under another that folds it,
- * rows chosen by their box, ⌘-click, and ⇧-click, and a menu their ⋯, a
- * right-click, and the menu key open; and a quick add's draft raised as a
- * card over a row, its chips in their cells. Synthetic tasks.
+ * as the Tasks page's List draws it, led by the relation's kind in words so
+ * it reads as a sentence, an open blocker's in the attention tone, then its
+ * priority, key, and status before its name, its assignee and its open pull
+ * requests after it, and its ⋯; a blocked task wearing its stop sign beside
+ * its name and a parent its count of finished sub-tasks; one row nested
+ * under another that folds it, rows chosen by their box, ⌘-click, and
+ * ⇧-click, and a menu their ⋯, a right-click, and the menu key open; a
+ * composer's dock of related tasks, bare of a box's gutter and a ⋯, its
+ * rows' kinds leading and their × at their ends; and a quick add's draft
+ * raised as a card over a row, its chips in their cells. Synthetic tasks.
  */
 
 /** Does nothing: the catalog's menus act on nothing. */
 function ignore(): void {}
+
+/** How a related task stands to the list's task, by its words and its icon. */
+const RELATION_KIND = {
+  BLOCKED_BY: { words: "Blocked by", icon: <OctagonMinusIcon aria-hidden="true" /> },
+  BLOCKS: { words: "Blocks", icon: <HandIcon aria-hidden="true" /> },
+} as const;
+
+type RelationKind = (typeof RELATION_KIND)[keyof typeof RELATION_KIND];
 
 /** One synthetic task, as a row draws it. */
 interface CatalogTask {
@@ -60,7 +74,8 @@ interface CatalogTask {
   readonly status: TaskStatus;
   readonly assignee: string | undefined;
   readonly pullRequests: readonly number[];
-  readonly kind: string;
+  /** How it stands to the list's task; none for a row nested under another, which stands to its parent. */
+  readonly kind?: RelationKind;
   /** Whether another task it waits on is still open. */
   readonly blocked?: boolean;
   /** How many of its sub-tasks are finished, of all of them. */
@@ -75,7 +90,7 @@ const PARENT: CatalogTask = {
   status: TASK_STATUS.IN_PROGRESS,
   assignee: "Ada Lovelace",
   pullRequests: [612],
-  kind: "Blocks",
+  kind: RELATION_KIND.BLOCKED_BY,
   blocked: true,
   subTasks: { finished: 1, total: 3 },
 };
@@ -88,7 +103,6 @@ const CHILD: CatalogTask = {
   status: TASK_STATUS.TODO,
   assignee: undefined,
   pullRequests: [615, 611],
-  kind: "Child",
 };
 
 const RELATED: CatalogTask = {
@@ -99,7 +113,7 @@ const RELATED: CatalogTask = {
   status: TASK_STATUS.BACKLOG,
   assignee: "Grace Hopper",
   pullRequests: [],
-  kind: "Related",
+  kind: RELATION_KIND.BLOCKS,
 };
 
 /** A task's own menu. */
@@ -137,6 +151,38 @@ function PullRequest({ number }: { number: number }): React.JSX.Element {
   );
 }
 
+/** A relation's kind as the compact pill that leads its row, by its icon, its words, and a chevron; in the attention tone for a blocker still open. */
+function RelationPill({
+  kind,
+  open = false,
+}: {
+  kind: RelationKind;
+  open?: boolean;
+}): React.JSX.Element {
+  return (
+    <Chip
+      look={CHIP_LOOK.PILL}
+      size={CHIP_SIZE.COMPACT}
+      tone={open ? STATUS_TONE.ATTENTION : undefined}
+      chevron
+      aria-label={`Relation: ${kind.words}`}
+      onClick={ignore}
+    >
+      {kind.icon}
+      <ChipName>{kind.words}</ChipName>
+    </Chip>
+  );
+}
+
+/** A task's key, in the caption's muted ink. */
+function Key({ task }: { task: CatalogTask }): React.JSX.Element {
+  return (
+    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+      {task.key}
+    </Text>
+  );
+}
+
 /** One task's row, nested and folding as said, and read at its place among its siblings. */
 function CatalogTaskRow({
   task,
@@ -159,11 +205,11 @@ function CatalogTaskRow({
         [TASK_ROW_CELL.PRIORITY]: (
           <MarkChip mark={<TaskPriorityMark priority={task.priority} />} words={task.priority} />
         ),
-        [TASK_ROW_CELL.KEY]: (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {task.key}
-          </Text>
-        ),
+        [TASK_ROW_CELL.RELATION]:
+          task.kind === undefined ? null : (
+            <RelationPill kind={task.kind} open={task.kind === RELATION_KIND.BLOCKED_BY} />
+          ),
+        [TASK_ROW_CELL.KEY]: <Key task={task} />,
         [TASK_ROW_CELL.STATUS]: (
           <MarkChip mark={<TaskStatusMark status={task.status} />} words={task.status} />
         ),
@@ -184,7 +230,6 @@ function CatalogTaskRow({
               label={`${task.subTasks.finished} of ${task.subTasks.total} sub-tasks finished`}
             />
           ),
-        [TASK_ROW_CELL.END]: <Badge tone={STATUS_TONE.NEUTRAL}>{task.kind}</Badge>,
       }}
       menu={{ thing: "Task", groups: taskMenu(task.name) }}
       onOpen={ignore}
@@ -216,6 +261,59 @@ function RelatedTasks(): React.JSX.Element {
   );
 }
 
+/** The cells a composer's dock draws of each related task: its relation, key, status, name, and the × that takes it away. */
+const DOCK_CELLS = [
+  TASK_ROW_CELL.RELATION,
+  TASK_ROW_CELL.KEY,
+  TASK_ROW_CELL.STATUS,
+  TASK_ROW_CELL.END,
+] as const;
+
+/** One related task in a composer's dock: bare of a box and a ⋯, its kind leading and its × at its end. */
+function DockRow({ task, remove }: { task: CatalogTask; remove: ReactNode }): React.JSX.Element {
+  return (
+    <TaskRow
+      taskId={task.id}
+      name={task.name}
+      cells={DOCK_CELLS}
+      edges={TASK_ROW_EDGES.BARE}
+      content={{
+        [TASK_ROW_CELL.RELATION]:
+          task.kind === undefined ? null : <RelationPill kind={task.kind} />,
+        [TASK_ROW_CELL.KEY]: <Key task={task} />,
+        [TASK_ROW_CELL.STATUS]: (
+          <MarkChip mark={<TaskStatusMark status={task.status} />} words={task.status} />
+        ),
+        [TASK_ROW_CELL.END]: remove,
+      }}
+      onOpen={ignore}
+    />
+  );
+}
+
+/** A composer's dock of the tasks a new task will be related to, each row bare, its first cell at its inset and its × at its end. */
+function ComposerDock(): React.JSX.Element {
+  const [docked, setDocked] = useState<readonly CatalogTask[]>([PARENT, RELATED]);
+  return (
+    <TaskRows label="Related tasks" cells={DOCK_CELLS} edges={TASK_ROW_EDGES.BARE}>
+      {docked.map((task) => (
+        <DockRow
+          key={task.id}
+          task={task}
+          remove={
+            <IconButton
+              icon={<GLYPH.CLOSE />}
+              label={`Remove ${task.name}`}
+              size={BUTTON_SIZE.COMPACT}
+              onClick={() => setDocked((was) => was.filter((each) => each.id !== task.id))}
+            />
+          }
+        />
+      ))}
+    </TaskRows>
+  );
+}
+
 /** A quick add's draft over a row, its chips standing in their cells. */
 function DraftOverRow(): React.JSX.Element {
   return (
@@ -243,8 +341,14 @@ function DraftOverRow(): React.JSX.Element {
 function TaskRowsExample(): React.JSX.Element {
   return (
     <>
-      <CatalogSection id="task-rows" title="A task's related tasks, one nested">
+      <CatalogSection
+        id="task-rows"
+        title="A task's related tasks, led by their relations, one nested"
+      >
         <RelatedTasks />
+      </CatalogSection>
+      <CatalogSection id="task-rows-dock" title="A composer's dock of related tasks, bare">
+        <ComposerDock />
       </CatalogSection>
       <CatalogSection id="task-row-draft" title="A quick add's draft over a row">
         <DraftOverRow />

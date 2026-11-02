@@ -263,6 +263,14 @@ service stores its name and when you pinned it under your account, so the pin
 follows you to every Mac you sign in on. Unpinning deletes that record, and
 deleting your account removes them all.
 
+**Renamed repositories.** So that a task, an agent, an automation, or a pin
+keeps its repository when you rename or transfer it on GitHub, our service
+keeps each repository's GitHub id with the name GitHub last gave it, as
+GitHub's deliveries to the Vespin GitHub App and its answers name them, and
+moves every stored name of a repository to its new one when GitHub reports
+it. That record names no account and holds nothing else; it is not removed
+with an account.
+
 **Sidebar sections.** When you make a section in the sidebar, our service
 stores its title, its icon (an emoji, or an icon's name and the color you
 chose for it), its place among your sections, and the workspace
@@ -684,13 +692,13 @@ conversation. Vespin
 on your Mac reads a page's HTML from our service only to draw it, in its tab
 or in the card over its tab, its row, or a chip naming it, holds it in
 memory only, and never passes it to the rest of the panel. Vespin in a
-browser draws a page in the same places, loading it from fullspin.page, a
+browser draws a page in the same places, loading it from vespin.page, a
 domain of ours kept apart from the app's own so that a page never shares a
 site with your account. As the page loads, our service makes a link to it for
 your account: the link names your account's id, the page, and its version,
 works for one minute, and is signed so that nothing but our service can make
 one. Our service keeps no record of the link; Vercel's request log records its
-address, as it records every request's. Nothing on fullspin.page sets or
+address, as it records every request's. Nothing on vespin.page sets or
 reads a cookie. A page runs sealed
 off from Vespin: it cannot read the panel, your account, or another page, and
 cannot store anything, open a window, or send anything anywhere but the
@@ -1587,7 +1595,10 @@ keeps beside it, and whether it may send, under `luke_app_replay` and
 `luke_app_replay_consent`, apart from the site's own counting. A connect
 started there, such as connecting GitHub, keeps in its tab's session storage a
 random id naming the connect, or the address it left from, until the page it
-lands on, or the app opened again in that tab, lets go of it. Our service
+lands on, or the app opened again in that tab, lets go of it. A sign-in
+started there keeps in its tab's session storage a mark that it left for the
+provider, until the page it comes back to lets go of it, so that page counts
+the sign-in once. Our service
 keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and an agent's changes are held in a Vercel Sandbox and

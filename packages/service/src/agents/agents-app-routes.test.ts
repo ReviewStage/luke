@@ -19,6 +19,7 @@ import { keepConversationPicture } from "@luke/database/models/conversation-pict
 import { rewindConversation } from "@luke/database/models/conversation-rewind";
 import { registerDevice } from "@luke/database/models/device-store";
 import { childConversationId } from "@luke/database/models/ids";
+import { sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
 import { createTask } from "@luke/database/models/task-store";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
@@ -79,6 +80,7 @@ import {
   TURN_ORIGIN,
   TURN_TRIGGER,
 } from "../core.js";
+import { SERVER_EVENT } from "../events/server-events.js";
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -91,7 +93,7 @@ import {
   AGENT_PULL_REQUEST_ACTION,
   AGENT_PULL_REQUEST_VIEWED,
   type Answer,
-  deploymentFor,
+  countedWith,
   drivenWhileStarting,
   fakeEve,
   freshInstallation,
@@ -132,6 +134,7 @@ import {
   githubReaching,
   openGithubUser,
 } from "../testing/github-app-fake.js";
+import { harnessFor } from "../testing/native-harness-fake.js";
 import { CODER } from "./coder-host/bounds.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { EVE_HOST_TURN } from "./eve-host/bounds.js";
@@ -289,7 +292,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a Start with no choice runs on the account's default, snapshots the plan as Copy would, and opens the session as the developer with the snapshot first",
+    "a Start with no choice runs on the account's default, snapshots the plan as Copy would, and opens the session through its harness acting for the developer with the snapshot first, named by the line it stands as",
     () =>
       Effect.gen(function* () {
         const { owner, task, eve, ask } = yield* openTask();
@@ -315,24 +318,27 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(stored.value.planSnapshot, SNAPSHOT);
         assert.equal(stored.value.prompt, null);
         assert.equal(stored.value.repository, RELAY_FULL_NAME);
+        const lineId = eve.opened[0]?.message.lineId ?? "";
         assert.deepEqual(eve.opened, [
           {
-            authorization: `Bearer ${owner}`,
+            authorization: harnessFor(owner),
             message: {
               conversationId: stored.value.conversationId,
               turn: EVE_HOST_TURN.TYPED,
               message: SNAPSHOT,
+              lineId,
             },
             sessionId: eve.opened[0]?.sessionId ?? "",
           },
         ]);
+        assert.equal(yield* sentLineStands(owner, stored.value.conversationId, lineId), true);
         // The default stands: nothing was chosen.
         assert.equal(yield* readAccountPreferences(owner), undefined);
       }),
   );
 
   it.effect(
-    "a task's start naming an agent makes the task with an empty plan and starts the agent on it with the prompt, opening its session as the developer, reaching the repository on GitHub once for both, and answers the task in progress",
+    "a task's start naming an agent makes the task with an empty plan and starts the agent on it with the prompt, opening its session through its harness acting for the developer, reaching the repository on GitHub once for both, and answers the task in progress",
     () =>
       Effect.gen(function* () {
         const { owner, task, eve, installation, github, ask } = yield* openTask();
@@ -376,7 +382,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(agent.status, AGENT_STATUS.STARTING);
         assert.deepEqual(
           eve.opened.map((opened) => [opened.authorization, opened.message.message]),
-          [[`Bearer ${owner}`, prompt]],
+          [[harnessFor(owner), prompt]],
         );
         assert.deepEqual(reachRequests(github.sent.slice(asked), installation.id), {
           installationReads: 1,
@@ -388,7 +394,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "over a browser's session cookie an agent's Start and a task's start naming an agent open the session as the deployment acting for the cookie's account, which no other account's cookie reaches",
+    "over a browser's session cookie an agent's Start and a task's start naming an agent open the session through its harness acting for the cookie's account, which no other account's cookie reaches",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, eve, ask } = yield* openTask();
@@ -438,8 +444,8 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.deepEqual(
           eve.opened.map((opened) => [opened.authorization, opened.message.message]),
           [
-            [deploymentFor(owner), SNAPSHOT],
-            [deploymentFor(owner), prompt],
+            [harnessFor(owner), SNAPSHOT],
+            [harnessFor(owner), prompt],
           ],
         );
       }),
@@ -512,6 +518,11 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(started.agent, undefined);
         assert.deepEqual(started.agentRefusal, { error: HOSTED_API_ERROR.UNAVAILABLE });
         assert.equal(opened.status, HOSTED_HTTP_STATUS.OK);
+        // The Start that failed is counted under the member as a failure of its own, and not as a start.
+        assert.deepEqual(countedWith(owner, SERVER_EVENT.AGENT_START_FAIL), [
+          { failure: "unreachable", started_by: "member", agent_kind: "coder" },
+        ]);
+        assert.deepEqual(countedWith(owner, SERVER_EVENT.AGENT_START), []);
       }),
   );
 

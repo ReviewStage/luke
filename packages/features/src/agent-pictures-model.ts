@@ -55,12 +55,26 @@ function fileName(path: string): string {
   return dot > 0 ? base.slice(0, dot) : base;
 }
 
+/**
+ * A `show_image` call's input as a list of pictures: one given bare, a path
+ * with no list around it, is read as a list of that one, as the service
+ * shows it and the transcript draws it. Note that this is read here rather
+ * than in the schema, because the schema is what the model is shown and a
+ * list is what it should send.
+ */
+export function asPictureList(input: UnparsedWireValue): UnparsedWireValue {
+  return isRecord(input) && input.images === undefined && input.path !== undefined
+    ? { images: [input] }
+    : input;
+}
+
 /** The pictures a `show_image` call showed, in order: each as the call asked for it, and as it was kept where the call answered. */
 export function shownPicturesOf(
   input: UnparsedWireValue,
   output: UnparsedWireValue,
 ): readonly ShownPicture[] {
-  const asked = isRecord(input) && Array.isArray(input.images) ? input.images : [];
+  const list = asPictureList(input);
+  const asked = isRecord(list) && Array.isArray(list.images) ? list.images : [];
   const kept = isRecord(output) && Array.isArray(output.pictures) ? output.pictures : [];
   return asked.flatMap((image: WireValue, index: number) => {
     if (!isRecord(image) || !isWireString(image.path)) return [];

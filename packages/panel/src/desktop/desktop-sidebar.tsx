@@ -2227,7 +2227,7 @@ function SidebarColumn({
       <div className="desktop-drag-strip" />
       <HistoryButtons history={history} room={room} />
       {/* The workspace heads the sidebar once one is read, as everything under it is that
-          workspace's; Fullspin's own head stands until then. */}
+          workspace's; the app's own head stands until then. */}
       {tasks.signedIn && tasks.workspace !== undefined ? (
         <WorkspaceSwitcher tasks={tasks} inSight={overlay.inSight} />
       ) : (
@@ -2435,7 +2435,7 @@ function SidebarColumn({
       />
       {sectionDialogs.dialog}
       {selection.dialog}
-      {/* Last, so the drag strip above Fullspin does not take the edge's top from it. */}
+      {/* Last, so the drag strip above the app's head does not take the edge's top from it. */}
       {sidebar.collapsed ? null : <ResizeEdge edge={edge} />}
     </PanePin>
   );

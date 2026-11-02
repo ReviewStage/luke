@@ -230,6 +230,25 @@ it.layer(getTestDB())("show_image", (it) => {
     }),
   );
 
+  it.effect("one picture given bare, its path and caption with no list around them, is shown", () =>
+    Effect.gen(function* () {
+      const target = yield* openConversation;
+      const sandbox = sandboxWith({ [`${CHECKOUT}/shots/members.png`]: pngBytes(1200, 720) });
+
+      const answer = readShown(
+        yield* show(
+          { target, sandbox, checkout: CHECKOUT },
+          { path: "shots/members.png", caption: "Members page" },
+        ),
+      );
+
+      assert.deepEqual(
+        answer.pictures.map(({ width, height }) => [width, height]),
+        [[1200, 720]],
+      );
+    }),
+  );
+
   it.effect(
     "a call of no images, or of more than a set may hold, is refused in the tool's words",
     () =>

@@ -243,8 +243,25 @@ whose rows stand on it, of whichever account, at most ten, newest first, and
 each one's pull request is read again from GitHub on a token minted on its
 task's workspace installation through `agentPublished`, as the agent's tab
 reads it, which writes the row.
-A redelivery reads the same again. GitHub's `ping` and any other event are
-answered and ignored. An `installation` delivery, which GitHub sends every
+A redelivery reads the same again. Before any of that, the repository a
+delivery names is recorded by GitHub's id under the name it carries
+(`github_repository`, `@luke/database/models/github-repositories`); where
+GitHub gives the id another name than it was last seen under, every stored
+name of it (tasks, agents, automations, pins, token reads, chapters, and
+workspace token repositories) moves to the new one in the same transaction,
+so the agents and tasks the delivery is matched to are found after a rename
+or a transfer. A delivery older than the one the id was last seen in, by the
+repository's own `updated_at`, moves nothing back, since GitHub delivers
+late and redelivers. Every reach records the id under the name it reached,
+too, so a delivery under a new name finds what a start or a turn wrote under
+the old one. A `repository` delivery is read for that alone: its `renamed`
+and `transferred` actions name the name it had, so a repository renamed
+before the service ever saw it is relabeled too. The App must subscribe to
+the Repository event for those, a setting of the App on GitHub; without it,
+the next reach of the old name, which GitHub answers with a redirect to the
+new one on whichever of the workspace's installations reaches it now
+(`github-app.ts`), does the same. GitHub's `ping` and any other event are answered and
+ignored. An `installation` delivery, which GitHub sends every
 App unsubscribed, moves the status of its workspace's `github_installation`
 row: `deleted` to deleted, `suspend` to suspended, `unsuspend` back to active;
 `GET /api/workspaces` then carries that workspace's `github.active` as false,

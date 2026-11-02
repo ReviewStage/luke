@@ -884,12 +884,14 @@ export const UPDATE_TASK_TOOL = {
     "Change a task of your workspace by its id, as the developer's own task menu would, on behalf " +
     "of the developer you work for: rename it, set or clear its repository, set where it stands " +
     "(its status) or how much it matters (its priority), assign it to a member of the " +
-    "workspace or to no one, pin or unpin it in their sidebar, put it under a parent task or " +
+    "workspace or to no one, pin or unpin it in their sidebar, move it into one of their sidebar " +
+    "sections or back out of it (sectionId), put it under a parent task or " +
     "take it out from under one, or add and take away the tasks " +
     "it is blocked by and the tasks it blocks; name at least one change, " +
     "and several go in one call. Mark a task whose work is " +
     "done Done, with status done, as the menu's Mark done does, such as one whose pull requests " +
-    "merged, or one the developer asked you to clean up; never a teammate's " +
+    "merged, or one the developer asked you to clean up; it is refused while a thread of the task " +
+    `holds an ask open, so withdraw those you no longer need with ${AGENT_TOOL.WITHDRAW_ASK} first; never a teammate's ` +
     "task still in use unless the developer asked for it. A task is never archived: a settled " +
     `one stands Done or Canceled, which ${AGENT_TOOL.LIST_TASKS} lists by status. A block is ` +
     "Linear's: the blocker's work comes first and the task it blocks waits on it, as one child " +
@@ -2196,7 +2198,7 @@ export function runUpdateTask(
         // A move to Done archives the task's idle agents with it, as this agent for its member.
         const updated =
           Object.keys(asWritten).length === 0
-            ? Option.some({ task: read.value.task, archived: [] })
+            ? Option.some({ task: read.value.task, archived: [], statusMoved: false })
             : yield* updateTaskCommitted(userId, taskId, asWritten, undefined, {
                 archivedBy: archiverOf(caller, undefined),
                 idle: idleStandingAgents,

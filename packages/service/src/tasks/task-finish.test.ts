@@ -15,6 +15,7 @@ import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/w
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Result } from "effect";
 import { idleStandingAgents } from "../agents/coder-host/stop.js";
+import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { answerInboxAsk, INBOX_ASK_ANSWER, postInboxThread } from "../inbox/inbox-store.js";
 import { reopenTaskForWork, settleTaskAfterTurn, settleTaskIfFinished } from "./task-finish.js";
 
@@ -29,6 +30,12 @@ import { reopenTaskForWork, settleTaskAfterTurn, settleTaskIfFinished } from "./
  *
  * Synthetic accounts, tasks, and words throughout.
  */
+
+/** What the finishes counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+const countedFor = (userId: string) =>
+  ANALYTICS.recorded.filter((event) => event.userId === userId);
 
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
@@ -165,11 +172,19 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         );
         yield* settleTaskIfFinished(userId, task.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.DONE);
+        // Only the check that moved the task counted, and as the merge's own finish.
+        assert.deepEqual(countedFor(userId), [
+          {
+            name: SERVER_EVENT.TASK_FINISH,
+            userId,
+            properties: { status: TASK_STATUS.DONE, by: "merge" },
+          },
+        ]);
 
         // A turn starting on the task takes it up again.
         yield* reopenTaskForWork(userId, task.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.IN_PROGRESS);
-      }),
+      }).pipe(Effect.provide(ANALYTICS.layer)),
   );
 
   it.effect(

@@ -7,7 +7,7 @@ test("a call of a tool the record does not hold is reported, but the harness's o
   const reports: string[] = [];
   projectMoments(
     heldProjection(null),
-    ["ToolSearch", "SendMessage"].map((name, index) => ({
+    ["ToolSearch", "RemoteTrigger"].map((name, index) => ({
       kind: NATIVE_MOMENT.TOOL_STARTED,
       callId: `toolu_${index}`,
       name,
@@ -22,7 +22,7 @@ test("a call of a tool the record does not hold is reported, but the harness's o
       report: (said) => reports.push(said),
     },
   );
-  assert.deepEqual(reports, ["A call to SendMessage names no stored tool and is not recorded."]);
+  assert.deepEqual(reports, ["A call to RemoteTrigger names no stored tool and is not recorded."]);
 });
 
 test("a warm launch that fails after its turn ended at its IDLE fails no turn of its own", () => {

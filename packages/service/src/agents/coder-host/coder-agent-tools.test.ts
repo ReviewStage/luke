@@ -112,7 +112,13 @@ import {
   TURN_TRIGGER,
   type WireRecord,
 } from "../../core.js";
-import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
+import {
+  recordingProductAnalytics,
+  SERVER_AGENT_STARTER,
+  SERVER_AUTOMATION_SOURCE,
+  SERVER_EVENT,
+  SERVER_TURN_OUTCOME,
+} from "../../events/server-events.js";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
 import { postInboxThread } from "../../inbox/inbox-store.js";
 import {
@@ -127,6 +133,7 @@ import {
   githubReaching,
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
+import { scriptedHarness } from "../../testing/native-harness-fake.js";
 import { nativeRelayFake } from "../../testing/native-relay-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
@@ -145,6 +152,7 @@ import {
 import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
 import { EVE_HOST_ATTRIBUTE, EVE_HOST_HEADER, EVE_HOST_TURN } from "../eve-host/bounds.js";
 import { claimRuntimeSession } from "../eve-host/conversation.js";
+import { EVE_MOUNT, eveSessionsComposer } from "../eve-host/eve-sessions.js";
 import { TASK_BLOCK_REFUSAL } from "../task-block-changes.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
@@ -160,6 +168,7 @@ import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import type { CoderHostSeams } from "./production.js";
 import type { SummaryModelOf } from "./replay-summary.js";
+import { NativeAgentSessions } from "./runtime-sessions.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -207,11 +216,14 @@ const SMALL_WINDOW = { model: "anthropic/claude-sonnet-4.9", tokens: 60_000 } as
 /** What the agents' tools counted, across the file; a test reads its own account's, from where it began. */
 const ANALYTICS = recordingProductAnalytics();
 
+/** The properties of each of one event the account was counted for, in order. */
+const countedWith = (userId: string, name: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === name)
+    .map((event) => event.properties);
+
 /** How many tasks the account was counted as making. */
-const tasksCounted = (userId: string) =>
-  ANALYTICS.recorded.filter(
-    (event) => event.userId === userId && event.name === SERVER_EVENT.TASK_CREATE,
-  ).length;
+const tasksCounted = (userId: string) => countedWith(userId, SERVER_EVENT.TASK_CREATE).length;
 
 const CATALOG: readonly OfferedModel[] = [
   {
@@ -308,7 +320,14 @@ async function claimed(
   userId: string,
   start: Parameters<typeof createAgent>[1],
 ): Promise<StartedAgent> {
-  const started = await database.run(createAgent(userId, start));
+  // An agent starts on Claude Code on its starter's API key, as a Start's would; none starts on eve.
+  const started = await database.run(
+    createAgent(userId, {
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+      payer: AGENT_PAYER.API_KEY,
+      ...start,
+    }),
+  );
   assert.ok(Option.isSome(started));
   const target = { userId, conversationId: started.value.agent.conversationId };
   const session = sessionId();
@@ -375,13 +394,31 @@ async function fakeCoderEve(
     );
   });
   return {
-    services: github.layer,
+    services: Layer.provideMerge(harnessOverScript, github.layer),
     sent,
     retire: () => {
       retired = true;
     },
   };
 }
+
+/**
+ * The native harnesses as the suite's eve script answers them, over its
+ * wire as the deployment acting for the agent's starter, so a native
+ * agent's launch and messages are written down beside every other call.
+ */
+const harnessOverScript = Layer.effect(
+  NativeAgentSessions,
+  Effect.map(eveSessionsComposer, (compose) =>
+    scriptedHarness((account) =>
+      compose({
+        origin: EVE_ORIGIN,
+        caller: { secret: Redacted.make(DEPLOYMENT_SECRET), account },
+        mount: EVE_MOUNT.CODER,
+      }),
+    ),
+  ),
+);
 
 /** Our Sentry integration as a deployment that configures it holds it. */
 const SENTRY_CONFIGURED = Layer.succeed(
@@ -767,6 +804,7 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), caller, eve.services);
   const prompt = "Write the migration that adds the invitation's expiry.";
+  const startsBefore = countedWith(caller.userId, SERVER_EVENT.AGENT_START).length;
 
   const started = await call(
     CODER_TOOL.START_AGENT,
@@ -806,6 +844,13 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.ok(isRecord(again.agent));
   assert.equal(again.agent.id, startedId);
   assert.equal(eve.sent.length, 1, "the same call run again starts no second agent");
+  // Counted once under its starter's member, as an agent's start rather than theirs.
+  assert.deepEqual(
+    countedWith(caller.userId, SERVER_EVENT.AGENT_START)
+      .slice(startsBefore)
+      .map((properties) => ("started_by" in properties ? properties.started_by : undefined)),
+    [SERVER_AGENT_STARTER.AGENT],
+  );
 });
 
 test("start_agent on a task that runs on another member's device is refused in words that name the device and its owner, starting nothing", async () => {
@@ -987,6 +1032,21 @@ test("message_agent refuses a malformed id, empty words, and words over the boun
     },
   );
   assert.equal(eve.sent.length, 0, "a refusal sends nothing");
+});
+
+test("message_agent takes the words under message where no text stands, as Claude Code's agents name them", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+
+  const sent = await call(CODER_TOOL.MESSAGE_AGENT, {
+    agentId: agents.teammates.id,
+    message: NOTE,
+  });
+
+  assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
+  const words = sentWords(eve.sent.at(-1)?.body);
+  assert.ok(words.endsWith(`${NOTE}\n\n${agentMessageReplyLine(agents.caller.id)}`), words);
 });
 
 test("start_agent refuses, in words that say why and starting nothing, a picture of another agent's conversation, a video the caller recorded, one past an image's bound, pictures past a message's bound together, and more ids than a start takes", async () => {
@@ -2751,6 +2811,15 @@ test("a message to an agent whose session eve no longer runs opens a fresh sessi
   assert.match(String(opened[0]?.[2]), new RegExp(NOTE, "u"));
   const settled = [turnId, TURN_STATUS.FAILED, TURN_FAILURE.SESSION_ENDED];
   assert.deepEqual(await newestTurnOf(agents.teammates), settled);
+  // Counted as failed, with why.
+  assert.deepEqual(
+    countedWith(agents.teammates.userId, SERVER_EVENT.TURN_END).map((properties) =>
+      "outcome" in properties && "failure" in properties
+        ? [properties.outcome, properties.failure]
+        : undefined,
+    ),
+    [[SERVER_TURN_OUTCOME.FAILED, TURN_FAILURE.SESSION_ENDED]],
+  );
 
   const again = await directMessage(host, agents.caller, agents.teammates, eve.services, "call-2");
   assert.equal(again.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(again));
@@ -3378,9 +3447,11 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
   });
 });
 
-test("update_agent renames a teammate's agent, moves it to a model the catalog offers as the catalog reads the choice, and switches its servers, pins an agent on a task and one on no task, refuses a model the catalog refuses with nothing written, and changes no agent of another workspace", async () => {
-  const { workspaceId, agents } = await openWorkspaces();
-  const { caller, teammates, otherWorkspaces } = agents;
+test("update_agent renames a teammate's eve agent, moves it to a model the catalog offers as the catalog reads the choice, and switches its servers, pins an agent on a task and one on no task, refuses a model the catalog refuses with nothing written, and changes no agent of another workspace", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const { caller, otherWorkspaces } = agents;
+  // Note that only an agent on eve moves to another provider's model and takes a window, so the teammate's is one.
+  const teammates = await eveAgentOn(agents.teammates.userId, tasks.billing);
   const eve = await fakeCoderEve(workspaceId);
   const offered: readonly OfferedModel[] = [
     ...CATALOG,
@@ -3524,10 +3595,24 @@ async function claudeCodeAgentOn(userId: string, taskId: string): Promise<Starte
   });
 }
 
+/** An agent of the account's on the task on eve, as a row from before the native harnesses still reads. */
+async function eveAgentOn(userId: string, taskId: string): Promise<StartedAgent> {
+  return claimed(userId, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId,
+    planSnapshot: "# Billing",
+    prompt: null,
+    runtime: AGENT_RUNTIME.EVE,
+    payer: undefined,
+  });
+}
+
 test("list_models for a Claude Code agent lists its Claude models alone, their fast versions among them, while a start's list and an eve agent's list every model, as they did", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const onClaudeCode = await claudeCodeAgentOn(agents.teammates.userId, tasks.billing);
+  const onEve = await eveAgentOn(agents.teammates.userId, tasks.billing);
   const call = await peerCaller(
     hostOf(true),
     agents.caller,
@@ -3538,7 +3623,7 @@ test("list_models for a Claude Code agent lists its Claude models alone, their f
     Array.isArray(listed.models) ? listed.models.map((model) => isRecord(model) && model.id) : [];
 
   const forStart = await call(CODER_TOOL.LIST_MODELS, {});
-  const forEve = await call(CODER_TOOL.LIST_MODELS, { agentId: agents.teammates.id });
+  const forEve = await call(CODER_TOOL.LIST_MODELS, { agentId: onEve.id });
   const forClaudeCode = await call(CODER_TOOL.LIST_MODELS, { agentId: onClaudeCode.id });
 
   assert.deepEqual(ids(forStart), [OPUS, OPUS_FAST, SONNET, SOL, SOL_FAST]);
@@ -3568,6 +3653,7 @@ test("update_agent refuses a Claude Code agent a GPT model and a context window,
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const onClaudeCode = await claudeCodeAgentOn(agents.teammates.userId, tasks.billing);
+  const onEve = await eveAgentOn(agents.teammates.userId, tasks.billing);
   const call = await peerCaller(
     hostOf(true),
     agents.caller,
@@ -3634,12 +3720,12 @@ test("update_agent refuses a Claude Code agent a GPT model and a context window,
     { model: SOL, effort: "low" },
   ]) {
     const changed = await call(CODER_TOOL.UPDATE_AGENT, {
-      agentId: agents.teammates.id,
+      agentId: onEve.id,
       ...change,
     });
     assert.equal(changed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(changed));
   }
-  assert.equal((await stored(agents.teammates)).model, SOL);
+  assert.equal((await stored(onEve)).model, SOL);
 });
 
 test("a Codex agent lists its GPT models alone with no fast version, and update_agent refuses it a Claude model, a fast version, and a context window in words and takes a GPT one", async () => {
@@ -3992,6 +4078,10 @@ test("list_automations, create_automation, update_automation, and delete_automat
   const id = automation.id;
   // The same call run again names the automation it made, and makes no second one.
   assert.equal(automationOf(await call(CODER_TOOL.CREATE_AUTOMATION, made, "call-make")).id, id);
+  // Counted once, as the agent's automation rather than its starter's own.
+  assert.deepEqual(countedWith(agents.caller.userId, SERVER_EVENT.AUTOMATION_CREATE), [
+    { trigger_kind: "schedule", source: SERVER_AUTOMATION_SOURCE.AGENT },
+  ]);
   const listed = await call(CODER_TOOL.LIST_AUTOMATIONS, {});
   assert.ok(Array.isArray(listed.automations));
   assert.deepEqual(

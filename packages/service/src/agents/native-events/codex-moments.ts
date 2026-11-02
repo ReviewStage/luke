@@ -26,8 +26,8 @@ import {
  * runner's own (`runner-moments.ts`) is read here for what the transcript
  * keeps. Codex names no model call, so its items stand in: an agent message
  * is a step, its deltas drafting the step's words and its completion
- * telling them whole; a command, a file change, an MCP call, a web search
- * and a subagent call each start a call as their item starts and settle it
+ * telling them whole; a command, a file change, an MCP call, a web search,
+ * a picture looked at, and a subagent call each start a call as their item starts and settle it
  * as it completes; a reasoning item's summary is the step's reasoning; the
  * turn's plan is its todo list, one call for each time Codex sets it.
  * `turn/completed` ends one model turn, failed where Codex says so, with
@@ -71,6 +71,7 @@ const ITEM = {
   MCP_TOOL_CALL: "mcpToolCall",
   WEB_SEARCH: "webSearch",
   SUBAGENT: "collabAgentToolCall",
+  IMAGE_VIEW: "imageView",
   COMPACTION: "contextCompaction",
 } as const;
 
@@ -190,6 +191,9 @@ const readSubagent = Schema.decodeUnknownOption(
     receiverThreadIds: Schema.optionalKey(Schema.Array(Schema.String)),
     agentsStates: Schema.optionalKey(WireValueSchema),
   }),
+);
+const readImageView = Schema.decodeUnknownOption(
+  Schema.Struct({ ...ITEM_FIELDS, path: Schema.String }),
 );
 const readTextBlock = Schema.decodeUnknownOption(
   Schema.Struct({ type: Schema.Literal("text"), text: Schema.String }),
@@ -374,6 +378,15 @@ function callOf(type: string, item: unknown): Option.Option<Answered> {
           output: { status: call.status, agentsStates: call.agentsStates ?? {} },
         },
         failed: FAILED_STATUSES.has(call.status),
+      }));
+    // Note that Codex reports no status for a picture it looked at, and the model read the picture itself, which stands in as a CLI tool's does.
+    case ITEM.IMAGE_VIEW:
+      return Option.map(readImageView(item), (view) => ({
+        callId: view.id,
+        name: CODEX_TOOL.IMAGE_VIEW,
+        input: { path: view.path },
+        answer: { lukeTool: false, text: PICTURE_STAND_IN, output: PICTURE_STAND_IN },
+        failed: false,
       }));
     default:
       return Option.none();

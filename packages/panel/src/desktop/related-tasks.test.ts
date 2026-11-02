@@ -16,15 +16,18 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { longPress, underAFinger } from "../testing/finger.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { RelatedTasks } from "./related-tasks.js";
 
 /**
  * related-tasks.test.ts -- a task's related tasks, drawn on their own as the
- * Tasks page's List draws a task: each row ends with a chip for each of its
- * open pull requests, a draft among them and a merged one left out, then
- * what its owner stands at its end, and its sub-tasks' count stands however
- * narrow the list; a press on a row opens its task.
+ * Tasks page's List draws a task: each row is led by what its owner stands
+ * there, its relation, and ends with a chip for each of its open pull
+ * requests, a draft among them and a merged one left out, and its
+ * sub-tasks' count stands however narrow the list; a press on a row opens
+ * its task, and a finger's row
+ * draws no ⋯, its menu a long press away.
  * Synthetic tasks.
  */
 
@@ -95,7 +98,7 @@ const TASK: TaskSummary = {
   },
 };
 
-test("a related task's row ends with its open pull requests and its owner's end, and a press opens it", () => {
+test("a related task's row is led by its owner's relation and ends with its open pull requests, and a press opens it", () => {
   const opened: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -115,7 +118,7 @@ test("a related task's row ends with its open pull requests and its owner's end,
         createElement(RelatedTasks, {
           tasks,
           label: "Related tasks",
-          rows: [{ task: TASK, end: "Blocks" }],
+          rows: [{ task: TASK, relation: "Blocks" }],
         }),
       ),
     ),
@@ -127,7 +130,7 @@ test("a related task's row ends with its open pull requests and its owner's end,
     (chip) => chip.textContent,
   );
   assert.deepEqual(chips, ["#612", "#611"]);
-  assert.equal(row.querySelector("[data-cell='end']")?.textContent, "Blocks");
+  assert.equal(row.querySelector("[data-cell='relation']")?.textContent, "Blocks");
 
   act(() => row.querySelector<HTMLButtonElement>("[data-card-press]")?.click());
   assert.deepEqual(opened, ["t-42"]);
@@ -172,4 +175,35 @@ test("a related task's row says it is blocked beside its name and how many of it
   );
   assert.equal(row.querySelector("[data-cell='key']"), null, "the key folds away");
   assert.match(row.querySelector("[data-cell='subTasks']")?.textContent ?? "", /^1\/2/u);
+});
+
+test("under a finger, a related task's row draws no ⋯, and a long press on it opens the task's menu", () => {
+  underAFinger();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const tasks = tasksControl({
+    tasks: [TASK],
+    workspace: ACME,
+    workspaces: [ACME],
+    listRead: true,
+  });
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(RelatedTasks, { tasks, label: "Sub-tasks", rows: [{ task: TASK }] }),
+      ),
+    ),
+  );
+
+  const row = container.querySelector<HTMLElement>("[data-task-id='t-42']");
+  assert.ok(row, "the task's row stands");
+  assert.ok(row.querySelector('button[aria-label="Task actions"]') === null, "the row draws no ⋯");
+  longPress(row.querySelector<HTMLElement>("[data-card-press]") ?? assert.fail("no press"));
+  const labels = [...document.querySelectorAll('[role^="menuitem"] .luke-menu-item-label')].map(
+    (label) => label.textContent,
+  );
+  assert.ok(labels.includes("Rename"), "the menu offers Rename");
 });

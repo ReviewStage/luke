@@ -52,6 +52,9 @@ const ENVIRONMENT_PROPERTY = "environment";
 /** The environment stamped where Vercel names none, as a local `vercel dev` or a test; Sentry's own fallback. */
 const UNNAMED_DEPLOYMENT = "development";
 
+/** Vercel's own name for the deployment: `production`, `preview`, or `development`. */
+export const DEPLOYMENT_VARIABLE = "VERCEL_ENV";
+
 /** What the shared brake holds this endpoint to; a batch spends its own event count. */
 const RATE_LIMIT = {
   WINDOW_MS: 60_000,
@@ -145,6 +148,11 @@ function batchDocument(
   };
 }
 
+/** The environment an event is stamped with: the deployment's own name, or `development` where it names none. */
+export function deploymentNamed(deployment: string | undefined): string {
+  return trimmedText(deployment) ?? UNNAMED_DEPLOYMENT;
+}
+
 /**
  * One batch recorded for the account the caller resolved to: read through
  * the allowlist, braked, stamped, and forwarded. The caller, the kill
@@ -172,7 +180,7 @@ export function recordEvents(
     const stamp = {
       ...build,
       [PLATFORM_PROPERTY]: build.platform ?? PRODUCT_PLATFORM.DESKTOP,
-      [ENVIRONMENT_PROPERTY]: trimmedText(options.deployment) ?? UNNAMED_DEPLOYMENT,
+      [ENVIRONMENT_PROPERTY]: deploymentNamed(options.deployment),
     };
 
     const now = yield* Clock.currentTimeMillis;

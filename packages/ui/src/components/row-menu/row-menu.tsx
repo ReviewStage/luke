@@ -28,7 +28,11 @@ import { MoreButton, moreLabel } from "../more-button/more-button.js";
  * spreads `props` on the box that is the row, draws `more` where its ⋯
  * stands and `popup` beside the row, and a `ListRow` takes the same pieces
  * from here. A row unavailable, or whose thing offers no acts now, offers
- * no door at all.
+ * no door at all. A row that opens something (`opener`) may leave its ⋯
+ * out (`more`), as a phone's mail list draws none on its rows, and offer
+ * its menu by the long press, the right-click, and the menu key alone; one
+ * that opens nothing keeps it, because it is the one control its menu
+ * hands focus back to.
  */
 
 /** A row's menu of its thing's acts: what the thing is, which names its ⋯ and the menu, and the menu's items. */
@@ -73,9 +77,11 @@ export function useRowMenu(
     /** Whether the row is unavailable now, as one being deleted is, so it offers no menu. */
     readonly disabled?: boolean | undefined;
     readonly opener?: RefObject<HTMLElement | null> | undefined;
+    /** Whether the row draws its menu's ⋯; one that opens something may leave it out, its menu still a long press, a right-click, and the menu key away. */
+    readonly more?: boolean | undefined;
   } = {},
 ) {
-  const { disabled = false, opener } = options;
+  const { disabled = false, opener, more = true } = options;
   const state = useMenu(menu?.shown ?? true);
   const moreElement = useRef<HTMLButtonElement | null>(null);
   // Note that a row unavailable, or whose thing offers no acts now, opens no menu by any door.
@@ -84,6 +90,7 @@ export function useRowMenu(
       ? menu
       : undefined;
   const offered = live !== undefined;
+  const moreDrawn = offered && (more || opener === undefined);
   // The menu key, on the row's press or any of its acts, hangs the menu
   // under the row from its start, and hands focus back to what held it.
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -111,7 +118,7 @@ export function useRowMenu(
   const open = state.open !== undefined;
   // Note that a row's ⋯ lights its glyph alone at any size, because the row is already lit and, while its menu stands, ringed.
   const button = ({ size, describedBy }: RowMoreOptions = {}): ReactNode =>
-    live !== undefined ? (
+    live !== undefined && moreDrawn ? (
       <MoreButton
         ref={moreElement}
         thing={live.thing}
@@ -137,6 +144,8 @@ export function useRowMenu(
   return {
     /** Whether the row offers its menu now. */
     offered,
+    /** Whether the row draws its ⋯ now: it offers its menu, and has not left its ⋯ out (`more`). */
+    moreDrawn,
     /** Whether the menu stands open, which rings the row. */
     open,
     /** Closes the menu, handing focus back to its opener where asked. */
@@ -149,7 +158,7 @@ export function useRowMenu(
     button,
     /** The ⋯ as a revealed end of the row (`row-menu.css`): shown as the row is reached for, its room kept. */
     more: (moreOptions?: RowMoreOptions): ReactNode =>
-      offered ? <span className="luke-row-more">{button(moreOptions)}</span> : null,
+      moreDrawn ? <span className="luke-row-more">{button(moreOptions)}</span> : null,
     /** What a row that is no `ListRow` spreads on its box: the three doors, and the marks its ⋯'s reveal and its ring read. */
     props: {
       ...withContextMenu<HTMLElement>(doors, {}),

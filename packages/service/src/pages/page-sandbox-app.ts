@@ -14,7 +14,8 @@
  * account the link was minted for, under the reach its mint was held to, and
  * answered under the policy every server of a page answers with
  * (`@luke/features/page-policy`), framed by the app's own origins alone, with
- * the find's script ahead of it (`@luke/features/page-find`).
+ * our scripts ahead of it, the find's (`@luke/features/page-find`) and
+ * the link's (`@luke/features/page-link`).
  *
  * A link refused for any reason, its signature, its sandbox, its lapse, or the
  * account's reach, is answered not found alike, so a refusal says nothing of
@@ -23,7 +24,7 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readPageVersion } from "@luke/database/models/plan-pages";
-import { withPageFind } from "@luke/features/page-find";
+import { withPageScripts } from "@luke/features/page-find";
 import { sandboxPageResponseHeaders } from "@luke/features/page-policy";
 import { HTTP_METHOD } from "@luke/wire";
 import { Clock, Effect, Layer, Option, type Scope } from "effect";
@@ -72,7 +73,7 @@ const sandboxPageEndpoint = /* @__PURE__ */ Effect.fn("web/sandboxPageEndpoint")
     const { userId, owner, pageId, version } = linked;
     const page = yield* hostedStoreOrUnavailable(readPageVersion(userId, owner, pageId, version));
     if (Option.isNone(page)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    return HttpServerResponse.text(withPageFind(page.value.html), {
+    return HttpServerResponse.text(withPageScripts(page.value.html), {
       status: HOSTED_HTTP_STATUS.OK,
       headers: sandboxPageResponseHeaders(sandbox.appOrigins),
     });

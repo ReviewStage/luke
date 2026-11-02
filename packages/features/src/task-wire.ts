@@ -75,6 +75,8 @@ export const TASK_BOUNDS = {
   MAX_WORKSPACE_ID_CHARS: 200,
   /** The most characters a task's brief may spell: as many as a coding agent's prompt (`AGENT_BOUNDS.MAX_MESSAGE_CHARS`). */
   MAX_BRIEF_CHARS: 16_000,
+  /** The most relations a start may make its task in, far past what New task's rows draw. */
+  MAX_START_RELATIONS: 20,
 } as const;
 
 /** The name a plan started without one stands under until the developer renames it. */
@@ -269,12 +271,43 @@ const taskCreateRelationSchema = EffectSchema.Struct({
 
 export type TaskCreateRelation = typeof taskCreateRelationSchema.Type;
 
-/** Whether a start names its parent one way at most: `parentTaskId`, or a `relation`, which says the same of a sub-task and more. */
+/** The relations a start asks, by either door: `relations`, or the old door's one `relation` as a list of one; none where it names neither. */
+export function startRelationsOf(request: {
+  readonly relation?: TaskCreateRelation;
+  readonly relations?: readonly TaskCreateRelation[];
+}): readonly TaskCreateRelation[] {
+  if (request.relations !== undefined) return request.relations;
+  return request.relation === undefined ? [] : [request.relation];
+}
+
+/** Whether a start names its relations through one door at most: `relations`, or the old door's `relation`, never both. */
+function relationsThroughOneDoor(request: {
+  relation?: TaskCreateRelation;
+  relations?: readonly TaskCreateRelation[];
+}): boolean {
+  return request.relation === undefined || request.relations === undefined;
+}
+
+/** Whether a start names its parent one way at most: `parentTaskId`, or its relations, which say the same of a sub-task and more. */
 function relationNamedOnce(request: {
   parentTaskId?: string;
   relation?: TaskCreateRelation;
+  relations?: readonly TaskCreateRelation[];
 }): boolean {
-  return request.parentTaskId === undefined || request.relation === undefined;
+  return request.parentTaskId === undefined || startRelationsOf(request).length === 0;
+}
+
+/** Whether a start's relations name one parent at most, since a task has one, and each other task once, since a task takes one relation to another. */
+function relationsEachOnce(request: {
+  relation?: TaskCreateRelation;
+  relations?: readonly TaskCreateRelation[];
+}): boolean {
+  const relations = startRelationsOf(request);
+  const parents = relations.filter(
+    (relation) => relation.kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF,
+  );
+  const named = new Set(relations.map((relation) => relation.taskId));
+  return parents.length <= 1 && named.size === relations.length;
 }
 
 /**
@@ -302,16 +335,21 @@ function relationNamedOnce(request: {
  * where its agents run, so a start naming another repository is refused
  * (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), as one naming another place
  * to run is (`HOSTED_API_ERROR.RUNS_ON_LOCKED`), and a parent the starter
- * cannot reach is not found. A `relation` starts the task related to another
+ * cannot reach is not found. `relations` start the task related to others
  * the starter reaches in the same workspace, written in the start's own
- * transaction, so the task and its relation land together or not at all: a
- * sub-task of it, which is `parentTaskId` by another name, so naming both is
- * refused; its parent, which takes that task's repository as a sub-task
- * takes its parent's (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), and is
- * refused where that task has a parent already
- * (`HOSTED_API_ERROR.TASK_PARENT_HELD`), since a start takes no parent's
- * place; or a block on either side, under the blocks' own rules
- * (`taskBlockRequestSchema`). The other task out of reach is not found.
+ * transaction, so the task and every relation land together or not at all,
+ * and one refused leaves no task behind. Each is one of: a sub-task of the
+ * other, which is `parentTaskId` by another name, so naming both is
+ * refused, as more than one is, since a task has one parent; the other's
+ * parent, which takes that task's repository as a sub-task takes its
+ * parent's (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), so every task of
+ * the tree a start joins shares one, and is refused where that task has a
+ * parent already (`HOSTED_API_ERROR.TASK_PARENT_HELD`), since a start
+ * takes no parent's place; or a block on either side, under the blocks' own
+ * rules (`taskBlockRequestSchema`). No task is named twice, since a task
+ * takes one relation to another, and any other task out of reach is not
+ * found. `relation` is the old door, which desktop builds already released
+ * send: it reads as `relations` of one, and naming both is refused.
  * A task is worked by its agents unless `mode` names a pilot, which the
  * service refuses from an account without the Pilot experiment, and which
  * stands as the task was started.
@@ -336,9 +374,20 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(taskAssigneeIdSchema),
   parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
+  /** The old door, which released desktop builds send: one relation, read as `relations` of one. */
   relation: EffectSchema.optionalKey(taskCreateRelationSchema),
+  relations: EffectSchema.optionalKey(
+    EffectSchema.Array(taskCreateRelationSchema).check(
+      EffectSchema.isMaxLength(TASK_BOUNDS.MAX_START_RELATIONS),
+    ),
+  ),
   mode: EffectSchema.optionalKey(taskModeSchema),
-}).check(EffectSchema.makeFilter(agentStartsUnplanned), EffectSchema.makeFilter(relationNamedOnce));
+}).check(
+  EffectSchema.makeFilter(agentStartsUnplanned),
+  EffectSchema.makeFilter(relationsThroughOneDoor),
+  EffectSchema.makeFilter(relationNamedOnce),
+  EffectSchema.makeFilter(relationsEachOnce),
+);
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
 

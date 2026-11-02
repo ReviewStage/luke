@@ -80,6 +80,7 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "../testing/github-app-fake.js";
+import { harnessFor, scriptedHarnessLayer } from "../testing/native-harness-fake.js";
 import { automationRunsLiveStatements, automationsLiveStatements } from "./automation-live.js";
 import { automationsProcedures } from "./automations-procedures.js";
 
@@ -173,6 +174,7 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
           Layer.succeed(Clock.Clock, yield* Clock.Clock),
           githubReaching(INSTALLATIONS).layer,
           modelCatalogOf(CATALOG),
+          scriptedHarnessLayer((account) => sessionsAs(harnessFor(account))),
         ),
       ),
     );
@@ -949,7 +951,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
-    "a Run now over a browser's session cookie starts the automation's agent as the deployment acting for the cookie's account, over the bearer over the bearer, and another account's cookie runs nothing",
+    "a Run now over a browser's session cookie starts the automation's agent as one over the bearer does, through its harness acting for the automation's creator, and another account's cookie runs nothing",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask, openedAs } = yield* openAccounts;
@@ -989,12 +991,12 @@ it.layer(getTestDB())("the automation routes", (it) => {
           [AUTOMATION_RUN_STATUS.STARTED, AUTOMATION_RUN_STATUS.STARTED],
         );
         assert.deepEqual(overCookie.run.firing, { kind: AUTOMATION_FIRING.MANUAL, userId: owner });
-        assert.deepEqual(openedAs, [deploymentFor(owner), `Bearer ${owner}`]);
+        assert.deepEqual(openedAs, [harnessFor(owner), harnessFor(owner)]);
       }),
   );
 
   it.effect(
-    "a teammate's Run now of the owner's workspace automation over a session cookie starts its agent as the deployment acting for the teammate, never for the automation's creator",
+    "a teammate's Run now of the owner's workspace automation over a session cookie starts its agent, the creator's, through its harness acting for that creator, whose plan or key pays",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask, openedAs } = yield* openAccounts;
@@ -1020,7 +1022,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
 
         assert.equal(run.status, AUTOMATION_RUN_STATUS.STARTED);
         assert.deepEqual(run.firing, { kind: AUTOMATION_FIRING.MANUAL, userId: other });
-        assert.deepEqual(openedAs, [deploymentFor(other)]);
+        assert.deepEqual(openedAs, [harnessFor(owner)]);
       }),
   );
 

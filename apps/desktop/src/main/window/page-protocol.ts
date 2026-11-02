@@ -1,4 +1,4 @@
-import { withPageFind } from "@luke/features/page-find";
+import { withPageScripts } from "@luke/features/page-find";
 import { framedPageOf, PAGE_SCHEME } from "@luke/features/page-frame";
 import { PAGE_RESPONSE_HEADERS } from "@luke/features/page-policy";
 import type { TasksPageAnswer, TasksPageParams } from "@luke/features/tasks-view";
@@ -11,8 +11,10 @@ import type { CustomScheme } from "electron";
  * A page is HTML an agent wrote, so it is served as nothing of our own: a
  * scheme of its own, read from the service by this process on the account's
  * bearer and answered whole, under the page policy `@luke/features/page-policy`
- * states for every server of a page, with the find's script ahead of it
- * (`@luke/features/page-find`), which ⌘F in the panel finds through. The
+ * states for every server of a page, with our scripts ahead of it:
+ * the find's (`@luke/features/page-find`), which ⌘F in the panel finds
+ * through, and the link's (`@luke/features/page-link`), which hands the
+ * panel a link out to open in the browser. The
  * privileges mark the scheme standard and secure and nothing more: no fetch
  * from another document, no service worker, no CORS.
  */
@@ -38,7 +40,7 @@ export function pageResponse(
   if (framed === undefined) return Effect.succeed(new Response(null, { status: NOT_FOUND }));
   return Effect.map(readPage(framed), (answer) =>
     "page" in answer
-      ? new Response(withPageFind(answer.page.html), { headers: PAGE_RESPONSE_HEADERS })
+      ? new Response(withPageScripts(answer.page.html), { headers: PAGE_RESPONSE_HEADERS })
       : new Response(null, { status: NOT_FOUND }),
   );
 }
