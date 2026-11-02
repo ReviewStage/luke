@@ -102,4 +102,4 @@ if [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" == "true" ]]; the
 fi
 
 printf 'Published %s. The website reaches this build at:\n' "$TAG"
-printf '  https://github.com/ReviewStage/luke/releases/latest/download/%s\n' "$LATEST_DMG_ASSET_NAME"
+printf '  https://github.com/ReviewStage/vespin/releases/latest/download/%s\n' "$LATEST_DMG_ASSET_NAME"

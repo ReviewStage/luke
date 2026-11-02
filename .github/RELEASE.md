@@ -104,9 +104,9 @@ Confirm the three consumers see the build:
 
 ```sh
 curl -sI -o /dev/null -w '%{http_code}\n' \
-  https://github.com/ReviewStage/luke/releases/latest/download/Vespin.dmg
-curl -s https://api.github.com/repos/ReviewStage/luke/releases/latest | grep tag_name
-curl -sL https://github.com/ReviewStage/luke/releases/latest/download/latest-mac.yml
+  https://github.com/ReviewStage/vespin/releases/latest/download/Vespin.dmg
+curl -s https://api.github.com/repos/ReviewStage/vespin/releases/latest | grep tag_name
+curl -sL https://github.com/ReviewStage/vespin/releases/latest/download/latest-mac.yml
 ```
 
 To check a downloaded build by hand, keep the zip and its checksum file in the same

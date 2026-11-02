@@ -15,7 +15,7 @@
  */
 
 /** The repository whose releases carry the host's tarballs. */
-const RELEASE_REPOSITORY = "ReviewStage/luke";
+const RELEASE_REPOSITORY = "ReviewStage/vespin";
 
 /** Each platform and architecture the host is released for, as its tarball's name spells it. */
 export const HOST_TARGET = {

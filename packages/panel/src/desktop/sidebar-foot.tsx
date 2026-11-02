@@ -66,7 +66,7 @@ import { OfflineMark } from "./offline-mark.js";
  */
 
 /** Where Contact us > GitHub leads: our own issues, where CONTRIBUTING.md sends bugs and feature requests. */
-const ISSUES_URL = "https://github.com/ReviewStage/luke/issues";
+const ISSUES_URL = "https://github.com/ReviewStage/vespin/issues";
 
 /** The account's place while no one is signed in: someone's outline. */
 const NOBODY_SIGNED_IN: Actor = { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };

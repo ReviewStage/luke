@@ -21,8 +21,8 @@ export const UPDATE_ENDPOINT = {
   // The trailing slash keeps the last segment a directory under every URL
   // resolver; electron-updater normalizes a slashless base itself, but the
   // literal should not need that reading.
-  UPDATE_FEED_URL: "https://github.com/ReviewStage/luke/releases/latest/download/",
-  LATEST_RELEASE_PAGE_URL: "https://github.com/ReviewStage/luke/releases/latest",
+  UPDATE_FEED_URL: "https://github.com/ReviewStage/vespin/releases/latest/download/",
+  LATEST_RELEASE_PAGE_URL: "https://github.com/ReviewStage/vespin/releases/latest",
   CHANGELOG_PAGE_URL: `${LINK_ORIGIN}/changelog`,
 } as const;
 

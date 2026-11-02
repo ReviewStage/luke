@@ -136,5 +136,5 @@ project, and there is no CLA to sign.
 
 ## Reporting problems
 
-Bugs and feature requests go in [GitHub issues](https://github.com/ReviewStage/luke/issues).
+Bugs and feature requests go in [GitHub issues](https://github.com/ReviewStage/vespin/issues).
 Security vulnerabilities do not. See [SECURITY.md](SECURITY.md).
