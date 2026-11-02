@@ -692,13 +692,13 @@ conversation. Vespin
 on your Mac reads a page's HTML from our service only to draw it, in its tab
 or in the card over its tab, its row, or a chip naming it, holds it in
 memory only, and never passes it to the rest of the panel. Vespin in a
-browser draws a page in the same places, loading it from fullspin.page, a
+browser draws a page in the same places, loading it from vespin.page, a
 domain of ours kept apart from the app's own so that a page never shares a
 site with your account. As the page loads, our service makes a link to it for
 your account: the link names your account's id, the page, and its version,
 works for one minute, and is signed so that nothing but our service can make
 one. Our service keeps no record of the link; Vercel's request log records its
-address, as it records every request's. Nothing on fullspin.page sets or
+address, as it records every request's. Nothing on vespin.page sets or
 reads a cookie. A page runs sealed
 off from Vespin: it cannot read the panel, your account, or another page, and
 cannot store anything, open a window, or send anything anywhere but the
