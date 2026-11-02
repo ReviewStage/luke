@@ -187,7 +187,6 @@ const CHAPTERS_WORDS = {
   /** Why no chapters can be generated, naming the page an API key is saved on by its link. */
   unavailable: (page: ReactNode) => <>Save an API key in {page} settings to generate chapters.</>,
   GENERATING: "Generating chapters",
-  ELSEWHERE: "Chapters are being generated",
   REFRESH: "Refresh",
   REFRESHING: "Refreshing",
   REGENERATE: "Regenerate",
@@ -366,7 +365,7 @@ function Generating({
   return (
     <EmptyState
       icon={<Spinner label={CHAPTERS_WORDS.GENERATING} size={SPINNER_SIZE.REGION} delay={false} />}
-      title={ours ? CHAPTERS_WORDS.GENERATING : CHAPTERS_WORDS.ELSEWHERE}
+      title={CHAPTERS_WORDS.GENERATING}
       action={
         ours
           ? undefined
