@@ -189,9 +189,10 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * calls its round button (`wording`), stands its Runs on chip after the "+" (`tools`),
  * holds Start while it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
  * says what Escape does (`onLeave`), hands its workspace's mentions and
- * the chosen repository's skills to its `@` and `/` lists, and offers no MCP servers'
- * switches, so its "+" opens the file picker itself, as every box that
- * takes nothing but files does (`attach-files-button.tsx`).
+ * the chosen repository's skills to its `@` and `/` lists, and hands the
+ * MCP servers' switches its first agent starts with, which its "+" menu
+ * opens as an agent's does, with no Built in section, since no agent has
+ * started yet.
  */
 
 /** What the box's note says while the editor bundle could not be loaded. */
@@ -478,7 +479,7 @@ export function AgentComposer({
   usage: AgentUsage | undefined;
   /** Who pays for the agent, which the chip's menu names where a plan does; nothing where the page said none. */
   payer?: AgentPayer | undefined;
-  /** The MCP servers the agent is handed and their switches, which the + menu opens; none where the box offers none, as New task's does, whose + opens the file picker itself. */
+  /** The MCP servers the agent is handed and their switches, which the + menu opens; none where the box offers none, whose + opens the file picker itself. */
   servers: AgentServersControl | undefined;
   /** What the agent's model's context holds, which the ring draws; nothing before a step ended, which draws no ring. */
   context?: AgentContext | undefined;
@@ -586,7 +587,7 @@ export function AgentComposer({
       }
     });
   };
-  // Note that a box handing no servers, as New task's, offers none to reconnect either.
+  // Note that a box handing no servers offers none to reconnect either.
   const lapsed =
     servers === undefined
       ? undefined

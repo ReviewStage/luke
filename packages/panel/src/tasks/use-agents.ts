@@ -470,12 +470,13 @@ function taskDraft(
   };
 }
 
-/** What New task hands a task it started whose agent was refused: the key that start carried, the prompt, its files, the choice picked on its chip, none where the chip was left on the account's default, which the draft's tab then reads afresh, and why. */
+/** What New task hands a task it started whose agent was refused: the key that start carried, the prompt, its files, the choice picked on its chip, none where the chip was left on the account's default, which the draft's tab then reads afresh, the servers its + menu switched off, and why. */
 interface HandedDraft {
   readonly id: string;
   readonly prompt: string;
   readonly attachments: readonly AgentAttachment[];
   readonly choice: ModelChoice | undefined;
+  readonly disabledServers: readonly string[];
   readonly refused: Failure;
 }
 
@@ -1141,7 +1142,7 @@ export function useAgents(input: {
     withDraft(on, {
       id: handed.id,
       choice: handed.choice,
-      disabledServers: [],
+      disabledServers: handed.disabledServers,
       refused: handed.refused,
     });
   };

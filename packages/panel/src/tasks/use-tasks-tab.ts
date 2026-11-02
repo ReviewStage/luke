@@ -461,24 +461,29 @@ interface AutomationsViewControl {
 /**
  * The coding agent New task's Agent mode starts on the task it started:
  * the key its start carries, which the card keeps for a press asking the
- * same again (`new-task-composer.tsx`), its prompt, the files attached, and
+ * same again (`new-task-composer.tsx`), its prompt, the files attached,
  * the model picked on its chip, none where the chip was left on the
- * account's default, so the service runs the default it holds at the start.
+ * account's default, so the service runs the default it holds at the start,
+ * and the MCP servers its + menu switched off, none by default.
  */
 export interface NewTaskAgent {
   readonly idempotencyKey: string;
   readonly prompt: string;
   readonly attachments: readonly AgentAttachment[];
   readonly choice: ModelChoice | undefined;
+  readonly disabledServers: readonly string[];
 }
 
-/** The agent a task's start starts on it, as the act carries it: the card's key, the prompt, the files where any, and the chip's model where one was picked. */
+/** The agent a task's start starts on it, as the act carries it: the card's key, the prompt, the files where any, the chip's model where one was picked, and the servers switched off where any. */
 function agentRequest(handed: NewTaskAgent) {
   return {
     idempotencyKey: handed.idempotencyKey,
     prompt: handed.prompt,
     ...(handed.attachments.length === 0 ? undefined : { attachments: handed.attachments }),
     ...(handed.choice === undefined ? undefined : choiceRequest(handed.choice)),
+    ...(handed.disabledServers.length === 0
+      ? undefined
+      : { disabledServers: handed.disabledServers }),
   };
 }
 
@@ -2703,7 +2708,7 @@ export function useTasksTab(input: {
 
   // A task started with an agent opens on the agent's tab, as a landed
   // Start opens it; one whose agent was refused opens on a draft holding
-  // the words, the files, and the model under the start's key, with why
+  // the words, the files, the model, and the servers under the start's key, with why
   // under its box, whose Retry is the agent's own Start on the task. Either
   // opens on the agent alone, its plan's tab closed on the task, so the side
   // panel draws nothing beside it and stands as it stood on every other task.

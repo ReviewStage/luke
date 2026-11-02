@@ -12,6 +12,7 @@ import {
 import { TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import {
   CHIP_WIDTH,
@@ -38,8 +39,10 @@ import {
   useDraftWriter,
 } from "../composer-drafts.js";
 import { automationAgentBrief } from "../desktop/automation-agent-brief.js";
+import { useOpenSettings } from "../open-settings.js";
 import { useExperiment } from "../use-app-state.js";
 import { AgentComposer, type ComposerWords } from "./agent-composer.js";
+import type { AgentServersControl } from "./agent-servers.js";
 import type { MentionMenuSide } from "./mention-picker.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import { type NewTaskRelation, NewTaskRelationPill, treeKind } from "./new-task-relation.js";
@@ -57,8 +60,9 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * new-task-composer.tsx -- New task's composer card: the words a coding agent starts on, and the chips that say where and how the task starts.
  *
  * The card is the agent box's own (`agent-composer.tsx`): the words field,
- * the "+" that attaches files, with an image pasted or files dropped taken
- * too, dictation, the model chip, and the round Start button, with File for
+ * the "+", which raises a menu of Attachment, which attaches files, with an
+ * image pasted or files dropped taken too, and MCP servers, which opens the
+ * servers popover beside the menu (`agent-servers.tsx`), dictation, the model chip, and the round Start button, with File for
  * later before it, drawing the backlog's mark alone where the card is too
  * narrow for its words, as on a phone, where the model chip's words are cut
  * short too, so Start stays at the row's end in the card.
@@ -100,6 +104,12 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * holding the words, why under the box, and Retry (`draft-agent-tab.tsx`).
  * The model chip shows the account's default as the card read it, and a
  * pick here runs this one agent alone: only Settings changes the default.
+ * The + menu's MCP servers switch the servers the agent is handed, every
+ * one on as the card opens, as on a draft agent's tab, with no Built in
+ * section, since no agent has started to read its own tools from, and no
+ * chip naming them; the start names those switched off, and only where
+ * there are any, so a card left alone starts the agent as one started
+ * anywhere else with none named.
  * Until the chip is picked the start names no model, so the agent runs on
  * the default Settings holds as Start is pressed, which may be newer than
  * the one the chip read, as on the welcome's card left standing; a draft
@@ -110,8 +120,8 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * An agent's start carries a key the card mints, and a press asking the
  * same again, as Retry after a start the service never answered does,
  * carries the same key, so a service that made the task and its agent
- * answers them rather than a second pair; a press asking anything else
- * mints another, and so does the card mounted afresh.
+ * answers them rather than a second pair; a press asking anything else,
+ * other servers among it, mints another, and so does the card mounted afresh.
  *
  * Return starts, Shift+Return is a new line, and ⌘Return on a box with
  * neither words nor files starts a bare task: an empty plan, no call, and
@@ -120,8 +130,9 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * nothing else on screen would. Escape closes a menu or a
  * dictation standing first,
  * and then whatever the owner says (`onLeave`), the dialog's card. A start
- * that was refused keeps the card and its words, with why under it and
- * Retry. Nothing typed here reaches the model as conversation.
+ * that was refused keeps the card, its words, and its servers, with why
+ * under it and Retry; one whose task started but whose agent was refused
+ * hands the servers to the draft agent's tab it opens on. Nothing typed here reaches the model as conversation.
  *
  * An `@` offers what it offers on the page of an agent no task holds
  * (`task-mentions.tsx`'s `tasklessMentions`): the servers and the
@@ -220,6 +231,9 @@ const DEVICES_UNREAD: Failure = {
   text: `Couldn't read your devices, so ${PRODUCT_NAME} can't tell where this task should run.`,
 };
 
+/** The servers a card switches off as it opens: none, as an agent started with none named runs with every one on. */
+const NONE_OFF: readonly string[] = [];
+
 /** The devices Runs on offers before a read lists any, or while Bring your own host is off: none, so it offers Cloud alone. */
 const NO_DEVICES: readonly MacOffer[] = [];
 
@@ -242,7 +256,7 @@ export interface NewTaskPress {
   readonly key: string;
 }
 
-/** Whether two presses ask the same: the same task, device, mode, relation, words, files in the same order, and model. */
+/** Whether two presses ask the same: the same task, device, mode, relation, words, files in the same order, model, and servers switched off. */
 function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
   return (
     a.repository === b.repository &&
@@ -256,7 +270,9 @@ function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
     a.agent.attachments.every((file, index) => file === b.agent.attachments[index]) &&
     a.agent.choice?.model === b.agent.choice?.model &&
     a.agent.choice?.effort === b.agent.choice?.effort &&
-    a.agent.choice?.contextWindow === b.agent.choice?.contextWindow
+    a.agent.choice?.contextWindow === b.agent.choice?.contextWindow &&
+    a.agent.disabledServers.length === b.agent.disabledServers.length &&
+    a.agent.disabledServers.every((server) => b.agent.disabledServers.includes(server))
   );
 }
 
@@ -351,6 +367,17 @@ export function NewTaskComposer({
         : newTask.preset?.repository,
   );
   const [choice, pickedModel, choose] = useDefaultChoice(newTask, refused?.card.choice);
+  // The servers the + menu switched off, a refused card's as it was pressed.
+  const [disabledServers, setDisabledServers] = useState<readonly string[]>(
+    refused?.card.press.ask.agent.disabledServers ?? NONE_OFF,
+  );
+  const openSettings = useOpenSettings();
+  // Note that no agent has started, so the popover offers no Built in section (`luke`).
+  const servers: AgentServersControl = {
+    disabled: disabledServers,
+    onSwitch: setDisabledServers,
+    onOpenSettings: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
+  };
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(refused?.note);
   // Pilot or Agent stands on a task's card while the Pilot experiment is on, set to Pilot.
@@ -541,7 +568,7 @@ export function NewTaskComposer({
       deviceId: device?.deviceId,
       mode: asked,
       relation: relation === undefined ? undefined : relationAsked(relation),
-      agent: { prompt, attachments, choice: pickedModel },
+      agent: { prompt, attachments, choice: pickedModel, disabledServers },
     };
     const held = pressed.current;
     const key = held !== undefined && sameAsk(held.ask, ask) ? held.key : crypto.randomUUID();
@@ -658,7 +685,7 @@ export function NewTaskComposer({
         modelsFailed={newTask.modelsFailed}
         readModels={newTask.readModels}
         usage={undefined}
-        servers={undefined}
+        servers={servers}
         skills={skills}
         published={undefined}
         doors={{ openGitHub: () => undefined, copy: () => undefined }}

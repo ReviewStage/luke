@@ -171,9 +171,6 @@
           "additionalProperties": false
         }
       ]
-    },
-    "waits": {
-      "type": "boolean"
     }
   },
   "required": [
