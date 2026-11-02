@@ -2,30 +2,21 @@ import type { TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
-  CHIP_LOOK,
-  Chip,
-  ChipName,
   GROUP_ACTION_STATE,
   GroupAction,
   IconButton,
-  LIST_MOTION_WAY,
-  ListMotion,
-  motionRows,
   TextButton,
   Tooltip,
-  useLeaving,
   useMenu,
 } from "@luke/ui";
-import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
+import { ACTOR_KIND, type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
 import {
   ASSIGNED_TO,
   type AssignedTo,
   type HiddenStatus,
   TASK_GROUPING,
 } from "@luke/ui/task-list-model";
-import { FolderGitIcon, ListIcon, SlidersHorizontalIcon, UsersIcon } from "lucide-react";
-import { type RefObject, useMemo, useRef } from "react";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { FolderGitIcon, ListIcon, SlidersHorizontalIcon } from "lucide-react";
 import { useAppCommand } from "../app-commands.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -41,10 +32,11 @@ import { FILTERED } from "./tasks-page-options.js";
  * The sidebar lists the work under way, browsing left to the Tasks page, so
  * its one button, the Inbox's own sliders at the Tasks head's end, drops the
  * window's menu with two choices: Group by, Repository or None, and, in a
- * shared workspace, Assigned to: Me, Anyone, or each member by face. While
- * the list holds anything but the reader's own, a chip under the head says
- * whose, its × lists the reader's again, and the button wears a dot, so a
- * list of someone else's never passes for the reader's. The button waits
+ * shared workspace, Assigned to: Me, Anyone, or each member by face. The
+ * head itself says whose tasks the list holds, "My tasks", "Everyone's
+ * tasks", or one member's, and while it holds anything but the reader's own
+ * the button wears a dot, so a list of someone else's never passes for the
+ * reader's. The button waits
  * for the pointer or the keyboard, as a repository's head's actions do, but
  * stands at rest wearing its dot while it lists anything but the reader's
  * (`GroupAction`).
@@ -55,6 +47,12 @@ import { FILTERED } from "./tasks-page-options.js";
 
 /** What View options is called, on its button and its menu alike. */
 const VIEW_OPTIONS = "View options";
+
+/** What the Tasks head says for Me and Anyone; a member's list is called by their name (`tasksHeadWords`). */
+const TASKS_HEAD_WORDS = {
+  [ASSIGNED_TO.ME]: "My tasks",
+  [ASSIGNED_TO.ANYONE]: "Everyone's tasks",
+} as const;
 
 /** Who the list is filtered to, as the window draws them: a member as read, else as a listed task names them, else someone. */
 function filteredActor(
@@ -179,6 +177,24 @@ export function TaskViewOptions({
   );
 }
 
+/**
+ * What the Tasks head says, and its list is called: whose tasks the list
+ * holds. Note that a workspace nobody shares lists every task, which are
+ * all the reader's, so it says "My tasks" rather than "Everyone's tasks".
+ */
+export function tasksHeadWords(
+  assignedTo: AssignedTo,
+  shared: boolean,
+  reader: ReturnType<typeof useMemberDirectory>,
+  tasks: readonly TaskSummary[],
+): string {
+  if (!shared) return TASKS_HEAD_WORDS[ASSIGNED_TO.ME];
+  if (assignedTo.kind !== ASSIGNED_TO.MEMBER) return TASKS_HEAD_WORDS[assignedTo.kind];
+  const actor = filteredActor(assignedTo.userId, reader, tasks);
+  if (actor.kind === ACTOR_KIND.PERSON && actor.you) return TASKS_HEAD_WORDS[ASSIGNED_TO.ME];
+  return `${actorName(actor)}'s tasks`;
+}
+
 /** What the list says where its filters leave nothing, as the Tasks page says it; a section says it where they leave none of its rows. */
 export const NONE_MATCH = "No tasks match this view.";
 
@@ -202,113 +218,6 @@ export function HiddenStatusesLine({
     <p className="sidebar-hidden-statuses mx-row-inset my-tight-gap text-caption text-muted-foreground">
       <TextButton onClick={onOpen}>{hiddenStatusesLine(hidden)}</TextButton>
     </p>
-  );
-}
-
-/** What the chip under the Tasks head is followed by, as it arrives and leaves. */
-const VIEW_CHIP_KEY = "assignedTo";
-
-/** The chip under the Tasks head, as last drawn, so it leaves looking as it did. */
-interface ViewChipEntry {
-  /** A teammate's face, or none for Anyone, which draws the people glyph. */
-  readonly actor: Actor | undefined;
-  readonly words: string;
-}
-
-/** The chip Assigned to calls for: none for Me, the list's own. */
-function viewChipEntries(
-  assignedTo: AssignedTo,
-  tasks: readonly TaskSummary[],
-  reader: ReturnType<typeof useMemberDirectory>,
-): ViewChipEntry[] {
-  switch (assignedTo.kind) {
-    case ASSIGNED_TO.ME:
-      return [];
-    case ASSIGNED_TO.ANYONE:
-      return [{ actor: undefined, words: "Assigned to anyone" }];
-    case ASSIGNED_TO.MEMBER: {
-      const actor = filteredActor(assignedTo.userId, reader, tasks);
-      return [{ actor, words: `Assigned to ${actorName(actor)}` }];
-    }
-  }
-}
-
-/** What a press on a chip leaving does, out of reach as it is: nothing. */
-function stays(): void {}
-
-/**
- * The chip itself. Note that this is its own component under the line's
- * `ListMotion`, because `useLeaving` finds the motion through the context
- * the motion provides.
- */
-function ViewChipLine({
-  line,
-  assignedTo,
-  tasks,
-  onClear,
-}: {
-  line: RefObject<HTMLDivElement | null>;
-  assignedTo: AssignedTo;
-  tasks: readonly TaskSummary[];
-  onClear: () => void;
-}): React.JSX.Element {
-  const reader = useMemberDirectory();
-  // Note that the entries are made once for what they are made from, because `useLeaving` reads a new list as a change.
-  const listed = useMemo(
-    () => viewChipEntries(assignedTo, tasks, reader),
-    [assignedTo, tasks, reader],
-  );
-  const drawn = useLeaving(listed, () => VIEW_CHIP_KEY);
-  // Note that the box around the row stands hidden while nothing is filtered, so the row's padding takes no room, and a chip arriving arrives into a row that stands.
-  return (
-    <div ref={line} hidden={drawn.length === 0}>
-      <div
-        className="sidebar-view-chips flex flex-wrap gap-tight-gap px-item-gap pb-item-gap"
-        {...motionRows()}
-      >
-        {drawn.map(({ key, value, leaving }) => (
-          <Chip
-            key={key}
-            motionKey={key}
-            look={CHIP_LOOK.FILTER}
-            removeLabel="Show my tasks"
-            onRemove={leaving ? stays : onClear}
-          >
-            {value.actor === undefined ? (
-              <UsersIcon />
-            ) : (
-              <ActorMark actor={value.actor} size={ACTOR_SIZE.MARK} />
-            )}
-            <ChipName>{value.words}</ChipName>
-          </Chip>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/**
- * The chip under the Tasks head while the list holds anything but the
- * reader's own: "Assigned to anyone", or one member's face and "Assigned
- * to" their name, whose × lists the reader's own again. It scales in as it
- * is chosen and out as it is lifted, as the Tasks page's filter chips do,
- * under a `ListMotion` of its own.
- */
-export function ViewChips({
-  assignedTo,
-  tasks,
-  onClear,
-}: {
-  assignedTo: AssignedTo;
-  /** The listed tasks, which name a member the members no longer list. */
-  tasks: readonly TaskSummary[];
-  onClear: () => void;
-}): React.JSX.Element {
-  const line = useRef<HTMLDivElement | null>(null);
-  return (
-    <ListMotion root={line} way={LIST_MOTION_WAY.SCALE}>
-      <ViewChipLine line={line} assignedTo={assignedTo} tasks={tasks} onClear={onClear} />
-    </ListMotion>
   );
 }
 

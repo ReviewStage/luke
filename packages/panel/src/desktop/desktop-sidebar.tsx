@@ -183,8 +183,8 @@ import {
   HiddenStatusesLine,
   NONE_MATCH,
   TaskViewOptions,
+  tasksHeadWords,
   useTaskViewCommands,
-  ViewChips,
 } from "./sidebar-task-view.js";
 import { sharedStatus, statusSubmenu } from "./standing-submenus.js";
 import { type RowFaces, SidebarTask } from "./task-actions.js";
@@ -1851,7 +1851,7 @@ function SidebarColumn({
   };
   const folds = useFoldedGroups(sidebar.staged);
   const taskView = useTaskListView(tasks.workspace?.id, sidebar.staged);
-  // The Tasks head's New section, pressed on its button, or offered on a right-click and a long press.
+  // The Tasks head's own menu, on a right-click and a long press, drawn only once it offers more than the buttons beside it.
   const tasksHeadMenu = useMenu(tasks.shown && overlay.inSight);
   const newSectionButton = useRef<HTMLButtonElement | null>(null);
   const reader = useMemberDirectory();
@@ -1962,8 +1962,10 @@ function SidebarColumn({
     ]);
   };
   const { chosen } = overlay;
-  // The reader's own tasks, which the list holds until the reader chooses otherwise, and the chip's × lists again.
+  // The reader's own tasks, which the list holds until the reader chooses otherwise.
   const mine: AssignedTo = { kind: ASSIGNED_TO.ME };
+  // The Tasks head and its list are called whose tasks the list holds.
+  const tasksHead = tasksHeadWords(assignedTo, shared, reader, tasks.listed.tasks);
   // New section stands on the Tasks head while the account keeps sections.
   // Note that a new section is named in place at the foot of the sections, so the sidebar stays standing rather than being put away as a choice puts it.
   const askNewSection = () => {
@@ -1972,6 +1974,8 @@ function SidebarColumn({
   };
   const tasksHeadGroups: MenuAction[][] =
     sectionsShown && tasks.workspace !== undefined ? [[newSectionAction(askNewSection)]] : [];
+  // Note that a menu holding New section alone would repeat the button beside it, so the head offers none until another item joins it.
+  const tasksHeadMenuOffered = tasksHeadGroups.flat().length > 1;
   // Note that the count reads every listed task, not the rows the view draws, which hides the finished ones by default.
   const childCounts = useMemo(() => childTaskCounts(tasks.listed.tasks), [tasks.listed.tasks]);
   const context: RowContext = {
@@ -2327,19 +2331,19 @@ function SidebarColumn({
                   />
                   <nav
                     className="sidebar-group"
-                    aria-label="Tasks"
+                    aria-label={tasksHead}
                     data-row-drop={sectionsShown ? TASKS_DROP_ZONE : undefined}
                     {...motionRows()}
                   >
                     {tasks.signedIn ? (
                       <GroupHeader
                         heading={GROUP_HEADING.NONE}
-                        label="Tasks"
+                        label={tasksHead}
                         menuOpen={tasksHeadMenu.open !== undefined}
                         contextMenu={
-                          tasksHeadGroups.length === 0
-                            ? undefined
-                            : tasksHeadMenu.contextMenu(newSectionButton)
+                          tasksHeadMenuOffered
+                            ? tasksHeadMenu.contextMenu(newSectionButton)
+                            : undefined
                         }
                         actions={
                           <>
@@ -2372,13 +2376,6 @@ function SidebarColumn({
                         onClose={tasksHeadMenu.close}
                       />
                     )}
-                    {tasks.signedIn && shared ? (
-                      <ViewChips
-                        assignedTo={assignedTo}
-                        tasks={unpinnedTasks}
-                        onClear={() => taskView.onAssignedTo(mine)}
-                      />
-                    ) : null}
                     {assignedTo.kind !== ASSIGNED_TO.ANYONE &&
                     rows.length === 0 &&
                     shownSections.every((drawn) => drawn.rows.length === 0) &&

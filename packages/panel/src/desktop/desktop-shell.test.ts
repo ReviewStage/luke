@@ -709,7 +709,7 @@ test("with Channels on, the sidebar keeps the Tasks section and stands the chann
   const groups = [...sidebar.querySelectorAll("nav[aria-label]")].map((nav) =>
     nav.getAttribute("aria-label"),
   );
-  assert.ok(groups.includes("Tasks"), `the Tasks section stands: ${groups.join(", ")}`);
+  assert.ok(groups.includes("My tasks"), `the Tasks section stands: ${groups.join(", ")}`);
   assert.ok(!groups.includes("Channels"), "the channels head no section of their own");
   const inbox = () => placeRow(page, "Inbox") ?? assert.fail("the Inbox's row stands");
   assert.equal(
