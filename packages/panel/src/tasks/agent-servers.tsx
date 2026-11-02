@@ -114,9 +114,9 @@ import { type LukeToolsDoor, type LukeToolsRead, useLukeTools } from "./agent-lu
 import { ServerCard } from "./server-card.js";
 
 /**
- * agent-servers.tsx -- the MCP servers row of an agent box's + menu and an automation's servers field, and the popover both open that lists the servers the agent is handed with a switch for each, and each server's tools.
+ * agent-servers.tsx -- the Integrations row of an agent box's + menu and an automation's servers field, and the popover both open that lists the servers the agent is handed with a switch for each, and each server's tools.
  *
- * The agent box's + opens a menu whose MCP servers row opens the popover
+ * The agent box's + opens a menu whose Integrations row opens the popover
  * beside the menu as its submenu (`serversMenuPanel`, `@luke/ui`'s
  * `MenuPanel`), the menu standing behind it; an automation's form opens the
  * same popover from its field's chip, hung from the chip's trailing edge
@@ -209,9 +209,6 @@ const SERVER_END_CLASS = "ml-auto flex flex-none items-center gap-tight-gap";
 export const SERVER_PAGE_HEAD_CLASS =
   "agent-servers-page-head flex h-pane-bar flex-none items-center gap-icon-gap border-b border-border pr-list-inset pl-item-gap [--luke-fold:folded]";
 
-/** What the + menu's row that opens the popover is named. */
-const SERVERS_ROW = "MCP servers";
-
 /** What the pinned row at the popover's foot is named, which opens Settings › Integrations. */
 const SERVERS_SETTINGS = "Manage in Settings";
 
@@ -220,8 +217,8 @@ const SERVERS_NONE = "No integrations available";
 
 /** What the home's field asks for, and says where nothing matches. */
 const SEARCH = {
-  PLACEHOLDER: "Search servers and tools",
-  NONE: "No servers or tools match",
+  PLACEHOLDER: "Search integrations and tools",
+  NONE: "No integrations or tools match",
   TOOLS: "Tools",
 } as const;
 
@@ -1391,7 +1388,7 @@ function ServersMenuPanel({
 }
 
 /**
- * The + menu's MCP servers row, which opens the popover beside the menu as
+ * The + menu's Integrations row, which opens the popover beside the menu as
  * its submenu: the same popover the chip hangs, Escape on its home going
  * back to the row.
  */
@@ -1400,7 +1397,7 @@ export function serversMenuPanel(
   statuses: IntegrationStatuses,
 ): MenuPanel {
   return {
-    label: SERVERS_ROW,
+    label: SERVERS_LABEL,
     icon: <McpIcon />,
     panel: ({ back, close, entered }) => (
       <ServersMenuPanel
