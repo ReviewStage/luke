@@ -2262,6 +2262,16 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   container: published-row / inline-size;
 }
 
+/* As narrow as a phone's: where it stands goes, so the title has the room;
+   the mark's colour and its words for a reader who cannot see it, and the
+   Pull request tab, still say it. */
+/* off-scale: 420px, a phone's widest card */
+@container published-row (width < 420px) {
+  .agent-published-state {
+    display: none;
+  }
+}
+
 /* Too narrow for the checks' word: it goes, and the mark's words for a
    reader who cannot see it and the Pull request tab still say they failed. */
 @container published-row (width < 360px) {
