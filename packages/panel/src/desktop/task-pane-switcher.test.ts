@@ -183,6 +183,7 @@ function mount(
                   tab: on,
                   onChoose: (chosen) => told.push(`choose ${String(chosen)}`),
                   onToggle: () => told.push("toggle"),
+                  onShowList: () => told.push("list"),
                   onClose: (closed) => told.push(`close ${String(closed)}`),
                 },
               }),
@@ -324,7 +325,7 @@ test("on a phone Agents shuts the panel by its own toggle and shows an agent's t
   shut.choose("Overview");
   assert.deepEqual(shut.told, [`column "${MAIN_TAB.OVERVIEW}"`]);
   shut.choose("Activity");
-  assert.deepEqual(shut.told, [`column "${MAIN_TAB.OVERVIEW}"`, "toggle"]);
+  assert.deepEqual(shut.told, [`column "${MAIN_TAB.OVERVIEW}"`, "list"]);
 });
 
 test("on a phone ⌘K's Change repository shows Overview from under the panel, and opens the repository's menu under the plan's path only once the plan is in sight", async () => {
@@ -354,7 +355,7 @@ test("on a phone Activity closes a tab from its row, as the strip's × did, with
 test("on a phone Activity asked over a shut panel lists the tabs whatever tab the panel opens on, as one with every tab closed chooses as it opens", async () => {
   const page = mount(SHELL_ROOM.NARROW, false, undefined);
   page.choose("Activity");
-  assert.deepEqual(page.told, ["toggle"]);
+  assert.deepEqual(page.told, ["list"]);
   page.draw(true, SIDE_PANEL_TAB.INBOX);
   await act(async () => undefined);
   assert.deepEqual(page.views(), ["Overview", "Agents", "*Activity"]);

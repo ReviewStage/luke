@@ -26,6 +26,8 @@ import {
   ListRow,
   type MenuRow,
   MenuRowList,
+  POPOVER_ALIGN,
+  POPOVER_BOUNDS,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
   type ResizeEdgeHandle,
@@ -33,6 +35,7 @@ import {
   RowHintOptions,
   SCROLL_SIZE,
   ScrollArea,
+  SearchableMenu,
   SidePanelIcon,
   SpinnerRegion,
   TEXT_TONE,
@@ -64,12 +67,15 @@ import {
   type TerminalStripTab,
   tabKey,
 } from "@luke/ui/tab-strip-model";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import {
+  createContext,
   Fragment,
   type ReactNode,
   Suspense,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
@@ -1513,28 +1519,74 @@ export function ActivityList({
 }
 
 /**
- * The panel shown on purpose with every tab closed: every row its "+" menu
- * offers, under the menu's own headings, each opening what it names as its
- * row there does. Note that a plan's page reaches it by ⌘T alone, since its
- * Show panel opens a tab first (`useTasksTab`), while an agent's page, which
- * has no summary to list its tabs, reaches it by its toggle too.
+ * The window's box holding the side panel's toggle, which the panel's "+"
+ * menu hangs from where the toggle asked for it with nothing to show; none
+ * where no toggle is drawn.
  */
-function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Element {
-  return (
-    <ScrollArea size={SCROLL_SIZE.CONTENT}>
-      <div className="side-panel-no-tabs flex flex-col px-side-panel-no-tabs py-luke-48">
-        <div className="side-panel-no-tabs-line mb-control-gap px-row-inset">
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            No tabs open
-          </Text>
-        </div>
-        <MenuRowList
-          label="Open a tab"
-          rows={entries.map(entryRow)}
-          onPick={(id) => entries.find((entry) => entry.row.id === id)?.onPick()}
-        />
-      </div>
-    </ScrollArea>
+export const PanelToggleRoom = createContext<HTMLElement | null>(null);
+
+/**
+ * The "+" menu hung from the side panel's toggle, where the toggle or ⌘T
+ * asked for it with nothing to show, since the panel never stands with
+ * nothing in it: a pick opens the panel on what it names, and the menu
+ * closing, by a pick or not, answers the ask. Focus goes back to the toggle,
+ * as a native menu hands it back to its trigger. Where no toggle is drawn,
+ * a phone's page, whose ⋯ offers Show panel, it hangs at the window's top
+ * right, where the toggle would stand.
+ */
+function ToggleOffers({
+  entries,
+  onAnswered,
+}: {
+  entries: readonly AddEntry[];
+  onAnswered: () => void;
+}): React.JSX.Element | null {
+  const toggle = useContext(PanelToggleRoom);
+  const [corner, setCorner] = useState<HTMLElement | null>(null);
+  const room = toggle ?? corner;
+  const [open, setOpen] = useState(true);
+  const drawn = useDisclosure(open);
+  const menuId = useId();
+  useEffect(() => {
+    if (!drawn.mounted) onAnswered();
+  }, [drawn.mounted, onAnswered]);
+  if (!drawn.mounted) return null;
+  // Note that the corner stands only where no toggle does, as the box the menu hangs from in its place.
+  if (room === null) return <div ref={setCorner} className="panel-offers-corner" />;
+  const close = () => {
+    setOpen(false);
+    room.querySelector<HTMLElement>("button")?.focus();
+  };
+  const menu = (
+    <SearchableMenu
+      leaving={drawn.leaving}
+      ref={drawn.ref}
+      id={menuId}
+      label="Open a tab"
+      placeholder="Search tabs"
+      rows={entries.map(entryRow)}
+      value={undefined}
+      // Note that a menu offering nothing says so, rather than that a query matched nothing.
+      noMatch={entries.length === 0 ? "Nothing to open here" : "No tabs match"}
+      align={POPOVER_ALIGN.END}
+      bounds={POPOVER_BOUNDS.WINDOW}
+      onPick={(id) => {
+        const entry = entries.find((each) => each.row.id === id);
+        close();
+        entry?.onPick();
+      }}
+      onClose={close}
+      onLeave={(left) => {
+        if (!(left instanceof Node && room.contains(left))) setOpen(false);
+      }}
+    />
+  );
+  return toggle === null ? (
+    <div ref={setCorner} className="panel-offers-corner">
+      {menu}
+    </div>
+  ) : (
+    createPortal(menu, toggle)
   );
 }
 
@@ -2091,7 +2143,7 @@ export function SidePanelToggle({
       <IconButton
         icon={closes ? <CloseIcon /> : <SidePanelIcon />}
         label={label}
-        aria-expanded={panel.open}
+        aria-expanded={panel.open || panel.toggleAsked}
         disabled={disabled}
         onClick={panel.onToggle}
       />
@@ -2372,7 +2424,7 @@ export function SidePanel({
    * ⋯ holding the list, the tab's own actions, and Close; none elsewhere.
    */
   phone?: { readonly back: string; readonly onBack: () => void } | undefined;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   // A phone's panel over a page other than a task's keeps its own Activity: whether it lists its tabs, and the tab shown.
   const [ownListed, setOwnListed] = useState(false);
   const [ownShown, setOwnShown] = useState<ShownTab | undefined>(undefined);
@@ -2587,9 +2639,13 @@ export function SidePanel({
       onOpenAgent: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
     },
   });
-  // Something on offer past the fixed kinds, which an empty panel offers in place as a closed kind is.
-  const offersMore = offers.some((entry) => entry.row.section !== undefined);
   const macTerminalClose = useMacTerminalClose(panel);
+  // Note that the panel is drawn only with something in it; while shut, it stands here only for the toggle's ask, as the "+" menu hung from the toggle.
+  if (!panel.open) {
+    return panel.toggleAsked ? (
+      <ToggleOffers entries={offers} onAnswered={panel.onToggleAskedAnswered} />
+    ) : null;
+  }
 
   return (
     <PanelFrame
@@ -2684,9 +2740,7 @@ export function SidePanel({
       {listing ? (
         <Fill ref={setActivitySlot} className="side-panel-content" />
       ) : tab === SIDE_PANEL_TAB.PLAN && plan !== undefined ? null : tab === undefined ? (
-        <Fill className="side-panel-content">
-          {panel.closedTabs.length === 0 && !offersMore ? null : <NoTabs entries={offers} />}
-        </Fill>
+        <Fill className="side-panel-content" />
       ) : (
         // A page's words stand in a sandboxed frame no find of the window
         // reaches, so a page's tab finds itself, through its frame or in its

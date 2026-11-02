@@ -94,7 +94,12 @@ beforeEach(() => {
   // The panel left open on an earlier launch, since a first launch leaves it shut.
   window.localStorage.setItem(
     "luke.sidePanel",
-    JSON.stringify({ open: true, tabs: ["plan", "inbox", "comments"], width: 400 }),
+    JSON.stringify({
+      open: true,
+      tabs: ["plan", "inbox", "comments"],
+      tab: "comments",
+      width: 400,
+    }),
   );
   fakeAppPlatform(QUIET_PANEL);
   Object.defineProperty(window, "matchMedia", {
