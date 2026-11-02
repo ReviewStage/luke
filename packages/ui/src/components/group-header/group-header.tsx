@@ -7,7 +7,6 @@ import {
   useRef,
 } from "react";
 import { isComposingKey } from "../../composing-key.js";
-import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { ShadcnInput } from "../../shadcn/input.js";
 import { STATUS_TONE } from "../../status-tone.js";
 import {
@@ -499,7 +498,7 @@ export function GroupHeader({
       className={`${PART.LEAD} ${PRESSED_AS_ROW.LEAD}`}
       aria-expanded={state.open}
       aria-controls={rows ? rowsId : undefined}
-      onClick={pulseOnPress(state.toggle, PRESS_PULSE.QUIET)}
+      onClick={state.toggle}
     >
       {lead}
     </button>

@@ -531,7 +531,7 @@ const MESSAGE_AGENT_WORDS = ` Message another agent with \`${MESSAGE_AGENT_TOOL.
 /** How an agent the agent starts reports back: its final message handed to the agent by itself, and `message_agent` before then. */
 const STARTED_REPORT_WORDS = `reports back to you: once its turn ends, its final message reaches you by itself, as a line opening \`${AGENT_MESSAGE_LEAD} ·\` naming it and how its turn ended, completed, failed with why, or stopped, which is yours to act on; before then it may message you with \`${MESSAGE_AGENT_TOOL.name}\``;
 
-/** How an agent another started sends it what it would have posted in a thread: with `message_agent`, by the starter's id. */
+/** How an agent another started reaches it before its final report: with `message_agent`, by the starter's id. */
 const STARTER_REACH_WORDS = `with \`${MESSAGE_AGENT_TOOL.name}\` and that agent's id`;
 
 /** What the instructions say of where the agent works, which differs for an agent with a repository and one with none. */
@@ -597,6 +597,15 @@ function toolsOn(tools: ToolWords, machine: CoderMachine): ToolWords {
   };
 }
 
+/**
+ * What a cloud agent is told of the developer's Mac: what `run_on_mac`
+ * reaches, and that it is withdrawn for good once anyone but the developer
+ * puts words into the agent (`tool-set.ts`'s `macToolsOf`), so an agent
+ * that loses it knows why. A local agent is told none of it, since it is
+ * offered no `run_on_mac`.
+ */
+const RUN_ON_MAC_WORDS = `\`${CODER_TOOL.RUN_ON_MAC}\` runs a command on the developer's own Mac instead, from their home folder, where the developer may be asked to allow the command, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers. It is offered only until someone other than the developer puts words into you, such as a teammate's message, a webhook's body, or a review on your pull request.`;
+
 /** Where a sandboxed local agent runs, and what of its device it cannot reach. */
 const DEVICE_VM_WORDS = `You run in a Linux virtual machine of your own on one of the developer's devices, booted from ${PRODUCT_NAME}'s sandbox image, with your folder mounted in from the device: the device's own installed tools, running services, and files outside your folder are out of your reach.`;
 
@@ -619,7 +628,7 @@ function checkoutReachWords(tools: ToolWords, machine: CoderMachine): string {
   }
   return machine.local
     ? `GitHub is reachable through \`gh\` and \`git\` from the shell, under the developer's own git credentials on their Mac, so never put a token in a URL or a command, and never sign in as anyone else. You run on the developer's own Mac, in a worktree of your own, with their installed tools and running services, inside ${tools.ownSandbox}, which keeps your worktree and the temp folder writable.`
-    : "GitHub is reachable through `gh` and `git` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in. `run_on_mac` runs a command on the developer's own Mac instead, from their home folder, where the developer may be asked to allow the command, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.";
+    : `GitHub is reachable through \`gh\` and \`git\` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in. ${RUN_ON_MAC_WORDS}`;
 }
 
 /** How the agent looks at what it built before it publishes: on the sandbox's Playwright, display, and browser, or on the developer's machine with whatever the repository runs. */
@@ -751,7 +760,7 @@ You work on the developer's own Mac, in a folder of your own with no repository 
   }
   return `## Your sandbox
 
-You have a sandbox of your own, with no repository in it, which opens the first time you use it. ${tools.sandbox} No GitHub credential is set in it, so never try to sign in. \`run_on_mac\` runs a command on the developer's own Mac instead, from their home folder, where the developer may be asked to allow the command, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.`;
+You have a sandbox of your own, with no repository in it, which opens the first time you use it. ${tools.sandbox} No GitHub credential is set in it, so never try to sign in. ${RUN_ON_MAC_WORDS}`;
 }
 
 /**
@@ -949,10 +958,9 @@ const CODER_SECTION_WORDS: SectionWords = {
 };
 
 /**
- * What a pilot is told beside its job of the agents it starts: it alone
- * speaks for its task, to the developer, or to the pilot that started it;
- * its agents report to it and post no threads, as every agent another
- * started is told (`../agent-tools.ts`'s `startedByNote`); it sends up only
+ * What a pilot is told beside its job of the agents it starts: its agents
+ * report to it, as every agent another started is told
+ * (`../agent-tools.ts`'s `startedByNote`); it sends up only
  * what needs the developer, passes their steering down, and points them at
  * a picture an agent shows in its own transcript.
  */
@@ -960,7 +968,7 @@ const PILOT_SECTIONS = `
 
 ## Agents you start
 
-You alone speak for your task: every agent you start, coding agent or pilot, is told you started it, reports to you, its final message reaching you by itself once its turn ends and any word before then with \`${MESSAGE_AGENT_TOOL.name}\`, each as a line opening \`${AGENT_MESSAGE_LEAD} ·\`, and posts no threads. You decide what goes up, to the developer, or, where a pilot started you, to it, and relay the answers down. Send up only what needs the developer: that your breakdown is ready, one that grows the scope, a held pull request's go, and a question or a to-do only they can settle, each in a thread of its own, or, where a pilot started you, in a message to it; never pass on a routine milestone, such as a pull request opened, a fix pushed, or checks green, which your final report covers. The developer steers the work through you alone, so pass what they ask down to the agent it concerns. A message carries no picture, so where an agent shows one in its own transcript, mention that agent for the developer to open it there.`;
+Every agent you start, coding agent or pilot, is told you started it, reports to you, its final message reaching you by itself once its turn ends and any word before then with \`${MESSAGE_AGENT_TOOL.name}\`, each as a line opening \`${AGENT_MESSAGE_LEAD} ·\`. You decide what goes up, to the developer, or, where a pilot started you, to it, and relay the answers down. Send up only what needs the developer: that your breakdown is ready, one that grows the scope, a held pull request's go, and a question or a to-do only they can settle, each in a thread of its own, or, where a pilot started you, in a message to it; never pass on a routine milestone, such as a pull request opened, a fix pushed, or checks green, which your final report covers. The developer steers the work through you alone, so pass what they ask down to the agent it concerns. A message carries no picture, so where an agent shows one in its own transcript, mention that agent for the developer to open it there.`;
 
 const PILOT_SECTION_WORDS: SectionWords = {
   ...CODER_SECTION_WORDS,
@@ -1064,7 +1072,7 @@ What you need from the developer goes in a thread with \`${INBOX_TOOLS.POST.name
 
 A thread goes to one of your workspace's channels, which every member reads, and shows on your task as well where you work on one. Post only what a person would act on or be glad to know: an update on something you posted goes into its thread, never a thread of its own. Keep to the channels that stand: make one with \`${INBOX_TOOLS.CREATE_CHANNEL.name}\` only for a lasting topic or a project of several weeks that none of them covers, never one per task, rename it, edit its purpose, or archive it with \`${INBOX_TOOLS.UPDATE_CHANNEL.name}\`, archiving a project's channel once the project ships, and move a thread to the channel it belongs in with \`${INBOX_TOOLS.MOVE_THREAD.name}\`.
 
-Where another agent started you, as your first message says, threads to the developer are that agent's to post, not yours: post none. Send that agent instead, ${STARTER_REACH_WORDS}, what you would have posted, a pull request ready for review, a decision, a question, or something only the developer can do by hand, and wait on its answer where you would have waited on theirs; it decides what reaches the developer and relays their answer back to you. A message carries no picture, so show one with \`${CODER_TOOL.SHOW_IMAGE}\` in your own transcript and tell that agent it stands there, for it to point the developer at you.
+Where another agent started you, as your first message says, your final message reaches it by itself as your report, and you may send it before then, ${STARTER_REACH_WORDS}, what concerns the work it handed you, such as a question it can answer for you. A message carries no picture, so show one with \`${CODER_TOOL.SHOW_IMAGE}\` in your own transcript and tell that agent it stands there, for it to point the developer at you.
 
 One thread per thing you need; \`${INBOX_TOOLS.POST.name}\`'s own words say how to write its posts and the asks they end with. Decide small things yourself.
 

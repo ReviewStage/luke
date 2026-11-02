@@ -19,7 +19,7 @@ import {
 } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { ChevronRightIcon, FoldChevronIcon } from "../../face/glyphs.js";
-import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
+import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
 import { BUTTON_SIZE } from "../button/button.js";
 import { motionKey, motionRows } from "../list-motion/list-motion.js";
@@ -848,7 +848,7 @@ export function ListRow({
           className={FOLD_CLASS}
           aria-label={fold.label}
           aria-expanded={fold.open}
-          onClick={pulseOnPress(() => fold.onOpenChange(!fold.open), pressPulse)}
+          onClick={() => fold.onOpenChange(!fold.open)}
         >
           {/* Note that the chevron turns on the one turn every fold makes (`disclosure.css`). */}
           <span className="luke-disclosure-turn" data-open={fold.open}>
