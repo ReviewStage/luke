@@ -30,7 +30,7 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * and opens as the host's open task.
  *
  * The add menu's New task, and a task's menu and ⌘K's New sub-task, open
- * this same card with its Relation pill filled (New task's preset's
+ * this same card with that task's relation as a row over it (New task's preset's
  * `relation`), started in that task's workspace rather than the one listed.
  *
  * The Automations page's Create with an agent opens this same card for the

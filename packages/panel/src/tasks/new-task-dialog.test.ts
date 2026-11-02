@@ -370,7 +370,7 @@ test("a server switched off from the + menu's MCP servers is handed to the agent
     const rows = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
     assert.deepEqual(
       rows.map((row) => row.textContent),
-      ["Attachment", "MCP servers"],
+      ["Attachment", "MCP servers", "Task relation"],
     );
     act(() => rows[1]?.click());
     await settle();

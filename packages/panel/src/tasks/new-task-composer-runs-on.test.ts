@@ -162,7 +162,10 @@ async function mount(offered: Offered = { devices: devicesWith() }, relation?: N
       ? { state: MODELS_READ.UNREAD, generation: 0 }
       : { state: MODELS_READ.READ, generation: 1 };
   const starts: (TaskRunsOnRequest | undefined)[] = [];
-  const named: { repository: string | null; relation: TaskCreateRelation | undefined }[] = [];
+  const named: {
+    repository: string | null;
+    relations: readonly TaskCreateRelation[] | undefined;
+  }[] = [];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -200,7 +203,7 @@ async function mount(offered: Offered = { devices: devicesWith() }, relation?: N
         from?: NewTaskStart,
       ) => {
         starts.push(from?.runsOn);
-        named.push({ repository, relation: from?.relation });
+        named.push({ repository, relations: from?.relations });
         return Promise.resolve(undefined);
       },
     });
@@ -396,6 +399,6 @@ test("a sub-task's card starts in its relation alone, naming no repository and n
 
   assert.deepEqual(starts, [undefined]);
   assert.deepEqual(named, [
-    { repository: null, relation: { kind: "sub-task-of", taskId: SUB_TASK.task.id } },
+    { repository: null, relations: [{ kind: "sub-task-of", taskId: SUB_TASK.task.id }] },
   ]);
 });
