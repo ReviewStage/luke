@@ -62,7 +62,7 @@ export function SignInGate({
   return (
     <AuthPage
       mark={<WingFace />}
-      title="Welcome to Luke"
+      title="Sign in to Luke"
       error={
         failure === undefined
           ? undefined

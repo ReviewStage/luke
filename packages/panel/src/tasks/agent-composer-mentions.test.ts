@@ -1467,7 +1467,7 @@ test("a bare @ ends in a row for each kind the place offers, and → on one narr
     ["Plan", "2 sections"],
     ["Pages", "1 page"],
     ["Agents", "acme"],
-    ["Dates", "A day, a time, or a range"],
+    ["Dates", ""],
     ["Linear", "Integration"],
   ]);
   assert.deepEqual(wideKeys, ["↑↓Move", "⏎⇥Mention", "→Open", "EscClose"]);
