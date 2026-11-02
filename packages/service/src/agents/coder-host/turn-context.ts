@@ -64,10 +64,9 @@ function contentKey(text: string): string {
  * model reads it: its name, brief, and open comment threads
  * (`openThreadsText`), so a change the model would not see, a resolved
  * thread's own fields, hands the task again no sooner. Note that the saved
- * document, the agents' notes, and the sections the developer wrote are left
- * out, because every save of the plan changes them, the agent's own among
- * them; whether someone else saved is read from the plan's revisions
- * (`savedByAnotherSince`).
+ * document and the agents' notes are left out, because every save of the plan
+ * changes them, the agent's own among them; whether someone
+ * else saved is read from the plan's revisions (`savedByAnotherSince`).
  */
 export function taskKey(stored: StoredTask, comments: readonly PlanCommentThread[]): string {
   const { name } = stored.task;
