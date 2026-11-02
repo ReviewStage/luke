@@ -521,8 +521,8 @@ export interface NewTaskPreset {
 interface NewTaskCardKept {
   /** What the card started, which it opens again for; a task's agent where none is named. */
   readonly purpose?: NewTaskPurpose;
-  /** The relation the card started its task in, which it opens again on; none for a task related to none. */
-  readonly relation?: NewTaskRelation;
+  /** The relations the card started its task in, which it opens again on. */
+  readonly relations: readonly NewTaskRelation[];
   readonly repository: string | null;
   readonly choice: ModelChoice | undefined;
   readonly press: NewTaskPress;
@@ -540,8 +540,8 @@ export interface NewTaskStart {
   readonly runsOn?: TaskRunsOnRequest;
   /** The device Runs on chose, which a refusal names; none for the cloud. */
   readonly device?: MacOffer;
-  /** The relation the start makes its task in, from the new task's side, written with it in one transaction; none for a task related to none. */
-  readonly relation?: TaskCreateRelation;
+  /** The relations the start makes its task in, from the new task's side, written with it in one transaction; none for a task related to none. */
+  readonly relations?: readonly TaskCreateRelation[];
   readonly handed?: NewTaskAgent;
   /** How the task is worked, where the card's choice named it while the Pilot experiment is on; by its agents otherwise. */
   readonly mode?: TaskMode;
@@ -815,7 +815,7 @@ export interface TasksControl {
     readDefault: () => Promise<AgentDefaultAnswer>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
-    /** The tasks the window lists, archived ones among them, which name the agents an `@` in the composer offers and the Relation pill offers its workspace's of. */
+    /** The tasks the window lists, archived ones among them, which name the agents an `@` in the composer offers and New task's Task relation offers its workspace's of. */
     tasks: readonly TaskSummary[];
     /** Opens a task or a section a mention in the composer names, as the window's own opener does. */
     onShowMention: (mention: PlanMention) => void;
@@ -2636,7 +2636,6 @@ export function useTasksTab(input: {
               ? undefined
               : {
                   ...(card.purpose === undefined ? undefined : { purpose: card.purpose }),
-                  ...(card.relation === undefined ? undefined : { relation: card.relation }),
                   refused: { card, note },
                 },
         });
@@ -2649,7 +2648,9 @@ export function useTasksTab(input: {
       ...(workspaceId === undefined ? undefined : { workspaceId }),
       ...(from.runsOn === undefined ? undefined : { runsOn: from.runsOn }),
       ...(from.mode === undefined ? undefined : { mode: from.mode }),
-      ...(from.relation === undefined ? undefined : { relation: from.relation }),
+      ...(from.relations === undefined || from.relations.length === 0
+        ? undefined
+        : { relations: from.relations }),
       planning: false,
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
       ...(stays ? { quiet: true } : undefined),

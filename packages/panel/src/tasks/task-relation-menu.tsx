@@ -34,7 +34,7 @@ import { useEffect, useId, useRef, useState } from "react";
  * why at its end: already related that way, a loop the service would
  * refuse, or, for a sub-task or a parent, another repository, since a tree
  * works in one. New task is pinned above the kind and opens New task with
- * its Relation pill filled from the new task's side: on Sub-task as a
+ * a relation to this task, read from the new task's side: on Sub-task as a
  * sub-task of this task, on Blocked by as one that blocks it. A pick is sent through the door: a block as the
  * blocks' change, a sub-task or a parent as a parent set, the service's
  * answer being what the head goes on drawing. The task's ⋯ menu, its
