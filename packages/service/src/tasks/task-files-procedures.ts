@@ -186,7 +186,8 @@ export function taskFilesProcedures(seams: TaskFilesProcedureSeams) {
       const taskId = yield* pathUuid(input.id);
       const pageId = yield* pathUuid(input.page);
       const version = yield* pageVersionOf(input.version);
-      return yield* pageFrameAnswer(context.userId, taskPageOwner(taskId), pageId, version);
+      const owner = taskPageOwner(taskId);
+      return yield* pageFrameAnswer(context.request, context.userId, owner, pageId, version);
     }),
   };
 }

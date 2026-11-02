@@ -5,9 +5,12 @@
  * root `vercel.json`), a link's `/p/<token>` with its token moved into a
  * query, and this route answers on that host alone, whatever routed a request
  * here: on any address of the app's, its own path among them, it answers not
- * found, so no page is ever a document of the app's origin. What admits a
- * request is the link's token alone (`page-links.ts`): the route reads no
- * cookie, needs no session, and sets none. The version is read again for the
+ * found, so no page is ever a document of the app's origin. It answers a
+ * frame's load alone (`page-links.ts`'s `loadsAFrame`): opened in a whole
+ * tab, or by a request that names no load, a link is refused, so a page is
+ * never a tab of its own on a domain of Luke's. What admits a request is the
+ * link's token alone (`page-links.ts`): the route reads no cookie, needs no
+ * session, and sets none. The version is read again for the
  * account the link was minted for, under the reach its mint was held to, and
  * answered under the policy every server of a page answers with
  * (`@luke/features/page-policy`), framed by the app's own origins alone, with
@@ -34,7 +37,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { PAGE_LINK_ROUTE, PageLinks, readPageLink } from "./page-links.js";
+import { loadsAFrame, PAGE_LINK_ROUTE, PageLinks, readPageLink } from "./page-links.js";
 
 /** What the route may require of the function that stands it: the store and the deployment's page links. */
 export type PageSandboxAppServices = DatabaseServices | PageLinks;
@@ -44,7 +47,7 @@ type PageSandboxServices =
   | HttpServerRequest.HttpServerRequest
   | Scope.Scope;
 
-/** GET: the version the link admits, as its page, on the sandbox's own host. */
+/** GET: the version the link admits, as its page, to a frame's load on the sandbox's own host. */
 const sandboxPageEndpoint = /* @__PURE__ */ Effect.fn("web/sandboxPageEndpoint")(
   function* (): Effect.fn.Return<
     HttpServerResponse.HttpServerResponse,
@@ -56,6 +59,7 @@ const sandboxPageEndpoint = /* @__PURE__ */ Effect.fn("web/sandboxPageEndpoint")
       return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
     }
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+    if (!loadsAFrame(request)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     const address = new URL(request.url);
     const { sandbox } = yield* PageLinks;
     // Note that a page is served on the sandbox's host or not at all, because on an address of the app's it would run as the app's own.

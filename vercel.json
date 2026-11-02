@@ -39,8 +39,13 @@
               }
             }
           ],
-          "dest": "/api/page-sandbox.js",
-          "status": 404
+          "dest": "/sandbox-not-found.txt",
+          "status": 404,
+          "headers": {
+            "Content-Security-Policy": "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "no-referrer"
+          }
         },
         {
           "src": "/install\\.sh",

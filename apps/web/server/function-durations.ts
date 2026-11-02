@@ -36,7 +36,7 @@ function routeKeyOf(path: string): string {
  * one it already had.
  *
  * The one group not drawn by a bound is the sandbox's page route's, which
- * shares its function with nothing: its function is all the sandbox's host
+ * shares its function with nothing: it is the one function the sandbox's host
  * reaches (the root `vercel.json`), and a dispatcher holding any other route
  * would hand that route a request whose query named it, the API's among them.
  */

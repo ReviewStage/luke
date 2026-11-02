@@ -17,13 +17,20 @@
  * route reads the version again on the account's own reach, so an account
  * that lost the task within that minute is refused too.
  *
- * The deployment has a sandbox only where its environment names both the key
- * and the origin, and holds them apart: a key shorter than 32 characters or
- * one another of the deployment's secrets holds, and an origin other than the
- * one the deployment's routing locks to the page route, are read as unset,
- * which the build says once by the variables' names. Without a sandbox every
- * page frame is sent to the page saying pages open in the Mac app, and the
- * page route answers nothing.
+ * A link is minted and served to a frame's load alone (`loadsAFrame`). In a
+ * whole tab a page's script would answer to no `frame-src` of the app's and
+ * could send the browser anywhere from a domain of Luke's own, and the link
+ * would stand in the tab's history; so a load the browser names as anything
+ * but a frame's, or names as nothing, is refused, never served.
+ *
+ * The deployment has a sandbox only where it is production and its
+ * environment names both the key and the origin, and holds them apart: a key
+ * shorter than 32 characters or one another of the deployment's secrets
+ * holds, and an origin other than the one the deployment's routing locks to
+ * the page route, are read as unset, which the build says once by the
+ * variables' names. A Preview has no sandbox domain, so it never has a
+ * sandbox. Without one every page frame is sent to the page saying pages open
+ * in the Mac app, and the page route answers nothing.
  */
 
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -35,6 +42,7 @@ import {
   AUTH_DEPLOYMENT_ENVIRONMENT,
   AUTH_SECRET_ENVIRONMENT,
   authDeployment,
+  DEPLOYMENT_ENVIRONMENT,
 } from "../auth/auth-deployment.js";
 import { text } from "../core.js";
 import { CRON_ENVIRONMENT } from "../maintenance/maintenance-bounds.js";
@@ -59,6 +67,12 @@ export const PAGE_LINK_ROUTE = {
   TOKEN_QUERY: "token",
 } as const;
 
+/**
+ * What a browser names a frame's load as in `Sec-Fetch-Dest`, which no page's
+ * script can set: every current browser sends it with every load it makes.
+ */
+const FRAME_DESTINATION = { HEADER: "sec-fetch-dest", FRAME: "iframe" } as const;
+
 /** How long a link admits its page: long enough for the frame that asked for it to follow it, and no longer. */
 const PAGE_LINK_LIFETIME = Duration.minutes(1);
 
@@ -78,6 +92,7 @@ const OTHER_SECRETS = [
 
 /** Why the environment's sandbox is read as none, said once by the build, by the variables' names alone. */
 const SANDBOX_UNSET = {
+  NOT_PRODUCTION: `${AGENT_PAGES_ENVIRONMENT.SECRET} or ${AGENT_PAGES_ENVIRONMENT.ORIGIN} is set on a deployment that is not production, so pages open in the Mac app.`,
   HALF: `${AGENT_PAGES_ENVIRONMENT.SECRET} and ${AGENT_PAGES_ENVIRONMENT.ORIGIN} are not both set, so pages open in the Mac app.`,
   SHORT: `${AGENT_PAGES_ENVIRONMENT.SECRET} is shorter than ${MINIMUM_SECRET_CHARACTERS} characters, so it is read as unset and pages open in the Mac app.`,
   SHARED: `${AGENT_PAGES_ENVIRONMENT.SECRET} holds the value of another of the deployment's secrets, so it is read as unset and pages open in the Mac app.`,
@@ -128,6 +143,11 @@ function sameText(offered: string, held: string): boolean {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+/** Whether the browser says the request loads a frame: the one load a page or its link is answered to. */
+export function loadsAFrame(request: Request): boolean {
+  return request.headers.get(FRAME_DESTINATION.HEADER) === FRAME_DESTINATION.FRAME;
+}
+
 /** An address's origin, where it is one; nothing for anything that does not parse. */
 function originOf(address: string): string | undefined {
   return URL.canParse(address) ? new URL(address).origin : undefined;
@@ -166,7 +186,7 @@ export function readPageLink(
 }
 
 /** The sandbox an environment record names, or why it names none: nothing for either where both variables are unset. */
-export function pageSandboxIn(environment: Readonly<Record<string, string | undefined>>): {
+function pageSandboxIn(environment: Readonly<Record<string, string | undefined>>): {
   readonly sandbox: PageSandbox | undefined;
   readonly unset: string | undefined;
 } {
@@ -174,6 +194,9 @@ export function pageSandboxIn(environment: Readonly<Record<string, string | unde
   const origin = text(environment[AGENT_PAGES_ENVIRONMENT.ORIGIN]);
   const none = (unset: string | undefined) => ({ sandbox: undefined, unset });
   if (secret === undefined && origin === undefined) return none(undefined);
+  if (environment[AUTH_DEPLOYMENT_ENVIRONMENT.ENVIRONMENT] !== DEPLOYMENT_ENVIRONMENT.PRODUCTION) {
+    return none(SANDBOX_UNSET.NOT_PRODUCTION);
+  }
   if (secret === undefined || origin === undefined) return none(SANDBOX_UNSET.HALF);
   if (secret.length < MINIMUM_SECRET_CHARACTERS) return none(SANDBOX_UNSET.SHORT);
   const shared = OTHER_SECRETS.some((name) => {

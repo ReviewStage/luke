@@ -28,7 +28,7 @@ import { Redacted } from "effect";
 import { text } from "../core.js";
 
 /** The Vercel environment a deployment runs as, as its own `VERCEL_ENV` names it. */
-const DEPLOYMENT_ENVIRONMENT = {
+export const DEPLOYMENT_ENVIRONMENT = {
   PRODUCTION: "production",
   PREVIEW: "preview",
   DEVELOPMENT: "development",

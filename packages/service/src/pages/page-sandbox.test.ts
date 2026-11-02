@@ -33,8 +33,9 @@ import { pageSandboxApp } from "./page-sandbox-app.js";
  * alone, with no cookie set; while an account the page's task does not
  * reach is minted no link, one that loses the task within the link's minute
  * is served nothing, a link is served nothing once its minute has passed,
- * and a deployment with no sandbox sends every frame to the page saying
- * pages open in the Mac app.
+ * neither the mint nor the link answers a load that is not a frame's, and a
+ * deployment with no sandbox sends every frame to the page saying pages open
+ * in the Mac app.
  *
  * Synthetic accounts, bearers, workspaces, tasks, agents, pages, and keys
  * throughout.
@@ -50,6 +51,15 @@ const SANDBOX: PageSandbox = {
 };
 
 const CHART = { title: "Invite funnel", html: "<!doctype html><p>Invites by week</p>" } as const;
+
+/** What a browser names its load as (`Sec-Fetch-Dest`): a frame's, a whole tab's, or nothing, where the header is not sent. */
+const LOAD = { FRAME: "iframe", TAB: "document", UNNAMED: "unnamed" } as const;
+
+type Load = (typeof LOAD)[keyof typeof LOAD];
+
+/** A request's headers as a browser sends them for the load named. */
+const loadHeaders = (load: Load): Record<string, string> =>
+  load === LOAD.UNNAMED ? {} : { "sec-fetch-dest": load };
 
 const openAccount = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
@@ -101,19 +111,23 @@ const standing = (sandbox: PageSandbox | undefined) =>
       agentPages: agentPagesProcedures({ resolveUserId }),
       taskFiles: taskFilesProcedures({ resolveUserId }),
     });
-    /** A frame's load of a page's version, as the account names it. */
-    const frame = (userId: string, path: string) =>
+    /** A load of a page's version's frame address, as the account names it, a frame's unless named. */
+    const frame = (userId: string, path: string, load: Load = LOAD.FRAME) =>
       Effect.promise(() =>
         procedures(
-          new Request(`${APP_ORIGIN}${path}`, { headers: { authorization: `Bearer ${userId}` } }),
+          new Request(`${APP_ORIGIN}${path}`, {
+            headers: { authorization: `Bearer ${userId}`, ...loadHeaders(load) },
+          }),
           context,
         ),
       );
-    /** A link followed as the routing hands it to the page route, on the host given, the link's own unless named. */
-    const follow = (link: string, host = new URL(link).host) => {
+    /** A link followed as the routing hands it to the page route, a frame's load on the link's own host unless named. */
+    const follow = (link: string, host = new URL(link).host, load: Load = LOAD.FRAME) => {
       const token = new URL(link).pathname.slice(`/${PAGE_LINK_ROUTE.STEP}/`.length);
       const address = `https://${host}${PAGE_LINK_ROUTE.PATH}?${PAGE_LINK_ROUTE.TOKEN_QUERY}=${token}`;
-      return Effect.promise(() => route.handler(new Request(address)));
+      return Effect.promise(() =>
+        route.handler(new Request(address, { headers: loadHeaders(load) })),
+      );
     };
     return { frame, follow };
   });
@@ -228,6 +242,24 @@ it.layer(getTestDB())("a page framed on the web", (it) => {
       assert.equal(within.status, HOSTED_HTTP_STATUS.OK);
       assert.deepEqual(yield* refusalOf(yield* follow(link)), NOT_FOUND);
     }),
+  );
+
+  it.effect(
+    "a page's frame address and its link answer a frame's load alone: a whole tab's, or a load that names none, is minted no link and served no page",
+    () =>
+      Effect.gen(function* () {
+        const { frame, follow } = yield* standing(SANDBOX);
+        const { teammate, task, page } = yield* pageOnTask;
+        const path = framePath(task.id, page.id, 1);
+        const link = linkOf(yield* frame(teammate, path, LOAD.FRAME));
+        const host = new URL(link).host;
+
+        assert.equal((yield* follow(link, host, LOAD.FRAME)).status, HOSTED_HTTP_STATUS.OK);
+        for (const load of [LOAD.TAB, LOAD.UNNAMED]) {
+          assert.deepEqual(yield* refusalOf(yield* frame(teammate, path, load)), NOT_FOUND, load);
+          assert.deepEqual(yield* refusalOf(yield* follow(link, host, load)), NOT_FOUND, load);
+        }
+      }),
   );
 
   it.effect("a link is served on the sandbox's own host alone, never the app's", () =>

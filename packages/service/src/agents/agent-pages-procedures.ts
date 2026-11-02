@@ -65,7 +65,7 @@ export function agentPagesProcedures(seams: AgentPagesProcedureSeams) {
       const pageId = yield* pathUuid(input.page);
       const version = yield* pageVersionOf(input.version);
       const owner = { kind: PAGE_OWNER.AGENT, agentId } as const;
-      return yield* pageFrameAnswer(context.userId, owner, pageId, version);
+      return yield* pageFrameAnswer(context.request, context.userId, owner, pageId, version);
     }),
   };
 }

@@ -7,10 +7,13 @@
  * The link stands only in the answer's `Location`, never in the app's script,
  * its document, or its screen recording; the answer is kept by no cache
  * (`orpc/handler.ts`) and carries no referrer on; and every load of the
- * frame, a reload among them, mints anew. The version is read on the
- * account's own reach first, the rule the desktop's page read is held to
- * (`@luke/database/models/plan-pages`), so a page the account does not reach
- * answers not found and no link is minted for it, with a sandbox or without.
+ * frame, a reload among them, mints anew. A load the browser does not name as
+ * a frame's, a whole tab's above all, is answered not found and mints nothing
+ * (`page-links.ts`'s `loadsAFrame`), so no link ever stands in a tab's history.
+ * The version is read on the account's own reach first, the rule the
+ * desktop's page read is held to (`@luke/database/models/plan-pages`), so a
+ * page the account does not reach answers not found and no link is minted
+ * for it, with a sandbox or without.
  *
  * Note that the mint is a GET, which the cookie origin guard lets through from
  * any page, and that this is safe: it changes nothing, and what it answers is
@@ -35,15 +38,17 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
-import { mintPageLink, PageLinks } from "./page-links.js";
+import { loadsAFrame, mintPageLink, PageLinks } from "./page-links.js";
 
-/** The frame's answer for one version of one page the account asks for: where to load it from, or not found where the account does not reach it. */
+/** The frame's answer for one version of one page the account asks for: where to load it from, or not found where the account does not reach it or the request loads no frame. */
 export const pageFrameAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
   userId: string,
   owner: PageOwner,
   pageId: string,
   version: number,
 ): Effect.fn.Return<PageFrameAnswer, HostedRefusal, DatabaseServices | PageLinks> {
+  if (!loadsAFrame(request)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const page = yield* hostedStoreOrUnavailable(readPageVersion(userId, owner, pageId, version));
   if (Option.isNone(page)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { sandbox } = yield* PageLinks;

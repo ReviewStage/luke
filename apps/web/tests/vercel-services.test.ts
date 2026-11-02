@@ -8,12 +8,7 @@ import { temporaryDirectory } from "@luke/runtime/testing";
 import { PAGE_LINK_ROUTE } from "@luke/service/pages/page-links";
 import { test } from "vitest";
 import { functionPublicPath, webFunctions } from "../server/function-layout";
-import {
-  apiRewrites,
-  isHostLocked,
-  readVercelConfig,
-  vercelConfigSource,
-} from "../server/function-rewrites";
+import { apiRewrites, readVercelConfig, vercelConfigSource } from "../server/function-rewrites";
 import { changelogRoutes } from "../src/changelog-releases";
 import { parseReleases } from "../src/site-markdown";
 
@@ -28,10 +23,13 @@ const WEB = fileURLToPath(new URL("..", import.meta.url));
 
 const vercel = await readVercelConfig(WEB);
 
+/** Whether a route or a top-level rewrite is held to one host, as the sandbox's are. */
+const heldToAHost = (route: object) => "has" in route;
+
 test("the /api/ rewrites are generated into the web service's routes, ahead of its other routes but the sandbox host's", async () => {
   const generated = apiRewrites(await webFunctions(WEB));
   const { routes } = vercel.services[SERVICE.WEB];
-  const locked = routes.filter(isHostLocked);
+  const locked = routes.filter(heldToAHost);
   const rest = routes.slice(locked.length);
   assert.ok(locked.length > 0);
   assert.deepEqual(routes.slice(0, locked.length), locked);
@@ -110,9 +108,9 @@ test("no workspace's slug can be the first step of a page the web app serves und
   // A route held to the sandbox's host is never the app's own address.
   const routed = [
     ...vercel.services[SERVICE.WEB].routes
-      .filter((route) => !isHostLocked(route))
+      .filter((route) => !heldToAHost(route))
       .map((route) => route.src),
-    ...vercel.rewrites.filter((rewrite) => !isHostLocked(rewrite)).map((rewrite) => rewrite.source),
+    ...vercel.rewrites.filter((rewrite) => !heldToAHost(rewrite)).map((rewrite) => rewrite.source),
   ];
   const pages = readdirSync(WEB)
     .filter((name) => name.endsWith(".html"))
@@ -351,7 +349,10 @@ const APP_PATHS = [
   "/install.sh",
 ] as const;
 
-test("the sandbox's host reaches the page route alone, by a link's address, and answers every other path, the app's, the API's, auth's, and eve's among them, not found", async () => {
+/** The file the sandbox's host answers every path but a link's with, under a forced 404. */
+const SANDBOX_NOT_FOUND = "/sandbox-not-found.txt";
+
+test("the sandbox's host reaches the page route alone, by a link's address, and answers every other path, the app's, the API's, auth's, and eve's among them, not found from a static file", async () => {
   const pageRoute = PAGE_LINK_ROUTE.PATH.slice("/api/".length);
   const pages = (await webFunctions(WEB)).find((definition) =>
     definition.routes.includes(pageRoute),
@@ -371,13 +372,20 @@ test("the sandbox's host reaches the page route alone, by a link's address, and 
   assert.equal(landed.pathname, pagesPath);
   assert.equal(landed.searchParams.get("route"), pageRoute);
   assert.equal(landed.searchParams.get(PAGE_LINK_ROUTE.TOKEN_QUERY), LINK_TOKEN);
+  // Every other path is a file of the build's own, answered not found, so no function is woken by it.
+  assert.ok(readdirSync(join(WEB, "public")).includes(SANDBOX_NOT_FOUND.slice(1)));
   for (const path of APP_PATHS) {
     const refused = servedBy(path, SANDBOX_HOST);
     assert.ok("file" in refused, path);
-    // No route is named, so the page function answers not found, and the route forces the status besides.
     assert.deepEqual(
       { file: refused.file, forced: refused.forced },
-      { file: pagesPath, forced: 404 },
+      { file: SANDBOX_NOT_FOUND, forced: 404 },
+      path,
+    );
+    assert.equal(refused.headers.get("x-content-type-options"), "nosniff", path);
+    assert.deepEqual(
+      directivesOf(refused.headers.get("content-security-policy") ?? "").get("default-src"),
+      ["'none'"],
       path,
     );
   }
