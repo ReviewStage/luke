@@ -15,7 +15,11 @@ import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
 import { task } from "../../schemas/task.js";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "../../testing/index.js";
-import { createAgent } from "../agent-store.js";
+import {
+  createAgent,
+  readRunnerTokenConversation,
+  recordAgentRunnerToken,
+} from "../agent-store.js";
 import { latestDeviceAgentLaunch, queueDeviceAgentLine } from "../device-agent-store.js";
 import { deviceLayout, registerDevice } from "../device-store.js";
 import {
@@ -167,7 +171,7 @@ it.layer(getTestDB())("the host store", (it) => {
   );
 
   it.effect(
-    "a Mac's enroll folds the account's other Macs on its machine into it, moving their agents, the tasks that run on them, and the Runs on pick, settling their open launches, and removing them, never itself or a Linux box naming the machine",
+    "a Mac's enroll folds the account's other Macs on its machine into it, moving their agents, the tasks that run on them, and the Runs on pick, retiring their runners, and removing them, never itself or a Linux box naming the machine",
     () =>
       Effect.gen(function* () {
         const { owner } = yield* openAccounts;
@@ -198,9 +202,12 @@ it.layer(getTestDB())("the host store", (it) => {
           kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
           payload: {},
         });
+        const bearerDigest = "f".repeat(64);
+        yield* recordAgentRunnerToken(owner, agent.id, bearerDigest);
 
         const fresh = yield* enrolledHost(owner, { name: "Air", machineId });
         const launch = yield* latestDeviceAgentLaunch(owner, agent.id);
+        const bearerReaches = yield* readRunnerTokenConversation(bearerDigest);
         const db = yield* Database;
         const [movedAgent] = yield* db
           .select({ deviceId: agentTable.deviceId })
@@ -219,6 +226,7 @@ it.layer(getTestDB())("the host store", (it) => {
           Option.isSome(launch) && launch.value.settled,
           "the agent's runner on the folded Mac reads as gone, so it launches again on the new one",
         );
+        assert.ok(Option.isNone(bearerReaches), "that runner's bearer reaches none of its tools");
         assert.deepEqual(
           yield* readRunsOnPick(owner),
           Option.some({ machine: AGENT_MACHINE.DEVICE, deviceId: fresh.id }),

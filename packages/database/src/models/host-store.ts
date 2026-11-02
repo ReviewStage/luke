@@ -332,7 +332,12 @@ const FoldSchema = Schema.Struct({
   to: Schema.String,
 });
 
-/** The account's agents pinned to the devices folded, pinned to the one they fold into; their conversations. */
+/**
+ * The account's agents pinned to the devices folded, pinned to the one they
+ * fold into, each runner's bearer retired as the lease sweep retires a gone
+ * runner's, since any runner one was handed ran on a device folded; their
+ * conversations.
+ */
 const moveAgents = SqlSchema.findAll({
   Request: FoldSchema,
   Result: Schema.Struct({ conversationId: Schema.String }),
@@ -340,7 +345,7 @@ const moveAgents = SqlSchema.findAll({
     Database.use((db) =>
       db
         .update(agentTable)
-        .set({ deviceId: to })
+        .set({ deviceId: to, runnerTokenHash: null })
         .where(and(eq(agentTable.userId, userId), inArray(agentTable.deviceId, [...from])))
         .returning({ conversationId: agentTable.conversationId }),
     ),
@@ -390,9 +395,10 @@ export interface FoldedAgent {
  * Folds the account's other listed Macs on the machine its standing Mac of
  * the id runs on into that Mac, on the transaction its caller holds: their
  * agents, the tasks that run on them, and the account's Runs on pick move
- * to it, the launches still open on them are settled as their runner gone,
- * so a moved agent launches again on the Mac rather than reading a runner
- * there as live, and they are removed as `removeHost` removes one, their
+ * to it, the launches still open on them are settled and their agents'
+ * runner bearers retired as their runner gone, so a moved agent launches
+ * again on the Mac rather than reading a runner there as live, and a runner
+ * left on a folded device reaches none of its tools, and they are removed as `removeHost` removes one, their
  * secret refused from now on. Never the Mac itself, so one enrolled again
  * under its own id keeps its row, and never another account's device.
  * Answers each agent moved, with the turns it had running; none where the
