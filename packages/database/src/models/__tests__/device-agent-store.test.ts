@@ -7,7 +7,9 @@ import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
   DEVICE_CAPABILITY,
+  DEVICE_LAUNCH_STEP,
   type DeviceAgentAnswer,
+  type DeviceLaunchStep,
 } from "@luke/features/device-agent-wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option } from "effect";
@@ -27,12 +29,14 @@ import {
   deviceAgentRequestAnswer,
   deviceAgentRequestsWaiting,
   lapsedDeviceAgentLaunches,
+  latestDeviceAgentLaunch,
   liveDeviceAgents,
   openDeviceAgentLaunches,
   queueDeviceAgentLine,
   queueDeviceAgentRequest,
   settleDeviceAgentLine,
   settleLapsedDeviceAgentLine,
+  stepDeviceAgentLaunch,
   withdrawExpiredDeviceAgentRows,
 } from "../device-agent-store.js";
 import { beatDevice, registerDevice } from "../device-store.js";
@@ -43,7 +47,8 @@ import { beatDevice, registerDevice } from "../device-store.js";
  * handed out before, claimed
  * once with its secrets cleared in the claim, or again under the token its
  * claim carried but never with its secrets twice, and settled once with its
- * runner's exit; a request is claimed once and answered once, its answer
+ * runner's exit; a launch's step is kept only while its own Mac holds it
+ * claimed and unsettled, and only moved forward; a request is claimed once and answered once, its answer
  * read back as the Mac gave it, and one of a kind this build no longer
  * knows is passed over rather than failing the read; nothing is queued for, claimed by, or read
  * by another account; a discard line goes only to a Mac that registered it
@@ -236,6 +241,47 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
       }),
   );
 
+  it.effect(
+    "a launch's step is kept only while its own Mac holds it claimed and unsettled, and only moved forward",
+    () =>
+      Effect.gen(function* () {
+        const { userId, deviceId, agentId } = yield* openAccount();
+        const otherMac = yield* registerMac(userId);
+        const queued = Option.getOrThrow(yield* queueDeviceAgentLine(userId, launch(agentId)));
+        const said = Option.getOrThrow(yield* queueDeviceAgentLine(userId, message(agentId, "hi")));
+        const stepped = (
+          id: string,
+          step: DeviceLaunchStep = DEVICE_LAUNCH_STEP.PREPARING,
+          mac = deviceId,
+        ) => stepDeviceAgentLaunch(userId, mac, id, step);
+
+        const waiting = yield* stepped(queued.id);
+        yield* claimDeviceAgentLine(userId, deviceId, queued.id);
+        yield* claimDeviceAgentLine(userId, deviceId, said.id);
+        const onAnotherMac = yield* stepped(queued.id, DEVICE_LAUNCH_STEP.PREPARING, otherMac);
+        const onAMessage = yield* stepped(said.id);
+        const forward = [
+          yield* stepped(queued.id, DEVICE_LAUNCH_STEP.PREPARING),
+          yield* stepped(queued.id, DEVICE_LAUNCH_STEP.STARTING),
+        ];
+        const late = yield* stepped(queued.id, DEVICE_LAUNCH_STEP.FETCHING);
+        const held = yield* latestDeviceAgentLaunch(userId, agentId);
+        yield* settleDeviceAgentLine(userId, deviceId, queued.id, 0);
+        const settled = yield* stepped(queued.id, DEVICE_LAUNCH_STEP.STARTING);
+
+        assert.equal(waiting, false, "a launch no Mac claimed has no step");
+        assert.equal(onAnotherMac, false);
+        assert.equal(onAMessage, false);
+        assert.deepEqual(forward, [true, true]);
+        assert.equal(late, true, "a late report is taken without taking the launch back");
+        assert.deepEqual(
+          Option.map(held, (line) => line.step),
+          Option.some(DEVICE_LAUNCH_STEP.STARTING),
+        );
+        assert.equal(settled, false);
+      }),
+  );
+
   it.effect("an agent's lines are read in the order they were queued", () =>
     Effect.gen(function* () {
       const { userId, deviceId, agentId } = yield* openAccount();
@@ -275,7 +321,7 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
   );
 
   it.effect(
-    "another account neither queues for, lists, claims, settles, nor reads an account's work",
+    "another account neither queues for, lists, claims, steps, settles, nor reads an account's work",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount();
@@ -320,6 +366,20 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         );
         yield* claimDeviceAgentLine(owner.userId, owner.deviceId, line.id);
         yield* claimDeviceAgentRequest(owner.userId, owner.deviceId, requestId);
+        const steppedByOther = [
+          yield* stepDeviceAgentLaunch(
+            other.userId,
+            owner.deviceId,
+            line.id,
+            DEVICE_LAUNCH_STEP.STARTING,
+          ),
+          yield* stepDeviceAgentLaunch(
+            other.userId,
+            other.deviceId,
+            line.id,
+            DEVICE_LAUNCH_STEP.STARTING,
+          ),
+        ];
         const settledByOther = yield* settleDeviceAgentLine(
           other.userId,
           owner.deviceId,
@@ -341,6 +401,11 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         assert.deepEqual(lineClaimedByOther, Option.none());
         assert.deepEqual(lineClaimedOnOwnersMac, Option.none());
         assert.deepEqual(requestClaimedByOther, Option.none());
+        assert.deepEqual(steppedByOther, [false, false]);
+        assert.deepEqual(
+          Option.map(yield* latestDeviceAgentLaunch(owner.userId, owner.agentId), (l) => l.step),
+          Option.some(null),
+        );
         assert.equal(Option.isNone(settledByOther), true);
         assert.equal(answeredByOther, false);
         assert.deepEqual(yield* deviceAgentRequestAnswer(other.userId, requestId), Option.none());

@@ -32,7 +32,9 @@
  * A held read answers what waits for that Mac (`GET /api/device-agents/lines`,
  * `GET /api/device-agents/requests`), a claim takes one row by its id, a
  * launch line's secrets with it, a line's claim asked again under the
- * token it first carried answers that line again, and a settle or an answer keeps what the
+ * token it first carried answers that line again, a step keeps where the
+ * Mac's launch of a launch line it claimed and has not settled stands, only
+ * ever moved forward, answering not found for any other line, and a settle or an answer keeps what the
  * Mac said of a row it claimed.
  *
  * A box pairs with a code. Its start
@@ -55,6 +57,7 @@ import {
   claimDeviceAgentRequest,
   liveDeviceAgents,
   openDeviceAgentLaunches,
+  stepDeviceAgentLaunch,
 } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import {
@@ -309,6 +312,14 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       );
       if (Option.isNone(claimed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return claimed.value;
+    }),
+    lineStep: deviceAgents.lineStep.effect(function* ({ context, input }) {
+      yield* followed(context, input.deviceId);
+      return yield* keptOrNotFound(
+        yield* hostedStoreOrUnavailable(
+          stepDeviceAgentLaunch(context.userId, input.deviceId, input.id, input.step),
+        ),
+      );
     }),
     settleLine: deviceAgents.settleLine.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);

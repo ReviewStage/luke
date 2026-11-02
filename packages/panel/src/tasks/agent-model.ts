@@ -14,6 +14,7 @@ import {
   AGENT_DELEGATE_TOOL,
   AGENT_FAILURE,
   AGENT_KIND,
+  AGENT_LAUNCH,
   AGENT_PAYER,
   AGENT_RUNTIME,
   AGENT_SENDER,
@@ -22,6 +23,7 @@ import {
   type AgentAttachment,
   type AgentFailure,
   type AgentKind,
+  type AgentLaunch,
   type AgentPayer,
   type AgentPullRequest,
   type AgentPullRequestAnswer,
@@ -35,6 +37,7 @@ import {
   type ContextWindow,
   LOCAL_AGENT_REFUSAL,
   type LocalAgentRefusal,
+  type NativeAgentRuntime,
   OPERATOR_QUIET_REPLY,
   PART_CUT_FIELD,
   type PartCut,
@@ -2288,12 +2291,60 @@ const WORKING_PHASE = {
 export type WorkingPhase = (typeof WORKING_PHASE)[keyof typeof WORKING_PHASE];
 
 /** What the working line says in each phase. */
-export const WORKING_PHASE_WORDS = {
+const WORKING_PHASE_WORDS = {
   [WORKING_PHASE.REWINDING]: "Rewinding…",
   [WORKING_PHASE.STARTING]: "Starting…",
   [WORKING_PHASE.THINKING]: "Thinking…",
   [WORKING_PHASE.WORKING]: "Working…",
 } as const satisfies Record<WorkingPhase, string>;
+
+/** What the working line says while a local agent's launch stands at a step that names neither its host nor its harness. */
+const LAUNCH_STEP_WORDS = {
+  [AGENT_LAUNCH.PREPARING]: "Preparing the folder…",
+  [AGENT_LAUNCH.FETCHING]: "Fetching the repository…",
+} as const;
+
+/** What the working line says as a local agent's harness starts, by the harness. */
+const HARNESS_START_WORDS = {
+  [AGENT_RUNTIME.CLAUDE_CODE]: "Starting Claude Code…",
+  [AGENT_RUNTIME.CODEX]: "Starting Codex…",
+} as const satisfies Record<NativeAgentRuntime, string>;
+
+/** Who a launch waits on where its host's name is not to hand. */
+const UNNAMED_HOST = "the host";
+
+/** Where a local agent's launch stands as its page said, with what its words name: the host it runs on and the harness it runs. */
+export interface StartingLaunch {
+  readonly launch: AgentLaunch;
+  /** The host's name, as the agent's Runs on chip shows it (`agent-place.tsx`); none where none is to hand. */
+  readonly host?: string | undefined;
+  /** The harness the agent runs, as its summary says; none where unsaid. */
+  readonly runtime?: NativeAgentRuntime | undefined;
+}
+
+/**
+ * What the working line says in a phase. While the agent starts, a local
+ * agent whose page said where its launch stands (`AGENT_LAUNCH`) says what
+ * its start waits on: its host, by the name its Runs on chip shows, taking
+ * the launch, the folder, the repository, or its harness by name. With no
+ * launch said, as for a cloud agent, an older host, or an older service, it
+ * says "Starting…" as before. Note that a launch said once the turn has
+ * opened says nothing, since the phase has left starting.
+ */
+export function workingLineWords(phase: WorkingPhase, starting?: StartingLaunch): string {
+  if (phase !== WORKING_PHASE.STARTING || starting === undefined) {
+    return WORKING_PHASE_WORDS[phase];
+  }
+  const { launch, host, runtime } = starting;
+  switch (launch) {
+    case AGENT_LAUNCH.WAITING:
+      return `Waiting for ${host ?? UNNAMED_HOST}…`;
+    case AGENT_LAUNCH.STARTING:
+      return runtime === undefined ? WORKING_PHASE_WORDS[phase] : HARNESS_START_WORDS[runtime];
+    default:
+      return LAUNCH_STEP_WORDS[launch];
+  }
+}
 
 /**
  * What a working agent is doing, as far as its transcript shows it, which

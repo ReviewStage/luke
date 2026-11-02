@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
 import {
+  AGENT_LAUNCH,
   AGENT_PAYER,
   AGENT_RUNTIME,
   type AgentPullRequest,
@@ -58,6 +59,7 @@ import {
   transcriptRowKey,
   unreadOpeningLine,
   unreadSentLines,
+  workingLineWords,
 } from "./agent-model.js";
 import { TOOL_TARGET } from "./tool-call-model.js";
 
@@ -565,7 +567,7 @@ test("the starts that made a new task and the accepted section and task change c
   assert.deepEqual(sidebarCallIds(messages), ["c1", "c5", "c8", "c9", "c12"]);
 });
 
-test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {
+test("a working agent is starting until its turn opens, saying what a host's launch waits on, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {
   const task: AgentTranscriptMessage = {
     id: "m-plan",
     role: MESSAGE_ROLE.USER,
@@ -605,6 +607,15 @@ test("a working agent is starting until its turn opens, thinking until the turn 
   assert.equal(agentWorkingPhase([task, closed], false), "working");
   assert.equal(agentWorkingPhase([task, calling, line], false), "working");
   assert.equal(agentWorkingPhase([task, opened, line], false), "thinking");
+  // A host's launch says what the start waits on, naming the host or the harness, and nothing once the turn has opened.
+  const waiting = { launch: AGENT_LAUNCH.WAITING, host: "Studio", runtime: AGENT_RUNTIME.CODEX };
+  assert.equal(workingLineWords("starting", waiting), "Waiting for Studio…");
+  assert.equal(
+    workingLineWords("starting", { ...waiting, launch: AGENT_LAUNCH.STARTING }),
+    "Starting Codex…",
+  );
+  assert.equal(workingLineWords("thinking", waiting), "Thinking…");
+  assert.equal(workingLineWords("starting"), "Starting…");
 });
 
 test("the working line counts from the press of the line that opened the turn, through the turn and a line steering it", () => {

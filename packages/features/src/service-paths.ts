@@ -145,6 +145,8 @@ export const HOSTED_SERVICE_PATH = {
   DEVICE_AGENT_LINES: "/api/device-agents/lines",
   /** One waiting line, named by its id, claimed for the Mac, a launch line's secrets with it (POST). */
   DEVICE_AGENT_LINE_CLAIM: "/api/device-agents/lines/claim",
+  /** The step a claimed launch line's launch has reached on the Mac, named by the line's id (POST). */
+  DEVICE_AGENT_LINE_STEP: "/api/device-agents/lines/step",
   /** The requests of a Mac's local agents' tools, held open while none waits (GET), and one claimed request answered (POST). */
   DEVICE_AGENT_REQUESTS: "/api/device-agents/requests",
   /** One waiting request, named by its id, claimed for the Mac (POST). */

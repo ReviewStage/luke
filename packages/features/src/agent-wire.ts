@@ -2,6 +2,7 @@ import { keepIdentity, MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/
 import { describeWire, readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Effect, Schema as EffectSchema, Option, Result, SchemaTransformation } from "effect";
 import { AGENT_QUEUE_BOUNDS, agentQueueSchema } from "./agent-queue-wire.js";
+import { DEVICE_LAUNCH_STEP } from "./device-agent-wire.js";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import {
@@ -2357,6 +2358,20 @@ const agentSubagentTitleSchema = EffectSchema.Struct({
 export type AgentSubagentTitle = typeof agentSubagentTitleSchema.Type;
 
 /**
+ * Where the launch a local agent's transcript waits on stands, as its page
+ * says it (`agentMessagesAnswerSchema`'s `launch`): written and waiting for
+ * its host to take it, or the step the host that took it reported
+ * (`DEVICE_LAUNCH_STEP`), in the order a launch passes them.
+ */
+export const AGENT_LAUNCH = {
+  /** The launch is written and no host has taken it yet. */
+  WAITING: "waiting",
+  ...DEVICE_LAUNCH_STEP,
+} as const;
+
+export type AgentLaunch = (typeof AGENT_LAUNCH)[keyof typeof AGENT_LAUNCH];
+
+/**
  * The messages past a cursor (GET), the cursor to read on from, and where
  * the agent stood as the page was read, so a reader held on a running agent
  * learns from the page that ends the hold that there is nothing more to
@@ -2384,6 +2399,16 @@ export const agentMessagesAnswerSchema = EffectSchema.Struct({
   status: EffectSchema.Literals(Object.values(AGENT_STATUS)),
   /** When the run that status is read from began, as the agent's summary says it, so a tab following the transcript counts the run a new turn opened. */
   runStartedAt: EffectSchema.optionalKey(countedNumber),
+  /**
+   * Where the launch the agent waits on stands, on the agent's own
+   * transcript while it runs on a device and that launch's turn has not
+   * opened: waiting while no host has taken it, then the step the host
+   * reported, which the working line words in place of "Starting…". Absent
+   * on a worker's page, for an agent in the cloud, where the host that took
+   * the launch reported no step, once the launch's turn has opened, and
+   * from a service older than it.
+   */
+  launch: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_LAUNCH))),
   /**
    * The delegations the agent's newest turn still waits on, each by the
    * call that started it with when its worker began, so a running

@@ -16,6 +16,10 @@
  * (`../schemas/device-agent.ts`). The secrets are opaque here: the service
  * seals them before the queue and opens them after the claim.
  *
+ * A launch line's step (`DEVICE_LAUNCH_STEP`) is kept only while its Mac
+ * holds it claimed and unsettled, and only ever moved forward in the order
+ * a launch passes them, so a report that lands late never takes it back.
+ *
  * A line of a kind that needs a capability (`DEVICE_AGENT_LINE_CAPABILITY`)
  * is queued only where the agent's Mac registered it, since a follower that
  * predates the kind fails its whole held read on one.
@@ -33,10 +37,12 @@ import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
   DEVICE_CAPABILITY,
+  DEVICE_LAUNCH_STEPS,
   type DeviceAgentAnswer,
   type DeviceAgentLineKind,
   type DeviceAgentObject,
   type DeviceAgentRequestKind,
+  type DeviceLaunchStep,
   deviceAgentAnswerSchema,
   deviceAgentObjectSchema,
 } from "@luke/features/device-agent-wire";
@@ -145,10 +151,20 @@ const DeviceAgentPinSchema = Schema.Struct({
 
 export type DeviceAgentPin = typeof DeviceAgentPinSchema.Type;
 
-/** An agent's newest launch line as its machine reads it: whether its Mac settled it, with what exit, and whether a stop line followed it. */
+/**
+ * An agent's newest launch line as its machine and its transcript read it:
+ * when it was queued, whether its Mac claimed it and which step it reported
+ * its launch has reached, whether it settled it and with what exit, and
+ * whether a stop line followed it. Note that the step is read as the row
+ * holds it, any word at all, because a row a newer build wrote must not
+ * fail the read a runner's every line is queued by.
+ */
 const DeviceAgentLaunchSchema = Schema.Struct({
   id: Schema.String,
   payload: deviceAgentObjectSchema,
+  createdAt: Schema.Date,
+  claimed: Schema.Boolean,
+  step: Schema.NullOr(Schema.String),
   settled: Schema.Boolean,
   exitCode: Schema.NullOr(Schema.Number),
   stopped: Schema.Boolean,
@@ -224,6 +240,9 @@ const findLatestLaunch = SqlSchema.findOneOption({
         .select({
           id: deviceAgentLine.id,
           payload: deviceAgentLine.payload,
+          createdAt: deviceAgentLine.createdAt,
+          claimed: sql<boolean>`${deviceAgentLine.claimedAt} is not null`,
+          step: deviceAgentLine.launchStep,
           settled: sql<boolean>`${deviceAgentLine.settledAt} is not null`,
           exitCode: deviceAgentLine.exitCode,
           stopped: sql<boolean>`exists (${db
@@ -397,6 +416,45 @@ const findClaimedUnder = SqlSchema.findOneOption({
             isNull(deviceAgentLine.settledAt),
           ),
         ),
+    ),
+});
+
+/** A launch's steps in the order a launch passes them, as Postgres reads a step's place among them. */
+const LAUNCH_STEP_ORDER = sql`array[${sql.join(
+  DEVICE_LAUNCH_STEPS.map((step) => sql`${step}`),
+  sql`, `,
+)}]::text[]`;
+
+const writeLaunchStep = SqlSchema.findAll({
+  Request: Schema.Struct({
+    ...DeviceRowKeySchema.fields,
+    step: Schema.Literals(DEVICE_LAUNCH_STEPS),
+  }),
+  Result: Schema.Struct({ agentId: Schema.String }),
+  execute: ({ userId, deviceId, id, step }) =>
+    Database.use((db) =>
+      db
+        .update(deviceAgentLine)
+        .set({
+          // Note that a step at or behind the one the line holds leaves it as it stands, because a report that lands late must never take the launch back.
+          launchStep: sql<DeviceLaunchStep>`case
+            when array_position(${LAUNCH_STEP_ORDER}, ${deviceAgentLine.launchStep})
+              >= array_position(${LAUNCH_STEP_ORDER}, ${step}::text)
+            then ${deviceAgentLine.launchStep}
+            else ${step}::text
+          end`,
+        })
+        .where(
+          and(
+            eq(deviceAgentLine.id, id),
+            eq(deviceAgentLine.userId, userId),
+            eq(deviceAgentLine.deviceId, deviceId),
+            eq(deviceAgentLine.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
+            isNotNull(deviceAgentLine.claimedAt),
+            isNull(deviceAgentLine.settledAt),
+          ),
+        )
+        .returning({ agentId: deviceAgentLine.agentId }),
     ),
 });
 
@@ -784,7 +842,7 @@ export function deviceAgentPin(agentId: string): DeviceAgentEffect<Option.Option
   return findPin({ agentId });
 }
 
-/** The account's agent's newest launch line, as its machine reads whether its runner runs; nothing where none stands. */
+/** The account's agent's newest launch line, as its machine reads whether its runner runs and its transcript where its launch stands; nothing where none stands. */
 export function latestDeviceAgentLaunch(
   userId: string,
   agentId: string,
@@ -839,6 +897,22 @@ export function claimDeviceAgentLine(
       secretsGone: line.kind === DEVICE_AGENT_LINE_KIND.LAUNCH,
     }));
   });
+}
+
+/**
+ * Keeps the step the account's Mac reported its launch of a launch line it
+ * claimed and has not settled has reached, where it moves the line's step
+ * forward, and leaves it as it stands where it does not; whether the Mac
+ * holds such a line, which is false for another Mac's or account's line, a
+ * line of any other kind, one waiting, and one settled.
+ */
+export function stepDeviceAgentLaunch(
+  userId: string,
+  deviceId: string,
+  id: string,
+  step: DeviceLaunchStep,
+): DeviceAgentEffect<boolean> {
+  return Effect.map(writeLaunchStep({ userId, deviceId, id, step }), (rows) => rows.length > 0);
 }
 
 /**
