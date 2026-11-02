@@ -468,7 +468,7 @@ const enrolledHost = (userId: string) =>
       secretHash: secret.hash,
       machine: { name: "rack-1", platform: DEVICE_PLATFORM.LINUX, arch: DEVICE_ARCH.X64 },
     });
-    assert.ok(enrolled, "the host was not enrolled");
+    assert.ok(Option.isSome(enrolled), "the host was not enrolled");
     yield* registerDevice(userId, {
       id: deviceId,
       name: "rack-1",
@@ -496,7 +496,7 @@ const enrolledMac = (userId: string, isolation: DeviceIsolation) =>
       version: HOST_VERSION.FLOOR,
       secretHash: secret.hash,
     });
-    assert.ok(enrolled, "the Mac was not enrolled");
+    assert.ok(Option.isSome(enrolled), "the Mac was not enrolled");
     return { deviceId, secret: secret.secret };
   });
 

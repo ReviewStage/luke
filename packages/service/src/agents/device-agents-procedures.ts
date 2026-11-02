@@ -23,6 +23,12 @@
  * register under an id another account holds writes nothing and answers
  * not found too, and a register keeps only the capabilities this service
  * knows (`DEVICE_CAPABILITY`), so a newer follower's list is never refused.
+ * An own enroll, and a host's first register, which is a paired box's first
+ * word naming its machine, fold the account's other Macs on that machine
+ * into it (`@luke/database/models/host-store`), and the
+ * turns their agents had running are settled lost as a removed host's are;
+ * a later register never folds, so two hosts already running never remove
+ * each other.
  * A beat keeps where the host's update stands, cleared by one naming none,
  * and answers the release published (`HOST_RELEASE`) where the host's
  * daemon is below it, which the host updates itself to.
@@ -59,14 +65,14 @@ import {
   openDeviceAgentLaunches,
   stepDeviceAgentLaunch,
 } from "@luke/database/models/device-agent-store";
-import { beatDevice, machineColumns, registerDevice } from "@luke/database/models/device-store";
+import { beatDevice, machineColumns } from "@luke/database/models/device-store";
 import {
   HOST_PAIRING,
   type HostPairingOpening,
   openHostPairing,
   pollHostPairing,
 } from "@luke/database/models/host-pairing-store";
-import { enrollOwnDevice, hostsOf } from "@luke/database/models/host-store";
+import { enrollOwnDevice, hostsOf, registerHost } from "@luke/database/models/host-store";
 import { type DeviceAgentRelease, knownDeviceCapabilities } from "@luke/features/device-agent-wire";
 import { HOST_RELEASE } from "@luke/features/host-release";
 import {
@@ -108,6 +114,7 @@ import {
   deviceAgentRequestsFor,
   settledDeviceAgentLine,
 } from "./device-agent.js";
+import { settleLostHostTurns } from "./lost-host-turns.js";
 
 export interface DeviceAgentsProcedureSeams {
   /** The account behind a desktop's request, read from its bearer alone: the own enroll's caller, and a released desktop build's, refused elsewhere as needing an upgrade (`deviceMiddleware`). */
@@ -266,7 +273,8 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
           ...(machine === undefined ? undefined : { machine }),
         }),
       );
-      if (!enrolled) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      if (Option.isNone(enrolled)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      yield* settleLostHostTurns(enrolled.value);
       if (!before.some((host) => host.id === input.deviceId)) {
         yield* recordServerEvent(
           SERVER_EVENT.HOST_INSTALL,
@@ -283,11 +291,12 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       const { userId } = context;
       const { deviceId, capabilities, ...device } = input;
       const known = knownDeviceCapabilities(capabilities ?? []);
-      return yield* keptOrNotFound(
-        yield* hostedStoreOrUnavailable(
-          registerDevice(userId, { id: deviceId, ...device, capabilities: known }),
-        ),
+      const registered = yield* hostedStoreOrUnavailable(
+        registerHost(userId, { id: deviceId, ...device, capabilities: known }),
       );
+      if (Option.isNone(registered)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      yield* settleLostHostTurns(registered.value);
+      return DONE;
     }),
     beat: deviceAgents.beat.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);

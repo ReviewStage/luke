@@ -32,7 +32,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { runningTurnIds, settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
+import { runningTurnIds } from "@luke/database/models/abandoned-turns";
 import { devicesSeenSince } from "@luke/database/models/device-store";
 import {
   approveHostPairing,
@@ -42,7 +42,6 @@ import {
   readHostPairing,
 } from "@luke/database/models/host-pairing-store";
 import { hostAgentConversations, hostsOf, removeHost } from "@luke/database/models/host-store";
-import { storeWriter } from "@luke/database/models/writer";
 import { HOST_WIRE, hostUserCodeOf, hostVersionMeets } from "@luke/features/host-wire";
 import { Clock, Effect } from "effect";
 import { HOST_VERSION } from "../auth/device-secret.js";
@@ -58,7 +57,7 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
-import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { settleLostHostTurns } from "./lost-host-turns.js";
 
 export interface HostsProcedureSeams {
   /** The account behind a request: its bearer, or a browser's session cookie (`accountMiddleware`). */
@@ -72,34 +71,26 @@ function installScriptUrlOf(request: Request): string {
   return new URL(HOST_WIRE.INSTALL_SCRIPT_PATH, new URL(request.url).origin).href;
 }
 
-/** Why a removed host's agents' turns read as failed. */
-const HOST_REMOVED_DETAIL = "the host this agent ran on was removed";
-
 /**
  * Settles every turn still running of the agents pinned to a host just
- * removed as lost, as a runner gone without its end is settled
- * (`settleRunnerLostTurns`): the host's secret is refused from now on, so no
- * runner there can end them, and without this they would read as running
- * until `TURN_ABANDON`. Note that every agent's running turns are read once,
- * before any is settled, and only those are settled, because a removed host
- * may enroll again under its id and begin a turn while this runs, and that
- * turn is the new enrollment's. A failure here is logged and the remove
- * still answers done, because the host is already removed and a retry would
- * find no host to remove; the sweep's bound settles whatever was left.
+ * removed as lost (`settleLostHostTurns`). Note that every agent's running
+ * turns are read once, before any is settled, and only those are settled,
+ * because a removed host may enroll again under its id and begin a turn
+ * while this runs, and that turn is the new enrollment's. A failure here is
+ * logged and the remove still answers done, because the host is already
+ * removed and a retry would find no host to remove; the sweep's bound
+ * settles whatever was left.
  */
 const endedHostAgents = (userId: string, deviceId: string) =>
   Effect.gen(function* () {
     const conversations = yield* hostAgentConversations(userId, deviceId);
-    if (conversations.length === 0) return;
     const lost = yield* Effect.forEach(conversations, (conversationId) =>
-      Effect.map(runningTurnIds(conversationId), (ids) => ({ conversationId, ids })),
+      Effect.map(runningTurnIds(conversationId), (ids) => ({
+        conversationId,
+        runningTurnIds: ids,
+      })),
     );
-    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-    const now = yield* Clock.currentTimeMillis;
-    for (const { conversationId, ids } of lost) {
-      if (ids.length === 0) continue;
-      yield* settleRunnerLostTurns(writer, conversationId, now, HOST_REMOVED_DETAIL, new Set(ids));
-    }
+    yield* settleLostHostTurns(lost);
   }).pipe(
     Effect.catch((failure) =>
       Effect.logWarning("a removed host's agents' turns were not settled", failure),

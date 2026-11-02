@@ -158,11 +158,17 @@ function registered(deviceId: string) {
   return { deviceId, name: "Studio", ...DEVICE_LAYOUT };
 }
 
-/** A Mac's enroll on its desktop's sign-in under the id given, naming the Mac. */
-function enrollOwn(bearer: string, deviceId: string) {
+/** A Mac's enroll on its desktop's sign-in under the id given, naming the Mac, and the machine it runs on where one is given. */
+function enrollOwn(bearer: string, deviceId: string, machineId?: string) {
   return request(bearer, PATH.ENROLL_OWN, {
     version: HOST_VERSION.FLOOR,
-    body: { deviceId, name: "Studio", platform: DEVICE_PLATFORM.DARWIN, arch: DEVICE_ARCH.ARM64 },
+    body: {
+      deviceId,
+      name: "Studio",
+      platform: DEVICE_PLATFORM.DARWIN,
+      arch: DEVICE_ARCH.ARM64,
+      ...(machineId === undefined ? undefined : { machineId }),
+    },
   });
 }
 
@@ -501,6 +507,57 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
         "an agent on no host runs on",
       );
     }),
+  );
+
+  it.effect(
+    "a paired Mac's first register, and a Mac's own enroll, fold the account's other hosts on its machine into it, ending the turns their agents had running",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* account();
+        const machineId = "d".repeat(64);
+        const before = randomUUID();
+        const beforeSecret: string = (yield* answerOf(enrollOwn(owner, before, machineId))).body
+          .deviceSecret;
+        yield* statusOf(macRegister(beforeSecret, before));
+        const onBefore = yield* agentRunningOn(owner, before);
+        // Note that the box was reinstalled, so it pairs as a new host and names its machine only at its first register.
+        const { pollSecret, userCode } = yield* startedPairing;
+        yield* byCode(owner, PATH.PAIRING_APPROVE, userCode);
+        const handed = yield* pollPairing(pollSecret);
+        const paired: string = handed.body.deviceId;
+        const pairedRegister = yield* statusOf(
+          request(handed.body.deviceSecret, PATH.DEVICES, {
+            version: HOST_VERSION.FLOOR,
+            body: { ...registered(paired), machineId },
+          }),
+        );
+        const listedPaired = yield* answerOf(request(owner, PATH.HOSTS));
+        const onPaired = yield* agentRunningOn(owner, paired);
+        const after = randomUUID();
+        const enrolled = yield* statusOf(enrollOwn(owner, after, machineId));
+        const listedAfter = yield* answerOf(request(owner, PATH.HOSTS));
+        const turns = yield* latestTurnsOfReached([onBefore, onPaired]);
+
+        assert.deepEqual(
+          [pairedRegister, enrolled],
+          [HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK],
+        );
+        assert.deepEqual(
+          [listedPaired, listedAfter].map((listed) =>
+            listed.body.hosts.map((host: { readonly id: string }) => host.id),
+          ),
+          [[paired], [after]],
+        );
+        assert.deepEqual(
+          [turns.get(onBefore)?.status, turns.get(onPaired)?.status],
+          [TURN_STATUS.FAILED, TURN_STATUS.FAILED],
+          "no runner on a folded host can end its agents' turns",
+        );
+        assert.equal(
+          yield* statusOf(hostBeat(beforeSecret, before)),
+          HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        );
+      }),
   );
 
   it.effect(
