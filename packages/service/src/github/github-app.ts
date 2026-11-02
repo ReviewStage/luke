@@ -83,6 +83,10 @@ import {
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
 import { InstantColumnSchema } from "@luke/database/models/columns";
+import {
+  noteGitHubRepository,
+  type RepositorySighting,
+} from "@luke/database/models/github-repositories";
 import { account } from "@luke/database/schemas/auth";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import {
@@ -768,6 +772,8 @@ type InstallationRecord = typeof InstallationSchema.Type;
 const UserInstallationsSchema = Schema.Struct({ installations: Schema.Array(InstallationSchema) });
 
 const RepositorySchema = Schema.Struct({
+  /** GitHub's id for the repository, which a rename or a transfer keeps. */
+  id: Schema.Number,
   name: Schema.String,
   full_name: Schema.String,
   owner: Schema.Struct({ login: Schema.String }),
@@ -1010,6 +1016,7 @@ export function noreplyAddress(user: GitHubUser): string {
 /** A repository GitHub never dated reads as older than any it did. */
 function repositoryOf(record: RepositoryRecord): GitHubRepository {
   return {
+    id: record.id,
     owner: record.owner.login,
     name: record.name,
     fullName: record.full_name,
@@ -1017,6 +1024,11 @@ function repositoryOf(record: RepositoryRecord): GitHubRepository {
     private: record.private,
     updatedAt: record.updated_at?.getTime() ?? 0,
   };
+}
+
+/** A repository as GitHub answered it, as a sighting of it records it; one GitHub never dated reads as older than any it did. */
+function sightingOf(record: RepositoryRecord): RepositorySighting {
+  return { id: record.id, fullName: record.full_name, updatedAt: record.updated_at ?? new Date(0) };
 }
 
 /** Most recently updated first, and by name among those updated at once, so two reads of one GitHub answer in one order. */
@@ -1468,6 +1480,56 @@ function githubAppService(
     );
 
   /**
+   * The repository a name the installation no longer lists stood for, where
+   * GitHub renamed or transferred it and the installation reaches it under
+   * its name now; nothing where GitHub answers that name with no repository
+   * the installation reaches (404), or refuses it (403). GitHub answers a
+   * read of a repository under a name it left behind with a redirect to it
+   * (https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api#follow-redirects),
+   * which the client follows, on a token minted for the installation that
+   * reads no repository it was not given; any other failure is GitHub's
+   * and fails the reach. Every name the store keeps of it is relabeled to
+   * its name now (`@luke/database/models/github-repositories`).
+   */
+  const movedOnInstallation = (reached: GitHubInstallation, fullName: string) =>
+    Effect.gen(function* () {
+      const minted = yield* mint(reached.id, { permissions: INSTALLATION_TOKEN_PERMISSIONS.LIST });
+      const response = yield* send(githubRead(repositoryPath(fullName), minted.token));
+      if (
+        response.status === GITHUB_HTTP_STATUS.NOT_FOUND ||
+        response.status === GITHUB_HTTP_STATUS.FORBIDDEN
+      ) {
+        return Option.none<GitHubRepository>();
+      }
+      const record = yield* readBody(response, RepositorySchema);
+      if (record.full_name === fullName) return Option.none<GitHubRepository>();
+      yield* noteGitHubRepository({ ...sightingOf(record), formerly: fullName });
+      return Option.some(repositoryOf(record));
+    }).pipe(Effect.scoped);
+
+  /**
+   * The repository a name no installation of the workspace lists stood for,
+   * and the installation that reaches it under its name now, asked of each
+   * installation given in turn, since a transfer moves it to another
+   * account's; nothing where none reaches it.
+   */
+  const reachMoved = (installations: readonly GitHubInstallation[], fullName: string) =>
+    Effect.gen(function* () {
+      for (const installation of installations) {
+        const moved = yield* movedOnInstallation(installation, fullName);
+        if (Option.isSome(moved)) {
+          const reachedMoved: ReachResult = Result.succeed({
+            access: GITHUB_ACCESS.APP,
+            installation,
+            repository: moved.value,
+          });
+          return Option.some(reachedMoved);
+        }
+      }
+      return Option.none<ReachResult>();
+    });
+
+  /**
    * The repository and the installation it is reached through, where the
    * workspace's installation on its owner reaches it, or why it does not:
    * only an installation of this workspace on the owner can reach it, never
@@ -1492,6 +1554,8 @@ function githubAppService(
             repository: fullName,
           });
         }
+        const transferred = yield* reachMoved(found.running, fullName);
+        if (Option.isSome(transferred)) return transferred.value;
         const [only] = found.running;
         const connectedTo = found.running.length === 1 ? only?.accountLogin : undefined;
         return unreached({
@@ -1505,6 +1569,14 @@ function githubAppService(
       const repositories = yield* repositoriesOf(onOwner, (read) => read.some(isNamed));
       const repository = repositories.find(isNamed);
       if (repository !== undefined) {
+        // Note that the id is recorded under the name it is reached by, so a rename GitHub reports later relabels it.
+        if (repository.id !== undefined) {
+          yield* noteGitHubRepository({
+            id: repository.id,
+            fullName: repository.fullName,
+            updatedAt: new Date(repository.updatedAt),
+          });
+        }
         const reachedThrough: ReachResult = Result.succeed({
           access: GITHUB_ACCESS.APP,
           installation: onOwner,
@@ -1512,7 +1584,14 @@ function githubAppService(
         });
         return reachedThrough;
       }
-      // Note that an installation given only some repositories cannot tell one it was never given from one renamed or deleted, so it asks for the one GitHub can mend.
+      const renamed = yield* reachMoved([onOwner], fullName);
+      if (Option.isSome(renamed)) return renamed.value;
+      const others = (yield* liveWorkspaceInstallations(organizationId)).filter(
+        (one) => one.id !== onOwner.id,
+      );
+      const transferred = yield* reachMoved(others, fullName);
+      if (Option.isSome(transferred)) return transferred.value;
+      // Note that an installation given only some repositories cannot tell one it was never given from one deleted, so it asks for the one GitHub can mend.
       return unreached(
         onOwner.repositorySelection === GITHUB_REPOSITORY_SELECTION.SELECTED
           ? {
@@ -1574,6 +1653,11 @@ function githubAppService(
         return unreached(REPOSITORY_UNREACHED.TOKEN_NO_ACCESS);
       }
       const record = yield* readBody(response, TokenRepositorySchema);
+      // Note that GitHub answers a name it renamed or transferred away under the name now, which the store's names move to.
+      yield* noteGitHubRepository({
+        ...sightingOf(record),
+        formerly: record.full_name === fullName ? undefined : fullName,
+      });
       if (record.permissions?.push !== true)
         return unreached(REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH);
       const reachedOn: ReachResult = Result.succeed({

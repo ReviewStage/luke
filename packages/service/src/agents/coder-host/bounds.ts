@@ -78,9 +78,14 @@ export const CODER = {
    * with JS plugins it reserves about 6 GiB per thread, which the kernel's
    * default overcommit refuses at 4 GB, but it uses under one, and
    * `vm.overcommit_memory=1`, set on every boot, since a resumed sandbox
-   * boots with the default, lets it lint there in 36 seconds.
+   * boots with the default, lets it lint there in 36 seconds. It is named
+   * under its name now and the one it is being renamed to, since an agent's
+   * repository follows GitHub's rename (`models/github-repositories.ts`).
    */
-  SANDBOX_VCPUS_BY_REPOSITORY: new Map([["reviewstage/luke", 4]]) as ReadonlyMap<string, number>,
+  SANDBOX_VCPUS_BY_REPOSITORY: new Map([
+    ["reviewstage/luke", 4],
+    ["reviewstage/vespin", 4],
+  ]) as ReadonlyMap<string, number>,
   /**
    * The snapshots Vercel keeps of the agent's sandbox: the newest alone, which
    * is all a resume reads, so snapshot storage stays flat however many turns

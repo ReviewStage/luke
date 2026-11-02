@@ -14,6 +14,7 @@ import {
 } from "@luke/database/models/agent-store";
 import { createAutomation, listAutomationRuns } from "@luke/database/models/automation-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { readTask } from "@luke/database/models/task-store";
 import { listWorkspaces } from "@luke/database/models/workspace-store";
 import { account, user } from "@luke/database/schemas/auth";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
@@ -47,6 +48,7 @@ import {
   type FakeGitHub,
   githubReaching,
   openGithubUser,
+  repositoryIdOf,
   type SentToGitHub,
 } from "../testing/github-app-fake.js";
 import { GITHUB_PROVIDER_ID, GitHubApp } from "./github-app.js";
@@ -253,7 +255,7 @@ const openAgent = (pull: PullRequestFixture) =>
         listPublishedAgents(owner, [task.id]),
         (agents) => agents.find((each) => each.agent.id === agent.id)?.published,
       );
-    return { github, kept, ref, owner, agent };
+    return { github, kept, ref, owner, agent, task, installation };
   });
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
@@ -955,6 +957,99 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           github.sent.filter((sent) => new URL(sent.url).origin === EVE_ORIGIN).length,
           1,
         );
+      }),
+  );
+  it.effect(
+    "a repository renamed on GitHub still wakes its agent and still names its task: the first delivery under the new name relabels what the store kept under the old",
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.sync(() => vi.stubEnv(EVE_HOST_ENVIRONMENT.EVE_ORIGIN, EVE_ORIGIN));
+        const pull = { state: "open", merged: false, conclusion: "success" } as const;
+        const {
+          github: before,
+          ref,
+          owner,
+          agent,
+          task,
+          installation,
+        } = yield* openAgent({
+          ...pull,
+        });
+        yield* claimRuntimeSession(
+          { userId: owner, conversationId: agent.conversationId },
+          `wrun_${randomUUID()}`,
+          yield* DateTime.nowAsDate,
+        );
+        // The service reached the repository under its old name before GitHub renamed it, as a start does.
+        yield* Effect.flatMap(GitHubApp, (app) =>
+          app.repositoryReach(task.workspaceId, RELAY_FULL_NAME, undefined),
+        ).pipe(Effect.provide(before.layer));
+        const id = repositoryIdOf(RELAY);
+        const renamed = `${RELAY.owner}/Rocket`;
+        const github = githubReaching(
+          [{ ...installation, repositories: [{ owner: RELAY.owner, name: "Rocket" }] }],
+          undefined,
+          undefined,
+          relayRepository(pull, ref),
+        );
+        const review = {
+          action: "submitted",
+          repository: { id, full_name: renamed, updated_at: "2026-10-16T12:00:00Z", private: true },
+          sender: { login: "octocat", type: "User" },
+          review: {
+            id: 10,
+            state: "COMMENTED",
+            body: "Cover the expired invitation too.",
+            html_url: `https://github.com/${renamed}/pull/41#pullrequestreview-10`,
+            submitted_at: "2026-10-16T12:00:00Z",
+          },
+          pull_request: { number: 41, head: { ref } },
+        };
+
+        const answered = yield* answer(github, SECRET, delivery("pull_request_review", review), {
+          eveDeploymentSecret: Redacted.make("eve-deployment-secret-1"),
+        });
+
+        assert.deepEqual(answered, { status: 200, body: { read: 0, queued: 0, told: 1 } });
+        const stored = Option.getOrThrow(yield* readTask(owner, task.id));
+        assert.equal(stored.task.repository, renamed);
+      }),
+  );
+  it.effect.each([
+    {
+      action: "renamed",
+      from: (name: string) => `acme/${name}-old`,
+      changes: (name: string) => ({ repository: { name: { from: `${name}-old` } } }),
+    },
+    {
+      action: "transferred",
+      from: (name: string) => `old-owner/${name}`,
+      changes: () => ({ owner: { from: { organization: { login: "old-owner" } } } }),
+    },
+  ])(
+    "a repository $action on GitHub relabels its task by the name the delivery says it had, though the store never saw it before",
+    ({ action, from, changes }) =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const name = `relay-${randomUUID().slice(0, 8)}`;
+        const task = yield* startTask(owner, { name: "Relay", repository: from(name) });
+        const moved = {
+          action,
+          repository: {
+            id: 900_000_000 + Math.floor(Math.random() * 90_000_000),
+            name,
+            full_name: `acme/${name}`,
+            owner: { login: "acme" },
+            updated_at: "2026-10-16T12:00:00Z",
+          },
+          changes: changes(name),
+        };
+
+        const answered = yield* answer(githubReaching([]), SECRET, delivery("repository", moved));
+
+        assert.deepEqual(answered, { status: 200, body: { read: 0 } });
+        const stored = Option.getOrThrow(yield* readTask(owner, task.id));
+        assert.equal(stored.task.repository, `acme/${name}`);
       }),
   );
 });
