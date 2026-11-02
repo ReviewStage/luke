@@ -65,7 +65,8 @@ it.effect(
         const taskId = randomUUID();
         yield* sql`insert into task (id, user_id, organization_id, number, name, document) values (${taskId}, 'dean', ${workspaceId}, 1, 'Teammate invitations', '')`;
         const agent = { id: randomUUID(), conversationId: randomUUID() };
-        yield* sql`insert into conversations (id, user_id, kind) values (${agent.conversationId}, 'dean', 'coding_agent')`;
+        // Note that the agent runs on Claude Code, so the later archive of every agent left on eve leaves it and its asks open.
+        yield* sql`insert into conversations (id, user_id, kind, runtime) values (${agent.conversationId}, 'dean', 'coding_agent', 'claude_code')`;
         yield* sql`insert into coding_agent (id, task_id, organization_id, user_id, conversation_id, model, effort, plan_snapshot, repository, idempotency_key)
           values (${agent.id}, ${taskId}, ${workspaceId}, 'dean', ${agent.conversationId}, 'anthropic/claude-opus-5.5', 'high', '# Teammate invitations', 'acme/relay', ${randomUUID()})`;
         const item = (
