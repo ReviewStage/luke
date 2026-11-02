@@ -115,7 +115,7 @@ import { accountInboxPast, agentInboxPast, taskInboxPast } from "./inbox-page.js
  * workspace's members as one on a task does to its task's, a member writes
  * on an item's thread whatever its status, which moves the item's last
  * change and nothing else of it, and nothing of a workspace the account is
- * not in is read or written. On Fullspin Sync, a task's, an agent's, and the account's held reads
+ * not in is read or written. On Vespin Sync, a task's, an agent's, and the account's held reads
  * each answer an agent's post within a coalesce window.
  *
  * Synthetic accounts, tasks, and words throughout.
@@ -1348,7 +1348,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
 });
 
 /** Whether the item is unread for the reader, as their read of it says. */
-it.layer(getTestDB())("the inbox's held reads on Fullspin Sync", (it) => {
+it.layer(getTestDB())("the inbox's held reads on Vespin Sync", (it) => {
   it.effect(
     "a task's, an agent's, and the account's held reads each answer an agent's post within a coalesce window of it",
     () =>

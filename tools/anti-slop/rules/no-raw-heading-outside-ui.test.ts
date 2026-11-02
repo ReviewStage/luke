@@ -48,7 +48,7 @@ tester.run("no-raw-heading-outside-ui", noRawHeadingOutsideUiRule, {
       errors: [{ messageId: "rawHeading", data: { tag: "h2", element: "H2" } }],
     },
     {
-      code: 'function A() { return <h1 className="title">Fullspin</h1>; }',
+      code: 'function A() { return <h1 className="title">Vespin</h1>; }',
       filename: WEB_FILE,
       errors: [{ messageId: "rawHeading", data: { tag: "h1", element: "H1" } }],
     },

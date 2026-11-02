@@ -454,7 +454,7 @@ it.effect(
       live.list.set({ automations: [ROW] });
       yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, workspace);
       yield* settled;
-      // An answer Fullspin Sync woke hands the follow its wait for a write's transaction.
+      // An answer Vespin Sync woke hands the follow its wait for a write's transaction.
       live.list.set({ automations: [ROW] }, ["1"]);
       yield* nextPoll;
 
@@ -496,7 +496,7 @@ it.effect(
 );
 
 it.effect(
-  "a new automation stands on its followed list as its create answers, before Fullspin Sync hands the list a wait",
+  "a new automation stands on its followed list as its create answers, before Vespin Sync hands the list a wait",
   () =>
     Effect.gen(function* () {
       const workspace = { kind: AUTOMATION_FOLLOW.WORKSPACE, id: WORKSPACE_ID };
@@ -523,7 +523,7 @@ it.effect("a Run now answers once its workspace's followed runs carry it, as its
       id: WORKSPACE_ID,
     });
     yield* settled;
-    // Answers Fullspin Sync woke hand both follows their waits for a write's transaction.
+    // Answers Vespin Sync woke hand both follows their waits for a write's transaction.
     live.list.set({ automations: [ROW] }, ["1"]);
     live.workspaceRuns.set({ runs: [] }, ["1"]);
     yield* nextPoll;

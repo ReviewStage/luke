@@ -10,9 +10,9 @@ import { underWebAdminDoors } from "./support/admin-doors";
 /**
  * admin-cost.test.ts -- the Cost screen reads its window and scope from the
  * service, states each headline tile in words, names every dollar figure a
- * list-price equivalent and says it is not what Fullspin pays, shows a model the
+ * list-price equivalent and says it is not what Vespin pays, shows a model the
  * catalog does not price as unpriced rather than as dollars, and opens an expensive account's own page from its
- * row. The network, the HTTP boundary to Fullspin, is a fake that answers the
+ * row. The network, the HTTP boundary to Vespin, is a fake that answers the
  * screen's read.
  */
 
@@ -157,10 +157,10 @@ test("each headline tile reads its figure and its hint under its name", async ()
   );
 });
 
-test("every dollar figure is said to be a list-price equivalent, not what Fullspin pays", async () => {
+test("every dollar figure is said to be a list-price equivalent, not what Vespin pays", async () => {
   const page = await openCost(cost());
 
-  expect(page.textContent).toContain("a list-price equivalent, not what Fullspin pays.");
+  expect(page.textContent).toContain("a list-price equivalent, not what Vespin pays.");
   expect(page.textContent).toContain(
     "List prices leave out discounts, credits, plan fees, and which key paid.",
   );

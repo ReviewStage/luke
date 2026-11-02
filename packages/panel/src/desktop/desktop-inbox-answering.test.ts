@@ -1782,11 +1782,11 @@ test("an answered ask of words alone draws no card, its reply just its words and
   );
 });
 
-test("an ask of a type this build does not know reads as a line naming a newer Fullspin, saying which teammate it waits on while open and nothing more where it waits on the reader, and the box still replies", async () => {
+test("an ask of a type this build does not know reads as a line naming a newer Vespin, saying which teammate it waits on while open and nothing more where it waits on the reader, and the box still replies", async () => {
   const poll = Schema.decodeUnknownSync(inboxReadAskSchema)({ type: "poll", status: "open" });
   const asking = { ...askingMessage(EXPIRY_ASK), ask: poll };
   const pane = await mountThread(threadItem([asking]));
-  assert.deepEqual(askBoxes(pane), [["newer", "Answer this in a newer Fullspin."]]);
+  assert.deepEqual(askBoxes(pane), [["newer", "Answer this in a newer Vespin."]]);
   assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
   assert.equal(sendWords(pane), "Send");
 });
@@ -1797,7 +1797,7 @@ test("an ask of a type this build does not know, open on a teammate's item, name
     threadItem([{ ...askingMessage(EXPIRY_ASK), ask: poll }], { startedBy: TEAMMATE }),
   );
   assert.deepEqual(askBoxes(pane), [
-    ["newer", "Answer this in a newer Fullspin.Waiting on Charles Pan"],
+    ["newer", "Answer this in a newer Vespin.Waiting on Charles Pan"],
   ]);
 });
 

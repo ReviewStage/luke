@@ -1,8 +1,8 @@
 /**
- * codex.ts -- one launch of Codex for a Fullspin agent: `codex app-server` spawned with the ChatGPT plan's provider, the thread started or resumed, Fullspin's lines turned into turns, steers, interrupts and restarts, every notification posted out, and the launch ended, or kept warm, once the agent's turn is over.
+ * codex.ts -- one launch of Codex for a Vespin agent: `codex app-server` spawned with the ChatGPT plan's provider, the thread started or resumed, Vespin's lines turned into turns, steers, interrupts and restarts, every notification posted out, and the launch ended, or kept warm, once the agent's turn is over.
  *
  * One controller fiber owns the launch's state and acts on one signal at a
- * time: a line Fullspin wrote, or what app-server reported (a message a turn
+ * time: a line Vespin wrote, or what app-server reported (a message a turn
  * took, a turn completed, the process gone). Notifications are posted by the
  * reader as Codex writes them, so their order is Codex's own; the controller
  * only decides. A request it sends is awaited where it is sent, and whatever
@@ -12,9 +12,9 @@
  *
  * When the agent's turn is over (Codex's end-of-run rule). It is over at
  * the `turn/completed` of the turn the launch is running, on its own thread,
- * once no message Fullspin sent is left unanswered. Each `turn/start` and `turn/steer`
+ * once no message Vespin sent is left unanswered. Each `turn/start` and `turn/steer`
  * carries a `clientUserMessageId`, which Codex echoes as the `clientId` of
- * the `userMessage` item a turn takes it in, and which is Fullspin's own id for
+ * the `userMessage` item a turn takes it in, and which is Vespin's own id for
  * the line where a message goes alone. As app-server takes a line (its
  * `turn/start` or `turn/steer` answered), the launch posts ACCEPTED naming
  * the line, as Claude Code's launch does, once for each line a merged turn
@@ -27,18 +27,18 @@
  * turn, as P16 found), so nothing outlives `turn/completed` the way Claude
  * Code's background work outlives a `result`. A turn that is over ends the
  * launch as `turn_ended`, or, where the config asks it to stay `warm`, posts
- * IDLE and keeps the launch up (`RUNNER_WARM`) for Fullspin's next message,
- * until Fullspin retires it or its cap ends it as `idled`. One interrupted
- * after Fullspin's stop ends the launch as `stopped`; a
+ * IDLE and keeps the launch up (`RUNNER_WARM`) for Vespin's next message,
+ * until Vespin retires it or its cap ends it as `idled`. One interrupted
+ * after Vespin's stop ends the launch as `stopped`; a
  * failed turn, or one interrupted without a stop, as `failed`, with the
  * turn's error, so it shows as interrupted and Continue resumes the thread. A
  * stop with no turn running ends the launch at once; so does stdin closing
- * with none, while one running is let finish. App-server exiting, or Fullspin
+ * with none, while one running is let finish. App-server exiting, or Vespin
  * refusing the events, ends it as `failed`.
  *
  * Tokens. App-server takes its token from a command, Codex's provider
  * `auth`: the runner's own bundle as `codex-token` (`codex-token.ts`), which
- * asks Fullspin at the config's `tokenUrl` under the runner's bearer. Codex keeps
+ * asks Vespin at the config's `tokenUrl` under the runner's bearer. Codex keeps
  * what the command printed for the refresh interval, and runs it again past
  * that and after a 401, so a turn outlives any one token, and no token sits
  * in app-server's environment; what the command prints reaches app-server
@@ -112,31 +112,31 @@ const CHATGPT_PROVIDER = {
 } as const;
 
 /**
- * How app-server runs the token command: given long enough for a cold Fullspin
+ * How app-server runs the token command: given long enough for a cold Vespin
  * and a renewal at OpenAI behind it, and run again once what it printed is
- * five minutes old, well inside the margin Fullspin's route answers a token with.
+ * five minutes old, well inside the margin Vespin's route answers a token with.
  */
 const TOKEN_COMMAND = {
   TIMEOUT_MS: 30_000,
   REFRESH_INTERVAL_MS: 300_000,
 } as const;
 
-/** The name the Fullspin MCP server is registered under in Codex's config. */
+/** The name the Vespin MCP server is registered under in Codex's config. */
 const MCP_SERVER = "luke";
 
 /**
- * How long Codex waits on one Fullspin tool call, in seconds: the Fullspin MCP
+ * How long Codex waits on one Vespin tool call, in seconds: the Vespin MCP
  * function's own duration (`luke-mcp/app.ts`'s `LUKE_MCP_FUNCTION`, the
  * longest `run_on_mac` and two minutes around it), so Codex never gives up
- * on a call Fullspin is still running. Note that Codex's default is 60 s, past
- * which it fails the call while Fullspin carries it out, and the agent retries a
+ * on a call Vespin is still running. Note that Codex's default is 60 s, past
+ * which it fails the call while Vespin carries it out, and the agent retries a
  * call that already ran.
  */
 const MCP_TOOL_TIMEOUT_SECONDS = 600;
 
 /**
  * How long Codex waits on an integration's server to start, in seconds:
- * past the bound Fullspin lists a provider's tools within
+ * past the bound Vespin lists a provider's tools within
  * (`connection-door.ts`'s `LIST_TIMEOUT`, ten seconds), so a slow provider's
  * server answers no tools rather than being failed by Codex at its default
  * of ten (https://learn.chatgpt.com/docs/extend/mcp, `startup_timeout_sec`).
@@ -145,13 +145,13 @@ const INTEGRATION_STARTUP_TIMEOUT_SECONDS = 20;
 
 /**
  * Who the runner tells app-server it is. OpenAI asks that the name match the
- * `agent_name_hint` the sign-in sent, which is `Fullspin`. The version is the
+ * `agent_name_hint` the sign-in sent, which is `Vespin`. The version is the
  * package's, which the bundle's build writes in (`--define`); an unbundled
  * runner, such as the tests', says `dev`.
  */
 const CLIENT_INFO = {
-  name: "Fullspin",
-  title: "Fullspin",
+  name: "Vespin",
+  title: "Vespin",
   version: process.env.LUKE_RUNNER_VERSION ?? "dev",
 } as const;
 
@@ -198,9 +198,9 @@ type Signal =
   | { readonly kind: typeof SIGNAL.UNDELIVERED };
 
 /**
- * A message Fullspin sent, as Codex takes it, under the id Codex echoes when a
- * turn takes it: Fullspin's own id for the line where it goes alone. `lines` are
- * the ids of Fullspin's lines it carries, one for a line, several for a merged
+ * A message Vespin sent, as Codex takes it, under the id Codex echoes when a
+ * turn takes it: Vespin's own id for the line where it goes alone. `lines` are
+ * the ids of Vespin's lines it carries, one for a line, several for a merged
  * next turn.
  */
 interface Outgoing {
@@ -269,7 +269,7 @@ const API_KEY_PROVIDER = {
 
 /** Which credential a launch's app-server runs on. */
 const CODEX_AUTH = {
-  /** The account's ChatGPT plan, its token asked of Fullspin through the runner's token command. */
+  /** The account's ChatGPT plan, its token asked of Vespin through the runner's token command. */
   TOKEN_COMMAND: "token_command",
   /** The account's OpenAI API key, in the launch's environment. */
   API_KEY: "api_key",
@@ -280,7 +280,7 @@ type CodexAuth =
   | { readonly kind: typeof CODEX_AUTH.API_KEY };
 
 /**
- * How Fullspin's provider is handed its token: from the runner's token command
+ * How Vespin's provider is handed its token: from the runner's token command
  * on the plan, or from `OPENAI_API_KEY` (the documented `env_key`) on an API
  * key; and its own name.
  */
@@ -346,11 +346,11 @@ function sandboxModeOf(sandbox: SandboxPolicy): "danger-full-access" | "workspac
 }
 
 /**
- * App-server's argv: Fullspin's provider and its credential where the launch
- * runs on one of Fullspin's (`providerOverrides`), the Fullspin MCP
+ * App-server's argv: Vespin's provider and its credential where the launch
+ * runs on one of Vespin's (`providerOverrides`), the Vespin MCP
  * server and each integration's beside it with the bearer read from the environment and their tools approved up
  * front (under `approval_policy = "never"` Codex 0.163.0 otherwise fails
- * every MCP call, as P16 found) and given as long as Fullspin runs a call, the sandbox with network on and its
+ * every MCP call, as P16 found) and given as long as Vespin runs a call, the sandbox with network on and its
  * writable roots (`sandboxPolicy`), and commands inheriting the core variables
  * without the bearer or the key, and handed the image's tools' own
  * (`SANDBOX_TOOL_ENV`). Nothing in argv is secret.
@@ -364,7 +364,7 @@ function sandboxModeOf(sandbox: SandboxPolicy): "danger-full-access" | "workspac
  */
 function appServerArgs(config: CodexConfig, auth: CodexAuth, sandbox: SandboxPolicy): string[] {
   const mcp = `mcp_servers.${MCP_SERVER}`;
-  // Each integration the agent is handed is a server of its own on the same bearer, its tools approved and bounded as Fullspin's are.
+  // Each integration the agent is handed is a server of its own on the same bearer, its tools approved and bounded as Vespin's are.
   const integrations = (config.integrations ?? [])
     .filter((integration) => integration.name !== MCP_SERVER)
     .flatMap((integration): (readonly [string, string])[] => {
@@ -457,7 +457,7 @@ interface CodexLaunch {
   readonly sent: Map<string, Outgoing>;
   /** Messages for the next turn. */
   waiting: Outgoing[];
-  /** Fullspin's lines this launch has said app-server took, each said once. */
+  /** Vespin's lines this launch has said app-server took, each said once. */
   readonly accepted: Set<string>;
   /** The credential app-server runs on. */
   readonly auth: CodexAuth;
@@ -619,8 +619,8 @@ const revertedBefore = Effect.fn("agent-runner/codex/revertedBefore")(function* 
 });
 
 /**
- * Says each of Fullspin's lines a message carries was taken by app-server, as
- * Claude Code's launch says a line was handed to the SDK, so Fullspin ties the
+ * Says each of Vespin's lines a message carries was taken by app-server, as
+ * Claude Code's launch says a line was handed to the SDK, so Vespin ties the
  * line to the turn that runs it. A line said once is not said again when a
  * message is sent again in the next turn.
  */
@@ -674,7 +674,7 @@ const startTurn = Effect.fn("agent-runner/startTurn")(function* (
   yield* accepted(launch, outgoing);
 });
 
-/** One of Fullspin's lines, acted on; answers the launch's outcome where the line ends it. */
+/** One of Vespin's lines, acted on; answers the launch's outcome where the line ends it. */
 const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
   launch: CodexLaunch,
   text: string,
@@ -689,7 +689,7 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
   switch (value.type) {
     case INPUT_LINE.MESSAGE: {
       launch.warm = false;
-      // Note that Fullspin's id for the line is the id Codex echoes, so a turn that takes it names it.
+      // Note that Vespin's id for the line is the id Codex echoes, so a turn that takes it names it.
       const uuid = value.uuid ?? randomUUID();
       const outgoing: Outgoing = { clientId: uuid, input: userInput(value.content), lines: [uuid] };
       if (launch.turnId === undefined) {
@@ -775,7 +775,7 @@ const takeTurnCompleted = Effect.fn("agent-runner/codex/takeTurnCompleted")(func
     yield* startTurn(launch, unanswered);
     return undefined;
   }
-  // What Fullspin wrote before the turn completed, still queued behind the
+  // What Vespin wrote before the turn completed, still queued behind the
   // completion, is acted on before the launch is called over, so a
   // follow-up already sent starts the next turn rather than being dropped.
   for (;;) {
@@ -786,7 +786,7 @@ const takeTurnCompleted = Effect.fn("agent-runner/codex/takeTurnCompleted")(func
   }
   if (launch.turnId !== undefined) return undefined;
   if (launch.context.config.warm !== true) return ended(RUNNER_END.TURN_ENDED);
-  // The agent's turn is over: the launch stays warm for Fullspin's next message rather than ending.
+  // The agent's turn is over: the launch stays warm for Vespin's next message rather than ending.
   launch.warm = true;
   yield* launch.context.sink.emit({ type: RUNNER_EVENT.IDLE });
   return undefined;
@@ -903,7 +903,7 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     warm: false,
   };
 
-  // Fullspin's lines join the signals in a loop of their own, so a line is
+  // Vespin's lines join the signals in a loop of their own, so a line is
   // never held up behind what the controller is waiting on.
   yield* Stream.fromQueue(context.lines).pipe(
     Stream.runForEach((text) => Queue.offer(signals, { kind: SIGNAL.LINE, text })),

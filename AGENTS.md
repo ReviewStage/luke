@@ -1,6 +1,6 @@
 # Agent guide
 
-Fullspin is a macOS Electron app, with a web app beside it, for working through a
+Vespin is a macOS Electron app, with a web app beside it, for working through a
 task with coding agents: the developer works a task through with them in typed
 conversations, and they write its plan down as they go and open its pull
 requests.
@@ -86,7 +86,7 @@ component, factored out of the surface where it builds the box by hand.
   terminal relay (`apps/web/server/terminal/`) and the host to that panel's
   window, never into a trace, a counted event, a fixture, or app state. And a
   webhook body an automation's caller sends, or an
-  integration trigger's event (a Sentry issue or alert as Fullspin's Sentry
+  integration trigger's event (a Sentry issue or alert as Vespin's Sentry
   integration delivers it), may reach that run's agent task, transcript and
   traces. And an automation webhook secret may be shown once, in the window that
   minted it, at creation or rotation; never anywhere else. And an agent's cloud

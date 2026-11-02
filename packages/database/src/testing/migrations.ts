@@ -15,7 +15,7 @@ const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
 export const RENAME_PLAN_TO_TASK = "20261017014941_rename_plan_to_task";
 
 /**
- * The statements that take Fullspin Sync's capture off every synced table, as
+ * The statements that take Vespin Sync's capture off every synced table, as
  * the database stood before it. A test that walks today's schema back past
  * an earlier migration runs them first, because a capture's triggers name
  * the columns that walk renames or drops, just as a migration that drops

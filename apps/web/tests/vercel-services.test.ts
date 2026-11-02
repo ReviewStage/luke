@@ -263,7 +263,7 @@ function directivesOf(policy: string): ReadonlyMap<string, readonly string[]> {
   );
 }
 
-test("a link to any place in Fullspin, a plan's, a section's, a picture's, and a box's pairing among them, and the app's own path are served the web app, and no page of Fullspin's own is", () => {
+test("a link to any place in Vespin, a plan's, a section's, a picture's, and a box's pairing among them, and the app's own path are served the web app, and no page of Vespin's own is", () => {
   for (const path of [
     "/app",
     "/app/",

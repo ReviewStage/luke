@@ -3,7 +3,7 @@ import { test } from "vitest";
 import { LINK_OPEN, LINK_PLATFORM, linkOpenTarget } from "./link-open.js";
 
 /**
- * Whether a web page showing a Fullspin link hands it to the Mac app: only for
+ * Whether a web page showing a Vespin link hands it to the Mac app: only for
  * an account that chose the app, on a Mac, and an address naming a place in
  * a workspace, and then in the desktop's own scheme. Synthetic ids.
  */
@@ -18,7 +18,7 @@ test("an account that chose the app, on a Mac, hands the link over in the deskto
   );
 });
 
-test("a preview's address hands over the link it stands for on Fullspin's home", () => {
+test("a preview's address hands over the link it stands for on Vespin's home", () => {
   assert.equal(
     linkOpenTarget(
       LINK_OPEN.MAC_APP,

@@ -54,7 +54,7 @@ import type { LiveParams } from "./live-query.js";
  * task's, and its workspace's too, so every view of the agent's status
  * hears it; and for a worker opened, its delegation recorded, and its title
  * filled, which notify the agent's own conversation, whose transcript lists
- * its workers. A transcript read held on Fullspin Sync answers the agent's
+ * its workers. A transcript read held on Vespin Sync answers the agent's
  * message, and a wait for a worker's delegation its record, within a
  * coalesce window of the write.
  *
@@ -247,7 +247,7 @@ it.layer(getTestDB())("what moves a coding agent's transcript notifies", (it) =>
   );
 
   it.effect(
-    "on Fullspin Sync, a held read of the agent's transcript answers its message, and a wait for a worker's delegation the record, each within a coalesce window of the write",
+    "on Vespin Sync, a held read of the agent's transcript answers its message, and a wait for a worker's delegation the record, each within a coalesce window of the write",
     () =>
       Effect.scoped(
         Effect.gen(function* () {

@@ -30,7 +30,7 @@ function changelogAt(path: string): FunctionComponent {
 const ChangelogIndex = changelogAt("/changelog");
 
 const PAGES: readonly { path: string; page: FunctionComponent; marked: readonly string[] }[] = [
-  { path: "/", page: App, marked: ["Fullspin"] },
+  { path: "/", page: App, marked: ["Vespin"] },
   { path: "/about", page: AboutPage, marked: ["About", "About"] },
   { path: "/changelog", page: ChangelogIndex, marked: ["Changelog", "Changelog"] },
   { path: "/privacy", page: PrivacyPage, marked: ["Privacy"] },
@@ -56,10 +56,10 @@ for (const { path, page, marked } of PAGES) {
   test(`${path} names the site's links in its banner and footer`, () => {
     const root = drawn(page);
     assert.deepEqual(links(root.querySelector('header nav[aria-label="Site"]')), [
-      "Fullspin -> /",
+      "Vespin -> /",
       "About -> /about",
       "Changelog -> /changelog",
-      "Fullspin on GitHub -> https://github.com/ReviewStage/luke",
+      "Vespin on GitHub -> https://github.com/ReviewStage/luke",
     ]);
     assert.deepEqual(links(root.querySelector("footer")), [
       "About -> /about",
@@ -84,7 +84,7 @@ test("the landing offers the web app beside the download", () => {
   const body = drawn(App).querySelector("main");
   assert.deepEqual(links(body), [
     "Download for macOS -> https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg",
-    `Open Fullspin on the web -> ${PANEL_PATH}`,
+    `Open Vespin on the web -> ${PANEL_PATH}`,
     "View on GitHub -> https://github.com/ReviewStage/luke",
   ]);
 });

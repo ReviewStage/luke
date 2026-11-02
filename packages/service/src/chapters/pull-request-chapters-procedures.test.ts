@@ -372,7 +372,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
   );
 
   it.effect(
-    "a read before any Generate answers no chapters, and whether the reader can generate them, asking GitHub for no pull request: not where they saved no API key, since Fullspin's own key tells no chapters",
+    "a read before any Generate answers no chapters, and whether the reader can generate them, asking GitHub for no pull request: not where they saved no API key, since Vespin's own key tells no chapters",
     () =>
       Effect.gen(function* () {
         const { owner, github, ask } = yield* standing();

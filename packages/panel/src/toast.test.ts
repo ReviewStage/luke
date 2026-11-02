@@ -66,7 +66,7 @@ const TRACED: Pick<ShownFailureSentry, "getActiveSpan" | "getCurrentScope"> = {
   getCurrentScope: () => ({ getPropagationContext: () => ({ traceId: TRACE_FIXTURE }) }),
 };
 
-/** An agent's Stop that Fullspin never heard back on, the fetch beneath it naming a credential. */
+/** An agent's Stop that Vespin never heard back on, the fetch beneath it naming a credential. */
 function unheardStop(): ToastNotice {
   // A credential in the cause's code as well as its message, since a code is sent as a tag and grouped by.
   const unreached = Object.assign(new TypeError("fetch failed with token=fixture-secret"), {
@@ -444,7 +444,7 @@ test("a failure toast's Copy details copies what its report sent, to paste as it
 
   assert.deepEqual(copied, [
     [
-      "Fullspin showed an error. Find it in Sentry and the logs by these details:",
+      "Vespin showed an error. Find it in Sentry and the logs by these details:",
       "time: 2026-10-29T18:20:03.198Z",
       "failure.surface: agent.stop",
       "failure.kind: unexpected",
@@ -462,7 +462,7 @@ test("a failure toast's Copy details copies what its report sent, to paste as it
       `sentry.trace_id: ${TRACE_FIXTURE}`,
     ].join("\n"),
     [
-      "Fullspin showed an error. Find it in Sentry and the logs by these details:",
+      "Vespin showed an error. Find it in Sentry and the logs by these details:",
       "time: 2026-10-29T18:20:03.198Z",
       "failure.surface: agent.start",
       "failure.kind: refused",

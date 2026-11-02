@@ -9,7 +9,7 @@
  * refuses is answered not run with the Mac's reason. Only the Mac's bearer
  * is read, never a cookie,
  * and before anything the body says. Each refusal answers what the old
- * group answered. On Fullspin Sync, the held read answers within a coalesce
+ * group answered. On Vespin Sync, the held read answers within a coalesce
  * window of a command queued, and a call within one of the Mac settling it.
  *
  * Synthetic accounts, bearers, and commands throughout.
@@ -421,7 +421,7 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
   );
 
   it.effect(
-    "on Fullspin Sync, the held read answers a command queued, and a call its result, each within a coalesce window of the write",
+    "on Vespin Sync, the held read answers a command queued, and a call its result, each within a coalesce window of the write",
     () =>
       Effect.scoped(
         Effect.gen(function* () {

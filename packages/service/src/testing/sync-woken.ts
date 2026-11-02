@@ -1,5 +1,5 @@
 /**
- * sync-woken.ts -- a wait held on Fullspin Sync's hub over the test's database, held to answering within a coalesce window of the write that settles it.
+ * sync-woken.ts -- a wait held on Vespin Sync's hub over the test's database, held to answering within a coalesce window of the write that settles it.
  */
 
 import assert from "node:assert/strict";

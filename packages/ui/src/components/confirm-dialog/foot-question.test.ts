@@ -77,7 +77,7 @@ function KeyDialog({ answers, onDone }: { answers: Answers; onDone: () => void }
         confirm,
         question: {
           title: "Delete the OpenAI key?",
-          body: "Fullspin stops using it at once.",
+          body: "Vespin stops using it at once.",
           verb: "Delete",
           running: "Deleting",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
@@ -152,7 +152,7 @@ test("it takes the foot's place rather than a card of its own, lands on Cancel, 
   const title = document.getElementById(asking.getAttribute("aria-labelledby") ?? "");
   const body = document.getElementById(asking.getAttribute("aria-describedby") ?? "");
   assert.equal(title?.textContent, "Delete the OpenAI key?");
-  assert.equal(body?.textContent, "Fullspin stops using it at once.");
+  assert.equal(body?.textContent, "Vespin stops using it at once.");
   assert.ok(button("Delete key")?.closest("[inert]"), "what the dialog holds takes no press");
 });
 

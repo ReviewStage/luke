@@ -33,7 +33,7 @@ import { PullRequestCard, peopleOf } from "./pull-request-card.js";
  * pull-request-people.test.ts -- an agent's pull request's card says who
  * its pull request names as every actor is drawn: a linked teammate as the
  * member, anyone else as themself on GitHub, a person's circle or an App's
- * bot's square, Fullspin's own App's bot among them; each reviewer stands on a
+ * bot's square, Vespin's own App's bot among them; each reviewer stands on a
  * row of its own with where they stand at its end and hangs their card,
  * every one of them listed, scrolling within the card. Its Files changed
  * view names nobody, since the Pull request tab's header above it does.
@@ -193,7 +193,7 @@ test("a pull request's card says who opened it and lists its reviewers by where 
   assert.deepEqual(
     [opener.querySelector(".luke-inline-ref-label")?.textContent, opener.getAttribute("data-kind")],
     ["luke-agent", "github"],
-    "Fullspin's own App's bot is an App's bot on GitHub, as any other is",
+    "Vespin's own App's bot is an App's bot on GitHub, as any other is",
   );
   hover(opener);
   const opened = document.querySelector('.luke-tooltip-card [data-actor-card="github"]');

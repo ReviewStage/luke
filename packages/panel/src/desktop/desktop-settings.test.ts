@@ -93,7 +93,7 @@ const HOMES = [
   { words: "Delete account", page: "Account" },
   { words: "Let agents run commands on this Mac", page: "This Mac" },
   { words: "Prefer the Mac's microphone", page: "This Mac" },
-  { words: "Open Fullspin at login", page: "This Mac" },
+  { words: "Open Vespin at login", page: "This Mac" },
   { words: "Check for updates", page: "About", found: "Updates" },
   { words: "Changelog", page: "About" },
   { words: "Minimize inline comments", page: "Appearance" },
@@ -446,7 +446,7 @@ test("the Settings search finds each moved option under its new page", () => {
   }
 });
 
-test("Open Fullspin at login stands on This Mac under Startup, drawn as the choice already stored, and Appearance holds it no more", () => {
+test("Open Vespin at login stands on This Mac under Startup, drawn as the choice already stored, and Appearance holds it no more", () => {
   const page = mount(
     createElement(SettingsHarness, {
       stored: settingsView({ openAtLogin: false }),
@@ -456,14 +456,14 @@ test("Open Fullspin at login stands on This Mac under Startup, drawn as the choi
   const appearance = openPage(page, "Appearance").textContent ?? "";
   const thisMac = openPage(page, "This Mac");
   const login = thisMac.querySelector<HTMLButtonElement>(
-    'button[aria-label="Open Fullspin at login"]',
+    'button[aria-label="Open Vespin at login"]',
   );
   assert.ok(login, "This Mac draws the switch");
   const group = login.closest("[aria-labelledby]");
   const heading = group && document.getElementById(group.getAttribute("aria-labelledby") ?? "");
   assert.equal(heading?.textContent, "Startup");
   assert.equal(login.getAttribute("aria-checked"), "false");
-  assert.equal(appearance.includes("Open Fullspin at login"), false);
+  assert.equal(appearance.includes("Open Vespin at login"), false);
 });
 
 test("a platform without Mac commands or updates lists no This Mac page, draws About without its Updates row, and its search finds none of them", () => {
@@ -492,7 +492,7 @@ test("a browser, which is no installed app, draws Appearance without Zoom and Th
     const groups = pageGroups(page);
     const appearance = openPage(page, "Appearance").textContent ?? "";
     const thisMac = openPage(page, "This Mac").textContent ?? "";
-    const found = ["Zoom", "Open Fullspin at login", "Keyboard shortcuts"].flatMap((words) =>
+    const found = ["Zoom", "Open Vespin at login", "Keyboard shortcuts"].flatMap((words) =>
       foundUnder(page, words),
     );
     act(() => root?.unmount());
@@ -501,7 +501,7 @@ test("a browser, which is no installed app, draws Appearance without Zoom and Th
     return {
       last: groups.at(-1),
       zoom: appearance.includes("Zoom"),
-      login: thisMac.includes("Open Fullspin at login"),
+      login: thisMac.includes("Open Vespin at login"),
       startup: thisMac.includes("Startup"),
       found,
     };

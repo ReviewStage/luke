@@ -31,7 +31,7 @@ import { afterAll, test } from "vitest";
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-/** Every table the migrations declare, by its Postgres name, better-auth's own alongside Fullspin's. */
+/** Every table the migrations declare, by its Postgres name, better-auth's own alongside Vespin's. */
 const DECLARED_TABLES = [
   "account",
   "account_chatgpt_host",

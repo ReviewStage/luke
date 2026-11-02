@@ -51,7 +51,7 @@ import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
- * chip-cards.test.ts -- a chip of a place in Fullspin hangs the card the window
+ * chip-cards.test.ts -- a chip of a place in Vespin hangs the card the window
  * hangs for that place wherever it names it: a plan's card for a plan, the
  * same card's head and the section's heading for a section, or the
  * version for a version; a page's title, version, and when it moved; a
@@ -599,7 +599,7 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
 
   assert.equal(page.card, "data-page-card");
   assert.equal(page.name, "Unfurl matrix");
-  assert.deepEqual([page.sub, page.detailWords], ["Version 3", ["Shown by Fullspin"]]);
+  assert.deepEqual([page.sub, page.detailWords], ["Version 3", ["Shown by Vespin"]]);
   assert.ok(page.corner, "the corner says when the page last moved");
   assert.deepEqual([other.name, other.notes], ["Old draft", [PAGE_UNREAD]]);
   // A page id the open plan holds, named on another plan, is not the open plan's page.
@@ -607,7 +607,7 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
   // A page of a plan not open hangs its tab's card all the same, as an Inbox item's bar names it.
   assert.equal(read.card, "data-page-card");
   assert.equal(read.name, "Rollout tracker");
-  assert.deepEqual([read.sub, read.detailWords], [undefined, ["Shown by Fullspin"]]);
+  assert.deepEqual([read.sub, read.detailWords], [undefined, ["Shown by Vespin"]]);
 });
 
 test("a page's chip of the open plan the window holds no pages for reads the plan's pages as it is hung, and says it can't be read once they lack it", async () => {

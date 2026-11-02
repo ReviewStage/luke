@@ -21,7 +21,7 @@ import {
 import { linkLabels, linksIn, mentionLinksIn, mentionsIn } from "./mention-link.js";
 
 /**
- * A place in Fullspin as the link a teammate is sent: written under its
+ * A place in Vespin as the link a teammate is sent: written under its
  * workspace by its ids alone, read back by the web's scheme or the
  * desktop's, and nothing read from an address that names no place.
  * Synthetic ids.
@@ -210,7 +210,7 @@ test("a task's places are read under the name the unit of work is taking, /task/
   });
 });
 
-test("a turn of Fullspin's work, or a worker of Fullspin's, once written under its task, names the task, since neither is drawn now", () => {
+test("a turn of Vespin's work, or a worker of Vespin's, once written under its task, names the task, since neither is drawn now", () => {
   for (const target of [
     `${HOME}/plan/${TASK}/work/1760000000000`,
     `${HOME}/plan/${TASK}/worker/toolu_02`,
@@ -233,7 +233,7 @@ test("a picture in a plan's address names its task, and nothing of the picture",
   assert.equal(readLink(`${HOME}/plan/${TASK}/files/not-an-id`), undefined);
 });
 
-test("an address that names no place in Fullspin names nothing", () => {
+test("an address that names no place in Vespin names nothing", () => {
   for (const target of [
     `https://example.com/acme/agent/${AGENT}`,
     `http://tryluke.dev/acme/agent/${AGENT}`,
@@ -351,7 +351,7 @@ test("a title holding a bracket, a backslash, or a line break is written as one 
   const url = "https://github.com/acme/relay/pull/42";
   const title = "#42 Fix [the] build\\cache]\nnow";
   const mention = mentionMarkdownLink(title, url);
-  const [read] = linksIn(`Waiting on ${mention} by Fullspin.`);
+  const [read] = linksIn(`Waiting on ${mention} by Vespin.`);
   assert.deepEqual([read?.label, read?.target], ["@#42 Fix [the] build\\cache] now", url]);
   assert.equal(linkLabels(`Waiting on ${mention}.`), "Waiting on #42 Fix [the] build\\cache] now.");
   assert.deepEqual(

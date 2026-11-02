@@ -115,7 +115,7 @@ test("a document opened and handed over untouched is byte for byte what it was",
 
   assert.equal(handedOver(), DOCUMENT);
 });
-test("Fullspin's part of a merged answer replaces only the blocks it changed, and the caret stays in the developer's block", async () => {
+test("Vespin's part of a merged answer replaces only the blocks it changed, and the caret stays in the developer's block", async () => {
   const { editor, host, handedOver, took } = opened(DOCUMENT);
   await retype(host, "Model an invite as a", "Model an invite as one");
   const sent = handedOver();
@@ -137,7 +137,7 @@ test("Fullspin's part of a merged answer replaces only the blocks it changed, an
       "Only an admin can add someone,",
       "Only an admin or an owner can add someone,",
     ),
-    "undo takes back the developer's words, not Fullspin's",
+    "undo takes back the developer's words, not Vespin's",
   );
 });
 
@@ -146,9 +146,9 @@ test("a block the developer changed after the save went out stays theirs when th
   await retype(host, "Model an invite as a", "Model an invite as one");
   const sent = handedOver();
   await retype(host, " row.", " row, pending.");
-  const merged = sent.replace("1) first", "1) first, by Fullspin");
+  const merged = sent.replace("1) first", "1) first, by Vespin");
 
-  assert.equal(took(sent, merged), merged, "Fullspin's change taken whole is the next save's base");
+  assert.equal(took(sent, merged), merged, "Vespin's change taken whole is the next save's base");
   assert.deepEqual(changedLines(merged, handedOver()), [
     "-Model an invite as one `memberships` row.",
     "+Model an invite as one `memberships` row, pending.",

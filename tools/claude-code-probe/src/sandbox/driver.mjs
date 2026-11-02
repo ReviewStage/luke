@@ -1,4 +1,4 @@
-// driver.mjs -- the probe's stand-in for P05's runner, run in the sandbox as the agent user: query() in streaming input mode, Fullspin's lines in on stdin, the SDK's messages out on stdout.
+// driver.mjs -- the probe's stand-in for P05's runner, run in the sandbox as the agent user: query() in streaming input mode, Vespin's lines in on stdin, the SDK's messages out on stdout.
 //
 // The first stdin line is the config: the token, the model, the working
 // directory, the session to resume, and the options `query()` runs with.

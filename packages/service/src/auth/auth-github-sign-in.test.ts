@@ -9,7 +9,7 @@ import { ACCOUNT_TOKEN_STORAGE, DISABLED_AUTH_PATHS, GITHUB_SIGN_IN } from "./au
 
 /**
  * A GitHub sign-in, configured as `auth.ts` configures it, over an in-memory
- * database with GitHub a fake behind `fetch`. Sign-in is the Fullspin GitHub
+ * database with GitHub a fake behind `fetch`. Sign-in is the Vespin GitHub
  * App's user authorization, so what this holds is that GitHub is asked as
  * the App's client and for no OAuth scope; that an account from before the
  * App, the same GitHub user, signs in to the user it already has and comes

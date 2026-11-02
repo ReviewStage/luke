@@ -76,7 +76,7 @@ test("a press on a ButtonLink is heard, and the link is still followed", () => {
     createElement(ButtonLink, {
       href: "tryluke://tryluke.dev/acme",
       onClick: (event) => presses.push(event.defaultPrevented),
-      children: "Open in Fullspin",
+      children: "Open in Vespin",
     }),
   );
   const link = container.querySelector("a");
@@ -277,7 +277,7 @@ test("an IconButtonLink is a link named by its label, and one in a new tab opens
       createElement(IconButtonLink, {
         href: "https://github.com/example/luke",
         icon: createElement("svg", { "aria-hidden": true }),
-        label: "Fullspin on GitHub",
+        label: "Vespin on GitHub",
       }),
       createElement(IconButtonLink, {
         href: "https://x.com/example",
@@ -296,7 +296,7 @@ test("an IconButtonLink is a link named by its label, and one in a new tab opens
       link.getAttribute("target"),
     ]),
   ).toEqual([
-    ["Fullspin on GitHub", "https://github.com/example/luke", null],
+    ["Vespin on GitHub", "https://github.com/example/luke", null],
     ["Example on X", "https://x.com/example", "_blank"],
   ]);
   expect(container.querySelector("button")).toBeNull();

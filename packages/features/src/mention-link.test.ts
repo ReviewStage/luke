@@ -776,7 +776,7 @@ test("a server or tool of an account past a provider's first names it by its con
   }
 });
 
-test("a page of a plan is its Fullspin link, an agent of one is the agent's own, an older link under its task read back as it, by the app's scheme too, a bare one named by its kind, and a step or a fragment past its id names nothing", () => {
+test("a page of a plan is its Vespin link, an agent of one is the agent's own, an older link under its task read back as it, by the app's scheme too, a bare one named by its kind, and a step or a fragment past its id names nothing", () => {
   const page: Mention = { kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: "page-1" };
   const agent: Mention = { kind: MENTION_KIND.AGENT, agentId: "agent-1" };
   const taskLink = `https://tryluke.dev/acme/plan/${TASK_ID}`;
@@ -804,7 +804,7 @@ test("a page of a plan is its Fullspin link, an agent of one is the agent's own,
   }
 });
 
-test("an agent on no task is mentioned by its own Fullspin link under the workspace, read back by either scheme, and a page on neither a task nor an agent names nothing", () => {
+test("an agent on no task is mentioned by its own Vespin link under the workspace, read back by either scheme, and a page on neither a task nor an agent names nothing", () => {
   const agent: Mention = { kind: MENTION_KIND.AGENT, agentId: "agent-9" };
 
   assert.equal(encodeMention(agent, PLACE), "https://tryluke.dev/acme/agent/agent-9");
@@ -845,7 +845,7 @@ test("a page an agent on no task showed is mentioned under the agent's own link,
   }
 });
 
-test("a person is mentioned by their page's Fullspin link under the workspace, read back by either scheme, pasted or written bare as their mention, and a step or a fragment past their id names nothing", () => {
+test("a person is mentioned by their page's Vespin link under the workspace, read back by either scheme, pasted or written bare as their mention, and a step or a fragment past their id names nothing", () => {
   const person: Mention = { kind: MENTION_KIND.PERSON, userId: "user_Ab-9" };
   const page = "https://tryluke.dev/acme/person/user_Ab-9";
 
@@ -870,7 +870,7 @@ test("a person is mentioned by their page's Fullspin link under the workspace, r
   }
 });
 
-test("an old Fullspin issue page's link names nothing now that Fullspin keeps no issues: no mention read back, pasted, or handed", () => {
+test("an old Vespin issue page's link names nothing now that Vespin keeps no issues: no mention read back, pasted, or handed", () => {
   const page = "https://tryluke.dev/acme/issue/3f0e6f5c-7d1a-4f6e-9a55-000000000007";
 
   assert.equal(decodeMention(page, null), undefined);
@@ -880,7 +880,7 @@ test("an old Fullspin issue page's link names nothing now that Fullspin keeps no
   assert.deepEqual(handedMentionsIn(`See ${page} or [@ACME-7](${page}).`, REPOSITORY), []);
 });
 
-test("words pasted whole that are an address of Fullspin's own become its mention, named by what the address says, while a file of the plan pastes as words", () => {
+test("words pasted whole that are an address of Vespin's own become its mention, named by what the address says, while a file of the plan pastes as words", () => {
   const pasted = (words: string) => pastedLinkMention(words, REPOSITORY);
   const page: Mention = { kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: "page-1" };
   const agent: Mention = { kind: MENTION_KIND.AGENT, agentId: "agent-2" };
@@ -900,7 +900,7 @@ test("words pasted whole that are an address of Fullspin's own become its mentio
   assert.equal(pasted(`see ${encodeMention(ROLLOUT, PLACE)}`), undefined);
 });
 
-test("an agent is handed each @ mention and each bare address of Fullspin's own, in order, a bare address ending where GFM ends it", () => {
+test("an agent is handed each @ mention and each bare address of Vespin's own, in order, a bare address ending where GFM ends it", () => {
   const section = encodeMention(ROLLOUT, PLACE);
   const taskLink = encodeMention(TASK, PLACE);
   const words = [
@@ -966,7 +966,7 @@ test("the links written in words are every inline link whatever its label, an au
   );
 });
 
-test("Fullspin on a task is mentioned by the task's link and `/luke`, read back by either scheme, and on no task names nothing", () => {
+test("Vespin on a task is mentioned by the task's link and `/luke`, read back by either scheme, and on no task names nothing", () => {
   const luke: Mention = { kind: MENTION_KIND.LUKE, taskId: "plan-1" };
 
   assert.equal(encodeMention(luke, PLACE), "https://tryluke.dev/acme/plan/plan-1/luke");
@@ -981,9 +981,9 @@ test("Fullspin on a task is mentioned by the task's link and `/luke`, read back 
   }
 });
 
-test("a comment's words ask the agents they mention with `@`, each once, and no bare link or Fullspin", () => {
+test("a comment's words ask the agents they mention with `@`, each once, and no bare link or Vespin", () => {
   const words = [
-    "[@Fullspin](https://tryluke.dev/acme/plan/plan-1/luke), and",
+    "[@Vespin](https://tryluke.dev/acme/plan/plan-1/luke), and",
     "[@Wire it](https://tryluke.dev/acme/plan/plan-1/agent/agent-1) with",
     "[@wire it again](https://tryluke.dev/acme/plan/plan-1/agent/AGENT-1),",
     "[@Other](https://tryluke.dev/acme/agent/agent-2), not",
@@ -1054,7 +1054,7 @@ test("a date written bare is named by its date in full, and is no address a past
   assert.equal(pastedLinkMention("luke://date/2026-10-20", REPOSITORY), undefined);
 });
 
-test("a channel is mentioned by its Fullspin link under the workspace, read back by either scheme, pasted bare as its mention, and a step past its id names nothing", () => {
+test("a channel is mentioned by its Vespin link under the workspace, read back by either scheme, pasted bare as its mention, and a step past its id names nothing", () => {
   const channel: Mention = { kind: MENTION_KIND.CHANNEL, channelId: "c1000001-6d9f-4ab7" };
   const link = "https://tryluke.dev/acme/channel/c1000001-6d9f-4ab7";
 
@@ -1065,11 +1065,11 @@ test("a channel is mentioned by its Fullspin link under the workspace, read back
   assert.equal(decodeMention(`${link}/threads`, null), undefined);
 });
 
-test("words that are one member's mention link, written whole or as its address, name that member, and a task, a Fullspin, a handle, or more words name none", () => {
+test("words that are one member's mention link, written whole or as its address, name that member, and a task, a Vespin, a handle, or more words name none", () => {
   const person = { kind: MENTION_KIND.PERSON, userId: "user-1" } as const;
   const address = encodeMention(person, PLACE);
   const link = `[@Ada Lovelace](${address})`;
-  const luke = `[@Fullspin](${encodeMention({ kind: MENTION_KIND.LUKE, taskId: TASK_ID }, PLACE)})`;
+  const luke = `[@Vespin](${encodeMention({ kind: MENTION_KIND.LUKE, taskId: TASK_ID }, PLACE)})`;
   const task = `[@Checkout](${encodeMention({ kind: MENTION_KIND.TASK, taskId: TASK_ID }, PLACE)})`;
   assert.deepEqual(memberMentionOf(link), person);
   assert.deepEqual(memberMentionOf(address), person);
@@ -1082,7 +1082,7 @@ test("a member's link is written as its name alone, its address written bare too
   const address = encodeMention({ kind: MENTION_KIND.PERSON, userId: "user-1" }, PLACE);
   const agentId = "11111111-2222-4333-8444-555555555555";
   const agent = `[@Invite emails](${encodeMention({ kind: MENTION_KIND.AGENT, agentId }, PLACE)})`;
-  const luke = `[@Fullspin](${encodeMention({ kind: MENTION_KIND.LUKE, taskId: TASK_ID }, PLACE)})`;
+  const luke = `[@Vespin](${encodeMention({ kind: MENTION_KIND.LUKE, taskId: TASK_ID }, PLACE)})`;
   const plan = encodeMention({ kind: MENTION_KIND.TASK, taskId: TASK_ID }, PLACE);
   const task = `[@Checkout](${plan})`;
   assert.equal(

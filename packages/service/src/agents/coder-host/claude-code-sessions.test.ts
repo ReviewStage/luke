@@ -143,7 +143,7 @@ const MCP_URL = "https://luke.test/api/agents/mcp";
 
 /** The one integration the agent is handed, a server of its own. */
 const LINEAR_SERVER = { name: "linear", url: `${MCP_URL}/integrations/linear` };
-const INSTRUCTIONS = "You are a Fullspin coding agent.";
+const INSTRUCTIONS = "You are a Vespin coding agent.";
 const BUNDLE = new TextEncoder().encode("// the runner, bundled\nconsole.log('runner');\n");
 const PLAN_TOKEN = "sk-ant-oat01-fixture-plan-token";
 const API_KEY = "sk-ant-api03-fixture-account-key";
@@ -686,7 +686,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
             .name,
           "luke",
         );
-        // Every other key and the body as installed, under the name and description Fullspin keeps.
+        // Every other key and the body as installed, under the name and description Vespin keeps.
         assert.equal(
           skills.get("/tmp/luke-installed-skills/skills/sentry-triage/SKILL.md"),
           '---\nname: sentry-triage\ndescription: "Triage a Sentry issue."\nallowed-tools: Bash\n---\n\nRun `scripts/triage.sh`.\n',
@@ -789,7 +789,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a local agent on a Mac signed in to Claude Code launches with no credential of the account's; once the Mac signs out, on the plan's refusal with none saved in Fullspin, and on the account's key where Settings keeps the plan from agents",
+    "a local agent on a Mac signed in to Claude Code launches with no credential of the account's; once the Mac signs out, on the plan's refusal with none saved in Vespin, and on the account's key where Settings keeps the plan from agents",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());

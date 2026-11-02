@@ -83,7 +83,7 @@ it("a quit with unsaved plan words asks first, with Cancel what Return and Esc p
   assert.equal(quit.held(), true);
   assert.equal(asked.length, 1);
   const [{ question, answer }] = asked as [Asked];
-  assert.equal(question.message, "Quit Fullspin?");
+  assert.equal(question.message, "Quit Vespin?");
   assert.equal(question.detail, "Edits that haven't saved will be lost.");
   assert.equal(returnPresses(question), "Cancel");
   assert.equal(question.cancelId, question.defaultId);
@@ -139,14 +139,14 @@ it("a quit, a restart to update, and a sign-out ask under the same conditions, n
   };
 
   assert.deepEqual(asks(LEAVE.QUIT), {
-    message: "Quit Fullspin?",
+    message: "Quit Vespin?",
     detail:
       "Edits that haven't saved will be lost. 2 Mac terminals will close, with what's running in them.",
     act: "Quit",
     returnPresses: "Cancel",
   });
   assert.deepEqual(asks(LEAVE.RESTART), {
-    message: "Restart Fullspin to update?",
+    message: "Restart Vespin to update?",
     detail:
       "Edits that haven't saved will be lost. 2 Mac terminals will close, with what's running in them.",
     act: "Restart",
@@ -154,7 +154,7 @@ it("a quit, a restart to update, and a sign-out ask under the same conditions, n
   });
   // Note that a sign-out leaves this Mac's terminals open, so it does not name them.
   assert.deepEqual(asks(LEAVE.SIGN_OUT), {
-    message: "Sign out of Fullspin?",
+    message: "Sign out of Vespin?",
     detail: "Edits that haven't saved will be lost.",
     act: "Sign out",
     returnPresses: "Cancel",
@@ -179,7 +179,7 @@ it("a restart to update asks while a panel holds unsaved words, goes at once whi
   const restart = askFirst(LEAVE.RESTART);
   assert.equal(await askFirst(LEAVE.RESTART), false);
   assert.equal(asked.length, 1);
-  assert.equal(asked[0]?.question.message, "Restart Fullspin to update?");
+  assert.equal(asked[0]?.question.message, "Restart Vespin to update?");
   asked[0]?.answer(true);
   assert.equal(await restart, true);
 });
