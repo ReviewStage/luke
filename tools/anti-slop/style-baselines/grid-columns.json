@@ -16,6 +16,5 @@
   "packages/ui/src/components/picture-set/picture-set.tsx": 2,
   "packages/ui/src/components/settings-row/settings-row.tsx": 1,
   "packages/ui/src/components/sidebar/sidebar.tsx": 1,
-  "packages/ui/src/components/task-row/task-row.tsx": 1,
-  "packages/ui/src/components/video-player/video-player.tsx": 1
+  "packages/ui/src/components/task-row/task-row.tsx": 1
 }
