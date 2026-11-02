@@ -52,7 +52,6 @@ import {
   inboxPictureDestination,
 } from "@luke/features/inbox-attachment-link";
 import {
-  INBOX_ASK,
   INBOX_ASK_STATUS,
   INBOX_BOUNDS,
   INBOX_FILE_TYPE,
