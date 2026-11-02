@@ -119,8 +119,8 @@ export const AUTOMATION_TOOL_REFUSAL = {
     "A personal automation is its creator's alone, and a workspace's its creator's, owners', and " +
     "admins'; only its toggle is open to more of the workspace.",
   NO_REPOSITORY:
-    "Not made: name the repositories its runs work in, as owner/name, the first where each run " +
-    "starts; you work in none to take as its own.",
+    "Not run: a GitHub trigger fires on events of the automation's repositories, so name at " +
+    "least one, as owner/name.",
   NOT_REACHABLE:
     "Not run: the GitHub installation connected to the workspace does not reach one of those " +
     "repositories; name ones it reaches.",
@@ -196,7 +196,8 @@ const TRIGGER = describeWire(
 const REPOSITORIES = describeWire(
   automationCreateRequestSchema.fields.repositories.schema,
   "The repositories its runs work in, as owner/name, the first where each run starts; each " +
-    "must be one the workspace's GitHub installation reaches.",
+    "must be one the workspace's GitHub installation reaches. [] for runs that work in no " +
+    "repository, which a GitHub trigger cannot take.",
 );
 
 const MODEL = describeWire(
@@ -267,7 +268,9 @@ const CREATE_AUTOMATION_INPUT = Schema.Struct({
     describeWire(
       automationCreateRequestSchema.fields.repositories.schema,
       "The repositories its runs work in, as owner/name, the first where each run starts; each " +
-        "must be one the workspace's GitHub installation reaches. The one you work in where left out.",
+        "must be one the workspace's GitHub installation reaches. The one you work in where left " +
+        "out, or none where you work in none; [] for runs that work in no repository, which a " +
+        "GitHub trigger cannot take.",
     ),
   ),
   model: Schema.optionalKey(MODEL),
@@ -337,7 +340,7 @@ export const CREATE_AUTOMATION_TOOL = {
   description:
     "Make an automation in your workspace for the developer you work for, as the automations " +
     `page would: each time its trigger fires, ${PRODUCT_NAME} starts an agent on its prompt, in its ` +
-    "repositories, on its creator's keys and connections, with no task and no one watching, or " +
+    "repositories or in none, on its creator's keys and connections, with no task and no one watching, or " +
     "hands the run to the one agent named. It is on as it is made, and runs as the developer. " +
     `One fired by Sentry needs ${PRODUCT_NAME}'s Sentry integration installed on the workspace first. ` +
     "Make one when the developer asks for it, never otherwise on your own, and read " +
@@ -678,7 +681,7 @@ export function runCreateAutomation(
       );
       if (Result.isFailure(landing)) return agentToolRejected(landing.failure);
       const worked = yield* workedRepository(call.caller);
-      const repositories = made.repositories ?? (worked === null ? undefined : [worked]);
+      const repositories = made.repositories ?? (worked === null ? [] : [worked]);
       const action: AutomationAction = {
         kind: AUTOMATION_ACTION.AGENT,
         prompt: made.prompt,
@@ -691,7 +694,7 @@ export function runCreateAutomation(
         userId,
         {
           workspaceId: workspace.value,
-          ...(repositories === undefined ? undefined : { repositories }),
+          repositories,
           name: made.name,
           trigger: made.trigger,
           action,
@@ -713,10 +716,6 @@ export function runCreateAutomation(
           made.scope === AUTOMATION_SCOPE.WORKSPACE
         ) {
           return agentToolRejected(AUTOMATION_TOOL_REFUSAL.WORKSPACE_SCOPE);
-        }
-        // Note that a create on a workspace with no repositories is refused as malformed, and is said as the repositories it lacks.
-        if (refusal.error === HOSTED_API_ERROR.INVALID_REQUEST && repositories === undefined) {
-          return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_REPOSITORY);
         }
         return agentToolRejected(refusalWords(refusal));
       }
