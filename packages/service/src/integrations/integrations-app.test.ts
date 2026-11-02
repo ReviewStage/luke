@@ -75,6 +75,7 @@ const SLACK = INTEGRATION_PROVIDER.SLACK;
 const SLACK_CONNECTOR = { SLACK_CONNECTOR_UID: "oauth/slack" } as const;
 const NOTION = INTEGRATION_PROVIDER.NOTION;
 const NOTION_CONNECTOR = { NOTION_CONNECTOR_UID: "oauth/notion" } as const;
+const GMAIL = INTEGRATION_PROVIDER.GMAIL;
 
 /** The deployment the origin guard reads its own origins from. */
 const DEPLOYMENT = { VERCEL_ENV: "production", BETTER_AUTH_URL: ORIGIN } as const;
@@ -942,6 +943,67 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           accountsIn(after.body).map((account) => account.label),
           [undefined],
         );
+      }),
+  );
+
+  it.effect(
+    "a Google account, whose grant names nothing, is called by its email at Google, one stored unnamed before among them, read once",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount("dean@google-email.example");
+        yield* beginIntegrationSignIn(
+          userId,
+          firstIntegrationAccount(userId, GMAIL),
+          `state-gmail-${userId}`,
+        );
+        yield* completeIntegrationSignIn(userId, GMAIL, `state-gmail-${userId}`);
+        // As a read before Google was asked for the email left it: read once, and named nothing.
+        const [connected] = yield* readIntegrationConnections(userId);
+        yield* fillIntegrationLabel(connected ?? assert.fail("Gmail has a row"), "");
+        const asked: string[] = [];
+        const google = fakeHttpClientLayer((url, init) => {
+          asked.push(`${url} ${new Headers(init.headers).get("authorization")}`);
+          return Response.json({ emailAddress: "dean.stratakos2026@gmail.example" });
+        });
+        const group = yield* standing({ GMAIL_CONNECTOR_UID: "google/gmail" }, undefined, google);
+        const labels = Effect.map(
+          group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }),
+          ({ body }) => accountsIn(body).map((account) => account.label),
+        );
+
+        assert.deepEqual(yield* labels, ["dean.stratakos2026@gmail.example"]);
+        assert.deepEqual(yield* labels, ["dean.stratakos2026@gmail.example"]);
+        assert.deepEqual(asked, [
+          `https://gmail.googleapis.com/gmail/v1/users/me/profile Bearer token_${userId}`,
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a provider that could not answer whose account a token is leaves the read as it was, and is not asked again while its hold stands",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount("dee@google-down.example");
+        yield* beginIntegrationSignIn(
+          userId,
+          firstIntegrationAccount(userId, GMAIL),
+          `state-gmail-down-${userId}`,
+        );
+        yield* completeIntegrationSignIn(userId, GMAIL, `state-gmail-down-${userId}`);
+        let asked = 0;
+        const google = fakeHttpClientLayer(() => {
+          asked += 1;
+          return new Response(null, { status: 503 });
+        });
+        const group = yield* standing({ GMAIL_CONNECTOR_UID: "google/gmail" }, undefined, google);
+        const accounts = Effect.map(
+          group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }),
+          ({ body }) => accountsIn(body).map((account) => [account.status, account.label]),
+        );
+
+        assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, undefined]]);
+        assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, undefined]]);
+        assert.equal(asked, 1);
       }),
   );
 

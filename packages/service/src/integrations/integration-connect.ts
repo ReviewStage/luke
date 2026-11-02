@@ -203,8 +203,28 @@ const VERCEL_CONNECT_SDK: ConnectSdk = {
   deleteTokenCacheEntry,
 };
 
-/** The longest account name a grant's fields are read as a label for. */
+/** The longest account name a grant's fields or a provider's answer are read as a label for. */
 const ACCOUNT_NAME_MAX = 64;
+
+/** The longest email an account is called by: the longest an address may be. */
+const ACCOUNT_EMAIL_MAX = 254;
+
+/** An email as an account is called by it: a local part, `@`, then a host of at least two labels. */
+const ACCOUNT_EMAIL_PATTERN = /^[^@\s]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
+
+/**
+ * An account's name at the provider as an account's label keeps it, from a
+ * grant's fields or the provider's own answer alike: an email whole, and
+ * anything else as a short line shaped like no credential. Note that an
+ * email is kept by its shape rather than `credentialFreeLine`, which drops a
+ * long run mixing letters and digits, as many a mailbox's name is.
+ */
+export function accountNameLine(candidate: string): string | undefined {
+  const name = candidate.trim();
+  if (ACCOUNT_EMAIL_PATTERN.test(name)) return name.length <= ACCOUNT_EMAIL_MAX ? name : undefined;
+  const line = credentialFreeLine(name);
+  return line === undefined || line.length > ACCOUNT_NAME_MAX ? undefined : line;
+}
 
 /** Where in a grant's metadata an account's name may stand, each read alone so one of the wrong shape hides none of the others. */
 const GRANT_NAME_READS = [
@@ -242,9 +262,9 @@ const GRANT_NAME_READS = [
  * The account's name at the provider as Connect's grant carries it, for an
  * account's label: Notion's `workspace_name`, Slack's team, an
  * organization's name, or the grant's own `name` where it is not the
- * connector's id. Note that each field is read only where it is a short line
- * shaped like no credential, because what Connect's driver stores is no
- * contract we can vouch for.
+ * connector's id. Note that each field is read only as `accountNameLine`
+ * keeps a name, because what Connect's driver stores is no contract we can
+ * vouch for.
  */
 function grantAccountName(response: ConnectTokenResponse): string | undefined {
   const candidates = [
@@ -252,8 +272,8 @@ function grantAccountName(response: ConnectTokenResponse): string | undefined {
     ...(response.name !== undefined ? [response.name] : []),
   ];
   for (const candidate of candidates) {
-    const line = credentialFreeLine(candidate);
-    if (line === undefined || line.length > ACCOUNT_NAME_MAX) continue;
+    const line = accountNameLine(candidate);
+    if (line === undefined) continue;
     if (line === response.connector.uid || line === response.connector.id) continue;
     return line;
   }

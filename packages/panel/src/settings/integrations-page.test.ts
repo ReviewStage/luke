@@ -1394,6 +1394,28 @@ test("two accounts at a provider stand as two rows named by their labels, each o
   );
 });
 
+test("an account alone at its provider is named by its label where it carries one, and by its provider alone where it carries none", async () => {
+  const gmail = INTEGRATION_PROVIDER.GMAIL;
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  standing.set(gmail, INTEGRATION_STATUS.CONNECTED);
+  standing.set(notion, INTEGRATION_STATUS.CONNECTED);
+  accounts = [
+    {
+      provider: gmail,
+      connection: "gmail",
+      label: "dean@example.com",
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+    { provider: notion, connection: "notion", status: INTEGRATION_STATUS.CONNECTED },
+  ];
+  const page = await mount();
+  const names = [...page.querySelectorAll('[id$="label"]')].map((name) => name.textContent);
+
+  assert.ok(names.includes("Gmail · dean@example.com"));
+  assert.ok(names.includes("Notion"));
+  assert.ok(!names.some((name) => name?.includes("Account 1")));
+});
+
 test("an account renamed from its row's ⋯ is named in place: Escape keeps its name, and Return asks for the new one", async () => {
   const notion = INTEGRATION_PROVIDER.NOTION;
   standing.set(notion, INTEGRATION_STATUS.CONNECTED);
@@ -1497,7 +1519,7 @@ test("an added account whose first sign-in Connect refused keeps its row with th
   const page = await mount();
   const acme =
     [...page.querySelectorAll(".luke-settings-row")].find(
-      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion",
+      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion · Acme",
     ) ?? assert.fail("Notion has a row");
   await choose(acme, "Add another account");
 
@@ -1549,7 +1571,7 @@ test("an account added under the provider's own name, beside one that stands, wa
   const page = await mount();
   const personal =
     [...page.querySelectorAll(".luke-settings-row")].find(
-      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion",
+      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion · Personal",
     ) ?? assert.fail("Notion has a row");
   await choose(personal, "Add another account");
 
@@ -1740,7 +1762,7 @@ test("Reopen on an added account still waiting on its first sign-in reopens that
   const page = await mount();
   const acme =
     [...page.querySelectorAll(".luke-settings-row")].find(
-      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion",
+      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion · Acme",
     ) ?? assert.fail("Notion has a row");
   await choose(acme, "Add another account");
   const added =

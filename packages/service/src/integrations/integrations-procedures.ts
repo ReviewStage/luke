@@ -91,8 +91,9 @@ import {
   integrationProviderFromWire,
   mintIntegrationConnectionName,
 } from "@luke/features/integration-wire";
-import { Effect, Redacted, Result } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
+import { Duration, Effect, Option, Redacted, Result } from "effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import {
@@ -110,13 +111,14 @@ import {
 } from "./github-integration.js";
 import {
   accountIntegrationConnect,
+  accountNameLine,
   type ConnectorService,
   INTEGRATION_CONNECT_FAILURE,
   type IntegrationConnect,
   revokeIntegrationGrant,
 } from "./integration-connect.js";
 import type { IntegrationAccountKey, IntegrationConnectionRow } from "./integration-store.js";
-import { INTEGRATION, type IntegrationDefinition } from "./integrations.js";
+import { type AccountNameRead, INTEGRATION, type IntegrationDefinition } from "./integrations.js";
 import {
   INTEGRATION_CALLBACK_QUERY,
   type IntegrationsAppSeams,
@@ -152,8 +154,23 @@ interface ToolsRead {
 /** The tools read lately, by user account and then by connection name, for as long as the instance stands. */
 type ToolsCache = Map<string, Map<string, ToolsRead>>;
 
-/** Every read past its time let go, so an instance that stands long holds the lists of no account that stopped asking. */
-function heldToolsSwept(cache: ToolsCache, now: number): void {
+/** When a provider lately answered no name for an account, asked with its token (`providerAccountName`). */
+interface UnnamedRead {
+  readonly at: number;
+}
+
+/**
+ * The accounts whose provider lately answered no name, by user account and
+ * then by connection name, for as long as the instance stands, so a provider
+ * that keeps failing is asked again only once its hold has passed.
+ */
+type UnnamedHold = Map<string, Map<string, UnnamedRead>>;
+
+/** Every read past its time let go, so an instance that stands long holds the reads of no account that stopped asking. */
+function heldReadsSwept(
+  cache: Map<string, Map<string, { readonly at: number }>>,
+  now: number,
+): void {
   for (const [userId, reads] of cache) {
     for (const [connectionName, read] of reads) {
       if (now - read.at >= INTEGRATION_TOOLS_TTL_MS) reads.delete(connectionName);
@@ -324,28 +341,82 @@ const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { status: INTEGRATION_STATUS.PENDING };
 });
 
+/** How long the read of whose account a token is may take before the account is left for the next statuses read. */
+const ACCOUNT_NAME_TIMEOUT = Duration.seconds(2);
+
+/**
+ * The account's name as its provider answers it with the account's token
+ * (`integrations.ts`'s `ACCOUNT_NAME`), kept as a grant's name is kept
+ * (`accountNameLine`), or nothing where the answer holds none; fails where
+ * the provider could not be read, whose cause is dropped unread.
+ */
+const providerAccountName = /* @__PURE__ */ Effect.fnUntraced(function* (
+  read: AccountNameRead,
+  token: Redacted.Redacted,
+): Effect.fn.Return<string | undefined, unknown, HttpClient.HttpClient> {
+  const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+  const answer = yield* client
+    .execute(
+      HttpClientRequest.get(read.URL).pipe(
+        HttpClientRequest.bearerToken(Redacted.value(token)),
+        HttpClientRequest.acceptJson,
+      ),
+    )
+    .pipe(
+      Effect.flatMap((response) => response.json),
+      Effect.scoped,
+      Effect.timeout(ACCOUNT_NAME_TIMEOUT),
+    );
+  return Option.getOrUndefined(Option.flatMapNullishOr(read.NAME(answer), accountNameLine));
+});
+
 /**
  * A connected account as the statuses read answers it, labelled once from
  * its grant where it carries no label: an account connected before labels
  * were kept, or one whose sign-in's grant named nothing then. Its name at
  * the provider is read from Connect's grant fields, the same ones a
- * sign-in's are, and stored; a grant that names nothing is stored as an
- * empty label, so it is asked once and the account is called by its place;
- * a grant that could not be read, or an account whose reconnect is under
- * way, is left for the next read.
+ * sign-in's are, or, where they name nothing and the provider answers whose
+ * account a token is (`integrations.ts`'s `ACCOUNT_NAME`), its name there,
+ * and stored; a grant that names nothing is stored as an empty label, so it
+ * is asked once and the account is called by its place; a grant or a
+ * provider that could not be read, or an account whose reconnect is under
+ * way, is left for the next read. Note that an empty label is read again at
+ * a provider that answers whose account a token is, because an account
+ * connected before that read was kept was stored with one; a provider that
+ * answered no name, or could not be read, is held from asking again for as
+ * long as a tools read is (`unnamed`), so the read never waits on it twice.
  */
 const labelledRow = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
+  unnamed: UnnamedHold,
   connector: ConnectorService,
   row: IntegrationConnectionRow,
   status: IntegrationStatus,
-): Effect.fn.Return<IntegrationConnectionRow, HostedRefusal, DatabaseServices> {
-  if (row.label !== undefined || status !== INTEGRATION_STATUS.CONNECTED) return row;
+): Effect.fn.Return<
+  IntegrationConnectionRow,
+  HostedRefusal,
+  DatabaseServices | HttpClient.HttpClient
+> {
+  const { ACCOUNT_NAME }: IntegrationDefinition = INTEGRATION[row.provider];
+  const unread = row.label === undefined || (row.label === "" && ACCOUNT_NAME !== undefined);
+  if (!unread || status !== INTEGRATION_STATUS.CONNECTED) return row;
   // Note that a reconnect under way is left alone, because the grant it ends with names the account, not the one it replaces.
   if (row.state !== undefined && signInStands(seams, row.stateIssuedAt)) return row;
+  const held = unnamed.get(row.userId);
+  if (ACCOUNT_NAME !== undefined && held?.has(row.connectionName)) return row;
   const issued = yield* Effect.result(connector.token(row.connectSubject, { fresh: false }));
   if (Result.isFailure(issued)) return row;
-  const label = issued.success.accountName ?? "";
+  const { accountName, token } = issued.success;
+  const named =
+    accountName !== undefined || ACCOUNT_NAME === undefined
+      ? Result.succeed(undefined)
+      : yield* Effect.result(providerAccountName(ACCOUNT_NAME, token));
+  const unanswered = Result.isFailure(named) || named.success === undefined;
+  if (ACCOUNT_NAME !== undefined && accountName === undefined && unanswered) {
+    unnamed.set(row.userId, (held ?? new Map()).set(row.connectionName, { at: seams.now() }));
+  }
+  if (Result.isFailure(named)) return row;
+  const label = accountName ?? named.success ?? "";
   yield* hostedStoreOrUnavailable(seams.fillLabel(row, label));
   return { ...row, label };
 });
@@ -366,11 +437,12 @@ interface ProviderStanding {
  */
 const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
+  unnamed: UnnamedHold,
   connector: ConnectorService,
   provider: IntegrationProvider,
   rows: readonly IntegrationConnectionRow[],
   settles: boolean,
-): Effect.fn.Return<ProviderStanding, HostedRefusal, DatabaseServices> {
+): Effect.fn.Return<ProviderStanding, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   const held = providerRows(rows, provider);
   const settled = yield* Effect.forEach(held, (row) => {
     if (!settles) {
@@ -384,7 +456,10 @@ const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
         standing.accountName !== undefined && (row.label === undefined || row.label === "")
           ? { ...row, label: standing.accountName }
           : row;
-      return { row: yield* labelledRow(seams, connector, settled, standing.status), standing };
+      return {
+        row: yield* labelledRow(seams, unnamed, connector, settled, standing.status),
+        standing,
+      };
     });
   });
   const first = settled.find(({ row }) => row.connectionName === provider);
@@ -406,6 +481,7 @@ const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 const statusesAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
+  unnamed: UnnamedHold,
   userId: string,
   settles: boolean,
 ): Effect.fn.Return<
@@ -414,6 +490,7 @@ const statusesAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   DatabaseServices | IntegrationConnect | GitHubApp | HttpClient.HttpClient
 > {
   const connect = yield* hostedStoreOrUnavailable(accountIntegrationConnect(userId));
+  heldReadsSwept(unnamed, seams.now());
   // A deployment with no connector at all answers from its configuration alone, whatever the store.
   const anyConfigured = INTEGRATION_PROVIDER_LIST.some((provider) => connect[provider].configured);
   const rows = anyConfigured ? yield* hostedStoreOrUnavailable(seams.readConnections(userId)) : [];
@@ -429,7 +506,7 @@ const statusesAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
             (status): ProviderStanding => ({ status, accounts: [] }),
           )
         : connect[provider].configured
-          ? providerStanding(seams, connect[provider], provider, rows, settles)
+          ? providerStanding(seams, unnamed, connect[provider], provider, rows, settles)
           : Effect.succeed(unavailable),
       (standing) => ({ provider, ...standing }),
     ),
@@ -644,11 +721,12 @@ const accountAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * The integrations resource: every procedure to a signed-in caller,
  * resolved before its input is read, and a rename's body held to its cap
- * before it is. The tools read lately are held for as long as the
- * instance stands.
+ * before it is. The tools read lately, and the accounts whose provider lately
+ * answered no name, are held for as long as the instance stands.
  */
 export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
   const cache: ToolsCache = new Map();
+  const unnamed: UnnamedHold = new Map();
   const integrations = hosted.integrations.use(accountMiddleware(seams.resolveUserId));
   return {
     /**
@@ -657,7 +735,12 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
      * desktop does.
      */
     statuses: integrations.statuses.effect(function* ({ context }) {
-      return yield* statusesAnswer(seams, context.userId, hostedCarriesBearer(context.request));
+      return yield* statusesAnswer(
+        seams,
+        unnamed,
+        context.userId,
+        hostedCarriesBearer(context.request),
+      );
     }),
     /**
      * POST: every sign-in under way settled, then where every one of the
@@ -666,7 +749,7 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
      * deployment's own pages before it reaches here.
      */
     settle: integrations.settle.effect(function* ({ context }) {
-      return yield* statusesAnswer(seams, context.userId, true);
+      return yield* statusesAnswer(seams, unnamed, context.userId, true);
     }),
     /**
      * POST: begins a browser sign-in to one account at a provider. Connect is
@@ -752,7 +835,7 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
         return { problem: toolsProblem(failure) };
       }
       const tools = listed.success;
-      heldToolsSwept(cache, seams.now());
+      heldReadsSwept(cache, seams.now());
       if (holds) {
         const accountReads = cache.get(userId) ?? new Map<string, ToolsRead>();
         accountReads.set(connectionName, { at: seams.now(), connectedAt: grant, tools });

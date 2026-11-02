@@ -105,7 +105,9 @@ import { MenuRow } from "./menu-row.js";
  * integrations-page.tsx -- Settings › Integrations: the services the account connects so our agents can use them.
  *
  * One row per account at a provider (two Notion workspaces are two rows,
- * "Notion · Acme" and "Notion · Personal", each its own grant), and one for
+ * "Notion · Acme" and "Notion · Personal", each its own grant, and an
+ * account alone is named the same way where it carries a name, such as a
+ * Google account's email: "Gmail · dean@example.com"), and one for
  * a provider where the account holds none, under Connected or Not connected as the MCP popover
  * sections its servers (`@luke/ui/agent-servers-model`), each section
  * in the order of the providers' names: its mark and name, and under it where its connection
@@ -600,7 +602,7 @@ function IntegrationRow({
   const [cancelling, setCancelling] = useState(false);
   const [editing, setEditing] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
-  // Several accounts at a provider each name themselves; one alone is the provider, as ever.
+  // Several accounts at a provider are each renamed, and each disconnected leaving the others.
   const several = row.accounts > 1 && account !== undefined;
 
   /** How a grant begun went, said under the row where it could not begin. */
@@ -808,7 +810,7 @@ function foundRow(
   const all = health.kind === CONNECTION_HEALTH.WORKING ? health.tools : [];
   // An account's label finds its row too, so "personal" finds Notion · Personal.
   const labelled =
-    row.accounts > 1 && tokens.every((token) => row.name.toLowerCase().includes(token));
+    row.account !== undefined && tokens.every((token) => row.name.toLowerCase().includes(token));
   const match =
     matchIntegration(row.provider, all, tokens) ??
     (labelled ? { named: true, tools: [] } : undefined);
