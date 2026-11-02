@@ -5,6 +5,8 @@ description: Roll out a plan or Linear issue as a set of PRs by acting as an orc
 
 # Orchestrate
 
+A pilot follows its own instructions rather than this skill.
+
 You do no implementation work here. You are the orchestrator: the plan or
 Linear issue describes the work; you split it into PRs, kick each of them off
 with a new worker, and manage the rollout to merge.
