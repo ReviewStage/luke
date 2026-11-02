@@ -169,7 +169,8 @@ import {
   type AnnotationState,
 } from "./annotation-card.js";
 import { threadPreview } from "./changes-model.js";
-import { type ChaptersRead, chaptersCount, useChaptersRead } from "./chapters-read.js";
+import { CHAPTERS_SHOWN, chapterPaths, chaptersShown, chapterViewed } from "./chapters-model.js";
+import { type ChaptersRead, useChaptersRead } from "./chapters-read.js";
 import {
   type ConversationFilters,
   type ConversationFiltersControl,
@@ -301,8 +302,9 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * head, those that failed first, then those still running, each opening
  * its page, counted in the colour of how they went; Chapters
  * (`agent-chapters-tab.tsx`), its diff told as chapters to review in order,
- * each over its own hunks in Files changed's list, counted once they are
- * ready; and Files changed (`AgentChangesTab`), its own bar and
+ * each over its own hunks in Files changed's list, its count saying
+ * where they stand: being made, failed, out of date, or how many, and how
+ * many viewed once any is; and Files changed (`AgentChangesTab`), its own bar and
  * tree, counted by the lines it adds and removes. A review carries the
  * threads on lines it started, each on the card every annotation on code
  * stands on (`annotation-card.tsx`): its file and lines in the strip over
@@ -2066,6 +2068,91 @@ function checksCount(
   ];
 }
 
+/** What the Chapters tab says of where they stand, beside its glyph, to a reader who cannot see it. */
+const CHAPTERS_TAB_WORDS = {
+  GENERATING: "generating",
+  FAILED: "failed",
+  STALE: "out of date",
+  VIEWED: "viewed",
+} as const;
+
+/** The glyphs the Chapters tab wears for being made, a failed generation, and new commits since, as the Checks tab's are kept: made once, never in a draw. */
+const CHAPTERS_TAB_GLYPHS = {
+  GENERATING: <GLYPH.STATUS />,
+  FAILED: <XIcon />,
+  STALE: <GLYPH.TIME />,
+} as const;
+
+/**
+ * What the Chapters tab counts, as the Chapters view tells their state
+ * (`chaptersShown`): a ring in the working tone while they are made, a cross
+ * in the danger tone where the generation failed, and once ready their count,
+ * in the attention tone under a clock where new commits came since, else how
+ * many are viewed of how many where any is, in the complete tone once all
+ * are; nothing while there are none. Note that viewed is read from the files
+ * and the marks Files changed reads, so it stands only once either view has
+ * read them, and before then the files' head is taken as the pull
+ * request's, which is the head the view will read them at.
+ */
+function chaptersTabCount(
+  chapters: ChaptersRead,
+  changes: ChangesReads,
+): readonly CountPart[] | undefined {
+  const files = changes.pullRequest ?? undefined;
+  const filesHead = files?.headSha ?? chapters.head;
+  const state = chaptersShown(chapters.answer, chapters.out, chapters.generating, {
+    pullRequest: chapters.head,
+    files: filesHead,
+  });
+  if (state.kind === CHAPTERS_SHOWN.GENERATING) {
+    return [
+      {
+        text: "",
+        tone: STATUS_TONE.WORKING,
+        glyph: CHAPTERS_TAB_GLYPHS.GENERATING,
+        glyphLabel: CHAPTERS_TAB_WORDS.GENERATING,
+      },
+    ];
+  }
+  if (state.kind === CHAPTERS_SHOWN.GENERATION_FAILED) {
+    return [
+      {
+        text: "",
+        tone: STATUS_TONE.DANGER,
+        glyph: CHAPTERS_TAB_GLYPHS.FAILED,
+        glyphLabel: CHAPTERS_TAB_WORDS.FAILED,
+      },
+    ];
+  }
+  if (state.kind !== CHAPTERS_SHOWN.READY) return undefined;
+  const total = state.chapters.length;
+  // Note that with no head read yet nothing says they are out of date, so they are counted as they stand.
+  if (state.stale && filesHead !== undefined) {
+    return [
+      {
+        text: formatCount(total),
+        tone: STATUS_TONE.ATTENTION,
+        glyph: CHAPTERS_TAB_GLYPHS.STALE,
+        glyphLabel: CHAPTERS_TAB_WORDS.STALE,
+      },
+    ];
+  }
+  const marks = changes.viewedFiles.marks;
+  const viewed =
+    files === undefined || marks === undefined
+      ? 0
+      : state.chapters.filter((chapter) =>
+          chapterViewed(chapterPaths(chapter, files.files), marks.viewed),
+        ).length;
+  if (viewed === 0) return [{ text: formatCount(total) }];
+  return [
+    {
+      text: `${formatCount(viewed)}/${formatCount(total)} ${CHAPTERS_TAB_WORDS.VIEWED}`,
+      tone: viewed === total ? STATUS_TONE.COMPLETE : undefined,
+    },
+  ];
+}
+
 /** What the Files changed tab counts: the lines left to review and, in its hint, the whole; or the whole alone. */
 interface FilesCount {
   readonly count: readonly CountPart[];
@@ -2128,7 +2215,8 @@ function conversationCount(conversation: AgentOverviewConversation): number {
  * The four tabs under the header, each counting what Fullspin has read of it
  * so far: the conversation once read; the checks by how they went from the
  * first frame, as the pill's mark says it, and by how many once read; the
- * chapters once they are ready (`chaptersCount`); and
+ * chapters by where they stand from their read, as the checks are
+ * (`chaptersTabCount`); and
  * the files by the lines left to review once some are marked viewed, else
  * by the lines what was published adds and removes (`filesCountOf`).
  */
@@ -2142,7 +2230,6 @@ function tabsOf(
   const conversation = landed(parts.conversation);
   const checks = landed(parts.checks);
   const files = filesCountOf(published, changes);
-  const chapterCount = chaptersCount(chapters);
   return [
     {
       value: PULL_REQUEST_VIEW.CONVERSATION,
@@ -2166,7 +2253,7 @@ function tabsOf(
       value: PULL_REQUEST_VIEW.CHAPTERS,
       icon: <GLYPH.PULL_REQUEST_CHAPTERS />,
       label: "Chapters",
-      count: chapterCount === undefined ? undefined : formatCount(chapterCount),
+      count: chaptersTabCount(chapters, changes),
     },
     {
       value: PULL_REQUEST_VIEW.FILES,
@@ -2631,8 +2718,9 @@ function useConversationAnchors(input: {
  * Review at its end while it is open. Each tab stands once shown, the others hidden, so
  * switching draws what each last read rather than asking GitHub again. The
  * header's reads, the pull request and its conversation, whose reviews say
- * where each reviewer stands, are asked as the tab is shown; the checks, the
- * chapters, and the files as their tab is first shown, the files also as
+ * where each reviewer stands, and the chapters, whose state their tab
+ * wears, are asked as the tab is shown; the checks and the files as their
+ * tab is first shown, the files also as
  * Chapters is, whose diff draws them. Only a read saying there is no
  * pull request yet takes the header and the tabs away; a read that failed
  * says so in its own part, with its own Retry, the others standing. Files
@@ -2810,7 +2898,7 @@ function PullRequestTabBody({
     checks: checksRead.ask,
     conversation: conversationRead.ask,
   };
-  // Refresh reads again the header's reads, the checks among them, and the chapters where their tab was shown, never before,
+  // Refresh reads again the header's reads, the checks among them, and the chapters once their read was asked,
   // and what the agent published, which names this tab and its pin by the pull request's title.
   const refresh = () => {
     ask.pullRequest();
@@ -2901,11 +2989,11 @@ function PullRequestTabBody({
   const [chaptersSeen, setChaptersSeen] = useState(false);
   if (!chaptersSeen && view === PULL_REQUEST_VIEW.CHAPTERS) setChaptersSeen(true);
   const overview = landed(parts.pullRequest);
-  // The chapters, read as their view is first shown once the pull request's own read has answered, naming the number it found, which its tab counts once they are ready.
+  // The chapters, read as the tab is shown once the pull request's own read has answered, naming the number it found, so their tab says where they stand before their view is opened.
   const chapters = useChaptersRead(
     agentId,
     control,
-    shown && overview !== undefined && view === PULL_REQUEST_VIEW.CHAPTERS,
+    shown && overview !== undefined,
     overview === undefined
       ? undefined
       : { number: overview.number, head: overview.merging?.headSha },
