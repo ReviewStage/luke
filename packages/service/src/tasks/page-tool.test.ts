@@ -148,8 +148,28 @@ it.layer(getTestDB())("show_page", (it) => {
           yield* show(task, { title: "Other", path: "other.html" }, task.agent),
         );
 
+        // Another agent of the task reads its own sandbox, so its file at the same path is its own page.
+        const otherAgent = shownPage(
+          yield* show(task, { title: "Funnel of another", path: "funnel.html" }, agent),
+        );
+        // A page named by id takes the version from another file, and leaves that file with the page that made it.
+        const named = shownPage(
+          yield* show(
+            task,
+            { title: "Invite funnel", path: "other.html", page: page.id },
+            task.agent,
+          ),
+        );
+        const otherAgain = shownPage(
+          yield* show(task, { title: "Other", path: "other.html" }, task.agent),
+        );
+
         assert.deepEqual(sameFile, { id: page.id, version: 3 });
         assert.notEqual(otherFile.id, page.id);
+        assert.deepEqual(otherAgent, { id: otherAgent.id, version: 1 });
+        assert.notEqual(otherAgent.id, page.id);
+        assert.deepEqual(named, { id: page.id, version: 4 });
+        assert.deepEqual(otherAgain, { id: otherFile.id, version: 2 });
         assert.deepEqual(first, {
           status: ACTION_RESULT_STATUS.ACCEPTED,
           page: {
@@ -161,12 +181,9 @@ it.layer(getTestDB())("show_page", (it) => {
         assert.deepEqual(second, { id: page.id, version: 2 });
         assert.deepEqual(
           (yield* listPages(task.userId, taskPageOwner(task.taskId)))
-            .map(({ id, title, version }) => ({ id, title, version }))
-            .sort((a, b) => a.version - b.version),
-          [
-            { id: otherFile.id, title: "Other", version: 1 },
-            { id: page.id, title: "Invite funnel", version: 3 },
-          ],
+            .map(({ id, version }) => `${id}:${version}`)
+            .sort(),
+          [`${otherFile.id}:2`, `${page.id}:4`, `${otherAgent.id}:1`].sort(),
         );
         const stored = Option.getOrThrow(
           yield* readPageVersion(task.userId, taskPageOwner(task.taskId), page.id, 1),

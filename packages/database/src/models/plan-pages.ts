@@ -119,16 +119,28 @@ const findNewestVersion = SqlSchema.findOneOption({
     ),
 });
 
-/** The id of the owner's page last written from the file at the path; nothing where it has none. */
+/** The id of the owner's page last written by the agent from the file at the path; nothing where it has none. A task's agents each read a path in a sandbox of their own, so only the agent's own versions name its file. */
 const findPageIdBySourcePath = SqlSchema.findOneOption({
-  Request: Schema.Struct({ owner: OwnerKeySchema.fields.owner, sourcePath: Schema.String }),
+  Request: Schema.Struct({
+    owner: OwnerKeySchema.fields.owner,
+    agentId: Schema.NullOr(Schema.String),
+    sourcePath: Schema.String,
+  }),
   Result: Schema.Struct({ pageId: Schema.String }),
-  execute: ({ owner, sourcePath }) =>
+  execute: ({ owner, agentId, sourcePath }) =>
     Database.use((db) =>
       db
         .select({ pageId: planPageVersion.pageId })
         .from(planPageVersion)
-        .where(and(ownedBy(owner), eq(planPageVersion.sourcePath, sourcePath)))
+        .where(
+          and(
+            ownedBy(owner),
+            agentId === null
+              ? isNull(planPageVersion.agentId)
+              : eq(planPageVersion.agentId, agentId),
+            eq(planPageVersion.sourcePath, sourcePath),
+          ),
+        )
         .orderBy(desc(planPageVersion.at))
         .limit(1),
     ),
@@ -252,8 +264,8 @@ function ownerColumns(owner: PageOwner, shownBy: PageShower) {
 
 /**
  * Writes the page's next version, or, where the write names none, the next
- * version of the owner's page last written from the same `sourcePath`, or a
- * new page's first, on the owner, as shown by `shownBy`; the page as it now
+ * version of the owner's page the showing agent last wrote from the same
+ * `sourcePath`, or a new page's first, on the owner, as shown by `shownBy`; the page as it now
  * stands. Nothing where the account reaches no such owner, or the owner no
  * such page, and a schema failure, with nothing written, for a write past
  * the wire's bounds.
@@ -270,13 +282,21 @@ export function writePage(
         const admitted = yield* Schema.decodeUnknownEffect(pageWriteSchema)(write);
         const locked = yield* lockOwner({ userId, owner });
         if (Option.isNone(locked)) return Option.none<PageLine>();
-        // Note that a page named outright wins over the path, which only finds the page a file already made.
+        const columns = ownerColumns(owner, shownBy);
         const sameFile =
-          admitted.pageId !== undefined || admitted.sourcePath === undefined
+          admitted.sourcePath === undefined
             ? Option.none()
-            : yield* findPageIdBySourcePath({ owner, sourcePath: admitted.sourcePath });
-        const pageId =
-          admitted.pageId ?? Option.getOrUndefined(Option.map(sameFile, (r) => r.pageId));
+            : yield* findPageIdBySourcePath({
+                owner,
+                agentId: columns.agentId,
+                sourcePath: admitted.sourcePath,
+              });
+        const foundId = Option.getOrUndefined(Option.map(sameFile, (row) => row.pageId));
+        // Note that a page named outright wins over the path, which only finds the page a file already made.
+        const pageId = admitted.pageId ?? foundId;
+        // Note that a path stays with the page it first made: a revision named by id from a file another page owns leaves it there.
+        const sourcePath =
+          foundId === undefined || foundId === pageId ? admitted.sourcePath : undefined;
         const newest =
           pageId === undefined
             ? Option.some({ version: 0 })
@@ -285,11 +305,11 @@ export function writePage(
         const at = yield* DateTime.nowAsDate;
         // An insert that returned no row is the database breaking its own contract, not an outcome.
         const row = yield* insertVersion({
-          ...ownerColumns(owner, shownBy),
+          ...columns,
           pageId: pageId ?? randomUUID(),
           version: newest.value.version + 1,
           title: admitted.title,
-          sourcePath: admitted.sourcePath ?? null,
+          sourcePath: sourcePath ?? null,
           html: admitted.html,
           shownBy,
           at,
