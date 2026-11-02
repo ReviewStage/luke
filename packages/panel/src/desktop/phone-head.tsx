@@ -1,9 +1,11 @@
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BackButton,
   dropBelow,
   MoreButton,
   moreLabel,
   NO_BACK_KEY,
+  SearchIcon,
   TOOLBAR_INSET,
   TOOLBAR_LOOK,
   Toolbar,
@@ -12,6 +14,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
+import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { ActionMenu, type MenuEnds, type MenuEntry } from "./action-menu.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
 
@@ -119,6 +122,30 @@ export function PhoneBack({ back }: { back: TaskHeadBack }): React.JSX.Element {
 }
 
 /** What a place's ⋯ is called. */
+
+/**
+ * A phone's ⌘F: the ⋯'s Find, which opens the find bar over what is on
+ * screen (`find-in-tab.tsx`), as a phone's browser offers Find in page from
+ * its own menu, since a phone has no keys to press ⌘F with. It runs the
+ * window's own Find, so it opens the bar where ⌘F would, and stands only
+ * while something on screen offers Find, read as the menu is drawn: an
+ * Activity list, which finds nothing, offers none. Each ⋯ heading a place
+ * that finds spreads it in as a group of its own, after its views; it is
+ * no group at all where nothing offers Find, so no rule is drawn for it.
+ */
+export function phoneFindGroups(): readonly (readonly MenuEntry[])[] {
+  if (!appCommandOffered(APP_COMMAND.FIND)) return [];
+  return [
+    [
+      {
+        label: APP_SHORTCUTS[APP_COMMAND.FIND].label,
+        icon: <SearchIcon />,
+        command: APP_COMMAND.FIND,
+        onSelect: () => runAppCommand(APP_COMMAND.FIND),
+      },
+    ],
+  ];
+}
 
 /**
  * A place's ⋯ and the menu it drops: `groups`, made as the menu is drawn

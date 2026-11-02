@@ -110,7 +110,7 @@ import {
   RowsSkeleton,
   SectionSkeleton,
 } from "./person-frame.js";
-import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
+import { PhoneBack, PhoneHead, phoneBar, phoneFindGroups } from "./phone-head.js";
 import { RecentRow } from "./recent-row.js";
 import { useTaskListView } from "./task-list-view.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
@@ -396,14 +396,15 @@ function PersonActions({
           {showTasks}
         </Button>
       ) : null}
-      {actions.length === 0 ? null : (
+      {/* A phone's ⋯ always stands, since it also stands in for ⌘F (`phoneFindGroups`). */}
+      {actions.length === 0 && !phone ? null : (
         <>
           <MoreButton thing={PERSON} {...menu.trigger()} />
           {menu.drawn === undefined ? null : (
             <ActionMenu
               label={moreLabel(PERSON)}
               menu={menu.drawn}
-              groups={actions}
+              groups={phone ? [...phoneFindGroups(), ...actions] : actions}
               onClose={menu.close}
             />
           )}

@@ -108,7 +108,7 @@ import {
   automationOwnerName,
   READING_AUTOMATIONS,
 } from "./automation-words.js";
-import { PhoneHead, PlaceMore, phoneBar } from "./phone-head.js";
+import { PhoneHead, PlaceMore, phoneBar, phoneFindGroups } from "./phone-head.js";
 import { useWorkspaceRuns, type WorkspaceRunsRead } from "./use-automation-runs.js";
 import { useAutomations } from "./use-automations.js";
 
@@ -556,6 +556,7 @@ function AutomationsHead({
                 onSelect: tasks.onNewAutomationAgent,
               },
             ],
+            ...phoneFindGroups(),
           ]}
         />
       }
