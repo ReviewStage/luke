@@ -16,7 +16,8 @@ import { TIME_LOOK, Time } from "../time/time.js";
  * the label role's, as the caller's name helper says it (`actorName`,
  * `agentName`), on one line cut where the head runs out of room, and
  * after it, in the muted ink, what the writer did where the comment is a
- * line of what happened to its thread (`said`, "resolved this"); the time
+ * line of what happened to its thread (`said`, "resolved this"), which
+ * stays whole while a long name is cut before it; the time
  * is `Time`'s age in the caption role, a step quieter, its moment in full
  * on hover; and the trailing slot holds the line's end, its actions or a
  * status, against the head's far edge. What they wrote stands under the
@@ -64,6 +65,9 @@ const FACE = "luke-comment-face col-start-1 row-start-1 inline-flex self-center"
 const HEAD =
   "luke-comment-head col-start-2 row-start-1 flex min-w-0 items-baseline gap-icon-gap text-label";
 const NAME = "luke-comment-name min-w-0";
+// Note that a name followed by what its writer did is cut on its own, because a long name, as an agent's often is, would otherwise cut what they did off the line.
+const NAME_SAYING = "luke-comment-name flex min-w-0 items-baseline";
+const WHO = "luke-comment-who";
 const SAID = "luke-comment-said flex-none whitespace-pre font-luke-regular text-muted-foreground";
 const TIME = "luke-comment-time flex-none";
 // Note that the trailing slot is the head's line tall, its controls centred on it and standing over its edges, because a control's height would push every comment's words down by a different amount.
@@ -156,10 +160,18 @@ export function Comment({
         />
       </FaceCell>
       <HeadLine>
-        <Text className={NAME} variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.SPAN} truncate>
-          {nameRef ?? author.name}
-          {said === undefined ? null : <span className={SAID}>{` ${said}`}</span>}
-        </Text>
+        {said === undefined ? (
+          <Text className={NAME} variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.SPAN} truncate>
+            {nameRef ?? author.name}
+          </Text>
+        ) : (
+          <Text className={NAME_SAYING} variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.SPAN}>
+            <Text className={WHO} variant={TEXT_VARIANT.INHERIT} as={TEXT_ELEMENT.SPAN} truncate>
+              {nameRef ?? author.name}
+            </Text>
+            <span className={SAID}>{` ${said}`}</span>
+          </Text>
+        )}
         {at === undefined ? null : (
           <Text
             className={TIME}

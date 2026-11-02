@@ -697,10 +697,15 @@ export const inboxWithdrawInputSchema = EffectSchema.Struct({
   reason: filledText(INBOX_BOUNDS.MAX_REASON_CHARS),
 });
 
-/** Where an ask stands as a read carries it, and why its agent withdrew it, on a withdrawn one. */
+/**
+ * Where an ask stands as a read carries it, and, on a withdrawn one, why its
+ * agent withdrew it and when it was withdrawn; the when is absent from an
+ * ask withdrawn before it was kept.
+ */
 const ASK_STANDING_FIELDS = {
   status: EffectSchema.Literals(Object.values(INBOX_ASK_STATUS)),
   withdrawnReason: EffectSchema.optionalKey(EffectSchema.String),
+  withdrawnAt: EffectSchema.optionalKey(countedNumber),
 };
 
 /**
@@ -1546,7 +1551,7 @@ export function inboxAnswersReply(answers: InboxAnswers, words: string): InboxRe
 
 /** An ask as a message keeps it without where it stands, where this build knows its type; nothing for a type a newer deployment wrote. */
 export function knownAsk(ask: InboxReadAsk): InboxAsk | undefined {
-  const { status: _status, withdrawnReason: _reason, ...kept } = ask;
+  const { status: _status, withdrawnReason: _reason, withdrawnAt: _at, ...kept } = ask;
   return EffectSchema.is(inboxAskSchema)(kept) ? kept : undefined;
 }
 
