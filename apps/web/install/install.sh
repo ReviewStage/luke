@@ -5,7 +5,7 @@
 # was fetched from, written in (packages/service/src/agents/host-install-script-app.ts),
 # and run, with no sudo, as the account whose agents the host should run:
 #
-#   curl -fsSL https://tryluke.dev/install.sh | sh
+#   curl -fsSL https://vespin.dev/install.sh | sh
 #
 # Before it changes anything it checks the computer and says what is missing:
 # Linux x64 or arm64 with a systemd user manager it can reach, or an Apple
@@ -28,9 +28,9 @@
 #   ~/.local/bin/luke-host                          absolute link to …/current/bin/luke-host
 #   ~/.local/state/luke-host/                       the state root: the box's record and its agents'
 #   ~/.config/systemd/user/luke-host.service        Linux: the service, run through current
-#   ~/Library/LaunchAgents/dev.reviewstage.luke.host.standalone.plist
+#   ~/Library/LaunchAgents/dev.vespin.host.standalone.plist
 #                                                   Mac: the LaunchAgent, run through current
-#   ~/Library/Logs/Luke Host/luke-host.log          Mac: the LaunchAgent's log
+#   ~/Library/Logs/Vespin Host/luke-host.log          Mac: the LaunchAgent's log
 #
 # On Linux it turns on lingering first, so the service keeps running after
 # the account logs out: on its own where the account may, and otherwise with
@@ -61,9 +61,9 @@ URL_DARWIN_ARM64="@@URL_DARWIN_ARM64@@"
 ORIGIN="@@ORIGIN@@"
 UNIT="luke-host.service"
 # A Mac's LaunchAgent, by its label, which an install that came before used too.
-MAC_LABEL="dev.reviewstage.luke.host.standalone"
+MAC_LABEL="dev.vespin.host.standalone"
 # Where a Mac's install that came before put Vespin host, under its user's home.
-MAC_EARLIER_FOLDER="Library/Application Support/Luke Host"
+MAC_EARLIER_FOLDER="Library/Application Support/Vespin Host"
 # Where a Linux box's install that came before put Vespin host and its service.
 EARLIER_INSTALL_DIR="/opt/luke-host"
 EARLIER_UNIT_FILE="/etc/systemd/system/$UNIT"
@@ -99,7 +99,7 @@ account_paths() {
   LINK="$HOME/.local/bin/luke-host"
   UNIT_FILE="$HOME/.config/systemd/user/$UNIT"
   PLIST="$HOME/Library/LaunchAgents/$MAC_LABEL.plist"
-  MAC_LOG="$HOME/Library/Logs/Luke Host/luke-host.log"
+  MAC_LOG="$HOME/Library/Logs/Vespin Host/luke-host.log"
 }
 
 # The computer's own architecture. On a Mac it reads the hardware, so Apple
@@ -273,7 +273,7 @@ write_unit() {
   cat >"$UNIT_FILE" <<UNIT_EOF
 [Unit]
 Description=Vespin host
-Documentation=https://tryluke.dev
+Documentation=https://vespin.dev
 
 [Service]
 Type=simple

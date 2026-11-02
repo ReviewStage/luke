@@ -710,7 +710,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       const noPicture = yield* Effect.promise(() =>
         client.callTool({
           name: "look_at_picture",
-          arguments: { address: "https://tryluke.dev/acme/plan/p/files/missing" },
+          arguments: { address: "https://vespin.dev/acme/plan/p/files/missing" },
         }),
       );
       yield* Effect.promise(() => client.close());

@@ -1,5 +1,5 @@
 /**
- * Which Luke a process is: the released app, an unpackaged development run, or
+ * Which Vespin a process is: the released app, an unpackaged development run, or
  * a locally packaged test build. Each carries a different code signature — a
  * release is signed with the Developer ID identity, `electron .` runs under
  * the Electron dev binary's own signature, and a local package is ad-hoc — and
@@ -19,14 +19,16 @@
  *
  * A development run may also be a named instance (`run.sh --instance <name>`,
  * or the one `run.sh --preview` derives from the Preview it points at), which
- * answers to the development name followed by its own: "Luke Dev preview".
+ * answers to the development name followed by its own: "Vespin Dev preview".
  * The name moving is again the whole separation: its own state directory,
  * and with it its own single-instance lock, sign-in, and settings, and its
  * own Keychain entry, so it runs beside the plain development instance rather
  * than replacing it. A packaged build has no instances.
  */
 
-const RELEASE_APP_NAME = "Luke";
+import { PRODUCT_NAME } from "@luke/features/product-name";
+
+const RELEASE_APP_NAME = PRODUCT_NAME;
 
 /**
  * Derived from the release name rather than freestanding, because

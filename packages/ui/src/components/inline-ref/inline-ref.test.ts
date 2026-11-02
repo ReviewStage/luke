@@ -170,7 +170,7 @@ test("a press that opens in the app stays a button, though it names an address",
     createElement(InlineRef, {
       look: INLINE_REF_LOOK.PILL,
       label: "Rollout",
-      linkHref: "https://tryluke.dev/acme/plan/1",
+      linkHref: "https://vespin.dev/acme/plan/1",
       onPress: () => {},
     }),
   );

@@ -33,7 +33,7 @@ export const NATIVE_HELPERS = [
 ];
 
 /**
- * Luke's host daemon as this Mac runs it (`apps/host`): its release folder,
+ * Vespin's host daemon as this Mac runs it (`apps/host`): its release folder,
  * staged by the host's own packaging (`scripts/build-host.mjs`) and shipped
  * whole in the app's resources, holding the daemon's and the runner's
  * bundles under `lib/` and the pinned Node they run on, which the app signs
@@ -49,7 +49,7 @@ export const HOST_RESOURCES = {
 };
 
 export const HOST_LOGIN_ITEM = {
-  plist: "dev.reviewstage.luke.host.plist",
+  plist: "dev.vespin.host.plist",
   folder: path.join("Library", "LaunchAgents"),
 };
 
@@ -85,6 +85,6 @@ export function packagedAppPath(repoRoot) {
     "artifacts",
     "release-builder",
     `mac-${PACKAGED_ARCHITECTURE}`,
-    "Luke.app",
+    "Vespin.app",
   );
 }

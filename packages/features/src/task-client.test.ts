@@ -49,7 +49,7 @@ const TASK = {
 
 function client(): HostedTaskClient {
   return new HostedTaskClient({
-    serviceBaseUrl: "https://tryluke.dev",
+    serviceBaseUrl: "https://vespin.dev",
     credential: accountBearer({
       readAccessToken: () => Effect.succeed("token-1"),
       refreshAccount: () => Effect.void,
@@ -432,7 +432,7 @@ it.effect(
       });
       assert.equal(
         silent.requests[0]?.url,
-        `https://tryluke.dev/api/plans/${TASK_ID}/comments?after=0`,
+        `https://vespin.dev/api/plans/${TASK_ID}/comments?after=0`,
       );
     }),
 );

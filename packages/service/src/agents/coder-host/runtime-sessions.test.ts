@@ -774,7 +774,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.match(
             texts[0]?.[0] ?? "",
             new RegExp(
-              `^\\[sender: \\[@Test User\\]\\(https://tryluke\\.dev/[^/]+/person/${teammate}\\), a teammate\\]$`,
+              `^\\[sender: \\[@Test User\\]\\(https://vespin\\.dev/[^/]+/person/${teammate}\\), a teammate\\]$`,
               "u",
             ),
           );

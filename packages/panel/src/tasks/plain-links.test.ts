@@ -44,7 +44,7 @@ const BARE =
   "https://www.postgresql.org/docs/current/sql-createindex.html#SQL-CREATEINDEX-CONCURRENTLY";
 
 const WORDS = [
-  `Read [the rollout](https://tryluke.dev/acme/plan/${TASK_ID}#rollout),`,
+  `Read [the rollout](https://vespin.dev/acme/plan/${TASK_ID}#rollout),`,
   `[the store](https://github.com/${REPOSITORY}/blob/0a1b2c3d/apps/web/store.ts#L3-L5),`,
   `[the docs](${DOCS}), and ${BARE}.`,
 ].join(" ");

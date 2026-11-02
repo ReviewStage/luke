@@ -1012,7 +1012,7 @@ it.layer(getTestDB())("a repository on a member's own token", (it) => {
   );
 });
 
-const CALLBACK = "https://tryluke.dev/api/github/installed/authorized";
+const CALLBACK = "https://vespin.dev/api/github/installed/authorized";
 const VERIFIER = "fixture-code-verifier-of-enough-length-for-pkce-0123456789abcdef";
 
 it.effect(

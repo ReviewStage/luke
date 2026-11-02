@@ -139,7 +139,7 @@ import { ChosenTasksContext, chosenRowMenu } from "./tasks-selection.js";
  * row's Status. Copy link prints ⇧⌘C where
  * the chord copies the same link (`copy-link-item.tsx`).
  *
- * Copy link copies the plan's address on tryluke.dev, as the ⋯
+ * Copy link copies the plan's address on vespin.dev, as the ⋯
  * beside the plan's title does (`task-menu-items.tsx`). Mark as unread
  * draws the task's row in the unread weight until it next opens, and turns
  * to Mark as read on a task already unread. Rename edits the

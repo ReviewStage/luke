@@ -19,7 +19,7 @@ import { user } from "./auth.js";
  *
  * A device is a member's machine running the host program, a Mac or a
  * Linux box alike, and says which platform and architecture it runs on, whether it runs each
- * agent in a VM of its own, straight on the machine on Fullspin's sign-ins, or on
+ * agent in a VM of its own, straight on the machine on Vespin's sign-ins, or on
  * the developer's own logins (`DEVICE_ISOLATION`),
  * and which lines beyond the first its follower takes (`DEVICE_CAPABILITY`).
  * The desktop mints the id once and keeps it, and registers it under the account it is signed in to;
@@ -62,7 +62,7 @@ export const device = pgTable(
     arch: text("arch").$type<DeviceArch>().notNull(),
     /** How the device runs its agents, as it last registered (`DEVICE_ISOLATION`); a row from before the column runs them bare, as every Mac did. */
     isolation: text("isolation").$type<DeviceIsolation>().notNull().default(DEVICE_ISOLATION.BARE),
-    /** The Mac's home folder, absolute, as the desktop read it: where a local agent's folder is (`~/.luke/agents/<agent>`); null for a host that has not registered yet. */
+    /** The Mac's home folder, absolute, as the desktop read it: where a local agent's folder is (`~/.vespin/agents/<agent>`); null for a host that has not registered yet. */
     home: text("home"),
     /** The Claude Code CLI the desktop bundles, by its absolute path, which a local agent's launch names; null for a host that has not registered yet. */
     claudeExecutable: text("claude_executable"),
@@ -104,7 +104,7 @@ export const device = pgTable(
     updatePhase: text("update_phase").$type<HostUpdate>(),
     /** The host's own words for why its update failed, naming no secret; null unless `update_phase` is failed. */
     updateFailure: text("update_failure"),
-    /** The device's secret as its SHA-256 in hex, never the secret; null for a device that never enrolled, which Fullspin no longer takes a call from, and for a removed one. */
+    /** The device's secret as its SHA-256 in hex, never the secret; null for a device that never enrolled, which Vespin no longer takes a call from, and for a removed one. */
     secretHash: text("secret_hash"),
     /** The host program version the device last called with; null for one that never enrolled. */
     version: text("version"),

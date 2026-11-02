@@ -28,7 +28,7 @@ const LISTED = { sandbox: SANDBOX_STATE.RUNNING, terminals: [SHELL] };
 
 function client(): HostedTerminalClient {
   return new HostedTerminalClient({
-    serviceBaseUrl: "https://tryluke.dev",
+    serviceBaseUrl: "https://vespin.dev",
     credential: accountBearer({
       readAccessToken: () => Effect.succeed("token-1"),
       refreshAccount: () => Effect.void,
@@ -110,7 +110,7 @@ it.effect("each refusal the tab reads is answered as one, and any other as unans
 
 it("the relay address names the agent, the shell, and the size on the socket origin", () => {
   const address = new URL(
-    terminalRelayAddress("wss://tryluke.dev", {
+    terminalRelayAddress("wss://vespin.dev", {
       agentId: AGENT_ID,
       terminalId: SHELL_ID,
       cols: 120,
@@ -118,7 +118,7 @@ it("the relay address names the agent, the shell, and the size on the socket ori
     }),
   );
 
-  assert.equal(address.origin, "wss://tryluke.dev");
+  assert.equal(address.origin, "wss://vespin.dev");
   assert.equal(address.pathname, "/api/terminal/sessions");
   assert.deepEqual(Object.fromEntries(address.searchParams), {
     agent: AGENT_ID,

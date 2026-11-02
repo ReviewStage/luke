@@ -9,7 +9,7 @@ import { type HistoryAdapter, memoryHistory } from "./history-adapter.js";
  * limit. Synthetic links.
  */
 
-const entry = (name: string) => ({ address: `https://tryluke.dev/acme/plan/${name}`, state: name });
+const entry = (name: string) => ({ address: `https://vespin.dev/acme/plan/${name}`, state: name });
 
 /** The state of the entry the history stands on. */
 const standing = (history: HistoryAdapter<string>) =>
@@ -38,7 +38,7 @@ test("a replace takes the standing entry's place and keeps the entries ahead", (
 
   assert.deepEqual(
     history.current().entries.map((each) => each.address),
-    ["https://tryluke.dev/acme/plan/uno", "https://tryluke.dev/acme/plan/two"],
+    ["https://vespin.dev/acme/plan/uno", "https://vespin.dev/acme/plan/two"],
   );
   assert.equal(standing(history), "uno");
 });

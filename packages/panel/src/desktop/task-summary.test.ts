@@ -328,7 +328,7 @@ test("an agent's row in the summary draws the agent's one menu, Copy link copyin
   await act(async () => copy.click());
 
   assert.deepEqual(labels, ["Copy link", "Rename", "Archive", "Permanently delete"]);
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${AGENT.id}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${AGENT.id}`]);
 });
 
 test("a heading folds its rows away, counting them, and stands folded as the summary is drawn again", () => {
