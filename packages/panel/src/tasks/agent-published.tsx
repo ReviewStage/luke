@@ -188,7 +188,7 @@ export function LinesChanged({
   );
 }
 
-/** The pull request's row pinned over the box, a card of one row: its number and title, that its checks failed where they did, where it stands if that matters, and the lines it adds and removes; a press opens its tab, or the page on GitHub, a right-click, a long press or the menu key offers the rest, a finger's row drawing no ⋯ so the title keeps its room, and the pointer resting on it hangs the pull request's chip's card, which names it whole. A narrow row gives up the checks' word, then the lines, before the number (tasks.css). */
+/** The pull request's row pinned over the box, a card of one row: its number and title, that its checks failed where they did, where it stands if that matters, and the lines it adds and removes; a press opens its tab, or the page on GitHub, a right-click, a long press or the menu key offers the rest, a finger's row drawing no ⋯ so the title keeps its room, and the pointer resting on it hangs the pull request's chip's card, which names it whole. A phone's narrow row gives up its state's word, and any narrow row the checks', then the lines, before the number (tasks.css). */
 export function PublishedRow({
   pullRequest,
   branch,
@@ -241,7 +241,9 @@ export function PublishedRow({
                 {pullRequest.checks === CHECK_SUMMARY.FAILING ? (
                   <span className="agent-published-checks text-danger">{CHECKS_FAILING}</span>
                 ) : null}
-                {state === undefined ? null : <span>{state}</span>}
+                {state === undefined ? null : (
+                  <span className="agent-published-state">{state}</span>
+                )}
                 <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
               </span>
             }
