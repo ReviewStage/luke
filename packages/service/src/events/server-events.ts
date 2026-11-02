@@ -23,7 +23,7 @@ import {
   type PosthogGroupFields,
   postBatchEffect,
 } from "../providers/posthog.js";
-import { DEPLOYMENT_VARIABLE, deploymentNamed } from "./events.js";
+import { DEPLOYMENT_VARIABLE, deploymentNamed, WORKSPACE_GROUP_TYPE } from "./events.js";
 
 /**
  * What the service counts about the work done through it: the core loop the
@@ -393,9 +393,6 @@ interface ServerEvent<Name extends ServerEventName = ServerEventName> {
   readonly workspaceId?: string;
   readonly properties: ServerEventProperties[Name];
 }
-
-/** The group type a workspace is filed under in PostHog, one of the project's five. */
-const WORKSPACE_GROUP_TYPE = "workspace";
 
 /** The event PostHog takes a group's properties from. */
 const GROUP_IDENTIFY_EVENT = "$groupidentify";

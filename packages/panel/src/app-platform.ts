@@ -16,13 +16,13 @@
 
 import type { ProductEventPropertiesFor, ProductSurfaceEventName } from "@luke/features/analytics";
 import type { FramedPage } from "@luke/features/page-frame";
-import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import {
   type AppCommand,
   COMMAND_KEY,
   type CommandKey,
   installCommandKey,
 } from "@luke/settings/shortcuts";
+import type { SessionReplayWord } from "./session-replay.js";
 import type { OpenBrowserLive } from "./tasks/cloud-browser-live.js";
 
 export type { OpenBrowserLive } from "./tasks/cloud-browser-live.js";
@@ -87,9 +87,10 @@ export interface AppPlatform {
   /**
    * Brings the shell's session recording into line with what the run allows,
    * in either direction; the panel calls it at bootstrap and on every account
-   * transition. A shell that records nothing does nothing.
+   * transition, and on every change of the workspace it lists. A shell that
+   * records nothing does nothing.
    */
-  applySessionReplay(bootstrap: SessionReplayBootstrap): void;
+  applySessionReplay(bootstrap: SessionReplayWord): void;
   /**
    * The link that opens the Mac app on where this window stands, which the
    * sign-in offers beside its ways in: a shell that is not the Mac app

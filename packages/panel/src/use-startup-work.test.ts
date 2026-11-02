@@ -68,7 +68,7 @@ afterEach(() => {
 
 /** What the panel's root runs on its first commit, over the snapshot given. */
 function Startup(props: { readonly state: AppStateSnapshot }): null {
-  useSessionReplay(props.state.run, props.state.sessionReplay);
+  useSessionReplay(props.state.run, props.state.sessionReplay, undefined);
   usePrefetchBundles();
   return null;
 }
