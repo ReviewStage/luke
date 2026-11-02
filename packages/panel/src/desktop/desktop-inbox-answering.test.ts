@@ -1430,6 +1430,48 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
 
   act(() => world.root?.unmount());
   world.root = undefined;
+  const followed = await mountThread(
+    threadItem([
+      askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.REPLACED }),
+      threadMessage("e1b2c3d4-0000-4000-8000-000000000025", "agent", "Still checking.", 2_000),
+      askingMessage(EXPIRY_ASK, { id: "e1b2c3d4-0000-4000-8000-000000000026", createdAt: 3_000 }),
+    ]),
+  );
+  assert.deepEqual(
+    threadLines(followed),
+    [
+      ["message", null],
+      ["message", null],
+      ["replaced", "replaced this with a newer question"],
+      ["message", null],
+    ],
+    "a follow-up that asks nothing leaves the ask open, so the line stands before the question that replaced it",
+  );
+
+  act(() => world.root?.unmount());
+  world.root = undefined;
+  const closedTwice = await mountThread(
+    threadItem(
+      [
+        askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.WITHDRAWN, withdrawnAt: 2_000 }),
+        threadMessage("e1b2c3d4-0000-4000-8000-000000000027", "agent", "Deploy finished.", 3_000),
+      ],
+      { status: INBOX_STATUS.CLOSED, closedBy: TEAMMATE, settledAt: 4_000 },
+    ),
+  );
+  assert.deepEqual(
+    threadLines(closedTwice),
+    [
+      ["message", null],
+      ["closed", "resolved this without an answer"],
+      ["message", null],
+      ["closed", "resolved this without an answer"],
+    ],
+    "an earlier close of the question keeps its line where a later close of a notice stands",
+  );
+
+  act(() => world.root?.unmount());
+  world.root = undefined;
   const toDo = await mountThread(
     threadItem([
       askingMessage(

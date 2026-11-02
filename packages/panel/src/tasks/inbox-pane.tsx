@@ -660,13 +660,45 @@ function standsAfter(
 }
 
 /**
+ * Where the post that replaced the ask at `index` stands: the agent's next
+ * post that asks, since a follow-up asking nothing on a thread still asking
+ * leaves its ask open; or, where none does, its next post, as a deployment
+ * that replaced an ask with a post asking nothing left it; -1 where the
+ * thread read carries neither.
+ */
+function replacingPost(thread: readonly InboxMessage[], index: number): number {
+  const later = (message: InboxMessage, at: number) =>
+    at > index && message.author === INBOX_MESSAGE_AUTHOR.AGENT;
+  const asked = thread.findIndex((message, at) => later(message, at) && message.ask !== undefined);
+  return asked === -1 ? thread.findIndex(later) : asked;
+}
+
+/**
+ * Whether the ask at `index`, withdrawn with no why, is the one the
+ * member's close that still stands withdrew, whose line the item's own close
+ * draws: the ask withdrawn at the close's stamp, or, for an ask withdrawn
+ * before its time was kept, the latest ask, since a post asking since would
+ * have opened the item again.
+ */
+function withdrawnByStandingClose(
+  item: InboxItem,
+  thread: readonly InboxMessage[],
+  index: number,
+): boolean {
+  if (!resolvedByMember(item)) return false;
+  const at = thread[index]?.ask?.withdrawnAt;
+  if (at !== undefined) return at === item.settledAt;
+  return thread.findLastIndex((message) => message.ask !== undefined) === index;
+}
+
+/**
  * The line a settled ask's message gives the thread, and where it stands:
- * for a replaced one, just before the agent's next post, which replaced it,
- * dated as that post, or right after it where the thread read no longer
- * carries that post; for one withdrawn with why, where it was withdrawn;
- * and for one withdrawn with none, which a member's close leaves, the line
- * saying it was resolved without an answer, unless it is the close that
- * still stands, whose line the item's own close draws.
+ * for a replaced one, just before the post that replaced it
+ * (`replacingPost`), dated as that post, or right after it where the thread
+ * read no longer carries that post; for one withdrawn with why, where it was
+ * withdrawn; and for one withdrawn with none, which a member's close leaves,
+ * the line saying it was resolved without an answer, unless it is the close
+ * that still stands (`withdrawnByStandingClose`).
  */
 function askEvent(
   item: InboxItem,
@@ -678,9 +710,7 @@ function askEvent(
   if (message === undefined || ask === undefined) return undefined;
   const key = message.id;
   if (ask.status === INBOX_ASK_STATUS.REPLACED) {
-    const next = thread.findIndex(
-      (message, at) => at > index && message.author === INBOX_MESSAGE_AUTHOR.AGENT,
-    );
+    const next = replacingPost(thread, index);
     const by = next === -1 ? undefined : thread[next];
     const line = { key, kind: THREAD_EVENT.REPLACED, by, at: by?.createdAt } as const;
     return { after: next === -1 ? index : next - 1, line };
@@ -692,9 +722,7 @@ function askEvent(
     const line = { key, kind: THREAD_EVENT.WITHDRAWN, reason, at: ask.withdrawnAt } as const;
     return { after, line };
   }
-  // Note that only the latest ask can be the one a standing close withdrew, since a post since would have opened the item again.
-  const latest = thread.findLastIndex((message) => message.ask !== undefined);
-  if (resolvedByMember(item) && latest === index) return undefined;
+  if (withdrawnByStandingClose(item, thread, index)) return undefined;
   const line = {
     key,
     kind: THREAD_EVENT.RESOLVED,
