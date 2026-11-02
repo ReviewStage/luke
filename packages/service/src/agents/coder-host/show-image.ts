@@ -11,7 +11,12 @@ import { mediaDimensions, sniffMediaType } from "@luke/features/media-signature"
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Data, Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "../../core.js";
+import {
+  ACTION_RESULT_STATUS,
+  isRecord,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "../../core.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
 import { type InboxSandboxDoor, readSandboxImage } from "./inbox-image.js";
@@ -158,6 +163,18 @@ function keepAll(
 }
 
 /**
+ * A call's input as a list of pictures: one given bare, a path with no list
+ * around it, is read as a list of that one. Note that this is read here
+ * rather than in the schema, because the schema is what the model is shown
+ * and a list is what it should send.
+ */
+function asPictureList(input: UnparsedWireValue): UnparsedWireValue {
+  return isRecord(input) && input.images === undefined && input.path !== undefined
+    ? { images: [input] }
+    : input;
+}
+
+/**
  * One `show_image` call: every file read before any is kept, so a refused
  * file shows nothing; then each kept beside the transcript in the order
  * given, the same bytes answered as the row already kept. A store that
@@ -168,7 +185,7 @@ export function runShowImage(
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const read = readEither(SHOW_IMAGE_INPUT)(input);
+    const read = readEither(SHOW_IMAGE_INPUT)(asPictureList(input));
     if (Result.isFailure(read)) return showImageRejected(SHOW_IMAGE_REFUSAL.UNREADABLE);
     const pictures: ReadPicture[] = [];
     for (const image of read.success.images) {
