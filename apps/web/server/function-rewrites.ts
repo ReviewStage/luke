@@ -269,10 +269,9 @@ export function apiRewritesSource(rewrites: readonly Rewrite[]): string {
  * services deployment: the web service owns the build, the install, the
  * ignore rule, and the `routes` the `/api/` rewrites are generated into,
  * because Vercel evaluates a service's routes only once a request has
- * entered it and ignores a `routes` key left at the top level; the eve
- * service owns its own build; and the top-level `rewrites` are the public
- * routing that sends `/eve/coder/v1/*` to eve and everything else to the web
- * service. The `git` key turns off deployment of GitHub's merge-queue
+ * entered it and ignores a `routes` key left at the top level; and the
+ * top-level `rewrites` are the public routing that sends every path to the
+ * web service. The `git` key turns off deployment of GitHub's merge-queue
  * branches (`gh-readonly-queue/<base>/pr-<n>-<sha>`): CI gates the queue, and
  * the squash it lands on `main` deploys on its own. It turns off, too, the
  * branches that hold pictures alone and share no history with `main`: PR
@@ -289,27 +288,6 @@ const WebService = Schema.Struct({
   routes: Schema.Array(WebRouteSchema),
 });
 
-const EveService = Schema.Struct({
-  root: Schema.String,
-  framework: Schema.String,
-  installCommand: Schema.String,
-  buildCommand: Schema.String,
-  ignoreCommand: Schema.String,
-});
-
-/** A route of the eve service, which rewrites its mounted path back to eve's own rather than naming a destination. */
-const TransformRouteSchema = Schema.Struct({
-  src: Schema.String,
-  transforms: Schema.Array(
-    Schema.Struct({ type: Schema.String, op: Schema.String, args: Schema.String }),
-  ),
-});
-
-const CoderService = Schema.Struct({
-  ...EveService.fields,
-  routes: Schema.Array(TransformRouteSchema),
-});
-
 /** A top-level rewrite: the service a path enters, where one host's alone, that host's. */
 const ServiceRewriteSchema = Schema.Struct({
   source: Schema.String,
@@ -324,7 +302,7 @@ const GitConfig = Schema.Struct({
 const VercelConfig = Schema.Struct({
   $schema: Schema.String,
   git: GitConfig,
-  services: Schema.Struct({ web: WebService, dev: CoderService }),
+  services: Schema.Struct({ web: WebService }),
   crons: Schema.Array(Schema.Struct({ path: Schema.String, schedule: Schema.String })),
   rewrites: Schema.Array(ServiceRewriteSchema),
 });

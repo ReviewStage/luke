@@ -49,32 +49,6 @@
       ],
       "project": ["src/**"]
     },
-    "apps/dev": {
-      "ignoreDependencies": [
-        "@ai-sdk/anthropic",
-        "@ai-sdk/openai",
-        "@better-auth/drizzle-adapter",
-        "@better-auth/electron",
-        "@better-auth/oauth-provider",
-        "@sentry/effect",
-        "@vercel/connect",
-        "@vercel/oidc",
-        "better-auth",
-        "diff",
-        "ws"
-      ],
-      "entry": [
-        "{,subagents/*/}agent.ts",
-        "{,subagents/*/}sandbox.ts",
-        "{,subagents/*/}instructions.ts",
-        "{,subagents/*/}instructions/*.ts",
-        "{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
-        "instrumentation/*.ts",
-        "evals/evals.config.ts",
-        "evals/*.eval.ts"
-      ],
-      "project": ["**/*.ts"]
-    },
     "packages/agent-runner": {
       "project": ["src/**", "scripts/**"],
       "ignore": ["src/codex-protocol/**"]

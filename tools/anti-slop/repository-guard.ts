@@ -2,7 +2,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { agentPinsGuard } from "./guards/agent-pins.ts";
-import { agentToolsGuard } from "./guards/agent-tools.ts";
 import { antiSlopListsGuard } from "./guards/anti-slop-lists.ts";
 import { catalogExamplesGuard } from "./guards/catalog-examples.ts";
 import type { RepositoryGuard } from "./guards/guard.ts";
@@ -23,7 +22,6 @@ const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)
 
 const GUARDS: Readonly<Record<string, RepositoryGuard>> = {
   "agent-pins": agentPinsGuard,
-  "agent-tools": agentToolsGuard,
   "anti-slop-lists": antiSlopListsGuard,
   "catalog-examples": catalogExamplesGuard,
   "launch-bundle": launchBundleGuard,
