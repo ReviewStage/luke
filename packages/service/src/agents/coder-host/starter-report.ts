@@ -17,13 +17,15 @@
  * send is logged and not tried again, since the starter reads the agent
  * itself (`read_agent`). A starter archived or gone is told by no one.
  *
- * Neither is a turn another agent stopped (`turns.cancel_requested_by`),
- * since that agent made the Stop and is the one to resume it: a pilot told
- * by the developer to stop stops every agent of its tree itself, and a
- * pilot it started, told nothing of the stop, would otherwise be woken by
- * each of its own agents' reports and continue them, so the developer's
- * Stop would not hold. A turn the developer stopped from its tab is still
- * reported, as the starter would otherwise wait on it.
+ * Neither is a turn the starter stopped, or an agent above it, the agent
+ * that started it or one up the chain (`turns.cancel_requested_by`), since
+ * that agent made the Stop and is the one to resume it: a pilot told by the
+ * developer to stop stops every agent of its tree itself, and a pilot it
+ * started, told nothing of the stop, would otherwise be woken by each of
+ * its own agents' reports and continue them, so the developer's Stop would
+ * not hold. A turn the developer stopped from its tab, or an agent outside
+ * the starter's chain, is still reported, as the starter would otherwise
+ * wait on it.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
@@ -91,9 +93,29 @@ function reportLine(
   return [head, words ?? NO_WORDS, agentMessageReplyLine(agent.id)].join("\n\n");
 }
 
-/** Whether the turn ended on another agent's Stop, which that agent knows of and resumes. */
-const stoppedByAgent = (turn: SettledAgentTurn): boolean =>
-  turn.status === TURN_STATUS.CANCELLED && turn.stoppedBy !== null;
+/** The most agents up a starter's chain read for the one that made a Stop, past any pilot tree's depth. */
+const MAX_CHAIN_AGENTS = 16;
+
+/**
+ * Whether the turn ended on a Stop made by the starter or an agent up its
+ * chain, which knows of the Stop and resumes it; a chain is read at most
+ * `MAX_CHAIN_AGENTS` deep, and an agent met twice ends it.
+ */
+const stoppedFromAbove = (turn: SettledAgentTurn, starter: Agent) =>
+  Effect.gen(function* () {
+    const stopper = turn.stoppedBy;
+    if (turn.status !== TURN_STATUS.CANCELLED || stopper === null) return false;
+    const seen = new Set<string>();
+    let above: Option.Option<Agent> = Option.some(starter);
+    while (Option.isSome(above) && seen.size < MAX_CHAIN_AGENTS) {
+      const { id, startedByAgentId, userId } = above.value;
+      if (id === stopper) return true;
+      if (startedByAgentId === null || seen.has(id)) return false;
+      seen.add(id);
+      above = yield* readAgent(userId, startedByAgentId);
+    }
+    return false;
+  });
 
 /**
  * The starter the agent reports to: the agent that started it, where it
@@ -110,8 +132,8 @@ const starterOf = (agent: Agent) =>
 
 /**
  * Hands the settled turn's final message to the agent's starter, as the
- * header says, or nothing where the agent has none to tell or another agent
- * stopped the turn; a failure to
+ * header says, or nothing where the agent has none to tell or its starter,
+ * or an agent above it, stopped the turn; a failure to
  * send is logged by its kind alone, never answered, so nothing of the agent
  * or its member rides the log line.
  */
@@ -119,12 +141,12 @@ export function reportToStarter(
   eveFor: EveForAccount,
   turn: SettledAgentTurn,
 ): Effect.Effect<void, never, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
-  if (stoppedByAgent(turn)) return Effect.void;
   return Effect.gen(function* () {
     const agent = yield* readAgentOfConversation(turn.userId, turn.conversationId);
     if (Option.isNone(agent)) return;
     const starter = yield* starterOf(agent.value);
     if (Option.isNone(starter)) return;
+    if (yield* stoppedFromAbove(turn, starter.value)) return;
     const journal = yield* readMessageByClientId(
       turn.userId,
       turn.conversationId,

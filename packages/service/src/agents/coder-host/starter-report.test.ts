@@ -39,7 +39,7 @@ const T0 = new Date("2026-10-28T12:00:00Z").getTime();
 
 const REPORT = "Opened the pull request; the checks are green and auto-merge is armed.";
 
-/** A member of a fresh workspace, their orchestrating agent with its eve session recorded, and an agent it started. */
+/** A member of a fresh workspace, a pilot above, the orchestrating agent it started with its eve session recorded, an agent that one started, and an agent outside the chain. */
 const openStarted = () =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -49,11 +49,19 @@ const openStarted = () =>
     const organizationId = yield* openWorkspace(member);
     const start = { taskId: null, organizationId, planSnapshot: null, repository: null };
     const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
+    const unstarted = (prompt: string) =>
+      Effect.map(
+        createAgent(member, { ...start, prompt, idempotencyKey: randomUUID(), ...choice }),
+        (created) => Option.getOrThrow(created).agent,
+      );
+    const above = yield* unstarted("Pilot the whole tree.");
+    const outsider = yield* unstarted("Tidy the sidebar.");
     const starter = Option.getOrThrow(
       yield* createAgent(member, {
         ...start,
         prompt: "Orchestrate the rollout.",
         idempotencyKey: randomUUID(),
+        startedByAgentId: above.id,
         ...choice,
       }),
     ).agent;
@@ -73,7 +81,7 @@ const openStarted = () =>
       sessionId,
       new Date(T0 - 60_000),
     );
-    return { member, starter, agent, sessionId };
+    return { member, above, outsider, starter, agent, sessionId };
   });
 
 /** The writer told to hand each turn it settles to the agent's starter over the eve given, as the deployment's listener does. */
@@ -163,22 +171,26 @@ it.layer(getTestDB())("a started agent's final message handed to its starter", (
   );
 
   it.effect(
-    "a failed turn that said nothing hands its failure, one the developer stopped that it was stopped, and one another agent stopped nothing",
+    "a failed turn that said nothing hands its failure, one the developer or an agent outside the chain stopped that it was stopped, and one the pilot above stopped nothing",
     () =>
       Effect.gen(function* () {
         const eve = recordingEve();
-        const { starter, agent, sessionId } = yield* openStarted();
+        const { above, outsider, agent, sessionId } = yield* openStarted();
 
         yield* endedAt(agent, RUN_STATUS.FAILED, T0).pipe(Effect.provide(reporting(eve)));
         yield* endedAt(agent, RUN_STATUS.CANCELLED, T0 + 1_000, "Stopping.").pipe(
           Effect.provide(reporting(eve)),
         );
-        // A pilot above stopping its tree made this Stop, so the starter is not woken to continue it.
-        yield* endedAt(agent, RUN_STATUS.CANCELLED, T0 + 2_000, "Stopped.", starter.id).pipe(
+        // The pilot above the starter stopping its tree made this Stop, so the starter is not woken to continue it.
+        yield* endedAt(agent, RUN_STATUS.CANCELLED, T0 + 2_000, "Stopped.", above.id).pipe(
+          Effect.provide(reporting(eve)),
+        );
+        // An agent outside the chain stopping it leaves the starter to hear of it.
+        yield* endedAt(agent, RUN_STATUS.CANCELLED, T0 + 3_000, "Halted.", outsider.id).pipe(
           Effect.provide(reporting(eve)),
         );
 
-        const [failed, stopped, ...more] = sentTo(eve, sessionId);
+        const [failed, stopped, halted, ...more] = sentTo(eve, sessionId);
         assert.equal(more.length, 0, more.join("\n"));
         assert.ok(
           failed?.includes(
@@ -189,6 +201,10 @@ it.layer(getTestDB())("a started agent's final message handed to its starter", (
         assert.ok(
           stopped?.includes("was stopped before it finished. Its final message:\n\nStopping."),
           stopped ?? "nothing was sent",
+        );
+        assert.ok(
+          halted?.includes("was stopped before it finished. Its final message:\n\nHalted."),
+          halted ?? "nothing was sent",
         );
       }),
   );
