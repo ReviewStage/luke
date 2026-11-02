@@ -748,7 +748,7 @@ body {
   gap: var(--luke-space-40);
 }
 
-/* The app's face at the size the OAuth cards open with. */
+/* The product's mark at the size the OAuth cards open with. */
 .catalog-auth-mark {
   display: block;
   width: 52px;
