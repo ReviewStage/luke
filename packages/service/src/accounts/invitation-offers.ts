@@ -74,7 +74,8 @@ const findAddress = SqlSchema.findOneOption({
     ),
 });
 
-const findMemberInviter = SqlSchema.findOneOption({
+/** The account `userId` as a member of the workspace, by its name and address: an inviter still in it, or a reader already in it. */
+const findMember = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
   Result: Schema.Struct({ name: Schema.String, email: Schema.String }),
   execute: ({ userId, organizationId }) =>
@@ -95,8 +96,10 @@ function roleOfRow(role: string | null): WorkspaceInvitation["role"] {
 
 /**
  * The invitation `id` as `userId` is offered it at `now`: the offer, naming
- * the inviter while they are a member, or why there is none, an invitation
- * that is unknown, used, canceled, or expired said alike as spent.
+ * the inviter while they are a member; that the reader is already a member of
+ * its workspace, as someone opening their link again after joining is,
+ * whatever the invitation's state; or why there is none, an invitation that is
+ * unknown, used, canceled, or expired said alike as spent.
  */
 export const invitationOffer = Effect.fn("web/invitationOffer")(function* (
   userId: string,
@@ -104,6 +107,17 @@ export const invitationOffer = Effect.fn("web/invitationOffer")(function* (
   now: number,
 ) {
   const found = yield* findInvitation(id);
+  if (Option.isSome(found)) {
+    const joined = yield* findMember({
+      userId,
+      organizationId: found.value.organizationId,
+    });
+    if (Option.isSome(joined)) {
+      return {
+        member: { workspaceName: found.value.workspaceName },
+      } satisfies InvitationOfferAnswer;
+    }
+  }
   if (
     Option.isNone(found) ||
     found.value.status !== PENDING ||
@@ -119,7 +133,7 @@ export const invitationOffer = Effect.fn("web/invitationOffer")(function* (
   if (!address.value.emailVerified) {
     return { refused: INVITATION_OFFER_REFUSAL.UNVERIFIED } satisfies InvitationOfferAnswer;
   }
-  const inviter = yield* findMemberInviter({
+  const inviter = yield* findMember({
     userId: offered.inviterId,
     organizationId: offered.organizationId,
   });

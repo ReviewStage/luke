@@ -116,6 +116,8 @@ const emailInvitation = Effect.fn("web/emailWorkspaceInvitation")(function* (
     acceptUrl: invitation.acceptUrl,
     workspaceName,
     inviterLabel: inviter?.name.trim() || inviter?.email || INVITER_UNKNOWN,
+    role: invitation.role,
+    expiresAt: invitation.expiresAt,
   });
 });
 

@@ -1,14 +1,28 @@
 import { browserClient } from "@luke/features/contract/browser-client";
+import { LANDING_TONE, type LandingTone } from "@luke/features/landing-outcome";
 import {
   INVITATION_OFFER_QUERY,
   INVITATION_OFFER_REFUSAL,
+  INVITATION_ROLE,
   type InvitationAcceptQuery,
   invitationAcceptQuery,
+  type WorkspaceInvitation,
 } from "@luke/features/workspace-invitation-wire";
-import { AuthPage, BUTTON_VARIANT, Button, SocialSignInCard } from "@luke/ui";
+import {
+  type AuthAction,
+  AuthMark,
+  AuthPage,
+  AVATAR_SHAPE,
+  AVATAR_SIZE,
+  Avatar,
+  BUTTON_VARIANT,
+  Button,
+  SocialSignInCard,
+} from "@luke/ui";
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { useEffect, useState } from "react";
+import { openLukeFromMac } from "./open-luke";
 import { WEB_APP_URL } from "./SiteChrome";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
@@ -29,9 +43,10 @@ import { mountPrerenderedPage } from "./mount-page";
  * and the Mac picks the workspace up on its next refresh. An invitation that
  * expired, was used, or was canceled is no invitation at all, so the page
  * says plainly that the link is spent rather than which of the three it
- * was. An invitation is read and accepted only by an account at the invited
- * address its provider verified, so a session at another address signs in
- * again.
+ * was, and a reader already in the workspace, as someone opening their link
+ * again after joining is, is told so rather than that the link is spent. An
+ * invitation is read and accepted only by an account at the invited address
+ * its provider verified, so a session at another address signs in again.
  */
 
 const authClient = createAuthClient({ plugins: [organizationClient()] });
@@ -45,21 +60,30 @@ const INVITATION_ERROR = {
 /** The HTTP status Better Auth answers an expired, used, canceled, or unknown invitation with. */
 const SPENT_STATUS = 400;
 
-/** What the page shows: the work under way, a sign-in, the invitation to accept, how it settled, or that it was accepted. */
+/** What the page shows: the work under way, a sign-in, the invitation to accept, or how it stands now. */
 const VIEW = {
   WORKING: "working",
   SIGN_IN: "sign-in",
   OFFER: "offer",
   SAID: "said",
-  JOINED: "joined",
 } as const;
 
 type View =
   | { readonly kind: typeof VIEW.WORKING }
   | {
-      readonly kind: typeof VIEW.SIGN_IN | typeof VIEW.SAID | typeof VIEW.JOINED;
+      readonly kind: typeof VIEW.SIGN_IN;
       readonly title: string;
       readonly body: string;
+      /** What comes after signing in, said only before any session. */
+      readonly footnote?: string;
+    }
+  | {
+      readonly kind: typeof VIEW.SAID;
+      readonly title: string;
+      readonly body: string;
+      /** How it ended, badged on the mark: settled, failed, or neither. */
+      readonly tone: LandingTone | undefined;
+      readonly action: AuthAction | undefined;
     }
   | {
       readonly kind: typeof VIEW.OFFER;
@@ -67,28 +91,45 @@ type View =
       readonly name: string;
       /** Who invited them, while still a member of the workspace. */
       readonly inviter: string | undefined;
-      readonly role: string;
+      readonly role: WorkspaceInvitation["role"];
     };
 
 const WORKING: View = { kind: VIEW.WORKING };
 
-/** What the joined page says beneath its title, which keeps the way back to the Mac app. */
-const JOINED_BODY = `Return to ${PRODUCT_NAME}. You can close this tab.`;
-
-/** The way on the joined page offers to a reader with no Mac app to return to. */
+/** The way on the web app offers, to a reader with no Mac app to open. */
 const OPEN_ON_THE_WEB = { label: `Open ${PRODUCT_NAME} on the web`, href: WEB_APP_URL } as const;
+
+/** How the offer names the role it joins as. */
+const ROLE_WORDS = {
+  [INVITATION_ROLE.MEMBER]: "a member",
+  [INVITATION_ROLE.ADMIN]: "an admin",
+} as const satisfies Record<WorkspaceInvitation["role"], string>;
+
+/** The way into the workspace once in it: the Mac app on a Mac, else the web app. */
+function openTheWorkspace(): AuthAction {
+  return openLukeFromMac() ?? OPEN_ON_THE_WEB;
+}
 
 const SPENT: View = said(
   "This invitation is no longer valid",
   "It has expired, already been used, or been canceled. Ask whoever invited you for a new link.",
+  LANDING_TONE.DANGER,
+  OPEN_ON_THE_WEB,
 );
 
-function said(title: string, body: string): View {
-  return { kind: VIEW.SAID, title, body };
+function said(title: string, body: string, tone?: LandingTone, action?: AuthAction): View {
+  return { kind: VIEW.SAID, title, body, tone, action };
 }
 
-function signIn(title: string, body: string): View {
-  return { kind: VIEW.SIGN_IN, title, body };
+function signIn(title: string, body: string, footnote?: string): View {
+  return footnote === undefined
+    ? { kind: VIEW.SIGN_IN, title, body }
+    : { kind: VIEW.SIGN_IN, title, body, footnote };
+}
+
+/** The workspace the reader is in, as joined now or found joined already. */
+function inWorkspace(title: string, body: string): View {
+  return said(title, body, LANDING_TONE.COMPLETE, openTheWorkspace());
 }
 
 /** Who the invitation is for, where its link says, and who the browser is signed in as. */
@@ -127,6 +168,7 @@ function unverified(email: string): View {
 const UNREACHED: View = said(
   `${PRODUCT_NAME} could not be reached`,
   "Reload this page to try again.",
+  LANDING_TONE.DANGER,
 );
 
 /** A refusal of the plugin's accept in words: a sign-in where another account would do, else what went wrong. */
@@ -143,11 +185,24 @@ function refused(
 /** The invitation the address names, read on the signed-in session through our own route. */
 async function readInvitation(query: InvitationAcceptQuery, signedIn: string): Promise<View> {
   const { id } = query;
-  if (id === undefined) return said("Nothing to accept", "Open the invitation link you were sent.");
+  if (id === undefined) {
+    return said(
+      "Nothing to accept",
+      "Open the invitation link you were sent.",
+      LANDING_TONE.DANGER,
+    );
+  }
   const answer = await browserClient.workspaceInvitations
     .offer({ [INVITATION_OFFER_QUERY.ID]: id })
     .catch(() => undefined);
   if (answer === undefined) return UNREACHED;
+  if ("member" in answer) {
+    const { workspaceName } = answer.member;
+    return inWorkspace(
+      `You're already in ${workspaceName}`,
+      `It's in your sidebar in ${PRODUCT_NAME}.`,
+    );
+  }
   if ("refused" in answer) {
     if (answer.refused === INVITATION_OFFER_REFUSAL.NOT_RECIPIENT) {
       return otherAddress({ invited: query.email, signedIn });
@@ -167,7 +222,10 @@ async function readInvitation(query: InvitationAcceptQuery, signedIn: string): P
 async function accept(offer: { id: string; name: string }, addresses: Addresses): Promise<View> {
   const accepted = await authClient.organization.acceptInvitation({ invitationId: offer.id });
   if (accepted.error) return refused(accepted.error, addresses);
-  return { kind: VIEW.JOINED, title: `You joined ${offer.name}`, body: JOINED_BODY };
+  return inWorkspace(
+    `You joined ${offer.name}`,
+    `${offer.name} is in your sidebar in ${PRODUCT_NAME}. You can close this tab.`,
+  );
 }
 
 function titleOf(view: View): string {
@@ -179,10 +237,19 @@ function titleOf(view: View): string {
 function descriptionOf(view: View): string | undefined {
   if (view.kind === VIEW.WORKING) return undefined;
   if (view.kind !== VIEW.OFFER) return view.body;
+  const as = ROLE_WORDS[view.role];
   if (view.inviter === undefined) {
-    return `You're invited to plan in ${view.name} on ${PRODUCT_NAME}, as ${view.role}.`;
+    return `You're invited to work in ${view.name} on ${PRODUCT_NAME}, as ${as}.`;
   }
-  return `${view.inviter} invited you to plan in ${view.name} on ${PRODUCT_NAME}, as ${view.role}.`;
+  return `${view.inviter} invited you to work in ${view.name} on ${PRODUCT_NAME}, as ${as}.`;
+}
+
+/** The mark each view opens on: the invitation's workspace on its offer, else the app's, badged as it ended. */
+function markOf(view: View): React.JSX.Element {
+  if (view.kind === VIEW.OFFER) {
+    return <Avatar name={view.name} size={AVATAR_SIZE.PAGE} shape={AVATAR_SHAPE.TILE} decorative />;
+  }
+  return <AuthMark tone={view.kind === VIEW.SAID ? view.tone : undefined} />;
 }
 
 /**
@@ -190,12 +257,22 @@ function descriptionOf(view: View): string | undefined {
  * ends with the card: a session that comes and goes in another tab brings the
  * card back without an earlier failure.
  */
-function SignInCard({ title, body }: { title: string; body: string }): React.JSX.Element {
+function SignInCard({
+  title,
+  body,
+  footnote,
+}: {
+  title: string;
+  body: string;
+  footnote: string | undefined;
+}): React.JSX.Element {
   const { pending, failed, begin } = useSocialSignIn(authClient);
   return (
     <SocialSignInCard
+      mark={<AuthMark />}
       title={title}
       description={body}
+      footnote={footnote}
       pending={pending}
       failed={failed ? UNREPORTED.NO_REPORTER : undefined}
       onPress={begin}
@@ -204,10 +281,10 @@ function SignInCard({ title, body }: { title: string; body: string }): React.JSX
 }
 
 /**
- * The page is one AuthPage card with no artwork, as it had none before: the
- * title says where the invitation stands, the description what it means,
- * and the body holds the one action that moves it on, accepting it or
- * signing in.
+ * The page is one AuthPage card: the mark says whose invitation it is or how
+ * it ended, the title where the invitation stands, the description what it
+ * means, and the body holds the one action that moves it on, accepting it or
+ * signing in, with the way into the workspace once the reader is in it.
  */
 function AcceptInvitation(): React.JSX.Element {
   const [query] = useState(() => invitationAcceptQuery(window.location.search));
@@ -220,16 +297,15 @@ function AcceptInvitation(): React.JSX.Element {
   // Note that the invitation is read again only when who is signed in, or
   // whether their address is verified, changes, not whenever the session is:
   // accepting makes Better Auth read the session again, and a read of an
-  // invitation just accepted says it is spent.
+  // invitation just accepted says the reader is already a member.
   useEffect(() => {
     if (session.isPending) return;
     if (signedIn === undefined) {
       setView(
         signIn(
           "Sign in to accept your invitation",
-          query.email === undefined
-            ? "Sign in with the account at the address you were invited at."
-            : `Sign in with the account that uses ${query.email}.`,
+          `Use the Google or GitHub account at ${query.email ?? "the address you were invited at"}.`,
+          "You'll come back to this page to join.",
         ),
       );
       return;
@@ -244,16 +320,20 @@ function AcceptInvitation(): React.JSX.Element {
     setAccepting(false);
   };
 
-  if (view.kind === VIEW.SIGN_IN) return <SignInCard title={view.title} body={view.body} />;
+  if (view.kind === VIEW.SIGN_IN) {
+    return <SignInCard title={view.title} body={view.body} footnote={view.footnote} />;
+  }
   return (
     <AuthPage
+      mark={markOf(view)}
       title={titleOf(view)}
       description={descriptionOf(view)}
-      action={view.kind === VIEW.JOINED ? OPEN_ON_THE_WEB : undefined}
+      action={view.kind === VIEW.SAID ? view.action : undefined}
+      footnote={view.kind === VIEW.OFFER ? `You'll join as ${signedIn ?? ""}.` : undefined}
     >
       {view.kind === VIEW.OFFER ? (
         <Button
-          variant={BUTTON_VARIANT.OUTLINE}
+          variant={BUTTON_VARIANT.PRIMARY}
           busy={accepting}
           busyLabel="Joining"
           onClick={() => void join(view)}
