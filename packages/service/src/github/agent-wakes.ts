@@ -15,7 +15,7 @@ import type { TaskStoreEffect } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { AGENT_BOUNDS, AGENT_STATUS } from "@luke/features/agent-wire";
-import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
+import { GITHUB_READER, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { mentionMarkdownLink } from "@luke/features/link-grammar";
 import {
   EXCESS_KEYS,
@@ -227,16 +227,6 @@ const REVIEWED = "reviewed";
 const FENCE_TAG = {
   [AGENT_WAKE.REVIEW]: "github-review",
   [AGENT_WAKE.COMMENT]: "github-comment",
-} as const;
-
-/**
- * What the agent reads GitHub with, by its access: `gh` on the App's
- * credential, and GitHub's REST API through `gh api` alone on a member's
- * token, where `gh pr` commands do not work (`instructions.ts`).
- */
-const GITHUB_READER = {
-  [GITHUB_ACCESS.APP]: "`gh`",
-  [GITHUB_ACCESS.TOKEN]: "`gh api`",
 } as const;
 
 /** What closes what a review or a comment says where it would not fit the message. */
