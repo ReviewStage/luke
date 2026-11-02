@@ -572,25 +572,11 @@ test("Escape puts the card away with nothing started, and focus goes back to wha
   assert.deepEqual(card.starts, []);
 });
 
-test("a card holding words is nudged rather than put away by the first Escape, and put away by the next", async () => {
-  const card = await mount();
-  card.type("Dark mode");
-  await card.key("Escape");
-  const nudged = card.dialog()?.getAttribute("data-nudge");
-  await card.key("Escape");
-
-  assert.equal(nudged, "true", "the first Escape nudges the card and keeps it");
-  assert.equal(card.dialog(), null);
-  assert.equal(document.activeElement, card.opener);
-  assert.deepEqual(card.starts, []);
-});
-
 test("words left in a card put away come back as New task opens again and after a relaunch, and a task started lets them go", async () => {
   const card = await mount();
   card.type("Dark mode");
   await card.key("Escape");
-  await card.key("Escape");
-  assert.equal(card.dialog(), null);
+  assert.equal(card.dialog(), null, "one Escape puts away a card holding words");
 
   await card.reopen();
   assert.equal(card.field().textContent, "Dark mode");
@@ -637,7 +623,6 @@ test("words typed before the workspaces are read stay in the box as the workspac
   await card.list("workspace-personal");
   assert.equal(card.field().textContent, "Dark mode");
 
-  await card.key("Escape");
   await card.key("Escape");
   await card.reopen();
   assert.equal(card.field().textContent, "Dark mode");

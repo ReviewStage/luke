@@ -300,15 +300,6 @@ function useDefaultChoice(
   return [picked ?? read, picked, setPicked];
 }
 
-/** Whether a card's draft for `purpose` in `workspaceId` holds words or files, which its card keeps from a stray dismissal. */
-export function useNewTaskHolding(
-  workspaceId: string | undefined,
-  purpose: NewTaskPurpose = NEW_TASK_PURPOSE.TASK,
-): boolean {
-  const { text, attachments } = useDraft(newTaskPlace(workspaceId, purpose)).draft;
-  return hasWordsOrFiles(text, attachments);
-}
-
 export function NewTaskComposer({
   newTask,
   workspaceId,
