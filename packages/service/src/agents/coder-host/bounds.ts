@@ -205,26 +205,37 @@ export const CODER = {
    * (`FoundPlace.machine`), never by a flag. Past its window, a sweep retires
    * the runner (`retireWarmRunner`): a sandbox's in
    * `../../maintenance/native-sandbox-sweep.ts`, whose END then stops the
-   * sandbox, and a device's in `../../maintenance/device-warm-sweep.ts`, which
-   * ends it before its own idle cap does (`@luke/agent-runner`'s
-   * `RUNNER_WARM.IDLE_CAP_MS`), since a message its host writes in that
-   * instant is lost. Both are zero, so the events route retires a runner as
-   * its IDLE lands (`runnerIdled`), under the runner lease, and the sweeps
-   * retry only a retire that failed. The sandbox's is zero because ten warm
-   * minutes kept a 4 vCPU, 8 GB sandbox up for up to 62 sandbox-hours a day
-   * over Oct 23–24, about $5–10 a day, for the 636 of 1,536 finished turns a
-   * follow-up reached within three minutes. Those now resume from the stop's
-   * snapshot. Note that the runner is still launched warm and retired rather
-   * than launched to end on its own, because a runner ending by itself stops
-   * reading its stdin while its END is still posted, and a message written
-   * then would be taken as delivered and never run; a runner that reads its
-   * lines from Fullspin leaves such a message waiting instead, and its END hands
-   * it on (`runner-sessions.ts`'s `LINES_WAITING`). A window is one line
-   * here: raise it, and its sweep retires runners past it.
+   * sandbox, and a device's in `../../maintenance/device-warm-sweep.ts`.
+   *
+   * The sandbox's is zero, so the events route retires its runner as its
+   * IDLE lands (`runnerIdled`), under the runner lease, and its sweep retries
+   * only a retire that failed. Zero because ten warm minutes kept a 4 vCPU,
+   * 8 GB sandbox up for up to 62 sandbox-hours a day over Oct 23–24, about
+   * $5–10 a day, for the 636 of 1,536 finished turns a follow-up reached
+   * within three minutes. Those now resume from the stop's snapshot.
+   *
+   * The device's is thirty minutes, because nothing is billed on a host, and
+   * every message within it goes into the running session rather than
+   * through a relaunched CLI, a new GitHub token, and the last runner's
+   * grace. Thirty, half the runner's own cap (`@luke/agent-runner`'s
+   * `RUNNER_WARM.IDLE_CAP_MS`, sixty minutes), because the window is closed
+   * by Fullspin's retire under the lease and never by the runner ending itself,
+   * whose stdin a message its host writes in that instant is lost on: the
+   * sweep retires it past the window, a message sent past it ends the
+   * runner and relaunches whether or not the sweep ran (`sendHolding`), and
+   * a host waiting to switch release has its runner retired at its IDLE.
+   *
+   * Note that the runner is launched warm and retired rather than launched
+   * to end on its own, because a runner ending by itself stops reading its
+   * stdin while its END is still posted, and a message written then would be
+   * taken as delivered and never run; a runner that reads its lines from
+   * Fullspin leaves such a message waiting instead, and its END hands it on
+   * (`runner-sessions.ts`'s `LINES_WAITING`). A window is one line here:
+   * raise it, and its sweep retires runners past it.
    */
   RUNNER_WARM: {
     [AGENT_MACHINE.VERCEL]: Duration.zero,
-    [AGENT_MACHINE.DEVICE]: Duration.zero,
+    [AGENT_MACHINE.DEVICE]: Duration.minutes(30),
   } satisfies Record<AgentMachineKind, Duration.Duration>,
   /**
    * How long a message to a runner that reads its lines waits on that

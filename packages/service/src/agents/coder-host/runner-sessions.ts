@@ -40,7 +40,10 @@
  * while it runs. Where the place stopped or the runner ended, it resumes
  * the place, sets the repository's credential at its firewall again, and
  * launches the runner anew with the harness's session to resume and the
- * next event number, whose session files the machine's disk kept.
+ * next event number, whose session files the machine's disk kept. A
+ * runner warm past its machine's window (`CODER.RUNNER_WARM`), or one a
+ * Stop was written to since its launch, is ended rather than written to,
+ * and the message relaunches it, so no line goes to a runner on its way down.
  * `cancel` writes `stop` to a runner that runs, scoped to the launch running
  * the turn the Stop names, and nothing once that turn is no longer under way;
  * past the answer, a turn still running `CODER.STOP_CONFIRM` on has its
@@ -88,6 +91,7 @@ import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
 import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import {
   type Agent,
+  type AgentLatestTurn,
   awaitingLinesOfReached,
   hasRepository,
   latestTurnsOfReached,
@@ -103,6 +107,7 @@ import {
   clearNativeRewindHanded,
   readNativeRewind,
 } from "@luke/database/models/conversation-rewind";
+import { deviceAgentAwaitsUpdate } from "@luke/database/models/device-agent-store";
 import {
   ANY_LAUNCH,
   clearRunnerLines,
@@ -112,6 +117,7 @@ import {
 } from "@luke/database/models/runner-line-store";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import type { AgentMachineKind } from "@luke/features/agent-wire";
 import { TURN_FAILURE } from "@luke/features/turn-run";
 import { causeKind, failureKind } from "@luke/runtime/effect";
 import type { UserContent } from "ai";
@@ -410,6 +416,20 @@ function line(value: RunnerConfig | InputLine): string {
   return `${JSON.stringify(value)}\n`;
 }
 
+/** Lines as one write to the runner's stdin. */
+function stdinText(lines: readonly InputLine[]): string {
+  return lines.map(line).join("");
+}
+
+/**
+ * The stop a Stop or a halt writes to the runner of the launch named, by its
+ * first event number. One spelling, because a send looks for the very write
+ * a Stop made (`stopWritten`), so a field added to the line moves both.
+ */
+function stopLine(launch: number): InputLine {
+  return { type: INPUT_LINE.STOP, launch };
+}
+
 /**
  * What a runner was launched with that it cannot take up while it runs: its
  * credential, and the integrations it was handed, as a digest. A warm
@@ -430,6 +450,25 @@ function launchFingerprint(
     .update(JSON.stringify({ env, names, ...own }))
     .digest("hex")
     .slice(0, FINGERPRINT_CHARS);
+}
+
+/**
+ * Whether the agent's turn ended longer ago than the warm window of the
+ * machine given (`CODER.RUNNER_WARM`), so Fullspin has closed or is closing it,
+ * and the runner may soon end itself at its own idle cap. Never where the
+ * window is zero, which the IDLE's own retire closes (`runnerIdled`). An
+ * ended turn with no settle time stamped reads as ended long ago, as the
+ * sweep reads it.
+ */
+function pastWarmWindow(
+  machine: AgentMachineKind,
+  turn: AgentLatestTurn | undefined,
+  now: number,
+): boolean {
+  const window = CODER.RUNNER_WARM[machine];
+  if (Duration.isZero(window) || turn === undefined) return false;
+  if (RUNNING_TURN_STATUSES.has(turn.status)) return false;
+  return turn.settledAt === null || now - turn.settledAt.getTime() > Duration.toMillis(window);
 }
 
 /** The place a runner's handle names, without the runner. */
@@ -507,7 +546,19 @@ function deliveredTo(
 ): Effect.Effect<void, LaunchRefused | StoreFailure | SandboxUnavailable, DatabaseServices> {
   return runner.mark.linesRead === true
     ? queuedFor(userId, agentId, runner.mark.firstSequence, lines)
-    : machine.writeLine(runner.handle, lines.map(line).join(""));
+    : machine.writeLine(runner.handle, stdinText(lines));
+}
+
+/**
+ * Whether a Stop's line was written to the runner since its launch, as
+ * `deliveredTo` wrote it, which the runner ends on whether or not its turn
+ * still runs: at once with no turn under way, and as `RUNNER_END.STOPPED`
+ * once the turn it interrupts ends. Read under the agent's runner lease, which every
+ * Stop holds while it writes, so a Stop written ahead of the caller is seen.
+ * False on a machine that keeps nothing of what it wrote (`wrote`).
+ */
+function stopWritten(machine: MachineLifecycle, runner: RecordedRunner) {
+  return machine.wrote(runner.handle, stdinText([stopLine(runner.mark.firstSequence)]));
 }
 
 /** The status a failure answers as. */
@@ -1046,8 +1097,17 @@ export const runnerSessions = <
         const running = found.value.runner;
         if (running !== undefined) {
           const runnerPlace = placeOfHandle(running.handle);
-          // A warm runner launched with what has changed since is ended, and the message relaunches it.
-          if (yield* staleWarm(agent, running.mark, turnRunning)) {
+          // A runner that would not take the message as it should is ended, and the message
+          // relaunches it: one warm past its machine's window, which may end itself at its idle cap
+          // as the line lands; one a Stop was written to since its launch, which ends on it; and a
+          // warm one launched with what has changed since. Note that the first two hold whether
+          // or not the sweep or the IDLE's retire ran, since a Mac drops a line once its runner
+          // has gone, so a line written to a runner on its way down is lost.
+          if (
+            pastWarmWindow(found.value.machine, turn, handedAt) ||
+            (yield* stopWritten(machine, running)) ||
+            (yield* staleWarm(agent, running.mark, turnRunning))
+          ) {
             yield* machine.kill(running.handle);
             yield* relaunched(agent, sessionId, found.value.name, runnerPlace, layout, sent);
             yield* handed(SERVER_HANDOFF_PATH.RELAUNCHED);
@@ -1188,9 +1248,7 @@ export const runnerSessions = <
         }
         const live = yield* liveRunner(machine, found.value);
         if (live === undefined) return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED } as const;
-        yield* delivered(agent, live, [
-          { type: INPUT_LINE.STOP, launch: live.mark.firstSequence },
-        ]).pipe(
+        yield* delivered(agent, live, [stopLine(live.mark.firstSequence)]).pipe(
           Effect.catchIf(
             (failure) =>
               failure instanceof SandboxUnavailable && failure.status === NOT_FOUND_STATUS,
@@ -1271,7 +1329,7 @@ export const runnerSessions = <
         const live = yield* liveRunner(machine, found.value);
         if (live === undefined) return;
         const { handle } = live;
-        yield* delivered(agent, live, [{ type: INPUT_LINE.STOP, launch: live.mark.firstSequence }]);
+        yield* delivered(agent, live, [stopLine(live.mark.firstSequence)]);
         // Note that a read of the exit answers null for a command still running once its own wait is up.
         const exited = machine.runnerExit(handle).pipe(Effect.timeoutOption(CODER.RUNNER_HALT));
         const stopped = yield* exited;
@@ -1898,14 +1956,19 @@ export const runnerEnded = Effect.fn("web/runnerEnded")(function* (ending: Runne
 });
 
 /**
- * A launch's IDLE, its runner warm past the agent's turn, where the warm
- * window is zero (`CODER.RUNNER_WARM`): the runner retired at once
- * (`retireWarmRunner`), whose END then stops the place. Retiring under
- * the runner lease is what keeps a message sent at the turn's end: one a
- * send wrote first is taken by the runner, which still reads its stdin, and
- * one sent after finds the runner no longer told of and relaunches. Nothing
- * for an IDLE older than the launch its place runs now. Answers whether
- * the retire line was written.
+ * A launch's IDLE, its runner warm past the agent's turn: the runner
+ * retired at once (`retireWarmRunner`), whose END then stops the place,
+ * where its machine's warm window is zero (`CODER.RUNNER_WARM`), as a
+ * sandbox's is, or where its device last beat that it waits to switch
+ * release (`HOST_UPDATE.WAITING`), so a host waiting to update goes idle as
+ * its last turn ends. A device's runner otherwise stays warm for the next
+ * message, and is retired past its window by the sweep
+ * (`../../maintenance/device-warm-sweep.ts`) or by a message sent past it
+ * (`sendHolding`). Retiring under the runner lease is what keeps a message
+ * sent at the turn's end: one a send wrote first is taken by the runner,
+ * which still reads its stdin, and one sent after finds the runner no
+ * longer told of and relaunches. Nothing for an IDLE older than the launch
+ * its place runs now. Answers whether the retire line was written.
  */
 export const runnerIdled = Effect.fn("web/runnerIdled")(function* (idle: RunnerEnding) {
   const machine = yield* deploymentLifecycle;
@@ -1914,6 +1977,10 @@ export const runnerIdled = Effect.fn("web/runnerIdled")(function* (idle: RunnerE
   const { agentId, launch, running } = found.value;
   if (agentId === undefined || running === undefined) return false;
   if (launch !== undefined && idle.sequence < launch.firstSequence) return false;
+  const closes =
+    Duration.isZero(CODER.RUNNER_WARM[found.value.machine]) ||
+    (yield* deviceAgentAwaitsUpdate(idle.target.userId, agentId));
+  if (!closes) return false;
   return yield* retireWarmRunner({
     sessionId: idle.sessionId,
     userId: idle.target.userId,

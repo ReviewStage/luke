@@ -316,6 +316,17 @@ export interface AgentMachineService {
     handle: RunnerHandle,
     text: string,
   ) => Effect.Effect<void, SandboxUnavailable | LaunchRefused>;
+  /**
+   * Whether the text given was written to the runner since its launch, as
+   * one write, where the machine keeps what it wrote: a Mac keeps its lines
+   * in the store. A sandbox keeps nothing of its runner's stdin, and its
+   * runner reads its lines from Fullspin, which its END hands on, so it answers
+   * false.
+   */
+  readonly wrote: (
+    handle: RunnerHandle,
+    text: string,
+  ) => Effect.Effect<boolean, SandboxUnavailable>;
   /** The runner's exit code, null while it runs, or gone where the machine no longer knows it; waiting at most `within` for the exit. */
   readonly runnerExit: (
     handle: RunnerHandle,

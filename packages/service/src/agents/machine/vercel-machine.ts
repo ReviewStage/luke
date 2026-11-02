@@ -511,6 +511,8 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
     // here is a caller's mistake, refused loudly rather than written where nothing reads it.
     writeLine: () => Effect.die(new Error("a sandbox's runner reads its lines from Fullspin")),
 
+    wrote: () => Effect.succeed(false),
+
     runnerExit: (handle, within) => api.commandExit(handle.running, handle.command, within),
 
     kill: (handle) => api.kill(handle.running, handle.command),

@@ -27,10 +27,14 @@
  * their order of commit and only the lease keeps two from interleaving
  * (`device-agent-store.ts`'s header). The other calls queue no line: the Mac
  * has no firewall Fullspin sets, so `setCredential` does nothing, and nothing
- * to stop, resume, or throw away, since a warm runner is retired past its
- * window (`../../maintenance/device-warm-sweep.ts`), or ends by itself at its
- * idle cap, settling its line; the agent's folder goes from its device only
- * once the agent is archived (`../device-discard.ts`).
+ * to stop, resume, or throw away, since a warm runner is retired by Fullspin
+ * under its lease, settling its line: past its window by the sweep
+ * (`../../maintenance/device-warm-sweep.ts`) or by a message sent past it,
+ * or at its IDLE where its device waits to update
+ * (`../coder-host/runner-sessions.ts`); the agent's folder goes from its
+ * device only once the agent is archived (`../device-discard.ts`).
+ * `wrote` reads whether a write was queued after the runner's launch line,
+ * as a Stop's is, which the runner ends on.
  *
  * Whether a runner runs is read off the agent's newest launch line, which
  * stands for the record a sandbox keeps in its tags: it runs while that
@@ -57,6 +61,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { hasRepository, readAgent } from "@luke/database/models/agent-store";
 import {
   type DeviceAgentPin,
+  deviceAgentLineQueuedAfter,
   deviceAgentLineStanding,
   deviceAgentOfSession,
   deviceAgentPin,
@@ -174,6 +179,11 @@ function onlyEnds(text: string): boolean {
 /** A local agent's place on its Mac, under Fullspin's session given: the agent itself, since it has one place. */
 function macPlace(session: string, agentId: string): MachinePlace {
   return { machine: AGENT_MACHINE.DEVICE, session, running: runningOfAgent(agentId) };
+}
+
+/** The line that writes the text given to a runner's stdin, as a message or a Stop is written and later looked for. */
+function stdinLine(text: string) {
+  return { kind: DEVICE_AGENT_LINE_KIND.MESSAGE, payload: { text } } as const;
 }
 
 /** A failure the store or the seal answered, as a machine's own: unavailable, with no words of the cause. */
@@ -515,8 +525,14 @@ function deviceMachineOver(
         // Note that a line that only stops or retires the runner still goes, because a Stop on an
         // away Mac is honoured when it is back, and its lease's own stop stands for it if it never is.
         if (!onlyEnds(text)) yield* refuseAway(pin);
-        yield* queued(pin, { kind: DEVICE_AGENT_LINE_KIND.MESSAGE, payload: { text } });
+        yield* queued(pin, stdinLine(text));
       }),
+
+    // The runner's handle names its launch line, after which every write to it is queued in order.
+    wrote: (handle, text) =>
+      Effect.flatMap(pinOfPlace(handle), (pin) =>
+        stored(deviceAgentLineQueuedAfter(pin.userId, handle.command, stdinLine(text))),
+      ),
 
     runnerExit: (handle, within = MAC_MACHINE.EXIT_WAIT) =>
       Effect.gen(function* () {

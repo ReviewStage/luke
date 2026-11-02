@@ -27,6 +27,8 @@ import {
   answerDeviceAgentRequest,
   claimDeviceAgentLine,
   claimDeviceAgentRequest,
+  deviceAgentAwaitsUpdate,
+  deviceAgentLineQueuedAfter,
   deviceAgentLineSettlement,
   deviceAgentLinesWaiting,
   deviceAgentRequestAnswer,
@@ -64,7 +66,9 @@ import { beatDevice, registerDevice } from "../device-store.js";
  * launches are read across accounts, each under its own, only where the
  * agent's newest launch is open on a device that beat within its lease and
  * its run ended before the bound, or before the grace on a device waiting to
- * update. Synthetic accounts, agents, and Macs throughout.
+ * update; and whether an agent's device waits to update, and whether a
+ * line was queued after its launch line, are read for its own account
+ * alone. Synthetic accounts, agents, and Macs throughout.
  */
 
 const SEALED = "sealed:v1:not-a-real-secret";
@@ -823,6 +827,50 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
 
         assert.deepEqual(yield* liveDeviceAgents(owner.userId, owner.deviceId), [owner.agentId]);
         assert.deepEqual(yield* liveDeviceAgents(owner.userId, otherMac), [onOtherMac]);
+      }),
+  );
+  it.effect(
+    "an agent's device waits to update only while it last beat that it waits to switch release, and another account reads none of it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount();
+        const other = yield* openAccount();
+        yield* beatDevice(owner.userId, owner.deviceId, undefined, {
+          update: HOST_UPDATE.WAITING,
+        });
+
+        const waiting = yield* deviceAgentAwaitsUpdate(owner.userId, owner.agentId);
+        const readByOther = yield* deviceAgentAwaitsUpdate(other.userId, owner.agentId);
+        yield* beatDevice(owner.userId, owner.deviceId, undefined, {
+          update: HOST_UPDATE.UPDATING,
+        });
+        const switching = yield* deviceAgentAwaitsUpdate(owner.userId, owner.agentId);
+
+        assert.deepEqual([waiting, readByOther, switching], [true, false, false]);
+      }),
+  );
+  it.effect(
+    "a line is found queued after a launch line only once one of its kind and payload follows that launch, and another account finds none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount();
+        const other = yield* openAccount();
+        const text = '{"type":"stop","launch":3}\n';
+        const stop = { kind: DEVICE_AGENT_LINE_KIND.MESSAGE, payload: { text } } as const;
+        yield* queueDeviceAgentLine(owner.userId, launch(owner.agentId));
+        yield* queueDeviceAgentLine(owner.userId, message(owner.agentId, text));
+        const newest = Option.getOrThrow(
+          yield* queueDeviceAgentLine(owner.userId, launch(owner.agentId)),
+        );
+
+        const before = yield* deviceAgentLineQueuedAfter(owner.userId, newest.id, stop);
+        yield* queueDeviceAgentLine(owner.userId, message(owner.agentId, "Now the emails."));
+        const another = yield* deviceAgentLineQueuedAfter(owner.userId, newest.id, stop);
+        yield* queueDeviceAgentLine(owner.userId, message(owner.agentId, text));
+        const after = yield* deviceAgentLineQueuedAfter(owner.userId, newest.id, stop);
+        const readByOther = yield* deviceAgentLineQueuedAfter(other.userId, newest.id, stop);
+
+        assert.deepEqual([before, another, after, readByOther], [false, false, true, false]);
       }),
   );
   it.effect("another account reads none of a device's live agents", () =>

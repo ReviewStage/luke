@@ -231,8 +231,60 @@ const findPin = SqlSchema.findOneOption({
     ),
 });
 
+const findAwaitsUpdate = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: device.id })
+        .from(agentTable)
+        .innerJoin(device, eq(device.id, agentTable.deviceId))
+        .where(and(pinnedAgent(userId, agentId), eq(device.updatePhase, HOST_UPDATE.WAITING))),
+    ),
+});
+
 /** A stop line queued for the agent after its launch line. */
 const stopLine = alias(deviceAgentLine, "stop_line");
+
+/** A line queued for the agent after its launch line. */
+const laterLine = alias(deviceAgentLine, "later_line");
+
+const findQueuedAfter = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    launchId: Schema.String,
+    kind: LineKindSchema,
+    payload: deviceAgentObjectSchema,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, launchId, kind, payload }) =>
+    Database.use((db) =>
+      db
+        .select({ id: laterLine.id })
+        .from(deviceAgentLine)
+        .innerJoin(
+          laterLine,
+          and(
+            eq(laterLine.agentId, deviceAgentLine.agentId),
+            gt(laterLine.seq, deviceAgentLine.seq),
+          ),
+        )
+        .where(
+          and(
+            eq(deviceAgentLine.id, launchId),
+            eq(deviceAgentLine.userId, userId),
+            eq(deviceAgentLine.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
+            eq(laterLine.userId, userId),
+            eq(laterLine.kind, kind),
+            // Note that the payload is matched as the queue writes it, in the database, so no
+            // message's words or pictures are read back to find it.
+            sql`${laterLine.payload} = ${JSON.stringify(payload)}::jsonb`,
+          ),
+        )
+        .limit(1),
+    ),
+});
 
 const findLatestLaunch = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
@@ -932,6 +984,35 @@ export function deviceAgentOfSession(
 /** The local agent under the id, its starter and its Mac; nothing for an agent in a sandbox. Read with no account in hand, as above, only for an id a machine's place carries. */
 export function deviceAgentPin(agentId: string): DeviceAgentEffect<Option.Option<DeviceAgentPin>> {
   return findPin({ agentId });
+}
+
+/**
+ * Whether the account's local agent's device last beat that it waits to
+ * switch release (`HOST_UPDATE.WAITING`); false for an agent in a sandbox,
+ * one pinned to no device of the account's, and another account's agent.
+ */
+export function deviceAgentAwaitsUpdate(
+  userId: string,
+  agentId: string,
+): DeviceAgentEffect<boolean> {
+  return Effect.map(findAwaitsUpdate({ userId, agentId }), (rows) => rows.length > 0);
+}
+
+/**
+ * Whether a line of the kind and payload given was queued after the
+ * account's launch line named, for the same agent: what a later call reads
+ * of what was written to the runner that launch started. False where no
+ * such launch line of the account's stands.
+ */
+export function deviceAgentLineQueuedAfter(
+  userId: string,
+  launchId: string,
+  line: { readonly kind: DeviceAgentLineKind; readonly payload: DeviceAgentObject },
+): DeviceAgentEffect<boolean> {
+  return Effect.map(
+    findQueuedAfter({ userId, launchId, kind: line.kind, payload: line.payload }),
+    (rows) => rows.length > 0,
+  );
 }
 
 /** The account's agent's newest launch line, as its machine reads whether its runner runs and its transcript where its launch stands; nothing where none stands. */
