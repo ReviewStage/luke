@@ -144,8 +144,11 @@ describe("the host's platform concerns", () => {
             Layer.succeed(TerminalSocket, () => Effect.succeed({ unreachable: true as const })),
             Layer.succeed(SignInConsent, { open: loopbackConsent }),
             Layer.succeed(ThisMacHost, {
-              loginItem: () => Effect.succeed(Result.fail("no login item in a fixture")),
-              version: Effect.succeed(Result.fail("no luke-host in a fixture")),
+              stateRoot,
+              runsHost: false,
+              loaded: Effect.succeed(false),
+              install: () => Effect.succeed(Result.fail("no install in a fixture")),
+              stop: Effect.succeed(Result.fail("no launchd in a fixture")),
               machine: Effect.succeed({
                 name: "Studio",
                 platform: DEVICE_PLATFORM.DARWIN,

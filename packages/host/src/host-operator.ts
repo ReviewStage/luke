@@ -407,7 +407,7 @@ import type {
   AppWorkspaceChannels,
   SessionReplayState,
 } from "./app-state.js";
-import { type ThisMacHostStanding, thisMacHostStandingSchema } from "./contract/this-mac-host.js";
+import { type ThisMacHostRead, thisMacHostReadSchema } from "./contract/this-mac-host.js";
 import {
   type MacCommandAnswer,
   type MacCommandAsk,
@@ -448,10 +448,8 @@ export interface HostOperator {
   setMacRepository(entry: MacRepository): Effect.Effect<MacRepositoriesAnswer | undefined>;
   /** The developer's answer to one command an agent asked to run on this Mac; whether the ask still waited. */
   answerMacCommand(answer: MacCommandAnswer): Effect.Effect<boolean>;
-  /** Where This Mac's `luke-host` stands; none where the host could not answer. */
-  thisMacHostStanding(): Effect.Effect<ThisMacHostStanding | undefined>;
-  /** This Mac's `luke-host` turned on by the member's own act; where it then stands, or none where the host could not answer. */
-  turnOnThisMacHost(): Effect.Effect<ThisMacHostStanding | undefined>;
+  /** The device This Mac's host's record names; none where the host could not answer. */
+  thisMacHost(): Effect.Effect<ThisMacHostRead | undefined>;
   updateSetting<Field extends AppSettingField>(
     field: Field,
     value: AppSettingValue<Field>,
@@ -1144,15 +1142,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(macRepositoriesAnswerSchema, undefined),
       ),
-    thisMacHostStanding: () =>
+    thisMacHost: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.THIS_MAC_HOST_READ),
-        answerOf(thisMacHostStandingSchema, undefined),
-      ),
-    turnOnThisMacHost: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.THIS_MAC_HOST_TURN_ON),
-        answerOf(thisMacHostStandingSchema, undefined),
+        answerOf(thisMacHostReadSchema, undefined),
       ),
     answerMacCommand: (answer) =>
       Effect.map(

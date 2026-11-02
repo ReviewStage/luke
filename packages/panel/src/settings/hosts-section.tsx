@@ -16,6 +16,7 @@ import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { agoText } from "@luke/features/time-format";
 import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   ANNOUNCE,
@@ -65,17 +66,10 @@ import {
 } from "../device-presence.js";
 import { hostUpdateWords } from "../device-setup.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
+import { useExperiment } from "../use-app-state.js";
 import { HostConnectDialog, useHostConnect } from "./host-connect-dialog.js";
 import { MenuRow } from "./menu-row.js";
-import {
-  type HostLine,
-  HostStateLine,
-  setupLineOf,
-  ThisMacAct,
-  type ThisMacHost,
-  ThisMacHostRow,
-  useThisMacHost,
-} from "./this-mac-host-row.js";
+import { type HostLine, HostStateLine, setupLineOf, useThisMacHost } from "./this-mac-host-row.js";
 
 /**
  * hosts-section.tsx -- Settings › Hosts: the member's own machines that run their local agents, Linux servers and Macs alike, and Add hosts, which shows the install command and waits for the hosts it adds.
@@ -87,27 +81,24 @@ import {
  * the window's own clock as a Mac's label is (`macOnline`), when it was last
  * seen otherwise, the host program's version it last called with, where its
  * setup stands while it is not ready, getting ready or couldn't set up and
- * why, in the words This Mac's row says them in (`setupLineOf`), where its
- * update to a newer release stands while one is under way, waiting for its
- * agents to finish, updating, or couldn't update and why
- * (`hostUpdateWords`), on every row but This Mac's, whose line is its own
- * app's reading, and, where its host program
- * is below the service's floor, Update needed with how to update it: the
- * install command's update, this Mac's app updated, or, for another Mac,
- * either, since the service lists no word of how a Mac joined. Remove,
- * behind the row's ⋯, refuses that machine at once, after asking with the
- * command that takes the host off the machine itself where the install command
- * may have set it up. Adding takes a Linux server and a Mac alike, through
- * one command.
+ * why (`setupLineOf`), where its update to a newer release stands while
+ * one is under way, waiting for its agents to finish, updating, or couldn't
+ * update and why (`hostUpdateWords`), and, where its host program is below
+ * the service's floor, Update needed with how to update it: the install
+ * command's update, or, for a Mac, either that or its app updated, since
+ * the service lists no word of how a Mac joined. Remove, behind the row's
+ * ⋯, refuses that machine at once, after asking with the command that takes
+ * the host off the machine itself where the install command may have set it
+ * up. Adding takes a Linux server and a Mac alike, through one command.
  *
- * In the desktop app this Mac stands first, with where its `luke-host`
- * stands under it (`this-mac-host-row.tsx`) and Retry where it failed: on
- * its own machine's row, matched by the device it is enrolled as, or, where
- * the service lists no machine for it (not turned on, removed, a turn-on
- * that failed, or another account's), on a This Mac row of its own with
- * Turn on, Turn on again, or Retry, so there is always a way in. A browser
- * tab has no This Mac, so it draws neither, and with no host says what one
- * is above Add hosts.
+ * In the desktop app, behind the One host program experiment, this Mac
+ * always stands first: on the row of the machine its host's record names
+ * (`this-mac-host-row.tsx`), which says only whether it is online and that
+ * it is updating while it is, and offers no Remove, since the app keeps
+ * that host as Bring your own host says; or, until the service lists that
+ * machine, on a This Mac row of its own that reads offline. A browser tab
+ * has no This Mac, so it draws neither, and with no host says what one is
+ * above Add hosts.
  *
  * Add hosts shows the install command, public and the same for every
  * member, which pairs a box with a code the member approves, and waits.
@@ -142,11 +133,12 @@ const WORDS = {
   ADD: "Add hosts",
   NONE: "No hosts yet. A host is a Mac or Linux server of yours that runs your agents instead of the cloud.",
   ONLINE: "Online",
+  OFFLINE: "Offline",
+  THIS_MAC: "This Mac",
   UNKNOWN: "Can't check status",
   CHECKING: "Checking",
   UPGRADE_NEEDED: "Update needed",
   UPGRADE_TITLE: "Run this on the host to update it",
-  MAC_UPGRADE: `Update the ${PRODUCT_NAME} app on this Mac.`,
   OTHER_MAC_UPGRADE: `If you added it from the ${PRODUCT_NAME} app on it, update the app there.`,
   OTHER_MAC_UPGRADE_TITLE: "If you used the install command, run this on it",
   INSTALL_TITLE: "Run this on each host",
@@ -222,11 +214,11 @@ function seenWords(host: Host, book: PresenceBook, now: number): string {
   const age = presenceAgeMs(book, host.id);
   // Note that the age is the service's, so the moment is made from the window's clock and the age alone.
   const lastSeen = age === undefined ? "" : ` · last seen ${agoText(now - age, now)}`;
-  return `${standing === DEVICE_STANDING.OFFLINE ? "Offline" : WORDS.UNKNOWN}${lastSeen}`;
+  return `${standing === DEVICE_STANDING.OFFLINE ? WORDS.OFFLINE : WORDS.UNKNOWN}${lastSeen}`;
 }
 
 /**
- * Where a host that is not this Mac stands in its setup: getting ready, or
+ * Where a host stands in its setup: getting ready, or
  * couldn't set up and why; nothing for one that is ready, or offline,
  * whose last word of its setup may no longer hold. It offers no Retry,
  * since nothing here can ask another machine's host to try again.
@@ -237,7 +229,7 @@ function setupLine(host: Host, standing: DeviceStanding): HostLine | null {
 }
 
 /**
- * Where a host that is not this Mac stands in updating itself: waiting for
+ * Where a host stands in updating itself: waiting for
  * its agents to finish or updating, plain, or couldn't update and why,
  * tinted; nothing while no update is under way, or while it is offline,
  * whose last word of its update may no longer hold.
@@ -251,17 +243,14 @@ function updateLine(host: Host, standing: DeviceStanding): HostLine | null {
   };
 }
 
-/** How a host is updated by hand, under its Update needed: this Mac's app updated, the install command's update run on a server, and either for another Mac. */
+/** How a host is updated by hand, under its Update needed: the install command's update run on a server, and either that or its app updated for a Mac. */
 function UpgradeHow({
   platform,
-  thisMac,
   installScriptUrl,
 }: {
   platform: DevicePlatform;
-  thisMac: boolean;
   installScriptUrl: string;
 }): React.JSX.Element {
-  if (thisMac) return <Text>{WORDS.MAC_UPGRADE}</Text>;
   const mac = platform === DEVICE_PLATFORM.DARWIN;
   const command = (
     <CodeCard
@@ -286,22 +275,18 @@ const REMOVED = `It stops taking agents now, and its agents stop. Their tasks an
 /**
  * What Remove says, and the title of the uninstall command it shows, by what
  * the machine is: a server the install command set up is cleaned on the box
- * itself, this Mac's own This Mac joins again only from its app, and another
- * Mac may be either, since the service lists no word of how a Mac joined.
+ * itself, and a Mac may have joined from its app too, since the service
+ * lists no word of how a Mac joined.
  */
 const REMOVE_WORDS = {
   SERVER: { body: REMOVED, uninstall: `Run this on the host to remove ${PRODUCT_NAME} from it` },
-  THIS_MAC: {
-    body: `${REMOVED} To use it again, choose Turn on again under This Mac.`,
-    uninstall: undefined,
-  },
   MAC: {
     body: `${REMOVED} If you added it from the ${PRODUCT_NAME} app on it, choose Turn on again under This Mac there to use it again.`,
     uninstall: "If you used the install command, run this on it",
   },
 } as const;
 
-/** One machine's row: its name, whether it is online, what it is, and its version, where its setup stands while it is not ready and its update while one is under way, Update needed with how to update it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
+/** One machine's row: its name, whether it is online, what it is, and its version, where its setup stands while it is not ready and its update while one is under way, Update needed with how to update it, and Remove behind its ⋯; for this Mac, whether it is online and updating, and nothing more. */
 function HostRow({
   host,
   book,
@@ -315,8 +300,8 @@ function HostRow({
   now: number;
   installScriptUrl: string;
   onRemove: (id: string) => Promise<ActionResult>;
-  /** Where this Mac stands, on the row of the machine it is enrolled as alone. */
-  thisMac?: ThisMacHost | undefined;
+  /** Whether the machine is the one this Mac's host's record names. */
+  thisMac: boolean;
 }): React.JSX.Element {
   const removing = useConfirmDialog(
     { subject: true, surfaceOpen: true },
@@ -327,33 +312,34 @@ function HostRow({
   const platform = host.platform ?? DEVICE_PLATFORM.LINUX;
   const kind = DEVICE_PLATFORM_NAME[platform];
   const versioned = host.version === null ? kind : `${kind} · ${host.version}`;
-  const removeWords =
-    thisMac !== undefined
-      ? REMOVE_WORDS.THIS_MAC
-      : platform === DEVICE_PLATFORM.DARWIN
-        ? REMOVE_WORDS.MAC
-        : REMOVE_WORDS.SERVER;
+  const removeWords = platform === DEVICE_PLATFORM.DARWIN ? REMOVE_WORDS.MAC : REMOVE_WORDS.SERVER;
   const standing = hostStanding(host, book);
-  // Note that this Mac's own line is its app's reading of its `luke-host`, which says its setup and more, with Retry, and its update is its app's.
-  const line = thisMac !== undefined ? thisMac.line : setupLine(host, standing);
-  const update = thisMac !== undefined ? null : updateLine(host, standing);
-  const label = thisMac === undefined ? host.name : `${host.name} (this Mac)`;
+  // Note that this Mac's row says only whether it is online and that it is updating, since the app keeps its host itself.
+  const line = thisMac ? null : setupLine(host, standing);
+  const update =
+    thisMac && host.update !== HOST_UPDATE.UPDATING ? null : updateLine(host, standing);
+  const upgradeNeeded = host.upgradeNeeded && !thisMac;
+  const label = thisMac ? `${host.name} (this Mac)` : host.name;
   return (
     <>
       <MenuRow
         thing={label}
-        actions={[
-          {
-            label: "Remove",
-            icon: <TrashIcon />,
-            danger: true,
-            disabled: removing.busy,
-            onSelect: removing.ask,
-          },
-        ]}
+        actions={
+          thisMac
+            ? []
+            : [
+                {
+                  label: "Remove",
+                  icon: <TrashIcon />,
+                  danger: true,
+                  disabled: removing.busy,
+                  onSelect: removing.ask,
+                },
+              ]
+        }
         row={{
           label,
-          adornment: host.upgradeNeeded ? (
+          adornment: upgradeNeeded ? (
             <Badge tone={STATUS_TONE.ATTENTION}>{WORDS.UPGRADE_NEEDED}</Badge>
           ) : undefined,
           description: (
@@ -367,13 +353,8 @@ function HostRow({
               {update === null ? null : <HostStateLine line={update} />}
             </>
           ),
-          control: thisMac === undefined ? undefined : <ThisMacAct thisMac={thisMac} />,
-          below: !host.upgradeNeeded ? undefined : (
-            <UpgradeHow
-              platform={platform}
-              thisMac={thisMac !== undefined}
-              installScriptUrl={installScriptUrl}
-            />
+          below: !upgradeNeeded ? undefined : (
+            <UpgradeHow platform={platform} installScriptUrl={installScriptUrl} />
           ),
         }}
       />
@@ -388,14 +369,12 @@ function HostRow({
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       >
-        {removeWords.uninstall === undefined ? null : (
-          <CodeCard
-            title={removeWords.uninstall}
-            titleIs={CODE_CARD_TITLE.WORDS}
-            code={HOST_UNINSTALL_COMMAND}
-            copy={copyThroughShell}
-          />
-        )}
+        <CodeCard
+          title={removeWords.uninstall}
+          titleIs={CODE_CARD_TITLE.WORDS}
+          code={HOST_UNINSTALL_COMMAND}
+          copy={copyThroughShell}
+        />
       </ConfirmDialog>
     </>
   );
@@ -497,7 +476,8 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const [attempt, setAttempt] = useState(0);
   // The ids of the account's hosts as Add hosts opened, while its dialog stands.
   const [adding, setAdding] = useState<ReadonlySet<string> | undefined>(undefined);
-  const thisMac = useThisMacHost(signedIn);
+  const thisMacKept = useExperiment(EXPERIMENT.THIS_MAC_ACCOUNT_HOST);
+  const thisMac = useThisMacHost(signedIn && thisMacKept);
   const [connecting, closeConnect] = useHostConnect();
   // A pairing's question does not outlive the page it was asked over.
   useEffect(() => closeConnect, [closeConnect]);
@@ -582,7 +562,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
     [act],
   );
 
-  const thisMacId = thisMac.standing?.deviceId;
+  const thisMacId = thisMac?.deviceId;
   const listedMac =
     thisMacId === undefined ? undefined : hosts?.find((host) => host.id === thisMacId);
   const loaded = signedIn && hosts !== undefined && installScriptUrl !== undefined;
@@ -590,7 +570,8 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
     hosts === undefined || listedMac === undefined
       ? (hosts ?? [])
       : [listedMac, ...hosts.filter((host) => host !== listedMac)];
-  const thisMacAlone = listedMac === undefined && thisMac.line !== null;
+  // Note that this Mac stands even before the service lists its host, reading offline as a host does until it calls in.
+  const thisMacAlone = thisMac !== undefined && listedMac === undefined;
   return (
     <>
       {/* Note that signed out the section holds the search anchor, since Add hosts is drawn only for a signed-in member. */}
@@ -601,8 +582,15 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
           <SettingsLine>{WORDS.NONE}</SettingsLine>
         ) : loaded ? (
           <>
-            {thisMacAlone && thisMac.line !== null ? (
-              <ThisMacHostRow thisMac={thisMac} line={thisMac.line} />
+            {thisMacAlone ? (
+              <SettingsRow
+                label={WORDS.THIS_MAC}
+                description={
+                  <SettingsRowStateLine state={STANDING_STATE[DEVICE_STANDING.OFFLINE]}>
+                    {WORDS.OFFLINE}
+                  </SettingsRowStateLine>
+                }
+              />
             ) : null}
             {ordered.map((host) => (
               <HostRow
@@ -612,7 +600,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
                 now={now}
                 installScriptUrl={installScriptUrl}
                 onRemove={remove}
-                thisMac={host === listedMac ? thisMac : undefined}
+                thisMac={host === listedMac}
               />
             ))}
           </>

@@ -20,6 +20,14 @@ export const EXPERIMENT = {
   SKILLS: "skills",
   /** Bring your own host: agents that run on the member's own Macs and Linux machines, This Mac among them, set up in Settings › Hosts, rather than only in our cloud. */
   BRING_YOUR_OWN_HOST: "bring-your-own-host",
+  /**
+   * One host program: This Mac's host is the account install the install
+   * command puts on a Mac, kept running while Bring your own host is on and
+   * stopped while it is off, in place of the one inside the app. It has no
+   * entry in `EXPERIMENTS`, so no switch: it is turned on for an account in
+   * its stored choices alone, while its owner tests it by hand.
+   */
+  THIS_MAC_ACCOUNT_HOST: "this-mac-account-host",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];

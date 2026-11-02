@@ -455,14 +455,12 @@ export const TERMINAL_ACT_KIND = {
 } as const;
 
 /**
- * This Mac's `luke-host` as Settings › Hosts reaches it
- * (`this-mac-host.ts`): where it stands, read while the switch is drawn, and
- * an explicit turn-on, which enrolls the Mac again where the service removed it or
- * the last turn-on failed. Answered by the host, which runs it.
+ * This Mac's host as Settings › Hosts reaches it (`this-mac-host.ts`): the
+ * device its record names, read while Hosts is drawn. Answered by the host,
+ * which keeps it.
  */
 export const THIS_MAC_HOST_ACT_KIND = {
   THIS_MAC_HOST_READ: "thisMacHost.read",
-  THIS_MAC_HOST_TURN_ON: "thisMacHost.turnOn",
 } as const;
 
 /**

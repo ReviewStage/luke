@@ -1,123 +1,96 @@
-import {
-  type HostedDeviceAgentClient,
-  OWN_ENROLL_OUTCOME,
-  type OwnEnrollOutcome,
-} from "@luke/features";
-import { DEVICE_SETUP, type DeviceSetup } from "@luke/features/device-agent-wire";
+import { type HostedDeviceAgentClient, OWN_ENROLL_OUTCOME } from "@luke/features";
+import { HOST_RELEASE } from "@luke/features/host-release";
 import { HOST_WIRE } from "@luke/features/host-wire";
 import { carried, GATEWAY_METHOD } from "@luke/gateway";
-import { Clock, Duration, Effect, Option, type Path, Ref, Result, Semaphore } from "effect";
+import { EXPERIMENT, type Experiment } from "@luke/settings";
+import { Duration, Effect, Option, type Path, Result, Schedule, Stream } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import type { ChildProcessSpawner } from "effect/process";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
-import { THIS_MAC_HOST_STANDING, type ThisMacHostStanding } from "./contract/this-mac-host.js";
-import {
-  HOST_LOGIN_ITEM_ACT,
-  HOST_LOGIN_ITEM_STATUS,
-  type HostLoginItemStatus,
-  Reporter,
-  ThisMacHost,
-} from "./effect/seams.js";
-import { followerLockHeld } from "./follower-lock.js";
+import type { ThisMacHostRead } from "./contract/this-mac-host.js";
+import { Reporter, ThisMacHost } from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
-import { readHostDevice, writeHostDevice } from "./host-device-record.js";
+import { type HostDevice, readHostDevice, writeHostDevice } from "./host-device-record.js";
 import type { HostKernel } from "./host-kernel.js";
-import {
-  localAgentDeviceOf,
-  localAgentLaunchesHanded,
-  localAgentOwnerOf,
-} from "./local-agent-state.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-this-mac-host.ts -- This Mac's local agents run by `luke-host`, the same host program a Linux box runs, as the member turns it on in the desktop app and the app shows where it stands.
+ * compose-this-mac-host.ts -- This Mac's host, the account install the install command puts on a Mac, kept running while the account has Bring your own host on and stopped while it has it off, behind the One host program experiment.
  *
- * This Mac runs agents only once the member turns it on, with Turn on under
- * This Mac in Settings › Hosts (`THIS_MAC_HOST_TURN_ON`), because turning it
- * on registers a login item that runs `luke-host` at login, the app open or
- * not, and `luke-host` downloads what its agents run on. The Mac is turned on
- * in one sequence, in order: it is enrolled on the member's own sign-in
- * under the device id the account has on this Mac (`local-agent-state.ts`),
- * minted the first time (`enrollOwn`), which converts its device in place,
- * so its agents and their folders carry over; its record is written where
- * `luke-host` reads it, the app's own state folder
- * (`host-device-record.ts`); the launches kept under the account are handed
- * to the device, whose follower settles them; and its login item is
- * registered (`ThisMacHost`). From then on the record keeps it on: a Mac
- * holding a record of the account's that the service has not refused stands on as
- * the app starts, its login item registered again where it is not, with
- * nothing to switch, since a task runs here only where its Runs on picks
- * this Mac; one holding none stands not turned on until the member asks.
+ * There is one such install on a Mac, under the member's own home
+ * (`ThisMacHost`'s `stateRoot`, `~/.local/state/luke-host`), so every build
+ * of the app, released, Test, development, and each named instance, reads
+ * and controls the same host. Where it stands is read again every `IDLE`,
+ * and acted on only when it changed: at launch, at sign-in, and when either
+ * experiment is turned on or off. While the One host program experiment is
+ * off, or no account is signed in, nothing on this Mac is installed,
+ * started, or stopped.
  *
- * The record names the account the Mac runs agents for, the one whose
- * device id it carries, so another account signed in on the same Mac sees
- * it as another member's machine and turns nothing on or off. The service
- * refusing the record's secret marks it refused (`@luke/host/daemon`), the Mac
- * removed in Settings, and nothing enrolls it again on its own: only the
- * member's own act does, Turn on again (`THIS_MAC_HOST_TURN_ON`). A turn-on
- * that failed says why and waits for the same act, Retry; the app never
- * follows the queue itself.
+ * With Bring your own host on, a Mac with no host of the account standing,
+ * no record or one the service refused, is enrolled on the member's own
+ * sign-in (`enrollOwn`), under the record's device id where it has one, so
+ * a removed host comes back as itself, and under an id minted here where it
+ * has none; its record is written where the install's host reads it; and
+ * the install script the service serves is run, which installs or upgrades
+ * the release, loads its LaunchAgent, and starts the host, whose `connect`
+ * answers at once as connected. A host of the account standing is left as
+ * it is, but started where launchd no longer holds it, the script run again
+ * over the record it stands on. With Bring your own host off, a host of the
+ * account is stopped and kept from starting at the next login, its
+ * releases, state, record and agents' folders kept, so turning it on again
+ * starts the same host on the same record.
  *
- * `luke-host` fetches what its agents run on once each time it starts, and
- * registers with the service whether that is still under way or failed, so
- * where it stands is read with the setup the service lists for this Mac. A
- * setup that failed waits for Retry, which starts `luke-host` again by
- * unregistering its login item and registering it again; so does Retry
- * after a failed turn-on. Nothing else starts it again, since a Mac whose
- * setup is ready may be mid-turn, and a setup the service could not say is
- * taken as not failed.
- *
- * It turns on beside a standalone `luke-host` the install command put on
- * this Mac, whichever account that one runs agents for: each keeps its own
- * state folder, and each agent's folder is named for the agent.
- *
- * Where it stands is read again every `IDLE` while the account is signed
- * in: running while a follower holds the machine's lease, which only
- * `luke-host` can on a Mac, and otherwise as its login
- * item answers, registered and starting, or waiting for approval in System
- * Settings. The setup it carries is read at most every `SETUP_READ_EVERY`,
- * and only as Settings asks.
+ * A record is the account's where the service lists its device among the
+ * account's hosts; another account's, or one enrolled with another service
+ * than the app's, as a development build pointed at a Preview would see, is
+ * left alone, since there is only one such install on a Mac. Note that the
+ * Mac is enrolled only where no host of the account stands, because an
+ * enroll keys the device again and refuses the secret its host runs on; so
+ * once a record stands, a step that failed is tried again by running the
+ * script again, never by enrolling. A step that failed is tried again after
+ * `RETRY`, for as long as what the app keeps the host at stands, and nothing
+ * is shown of it: launchd and the host's own setup carry the rest. A Mac the
+ * host cannot run on (`ThisMacHost`'s `runsHost`) is never enrolled.
  */
 
-/** How often where `luke-host` stands is read again. */
+/** How often what the app keeps This Mac's host at is read again. */
 const IDLE = Duration.seconds(5);
 
-/** How often Settings' read of this Mac asks the service again for the setup it registered. */
-const SETUP_READ_EVERY = Duration.seconds(30);
-
-/** What a failed turn-on says, by what failed. */
-const FAILED_WORDS = {
-  VERSION: "Couldn't start the host program on this Mac",
-  NOT_FOUND: "This Mac isn't under your account. Retry.",
-  UPGRADE_NEEDED: "Running agents here needs a newer version of this app. Update it, then Retry.",
-  UNANSWERED: "Couldn't reach the service to add this Mac. Check your connection, then Retry.",
-  REFUSED: "The service refused to add this Mac",
-  NOT_SAVED: "Couldn't save this Mac's sign-in in the state folder. Retry.",
-  LOGIN_ITEM: "macOS refused the app's login item",
-  NO_LOGIN_ITEM: "This build carries no login item to run agents with.",
-  SETUP: "Couldn't download what agents run on here",
+/** How soon a step that failed is tried again: from `FIRST`, twice as long each time, never longer than `LONGEST`. */
+const RETRY_AFTER = {
+  FIRST: Duration.seconds(10),
+  LONGEST: Duration.hours(1),
 } as const;
 
-/** Where this Mac's setup stands as the service lists it: none for one that is ready. */
-export interface ThisMacSetup {
-  readonly setup?: DeviceSetup | undefined;
-  readonly setupFailure?: string | undefined;
-}
+const RETRY = Schedule.exponential(RETRY_AFTER.FIRST).pipe(
+  Schedule.modifyDelay(({ duration }) =>
+    Effect.succeed(Duration.min(duration, RETRY_AFTER.LONGEST)),
+  ),
+);
+
+/** What the app keeps This Mac's host at for the account signed in; none where it keeps it at nothing, and leaves it as it stands. */
+type Kept = { readonly userId: string; readonly running: boolean } | undefined;
+
+const sameKept = (one: Kept, other: Kept) =>
+  one?.userId === other?.userId && one?.running === other?.running;
 
 export interface ThisMacHostDependencies {
-  kernel: Pick<HostKernel, "stateRoot" | "hostedServiceBaseUrl" | "createId"> & {
+  kernel: Pick<HostKernel, "hostedServiceBaseUrl" | "createId"> & {
     runMode: Pick<RunMode, "sendsNetwork">;
   };
   account: Pick<AccountComposer, "capabilitiesActive">;
   /** The account signed in now, by its id; none where nobody is. */
   accountId: () => string | undefined;
-  /** The setup the service lists for the device, by its id, nothing to say where it lists no such device; none where it could not answer. */
-  deviceSetup: (
+  /** Whether the account signed in has the experiment given on, as the settings hold it now. */
+  experimentOn: (experiment: Experiment) => Effect.Effect<boolean>;
+  /** Whether the service lists the device given among the account's hosts; none where it could not answer. */
+  hostListed: (
     deviceId: string,
-  ) => Effect.Effect<Option.Option<ThisMacSetup>, never, HttpClient.HttpClient>;
+  ) => Effect.Effect<Option.Option<boolean>, never, HttpClient.HttpClient>;
   client: Pick<HostedDeviceAgentClient, "enrollOwn">;
 }
 
@@ -129,77 +102,6 @@ type ThisMacHostServices =
   | Path.Path
   | HttpClient.HttpClient;
 
-const failed = (reason: string): ThisMacHostStanding => ({
-  standing: THIS_MAC_HOST_STANDING.FAILED,
-  reason,
-});
-
-const standingOf = (
-  kind: Exclude<
-    ThisMacHostStanding["standing"],
-    typeof THIS_MAC_HOST_STANDING.FAILED | typeof THIS_MAC_HOST_STANDING.SETUP_FAILED
-  >,
-): ThisMacHostStanding => ({ standing: kind });
-
-/** A standing of the device this Mac is enrolled as. */
-const ofDevice = (next: ThisMacHostStanding, deviceId: string): ThisMacHostStanding => ({
-  ...next,
-  deviceId,
-});
-
-/** Whether the service says this Mac's setup failed; one it could not say is not. */
-const setupFailed = (setup: Option.Option<ThisMacSetup>): boolean =>
-  Option.isSome(setup) && setup.value.setup === DEVICE_SETUP.FAILED;
-
-/** A standing that says `luke-host` is up, as its setup leaves it: getting ready, failed, or as it was. */
-const withSetup = (
-  next: ThisMacHostStanding,
-  setup: Option.Option<ThisMacSetup>,
-): ThisMacHostStanding => {
-  const up =
-    next.standing === THIS_MAC_HOST_STANDING.RUNNING ||
-    next.standing === THIS_MAC_HOST_STANDING.NOT_RUNNING;
-  if (!up || Option.isNone(setup)) return next;
-  switch (setup.value.setup) {
-    case DEVICE_SETUP.PREPARING:
-      return { ...next, standing: THIS_MAC_HOST_STANDING.GETTING_READY };
-    case DEVICE_SETUP.FAILED:
-      return {
-        ...next,
-        standing: THIS_MAC_HOST_STANDING.SETUP_FAILED,
-        reason: setup.value.setupFailure ?? FAILED_WORDS.SETUP,
-      };
-    case undefined:
-      return next;
-  }
-};
-
-/** Where a registered login item leaves `luke-host`, as it answered. */
-const registeredStanding = (status: HostLoginItemStatus): ThisMacHostStanding => {
-  switch (status) {
-    case HOST_LOGIN_ITEM_STATUS.REQUIRES_APPROVAL:
-      return standingOf(THIS_MAC_HOST_STANDING.REQUIRES_APPROVAL);
-    case HOST_LOGIN_ITEM_STATUS.NOT_FOUND:
-      return failed(FAILED_WORDS.NO_LOGIN_ITEM);
-    default:
-      return standingOf(THIS_MAC_HOST_STANDING.NOT_RUNNING);
-  }
-};
-
-/** What an enroll that took no secret says. */
-const enrollFailure = (outcome: Exclude<OwnEnrollOutcome, { outcome: "enrolled" }>): string => {
-  switch (outcome.outcome) {
-    case OWN_ENROLL_OUTCOME.NOT_FOUND:
-      return FAILED_WORDS.NOT_FOUND;
-    case OWN_ENROLL_OUTCOME.UPGRADE_NEEDED:
-      return FAILED_WORDS.UPGRADE_NEEDED;
-    case OWN_ENROLL_OUTCOME.UNANSWERED:
-      return FAILED_WORDS.UNANSWERED;
-    case OWN_ENROLL_OUTCOME.REFUSED:
-      return `${FAILED_WORDS.REFUSED} (${outcome.refusal}). Retry.`;
-  }
-};
-
 export function composeThisMacHost(
   dependencies: ThisMacHostDependencies,
 ): Effect.Effect<Composer, never, ThisMacHostServices> {
@@ -208,207 +110,134 @@ export function composeThisMacHost(
     const host = yield* ThisMacHost;
     const services = yield* Effect.context<ThisMacHostServices>();
     const { kernel, account, client } = dependencies;
-    const standing = yield* Ref.make<ThisMacHostStanding>(standingOf(THIS_MAC_HOST_STANDING.OFF));
-    /** Whether the last turn-on failed, which only the member's own act tries again. */
-    const turnOnFailed = yield* Ref.make(false);
-    /** The setup last read for Settings, of which device, and when. */
-    const setupRead = yield* Ref.make<
-      { at: number; deviceId: string; setup: Option.Option<ThisMacSetup> } | undefined
-    >(undefined);
-    const reconciling = yield* Semaphore.make(1);
+    const serviceOrigin = new URL(kernel.hostedServiceBaseUrl).origin;
 
-    const set = (next: ThisMacHostStanding) => Effect.as(Ref.set(standing, next), next);
+    /** Whether the record was enrolled with this app's service; one enrolled with another is left alone. */
+    const ownService = (record: HostDevice) =>
+      URL.canParse(record.serviceOrigin) && new URL(record.serviceOrigin).origin === serviceOrigin;
 
-    /** The enroll on the sign-in, with the version of the `luke-host` it enrolls for, naming the Mac as its `luke-host` registers it, so the service creates the device where it never saw this Mac. */
-    const enrolled = (deviceId: string, version: string) =>
-      Effect.flatMap(host.machine, (machine) => client.enrollOwn(deviceId, machine)).pipe(
-        Effect.updateService(
-          HttpClient.HttpClient,
-          HttpClient.mapRequest(HttpClientRequest.setHeader(HOST_WIRE.VERSION_HEADER, version)),
-        ),
+    const ownServiceRecord = Effect.map(readHostDevice(host.stateRoot), Option.filter(ownService));
+
+    /** Whether the record's device is the account's, as the service lists its hosts. */
+    const accountOwns = (record: HostDevice) =>
+      Effect.flatMap(dependencies.hostListed(record.deviceId), (listed) =>
+        Option.isSome(listed)
+          ? Effect.succeed(listed.value)
+          : Effect.fail("read the account's hosts"),
       );
 
     /**
-     * The sequence: the Mac enrolled under the account's device id, its
-     * record written, its launches handed to the device, and its login item
-     * registered; where it then stands, or why it failed.
+     * The Mac enrolled under the device id given, or one minted, on the
+     * version of the release the script installs, and its record written;
+     * whether it was, false where the id is another account's. Note that it
+     * runs whole once begun, since the service answers the secret once.
      */
-    const turnOn = (userId: string) =>
+    const enrolled = (kept: Option.Option<string>, version: string) =>
       Effect.gen(function* () {
-        yield* set(standingOf(THIS_MAC_HOST_STANDING.TURNING_ON));
-        const deviceId = yield* localAgentDeviceOf(kernel.stateRoot, userId, kernel.createId);
-        const version = yield* host.version;
-        if (Result.isFailure(version)) return failed(`${FAILED_WORDS.VERSION}: ${version.failure}`);
-        const outcome = yield* enrolled(deviceId, version.success);
-        if (outcome.outcome !== OWN_ENROLL_OUTCOME.ENROLLED) return failed(enrollFailure(outcome));
-        const saved = yield* Effect.result(
-          writeHostDevice(kernel.stateRoot, {
-            deviceId,
-            deviceSecret: outcome.deviceSecret,
-            serviceOrigin: kernel.hostedServiceBaseUrl,
-          }),
-        );
-        if (Result.isFailure(saved)) return failed(FAILED_WORDS.NOT_SAVED);
-        // Note that the launches the app kept are the device's only once it holds its secret, so a failed enroll strands none of them.
-        if (!(yield* localAgentLaunchesHanded(kernel.stateRoot, userId, deviceId))) {
-          report("the local agents' state could not be saved");
-        }
-        const registered = yield* host.loginItem(HOST_LOGIN_ITEM_ACT.REGISTER);
-        if (Result.isFailure(registered)) {
-          return ofDevice(failed(`${FAILED_WORDS.LOGIN_ITEM}: ${registered.failure}`), deviceId);
-        }
-        report("this Mac's luke-host was enrolled and its login item registered");
-        return ofDevice(registeredStanding(registered.success), deviceId);
-      });
+        const deviceId = Option.getOrElse(kept, kernel.createId);
+        const outcome = yield* client
+          .enrollOwn(deviceId, yield* host.machine)
+          .pipe(
+            Effect.updateService(
+              HttpClient.HttpClient,
+              HttpClient.mapRequest(HttpClientRequest.setHeader(HOST_WIRE.VERSION_HEADER, version)),
+            ),
+          );
+        if (outcome.outcome === OWN_ENROLL_OUTCOME.NOT_FOUND) return false;
+        if (outcome.outcome !== OWN_ENROLL_OUTCOME.ENROLLED) return yield* Effect.fail("enroll it");
+        yield* writeHostDevice(host.stateRoot, {
+          deviceId,
+          deviceSecret: outcome.deviceSecret,
+          serviceOrigin,
+        }).pipe(Effect.mapError(() => "save its record"));
+        report("this Mac's host was enrolled");
+        return true;
+      }).pipe(Effect.uninterruptible);
 
-    /** Where an enrolled `luke-host` stands: running while it holds the machine's lease, else as its login item answers, registered again where it was not. */
-    const standingNow = Effect.gen(function* () {
-      if (yield* followerLockHeld(kernel.stateRoot)) {
-        return standingOf(THIS_MAC_HOST_STANDING.RUNNING);
-      }
-      const status = yield* host.loginItem(HOST_LOGIN_ITEM_ACT.STATUS);
-      if (Result.isFailure(status)) return failed(`${FAILED_WORDS.LOGIN_ITEM}: ${status.failure}`);
-      if (status.success !== HOST_LOGIN_ITEM_STATUS.NOT_REGISTERED) {
-        return registeredStanding(status.success);
-      }
-      const registered = yield* host.loginItem(HOST_LOGIN_ITEM_ACT.REGISTER);
-      return Result.isFailure(registered)
-        ? failed(`${FAILED_WORDS.LOGIN_ITEM}: ${registered.failure}`)
-        : registeredStanding(registered.success);
+    /** The install script the service serves, run: the release installed or upgraded and the host started. */
+    const installed = Effect.gen(function* () {
+      const script = yield* HttpClient.get(
+        new URL(HOST_WIRE.INSTALL_SCRIPT_PATH, serviceOrigin).href,
+      ).pipe(
+        Effect.flatMap(HttpClientResponse.filterStatusOk),
+        Effect.flatMap((response) => response.text),
+        Effect.mapError(() => "read its install script"),
+      );
+      const ran = yield* host.install(script);
+      if (Result.isFailure(ran)) return yield* Effect.fail(`install it: ${ran.failure}`);
+      report("this Mac's host was installed and started");
     });
 
-    /**
-     * The setup the service lists for the device, read now: none where it
-     * could not answer. The read is kept for Settings, but for one that
-     * could not answer, which keeps the setup last read, so a failure stays
-     * drawn with its Retry through a service that cannot say.
-     */
-    const setupNow = (deviceId: string) =>
-      Effect.gen(function* () {
-        const setup = yield* dependencies.deviceSetup(deviceId);
-        const kept = yield* Ref.get(setupRead);
-        yield* Ref.set(setupRead, {
-          at: yield* Clock.currentTimeMillis,
-          deviceId,
-          setup: Option.isNone(setup) && kept?.deviceId === deviceId ? kept.setup : setup,
-        });
-        return setup;
-      });
-
-    /** The setup Settings draws for the device: the one kept, read again where it is older than `SETUP_READ_EVERY`. */
-    const setupShown = (deviceId: string) =>
-      Effect.gen(function* () {
-        const now = yield* Clock.currentTimeMillis;
-        const kept = yield* Ref.get(setupRead);
-        if (
-          kept === undefined ||
-          kept.deviceId !== deviceId ||
-          now - kept.at >= Duration.toMillis(SETUP_READ_EVERY)
-        ) {
-          yield* setupNow(deviceId);
-        }
-        return Option.flatMap(
-          Option.fromUndefinedOr(yield* Ref.get(setupRead)),
-          (read) => read.setup,
-        );
-      });
-
-    /**
-     * `luke-host` started again, its login item unregistered and registered,
-     * so it fetches what its agents run on again; the setup it failed is taken
-     * as unread until the next read, since it has not registered again yet.
-     */
-    const restarted = (deviceId: string) =>
-      Effect.gen(function* () {
-        const unregistered = yield* host.loginItem(HOST_LOGIN_ITEM_ACT.UNREGISTER);
-        if (Result.isFailure(unregistered)) {
-          return failed(`${FAILED_WORDS.LOGIN_ITEM}: ${unregistered.failure}`);
-        }
-        const registered = yield* host.loginItem(HOST_LOGIN_ITEM_ACT.REGISTER);
-        if (Result.isFailure(registered)) {
-          return failed(`${FAILED_WORDS.LOGIN_ITEM}: ${registered.failure}`);
-        }
-        yield* Ref.set(setupRead, {
-          at: yield* Clock.currentTimeMillis,
-          deviceId,
-          setup: Option.none(),
-        });
-        report("this Mac's luke-host was started again");
-        return registeredStanding(registered.success);
-      });
-
-    /**
-     * One read of where things stand, acted on: `explicit` is the member's
-     * own Turn on, Turn on again, or Retry, the only thing that enrolls a Mac
-     * holding no record of the account's or a removed one, tries a failed
-     * turn-on again, or starts `luke-host` again, where its setup or the last
-     * turn-on failed.
-     */
-    const reconcile = (explicit: boolean) =>
-      reconciling.withPermit(
-        Effect.gen(function* () {
-          const userId = dependencies.accountId();
-          if (
-            userId === undefined ||
-            !account.capabilitiesActive() ||
-            !kernel.runMode.sendsNetwork
-          ) {
-            yield* Ref.set(turnOnFailed, false);
-            return yield* set(standingOf(THIS_MAC_HOST_STANDING.OFF));
-          }
-          const record = yield* readHostDevice(kernel.stateRoot);
-          const owner = Option.isSome(record)
-            ? yield* localAgentOwnerOf(kernel.stateRoot, record.value.deviceId)
-            : undefined;
-          // Note that another account's Mac is neither turned on nor off from here.
-          if (Option.isSome(record) && owner !== userId) {
-            return yield* set(standingOf(THIS_MAC_HOST_STANDING.OTHER_ACCOUNT));
-          }
-          if ((yield* Ref.get(turnOnFailed)) && !explicit) return yield* Ref.get(standing);
-          // Note that a Mac is never enrolled on its own, because turning it on registers a login item and downloads what its agents run on.
-          if (Option.isNone(record) && !explicit) {
-            return yield* set(standingOf(THIS_MAC_HOST_STANDING.NOT_TURNED_ON));
-          }
-          if (Option.isSome(record) && record.value.refused === true && !explicit) {
-            return yield* set(standingOf(THIS_MAC_HOST_STANDING.REMOVED));
-          }
-          if (Option.isNone(record) || record.value.refused === true) {
-            const next = yield* turnOn(userId);
-            yield* Ref.set(turnOnFailed, next.standing === THIS_MAC_HOST_STANDING.FAILED);
-            return yield* set(next);
-          }
-          const { deviceId } = record.value;
-          // Note that only a turn-on or a setup that failed starts luke-host again, since one that is ready may be mid-turn.
-          const restarts =
-            explicit && ((yield* Ref.get(turnOnFailed)) || setupFailed(yield* setupNow(deviceId)));
-          const next = restarts ? yield* restarted(deviceId) : yield* standingNow;
-          yield* Ref.set(turnOnFailed, next.standing === THIS_MAC_HOST_STANDING.FAILED);
-          return yield* set(ofDevice(next, deviceId));
-        }),
-      );
-
-    const lifetime = Effect.gen(function* () {
-      const guarded = Effect.catchDefect(Effect.provideContext(reconcile(false), services), () =>
-        Effect.sync(() => report("this Mac's luke-host could not be read")),
-      );
-      yield* Effect.forkScoped(Effect.forever(Effect.andThen(guarded, Effect.sleep(IDLE))));
+    /** The account's host running: enrolled where none of it stands, and the script run where launchd holds none. */
+    const keepRunning = Effect.gen(function* () {
+      if (HOST_RELEASE === undefined || !host.runsHost) return;
+      const record = yield* readHostDevice(host.stateRoot);
+      if (Option.isSome(record) && !ownService(record.value)) return;
+      if (Option.isNone(record) || record.value.refused === true) {
+        const deviceId = Option.map(record, (kept) => kept.deviceId);
+        if (!(yield* enrolled(deviceId, HOST_RELEASE.VERSION))) return;
+      } else if (!(yield* accountOwns(record.value)) || (yield* host.loaded)) {
+        return;
+      }
+      yield* installed;
     });
 
-    /** Where this Mac stands as Settings reads it: with the setup the service lists, where `luke-host` is up. */
-    const read = (next: ThisMacHostStanding) =>
-      next.deviceId === undefined
-        ? Effect.succeed(next)
-        : Effect.map(setupShown(next.deviceId), (setup) => withSetup(next, setup));
+    /** The account's host stopped and kept from starting at the next login, its files kept. */
+    const keepStopped = Effect.gen(function* () {
+      if (!host.runsHost) return;
+      const record = yield* ownServiceRecord;
+      if (Option.isNone(record) || record.value.refused === true) return;
+      if (!(yield* accountOwns(record.value))) return;
+      const stopped = yield* host.stop;
+      if (Result.isFailure(stopped)) return yield* Effect.fail(`stop it: ${stopped.failure}`);
+      report("this Mac's host was stopped");
+    });
+
+    /** What the app keeps the host at now, as the account and its experiments stand. */
+    const keptNow: Effect.Effect<Kept> = Effect.gen(function* () {
+      const userId = dependencies.accountId();
+      if (userId === undefined || !account.capabilitiesActive() || !kernel.runMode.sendsNetwork) {
+        return undefined;
+      }
+      if (!(yield* dependencies.experimentOn(EXPERIMENT.THIS_MAC_ACCOUNT_HOST))) return undefined;
+      return { userId, running: yield* dependencies.experimentOn(EXPERIMENT.BRING_YOUR_OWN_HOST) };
+    });
+
+    /** The host kept as asked, each step that failed tried again after `RETRY` until it lands. */
+    const keep = (kept: Kept) =>
+      kept === undefined
+        ? Effect.void
+        : (kept.running ? keepRunning : keepStopped).pipe(
+            Effect.tapError((step) =>
+              Effect.sync(() => report(`this Mac's host: could not ${step}, so it is tried again`)),
+            ),
+            Effect.retry(RETRY),
+            Effect.catchDefect(() =>
+              Effect.sync(() => report("this Mac's host could not be kept as asked")),
+            ),
+          );
+
+    // Note that a change interrupts the keep under way, but for an enroll begun, which runs whole.
+    const lifetime = Effect.forkScoped(
+      Stream.fromEffectSchedule(keptNow, Schedule.spaced(IDLE)).pipe(
+        Stream.changesWith(sameKept),
+        Stream.switchMap((kept) => Stream.fromEffectDrain(keep(kept))),
+        Stream.runDrain,
+        Effect.provideContext(services),
+      ),
+    );
+
+    /** This Mac's host as Hosts reads it: the device its record names, where it was enrolled with this app's service. */
+    const read = Effect.map(
+      ownServiceRecord,
+      (record): ThisMacHostRead =>
+        Option.isSome(record) ? { deviceId: record.value.deviceId } : {},
+    );
 
     const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.LOCAL_AGENTS> = {
       [GATEWAY_METHOD.THIS_MAC_HOST_READ]: () =>
-        Effect.map(
-          Effect.provideContext(Effect.flatMap(Ref.get(standing), read), services),
-          carried,
-        ),
-      [GATEWAY_METHOD.THIS_MAC_HOST_TURN_ON]: () =>
-        Effect.map(Effect.provideContext(Effect.flatMap(reconcile(true), read), services), carried),
+        Effect.map(Effect.provideContext(read, services), carried),
     };
-    return { methods, lifetime } satisfies Composer;
+    return { methods, lifetime: Effect.asVoid(lifetime) } satisfies Composer;
   });
 }

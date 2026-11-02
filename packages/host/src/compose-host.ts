@@ -20,7 +20,7 @@ import {
   type GatewayShutdownSteps,
   NODE_CAPABILITY_STATUS,
 } from "@luke/gateway";
-import { APP_SETTING_SCHEMA, MAC_COMMAND_MODE } from "@luke/settings";
+import { APP_SETTING_SCHEMA, experimentOn, MAC_COMMAND_MODE, NO_EXPERIMENTS } from "@luke/settings";
 import { Effect, Layer, Option } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -244,14 +244,19 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           kernel,
           account,
           accountId,
-          // Note that the account's devices are read where a Start reads them, so this Mac's setup is the one Runs on shows.
-          deviceSetup: (deviceId) =>
-            Effect.map(agentClient.models(), (answer) => {
-              if ("failure" in answer) return Option.none();
-              // Note that a device the answer does not list has no setup to say, which reads as nothing failed.
-              const device = answer.macs?.find((each) => each.deviceId === deviceId);
-              return Option.some({ setup: device?.setup, setupFailure: device?.setupFailure });
-            }),
+          experimentOn: (experiment) =>
+            Effect.map(
+              Effect.orElseSucceed(settings.store.snapshot(), () => ({
+                experiments: NO_EXPERIMENTS,
+              })),
+              (snapshot) => experimentOn(snapshot.experiments, experiment),
+            ),
+          hostListed: (deviceId) =>
+            Effect.map(agentClient.hosts(), (answer) =>
+              "failure" in answer
+                ? Option.none()
+                : Option.some(answer.hosts.some((host) => host.id === deviceId)),
+            ),
           client: new HostedDeviceAgentClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
             credential: account.credential,

@@ -48,13 +48,6 @@ const readLease = Effect.fnUntraced(function* (stateRoot: string) {
 /** Whether the lease stands for its holder now: renewed within `LEASE`. */
 const standing = (lease: Lease, now: number) => now - lease.renewedAt < Duration.toMillis(LEASE);
 
-/** Whether a follower other than `holder` holds the machine's lease now; with no holder named, whether any does. */
-export const followerLockHeld = Effect.fnUntraced(function* (stateRoot: string, holder?: string) {
-  const lease = yield* readLease(stateRoot);
-  const now = yield* Clock.currentTimeMillis;
-  return Option.isSome(lease) && lease.value.holder !== holder && standing(lease.value, now);
-});
-
 /** The lease for `holder`, renewed now, written whole in a file of its own beside the lease's; that file's path. */
 const writtenLease = Effect.fnUntraced(function* (stateRoot: string, holder: string) {
   const fileSystem = yield* FileSystem.FileSystem;

@@ -1,163 +1,114 @@
-import { existsSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { DEVICE_ARCH } from "@luke/features/device-agent-wire";
 import { DARWIN_HOST } from "@luke/host/daemon";
-import {
-  HOST_LOGIN_ITEM_ACT,
-  HOST_LOGIN_ITEM_STATUS,
-  type HostLoginItemAct,
-  type HostLoginItemStatus,
-  ThisMacHost,
-  type ThisMacHostSeam,
-} from "@luke/host/effect";
-import { Duration, Effect, Fiber, Layer, Option, Ref, Result, Stream } from "effect";
+import { ThisMacHost, type ThisMacHostSeam } from "@luke/host/effect";
+import { Duration, Effect, Layer, Option, Result, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import { app } from "electron";
 
 /**
- * host-login-item.ts -- This Mac's `luke-host` as the host asks it (`@luke/host/effect`'s `ThisMacHost`): its login item registered, unregistered, or where it stands, and the version of the `luke-host` the app carries.
+ * host-login-item.ts -- This Mac's host as the host asks it (`@luke/host/effect`'s `ThisMacHost`): the account install the install command puts on a Mac, its LaunchAgent started or stopped through launchd, and the install script run.
  *
- * A packaged app carries the login item, a launchd job in its
- * `Contents/Library/LaunchAgents` that runs our host daemon as the member
- * at login, whether or not the app is open, on the app's own state folder
- * (`@luke/host/daemon`'s `DARWIN_HOST`), and acts on it through its own
- * `luke-host` command (`native/macos/HostLoginItem.swift`), which reaches
- * `SMAppService`. A development run carries no login item, so it runs the
- * same daemon as a child of the app instead, from the release folder the
- * host's build stages (`pnpm --filter @luke/desktop build:host`), on the
- * development app's own state folder: registering starts it, unregistering
- * stops it, and it stops with the app.
+ * The install lives under the member's own home, by the names the install
+ * script gives it (`apps/web/install/install.sh`): its state, holding the
+ * record its host runs on, in `~/.local/state/luke-host`, and its
+ * LaunchAgent, `dev.vespin.host.standalone`, which runs its host at login.
+ * Every build of the app, a development run among them, acts on that one
+ * install, never a state folder of its own. Stopping it boots the
+ * LaunchAgent out and disables it, which keeps it from starting at the next
+ * login with its plist and files left in place; the install script enables
+ * it again before it runs, since launchd starts no disabled job.
  */
 
-const COMMAND = "luke-host";
+/** The account install's LaunchAgent, by its label (`MAC_LABEL` in the install script). */
+const LABEL = "dev.vespin.host.standalone";
 
-/** The Mac as its `luke-host` registers it (`DARWIN_HOST`), on Apple silicon alone. */
+/** The account install's state folder, under the home (`ACCOUNT_STATE` in `apps/host/scripts/luke-host.sh`). */
+const STATE_FOLDER = path.join(".local", "state", "luke-host");
+
+/** The oldest macOS the install script installs on (`MAC_MIN_VERSION` in the install script). */
+const MAC_MIN_VERSION = [12, 3] as const;
+
+/** How long launchd may take to answer; the install script, which downloads a release, longer. */
+const ANSWER_WITHIN = {
+  LAUNCHD: Duration.seconds(30),
+  INSTALL: Duration.minutes(10),
+} as const;
+
+/** The Mac as its host registers it (`DARWIN_HOST`), on Apple silicon alone. */
 const machine = Effect.sync(() => ({
   name: DARWIN_HOST.deviceName(),
   platform: DARWIN_HOST.platform,
   arch: DEVICE_ARCH.ARM64,
 }));
 
-/** How long the command may take; `SMAppService` answers at once. */
-const ACT_WITHIN = Duration.seconds(30);
+/** Whether macOS, as Electron reads its version, is the install script's oldest or later. */
+function macOsTakesHost(version: string): boolean {
+  const [major = 0, minor = 0] = version.split(".").map(Number);
+  const [needMajor, needMinor] = MAC_MIN_VERSION;
+  return major > needMajor || (major === needMajor && minor >= needMinor);
+}
 
-/** The variables a development run's daemon reads its state folder and runner's folder from, since it ships in no app to name them. */
-const DEVELOPMENT_VARIABLE = {
-  STATE_ROOT: "LUKE_HOST_STATE_ROOT",
-  RUNNER_FOLDER: "LUKE_HOST_RUNNER_FOLDER",
-} as const;
-
-/** The command given run once: what it printed, or the words it failed with. */
-const printedBy = (command: string, args: readonly string[]) =>
+/** The command given run once, its input on stdin where it is given some: nothing where it exited 0, or the words it failed with. */
+const ran = (command: string, args: readonly string[], within: Duration.Duration, input?: string) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const handle = yield* ChildProcess.make(command, [...args], { stdin: "ignore" });
-      const [printed, said] = yield* Effect.all(
-        [
-          Stream.mkString(Stream.decodeText(handle.stdout)),
-          Stream.mkString(Stream.decodeText(handle.stderr)),
-        ],
+      const handle = yield* ChildProcess.make(command, [...args], {
+        stdin: input === undefined ? "ignore" : Stream.make(new TextEncoder().encode(input)),
+      });
+      const [, said] = yield* Effect.all(
+        [Stream.runDrain(handle.stdout), Stream.mkString(Stream.decodeText(handle.stderr))],
         { concurrency: "unbounded" },
       );
       const code = Number(yield* handle.exitCode);
       return code === 0
-        ? Result.succeed<string>(printed.trim())
-        : Result.fail(said.trim() || `${COMMAND} ${args.join(" ")} exited ${code}`);
+        ? Result.succeed<void>(undefined)
+        : Result.fail(said.trim() || `${command} ${args.join(" ")} exited ${code}`);
     }),
   ).pipe(
-    Effect.timeoutOption(ACT_WITHIN),
+    Effect.timeoutOption(within),
     Effect.map(
       Option.getOrElse(() =>
-        Result.fail<string>(`${COMMAND} did not answer in ${Duration.format(ACT_WITHIN)}`),
+        Result.fail<string>(`${command} did not answer in ${Duration.format(within)}`),
       ),
     ),
-    Effect.catch((failure) => Effect.succeed(Result.fail(`${COMMAND}: ${String(failure)}`))),
+    Effect.catch((failure) => Effect.succeed(Result.fail(`${command}: ${String(failure)}`))),
   );
 
-/** The packaged app's `luke-host`, beside its own executable in `Contents/MacOS`, through `SMAppService`. */
-const packagedHost: ThisMacHostSeam = (() => {
-  const command = path.join(path.dirname(process.execPath), COMMAND);
+const launchctl = (args: readonly string[]) => ran("launchctl", args, ANSWER_WITHIN.LAUNCHD);
+
+/** The account install as This Mac's host, for the user the app runs as. */
+function thisMacHost(): ThisMacHostSeam {
+  const agent = `gui/${process.getuid?.() ?? 0}/${LABEL}`;
+  const loaded = Effect.map(launchctl(["print", agent]), Result.isSuccess);
   return {
-    loginItem: (act: HostLoginItemAct) =>
-      Effect.map(printedBy(command, [act]), (printed) =>
-        Result.flatMap(printed, (word) => {
-          const status = Object.values(HOST_LOGIN_ITEM_STATUS).find((each) => each === word);
-          return status === undefined
-            ? Result.fail(`${COMMAND} ${act} printed no status`)
-            : Result.succeed<HostLoginItemStatus>(status);
-        }),
-      ),
-    version: printedBy(command, ["version"]),
+    stateRoot: path.join(os.homedir(), STATE_FOLDER),
+    runsHost:
+      process.platform === "darwin" &&
+      (process.arch === "arm64" || app.runningUnderARM64Translation) &&
+      macOsTakesHost(process.getSystemVersion()),
     machine,
+    loaded,
+    install: (script) =>
+      Effect.flatMap(launchctl(["enable", agent]), (enabled) =>
+        Result.isFailure(enabled)
+          ? Effect.succeed(enabled)
+          : ran("/bin/sh", ["-s"], ANSWER_WITHIN.INSTALL, script),
+      ),
+    // Note that a bootout of a job launchd holds no longer fails, so it is read past and the job read again.
+    stop: Effect.gen(function* () {
+      const disabled = yield* launchctl(["disable", agent]);
+      if (Result.isFailure(disabled)) return disabled;
+      yield* launchctl(["bootout", agent]);
+      return (yield* loaded)
+        ? Result.fail(`launchd still holds ${LABEL}`)
+        : Result.succeed<void>(undefined);
+    }),
   };
-})();
+}
 
-/** A development run's daemon, run as a child of the app on its state folder, from the release the host's build staged. */
-const developmentHost = (stateRoot: string) =>
-  Effect.gen(function* () {
-    const release = path.join(app.getAppPath(), ".build", COMMAND);
-    const node = path.join(release, "node", "bin", "node");
-    const bundle = path.join(release, "lib", "luke-host.mjs");
-    const staged = () => existsSync(node) && existsSync(bundle);
-    const unstaged = `this development build has no staged ${COMMAND}: run pnpm --filter @luke/desktop build:runner and build:host`;
-    const scope = yield* Effect.scope;
-    const running = yield* Ref.make(Option.none<Fiber.Fiber<unknown, unknown>>());
-    /** Whether the child runs now, set as it starts and cleared as it ends, whatever ended it. */
-    const alive = yield* Ref.make(false);
-    const daemon = Effect.scoped(
-      Effect.flatMap(
-        ChildProcess.make(node, [bundle, "run"], {
-          // Note that the runner is the development build's own, as a packaged app's is its own.
-          env: {
-            [DEVELOPMENT_VARIABLE.STATE_ROOT]: stateRoot,
-            [DEVELOPMENT_VARIABLE.RUNNER_FOLDER]: path.resolve(
-              app.getAppPath(),
-              "..",
-              "..",
-              "packages",
-              "agent-runner",
-              "dist",
-            ),
-          },
-          extendEnv: true,
-          stdin: "ignore",
-          stdout: "inherit",
-          stderr: "inherit",
-        }),
-        (handle) => handle.exitCode,
-      ),
-    ).pipe(Effect.ensuring(Ref.set(alive, false)));
-    const status = Effect.map(Ref.get(alive), (up) =>
-      up ? HOST_LOGIN_ITEM_STATUS.ENABLED : HOST_LOGIN_ITEM_STATUS.NOT_REGISTERED,
-    );
-    const seam: ThisMacHostSeam = {
-      loginItem: (act) =>
-        Effect.gen(function* () {
-          if (!staged()) return Result.fail(unstaged);
-          if (act === HOST_LOGIN_ITEM_ACT.REGISTER && !(yield* Ref.get(alive))) {
-            yield* Ref.set(alive, true);
-            yield* Ref.set(running, Option.some(yield* Effect.forkIn(daemon, scope)));
-          }
-          if (act === HOST_LOGIN_ITEM_ACT.UNREGISTER) {
-            const fiber = yield* Ref.getAndSet(running, Option.none());
-            if (Option.isSome(fiber)) yield* Fiber.interrupt(fiber.value);
-          }
-          return Result.succeed<HostLoginItemStatus>(yield* status);
-        }),
-      version: Effect.suspend(() =>
-        staged() ? printedBy(node, [bundle, "version"]) : Effect.succeed(Result.fail(unstaged)),
-      ),
-      machine,
-    };
-    return seam;
-  });
-
-/** This Mac's `luke-host` for the host: the login item where the app is packaged, a child of the app where it is a development run. */
-export function thisMacHostLayer(options: {
-  readonly packaged: boolean;
-  readonly stateRoot: string;
-}) {
-  return options.packaged
-    ? Layer.succeed(ThisMacHost, packagedHost)
-    : Layer.effect(ThisMacHost, developmentHost(options.stateRoot));
+/** This Mac's host for the host: the account install, whichever build of the app runs. */
+export function thisMacHostLayer() {
+  return Layer.sync(ThisMacHost, thisMacHost);
 }
