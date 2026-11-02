@@ -2,7 +2,7 @@ import { Avatar as AvatarPrimitive } from "@base-ui/react/avatar";
 import { cn } from "../cn.js";
 
 /**
- * avatar.tsx -- shadcn/ui's avatar (style `base-nova`, on Base UI), vendored and drawn as Fullspin's disc.
+ * avatar.tsx -- shadcn/ui's avatar (style `base-nova`, on Base UI), vendored and drawn as our disc.
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add avatar` reads as a small diff. Its local

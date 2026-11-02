@@ -6,14 +6,14 @@ import { agentTable } from "./agent.js";
 import { task } from "./task.js";
 
 /**
- * plan-page.ts -- the pages agents and Fullspin showed, one row per version of a page, on a task or on a coding agent with no task.
+ * plan-page.ts -- the pages agents and the brain showed, one row per version of a page, on a task or on a coding agent with no task.
  *
  * A page is an interactive HTML document an agent wrote, and it has no row
  * of its own: its versions share its id, numbered from one, and
  * the newest names it. Each version is written once and never changed, so an
  * earlier one reads as it was shown. A version also has an id of its own, so
  * one version can be named alone, as a link to it would name it, and says who
- * showed it, Fullspin or a coding agent by its id, named as it is read. The HTML is
+ * showed it, the brain or a coding agent by its id, named as it is read. The HTML is
  * stored as written, like the plan's own text, readable by an operator and
  * kept the developer's own by what it hangs off.
  *
@@ -22,7 +22,7 @@ import { task } from "./task.js";
  * it. A coding agent on no task shows its pages on itself: `task_id` null,
  * read by the agent's rule. Every version a coding agent showed names it in
  * `agent_id` as well, on a task or not, so the agent's own work is found by
- * it; one Fullspin showed, or one shown before the column, names none, and at
+ * it; one the brain showed, or one shown before the column, names none, and at
  * least one of the two always stands.
  *
  * Rows go with their task, as its agents do (`agent.task_id`). An
@@ -42,7 +42,7 @@ export const planPageVersion = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     /** The task the page stands on; null for a page of a coding agent on no task. */
     taskId: uuid("task_id").references(() => task.id, { onDelete: "cascade" }),
-    /** The coding agent that showed the version, on a task or not; null for one Fullspin showed, or one shown before it was kept. */
+    /** The coding agent that showed the version, on a task or not; null for one the brain showed, or one shown before it was kept. */
     agentId: uuid("agent_id").references(() => agentTable.id, { onDelete: "set null" }),
     /** The page the version is of, the same on each of its versions. */
     pageId: uuid("page_id").notNull(),
@@ -51,7 +51,7 @@ export const planPageVersion = pgTable(
     title: text("title").notNull(),
     /** The page's whole HTML document, as the agent wrote it. */
     html: text("html").notNull(),
-    /** Who showed the version, Fullspin or a coding agent by its id (`PageShower`); null for one shown before it was kept. */
+    /** Who showed the version, the brain or a coding agent by its id (`PageShower`); null for one shown before it was kept. */
     shownBy: jsonb("shown_by").$type<PageShower>(),
     at: timestamptz("at").notNull(),
   },

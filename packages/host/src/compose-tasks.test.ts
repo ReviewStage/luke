@@ -215,7 +215,7 @@ interface FakeService extends TasksClient {
   sectionRefused: TaskSectionWrite["kind"] | undefined;
   /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
-  /** The Vespin GitHub App install address a connection answers. */
+  /** Our GitHub App's install address a connection answers. */
   installUrl: string;
   /** Whether the workspaces are not sealed, as a service that did not answer. */
   workspacesFail: boolean;
@@ -569,7 +569,7 @@ function fakeService(tasks: Task[]): FakeService {
         }),
       connect: () =>
         Effect.sync(() => {
-          const url = `https://tryluke.dev/connect-github.html?intent=intent-${service.connectPages.length + 1}`;
+          const url = `https://vespin.dev/connect-github.html?intent=intent-${service.connectPages.length + 1}`;
           service.connectPages.push(url);
           return { ok: true as const, answer: { url } };
         }),
@@ -765,7 +765,7 @@ function fakeService(tasks: Task[]): FakeService {
             email,
             role: role === WORKSPACE_ROLE.ADMIN ? WORKSPACE_ROLE.ADMIN : WORKSPACE_ROLE.MEMBER,
             expiresAt: "2026-10-16T12:00:00.000Z",
-            acceptUrl: `https://tryluke.dev/accept-invitation.html?id=inv-${email}`,
+            acceptUrl: `https://vespin.dev/accept-invitation.html?id=inv-${email}`,
           };
           service.invitations[workspaceId] = [...(service.invitations[workspaceId] ?? []), made];
           return { ok: true, answer: made } as const;
@@ -1376,7 +1376,7 @@ it.effect(
       const listedIds = () => last()?.tasks.map((row) => row.id);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      // An answer Vespin Sync woke hands the follow its wait for a write's transaction.
+      // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.list.set({ plans: [rowOfTask(billing)] }, ["tx-earlier"]);
       yield* nextPoll(settled);
       const made: Task = {
@@ -1959,7 +1959,7 @@ it.effect(
         view?.repositoryPins?.map((pin) => pin.repository) ?? [];
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
-      // An answer Vespin Sync woke hands the follow its wait for a write's transaction.
+      // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.sidebar.set({}, ["tx-earlier"]);
       yield* nextPoll(settled);
 
@@ -2040,7 +2040,7 @@ it.effect(
         view?.tasks.find((row) => row.id === INVITES)?.pinnedAt !== undefined;
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      // An answer Vespin Sync woke hands the follow its wait for a write's transaction.
+      // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.list.set({}, ["tx-earlier"]);
       yield* nextPoll(settled);
 
@@ -2092,7 +2092,7 @@ it.effect(
       const repositoryOf = () => last()?.tasks.find((row) => row.id === INVITES)?.repository;
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      // An answer Vespin Sync woke hands the follow its wait for a write's transaction.
+      // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.list.set({}, ["tx-earlier"]);
       yield* nextPoll(settled);
 
@@ -2718,7 +2718,7 @@ it.effect(
         email: "alan@example.com",
         role: WORKSPACE_ROLE.MEMBER,
         expiresAt: "2026-10-16T12:00:00.000Z",
-        acceptUrl: "https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com",
+        acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-alan@example.com",
       };
       assert.deepEqual(made, { invitation });
       assert.deepEqual(pending, { invitations: [invitation] });

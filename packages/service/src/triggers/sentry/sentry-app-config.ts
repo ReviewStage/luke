@@ -2,9 +2,9 @@ import { Config, Context, Data, Effect, Layer, Option, Redacted } from "effect";
 import { text } from "../../core.js";
 
 /**
- * sentry-app-config.ts -- Fullspin's Sentry public integration as this deployment's environment configures it.
+ * sentry-app-config.ts -- our Sentry public integration as this deployment's environment configures it.
  *
- * Automations fire on Sentry's events through Fullspin's own Sentry public
+ * Automations fire on Sentry's events through our own Sentry public
  * integration, which a Sentry organization installs on a workspace. Its
  * slug names the install address, and its client id and secret exchange the
  * code an install returns with and sign every webhook Sentry delivers. A

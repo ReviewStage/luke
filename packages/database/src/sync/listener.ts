@@ -1,5 +1,5 @@
 /**
- * listener.ts -- `LISTEN` on Fullspin Sync's channel, over a connection of the listener's own.
+ * listener.ts -- `LISTEN` on Sync's channel, over a connection of the listener's own.
  *
  * A pooler can't hold a `LISTEN`, since the session it would be registered
  * on is handed to another client after each transaction, and the pooled

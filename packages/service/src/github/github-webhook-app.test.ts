@@ -54,7 +54,7 @@ import { LINK_OUTCOME } from "./github-installations.js";
 import { githubWebhookApp } from "./github-webhook-app.js";
 
 /**
- * The Vespin GitHub App's webhook, answered by its group the way a function
+ * Our GitHub App's webhook, answered by its group the way a function
  * answers it, over a real dialect and a GitHub the test scripts: nothing of
  * a delivery is read before its signature over the body's own bytes holds
  * under the deployment's secret, a deployment with no secret refuses every
@@ -711,8 +711,8 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           [1, 1], // a person opens it: both
           [1, 2], // marked ready: not a moment the review chose
           [2, 3], // a person's push: both
-          [3, 4], // Vespin's agent opens one: both hear Vespin's agents
-          [3, 4], // Vespin's agent pushes: never, whatever a trigger says
+          [3, 4], // our agent opens one: both hear our agents
+          [3, 4], // our agent pushes: never, whatever a trigger says
           [3, 5], // another bot: only the trigger that hears other bots
           [3, 6], // a draft: only the trigger that asks for drafts
           [3, 7], // a fork's: only the trigger that asks for forks

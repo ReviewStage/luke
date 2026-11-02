@@ -11,7 +11,7 @@ import { bytea, createdAt, updatedAt } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 
 /**
- * installed-skill.ts -- the agent skills members install into Fullspin, personal or their workspace's, and each one's files.
+ * installed-skill.ts -- the agent skills members install, personal or their workspace's, and each one's files.
  *
  * A skill stands in one of two scopes: a personal skill is its owner's
  * (`owner_user_id`) and names no workspace, so it follows them into every

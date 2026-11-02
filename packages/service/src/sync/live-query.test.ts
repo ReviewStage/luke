@@ -20,7 +20,7 @@ import { defineLiveQuery, LIVE_MODE, type LiveQuery } from "./live-query.js";
 import { Sync } from "./watch.js";
 
 /**
- * Live reads Vespin Sync wakes, on tables only these tests create: the
+ * Live reads Sync wakes, on tables only these tests create: the
  * registry check holds a definition's statements, as Postgres plans them,
  * to the synced tables it declares and to no column they ignore; and a
  * held read on the hub answers within a coalesce window of a write to its

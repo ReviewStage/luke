@@ -7,7 +7,7 @@ import { host, readStepStarted, seams, stepTurnId } from "./host.js";
 import { runAgent } from "./runtime.js";
 
 /**
- * Fullspin's coding agent, as an eve agent. eve's default tools are off and the
+ * Our coding agent, as an eve agent. eve's default tools are off and the
  * tools it runs are authored one file each under `tools/`, so the set is
  * exactly the one the store writer registers (`packages/service/src/agents/coder-host/tool-set.ts`):
  * its shell and file tools, the code extension's patch and search, the
@@ -27,8 +27,8 @@ export default defineAgent({
   // Note that a finished or failed run's history is kept for the team plan's Workflow retention
   // period (eve offers only `0` or that default), so a session that died mid-turn can still be
   // read in the Workflow dashboard. This is for diagnosing those deaths and may go back to `0`,
-  // deleting the history at once, once their cause is known: Fullspin reads every transcript from
-  // its own store, written while the run is live, and never reads this history back.
+  // deleting the history at once, once their cause is known: we read every transcript from
+  // our own store, written while the run is live, and never read this history back.
   experimental: { workflow: { retention: "default" } },
   model: defineDynamic({
     events: {

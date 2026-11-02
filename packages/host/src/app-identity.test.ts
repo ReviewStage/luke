@@ -77,7 +77,7 @@ test("a preview run is named for its branch, or for the host given, in a name th
 
 test("a named launch replaces only its own instance, and the plain launch never a named one", async (t) => {
   const home = await temporaryDirectory(t, "luke-instances-");
-  // A lock held by a live process that is not Luke, which the script reports rather than stops.
+  // A lock held by a live process that is not the app, which the script reports rather than stops.
   const holdLock = (appName: string) => {
     const directory = join(home, "Library", "Application Support", appName);
     mkdirSync(directory, { recursive: true });
@@ -86,12 +86,12 @@ test("a named launch replaces only its own instance, and the plain launch never 
 
   holdLock(development());
   assert.equal(workspace("luke_stop_running_app preview", home).status, 0);
-  assert.match(workspace("luke_stop_running_app", home).stderr, /holds the "Luke Dev" lock/);
+  assert.match(workspace("luke_stop_running_app", home).stderr, /holds the "Vespin Dev" lock/);
 
   holdLock(development("preview"));
   assert.match(
     workspace("luke_stop_running_app preview", home).stderr,
-    /holds the "Luke Dev preview" lock/,
+    /holds the "Vespin Dev preview" lock/,
   );
   assert.equal(workspace("luke_stop_running_app other", home).status, 0);
 });

@@ -58,7 +58,7 @@ function revisionsStatement(userId: string, taskId: string) {
             agentId: planRevision.agentId,
             agentModel: agentTable.model,
             agentTitle: agentTable.title,
-            // No call stands to name, since Fullspin takes no calls; a released desktop still decodes the key.
+            // No call stands to name, since we take no calls; a released desktop still decodes the key.
             callId: sql<string | null>`null::text`,
             changes: planRevision.changes,
             restoredFrom: planRevision.restoredFrom,

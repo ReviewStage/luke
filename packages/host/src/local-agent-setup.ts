@@ -17,7 +17,7 @@ import { keptToolBinary, localAgentTool } from "./local-agent-tools.js";
 
 /**
  * What a device says it could not have, as it registers its setup failed
- * (`DEVICE_SETUP.FAILED`): words of Fullspin's own, never a tool's, so none
+ * (`DEVICE_SETUP.FAILED`): words of our own, never a tool's, so none
  * names a secret.
  */
 const SETUP_FAILURE = {

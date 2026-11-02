@@ -8,7 +8,7 @@ import { rememberReturn } from "../src/connect-return";
  * github-installed.test.ts -- the GitHub App's landing says where an
  * installation stands and what to do next: a confirmed one says the tab can
  * go, a refused one says why and how to try again, and an address whose
- * status the page does not know reads as an installation Vespin could not
+ * status the page does not know reads as an installation the service could not
  * confirm. The page runs as it does in the browser, mounted on its own
  * `#root`.
  */

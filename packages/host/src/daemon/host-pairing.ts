@@ -17,7 +17,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { readHostDevice, writeHostDevice } from "../host-device-record.js";
 
 /**
- * host-pairing.ts -- a box connected to Fullspin with a code (`luke-host connect`): it starts a pairing, shows the code and the link that opens it, polls until a member approves or denies the code or it lapses, and once approved writes its record of the device (`../host-device-record.ts`) as an enroll does.
+ * host-pairing.ts -- a box connected to the service with a code (`luke-host connect`): it starts a pairing, shows the code and the link that opens it, polls until a member approves or denies the code or it lapses, and once approved writes its record of the device (`../host-device-record.ts`) as an enroll does.
  *
  * The start carries no credential. The service answers a poll secret, which
  * names the pairing and nothing else, the code and its link, how long the
@@ -29,7 +29,7 @@ import { readHostDevice, writeHostDevice } from "../host-device-record.js";
  * for collecting a secret have both passed. The first poll after an approve
  * is answered the device's id and secret, this once, so the record is
  * written whole before anything may interrupt it. A box whose record stands,
- * and which Fullspin has not refused, is connected already and starts nothing.
+ * and which the service has not refused, is connected already and starts nothing.
  * The poll secret and the device secret are never shown, logged, or reported.
  */
 
@@ -47,7 +47,7 @@ const COLLECT_GRACE = Duration.minutes(1);
 export const HOST_CONNECT_OUTCOME = {
   /** A member approved the code, and the box's record is written. */
   CONNECTED: "connected",
-  /** The box's record stands and Fullspin has not refused it, so no pairing was started. */
+  /** The box's record stands and the service has not refused it, so no pairing was started. */
   ALREADY_CONNECTED: "already-connected",
   /** A member denied the code, or removed the host its approve made before the box collected it. */
   DENIED: "denied",

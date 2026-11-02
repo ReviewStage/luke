@@ -200,8 +200,8 @@ import {
  * transcript's turn journals, rendered as a short tail of what the agent
  * said and did; a read of one agent also asks GitHub what that branch
  * published, as the agent's tab does (`coder-host/published.ts`), and says
- * nothing of it where GitHub could not be asked. Fullspin summarises a read
- * aloud, so his tail's entries are cut close and his words for the tool say
+ * nothing of it where GitHub could not be asked. The app's voice summarises a read
+ * aloud, so its tail's entries are cut close and its words for the tool say
  * so; a coding agent reads its tail as text, to learn why an agent went
  * quiet, so each of its entries keeps more, and it may ask for a longer
  * tail, to a bound. One agent messages another with `message_agent`
@@ -230,7 +230,7 @@ import {
  * one another agent already continued among them, whose earlier
  * continuations its answer names, and with one of its messages
  * it forks it there, which leaves it going on; either is handed the
- * source's brief, its replay with Fullspin's summary of what does not fit, a
+ * source's brief, its replay with our summary of what does not fit, a
  * copy of its work, and the note, and takes no prompt and no branch. A read
  * names the message each entry of the tail stands in, which a fork names.
  * An archive takes the rule the Archive agent menu's does for the member
@@ -775,7 +775,7 @@ const UPDATE_TASK_CALL = Schema.Struct({
 
 const readTaskUpdate = Schema.decodeUnknownResult(UPDATE_TASK_CALL);
 /**
- * A start as a call carries it: one Fullspin made under the tool's earlier words
+ * A start as a call carries it: one the app made under the tool's earlier words
  * names its prompt `task`, and one made before `create_task` may name a
  * `newTask`, which is read only to be refused with where to go now.
  */
@@ -787,7 +787,7 @@ const START_AGENT_CALL = Schema.Struct({
 
 const readStart = Schema.decodeUnknownResult(START_AGENT_CALL);
 
-/** The tools as Fullspin and every coding agent are offered them: each its name, its words, and its input schema. */
+/** The tools as the app and every coding agent are offered them: each its name, its words, and its input schema. */
 export const LIST_AGENTS_TOOL = {
   name: AGENT_TOOL.LIST_AGENTS,
   description:
@@ -1161,7 +1161,7 @@ interface AgentReading {
   /** The agent's title, what it works on, which update_agent renames; the model's id where it has none yet. */
   readonly title: string;
   readonly model: string;
-  /** The model as Fullspin says it and the screen shows it, without the maker's word (`modelLabel`). */
+  /** The model as the app says it and the screen shows it, without the maker's word (`modelLabel`). */
   readonly modelName: string;
   readonly effort: string;
   readonly status: AgentStatus;
@@ -2164,7 +2164,7 @@ export function runUpdateTask(
               read.value.task.status ?? TASK_STATUS.TODO,
               archived,
             );
-      // Note that an agent's Done waits on the task's open asks, as Fullspin's own finish does, because a Done withdraws them (`inbox-settle.ts`).
+      // Note that an agent's Done waits on the task's open asks, as the app's own finish does, because a Done withdraws them (`inbox-settle.ts`).
       if (
         status === TASK_STATUS.DONE &&
         read.value.task.status !== TASK_STATUS.DONE &&

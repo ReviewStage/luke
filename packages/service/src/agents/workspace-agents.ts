@@ -15,7 +15,7 @@ import type { StoreFailure } from "../http/store-failure.js";
 /**
  * workspace-agents.ts -- the coding agents of one workspace as an agent's tools read them: on any task or none, by any member, one task's alone where asked, each with its task's name.
  *
- * The agent tools Fullspin on a call and every coding agent are offered
+ * The agent tools every coding agent is offered
  * (`agent-tools.ts`) list and find the agents here. A list names the archived
  * agents too, each marked, since an agent may need to know one stands, and
  * names each agent's task by its name, read once

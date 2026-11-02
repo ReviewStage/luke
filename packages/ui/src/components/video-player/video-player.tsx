@@ -19,7 +19,7 @@ import { Tooltip } from "../tooltip/hint.js";
 /**
  * video-player.tsx -- a video an agent recorded of what it did, played where a picture of it would be drawn, in its transcript and its inbox item, and in the file viewer an Expand opens.
  *
- * The player is Fullspin's own rather than the browser's: a bar along the
+ * The player is our own rather than the browser's: a bar along the
  * video's foot of the same icon buttons, glyphs, and slider the window draws
  * everywhere, with play and pause, how far it has run of how long, a
  * scrubber, Expand where the place has a viewer to open, and Full screen. A
@@ -286,7 +286,7 @@ function VideoBar({
   );
 }
 
-/** A video played in place of a picture or in the viewer, under Fullspin's own bar. */
+/** A video played in place of a picture or in the viewer, under our own bar. */
 export function VideoPlayer({
   dataUrl,
   label,

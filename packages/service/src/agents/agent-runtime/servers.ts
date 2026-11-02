@@ -19,7 +19,7 @@
  * handed, and eve tells the model at its next step when a connection came or
  * went.
  *
- * A Fullspin account may hold more than one account at a provider (two Notion
+ * A user account may hold more than one account at a provider (two Notion
  * workspaces), and each is handed as a connection of its own, under the
  * name its row goes by (`notion`, `notion-2`): every one standing connected
  * or expired, and the bare provider for one with none, so its first call

@@ -12,7 +12,6 @@ import {
 import { GLYPH } from "@luke/ui/icons";
 import {
   placeAllWrites,
-  restoreWrites,
   sectionEntries,
   unplaceAllWrites,
   workspaceSections,
@@ -22,7 +21,6 @@ import { createContext, useId, useRef, useState } from "react";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { confirmFailure } from "../failure-report.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { undoToast, useToast } from "../toast.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import {
   movesInto,
@@ -57,51 +55,30 @@ const SELECTION_ACT = {
 /** What a delete of every task chosen answers once the service deleted them all. */
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
-/** What the toast says once tasks were moved into the section titled, or out of every section where there is none. */
-function movedNote(count: number, title: string | null): string {
-  if (title === null) {
-    return count === 1
-      ? "Removed from its section"
-      : `${countWords(count, TERM.TASK)} removed from their sections`;
-  }
-  return count === 1 ? `Moved to ${title}` : `${countWords(count, TERM.TASK)} moved to ${title}`;
-}
-
 /**
  * Moves tasks into a section, on top of it in their order, or out of every
- * section where `sectionId` is null, and answers with one toast whose Undo
- * puts each back in the section it stood in, under the rows it stood under,
- * or in none. A task already where it is sent is left as it stands, and the
- * Undo leaves one moved again since where it was moved, reading the tab as
- * it stands when Undo is pressed (`latest`).
+ * section where `sectionId` is null, through the section dialogs' `move`,
+ * whose one toast's Undo puts each back in the section it stood in, under
+ * the rows it stood under, or in none. A task already where it is sent is
+ * left as it stands.
  */
 function moveToSection(
   tasks: TasksControl,
-  latest: () => TasksControl,
   taskIds: readonly string[],
   sectionId: string | null,
-  toast: (notice: ReturnType<typeof undoToast>) => void,
+  move: SectionDialogs["move"],
 ): void {
   const before = tasks.taskSections;
   const entries = sectionEntries(before);
   const moving = taskIds.filter((taskId) => (entries.get(taskId)?.sectionId ?? null) !== sectionId);
-  if (moving.length === 0) return;
   const members = moving.map((id) => ({ agent: false, id }));
-  tasks.onWriteSections(
+  move(
+    members,
+    sectionId,
     sectionId === null
       ? unplaceAllWrites(members)
       : placeAllWrites(before, members, sectionId, Date.now()),
   );
-  const title =
-    sectionId === null
-      ? null
-      : (before.sections.find((section) => section.id === sectionId)?.title ?? "");
-  const undo = () => {
-    const now = latest();
-    const writes = restoreWrites(before, now.taskSections, members, sectionId, Date.now());
-    if (writes.length > 0) now.onWriteSections(writes);
-  };
-  toast(undoToast(movedNote(moving.length, title), undo));
 }
 
 /** A selection of several tasks as a chosen row's menu reads it: how many, and the bar's acts on them all. */
@@ -122,10 +99,10 @@ function selectionActs(
   tasks: TasksControl,
   latest: () => TasksControl,
   taskIds: readonly string[],
-  toast: (notice: ReturnType<typeof undoToast>) => void,
   doors: {
     onActed: () => void;
     askNew: SectionDialogs["askNew"];
+    move: SectionDialogs["move"];
     askDelete: () => void;
   },
 ): SelectionAct[] {
@@ -140,7 +117,7 @@ function selectionActs(
   const sections =
     workspaceId === undefined ? [] : workspaceSections(tasks.taskSections, workspaceId);
   const move = (sectionId: string | null) =>
-    acted(() => moveToSection(tasks, latest, taskIds, sectionId, toast));
+    acted(() => moveToSection(tasks, taskIds, sectionId, doors.move));
   const members = taskIds.map((id) => ({ agent: false, id }));
   const put = (sectionId: string) =>
     placeAllWrites(latest().taskSections, members, sectionId, Date.now());
@@ -213,7 +190,6 @@ export function useTasksSelection(tasks: TasksControl, drawn: ReadonlySet<string
   // The tab as it stands, which an Undo pressed or a refusal answered renders after its act reads.
   const latest = useRef(tasks);
   latest.current = tasks;
-  const toast = useToast();
   const regionId = useId();
   const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set());
   const selected: ReadonlySet<string> = new Set([...chosen].filter((id) => drawn.has(id)));
@@ -243,9 +219,10 @@ export function useTasksSelection(tasks: TasksControl, drawn: ReadonlySet<string
     },
     confirmFailure(FAILURE_SURFACE.TASK_DELETE),
   );
-  const acts = selectionActs(tasks, () => latest.current, [...selected], toast, {
+  const acts = selectionActs(tasks, () => latest.current, [...selected], {
     onActed: onClear,
     askNew: sections.askNew,
+    move: sections.move,
     askDelete: () => {
       setDoomed([...selected]);
       deletion.ask();

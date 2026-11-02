@@ -454,7 +454,7 @@ it.effect(
       live.list.set({ automations: [ROW] });
       yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, workspace);
       yield* settled;
-      // An answer Vespin Sync woke hands the follow its wait for a write's transaction.
+      // An answer Sync woke hands the follow its wait for a write's transaction.
       live.list.set({ automations: [ROW] }, ["1"]);
       yield* nextPoll;
 
@@ -523,7 +523,7 @@ it.effect("a Run now answers once its workspace's followed runs carry it, as its
       id: WORKSPACE_ID,
     });
     yield* settled;
-    // Answers Vespin Sync woke hand both follows their waits for a write's transaction.
+    // Answers Sync woke hand both follows their waits for a write's transaction.
     live.list.set({ automations: [ROW] }, ["1"]);
     live.workspaceRuns.set({ runs: [] }, ["1"]);
     yield* nextPoll;

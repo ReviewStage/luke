@@ -211,7 +211,7 @@ function stoppable(turn: AgentLatestTurn | undefined): turn is AgentLatestTurn &
 export interface TurnStop {
   /** eve's id for the tool call the Stop is made under, where an agent's `stop_agent` made it. */
   readonly key?: string;
-  /** The coding agent whose `stop_agent` or continue makes the Stop; none for the developer's or Fullspin's. */
+  /** The coding agent whose `stop_agent` or continue makes the Stop; none for the developer's or the app's. */
   readonly by?: string;
 }
 

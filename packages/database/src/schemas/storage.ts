@@ -342,13 +342,13 @@ export const turns = pgTable(
      * The coding agent whose `stop_agent`, or whose Start continuing this
      * turn's agent, made the Stop, written with `cancel_requested_at`, so a
      * reader of the turn knows who stopped it. Null for a Stop the developer
-     * pressed or Fullspin made, and for none. Named by id and held to nothing,
+     * pressed or the service made, and for none. Named by id and held to nothing,
      * so the turn outlives that agent.
      */
     cancelRequestedBy: uuid("cancel_requested_by"),
     /** Whether Anthropic refused Fast for a step of the turn, which then ran at standard speed instead (`coder-host/model.ts`). */
     fastRefused: boolean("fast_refused").notNull().default(false),
-    /** How many notes a native coding agent's turn has taken on its plan over Fullspin's MCP server, reserved before each save (`edit_plan`'s per-turn cap); eve keeps its own count in its session. */
+    /** How many notes a native coding agent's turn has taken on its plan over our MCP server, reserved before each save (`edit_plan`'s per-turn cap); eve keeps its own count in its session. */
     planNotesTaken: integer("plan_notes_taken").notNull().default(0),
   },
   (table) => [

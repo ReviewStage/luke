@@ -26,7 +26,7 @@ const WORKSPACE_ID = "workspace-1";
 
 function client(): HostedAutomationClient {
   return new HostedAutomationClient({
-    serviceBaseUrl: "https://tryluke.dev",
+    serviceBaseUrl: "https://vespin.dev",
     credential: accountBearer({
       readAccessToken: () => Effect.succeed("token-1"),
       refreshAccount: () => Effect.void,
@@ -222,7 +222,7 @@ it.effect(
       assert.ok(!("failure" in listed));
       assert.deepEqual(
         listed.automations.map((each) => each.webhookUrl),
-        [undefined, `https://tryluke.dev/api/automations/${hooked.id}/webhook`],
+        [undefined, `https://vespin.dev/api/automations/${hooked.id}/webhook`],
       );
     }),
 );

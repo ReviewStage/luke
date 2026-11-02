@@ -649,7 +649,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
     reason: FAILURE_REASON.OTHER,
     text: messageFailureWords(AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),
   });
-  // Giving the repository to Vespin's GitHub App is pressed on GitHub, not the task, so it stands for an agent with no task.
+  // Giving the repository to our GitHub App is pressed on GitHub, not the task, so it stands for an agent with no task.
   const notSelected = messageFailureNote(
     {
       failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,

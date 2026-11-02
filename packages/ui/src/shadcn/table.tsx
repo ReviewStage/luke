@@ -2,7 +2,7 @@ import type * as React from "react";
 import { cn } from "../cn.js";
 
 /**
- * table.tsx -- shadcn/ui's table (style `base-nova`), vendored and drawn in Fullspin's table.
+ * table.tsx -- shadcn/ui's table (style `base-nova`), vendored and drawn in our table.
  *
  * The component is shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add table` reads as a small diff. Its local

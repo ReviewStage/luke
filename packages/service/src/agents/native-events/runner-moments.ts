@@ -25,10 +25,10 @@ import {
  * runner-moments.ts -- what every harness's reader reads alike: the runner's own events, and a tool's answer as the transcript settles its call.
  *
  * The runner posts its own events (`@luke/agent-runner/protocol`) among its
- * harness's messages, the same for Claude Code and Codex: a line Fullspin handed
+ * harness's messages, the same for Claude Code and Codex: a line we handed
  * the harness, the launch waiting on work in flight, the agent's turn over
  * with the launch kept warm, and the launch's end. A
- * tool's answer is settled the same way whichever harness ran it: a Fullspin
+ * tool's answer is settled the same way whichever harness ran it: our own
  * tool's as the JSON it answered, any other's as the text the model read.
  */
 
@@ -138,7 +138,7 @@ export function runnerMoments(message: WireValue): Option.Option<readonly Native
 /**
  * A tool's answer as the transcript settles its call: an error the harness
  * flagged is a refusal carrying the text, and any other answer is available.
- * A Fullspin tool's answer is read as the JSON it answers, so its status word
+ * Our own tool's answer is read as the JSON it answers, so its status word
  * counts as the eve relay counts it; any other tool's is kept as `output`,
  * the text the model read or what the harness reported of the call.
  */

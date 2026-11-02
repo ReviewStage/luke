@@ -154,7 +154,7 @@ const SWEEP: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-/** The prompt an automation's run handed its agent: the automation's own, then what Vespin adds of the firing. */
+/** The prompt an automation's run handed its agent: the automation's own, then what we add of the firing. */
 const HANDED = `Sweep the flaky tests.
 
 ---
@@ -1547,7 +1547,7 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
   assert.ok(item, "the ⋯ offers Copy link");
   await act(async () => item.click());
 
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${AGENT_ID}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${AGENT_ID}`]);
   assert.equal(newestToastSays(), "Link copied");
 });
 

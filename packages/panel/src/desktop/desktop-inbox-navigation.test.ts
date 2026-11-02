@@ -702,7 +702,7 @@ test("an item's row offers Copy link on a right-click, copying the item's link u
   await act(async () => item.click());
 
   assert.deepEqual(world.copied, [
-    `https://tryluke.dev/acme/agent/${THRESHOLD.agentId}/inbox/${THRESHOLD.id}`,
+    `https://vespin.dev/acme/agent/${THRESHOLD.agentId}/inbox/${THRESHOLD.id}`,
   ]);
 });
 
@@ -1004,8 +1004,8 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
     [...document.querySelectorAll('[role="menu"] .luke-menu-item-label')].map(
       (each) => each.textContent,
     ),
-    ["View options", "Mark all as read"],
-    "the ⋯ holds what the wide head draws as buttons, and what a right-click offers",
+    ["View options", "Find", "Mark all as read"],
+    "the ⋯ holds what the wide head draws as buttons, ⌘F's Find, and what a right-click offers",
   );
   act(() => more().click());
   pick("View options");
@@ -1099,6 +1099,7 @@ test("on a phone an item is headed by its way back's glyph, its task centred, wh
     "Open task",
     "Open agent",
     "Show panel",
+    "Find",
     "Copy link",
   ]) {
     assert.ok(labels.includes(offered), `the ⋯ offers ${offered}`);

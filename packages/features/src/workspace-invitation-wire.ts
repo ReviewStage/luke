@@ -6,10 +6,11 @@ import { ASSIGNABLE_ROLE } from "./workspace-wire.js";
  * workspace-invitation-wire.ts -- a workspace invitation as the Mac asks for, lists, and cancels it, and the web page its invitee accepts it on.
  *
  * An owner or an admin invites people from Settings on the Mac, under its
- * own Better Auth session, through Fullspin's routes over the organization
+ * own Better Auth session, through our routes over the organization
  * plugin's invitation calls; each pending invitation comes back with the
- * accept page's address, which the owner copies and sends by hand, and the
- * invitee opens to accept it on the browser's own session.
+ * accept page's address, which the service emails to the invitee where the
+ * deployment names a sender and the owner may also copy and send by hand,
+ * and the invitee opens to accept it on the browser's own session.
  *
  * The accept address carries the invited address beside the invitation's
  * id, because an invitation is read to its recipient alone: a browser
@@ -19,7 +20,7 @@ import { ASSIGNABLE_ROLE } from "./workspace-wire.js";
  * may accept is the plugin's check, not the page's.
  *
  * An invitation is the workspace's, not its inviter's: the accept page reads
- * it through Fullspin's own route (`invitationOfferAnswerSchema`), which names
+ * it through our own route (`invitationOfferAnswerSchema`), which names
  * the inviter only while they are still a member, so a link stays good after
  * whoever made it left, as the plugin's own read would not let it.
  */

@@ -1,7 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 
 /**
- * installed-skill-wire.ts -- a skill a member installs into Fullspin: whose it is, where it came from, and how large it may be.
+ * installed-skill-wire.ts -- a skill a member installs into the app: whose it is, where it came from, and how large it may be.
  *
  * A repository's skills are read from GitHub at session start; an installed
  * skill is kept by the service itself, its files stored beside it, and

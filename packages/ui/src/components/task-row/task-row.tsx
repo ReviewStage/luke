@@ -7,7 +7,7 @@ import { BUTTON_SIZE } from "../button/button.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, CARD_SHADOW, Card } from "../card/card.js";
 import { CardPress, SELECT_BOX_PLACE } from "../card-press/card-press.js";
 import { motionKey } from "../list-motion/list-motion.js";
-import type { ListRowFold } from "../list-row/list-row.js";
+import { type ListRowFold, type ListRowNest, nestedItem } from "../list-row/list-row.js";
 import { OneLine } from "../one-line/one-line.js";
 import { useRovingKeys } from "../roving-keys/roving-keys.js";
 import { type ListRowMenu, useRowMenu } from "../row-menu/row-menu.js";
@@ -55,7 +55,8 @@ import { SelectionRegion } from "../selection/selection-region.js";
  * for each level, its other columns still lined up with every row's; and a
  * row with rows nested under it folds them (`fold`), by a chevron before
  * its name, a control of its own beside the press, and by → and ← on the
- * press, as a `ListRow`'s fold does.
+ * press, as a `ListRow`'s fold does; a reader hears its level and its place
+ * among its siblings (`nest`), as a `ListRow`'s reader does.
  *
  * A group's quick add draws its draft as a row of the same cells, raised
  * as a card off the list (`TaskRowDraft`), so it reads as the row it is
@@ -299,6 +300,7 @@ export function TaskRow({
   onOpen,
   pressRef,
   depth = 0,
+  nest,
   fold,
   settled = false,
   children,
@@ -328,6 +330,8 @@ export function TaskRow({
   pressRef?: RefObject<HTMLButtonElement | null> | undefined;
   /** How deep it stands nested under other rows: 0, at the top, unless said. */
   depth?: number | undefined;
+  /** Where it stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
+  nest?: ListRowNest | undefined;
   /** The rows nested under it, which it folds; none where it holds none. */
   fold?: ListRowFold | undefined;
   /** Whether it stands settled beside the rows still open, its name in the muted ink: a blocker that is done. */
@@ -382,6 +386,7 @@ export function TaskRow({
       {...rowMenu.props}
       data-editing={editor === undefined ? undefined : "true"}
       data-depth={depth === 0 ? undefined : depth}
+      {...nestedItem(depth, nest)}
       data-settled={settled ? "true" : undefined}
     >
       <span

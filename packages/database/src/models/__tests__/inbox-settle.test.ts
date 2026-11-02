@@ -31,7 +31,7 @@ import { beginTaskWork, createTask, finishTaskWork, updateTask } from "../task-s
  * task, agent, or account, stands open. The
  * act's opposite, the agent brought back or a member moving the task off
  * Done or Canceled, opens again exactly the items that act settled, its asks
- * open again; Vespin reopening the task as a turn starts on it opens nothing.
+ * open again; the task reopened by us as a turn starts on it opens nothing.
  *
  * Synthetic accounts, workspaces, tasks, and agents throughout.
  */

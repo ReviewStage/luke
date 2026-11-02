@@ -21,12 +21,12 @@ import { CatalogSection } from "../section";
 /**
  * auth-page.tsx -- the sign-in page with its provider choices, a landing's
  * ringed mark on its way, settled, and failed, with and
- * without Open Fullspin, and a form with an error on a phone's width, each in a
+ * without its Open link, and a form with an error on a phone's width, each in a
  * frame the size of the screen it stands for. Every name and address is
  * made up.
  */
 
-/** Open Fullspin as a page offers it; the catalog goes nowhere. */
+/** The Open link as a page offers it; the catalog goes nowhere. */
 const OPEN_LUKE = { label: `Open ${PRODUCT_NAME}`, href: "#" } as const;
 
 function Face(): React.JSX.Element {

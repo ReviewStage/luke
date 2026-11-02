@@ -1,11 +1,11 @@
 /**
- * integration-connect.ts -- Vercel Connect, as Fullspin asks it about one account's grant at one provider.
+ * integration-connect.ts -- Vercel Connect, as we ask it about one account's grant at one provider.
  *
  * Vercel Connect holds every account's grant at every provider, encrypted,
- * and refreshes it; Fullspin names each account by the subject its row keeps
+ * and refreshes it; we name each account by the subject its row keeps
  * (`integration-store.ts`): its own user id for the first account at a
  * provider, a minted id for another, so two accounts at one provider are two
- * grants. Fullspin never stores a token. Three things are ever asked of a
+ * grants. We never store a token. Three things are ever asked of a
  * provider's connector, each through `@vercel/connect` as its docs and
  * README describe it: a browser sign-in for the account to begin, the
  * account's token now, and the grant revoked. A token is asked for at the
@@ -13,7 +13,7 @@
  * before it expires; one a provider refuses is dropped from that cache
  * (`evict`) under the same connector and parameters the read named, so the
  * next read asks Connect again rather than every read forcing a refresh.
- * Note that Fullspin asks Connect nothing its docs do not describe, so how a
+ * Note that we ask Connect nothing its docs do not describe, so how a
  * sign-in ended is learned only from whether the account now holds a
  * grant. Each answers either what was asked or one of three fixed words,
  * never Connect's own message: an error's message is Connect's or the
@@ -105,13 +105,13 @@ interface AllowedAccounts {
   readonly emails: readonly string[];
 }
 
-/** What Fullspin asks of one provider's connector. */
+/** What we ask of one provider's connector. */
 export interface ConnectorService {
   /** Whether the deployment names this connector at all; a deployment without it never asks Connect anything. */
   readonly configured: boolean;
   /** The accounts the deployment offers this provider to; absent, it is offered to every account. */
   readonly allowedAccounts?: AllowedAccounts;
-  /** Whether a Fullspin account may hold more than one account at this provider (`integrations.ts`). */
+  /** Whether a user account may hold more than one account at this provider (`integrations.ts`). */
   readonly multipleAccounts: boolean;
   /** The OAuth `prompt` a sign-in for another account asks the provider for, where the provider documents one. */
   readonly addAccountPrompt?: string;
@@ -244,7 +244,7 @@ const GRANT_NAME_READS = [
  * organization's name, or the grant's own `name` where it is not the
  * connector's id. Note that each field is read only where it is a short line
  * shaped like no credential, because what Connect's driver stores is no
- * contract Fullspin can vouch for.
+ * contract we can vouch for.
  */
 function grantAccountName(response: ConnectTokenResponse): string | undefined {
   const candidates = [

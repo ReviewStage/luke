@@ -134,7 +134,7 @@ function slugOf(workspaces: readonly Workspace[], workspaceId: string | undefine
  * The place a tab of the side panel shows, on the task or the agent's page
  * that holds the panel; none for a tab whose thing has no link of its own:
  * a file's, the board, the code, the Inbox, a terminal, a pull request
- * the agent did not open, and a worker of Fullspin's own, which is drawn
+ * the agent did not open, and a worker of the app's own, which is drawn
  * nowhere a link opens. Note that a Changes or a
  * worker's tab is the agent's, so it is linked by the agent alone, on a
  * task's panel as on the agent's page.

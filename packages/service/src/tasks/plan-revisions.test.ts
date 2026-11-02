@@ -134,7 +134,10 @@ it.layer(getTestDB())("a plan's history", (it) => {
       assert.equal((yield* revisionsOf(userId, taskId)).length, 1);
     }),
   );
-  /** Vespin's notes, each a revision of its own: the saves stand further apart than any join. */
+  /**
+   * The notetaker's notes, each a revision of its own: the saves stand further apart than
+   * any join.
+   */
   const apart = (userId: string, taskId: string, notes: readonly (readonly [string, string])[]) =>
     Effect.forEach(
       notes,

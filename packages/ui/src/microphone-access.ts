@@ -30,7 +30,7 @@ function microphoneStatusDetail(status: MicrophoneStatus): string | undefined {
 interface MicrophoneAccessRow {
   /** Absent wherever the row's name and its controls already say everything. */
   detail?: string;
-  /** Whether to offer the button that gives Fullspin the microphone. */
+  /** Whether to offer the button that gives the app the microphone. */
   offerAccess: boolean;
   /**
    * Whether to offer the way to System Settings. Only where macOS has already
@@ -38,13 +38,13 @@ interface MicrophoneAccessRow {
    * state where sending someone there is not sending them to look at nothing.
    */
   offerSystemSettings: boolean;
-  /** Whether the microphone is Fullspin's to open, which the row marks with its check. */
+  /** Whether the microphone is the app's to open, which the row marks with its check. */
   granted: boolean;
 }
 
 /**
  * Reads the row from the system's answer. The microphone's use is dictating
- * into a message box, whose clip goes through Fullspin's service to OpenAI and
+ * into a message box, whose clip goes through our service to OpenAI and
  * comes back as words; the macOS prompt is the consent for it, so the ask is
  * offered wherever macOS has not answered, and System Settings wherever it
  * has.

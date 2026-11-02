@@ -22,7 +22,7 @@ import {
 
 /**
  * Open on this Mac's script over real Git and bash, an origin on disk
- * standing in for GitHub: the first run clones it into Vespin's own folder
+ * standing in for GitHub: the first run clones it into the app's own folder
  * and makes a worktree on the agent's branch, tracking GitHub's; a later run after the agent pushes more, or
  * force-pushes, brings the worktree to the branch's new head and keeps what
  * Git ignores there; a worktree with the developer's own changes, or
@@ -33,15 +33,15 @@ import {
  * with no command says where to set one; a branch GitHub
  * deleted once its pull request merged opens at that pull request's last
  * head; a worktree folder deleted by hand is made again; one an earlier
- * Vespin kept under its application data is left there and said; two opens of
- * the shared clone at once each bring in their own branch, none taking the
- * lock from an open that took it after the holder it read let go; one waits on a
- * clone another holds while it lives, and takes the lock over once it is
- * gone; an open tidies the worktrees, this Vespin's and an earlier one's,
- * whose branch is gone from GitHub, unless one is in use, was opened in the
- * last day, or holds the developer's own, and an earlier Vespin's clone once
- * it holds none; and no two
- * branches share a worktree or reach outside its repository's folder.
+ * version of the app kept under its application data is left there and said;
+ * two opens of the shared clone at once each bring in their own branch, none
+ * taking the lock from an open that took it after the holder it read let go;
+ * one waits on a clone another holds while it lives, and takes the lock over
+ * once it is gone; an open tidies the worktrees, this version's and an earlier
+ * one's, whose branch is gone from GitHub, unless one is in use, was opened in
+ * the last day, or holds the developer's own, and an earlier version's clone
+ * once it holds none; and no two branches share a worktree or reach outside
+ * its repository's folder.
  */
 
 const GIT_ENVIRONMENT = {
@@ -62,7 +62,7 @@ function git(folder: string, args: readonly string[]): string {
   return execFileSync("git", args, { cwd: folder, env: GIT_ENVIRONMENT, encoding: "utf8" }).trim();
 }
 
-/** An origin with `main` and an agent's branch pushed to it, and the state root Vespin keeps its clone in. */
+/** An origin with `main` and an agent's branch pushed to it, and the state root the app keeps its clone in. */
 async function fixture(t: Parameters<typeof temporaryDirectory>[0]) {
   const scratch = await temporaryDirectory(t, "luke-open-on-mac-");
   const origin = path.join(scratch, "origin");
@@ -463,11 +463,11 @@ test(
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     const head = push("first\n");
-    const earlierRoot = path.join(scratch, "Application Support", "Luke Dev");
+    const earlierRoot = path.join(scratch, "Application Support", "Vespin Dev");
     const earlier = path.join(earlierRoot, "worktrees", "acme", "app", "luke%2Ffix-relay");
     mkdirSync(path.join(earlier, ".git"), { recursive: true });
     writeFileSync(path.join(earlier, "mine.txt"), "");
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".vespin");
     const worktree = worktreeFolder(root, "acme/app", "luke/fix-relay");
 
     const printed = run(
@@ -499,7 +499,7 @@ test(
     writeFileSync(path.join(origin, "README.md"), "other\n");
     git(origin, ["commit", "--quiet", "-am", "other"]);
     const other = git(origin, ["rev-parse", "HEAD"]);
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".vespin");
     const opening = (branch: string, name: string) => {
       const file = path.join(scratch, `${name}.sh`);
       writeFileSync(
@@ -558,7 +558,7 @@ test(
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     const head = push("first\n");
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".vespin");
     const clone = cloneFolder(root, "acme/app");
     const worktree = worktreeFolder(root, "acme/app", "luke/fix-relay");
     const holder = spawn("sleep", ["60"]);
@@ -602,7 +602,7 @@ test(
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     const head = push("first\n");
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".vespin");
     const clone = cloneFolder(root, "acme/app");
     const worktree = worktreeFolder(root, "acme/app", "luke/fix-relay");
     const lock = `${clone}.lock`;
@@ -733,7 +733,7 @@ test(
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".vespin");
     const trash = path.join(root, "trash");
     const branches = ["luke/merged", "luke/changed", "luke/recent", "luke/running", "luke/open"];
     for (const branch of branches) git(origin, ["branch", branch]);
@@ -787,7 +787,7 @@ test(
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
     git(origin, ["branch", "luke/merged"]);
-    const earlierRoot = path.join(scratch, "Application Support", "Luke Dev");
+    const earlierRoot = path.join(scratch, "Application Support", "Vespin Dev");
     const earlierClone = cloneFolder(earlierRoot, "acme/app");
     const earlierWorktree = worktreeFolder(earlierRoot, "acme/app", "luke/merged");
     run(
@@ -808,7 +808,7 @@ test(
     const then = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
     utimesSync(opened, then, then);
     git(origin, ["branch", "-D", "luke/merged"]);
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".vespin");
 
     const printed = run(
       scratch,
@@ -838,7 +838,7 @@ test.for(["notes.txt", ".git\n"])(
   async (file: string, t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
-    const earlierRoot = path.join(scratch, "Application Support", "Luke Dev");
+    const earlierRoot = path.join(scratch, "Application Support", "Vespin Dev");
     const earlierClone = cloneFolder(earlierRoot, "acme/app");
     run(
       scratch,
@@ -859,7 +859,7 @@ test.for(["notes.txt", ".git\n"])(
     ]);
     // Note that a name ending in a newline, beside the `.git` it imitates, is the developer's as much as any.
     writeFileSync(path.join(earlierClone, file), "mine\n");
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".vespin");
 
     run(
       scratch,

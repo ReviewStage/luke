@@ -1,5 +1,5 @@
 /**
- * compose-local-agents.test.ts -- the follower as the operating system sees it run agents straight on the box: a device registered as direct, signed in to nothing, getting ready while it fetches its CLIs and ready to take an agent only once it has them, or why it could not have them, an agent launched on the box with a GitHub token from Vespin in gh's config in its home, a launch whose claim's answer was lost claimed again and launched once, and, on This Mac alone, an agent that ran on the developer's own logins before refused with why.
+ * compose-local-agents.test.ts -- the follower as the operating system sees it run agents straight on the box: a device registered as direct, signed in to nothing, getting ready while it fetches its CLIs and ready to take an agent only once it has them, or why it could not have them, an agent launched on the box with a GitHub token from the service in gh's config in its home, a launch whose claim's answer was lost claimed again and launched once, and, on This Mac alone, an agent that ran on the developer's own logins before refused with why.
  *
  * The follower runs over a scripted spawner, a file system that holds
  * nothing but what a test names, and a fake service that hands one launch line and a new GitHub
@@ -353,7 +353,7 @@ it.effect(
         const { registered, spawned, asked, files } = yield* followingDevice(() => Effect.void);
         yield* until(() => spawned.some((each) => each.program === RUNNER));
 
-        // Note that no login of the device's is what its agents run on, so the service pays with the sign-in saved in Vespin, or refuses.
+        // Note that no login of the device's is what its agents run on, so the service pays with the sign-in saved in the account, or refuses.
         assert.deepEqual(
           registered.map((each) => ({
             isolation: each.isolation,
@@ -372,7 +372,7 @@ it.effect(
         );
         assert.deepEqual(asked, [AGENT_ID]);
         assert.ok(files.get(GH_HOSTS)?.includes('oauth_token: "ghs_fixture_1"'));
-        // Note that the uninstall removes the agents this record names, and no other Vespin install's.
+        // Note that the uninstall removes the agents this record names, and no other install's.
         assert.ok(
           files.has(`${STATE_ROOT}/owned-agents/${AGENT_ID}`),
           "the launch keeps the agent in the device's record of the agents it made",
@@ -912,7 +912,7 @@ const NODE = NodeChildProcessSpawner.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
 );
 
-/** The version a host runs, and the newer one Vespin names. */
+/** The version a host runs, and the newer one the service names. */
 const RUNNING = "0.3.0";
 const NEWER = "0.4.0";
 

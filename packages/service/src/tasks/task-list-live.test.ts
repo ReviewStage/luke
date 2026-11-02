@@ -433,7 +433,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         yield* openAgent(owner, { taskId: runs.id }, 10 * 60_000, {
           startedFrom: { agentId: local.id, messageId: randomUUID(), steps: 1, totalSteps: 2 },
         });
-        // Tasks made for the owner by a coding agent, and by Vespin on their call.
+        // Tasks made for the owner by a coding agent, and by the notetaker on their call.
         const followUp = yield* startTask(owner, {
           name: "Invite emails",
           origin: { actor: PLAN_ACTOR.AGENT, agentId: done.id },

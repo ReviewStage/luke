@@ -5,8 +5,8 @@ import { grantWindowPermissions } from "./window-permissions";
 
 /**
  * What a page is answered as it asks Chromium for a permission: a window of
- * Vespin's own may take the microphone and full screen, and nothing else, and
- * a page that is no window of Vespin's is refused everything.
+ * the app's own may take the microphone and full screen, and nothing else, and
+ * a page that is no window of the app's is refused everything.
  */
 
 type CheckHandler = Parameters<Session["setPermissionCheckHandler"]>[0];

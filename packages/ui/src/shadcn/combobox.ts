@@ -1,5 +1,5 @@
 /**
- * combobox.ts -- shadcn/ui's combobox (style `base-nova`, on Base UI), its list's drawing alone, in Fullspin's menu rows.
+ * combobox.ts -- shadcn/ui's combobox (style `base-nova`, on Base UI), its list's drawing alone, in our menu rows.
  *
  * What is kept of `shadcn add combobox` is the drawing of its list: the list
  * box, an item, a group's label, and the empty line, each the class string
@@ -13,7 +13,7 @@
  * left out, because the field is the text field's own and the list stands
  * in flow under it as one well rather than over the page.
  *
- * Fullspin's changes, against shadcn's own strings: an item is a menu row's
+ * Our changes, against shadcn's own strings: an item is a menu row's
  * height and corner, lit by the `aria-selected` the field or the engine sets
  * rather than Base UI's `data-highlighted`, dimmed by `aria-disabled`, its
  * indicator a slot of its own at the row's end rather than an absolute

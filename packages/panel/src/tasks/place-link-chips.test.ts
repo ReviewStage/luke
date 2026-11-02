@@ -28,7 +28,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
 /**
- * place-link-chips.test.ts -- a link to a place in Vespin written in words,
+ * place-link-chips.test.ts -- a link to a place in the app written in words,
  * an agent's, a page's, an Inbox item's, a member's, is drawn as a chip
  * called by the name the window already holds for the place: the task's
  * title for a bare task link, the agent's, the page's, the item's, the
@@ -49,7 +49,7 @@ const UNHELD_PAGE = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
 const ITEM = "item_4b9e";
 const SAM = "user-sam";
 const AT = 1_792_000_000_000;
-const HOME = "https://tryluke.dev/acme";
+const HOME = "https://vespin.dev/acme";
 
 // A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));

@@ -1,5 +1,5 @@
 /**
- * hub.ts -- Fullspin Sync's hub: one instance's `LISTEN` on the sync channel, and the watches it wakes.
+ * hub.ts -- Sync's hub: one instance's `LISTEN` on the sync channel, and the watches it wakes.
  *
  * Each function instance holds one listener while anyone watches. It is kept
  * in an `RcRef`: the first watch opens it, and it closes `LISTENER.IDLE`
@@ -575,7 +575,7 @@ const unpooledListener: Layer.Layer<SyncListener> = Layer.unwrap(
 );
 
 /**
- * Fullspin Sync as the deployment's environment has it: the hub over the
+ * Sync as the deployment's environment has it: the hub over the
  * unpooled URL, whose listener stays down where the deployment sees none,
  * so every watch waits on its clock.
  */

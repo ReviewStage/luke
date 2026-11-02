@@ -23,7 +23,7 @@ import { choose, menuItems, openViewOptions } from "./support/view-options";
  * by what broke and its status alone, a press on it opening its account
  * page; reads every provider's configuration in words; links product
  * analytics only where the deployment names its console; and offers the two
- * windows it reads. The network, the HTTP boundary to Vespin, is a fake that
+ * windows it reads. The network, the HTTP boundary to the service, is a fake that
  * answers the read.
  */
 

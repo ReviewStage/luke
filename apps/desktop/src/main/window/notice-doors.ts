@@ -13,14 +13,14 @@ import { app, Notification } from "electron";
  * the object is all that ties the banner to its click: one the collector
  * took has no click left to hand back. Whether macOS refused it or showed
  * it is handed on, since that is the only word Electron gives of whether
- * notifications are on for Fullspin, which This Mac says under Ask every time.
+ * notifications are on for the app, which This Mac says under Ask every time.
  *
  * The Dock's badge is Electron's own count, which macOS draws only where
- * notifications are allowed for Fullspin and its badges are not turned off in
+ * notifications are allowed for the app and its badges are not turned off in
  * System Settings, so the developer's own switch for it is the system's.
  */
 export function electronNoticeDoors(dependencies: {
-  /** macOS showed a notification, or refused one: whether notifications are on for Fullspin. */
+  /** macOS showed a notification, or refused one: whether notifications are on for the app. */
   onAnswered: (status: NotificationsStatus) => void;
   report: (line: string) => void;
 }): AgentNoticeDoorsSurface {
@@ -53,7 +53,7 @@ export function electronNoticeDoors(dependencies: {
 }
 
 /**
- * Asks macOS whether Fullspin may post notifications, at launch rather than at
+ * Asks macOS whether the app may post notifications, at launch rather than at
  * the first command ask. Electron asks as it first reaches for notifications
  * and posts without waiting for the answer, so a first notification posted
  * before the developer has answered is refused, and the question itself

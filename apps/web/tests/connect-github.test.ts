@@ -17,7 +17,7 @@ import { appTab, closeAppTabs } from "./support/connect-app-tab";
  * once GitHub is connected, and never while the page is still on its way
  * there; a same-tab connect that failed offers the way back too.
  * The page runs as it does in the browser, mounted on its own `#root`; the
- * network, the HTTP boundary to Vespin and Better Auth, is a fake.
+ * network, the HTTP boundary to the service and Better Auth, is a fake.
  */
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);

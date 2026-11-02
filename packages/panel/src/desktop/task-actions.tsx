@@ -24,6 +24,7 @@ import {
   LIST_ROW_INK,
   ListRow,
   type ListRowFold,
+  type ListRowNest,
   type MenuRow,
   nextRowOrHead,
   OneLine,
@@ -60,6 +61,7 @@ import {
 } from "react";
 import { ActorRef, AssigneeFaceHeard, AssigneeFaceMark } from "../actor-ref.js";
 import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import {
   COMMAND_PLACE,
   commandAction,
@@ -139,7 +141,7 @@ import { ChosenTasksContext, chosenRowMenu } from "./tasks-selection.js";
  * row's Status. Copy link prints ⇧⌘C where
  * the chord copies the same link (`copy-link-item.tsx`).
  *
- * Copy link copies the plan's address on tryluke.dev, as the ⋯
+ * Copy link copies the plan's address on vespin.dev, as the ⋯
  * beside the plan's title does (`task-menu-items.tsx`). Mark as unread
  * draws the task's row in the unread weight until it next opens, and turns
  * to Mark as read on a task already unread. Rename edits the
@@ -616,7 +618,7 @@ export function useTaskMenuItems(
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
   const section =
     task !== undefined
-      ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections.askNew)
+      ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections)
       : undefined;
   const setStanding = useStandingDoor(tasks);
   const assignees = useAssigneeRows(task?.assignee);
@@ -782,7 +784,11 @@ function SidebarTaskCard({
  * and Mark done stand in place of all of it while the row is hovered or
  * reached from the keyboard.
  * A press opens it, and its actions are one menu opened alike by the row's ⋯,
- * a right-click, and the menu key (`ListRow`'s `menu`). Where the sidebar
+ * a right-click, a long press, and the menu key (`ListRow`'s `menu`). A
+ * finger's row draws neither its ⋯ nor Pin and Mark done, as a phone's
+ * Inbox row draws no ⋯, so its name keeps the room and its time runs to the
+ * row's edge: a long press opens its menu, which offers Pin and Status's
+ * Done, and the menu key on the row still does. Where the sidebar
  * chooses rows, it is chosen as a Mac's sidebar list chooses one, by ⌘-click,
  * ⇧-click, X, and ⌘A, filled and with no box, and chosen among several its
  * menu acts on every task chosen (`ChosenTasksContext`). Renamed,
@@ -801,6 +807,7 @@ export function SidebarTask({
   repository,
   faces = EVERY_FACE,
   depth,
+  nest,
   fold,
   childCount,
   onOpen,
@@ -823,6 +830,8 @@ export function SidebarTask({
   faces?: RowFaces;
   /** How deep the row stands nested under its parent tasks: at the top unless said. */
   depth?: number | undefined;
+  /** Where the row stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
+  nest?: ListRowNest | undefined;
   /** The child tasks nested under the row, which it folds; none where the list holds none. */
   fold?: ListRowFold | undefined;
   /** How many of the task's child tasks are finished, of all of them, said before its time; none where it has none. */
@@ -839,6 +848,7 @@ export function SidebarTask({
     surface: TASK_MENU_SURFACE.ROW,
   });
   const reads = useReadMarks();
+  const coarse = useCoarsePointer();
   const worn = rowFaceOf(task, useMemberDirectory(), faces);
   const chosen = useContext(ChosenTasksContext)(task.id);
   const drafted = usePlanDrafted(task.id) && !open;
@@ -940,11 +950,13 @@ export function SidebarTask({
                   }
                 : { ...chosenRowMenu("Task", chosen, tasks.shown), openRequest: statusAsked }
           }
+          more={!coarse}
           depth={depth}
+          nest={nest}
           fold={fold}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
-            rename.editing ? null : (
+            rename.editing || coarse ? null : (
               <SidebarTaskMarks
                 tasks={tasks}
                 task={task}

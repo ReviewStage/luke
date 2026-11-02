@@ -193,7 +193,7 @@ its sandbox, such as a screenshot it took of what it built, or a short video it
 recorded there of what it did, a WebM of up to 4 MB, which our service
 reads from the sandbox and keeps the same way, as added by the member the
 agent's turn runs for, with the plan's history naming the agent. The plan's text
-names the picture by an address on tryluke.dev; our service serves its bytes
+names the picture by an address on vespin.dev; our service serves its bytes
 only to Vespin signed in as a member of the task's workspace, and opening the
 address in a browser shows a page that opens the task in Vespin and nothing of
 the picture. Every member of the workspace sees it, as they see the plan.
@@ -452,7 +452,7 @@ lost him, is deleted the same way, shortly after his conversation is removed.
 **A local agent on your Mac.** Once you turn on Bring your own host in
 Settings › Experimental and then This Mac in Settings › Hosts, an agent you
 start on This Mac runs Claude Code, or Codex for a GPT model, straight on your
-Mac, as you, in a folder of its own under `~/.luke/agents` that holds its
+Mac, as you, in a folder of its own under `~/.vespin/agents` that holds its
 repository, its home, and its caches. It has full access to whatever your
 account on the Mac can reach, as a program you run yourself does: your files,
 the folders of your other agents, your running programs, and the network;
@@ -813,7 +813,11 @@ you delete your account, as every workspace you own does, with only your
 membership removed. A workspace you create is a record
 named as you name it, holding you as its owner; every member of a workspace
 sees every other member's name, email address, and
-role in it, and an owner or admin of it can remove a member. A workspace may
+role in it, and an owner or admin of it can remove a member. An owner or
+admin invites someone by email address: the service keeps the address, the
+role offered, who invited them, and whether the invitation is still pending,
+and emails the invitation's link to that address through Resend, named
+under "Who we send it to" below. A workspace may
 show a photo an owner or admin of it uploads: the service keeps it with the
 workspace, a PNG, JPEG, or WebP image, and serves its bytes only to Vespin
 signed in as one of the workspace's members, never caching it on the way;
@@ -1338,6 +1342,13 @@ only when you press Send.
 - Sentry, for the Mac app's and Vespin in a browser's crash and performance
   reports, and our service's and Vespin's agents' error, performance, log, and
   agent reports, described above.
+- Resend, for email. When an owner or admin of a workspace invites someone,
+  our service sends Resend the invited address, the workspace's name, the
+  inviter's name (or their email address where their account has none), and
+  the invitation's link, and Resend delivers that one email to the invited
+  address and keeps it under its own policy. Nothing is emailed when an
+  invitation is canceled. A feedback note you send also reaches us by email
+  through Resend, with what it carries as described above.
 - Anthropic, for a pull request's chapters. Pressing Generate chapters in a
   agent's Pull request tab sends the pull request's title, description,
   commit messages, and patches, except those of files a reader reads past, to
@@ -1511,7 +1522,7 @@ We do not sell your information or use it for advertising.
 
 ## Our website
 
-tryluke.dev counts page views, presses, and sign-in steps using PostHog, and
+vespin.dev counts page views, presses, and sign-in steps using PostHog, and
 records the pages themselves, except the sign-in pages, which it does not
 record. A press is counted by what was clicked and where, never the words on
 it, and a recording masks what you type into a field. Before a count or a
@@ -1530,7 +1541,7 @@ The hand-off page is one of the sign-in pages above: not recorded, its
 address cut to the page itself. Your browser contacts PostHog directly, so
 PostHog sees your network address, as it does for the app's recordings.
 
-Vespin in a browser, the app at tryluke.dev/app and at every link to something
+Vespin in a browser, the app at vespin.dev/app and at every link to something
 in Vespin, is not one of the site's pages above: it records and reports what the
 Mac app does. It makes screen recordings as described under "Screen
 recordings", with every word masked and the same parts left out, and with

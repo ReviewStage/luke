@@ -5,10 +5,10 @@ import React from "react";
 void React;
 
 /**
- * Fullspin's face as a still mark, drawn from the generated `FACE_ART` constants so
+ * The app's face as a still mark, drawn from the generated `FACE_ART` constants so
  * every page that wears it stays tied to the product artwork, in
  * `currentColor` so its holder's ink is its own. Decorative: whatever stands
- * beside it already says "Fullspin".
+ * beside it already says the app's name.
  *
  * Wider than tall, so it fills the box that holds it and the default
  * `xMidYMid meet` letterboxes the face inside that box rather than stretching

@@ -68,7 +68,7 @@ export const CODER = {
   /**
    * The repositories whose agents' sandboxes open larger than
    * `SANDBOX_VCPUS`, by `owner/name` lowercased, as `sandboxVcpus` reads
-   * them; a repository asks for more by a row here. Fullspin's own is four,
+   * them; a repository asks for more by a row here. This repository's own is four,
    * because its typecheck needs about 5 GB of real memory. Measured on a
    * fresh checkout: `pnpm typecheck` takes 83 seconds at four vCPUs and peaks
    * near 5.2 GB, and at two vCPUs (4 GB) it is killed out of memory at a
@@ -220,7 +220,7 @@ export const CODER = {
    * through a relaunched CLI, a new GitHub token, and the last runner's
    * grace. Thirty, half the runner's own cap (`@luke/agent-runner`'s
    * `RUNNER_WARM.IDLE_CAP_MS`, sixty minutes), because the window is closed
-   * by Fullspin's retire under the lease and never by the runner ending itself,
+   * by our retire under the lease and never by the runner ending itself,
    * whose stdin a message its host writes in that instant is lost on: the
    * sweep retires it past the window, a message sent past it ends the
    * runner and relaunches whether or not the sweep ran (`sendHolding`), and
@@ -230,7 +230,7 @@ export const CODER = {
    * to end on its own, because a runner ending by itself stops reading its
    * stdin while its END is still posted, and a message written then would be
    * taken as delivered and never run; a runner that reads its lines from
-   * Fullspin leaves such a message waiting instead, and its END hands it on
+   * the service leaves such a message waiting instead, and its END hands it on
    * (`runner-sessions.ts`'s `LINES_WAITING`). A window is one line here:
    * raise it, and its sweep retires runners past it.
    */

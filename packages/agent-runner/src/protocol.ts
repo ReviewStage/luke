@@ -1,17 +1,17 @@
 /**
- * protocol.ts -- what Fullspin and the runner say to each other: the config line, the later stdin lines, the events the runner posts, and the environment it reads its secrets from.
+ * protocol.ts -- what the service and the runner say to each other: the config line, the later stdin lines, the events the runner posts, and the environment it reads its secrets from.
  *
  * This is the runner's whole contract, held apart from the Agent SDK so the
  * service that launches the runner (P08) and the route that takes its events
  * (P09) import it without the SDK behind it. Every line on stdin is one JSON
  * object: the first is the config, each later one a message, a stop, a model
  * change, or a retire. A config that names `linesUrl` has the runner read
- * the later lines from Fullspin instead (`RUNNER_LINES`).
+ * the later lines from the service instead (`RUNNER_LINES`).
  *
  * The config says which harness the launch runs: Claude Code (P05), or Codex
  * through `codex app-server` (P20). Secrets never travel in argv or on
  * stdin: the runner's bearer and the harness's credential are in its
- * environment, and Codex asks Fullspin for each ChatGPT access token over HTTPS
+ * environment, and Codex asks the service for each ChatGPT access token over HTTPS
  * through the runner's token command (`codex-token.ts`), so no line carries
  * one, on a Mac's queue (`@luke/features/device-agent-wire`) or anywhere else.
  */
@@ -25,12 +25,12 @@ import { Option, Schema } from "effect";
 import type { ServerNotification } from "./codex-protocol/index.js";
 
 /**
- * The environment the runner reads. The bearer authenticates it to Fullspin, its
+ * The environment the runner reads. The bearer authenticates it to the service, its
  * events and its MCP server alike. The plan token is never read by the runner
  * itself: the CLI it launches inherits it, and the command sandbox denies it,
  * with the bearer, to every command the agent runs. An Anthropic API key
  * stands in its place for an agent the account's key pays for. Codex's token is never
- * in it: app-server asks Fullspin for it through the runner's token command.
+ * in it: app-server asks the service for it through the runner's token command.
  */
 export const RUNNER_ENV = {
   BEARER: "LUKE_RUNNER_TOKEN",
@@ -59,7 +59,7 @@ export const RUNNER_ENV = {
 /** The places a runner's starter names in `RUNNER_ENV.PLACE`. */
 export const RUNNER_PLACE = {
   /**
-   * A machine its member runs Fullspin's host on, a Linux box or a Mac, with
+   * A machine its member runs our host on, a Linux box or a Mac, with
    * nobody signed in at it, where each launch runs straight on the box as
    * the host's own user, with full access to what that user reaches, and no
    * harness runs a sandbox of its own or asks an approval: Claude Code under
@@ -70,8 +70,8 @@ export const RUNNER_PLACE = {
 } as const;
 
 /**
- * How the folder of the skills a member installed into Fullspin is laid out,
- * which Fullspin writes into the sandbox as it opens and a config line names
+ * How the folder of the skills a member installed into the app is laid out,
+ * which the service writes into the sandbox as it opens and a config line names
  * (`installedSkills`): a Claude Code local plugin, its manifest naming it,
  * whose `skills/` holds one folder per skill, `SKILL.md` and its files, and
  * which is Codex's extra skills root as it stands. Claude Code lists a
@@ -88,10 +88,10 @@ export const INSTALLED_SKILLS = {
 
 /**
  * Claude Code's built-in tools a launch adds to and takes from the CLI's
- * default set, by the names the CLI gives them, which Fullspin's prompt names in
+ * default set, by the names the CLI gives them, which our prompt names in
  * turn. Note that CLI 2.1.304's default set holds neither Glob, Grep, nor a
  * to-do tool (TaskCreate and its siblings replaced TodoWrite), so each is
- * listed to be offered; and that a tool beside one of Fullspin's own, or one no
+ * listed to be offered; and that a tool beside one of our own, or one no
  * headless agent can use, is denied, so the agent has one way to do each
  * thing. SendMessage stays, because the Agent tool continues a subagent
  * with it.
@@ -132,7 +132,7 @@ const EffortSchema = Schema.Literals(Object.values(EFFORT));
 
 /**
  * The reasoning efforts Codex takes (its `model_reasoning_effort`); the pinned
- * protocol types them as any string, so the runner holds Fullspin to these.
+ * protocol types them as any string, so the runner holds the service to these.
  */
 export const CODEX_EFFORT = {
   NONE: "none",
@@ -156,20 +156,20 @@ export const INPUT_LINE = {
 /**
  * The argument that starts the runner's bundle as Codex's token command rather
  * than as a launch: `node <bundle> codex-token <tokenUrl>`, which prints the
- * plan's access token Fullspin answers, and nothing else, on stdout.
+ * plan's access token the service answers, and nothing else, on stdout.
  */
 export const CODEX_TOKEN_COMMAND = "codex-token";
 
-/** What Fullspin's token route answers a runner: the plan's access token, good for at least the route's margin. */
+/** What the service's token route answers a runner: the plan's access token, good for at least the route's margin. */
 export const RunnerTokenAnswerSchema = Schema.Struct({ accessToken: Schema.String });
 export type RunnerTokenAnswer = typeof RunnerTokenAnswerSchema.Type;
 
 /**
- * How a runner reads Fullspin's lines past its config where its config names
+ * How a runner reads the service's lines past its config where its config names
  * `linesUrl`, rather than taking them on its stdin, so a line stands at
- * Fullspin until the runner says it took it: a GET under the runner's bearer
+ * the service until the runner says it took it: a GET under the runner's bearer
  * naming the launch by its first event number and the place of the last
- * line it read, which Fullspin holds open until a line past it is queued or the
+ * line it read, which the service holds open until a line past it is queued or the
  * hold ends, answering the lines past it in order, none at the hold's end.
  * A message line the runner takes it says it took by its ACCEPTED event, as
  * ever; any other line is read once the next read names a place past it.
@@ -179,13 +179,13 @@ export type RunnerTokenAnswer = typeof RunnerTokenAnswerSchema.Type;
 export const RUNNER_LINES = {
   /** The query's names: the launch's first event number, and the place of the last line read. */
   QUERY: { LAUNCH: "launch", AFTER: "after" },
-  /** How long Fullspin holds a read with nothing past its place, as it holds a device's. */
+  /** How long the service holds a read with nothing past its place, as it holds a device's. */
   HOLD_MS: 20 * 1_000,
 } as const;
 
 const LinePlaceSchema = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
 
-/** What Fullspin answers a read of the runner's lines: the lines past its place, in order, each with its own place. */
+/** What the service answers a read of the runner's lines: the lines past its place, in order, each with its own place. */
 export const RunnerLinesAnswerSchema = Schema.Struct({
   lines: Schema.Array(Schema.Struct({ seq: LinePlaceSchema, text: Schema.String })),
 });
@@ -206,8 +206,8 @@ export const IMAGE_MEDIA_TYPE = {
 const SEQUENCE_MAX = 2 ** 52;
 
 /**
- * One integration the agent is handed, as an MCP server of its own at Fullspin,
- * reached under the runner's bearer as Fullspin's own server is: the
+ * One integration the agent is handed, as an MCP server of its own at the service,
+ * reached under the runner's bearer as our own MCP server is: the
  * connection's name (`linear`, `notion-2`), which the server is registered
  * under and its tools are named by, and its endpoint. The name is a bare
  * word, so it stands as a TOML key in Codex's config and in Claude Code's
@@ -229,7 +229,7 @@ const SequenceSchema = Schema.Number.check(
  * The first stdin line of a Claude Code launch: everything one launch of the CLI is started with.
  * `executable` is the `claude` binary the image carries, because the bundled
  * SDK cannot find its own platform package. `firstSequence` is where this
- * launch's events are numbered from, one past the last event Fullspin applied, so
+ * launch's events are numbered from, one past the last event the service applied, so
  * a relaunch with `resume` goes on numbering where the last launch stopped.
  */
 export const ClaudeCodeConfigSchema = Schema.Struct({
@@ -241,18 +241,18 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   effort: Schema.optionalKey(EffortSchema),
   /** Whether Claude Code's own fast mode is on, for an agent on a model's fast version. */
   fast: Schema.optionalKey(Schema.Boolean),
-  /** Fullspin's coder instructions, appended to Claude Code's own system prompt. */
+  /** Our coder instructions, appended to Claude Code's own system prompt. */
   append: Schema.String,
   /** The CLI's session id to resume, where this launch continues one. */
   resume: Schema.optionalKey(Schema.String),
-  /** Fullspin's id of a prompt a rewind dropped: the resumed session is cut just before it, and resumed whole where it holds no such prompt. */
+  /** The service's id of a prompt a rewind dropped: the resumed session is cut just before it, and resumed whole where it holds no such prompt. */
   rewindBefore: Schema.optionalKey(Schema.String),
   firstSequence: SequenceSchema,
   /** Where the runner posts its events. */
   eventsUrl: Schema.String,
-  /** Where the runner reads Fullspin's lines past its config, in place of its stdin (`RUNNER_LINES`); none where Fullspin writes them to its stdin. */
+  /** Where the runner reads the service's lines past its config, in place of its stdin (`RUNNER_LINES`); none where the service writes them to its stdin. */
   linesUrl: Schema.optionalKey(Schema.String),
-  /** The Fullspin MCP server's streamable-HTTP endpoint. */
+  /** Our MCP server's streamable-HTTP endpoint. */
   mcpUrl: Schema.String,
   /** The integrations the agent is handed, one MCP server each; none in a config written before them. */
   integrations: Schema.optionalKey(Schema.Array(IntegrationServerSchema)),
@@ -271,7 +271,7 @@ export type ClaudeCodeConfig = typeof ClaudeCodeConfigSchema.Type;
  * the image carries (P17); `CODEX_HOME`, where Codex keeps its threads, comes
  * from the launch's environment and must exist before the runner starts.
  * `threadId` is the thread to resume, where this launch continues one; a new
- * thread's id reaches Fullspin in its `thread/started` notification. Commands
+ * thread's id reaches the service in its `thread/started` notification. Commands
  * Codex runs reach the network (`workspace-write` with network on), so there
  * are no allowed domains to name.
  */
@@ -287,20 +287,20 @@ export const CodexConfigSchema = Schema.Struct({
    * API key alone asks for; the plan's launch runs none.
    */
   fast: Schema.optionalKey(Schema.Boolean),
-  /** Fullspin's coder instructions, as the thread's `developer_instructions`. */
+  /** Our coder instructions, as the thread's `developer_instructions`. */
   developerInstructions: Schema.String,
   threadId: Schema.optionalKey(Schema.String),
-  /** Fullspin's id of a message a rewind dropped: the resumed thread is reverted to before the turn that took it, and resumed whole where none did. */
+  /** The service's id of a message a rewind dropped: the resumed thread is reverted to before the turn that took it, and resumed whole where none did. */
   rewindBefore: Schema.optionalKey(Schema.String),
   firstSequence: SequenceSchema,
   eventsUrl: Schema.String,
-  /** Where the runner reads Fullspin's lines past its config (`RUNNER_LINES`); none where Fullspin writes them to its stdin. */
+  /** Where the runner reads the service's lines past its config (`RUNNER_LINES`); none where the service writes them to its stdin. */
   linesUrl: Schema.optionalKey(Schema.String),
   mcpUrl: Schema.String,
   /** The integrations the agent is handed, one MCP server each; none in a config written before them. */
   integrations: Schema.optionalKey(Schema.Array(IntegrationServerSchema)),
   /**
-   * Where the runner asks Fullspin for the plan's access token, under its bearer
+   * Where the runner asks the service for the plan's access token, under its bearer
    * (`/api/agents/runner-token`). App-server takes its token from the
    * runner's `codex-token` command (Codex's provider `auth`), which Codex runs
    * again as its cached token ages and after a 401, so a turn outlives any
@@ -321,7 +321,7 @@ export const CodexConfigSchema = Schema.Struct({
    * Whether app-server runs on the Mac's own Codex sign-in, the managed
    * ChatGPT login or API key `codex login` keeps under the user's default
    * `CODEX_HOME`, which Codex refreshes itself
-   * (https://learn.chatgpt.com/docs/auth): no provider of Fullspin's, no token
+   * (https://learn.chatgpt.com/docs/auth): no provider of ours, no token
    * command, and no key in the environment. A launch whose Mac turns out
    * signed out fails rather than turning to another payer.
    */
@@ -354,7 +354,7 @@ const UuidSchema = Schema.String.check(
 
 /**
  * A message for the session, in the Messages API's own block shapes. `uuid`
- * is Fullspin's id for the message, handed to the SDK as the prompt's own, so
+ * is the service's id for the message, handed to the SDK as the prompt's own, so
  * the ACCEPTED event and the `result` that answers it name it; the runner
  * mints one where a line names none.
  */
@@ -366,8 +366,8 @@ const MessageLineSchema = Schema.Struct({
 /**
  * Stop the running turn. `launch` names the launch the stop is for by its
  * first event number (its config's `firstSequence`): one launch runs one of
- * Fullspin's turns, so a stop Fullspin meant for an earlier launch's turn, delayed
- * past it, is skipped by the launch that replaced it rather than
+ * the service's turns, so a stop the service meant for an earlier launch's
+ * turn, delayed past it, is skipped by the launch that replaced it rather than
  * interrupting its turn. A stop that names none is taken by any launch.
  */
 const StopLineSchema = Schema.Struct({
@@ -390,10 +390,10 @@ const ModelLineSchema = Schema.Struct({
 
 /**
  * End the launch if it is warm: its turn over, nothing in flight, no
- * message of Fullspin's unanswered, and no turn of the CLI's own begun since.
- * Fullspin writes it once a warm launch has idled past its window
+ * message of the service's unanswered, and no turn of the CLI's own begun since.
+ * The service writes it once a warm launch has idled past its window
  * (`coder-host/runner-sessions.ts`'s `retireWarmRunner`), and a launch in
- * any other state skips it, so a message Fullspin wrote ahead of it on the same
+ * any other state skips it, so a message the service wrote ahead of it on the same
  * stdin always wins.
  */
 const RetireLineSchema = Schema.Struct({
@@ -413,14 +413,14 @@ export type InputLine = typeof InputLineSchema.Type;
  * the SDK never uses.
  *
  * ACCEPTED is posted as a message line is handed to the SDK, naming the
- * message's `uuid`, so Fullspin ties the message it sent to the turn that runs
+ * message's `uuid`, so the service ties the message it sent to the turn that runs
  * it: the CLI never echoes a prompt back. WAITING follows a `result` the run
  * outlives, because the Stop hook before it reported background work or a
  * scheduled wakeup still to come: the agent is waiting, not done, and the
  * sandbox must stay up. IDLE follows a `result`, or Codex's
  * `turn/completed`, that leaves nothing in flight or unanswered: the agent's
  * turn is over, as a `turn_ended` END says, but the launch stays warm
- * (`RUNNER_WARM`), so Fullspin's next message is a line on its stdin rather than
+ * (`RUNNER_WARM`), so the service's next message is a line on its stdin rather than
  * a resumed sandbox and a relaunched CLI. END is the last event a launch
  * posts, with why it ended.
  */
@@ -437,28 +437,28 @@ export const RUNNER_END = {
   TURN_ENDED: "turn_ended",
   /** A `result`, or an interrupted turn, after a stop: the turn was stopped. */
   STOPPED: "stopped",
-  /** Fullspin closed stdin, or the CLI ended its stream, before a turn ended. */
+  /** The service closed stdin, or the CLI ended its stream, before a turn ended. */
   INPUT_CLOSED: "input_closed",
   /** The CLI or app-server failed, or Codex's turn did; the turn shows as failed, and the next message relaunches with `resume`. */
   FAILED: "failed",
   /**
    * A wait released (`RUNNER_RELEASE`): the agent waited on wakeups alone,
    * with no process of its own still running, so the launch ended for its
-   * sandbox to stop; the END names the wakeups for Fullspin to deliver as they
+   * sandbox to stop; the END names the wakeups for the service to deliver as they
    * come due. The turn is over, as a `turn_ended` one is.
    */
   RELEASED: "released",
-  /** A warm launch ended with no turn under way: retired by Fullspin past its window, or past `RUNNER_WARM.IDLE_CAP_MS` on its own. Its turn was already over at its IDLE. */
+  /** A warm launch ended with no turn under way: retired by the service past its window, or past `RUNNER_WARM.IDLE_CAP_MS` on its own. Its turn was already over at its IDLE. */
   IDLED: "idled",
 } as const;
 export type RunnerEnd = (typeof RUNNER_END)[keyof typeof RUNNER_END];
 
 /**
- * How long a warm launch waits on its own. Fullspin retires a warm launch once
+ * How long a warm launch waits on its own. The service retires a warm launch once
  * it idled past its window (`CODER.RUNNER_WARM`), under the runner lease, so
  * no message it writes is lost to the end; this cap is the launch's own
- * bound where Fullspin never does, since the heartbeat keeps its sandbox alive
- * for as long as it runs. A message Fullspin writes in the instant the cap ends
+ * bound where the service never does, since the heartbeat keeps its sandbox alive
+ * for as long as it runs. A message the service writes in the instant the cap ends
  * the launch stays unaccepted, as one a released wait ends on does.
  */
 export const RUNNER_WARM = {
@@ -483,7 +483,7 @@ export interface RunnerWaiting {
   readonly session_crons: readonly SessionCronSummary[];
 }
 
-/** A wakeup a released wait left for Fullspin to deliver: the instant it comes due, and the prompt the CLI would have run then. */
+/** A wakeup a released wait left for the service to deliver: the instant it comes due, and the prompt the CLI would have run then. */
 export interface RunnerWakeup {
   /** An ISO 8601 instant. */
   readonly at: string;
@@ -498,9 +498,9 @@ export interface RunnerWakeup {
  * wait on a wakeup held the CLI, and the 8 GB sandbox under it, up until the
  * wakeup came. A launch waiting on one-shot wakeups alone, with no
  * background task and no process of the agent's still running, is ended
- * instead, and Fullspin delivers each wakeup as a message when it comes due,
+ * instead, and the service delivers each wakeup as a message when it comes due,
  * which relaunches the CLI on the session it resumes. Any launch hands the
- * wakeups back: Fullspin drops what it held, the CLI restores on resume the
+ * wakeups back: the service drops what it held, the CLI restores on resume the
  * one-shot tasks the agent made itself, and the agent owns them again.
  */
 export const RUNNER_RELEASE = {
@@ -531,12 +531,12 @@ export const RUNNER_RELEASE = {
 
 /**
  * How long a launch waits on the CLI's answer to one control request (a
- * model change, an interrupt). The input loop takes Fullspin's lines one at a
+ * model change, an interrupt). The input loop takes the service's lines one at a
  * time and every message goes behind a model line, so a request the CLI
  * never answers would hold every later message and Stop; past this, a model
  * change is let go and an interrupt ends the launch as `STOPPED`. The CLI
  * answers one within a second, and five leaves an interrupt's end inside
- * the bound Fullspin forces a Stop at (`CODER.STOP_CONFIRM`, ten seconds).
+ * the bound the service forces a Stop at (`CODER.STOP_CONFIRM`, ten seconds).
  */
 export const RUNNER_CONTROL = {
   ANSWER_MS: 5 * 1_000,
@@ -627,7 +627,7 @@ export interface RunnerEvent {
 }
 
 /**
- * One POST's body: consecutive events, in order. Fullspin applies each sequence
+ * One POST's body: consecutive events, in order. The service applies each sequence
  * at most once. A batch with no events is the launch's heartbeat
  * (`RUNNER_HEARTBEAT`), which applies nothing.
  */
@@ -636,18 +636,18 @@ export interface RunnerEventBatch {
 }
 
 /**
- * How often a launch tells Fullspin it still runs, as a batch with no events,
+ * How often a launch tells the service it still runs, as a batch with no events,
  * for as long as it runs. A harness may say nothing for an hour while a
- * background command or a wakeup it waits on runs, and Fullspin keeps the
+ * background command or a wakeup it waits on runs, and the service keeps the
  * sandbox alive only on what the runner posts (its keep-alive interval is
  * ten minutes, its timeout an hour), so five minutes leaves room for a
- * heartbeat Fullspin did not take, and costs one small post each.
+ * heartbeat the service did not take, and costs one small post each.
  */
 export const RUNNER_HEARTBEAT = {
   EVERY_MS: 5 * 60 * 1_000,
   /**
-   * How long one heartbeat waits on Fullspin's answer before it is let go, well
-   * inside the interval, so a post Fullspin never answers cannot hold back the
+   * How long one heartbeat waits on the service's answer before it is let go, well
+   * inside the interval, so a post the service never answers cannot hold back the
    * next one.
    */
   TIMEOUT_MS: 30 * 1_000,

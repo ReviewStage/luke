@@ -1,6 +1,6 @@
 name: Release host
 
-# Builds Luke's host daemon (apps/host) for linux-x64, linux-arm64, and
+# Builds Vespin's host daemon (apps/host) for linux-x64, linux-arm64, and
 # darwin-arm64 and publishes the three tarballs, each with its .sha256, to a
 # GitHub release of their own, tagged host-v<version> to match
 # apps/host/package.json. A manual dispatch is a rehearsal: it builds and
@@ -164,8 +164,8 @@ jobs:
           cd release
           sha256sum -c ./*.sha256
           gh release create "$TAG" --draft --latest=false --verify-tag \
-            --title "Luke host $VERSION" \
-            --notes "Luke's host daemon $VERSION for linux-x64, linux-arm64, and darwin-arm64. Install it from Settings › Hosts › Add hosts." \
+            --title "Vespin host $VERSION" \
+            --notes "Vespin's host daemon $VERSION for linux-x64, linux-arm64, and darwin-arm64. Install it from Settings › Hosts › Add hosts." \
             ./*.tar.gz ./*.sha256
           gh release edit "$TAG" --draft=false --latest=false
           echo "Move HOST_RELEASE (packages/features/src/host-release.ts) to $VERSION with these digests:"

@@ -15,7 +15,7 @@ import { PANEL_PATH } from "../src/app/web-address";
  * unreachable one offers nothing to press; and a signed-out visitor is
  * offered the providers, whose failure to start is announced. The page runs
  * as it does in the browser, mounted on its own `#root`; the network, the
- * HTTP boundary to Better Auth and Vespin's route, is a fake.
+ * HTTP boundary to Better Auth and our route, is a fake.
  */
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);

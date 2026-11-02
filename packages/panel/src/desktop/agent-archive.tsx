@@ -50,7 +50,7 @@ import { type CountNoun, foldedCount } from "./sidebar-fold.js";
  * first, in the accent, since archiving it stops a turn that is not the
  * reader's. Note that a teammate's agent drawn at rest is read again
  * before it is archived unasked, because nothing follows an agent whose
- * tab is not shown, and a turn begun since, by Fullspin or another window, is
+ * tab is not shown, and a turn begun since, by the app or another window, is
  * asked about first like any other, a button that pressed it held busy while
  * the read is out. Archived, which is drawn at once, before the service
  * answers, and put back where it refuses, unless it was asked about, whose

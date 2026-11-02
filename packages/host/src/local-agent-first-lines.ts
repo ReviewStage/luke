@@ -29,7 +29,7 @@ export const LAUNCH_NOTE = {
   CLEARED: `Your folder on this machine was cleared since your last turn, so this turn starts in a fresh one, with none of your earlier work but what you pushed to GitHub, and with no memory of the conversation before it. Fetch your branch to carry on from what you pushed. Your transcript is still in ${PRODUCT_NAME}.`,
 } as const;
 
-/** What leads the device's notes, so the agent reads them as Fullspin's rather than the developer's. */
+/** What leads the device's notes, so the agent reads them as the app's rather than the developer's. */
 const NOTES_LEAD = `From ${PRODUCT_NAME}, about the machine this turn runs on:`;
 
 /** The keys of a runner's config that continue a harness's session: Claude Code's session, Codex's thread, and the cut a rewind makes in either. */

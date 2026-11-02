@@ -24,6 +24,7 @@ import {
 import { GitBranchIcon, GLYPH } from "@luke/ui/icons";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import type { ReactNode } from "react";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { LINK_COPY } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction, rowMenu } from "../desktop/action-menu.js";
@@ -187,7 +188,7 @@ export function LinesChanged({
   );
 }
 
-/** The pull request's row pinned over the box, a card of one row: its number and title, that its checks failed where they did, where it stands if that matters, and the lines it adds and removes; a press opens its tab, or the page on GitHub, a right-click offers the rest, and the pointer resting on it hangs the pull request's chip's card, which names it whole. A narrow row gives up the checks' word, then the lines, before the number (tasks.css). */
+/** The pull request's row pinned over the box, a card of one row: its number and title, that its checks failed where they did, where it stands if that matters, and the lines it adds and removes; a press opens its tab, or the page on GitHub, a right-click, a long press or the menu key offers the rest, a finger's row drawing no ⋯ so the title keeps its room, and the pointer resting on it hangs the pull request's chip's card, which names it whole. A narrow row gives up the checks' word, then the lines, before the number (tasks.css). */
 export function PublishedRow({
   pullRequest,
   branch,
@@ -199,6 +200,7 @@ export function PublishedRow({
   doors: PublishedDoors;
 }): ReactNode {
   const state = pullRequestStateWord(pullRequest);
+  const coarse = useCoarsePointer();
   const inPanel = doors.openPullRequest;
   // Note that Open on GitHub is offered only where a press opens the tab instead.
   const actions = branchActions(
@@ -249,6 +251,7 @@ export function PublishedRow({
               else inPanel();
             }}
             menu={rowMenu(PUBLISHED_THING, actions)}
+            more={!coarse}
           />
         </RowHintOptions>
       </List>

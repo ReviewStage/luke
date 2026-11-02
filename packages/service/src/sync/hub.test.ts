@@ -33,7 +33,7 @@ import { syncFromEnvironment, syncHub } from "./hub.js";
 import { NO_TOPICS, Sync, type SyncWatch } from "./watch.js";
 
 /**
- * Vespin Sync's hub, on the test database's own listener: what a committed
+ * Sync's hub, on the test database's own listener: what a committed
  * write on a synced table wakes, how the listener is shared and proved, and
  * what waits on the clock instead. The tests run on a clock that announces
  * each wait, and move it only once something waits on it, so a write the
