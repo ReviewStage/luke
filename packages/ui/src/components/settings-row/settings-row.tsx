@@ -337,7 +337,8 @@ export function SettingsRowStateLine({
     <span
       className={cn(
         "luke-settings-row-state items-center gap-luke-6",
-        block ? "flex w-fit" : "inline-flex",
+        // Note that an inline line stands at the top of its own line box, because on the baseline a connected line takes its baseline from the dot, a flex item with none of its own, and sits a pixel low, growing the row as its words land.
+        block ? "flex w-fit" : "inline-flex align-top",
         // Note that the parts of a wrapping line are spaced by the spaces written between them, kept by `pre`: a flex gap beside the space a part ends in, trimmed at its end, would leave a wider gap after a separator than before it. The state's dot keeps its own.
         wrap && "flex-wrap gap-x-0 whitespace-pre before:me-luke-6",
         STATE_CLASS[state],
