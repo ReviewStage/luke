@@ -16,6 +16,11 @@ import {
 } from "@luke/wire/testing";
 import { Cause, type Context, Effect, Layer, Logger, Option, Redacted, Result } from "effect";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import {
+  recordingProductAnalytics,
+  SERVER_DICTATION_DURATION,
+  SERVER_EVENT,
+} from "../events/server-events.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
@@ -31,6 +36,9 @@ import { dictationProcedures } from "./dictation-procedures.js";
  *
  * Synthetic accounts, bearers, clip bytes, and words throughout.
  */
+
+/** What the route counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
 
 const ORIGIN = "https://luke.test";
 const DICTATION_PATH = "/api/dictation";
@@ -152,6 +160,7 @@ const answer = (
         Layer.mergeAll(
           Layer.succeed(HostedEnvironment, environment),
           seams.model,
+          ANALYTICS.layer,
           Logger.layer([recorder]),
         ),
       ),
@@ -219,6 +228,28 @@ it.layer(getTestDB())("the dictation route", (it) => {
         assert.ok(file instanceof File);
         assert.equal(file.type, "audio/webm");
         assert.deepEqual(new Uint8Array(yield* Effect.promise(() => file.arrayBuffer())), CLIP);
+      }),
+  );
+
+  it.effect(
+    "each clip answered is counted under the account by how long it ran, in no workspace, and a clip refused is not",
+    () =>
+      Effect.gen(function* () {
+        const { userId, ask } = yield* openAccount();
+
+        yield* ask(clip(userId));
+        yield* ask(clip(userId, { durationMs: 45_000 }));
+        yield* ask(clip(userId, { durationMs: 120_001 }));
+
+        assert.deepEqual(
+          ANALYTICS.recorded
+            .filter((event) => event.userId === userId && event.name === SERVER_EVENT.DICTATION_USE)
+            .map((event) => ({ workspaceId: event.workspaceId, ...event.properties })),
+          [
+            { workspaceId: undefined, duration: SERVER_DICTATION_DURATION.UNDER_10S },
+            { workspaceId: undefined, duration: SERVER_DICTATION_DURATION.UNDER_1M },
+          ],
+        );
       }),
   );
 

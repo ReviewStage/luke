@@ -27,6 +27,11 @@ import { readEither } from "@luke/wire/effect";
 import { Clock, type Context, Effect, Layer, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
+import {
+  recordingProductAnalytics,
+  SERVER_EVENT,
+  SERVER_SKILL_ACTION,
+} from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
@@ -57,6 +62,18 @@ import { installedSkillsProcedures } from "./installed-skills-procedures.js";
  * and a personal skill shared into a workspace. Synthetic accounts,
  * repositories, and words throughout.
  */
+
+/** What the routes counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+/** The skill changes each counted for the account, in order; each is in no workspace, since a skill may be personal. */
+const skillChangesCounted = (userId: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === SERVER_EVENT.SKILL_CHANGE)
+    .map((event) => {
+      assert.equal(event.workspaceId, undefined);
+      return "action" in event.properties ? event.properties.action : undefined;
+    });
 
 const ORIGIN = "https://luke.test";
 const SKILLS = HOSTED_SERVICE_PATH.INSTALLED_SKILLS;
@@ -273,6 +290,7 @@ const routes = (github: FakeGitHub) =>
           Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
           Layer.succeed(Database, yield* Database),
           Layer.succeed(Clock.Clock, yield* Clock.Clock),
+          ANALYTICS.layer,
           github.layer,
         ),
       ),
@@ -1231,6 +1249,7 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           yield* toggle(member, notes.id, false),
         ).skill;
         assert.equal(off.enabled, false);
+        yield* toggle(member, notes.id, true);
 
         const removing = (userId: string, id: string) =>
           ask(installedSkillPath(id), userId, { method: "DELETE" });
@@ -1244,6 +1263,17 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           (yield* ask(installedSkillPath("not-a-uuid"), owner, { method: "DELETE" })).status,
           HOSTED_HTTP_STATUS.NOT_FOUND,
         );
+        // Only a change that was made is counted, under whoever made it.
+        assert.deepEqual(skillChangesCounted(member), [
+          SERVER_SKILL_ACTION.INSTALL,
+          SERVER_SKILL_ACTION.DISABLE,
+          SERVER_SKILL_ACTION.ENABLE,
+        ]);
+        assert.deepEqual(skillChangesCounted(admin), [
+          SERVER_SKILL_ACTION.INSTALL,
+          SERVER_SKILL_ACTION.REMOVE,
+        ]);
+        assert.deepEqual(skillChangesCounted(peer), []);
       }),
   );
 
@@ -1374,6 +1404,11 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           HOSTED_HTTP_STATUS.FORBIDDEN,
           "a workspace skill is shared already",
         );
+        assert.deepEqual(skillChangesCounted(owner), [
+          SERVER_SKILL_ACTION.INSTALL,
+          SERVER_SKILL_ACTION.INSTALL,
+          SERVER_SKILL_ACTION.SHARE,
+        ]);
         const seen = readAnswer(
           installedSkillListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -1465,6 +1500,11 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           body: { workspaceId: workspace },
         });
         assert.equal(notTheirs.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.deepEqual(skillChangesCounted(owner), [
+          SERVER_SKILL_ACTION.INSTALL,
+          SERVER_SKILL_ACTION.UPDATE,
+        ]);
+        assert.deepEqual(skillChangesCounted(other), []);
       }),
   );
 

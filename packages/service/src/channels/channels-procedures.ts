@@ -33,6 +33,13 @@ import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import type { ArchivedChannel, Channel, ChannelsAnswer } from "@luke/features/channel-wire";
 import { DateTime, Effect, Option, Result } from "effect";
 import {
+  recordServerEvent,
+  recordServerEventIn,
+  SERVER_CHANNEL_ACTION,
+  SERVER_EVENT,
+  type ServerChannelAction,
+} from "../events/server-events.js";
+import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
@@ -88,6 +95,18 @@ const channelsWritten = /* @__PURE__ */ Effect.fnUntraced(function* (
   const answer: ChannelsAnswer = yield* channelsOf(userId, organizationId);
   return txid === undefined ? answer : { ...answer, txid };
 });
+
+/** A channel write counted under the member who made it, where it wrote a row; one that changed none, such as a retry, is not. */
+function channelChanged(
+  userId: string,
+  workspaceId: string,
+  action: ServerChannelAction,
+  { txid }: ChannelTxid,
+) {
+  return txid === undefined
+    ? Effect.void
+    : recordServerEvent(SERVER_EVENT.CHANNEL_CHANGE, { userId, workspaceId }, { action });
+}
 
 /** What a channel holds of the threads the reader may read, as the wire carries it: none and no latest post where it holds none. */
 function tallied(tally: ChannelPostTally | undefined): Pick<Channel, "threads" | "latestPostedAt"> {
@@ -166,14 +185,18 @@ export function channelsProcedures(seams: ChannelsProcedureSeams) {
       const made = yield* hostedStoreOrUnavailable(
         createChannel(context.userId, workspaceId, { name, purpose, project, id }, now),
       );
-      return yield* channelsWritten(context.userId, workspaceId, yield* written(made));
+      const wrote = yield* written(made);
+      yield* channelChanged(context.userId, workspaceId, SERVER_CHANNEL_ACTION.CREATE, wrote);
+      return yield* channelsWritten(context.userId, workspaceId, wrote);
     }),
     edit: signedIn.edit.effect(function* ({ input, context }) {
       const { workspaceId, channelId, name, purpose } = input;
       const edited = yield* hostedStoreOrUnavailable(
         editChannel(context.userId, workspaceId, channelId, { name, purpose }),
       );
-      return yield* channelsWritten(context.userId, workspaceId, yield* written(edited));
+      const wrote = yield* written(edited);
+      yield* channelChanged(context.userId, workspaceId, SERVER_CHANNEL_ACTION.EDIT, wrote);
+      return yield* channelsWritten(context.userId, workspaceId, wrote);
     }),
     archive: signedIn.archive.effect(function* ({ input, context }) {
       const { workspaceId, channelId } = input;
@@ -181,7 +204,9 @@ export function channelsProcedures(seams: ChannelsProcedureSeams) {
       const archived = yield* hostedStoreOrUnavailable(
         archiveChannel(context.userId, workspaceId, channelId, now),
       );
-      return yield* channelsWritten(context.userId, workspaceId, yield* written(archived));
+      const wrote = yield* written(archived);
+      yield* channelChanged(context.userId, workspaceId, SERVER_CHANNEL_ACTION.ARCHIVE, wrote);
+      return yield* channelsWritten(context.userId, workspaceId, wrote);
     }),
     unarchive: signedIn.unarchive.effect(function* ({ input, context }) {
       const { workspaceId, channelId } = input;
@@ -237,6 +262,12 @@ export function channelsProcedures(seams: ChannelsProcedureSeams) {
       );
       // Note that a thread the mover may not read and a channel that is no open one of its workspace are one refusal, so a move tells nothing of either.
       if (Result.isFailure(moved)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      yield* recordServerEventIn(
+        SERVER_EVENT.CHANNEL_CHANGE,
+        context.userId,
+        channelWorkspaceOf(context.userId, input.channelId),
+        { action: SERVER_CHANNEL_ACTION.THREAD_MOVE },
+      );
       return { thread: moved.success.thread, txid: moved.success.txid };
     }),
   };

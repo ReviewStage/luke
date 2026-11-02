@@ -38,6 +38,11 @@ import { eq } from "drizzle-orm";
 import { type Context, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import {
+  recordingProductAnalytics,
+  SERVER_AGENT_TOOL,
+  SERVER_EVENT,
+} from "../events/server-events.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
@@ -179,14 +184,28 @@ const openTask = Effect.gen(function* () {
   };
 });
 
+/** What the route counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+/** The tools the account was counted as opening, in order, each in the workspace given. */
+const toolsCounted = (userId: string, workspaceId: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === SERVER_EVENT.AGENT_TOOL_OPEN)
+    .map((event) => {
+      assert.equal(event.workspaceId, workspaceId);
+      return "tool" in event.properties ? event.properties.tool : undefined;
+    });
+
 const answer = (
   bearers: ReadonlyMap<string, string>,
   request: Request,
   agentBrowser: Layer.Layer<AgentBrowser>,
 ) =>
   Effect.gen(function* () {
-    // SAFETY: the procedures yield the database and the clock alone, which the test's own context holds.
-    const services = (yield* Effect.context<never>()) as Context.Context<WebServices>;
+    // SAFETY: the procedures yield the database, the clock and the analytics alone, which the test's own context holds.
+    const services = (yield* Effect.context<never>().pipe(
+      Effect.provide(ANALYTICS.layer),
+    )) as Context.Context<WebServices>;
     const handle = hostedFetch({
       agentBrowserTabs: agentBrowserTabsProcedures({
         resolveUserId: (incoming) =>
@@ -417,7 +436,7 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
     "a takeover makes the member the driver for the hold, another member's answers them as driver until it lapses, and a hand-back gives the tab back",
     () =>
       Effect.gen(function* () {
-        const { starter, teammate, taskId, coderTab, ask } = yield* openTask;
+        const { starter, teammate, taskId, workspace, coderTab, ask } = yield* openTask;
         const path = driverPath(taskId, coderTab.id);
         const takenAt = (yield* DateTime.nowAsDate).getTime();
 
@@ -434,6 +453,12 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
         assert.equal(lapsed?.driver, null);
         assert.equal(tabOf(yield* ask(request(teammate, path, "POST"))).driver?.userId, teammate);
         assert.equal(tabOf(yield* ask(request(teammate, path, "DELETE"))).driver, null);
+        // Only a takeover that took the tab and a hand-back that gave it back are counted.
+        assert.deepEqual(toolsCounted(starter, workspace), [SERVER_AGENT_TOOL.BROWSER_TAKEOVER]);
+        assert.deepEqual(toolsCounted(teammate, workspace), [
+          SERVER_AGENT_TOOL.BROWSER_TAKEOVER,
+          SERVER_AGENT_TOOL.BROWSER_HANDBACK,
+        ]);
       }),
   );
 
@@ -478,7 +503,7 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
     "a member who controls the agent opens a tab in its browser, kept with them as its opener and taken over by them",
     () =>
       Effect.gen(function* () {
-        const { starter, teammate, taskId, coder, ask } = yield* openTask;
+        const { starter, teammate, taskId, workspace, coder, ask } = yield* openTask;
         yield* runAgent(coder);
         const { peer, layer } = yield* runningBrowser;
 
@@ -513,6 +538,7 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
           listed.find((tab) => tab.id === opened.id),
           opened,
         );
+        assert.deepEqual(toolsCounted(starter, workspace), [SERVER_AGENT_TOOL.BROWSER]);
       }),
   );
 

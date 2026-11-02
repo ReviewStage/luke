@@ -32,6 +32,7 @@
 
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { listPages, readPageVersion } from "@luke/database/models/plan-pages";
+import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { pageVersionNumberSchema, taskPageOwner } from "@luke/features/page-wire";
 import { pictureOfDataUrl } from "@luke/features/picture-wire";
 import {
@@ -47,6 +48,7 @@ import {
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
+import { recordServerEventIn, SERVER_AGENT_TOOL, SERVER_EVENT } from "../events/server-events.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -152,6 +154,12 @@ export function taskFilesProcedures(seams: TaskFilesProcedureSeams) {
       );
       switch (kept.status) {
         case PLAN_ATTACHMENT_KEEP.KEPT:
+          yield* recordServerEventIn(
+            SERVER_EVENT.AGENT_TOOL_OPEN,
+            context.userId,
+            readTaskWorkspace(context.userId, taskId),
+            { tool: SERVER_AGENT_TOOL.ADD_TO_PLAN },
+          );
           return { status: PLAN_ATTACHMENT_STATUS.KEPT, body: { id: kept.id } };
         case PLAN_ATTACHMENT_KEEP.TOO_MANY:
           return {

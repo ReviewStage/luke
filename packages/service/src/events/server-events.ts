@@ -29,7 +29,8 @@ import { DEPLOYMENT_VARIABLE, deploymentNamed } from "./events.js";
  * desktop cannot see, because it happens on the service or in an agent's
  * sandbox — a task started, a coding agent started, a member's message to it,
  * each of its turns ended, a Stop, an archive, a pull request opened and
- * merged, an automation made, an integration connected.
+ * merged, an automation made, changed, or deleted, an integration connected,
+ * and a member's changes to their skills, channels, machines, and workspace.
  *
  * It holds to the desktop's counted events' rule
  * (`@luke/features/analytics`'s `product-events.ts`): an event is a name from
@@ -96,6 +97,14 @@ export const SERVER_EVENT = {
   PROVIDER_KEY_CREATE: "provider_key:create",
   PULL_REQUEST_ACTION: "pull_request:action",
   AGENT_SETTINGS_CHANGE: "agent:settings_change",
+  SKILL_CHANGE: "skill:change",
+  DICTATION_USE: "dictation:use",
+  MEMORY_FORGET: "memory:forget",
+  HOST_PAIRING_CHANGE: "host:pairing_change",
+  CHANNEL_CHANGE: "channel:change",
+  WORKSPACE_MEMBER_CHANGE: "workspace:member_change",
+  AUTOMATION_CHANGE: "automation:change",
+  AGENT_TOOL_OPEN: "agent:tool_open",
 } as const;
 
 type ServerEventName = (typeof SERVER_EVENT)[keyof typeof SERVER_EVENT];
@@ -245,6 +254,75 @@ export const SERVER_AGENT_SETTING = {
   EFFORT: "effort",
 } as const;
 
+/** What a member did to an installed skill. */
+export const SERVER_SKILL_ACTION = {
+  INSTALL: "install",
+  ENABLE: "enable",
+  DISABLE: "disable",
+  UPDATE: "update",
+  SHARE: "share",
+  REMOVE: "remove",
+} as const;
+
+/**
+ * How long a dictated clip ran, as a bucket, named for its upper bound as the
+ * turn's are; the service holds a clip to two minutes, so none runs over.
+ */
+export const SERVER_DICTATION_DURATION = {
+  UNDER_10S: "under_10s",
+  UNDER_30S: "under_30s",
+  UNDER_1M: "under_1m",
+  UNDER_2M: "under_2m",
+} as const;
+
+const SECOND_MS = 1_000;
+
+const DICTATION_DURATION_BOUNDS = [
+  [SERVER_DICTATION_DURATION.UNDER_10S, 10 * SECOND_MS],
+  [SERVER_DICTATION_DURATION.UNDER_30S, 30 * SECOND_MS],
+  [SERVER_DICTATION_DURATION.UNDER_1M, MINUTE_MS],
+] as const;
+
+/** What a member did to a box's pairing or an enrolled machine. */
+export const SERVER_HOST_PAIRING_ACTION = {
+  APPROVE: "approve",
+  DENY: "deny",
+  REMOVE: "remove",
+} as const;
+
+/** What a member did to a channel; an unarchive is left out. */
+export const SERVER_CHANNEL_ACTION = {
+  CREATE: "create",
+  EDIT: "edit",
+  ARCHIVE: "archive",
+  THREAD_MOVE: "thread_move",
+} as const;
+
+/** What was done to a workspace's members or to the workspace itself. */
+export const SERVER_WORKSPACE_MEMBER_ACTION = {
+  REMOVE: "remove",
+  ROLE_CHANGE: "role_change",
+  TRANSFER: "transfer",
+  LEAVE: "leave",
+  RENAME: "rename",
+  INVITE_CANCEL: "invite_cancel",
+} as const;
+
+/** What was done to an automation that is counted: a change, a toggle among them, or a delete. */
+export const SERVER_AUTOMATION_CHANGE_ACTION = {
+  EDIT: "edit",
+  DELETE: "delete",
+} as const;
+
+/** Which of an agent's tools a member opened or took up by hand. */
+export const SERVER_AGENT_TOOL = {
+  TERMINAL: "terminal",
+  BROWSER: "browser",
+  BROWSER_TAKEOVER: "browser_takeover",
+  BROWSER_HANDBACK: "browser_handback",
+  ADD_TO_PLAN: "add_to_plan",
+} as const;
+
 type Values<T> = T[keyof T];
 
 /** Where a task came to rest: done or canceled, the two a finish counts. */
@@ -253,6 +331,14 @@ export type ServerTaskFinishStatus = typeof TASK_STATUS.DONE | typeof TASK_STATU
 export type ServerAgentStartFailure = Values<typeof SERVER_AGENT_START_FAILURE>;
 
 export type ServerAgentStarter = Values<typeof SERVER_AGENT_STARTER>;
+
+export type ServerSkillAction = Values<typeof SERVER_SKILL_ACTION>;
+
+export type ServerChannelAction = Values<typeof SERVER_CHANNEL_ACTION>;
+
+export type ServerAgentTool = Values<typeof SERVER_AGENT_TOOL>;
+
+export type ServerWorkspaceMemberAction = Values<typeof SERVER_WORKSPACE_MEMBER_ACTION>;
 
 /**
  * Exactly what each event carries. A model and an effort are catalog ids the
@@ -354,12 +440,28 @@ export interface ServerEventProperties {
   [SERVER_EVENT.PULL_REQUEST_ACTION]: { action: Values<typeof SERVER_PULL_REQUEST_ACTION> };
   /** One counted for each of the model and the effort that a member's change made differ. */
   [SERVER_EVENT.AGENT_SETTINGS_CHANGE]: { changed: Values<typeof SERVER_AGENT_SETTING> };
+  /** A member's change to an installed skill; which skill is never named. */
+  [SERVER_EVENT.SKILL_CHANGE]: { action: Values<typeof SERVER_SKILL_ACTION> };
+  /** One transcribed clip, by how long it ran; its words are never counted. */
+  [SERVER_EVENT.DICTATION_USE]: { duration: Values<typeof SERVER_DICTATION_DURATION> };
+  /** A member's forget of one of the workspace's memories; what it held is never counted. */
+  [SERVER_EVENT.MEMORY_FORGET]: Record<string, never>;
+  [SERVER_EVENT.HOST_PAIRING_CHANGE]: { action: Values<typeof SERVER_HOST_PAIRING_ACTION> };
+  [SERVER_EVENT.CHANNEL_CHANGE]: { action: Values<typeof SERVER_CHANNEL_ACTION> };
+  [SERVER_EVENT.WORKSPACE_MEMBER_CHANGE]: { action: Values<typeof SERVER_WORKSPACE_MEMBER_ACTION> };
+  /** Who changed it is the member or one of their agents, as `automation:create` says. */
+  [SERVER_EVENT.AUTOMATION_CHANGE]: {
+    action: Values<typeof SERVER_AUTOMATION_CHANGE_ACTION>;
+    source: Values<typeof SERVER_AUTOMATION_SOURCE>;
+  };
+  [SERVER_EVENT.AGENT_TOOL_OPEN]: { tool: Values<typeof SERVER_AGENT_TOOL> };
 }
 
 /**
  * The events whose act belongs to no one workspace: an account's own sign-up
- * and setup, and its pins and machines, which reach every workspace it is in
- * alike.
+ * and setup, and its pins, machines, and dictation, which reach every
+ * workspace it is in alike, and its skills, which may be personal and are
+ * changed by id, naming no workspace.
  */
 type AccountEventName =
   | typeof SERVER_EVENT.ACCOUNT_SIGN_UP
@@ -369,7 +471,10 @@ type AccountEventName =
   | typeof SERVER_EVENT.GITHUB_TOKEN_SAVE
   | typeof SERVER_EVENT.PROVIDER_KEY_CREATE
   | typeof SERVER_EVENT.REPOSITORY_PIN
-  | typeof SERVER_EVENT.HOST_INSTALL;
+  | typeof SERVER_EVENT.HOST_INSTALL
+  | typeof SERVER_EVENT.SKILL_CHANGE
+  | typeof SERVER_EVENT.DICTATION_USE
+  | typeof SERVER_EVENT.HOST_PAIRING_CHANGE;
 
 /**
  * Who an event is counted under: the account that acted, and the one
@@ -694,6 +799,12 @@ function turnFailureOf(turn: SettledAgentTurn): Values<typeof SERVER_TURN_FAILUR
 function turnDurationOf(ranMs: number): Values<typeof SERVER_TURN_DURATION> {
   const bucket = TURN_DURATION_BOUNDS.find(([, bound]) => ranMs < bound);
   return bucket === undefined ? SERVER_TURN_DURATION.OVER_4H : bucket[0];
+}
+
+/** The bucket a dictated clip's length falls in. */
+export function dictationDurationOf(ms: number): Values<typeof SERVER_DICTATION_DURATION> {
+  const bucket = DICTATION_DURATION_BOUNDS.find(([, bound]) => ms < bound);
+  return bucket === undefined ? SERVER_DICTATION_DURATION.UNDER_2M : bucket[0];
 }
 
 /**

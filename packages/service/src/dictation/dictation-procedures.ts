@@ -6,8 +6,9 @@
  * model on the caller's own OpenAI API key (`../accounts/own-api-key.ts`),
  * never ours, with the words the desktop says it is likely to hold
  * (`dictation/transcription.ts`), and answers the text. Nothing of the clip or
- * the text is stored, logged, traced, or counted as an event: the clip lives
- * in this request's memory and goes when it ends.
+ * the text is stored, logged, or traced, and an event counts only that a
+ * clip was dictated and which length bucket it fell in: the clip lives in
+ * this request's memory and goes when it ends.
  *
  * What is kept is the meter: one call and the clip's seconds on the
  * account's day (`@luke/database/models/quota`), the seconds OpenAI billed where it says
@@ -29,6 +30,7 @@ import { middlewareGen } from "@orpc/experimental-effect";
 import { Clock, Effect, type Redacted } from "effect";
 import { ownApiKeyOf } from "../accounts/own-api-key.js";
 import { HostedEnvironment } from "../environment.js";
+import { dictationDurationOf, recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_REFUSAL, type UserIdResolver } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, type HostedCaller, type HostedContext, hosted } from "../orpc/base.js";
@@ -93,6 +95,11 @@ export function dictationProcedures(seams: DictationProcedureSeams) {
       const now = yield* Clock.currentTimeMillis;
       yield* spendDictationMeter({ userId: context.userId, seconds, now }).pipe(
         Effect.catch(logStoreFailure),
+      );
+      yield* recordServerEvent(
+        SERVER_EVENT.DICTATION_USE,
+        { userId: context.userId },
+        { duration: dictationDurationOf(durationMs) },
       );
       return { text: transcribed.text };
     }),

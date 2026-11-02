@@ -61,7 +61,11 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
+import {
+  recordingProductAnalytics,
+  SERVER_EVENT,
+  SERVER_WORKSPACE_MEMBER_ACTION,
+} from "../events/server-events.js";
 import { githubInstallApp } from "../github/github-install-app.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { answerInboxAsk, INBOX_ASK_ANSWER, postInboxThread } from "../inbox/inbox-store.js";
@@ -1394,6 +1398,59 @@ it.effect("an owner cannot leave, and a member leaves", () =>
       assert.deepEqual(yield* membersOf(acme), [{ userId: ada, role: WORKSPACE_ROLE.OWNER }]);
     }).pipe(Effect.provide(database));
   }),
+);
+
+it.effect(
+  "each change to a workspace's members is counted under the member who made it, in the workspace, and a refused one is not",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const linus = yield* openGithubAccount("Linus Torvalds");
+        const acme = yield* openTeam(plugin.api, ada, [
+          { userId: grace, role: "admin" },
+          { userId: alan, role: "admin" },
+          { userId: linus, role: "member" },
+        ]);
+        const countedIn = (userId: string) =>
+          ANALYTICS.recorded
+            .filter(
+              (event) =>
+                event.userId === userId && event.name === SERVER_EVENT.WORKSPACE_MEMBER_CHANGE,
+            )
+            .map((event) => ({ workspaceId: event.workspaceId, ...event.properties }));
+
+        yield* changingRole(plugin, ada, acme, grace, WORKSPACE_ROLE.MEMBER);
+        yield* removing(plugin, ada, acme, linus);
+        yield* renaming(plugin, ada, acme, "Acme Labs");
+        const invited = readAs(
+          yield* inviting(plugin, ada, acme, "carl@example.com"),
+          workspaceInvitationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+        ).invitation;
+        yield* postedInSession(plugin, ada, HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS_CANCEL, {
+          workspaceId: acme,
+          invitationId: invited.id,
+        });
+        const refused = yield* removing(plugin, alan, acme, ada);
+        yield* transferring(plugin, ada, acme, alan);
+        yield* leaving(plugin, ada, acme);
+
+        assert.equal(refused.status, HOSTED_HTTP_STATUS.FORBIDDEN);
+        assert.deepEqual(countedIn(ada), [
+          { workspaceId: acme, action: SERVER_WORKSPACE_MEMBER_ACTION.ROLE_CHANGE },
+          { workspaceId: acme, action: SERVER_WORKSPACE_MEMBER_ACTION.REMOVE },
+          { workspaceId: acme, action: SERVER_WORKSPACE_MEMBER_ACTION.RENAME },
+          { workspaceId: acme, action: SERVER_WORKSPACE_MEMBER_ACTION.INVITE_CANCEL },
+          { workspaceId: acme, action: SERVER_WORKSPACE_MEMBER_ACTION.TRANSFER },
+          { workspaceId: acme, action: SERVER_WORKSPACE_MEMBER_ACTION.LEAVE },
+        ]);
+        assert.deepEqual(countedIn(alan), []);
+      }).pipe(Effect.provide(plugin.database));
+    }),
 );
 
 it.effect(
