@@ -140,17 +140,23 @@ for (const [mode, ink] of Object.entries(INKS)) {
   );
 }
 
+// The share of an app icon's tile the disc spans, in every app icon alike:
+// the macOS icon, the web app icon, and the favicon. Note that it is larger
+// than a round glyph's usual half, because at half the mark stood small
+// beside every other app's glyph in the Dock, and smaller than the 80%
+// circle Android's maskable icon keeps, so no mask clips its rim.
+const ICON_MARK = 0.78;
+
 // App icon, one per mode, on Apple's macOS icon grid: an 824-unit tile with a
-// 185.4-unit corner, centred on a 1024 canvas, the disc spanning 54% of the
-// tile, the usual share for a round glyph. The packaged `.icns` is cut from
-// the dark set, and the running app swaps the Dock image between the two as
-// the theme changes. Note that the Dock and the app switcher draw the whole
-// canvas at one size, so a tile that filled it would stand a fifth larger
-// than every other app's.
-const ICON_GRID = { canvas: 1024, tile: 824, radius: 185.4, disc: 0.54 };
+// 185.4-unit corner, centred on a 1024 canvas, the disc spanning ICON_MARK of
+// the tile. The packaged `.icns` is cut from the dark set, and the running
+// app swaps the Dock image between the two as the theme changes. Note that
+// the Dock and the app switcher draw the whole canvas at one size, so a tile
+// that filled it would stand a fifth larger than every other app's.
+const ICON_GRID = { canvas: 1024, tile: 824, radius: 185.4 };
 {
   const origin = (ICON_GRID.canvas - ICON_GRID.tile) / 2;
-  const disc = ICON_GRID.tile * ICON_GRID.disc;
+  const disc = ICON_GRID.tile * ICON_MARK;
   const at = (ICON_GRID.canvas - disc) / 2;
   for (const [mode, { tile, ink }] of Object.entries(TILES)) {
     emit(
@@ -161,15 +167,31 @@ const ICON_GRID = { canvas: 1024, tile: 824, radius: 185.4, disc: 0.54 };
   }
 }
 
+// Web app icon: the dark mode's tile, full bleed, for the platform to round
+// or mask itself, the disc spanning ICON_MARK of it. The site's
+// apple-touch-icon and its manifest's icons, as is and maskable, are cut from
+// it -- see packages/brand/README.md.
+const WEB_ICON = { side: 100 };
+{
+  const { tile, ink } = TILES.dark;
+  const disc = WEB_ICON.side * ICON_MARK;
+  const at = (WEB_ICON.side - disc) / 2;
+  emit(
+    "icon/luke-web-icon.svg",
+    `${svgOpen(WEB_ICON.side, WEB_ICON.side)}<rect width="${WEB_ICON.side}" height="${WEB_ICON.side}" fill="${tile}"/>${markAt(at, at, disc, ink)}</svg>`,
+    `${PRODUCT_NAME} app icon`,
+  );
+}
+
 // Favicon: the light mode's copper tile with no Dock margin, which reads in
-// a light tab and a dark one alike, under the small cut a little larger than
-// the icon's, so the V still reads at 16 pixels. The site serves it as
-// /favicon.svg, with /favicon.ico cut from it for readers that take no SVG
-// -- see packages/brand/README.md.
-const FAVICON = { side: 240, inset: 8, radius: 52, disc: 0.66 };
+// a light tab and a dark one alike, under the small cut, so the V still
+// reads at 16 pixels, the disc spanning ICON_MARK of the tile. The site
+// serves it as /favicon.svg, with /favicon.ico cut from it for readers that
+// take no SVG -- see packages/brand/README.md.
+const FAVICON = { side: 240, inset: 8, radius: 52 };
 {
   const tile = FAVICON.side - FAVICON.inset * 2;
-  const disc = FAVICON.side * FAVICON.disc;
+  const disc = tile * ICON_MARK;
   const at = (FAVICON.side - disc) / 2;
   emit(
     "icon/luke-favicon.svg",

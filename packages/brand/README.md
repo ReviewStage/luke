@@ -55,9 +55,9 @@ rsvg-convert -w 660 -h 400 dmg/luke-dmg-background.svg -o dmg/luke-dmg-backgroun
 rsvg-convert -w 1320 -h 800 dmg/luke-dmg-background.svg -o dmg/luke-dmg-background@2x.png
 rsvg-convert -w 1200 -h 630 social/luke-og-card.svg -o ../../../apps/web/public/luke-og-card.png
 cp icon/luke-favicon.svg ../../../apps/web/public/favicon.svg
-rsvg-convert -w 180 -h 180 avatar/luke-avatar-dark.svg -o ../../../apps/web/public/apple-touch-icon.png
+rsvg-convert -w 180 -h 180 icon/luke-web-icon.svg -o ../../../apps/web/public/apple-touch-icon.png
 for s in 192 512; do
-  rsvg-convert -w $s -h $s avatar/luke-avatar-dark.svg -o ../../../apps/web/public/app-icon-$s.png
+  rsvg-convert -w $s -h $s icon/luke-web-icon.svg -o ../../../apps/web/public/app-icon-$s.png
 done
 for s in 16 32 48; do rsvg-convert -w $s -h $s icon/luke-favicon.svg -o /tmp/favicon-$s.png; done
 # Pack the three into apps/web/public/favicon.ico with any ICO writer that
@@ -87,12 +87,13 @@ The mark is static: it carries no motion.
 |---|---|
 | `luke-wordmark-{light,dark}.svg` | The name alone, outlined, per mode's ink |
 | `logo/luke-logo-{light,dark}.svg` + `-{256,512}.png` | The lockup, mark and name, on a transparent ground, for headers and docs |
-| `icon/luke-icon-{light,dark}.svg` + PNGs | The app icon on Apple's macOS grid: an 824-unit tile with a 185.4-unit corner on a 1024 canvas, the disc 54% of the tile. Dark: the night tile under the mark in copper. Light: the copper tile under a white mark. Flat, both |
+| `icon/luke-icon-{light,dark}.svg` + PNGs | The app icon on Apple's macOS grid: an 824-unit tile with a 185.4-unit corner on a 1024 canvas, the disc 78% of the tile (`ICON_MARK`, the one share every app icon takes). Dark: the night tile under the mark in copper. Light: the copper tile under a white mark. Flat, both |
 | `mark/luke-mark-square{,-transparent}-{light,dark}.svg` + `-1024.png` | The disc on a square canvas with a twelfth of air each side, per mode: over the icon's tile with square corners (for surfaces that round a square's corners themselves, GitHub's organization avatar among them), and in each mode's ink on transparency |
 | `mark/luke-mark-square-black.svg` + `-1024.png` | The white mark on flat pure black |
 | `mark/luke-mark-square-monochrome.svg` + `-{256,1024}.png` | The mark in pure black on transparency: the one-ink glyph a partner surface tints for its own theme, such as an integration's small icon on Sentry, which takes no colour but black |
 | `avatar/luke-avatar-{light,dark,black}.svg` + `-{400,1024}.png` | The profile photo: the icon's tile per mode, or flat black, with the disc at 56% of it, so the circle GitHub, X, Slack, and LinkedIn cut from a profile photo leaves air round the rim. Cut at 400, the size X and LinkedIn ask for, and at 1024 |
-| `icon/luke-favicon.svg` | The site's favicon: the copper tile with no Dock margin and the small cut a little larger, so it reads at 16 pixels in a light tab and a dark one. Copied to `apps/web/public/favicon.svg` and packed at 16, 32, and 48 into `apps/web/public/favicon.ico`. The site's 180-pixel `apple-touch-icon.png` is cut from `avatar/luke-avatar-dark.svg`, as are the manifest's `app-icon-{192,512}.png`, for Android's home screen as is and as maskable: the disc sits inside the 80% circle a mask keeps. The invitation email shows `app-icon-192.png` by its path |
+| `icon/luke-web-icon.svg` | The web app icon: the dark tile, full bleed, the disc 78% of it. The site's 180-pixel `apple-touch-icon.png` is cut from it, as are the manifest's `app-icon-{192,512}.png`, for Android's home screen as is and as maskable: the disc sits inside the 80% circle a mask keeps. The invitation email shows `app-icon-192.png` by its path |
+| `icon/luke-favicon.svg` | The site's favicon: the copper tile with no Dock margin under the small cut, the disc 78% of the tile, so it reads at 16 pixels in a light tab and a dark one. Copied to `apps/web/public/favicon.svg` and packed at 16, 32, and 48 into `apps/web/public/favicon.ico` |
 | `social/luke-og-card.svg` | The 1200×630 link-preview card the web pages' `og:image` points at: the lockup on the dark ground. One card, dark only: a link preview follows no UI theme. Its PNG is cut into `apps/web/public/luke-og-card.png`, which scrapers fetch from the site's root |
 | `button/luke-cta-download-{light,dark}.svg` | The download button, drawn as the site's primary button in each mode's accent, for a page that links the download |
 | `dmg/luke-dmg-background.svg` + PNGs | The disk image window's ground, with one round-ended arrow from the app to Applications, laid out by `scripts/dmg-window.mjs` |
