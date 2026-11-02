@@ -100,6 +100,8 @@
     "./chapters/chapters-function": "./src/chapters/chapters-function.js",
     "./db": "./src/db/index.js",
     "./db/sql-client": "./src/db/sql-client.js",
+    "./demo/demo-database": "./src/demo/demo-database.js",
+    "./demo/demo-seed": "./src/demo/demo-seed.js",
     "./dictation/transcription": "./src/dictation/transcription.js",
     "./environment": "./src/environment.js",
     "./events/events": "./src/events/events.js",

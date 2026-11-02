@@ -8,6 +8,7 @@
     "apps/host/src/main.ts",
     "apps/web/scripts/preview-probe.ts",
     "apps/web/server/db/migrate.ts",
+    "apps/web/server/demo-seed.ts",
     "apps/web/server/orpc-route.ts",
     "apps/web/server/runtime.ts",
     "apps/web/server/seed-clients.ts",
