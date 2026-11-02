@@ -707,9 +707,13 @@ const outcomeOf = Effect.fnUntraced(function* (eveFor: EveForAccount, run: Acted
       const outcome = yield* startClaimed(eveFor, decision.automation, run);
       // Counted for the owner once the run has an agent, whoever or whatever fired it.
       if (outcome.status === AUTOMATION_RUN_STATUS.STARTED) {
-        yield* recordServerEvent(SERVER_EVENT.AUTOMATION_RUN_START, decision.automation.userId, {
-          trigger_kind: run.firing.kind,
-        });
+        yield* recordServerEvent(
+          SERVER_EVENT.AUTOMATION_RUN_START,
+          { userId: decision.automation.userId, workspaceId: decision.automation.organizationId },
+          {
+            trigger_kind: run.firing.kind,
+          },
+        );
       }
       return { outcome, automation: decision.automation };
     }

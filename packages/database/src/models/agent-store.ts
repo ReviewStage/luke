@@ -118,14 +118,13 @@ import type { ConversationTarget } from "./writer.js";
  * rather than finding an agent nothing runs. The model, effort, and context
  * window on the row are read at every step, so a change to them is the next
  * step's. The
- * branch is what stood checked out in the agent's sandbox as its last turn
- * ended, written by the session's turn-end hook (`coder-host/host.ts`) and
- * read where the agent's pull request is looked up (`coder-host/published.ts`). A
- * delegation is a child conversation under the agent's, opened ahead of the
- * worker's session (`coder-host/delegation.ts`) with the model and effort
- * the agent chose for it written beside it here, so the worker's steps read
- * the pair under the child and the tabs read the worker's transcript under
- * the agent's; the worker's title stands on its child conversation
+ * branch is the head of the pull request the agent opened, written as it
+ * opens one (`coder-host/pull-request.ts`) and read where the agent's pull
+ * request is looked up (`coder-host/published.ts`). A delegation is a child
+ * conversation under the agent's, which an eve agent's `delegate` opened
+ * ahead of its worker's session with the model and effort the agent chose
+ * for it written beside it here, so the tabs read the worker's transcript
+ * under the agent's; the worker's title stands on its child conversation
  * (`child-titles.ts`) and is read back here by the call that delegated it,
  * which is kept on the delegation for that. Note that nothing here reaches the eve host's modules,
  * because the routes bundle this module and the eve host's modules reach
@@ -2717,7 +2716,7 @@ export function takeAgentMentionedServers(
   );
 }
 
-/** The branch checked out in the agent's sandbox as its turn ended, null for a detached HEAD; nothing written for an agent of a workspace the account is not in. */
+/** The branch the agent opened its pull request from, or null for none; nothing written for an agent of a workspace the account is not in. */
 export function updateAgentBranch(
   userId: string,
   agentId: string,
@@ -3055,13 +3054,18 @@ export function agentConversation(
   return findAgentConversation(agentId);
 }
 
-const findSettledTurnAgentKind = SqlSchema.findOneOption({
+const SettledTurnAgentSchema = Schema.Struct({
+  kind: Schema.Literals(Object.values(AGENT_KIND)),
+  organizationId: Schema.String,
+});
+
+const findSettledTurnAgent = SqlSchema.findOneOption({
   Request: Schema.String,
-  Result: Schema.Struct({ kind: Schema.Literals(Object.values(AGENT_KIND)) }),
+  Result: SettledTurnAgentSchema,
   execute: (turnId) =>
     Database.use((db) =>
       db
-        .select({ kind: agentTable.kind })
+        .select({ kind: agentTable.kind, organizationId: agentTable.organizationId })
         .from(turns)
         .innerJoin(agentTable, eq(agentTable.conversationId, turns.conversationId))
         .where(
@@ -3073,17 +3077,19 @@ const findSettledTurnAgentKind = SqlSchema.findOneOption({
     ),
 });
 
+/** What the agent whose turn settled is, and the workspace it belongs to. */
+export type SettledTurnAgent = typeof SettledTurnAgentSchema.Type;
+
 /**
- * What the agent whose turn this is is, where the turn stands ended;
- * nothing where no agent stands on its conversation or the turn's end was
- * rolled back with the transaction that wrote it. Only for a turn the
- * service settled itself, because it reads past any account's gate.
+ * What the agent whose turn this is is, and its workspace, where the turn
+ * stands ended; nothing where no agent stands on its conversation or the
+ * turn's end was rolled back with the transaction that wrote it. Only for a
+ * turn the service settled itself, because it reads past any account's gate.
  */
-export function settledTurnAgentKind(turnId: string): AgentStoreEffect<Option.Option<AgentKind>> {
-  return Effect.map(
-    findSettledTurnAgentKind(turnId),
-    Option.map((row) => row.kind),
-  );
+export function settledTurnAgent(
+  turnId: string,
+): AgentStoreEffect<Option.Option<SettledTurnAgent>> {
+  return findSettledTurnAgent(turnId);
 }
 
 /**
@@ -3366,43 +3372,6 @@ export function readAgentHeaderOfConversation(
   conversationId: string,
 ): AgentStoreEffect<Option.Option<AgentHeader>> {
   return findAgentHeaderOfConversation({ userId, conversationId });
-}
-
-/**
- * Whether the agent in the row read is under a pilot: started by an agent
- * of kind pilot (`AGENT_KIND.PILOT`), a coding agent and a sub-pilot alike.
- * Such an agent reports to that pilot with `message_agent` and posts no
- * thread the developer reads, which are the top pilot's alone; one started
- * by a coder, by no agent, or by an agent since deleted is under none.
- */
-export function agentUnderPilot(): SQL<boolean> {
-  const starter = alias(agentTable, "pilot_starter");
-  return exists(
-    queryBuilder
-      .select({ id: starter.id })
-      .from(starter)
-      .where(and(eq(starter.id, agentTable.startedByAgentId), eq(starter.kind, AGENT_KIND.PILOT))),
-  ).mapWith(Boolean);
-}
-
-const findAgentUnderPilot = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
-  Result: Schema.Struct({ underPilot: Schema.Boolean }),
-  execute: ({ userId, agentId }) =>
-    Database.use((db) =>
-      db
-        .select({ underPilot: agentUnderPilot() })
-        .from(agentTable)
-        .where(and(eq(agentTable.id, agentId), agentReachableBy(userId))),
-    ),
-});
-
-/** Whether the agent is under a pilot (`agentUnderPilot`); false for an agent the account does not reach. */
-export function readAgentUnderPilot(userId: string, agentId: string): AgentStoreEffect<boolean> {
-  return Effect.map(
-    findAgentUnderPilot({ userId, agentId }),
-    Option.exists((row) => row.underPilot),
-  );
 }
 
 /** What the agent's own conversation holds in its model's context: the model it runs on now, its newest step, and when eve last compacted it; null for each of the last two before it happens. */

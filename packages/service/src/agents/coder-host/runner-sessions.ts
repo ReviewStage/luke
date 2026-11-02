@@ -1081,19 +1081,23 @@ export const runnerSessions = <
         const turnRunning = turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status);
         const handedAt = yield* Clock.currentTimeMillis;
         const handed = (path: (typeof SERVER_HANDOFF_PATH)[keyof typeof SERVER_HANDOFF_PATH]) =>
-          recordServerEvent(SERVER_EVENT.AGENT_HANDOFF, userId, {
-            harness: harness.runtime,
-            path,
-            turn_running: turnRunning,
-            ...(turnRunning || turn?.settledAt == null
-              ? {}
-              : {
-                  idle_seconds: Math.max(
-                    0,
-                    Math.round((handedAt - turn.settledAt.getTime()) / 1_000),
-                  ),
-                }),
-          });
+          recordServerEvent(
+            SERVER_EVENT.AGENT_HANDOFF,
+            { userId, workspaceId: agent.organizationId },
+            {
+              harness: harness.runtime,
+              path,
+              turn_running: turnRunning,
+              ...(turnRunning || turn?.settledAt == null
+                ? {}
+                : {
+                    idle_seconds: Math.max(
+                      0,
+                      Math.round((handedAt - turn.settledAt.getTime()) / 1_000),
+                    ),
+                  }),
+            },
+          );
         const running = found.value.runner;
         if (running !== undefined) {
           const runnerPlace = placeOfHandle(running.handle);

@@ -1109,6 +1109,22 @@ words of any of them. They go from our service to PostHog, so PostHog never
 sees your network address for them, and deleting your account erases them
 with the rest of your usage data.
 
+Our service's counts are also grouped by workspace, so PostHog can count
+workspaces as well as people: a count of something done in a workspace (a
+task, an agent and its messages and turns, a pull request, a thread, a plan, an
+automation, an invitation, the GitHub App, or the workspace made) carries the
+workspace's id, and a count of your account's own setup (your first sign-in, a
+GitHub account or token, an integration, an API key, a pinned repository, or an
+enrolled host) carries none. For each workspace it counts, PostHog holds that
+workspace's name, as its members see it, and when it was made, and nothing
+else of it; our service sends them beside the workspace's first count on each
+of its servers, again once a day, and when the workspace is renamed. Your own
+first workspace is named with your name, so PostHog holds your name for it
+too. A workspace is never deleted, and PostHog cannot delete a single
+workspace's record, so PostHog keeps a workspace's name and creation date;
+deleting your account leaves them, your first workspace's name among them, as
+the workspace itself stays on our service.
+
 **Screen recordings.** Vespin records what its own panel draws, never your
 screen, your editor, your terminal, or any other app, and records its shape,
 not its words: before it leaves your Mac, every piece of text, and every
@@ -1348,7 +1364,8 @@ only when you press Send.
   under its own retention policy.
 - PostHog, for usage data and screen recordings from the Mac app, screen
   recordings from Vespin in a browser, and the counts our service makes of the
-  work done through it. The counts go through our own service; the
+  work done through it, grouped by workspace, with each workspace's name and
+  creation date. The counts go through our own service; the
   recordings go from Vespin, on the Mac or in your browser, to PostHog directly.
 - Sentry, for the Mac app's and Vespin in a browser's crash and performance
   reports, and our service's and Vespin's agents' error, performance, log, and

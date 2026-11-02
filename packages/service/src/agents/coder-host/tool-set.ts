@@ -112,27 +112,6 @@ export function repositoryToolsOf(agent: Pick<Agent, "repository">): ReadonlySet
   return new Set([CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.APPLY_PATCH]);
 }
 
-/** The tools offered by who started the agent: `post_thread` to every agent but one under a pilot. */
-export type StarterTool = typeof CODER_TOOL.POST_THREAD;
-
-/**
- * The tools an agent is offered by who started it, on every turn:
- * `post_thread` to every agent but one under a pilot (`agentUnderPilot`), a
- * coding agent or a sub-pilot a pilot started, which reports to that pilot
- * with `message_agent` instead, since the threads the developer reads are
- * the top pilot's alone. Note that the tool withheld is one its call would
- * only be refused by (`inbox-store.ts`'s `postInboxThread`), and that its
- * siblings stay, since none opens or adds to a thread: `withdraw_ask`
- * settles an ask only on a thread of the agent's own, which such an agent
- * never opens, `move_thread` moves a thread without a word added to it, and
- * `read_threads` only reads.
- */
-export function starterToolsOf(starter: {
-  readonly underPilot: boolean;
-}): ReadonlySet<StarterTool> {
-  return starter.underPilot ? new Set() : new Set([CODER_TOOL.POST_THREAD]);
-}
-
 /** The tools only an agent in a sandbox of ours is offered. */
 export type MachineTool = typeof CODER_TOOL.BROWSER;
 
@@ -147,18 +126,40 @@ export function machineToolsOf(agent: Pick<Agent, "machine">): ReadonlySet<Machi
   return agent.machine === AGENT_MACHINE.DEVICE ? new Set() : new Set([CODER_TOOL.BROWSER]);
 }
 
+/** The tools offered by whose words the agent has heard and where it runs: `run_on_mac`. */
+export type MacTool = typeof CODER_TOOL.RUN_ON_MAC;
+
+/**
+ * The tools an agent is offered by whose words it has heard and where it
+ * runs: `run_on_mac` to an agent in a sandbox of ours into which no one but
+ * its starter has put words (`mac-command-store.ts`'s
+ * `heardFromAnotherAccount`), and none to the rest. Note that once another
+ * account has put words in, such as a teammate's message, a webhook's body,
+ * or a review on its pull request, the call is refused for the rest of the
+ * conversation's life (`mac-command.ts`), and that a local agent already
+ * runs on one of the developer's own machines, whose instructions never name
+ * the tool (`instructions.ts`). The door still refuses a call made anyway.
+ */
+export function macToolsOf(
+  agent: Pick<Agent, "machine">,
+  heard: { readonly heardFromAnotherAccount: boolean },
+): ReadonlySet<MacTool> {
+  if (agent.machine === AGENT_MACHINE.DEVICE || heard.heardFromAnotherAccount) return new Set();
+  return new Set([CODER_TOOL.RUN_ON_MAC]);
+}
+
 /** What of an agent decides which tools eve offers it. */
 export type CoderOfferedTo = Pick<Agent, "repository" | "machine">;
 
-/** What beside its own row decides which tools an agent is offered: whether its starter has Memory on, and whether it is under a pilot (`starterToolsOf`). */
+/** What beside its own row decides which tools an agent is offered: whether its starter has Memory on, and whether anyone but its starter has put words into it (`macToolsOf`). */
 export interface OfferedBeside {
   readonly memoryOn: boolean;
-  readonly underPilot: boolean;
+  readonly heardFromAnotherAccount: boolean;
 }
 
 /**
  * The coder's tools eve offers some agents and not others: each one some
- * agent's repository, starter, machine, or Memory withholds. Note that
+ * agent's repository, machine, Memory, or outside words withholds. Note that
  * no tool is withheld by the agent's task, since every one that acts on a
  * task names it or acts on the agent itself where it works on none: the
  * plan's notes, pictures, and comments any task of its workspace, and a
@@ -166,8 +167,8 @@ export interface OfferedBeside {
  */
 const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
   ...repositoryToolsOf({ repository: "any" }),
-  ...starterToolsOf({ underPilot: false }),
   ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
+  ...macToolsOf({ machine: AGENT_MACHINE.VERCEL }, { heardFromAnotherAccount: false }),
   CODER_TOOL.SAVE_MEMORY,
   CODER_TOOL.SEARCH_MEMORY,
 ]);
@@ -175,10 +176,11 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
 /**
  * Every tool eve offers the agent on a turn, in the registry's order: each
  * coder's tool no agent is denied, and each narrowed one where its
- * repository, who started it, or where it runs offers it, and `save_memory` and `search_memory` where
+ * repository or where it runs offers it, `run_on_mac` where no one but its
+ * starter has put words into it, and `save_memory` and `search_memory` where
  * its starter has Memory on, the same rules eve's tool files read as each
- * turn starts (`apps/dev/host.ts`'s `offeredRepositoryTools`,
- * `offeredStarterTools`, and `memoryOffered`).
+ * turn starts (`apps/dev/host.ts`'s `offeredRepositoryTools` and
+ * `memoryOffered`).
  */
 export function offeredCoderTools(
   agent: CoderOfferedTo,
@@ -186,8 +188,8 @@ export function offeredCoderTools(
 ): readonly AgentTool[] {
   const offered: ReadonlySet<AgentTool> = new Set<AgentTool>([
     ...repositoryToolsOf(agent),
-    ...starterToolsOf(beside),
     ...machineToolsOf(agent),
+    ...macToolsOf(agent, beside),
     ...(beside.memoryOn ? [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY] : []),
   ]);
   return [...toolsOf(AGENT_ROLE.CODER)].filter(

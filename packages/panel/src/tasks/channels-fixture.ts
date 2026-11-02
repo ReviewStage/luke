@@ -361,6 +361,8 @@ function thread(
 ): ThreadSeed {
   const first = messages[0]?.createdAt ?? LANDED;
   const last = messages.at(-1)?.createdAt ?? first;
+  // Note that the agent hears the answer to every ask and never a notice's nod, as the service stores its latest post.
+  const latestPost = messages.findLast((message) => message.author === INBOX_MESSAGE_AUTHOR.AGENT);
   return {
     taskId: "id" in task ? task.id : undefined,
     channelId,
@@ -371,7 +373,7 @@ function thread(
       revision: messages.length,
       version: INBOX_WIRE_VERSION,
       title,
-      needsReply: false,
+      needsReply: latestPost?.ask !== undefined,
       status: INBOX_STATUS.OPEN,
       startedBy: task.owner,
       waitsOn: task.owner,
@@ -424,7 +426,7 @@ const THREADS: ThreadSeed[] = [
         ),
       ),
     ],
-    { unread: true, needsReply: true, waitsOn: DEAN, addressed: true },
+    { unread: true, waitsOn: DEAN, addressed: true },
   ),
   thread(
     2,
@@ -453,29 +455,22 @@ const THREADS: ThreadSeed[] = [
     ],
     { unread: true, waitsOn: CHARLES, addressed: true },
   ),
-  thread(
-    3,
-    seed(TASK.SENTRY),
-    CHANNEL.INFRA,
-    "Add SENTRY_DSN to the preview environment",
-    [
-      agentSaid(
-        103,
-        HOUR,
-        "Previews never report to Sentry because the DSN isn't set for Vercel's Preview environment. Only someone with access to the project's settings can add it.",
-        {
-          type: INBOX_ASK.DO,
-          steps: [
-            "Open luke-web › Settings › Environment Variables on Vercel.",
-            "Add SENTRY_DSN for Preview, the same value as Production's.",
-            "Redeploy the latest preview.",
-          ],
-          ...OPEN,
-        },
-      ),
-    ],
-    { needsReply: true },
-  ),
+  thread(3, seed(TASK.SENTRY), CHANNEL.INFRA, "Add SENTRY_DSN to the preview environment", [
+    agentSaid(
+      103,
+      HOUR,
+      "Previews never report to Sentry because the DSN isn't set for Vercel's Preview environment. Only someone with access to the project's settings can add it.",
+      {
+        type: INBOX_ASK.DO,
+        steps: [
+          "Open luke-web › Settings › Environment Variables on Vercel.",
+          "Add SENTRY_DSN for Preview, the same value as Production's.",
+          "Redeploy the latest preview.",
+        ],
+        ...OPEN,
+      },
+    ),
+  ]),
   thread(
     4,
     seed(TASK.SCHEMA),

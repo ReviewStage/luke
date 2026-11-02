@@ -463,9 +463,13 @@ export function agentPullRequestProcedures(seams: AgentPullRequestProcedureSeams
       // Counted only where GitHub made the change, and under the member: an agent's own pull request work never comes through here.
       const counted = countedAction(input.body);
       if (counted !== undefined && written.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE) {
-        yield* recordServerEvent(SERVER_EVENT.PULL_REQUEST_ACTION, context.userId, {
-          action: counted,
-        });
+        yield* recordServerEvent(
+          SERVER_EVENT.PULL_REQUEST_ACTION,
+          { userId: context.userId, workspaceId: agent.organizationId },
+          {
+            action: counted,
+          },
+        );
       }
       return writeAnswerOf(written);
     }),

@@ -9,7 +9,7 @@ import {
   withdrawPlanCommentAsk,
 } from "@luke/database/models/plan-comments";
 import { readPageById } from "@luke/database/models/plan-pages";
-import { readTaskHeader } from "@luke/database/models/task-store";
+import { readTaskHeader, readTaskWorkspace } from "@luke/database/models/task-store";
 import { TOPIC } from "@luke/database/sync/notification";
 import { askedInWords } from "@luke/features/mention-link";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
@@ -25,7 +25,7 @@ import {
 } from "@luke/features/plan-comment-wire";
 import { Effect, Option } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
-import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
+import { recordServerEventIn, SERVER_EVENT } from "../events/server-events.js";
 import { cursorOf, heldUntilMoved } from "../http/held-read.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -146,9 +146,12 @@ const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!("thread" in answer)) return answer;
   // Note that a retry under the key already taken wrote nothing, so it is not counted again.
   if (outcome.status === PLAN_COMMENT_OUTCOME.DONE && outcome.repeated !== true) {
-    yield* recordServerEvent(SERVER_EVENT.PLAN_COMMENT, comment.userId, {
-      is_reply: comment.isReply,
-    });
+    yield* recordServerEventIn(
+      SERVER_EVENT.PLAN_COMMENT,
+      comment.userId,
+      readTaskWorkspace(comment.userId, comment.taskId),
+      { is_reply: comment.isReply },
+    );
   }
   const { thread } = answer;
   const unsent = thread.entries.some(

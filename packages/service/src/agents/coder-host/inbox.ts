@@ -163,9 +163,7 @@ const POST_THREAD_WORDS =
   "It waits until they acknowledge it, which never reaches you unless they write something; " +
   `you may have at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} such posts waiting to be acknowledged, apart from your open asks. ` +
   "A thread holds one open ask, and a newer ask replaces it. " +
-  "An answer to decide or answer always reaches you as a message. " +
-  "waits is for a do alone: whether you need to hear it is done as a message, only where you set it true; " +
-  "a do you do not wait on is kept for you to read, though an answer carrying their words or a file still reaches you as a message. " +
+  "An answer to any ask, decide, do, or answer, always reaches you as a message. " +
   `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open asks. The call answers with your threads as they stand, each with the mention you name it by.`;
 
 /** One open channel as the tool's words list it: its name and what belongs in it. */
@@ -246,8 +244,8 @@ export const INBOX_TOOLS = {
       "Each message reads in order with who wrote it, you or a member by name, the ask it ends with and where that stands " +
       "(open, answered, replaced by a newer ask, or withdrawn, with your reason), and the answer a member's message carries. " +
       "A member may close a thread without answering, which withdraws its ask with no reason, and closedBy names them; " +
-      `where you waited on it, that reaches you as a developer's message whose first line starts "${INBOX_CLOSE_LEAD}" and names the key: ` +
-      "take it as their not wanting what the ask asked. Read it before you rely on a do you posted without waits being done.",
+      `where it held an ask open, that reaches you as a developer's message whose first line starts "${INBOX_CLOSE_LEAD}" and names the key: ` +
+      "take it as their not wanting what the ask asked.",
     inputSchema: inboxReadInputSchema,
   },
   CREATE_CHANNEL: {
@@ -287,7 +285,7 @@ interface AgentThreadLine {
   readonly answers?: Omit<InboxAnswers, "ask">;
 }
 
-/** One thread as the agent reads it back: its id and key, title, its mention, where it stands, whether the agent waits on its open ask, and its messages in order. */
+/** One thread as the agent reads it back: its id and key, title, its mention, where it stands, and its messages in order. */
 interface AgentInboxLine {
   /** The thread's id, which `move_thread` names it by as well as by its key. */
   readonly id: string;
@@ -296,8 +294,6 @@ interface AgentInboxLine {
   /** The thread as the agent names it in its words, `[@title](link)`, which the app draws as its chip; none where the member reads its workspace no longer. */
   readonly mention?: string;
   readonly status: InboxItem["status"];
-  /** Whether an answer to the open ask reaches the agent as a message, on a thread still asking. */
-  readonly waits?: boolean;
   /** How many earlier messages a settled thread's read leaves out. */
   readonly earlier?: number;
   readonly thread: readonly AgentThreadLine[];
@@ -380,9 +376,6 @@ export const INBOX_REFUSAL = {
   NO_ADDRESSEE: "Not posted: the member you addressed is not in your workspace.",
   ADDRESSEE_CANNOT_SEE:
     "Not posted: the member you addressed cannot see your task, so they would never see the thread; address someone who can, or leave to out.",
-  UNDER_PILOT:
-    "Not posted: a pilot started you, and the developer's threads are the top pilot's alone. Post nothing; " +
-    "report to the pilot that started you with message_agent instead, and it decides what reaches the developer.",
   NO_AGENT: "Not done: this conversation is no agent's.",
   UNAVAILABLE: "Not done: the service could not reach its store.",
 } as const;
@@ -476,18 +469,6 @@ function closerOf(item: InboxItem): Pick<AgentInboxLine, "closedBy"> {
 }
 
 /**
- * Whether the item is a notice still open: a post that asked nothing,
- * waiting on the developer's nod alone, which the agent never hears, so it
- * reads as no ask of the agent's.
- */
-function openNotice(item: InboxItem): boolean {
-  return (
-    item.status === INBOX_STATUS.OPEN &&
-    !(item.thread ?? []).some((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)
-  );
-}
-
-/**
  * What a thread no message asks or answers, a notice's, carries on itself
  * rather than on a message: why it was closed. Note that a thread that asks
  * carries it on its withdrawn ask, so it is not repeated there, and that a
@@ -533,7 +514,6 @@ function lineOf(item: InboxItem, mention: string | undefined): AgentInboxLine {
     title: item.title,
     ...(mention === undefined ? undefined : { mention }),
     status: item.status,
-    ...(open && !openNotice(item) ? { waits: item.needsReply } : undefined),
     ...(earlier > 0 ? { earlier } : undefined),
     thread: told.map(threadLineOf),
     ...closerOf(item),
@@ -654,20 +634,7 @@ function storeRefusal(refusal: InboxPostRefusal): string {
       return INBOX_REFUSAL.NO_ADDRESSEE;
     case INBOX_POST_REFUSAL.ADDRESSEE_CANNOT_SEE:
       return INBOX_REFUSAL.ADDRESSEE_CANNOT_SEE;
-    case INBOX_POST_REFUSAL.UNDER_PILOT:
-      return INBOX_REFUSAL.UNDER_PILOT;
   }
-}
-
-/**
- * Whether the agent hears the answer to an ask as a message: a decision or
- * an answer it asked for always, whatever the post says, since an agent
- * whose turn has ended reads nothing kept for it until something wakes it,
- * and the developer who answered would wait on it for ever; a to-do, which
- * it mostly needs only done, only where the post says it waits.
- */
-function heardAnswer(ask: InboxAskInput, waits: boolean | undefined): boolean {
-  return ask.type !== INBOX_ASK.DO || waits === true;
 }
 
 /**
@@ -707,11 +674,17 @@ interface ThreadPlace {
   readonly addresseeId?: string;
 }
 
-/** The post as the store writes it: its key, title, words, and ask as a message keeps it, whether the agent hears the answer (`heardAnswer`), and where it goes. */
+/**
+ * The post as the store writes it: its key, title, words, and ask as a
+ * message keeps it, and where it goes. Note that the agent hears the answer
+ * to every ask as a message, a `do`'s as a decision's, since an agent whose
+ * turn has ended reads nothing kept for it until something wakes it, and
+ * goes on telling the developer it waits on what they already answered.
+ */
 function threadPost(post: InboxThreadPostInput, place: ThreadPlace) {
-  const { waits, ask, channel: _channel, to: _to, ...written } = post;
+  const { ask, channel: _channel, to: _to, ...written } = post;
   if (ask === undefined) return { ...written, ...place };
-  return { ...written, ...place, ask: keptInboxAsk(ask), needsReply: heardAnswer(ask, waits) };
+  return { ...written, ...place, ask: keptInboxAsk(ask), needsReply: true };
 }
 
 /** The member a post's `to` names by their mention link written whole, or its address alone, by account; nothing where it names no person, such as an agent or a task. */

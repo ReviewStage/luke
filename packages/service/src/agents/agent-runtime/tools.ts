@@ -6,8 +6,8 @@
  * (`@luke/features/agent-tools`, which the desktop reads its calls by too),
  * is listed here with the roles it serves (`role.ts`), and everything that would otherwise be kept
  * twice is derived from it: what each coding agent's authored tools are
- * (`../coder-host/tool-set.ts`, held to the files under `apps/dev/tools/` by
- * its test), and every set the store writer holds a role's rows to. A tool
+ * (`../coder-host/tool-set.ts`), and every set the store writer holds a
+ * role's rows to, the calls of tools only eve's agents were offered among them. A tool
  * a role is not listed for is never offered to it, so adding a tool to a
  * role is one entry here and its implementation where the role's root
  * reaches it. The tools eve injects of its own beside a task or a connection

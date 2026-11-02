@@ -404,13 +404,17 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
         });
         // A member's own message, counted under them once the line is written; a repeat under its key is not.
         if (sent !== undefined) {
-          yield* recordServerEvent(SERVER_EVENT.MESSAGE_SEND, context.userId, {
-            runtime: sent.runtime,
-            machine: agent.machine ?? AGENT_MACHINE.VERCEL,
-            agent_kind: agent.kind,
-            turn_running: sent.turnRunning,
-            queued: false,
-          });
+          yield* recordServerEvent(
+            SERVER_EVENT.MESSAGE_SEND,
+            { userId: context.userId, workspaceId: agent.organizationId },
+            {
+              runtime: sent.runtime,
+              machine: agent.machine ?? AGENT_MACHINE.VERCEL,
+              agent_kind: agent.kind,
+              turn_running: sent.turnRunning,
+              queued: false,
+            },
+          );
         }
         const summary = yield* summaryOf(context.userId, agent);
         // The transaction that wrote the line, which the host waits to see live before it confirms the send.

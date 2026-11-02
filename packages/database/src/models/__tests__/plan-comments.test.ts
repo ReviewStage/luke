@@ -521,8 +521,10 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
         );
 
         const onPage = Option.getOrThrow(yield* readPlanCommentThreads(owner, taskId, shown.id));
+        // Note that the two may be started in one millisecond, which orders them by their ids, so they are compared in the order of their scopes.
+        const byScope = [...onPage].sort((a, b) => a.scope.localeCompare(b.scope));
         assert.deepEqual(
-          onPage.map((thread) => [
+          byScope.map((thread) => [
             thread.id,
             thread.scope,
             thread.quote,

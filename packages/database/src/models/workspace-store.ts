@@ -266,6 +266,21 @@ const findWorkspaceLogo = SqlSchema.findOneOption({
     ),
 });
 
+const WorkspaceFaceSchema = Schema.Struct({ name: Schema.String, createdAt: Schema.Date });
+
+const findWorkspaceFace = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: WorkspaceFaceSchema,
+  execute: (organizationId) =>
+    Database.use((db) =>
+      db
+        .select({ name: WORKSPACE_NAME, createdAt: organization.createdAt })
+        .from(organization)
+        .where(eq(organization.id, organizationId))
+        .limit(1),
+    ),
+});
+
 /** The workspaces the account is a member of, or the one named among them, as rows, each with how many members it has, counted apart from the account's own row the read joins. */
 function workspaceRows(db: DatabaseShape, userId: string, organizationId?: string) {
   return db
@@ -779,6 +794,20 @@ export function readWorkspacePhoto(
   return Effect.map(findWorkspaceLogo({ userId, organizationId }), (found) =>
     Option.flatMap(found, (row) => Option.fromNullishOr(photoOfLogo(row.logo))),
   );
+}
+
+/** A workspace's name, as its members read it, and when it was made. */
+export type WorkspaceFace = typeof WorkspaceFaceSchema.Type;
+
+/**
+ * One workspace's name and creation, by its id alone, for the service's own
+ * analytics to name the workspace a count is grouped under; nothing for an
+ * id no workspace holds. No account gates it, because no member asks for it.
+ */
+export function readWorkspaceFace(
+  organizationId: string,
+): WorkspaceStoreEffect<Option.Option<WorkspaceFace>> {
+  return findWorkspaceFace(organizationId);
 }
 
 /**

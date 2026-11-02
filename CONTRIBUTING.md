@@ -78,7 +78,6 @@ again only when it opens or reloads a window.
 apps/
   catalog/        every shared @luke/ui component on synthetic data, built and never deployed
   desktop/        the Electron app: main, preload, the renderer windows, build and release scripts
-  dev/            the coding agent's eve app
   web/            the site, the Vercel function routes (server/routes/), and the deployment shell
 packages/
   agent-runner/   the runner in a coding agent's sandbox: Claude Code or Codex, messages in and out

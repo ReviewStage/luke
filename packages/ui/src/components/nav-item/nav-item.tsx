@@ -269,7 +269,7 @@ function FoldToggle({ fold }: { fold: NavFold }): React.JSX.Element {
       aria-controls={fold.controls}
       // Note that a pointer's press leaves the focus where it was, so the chevron and the ⋯ go with the pointer rather than standing on a focus the press left behind.
       onMouseDown={preventFocusMove}
-      onClick={pulseOnPress(fold.state.toggle, PRESS_PULSE.QUIET)}
+      onClick={fold.state.toggle}
     >
       <DisclosureChevron open={fold.state.open} />
     </button>

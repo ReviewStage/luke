@@ -222,7 +222,7 @@ export function githubTokenProcedures(seams: GitHubTokenProcedureSeams) {
       yield* hostedStoreOrUnavailable(
         saveGitHubToken(userId, sealGitHubToken(ring, userId, token), facts, now),
       );
-      yield* recordServerEvent(SERVER_EVENT.GITHUB_TOKEN_SAVE, userId, {});
+      yield* recordServerEvent(SERVER_EVENT.GITHUB_TOKEN_SAVE, { userId }, {});
       return yield* tokenAnswer(userId, ring);
     }),
 

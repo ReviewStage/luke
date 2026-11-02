@@ -6,9 +6,10 @@
  * `offeredCoderTools`), and for one on Claude Code or Codex the tools of
  * our MCP server, whose harness keeps its own shell and files
  * (`luke-mcp/tools.ts`'s `offeredLukeMcpTool`), each narrowed by its
- * repository, whether a pilot started it, where it runs, and its starter's
- * Memory. Nothing is kept beside those rules, so the popover cannot name a
- * tool the agent is not handed. `run_on_mac` is answered off for the reasons a call would be
+ * repository, its kind, where it runs, whether anyone but its starter has
+ * put words into it, and its starter's Memory. Nothing is
+ * kept beside those rules, so the popover cannot name a tool the agent is
+ * not handed. `run_on_mac` is answered off for the reasons a call would be
  * refused now (`mac-command.ts`): no Mac of the starter's listening, then
  * words someone other than the starter put into the conversation, with
  * what kind of sender put the first of them there and when, where the
@@ -32,8 +33,8 @@ export interface LukeToolsOfferedTo {
   readonly native: boolean;
   /** Whether the agent's starter has Memory on. */
   readonly memoryOn: boolean;
-  /** Whether a pilot started the agent (`agentUnderPilot`). */
-  readonly underPilot: boolean;
+  /** Whether anyone but the agent's starter has put words into it (`heardFromAnotherAccount`). */
+  readonly heardFromAnotherAccount: boolean;
 }
 
 /** Our tools the agent is offered, by name, in the order its runtime offers them. */

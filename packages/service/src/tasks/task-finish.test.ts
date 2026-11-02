@@ -177,6 +177,7 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
           {
             name: SERVER_EVENT.TASK_FINISH,
             userId,
+            workspaceId: task.workspaceId,
             properties: { status: TASK_STATUS.DONE, by: "merge" },
           },
         ]);

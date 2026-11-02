@@ -419,13 +419,17 @@ export const openPullRequest = /* @__PURE__ */ Effect.fn("web/openPullRequest")(
   const read = readInput(input);
   if (result.status === ACTION_RESULT_STATUS.ACCEPTED && Result.isSuccess(read)) {
     yield* recordOpened(target, agent, read.success.head);
-    yield* recordServerEvent(SERVER_EVENT.PULL_REQUEST_CREATE, target.userId, {
-      opened_as:
-        result.openedAs === OPENED_AS.DEVELOPER
-          ? SERVER_PULL_REQUEST_OPENER.DEVELOPER
-          : SERVER_PULL_REQUEST_OPENER.APP,
-      is_draft: read.success.draft ?? false,
-    });
+    yield* recordServerEvent(
+      SERVER_EVENT.PULL_REQUEST_CREATE,
+      { userId: target.userId, workspaceId: agent.organizationId },
+      {
+        opened_as:
+          result.openedAs === OPENED_AS.DEVELOPER
+            ? SERVER_PULL_REQUEST_OPENER.DEVELOPER
+            : SERVER_PULL_REQUEST_OPENER.APP,
+        is_draft: read.success.draft ?? false,
+      },
+    );
   }
   return result;
 });

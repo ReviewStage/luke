@@ -1,10 +1,14 @@
-import { afterEach, describe, expect, it, vi } from "@effect/vitest";
+import { afterEach, expect, it, vi } from "@effect/vitest";
+import { Database } from "@luke/database/core/query";
+import { organization } from "@luke/database/schemas/auth";
+import { getTestDB } from "@luke/database/testing";
 import { AGENT_KIND } from "@luke/features/agent-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { eq } from "drizzle-orm";
 import { Effect, Layer, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
-import type { PosthogBatch } from "../providers/posthog.js";
+import type { PosthogBatch, PosthogBatchItem } from "../providers/posthog.js";
 import { DEPLOYMENT_VARIABLE } from "./events.js";
 import {
   productAnalyticsFromEnvironment,
@@ -12,9 +16,14 @@ import {
   SERVER_AGENT_START_KIND,
   SERVER_AGENT_STARTER,
   SERVER_EVENT,
+  SERVER_SIGN_IN_METHOD,
+  workspaceRenamed,
 } from "./server-events.js";
 
 const NOW = Date.parse("2026-08-19T12:00:00.000Z");
+
+/** When the workspace a group test names was made. */
+const CREATED = Date.parse("2026-03-02T09:30:00.000Z");
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
@@ -49,23 +58,45 @@ function analytics(environment: Partial<HostedEnvironmentValues>, status = 200) 
   return { layer, posted };
 }
 
-const agentStart = recordServerEvent(SERVER_EVENT.AGENT_START, "user-1", {
-  model: "anthropic/claude-opus-5.5",
-  effort: "high",
-  start_kind: SERVER_AGENT_START_KIND.FRESH,
-  is_from_automation: false,
-  started_by: SERVER_AGENT_STARTER.MEMBER,
-  has_task: true,
-  agent_kind: AGENT_KIND.CODER,
-});
+/** An agent's start counted in the workspace, which no row of the test's holds unless it opened one. */
+const agentStartIn = (workspaceId: string) =>
+  recordServerEvent(
+    SERVER_EVENT.AGENT_START,
+    { userId: "user-1", workspaceId },
+    {
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      start_kind: SERVER_AGENT_START_KIND.FRESH,
+      is_from_automation: false,
+      started_by: SERVER_AGENT_STARTER.MEMBER,
+      has_task: true,
+      agent_kind: AGENT_KIND.CODER,
+    },
+  );
+
+const agentStart = agentStartIn("workspace-1");
+
+/** Every item the processor was posted, across its batches, in order. */
+const itemsOf = (posted: readonly Posted[]): PosthogBatchItem[] =>
+  posted.flatMap((each) => [...each.body.batch]);
+
+/** A workspace the service holds, named and made as given, answering its id. */
+const openWorkspaceNamed = (id: string, name: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    yield* db
+      .insert(organization)
+      .values({ id, name, slug: `workspace-${id}`, createdAt: new Date(CREATED) });
+    return id;
+  });
 
 afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe("server events", () => {
+it.layer(getTestDB())("server events", (it) => {
   it.effect(
-    "posts the event under the account's id, its own properties, the deployment, and no location",
+    "posts the event under the account's id, its workspace's group, its own properties, the deployment, and no location",
     () => {
       // The layer reads the deployment's name as it is built, so it is named before.
       vi.stubEnv(DEPLOYMENT_VARIABLE, "preview");
@@ -95,6 +126,7 @@ describe("server events", () => {
                     started_by: "member",
                     has_task: true,
                     agent_kind: "coder",
+                    $groups: { workspace: "workspace-1" },
                     $geoip_disable: true,
                     platform: "server",
                     environment: "preview",
@@ -104,6 +136,51 @@ describe("server events", () => {
               ],
             },
           },
+        ]);
+      }).pipe(Effect.provide(processor.layer));
+    },
+  );
+
+  it.effect("files an account's own event under no workspace", () => {
+    const processor = analytics({ posthogProjectApiKey: Redacted.make("phc_project") });
+    return Effect.gen(function* () {
+      yield* recordServerEvent(
+        SERVER_EVENT.ACCOUNT_SIGN_UP,
+        { userId: "user-1" },
+        { method: SERVER_SIGN_IN_METHOD.GITHUB },
+      );
+      const items = itemsOf(processor.posted);
+      expect(items.map((item) => item.event)).toEqual(["account:sign_up"]);
+      expect(items[0]?.properties).not.toHaveProperty("$groups");
+    }).pipe(Effect.provide(processor.layer));
+  });
+
+  it.effect(
+    "names a workspace's group by its name and creation alone, beside its first event and again on a rename",
+    () => {
+      const processor = analytics({ posthogProjectApiKey: Redacted.make("phc_project") });
+      const named = () =>
+        itemsOf(processor.posted)
+          .filter((item) => item.event === "$groupidentify")
+          .map((item) => ({
+            type: item.properties["$group_type"],
+            key: item.properties["$group_key"],
+            set: item.properties["$group_set"],
+          }));
+      return Effect.gen(function* () {
+        const workspaceId = yield* openWorkspaceNamed("workspace-acme", "Acme");
+        yield* agentStartIn(workspaceId);
+        yield* agentStartIn(workspaceId);
+        const db = yield* Database;
+        yield* db
+          .update(organization)
+          .set({ name: "Acme Labs" })
+          .where(eq(organization.id, workspaceId));
+        yield* workspaceRenamed("user-1", workspaceId);
+        const created_at = new Date(CREATED).toISOString();
+        expect(named()).toEqual([
+          { type: "workspace", key: workspaceId, set: { name: "Acme", created_at } },
+          { type: "workspace", key: workspaceId, set: { name: "Acme Labs", created_at } },
         ]);
       }).pipe(Effect.provide(processor.layer));
     },

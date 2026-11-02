@@ -128,10 +128,10 @@ component, factored out of the surface where it builds the box by hand.
   it (`packages/service/src/tasks/picture-look.ts`), so no model is handed it,
   the plan's player is left out of session replay, and none of it goes into a
   trace, a counted event, or a fixture. And Sentry's SDKs run
-  with their default data collection, but that the service's and the eve roots'
-  leave out model inputs and outputs and request bodies
-  (`packages/service/src/observability/sentry.ts`, the eve roots'
-  `instrumentation/sentry.ts`, the desktop's `Sentry.init`, and the web app's
+  with their default data collection, but that the service's
+  leaves out model inputs and outputs and request bodies
+  (`packages/service/src/observability/sentry.ts`, the desktop's
+  `Sentry.init`, and the web app's
   browser SDK, `apps/web/src/app/web-sentry-sdk.ts`, with the desktop renderer's
   token filters, `@luke/features/sentry-breadcrumbs`), so what a request, a log
   line, a local variable, or an error's words carries may still reach Sentry
