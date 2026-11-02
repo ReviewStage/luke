@@ -1023,7 +1023,12 @@ export function composeLocalAgents(
               runnerScope,
               Effect.provideContext(Effect.andThen(turnLetGo(layout), usedNow(agentId)), services),
             ).pipe(
-              Effect.andThen(agentFoldersMade(layout.folder)),
+              Effect.andThen(
+                agentFoldersMade(layout.folder, {
+                  stateRoot: kernel.stateRoot,
+                  platform: platform.devicePlatform,
+                }),
+              ),
               Effect.as(Option.none<string>()),
               Effect.orElseSucceed(() => Option.some("the agent's folders could not be made")),
             );
