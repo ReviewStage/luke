@@ -29,6 +29,8 @@ const UNKNOWN_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 const PRODUCTION = { VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "main" } as const;
 /** What Vercel names a build of any other branch. */
 const PREVIEW = { VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "feat/branch" } as const;
+/** What Vercel names a build of the demo branch, whose Previews are the demo deployment. */
+const DEMO = { VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "demo" } as const;
 
 /**
  * A workspace shaped like the repository's: the two services `vercel.json`
@@ -306,6 +308,13 @@ test("production with no last deployment to compare with is built, whatever it c
   const root = await cloneOf(t, origin);
   assert.equal(decide(root, undefined, process.env.PATH, PRODUCTION), VERDICT.BUILD);
   assert.equal(decide(root, UNKNOWN_COMMIT, process.env.PATH, PRODUCTION), VERDICT.BUILD);
+});
+
+test("the demo branch is built even where its deployed tree is the one already deployed", async (t) => {
+  const root = await repository(t);
+  const deployed = commit(root, "docs/DESIGN.md");
+  assert.equal(decide(root, deployed, process.env.PATH, PREVIEW), VERDICT.SKIP);
+  assert.equal(decide(root, deployed, process.env.PATH, DEMO), VERDICT.BUILD);
 });
 
 test("a rebased branch whose deployed tree is the one already deployed is skipped, its last deployment fetched by sha", async (t) => {

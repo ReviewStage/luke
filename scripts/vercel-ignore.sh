@@ -2,8 +2,9 @@
 
 # The Vercel project's Ignored Build Step (Settings > Git), for the whole
 # deployment: exits 0, which skips it, when nothing any service builds from
-# changed, and 1, which builds it, otherwise. Vercel fails a deployment whose
-# step exits anything else, so the project runs it as
+# changed, and 1, which builds it, otherwise, and always for the demo branch.
+# Vercel fails a deployment whose step exits anything else, so the project
+# runs it as
 #
 #   [ -f scripts/vercel-ignore.sh ] && bash scripts/vercel-ignore.sh || exit 1
 #
@@ -30,6 +31,13 @@
 # (#2876), Vercel's own "not affected" skip sees every push as affecting it,
 # so without this step every push of a desktop-only branch built both
 # services and woke its branch's Neon compute (2026-10-15).
+#
+# A deployment of the demo branch (`DEMO_BRANCH`) always builds. Its
+# Previews are the demo deployment, on a database of their own
+# (`apps/web/server/README.md`), not a preview of a change, and the branch
+# is fast-forwarded to `main` as a rule, so the rules below would read its
+# tree as `main`'s, with nothing to preview, and skip it, as they canceled
+# its first deployment.
 #
 # The comparison is with `VERCEL_GIT_PREVIOUS_SHA`, the commit of this
 # branch's last deployment that succeeded, fetched by its sha where the
@@ -59,6 +67,7 @@
 
 SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 DEFAULT_BRANCH=main
+DEMO_BRANCH=demo
 # Where the fetched `main` is kept, out of the way of any branch of the clone's own.
 MAIN_REF=refs/vercel-ignore/main
 # How deep the clone is fetched, in turn, for its head and `main` to meet:
@@ -154,6 +163,11 @@ merge_base_with_main() {
     done
     return 1
 }
+
+if [[ ${VERCEL_GIT_COMMIT_REF:-} == "$DEMO_BRANCH" ]]; then
+    printf 'vercel-ignore: building (%s, the demo branch, always builds)\n' "$DEMO_BRANCH"
+    exit 1
+fi
 
 if ! read_deployed_paths; then
     printf 'vercel-ignore: building (the deployed workspaces could not be read)\n'

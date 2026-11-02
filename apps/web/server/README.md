@@ -53,6 +53,17 @@ creates a database branch for each Preview deployment, so its committed schema
 changes are applied to the matching branch before Vite builds the application.
 No package lifecycle hook runs migrations.
 
+The long-lived `demo` branch's Previews are the demo deployment, Vespin on
+fake data for trying features and recording demos, in a Neon project of its
+own (`luke-demo`). The integration still injects its `preview/demo` branch of
+production into them under `DATABASE_URL` and `DATABASE_URL_UNPOOLED`, so the
+demo's addresses are held under names it never sets,
+`LUKE_DEMO_DATABASE_URL` and `LUKE_DEMO_DATABASE_URL_UNPOOLED`, scoped to
+`demo`. Every reader, the migrator included, prefers those wherever they hold
+a value and `VERCEL_ENV` is not `production`
+(`packages/service/src/db/index.ts`), and `scripts/vercel-ignore.sh` builds
+every deployment of the branch, whose tree is otherwise `main`'s.
+
 The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_APP_CLIENT_ID`, and
 `GITHUB_APP_CLIENT_SECRET`; the GitHub App beneath the last two is described

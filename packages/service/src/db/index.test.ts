@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { type AddressInfo, createServer, type Server, type Socket } from "node:net";
 import { it } from "@effect/vitest";
-import { ConfigProvider, Effect, Redacted } from "effect";
+import { type Config, ConfigProvider, Effect, Redacted } from "effect";
 import { afterEach, test, vi } from "vitest";
-import { databaseUrl, getPool } from "./index.js";
+import { databaseUrl, getPool, requiredDatabaseUnpooledUrl } from "./index.js";
 
 const CONCURRENT_QUERIES = 5;
 
@@ -131,8 +131,11 @@ test("an idle client whose connection ends is dropped, and the next query opens 
   }
 });
 
-const readUrl = (environment: Record<string, string>) =>
-  databaseUrl.pipe(
+const readUrl = (
+  environment: Record<string, string>,
+  url: Config.Config<Redacted.Redacted> = databaseUrl,
+) =>
+  url.pipe(
     Effect.map(Redacted.value),
     Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown(environment)),
   );
@@ -166,6 +169,47 @@ it.effect(
 
       for (const [given, expected] of cases) {
         assert.equal(yield* readUrl({ DATABASE_URL: ` ${given} ` }), expected);
+      }
+    }),
+);
+
+const DEMO = "postgres://u:p@demo-host/db";
+
+it.effect(
+  "off production the demo branch's variables win where they hold a value, and production reads its own whatever else is set",
+  () =>
+    Effect.gen(function* () {
+      const cases: ReadonlyArray<
+        readonly [Config.Config<Redacted.Redacted>, Record<string, string>, string]
+      > = [
+        [
+          databaseUrl,
+          { VERCEL_ENV: "preview", LUKE_DEMO_DATABASE_URL: DEMO, DATABASE_URL: BASE },
+          DEMO,
+        ],
+        [
+          requiredDatabaseUnpooledUrl,
+          {
+            VERCEL_ENV: "preview",
+            LUKE_DEMO_DATABASE_URL_UNPOOLED: DEMO,
+            DATABASE_URL_UNPOOLED: BASE,
+          },
+          DEMO,
+        ],
+        [
+          databaseUrl,
+          { VERCEL_ENV: "preview", LUKE_DEMO_DATABASE_URL: " ", DATABASE_URL: BASE },
+          BASE,
+        ],
+        [
+          databaseUrl,
+          { VERCEL_ENV: "production", LUKE_DEMO_DATABASE_URL: DEMO, DATABASE_URL: BASE },
+          BASE,
+        ],
+      ];
+
+      for (const [url, environment, expected] of cases) {
+        assert.equal(yield* readUrl(environment, url), expected);
       }
     }),
 );

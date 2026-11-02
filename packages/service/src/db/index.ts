@@ -5,12 +5,24 @@ import { Pool } from "pg";
 /**
  * The variables the database is reached through: the pooled URL both pools
  * are built from, and the unpooled one a connection that must keep its own
- * session, such as Sync's `LISTEN`, is opened on.
+ * session, such as Sync's `LISTEN` or the migrator's, is opened on. Each has
+ * the demo branch's name beside it, which Neon's integration never sets: it
+ * injects a branch of production into every Preview under the default names,
+ * the demo branch's included (`apps/web/server/README.md`).
  */
 const DATABASE_ENVIRONMENT = {
-  URL: "DATABASE_URL",
-  UNPOOLED_URL: "DATABASE_URL_UNPOOLED",
+  URL: { DEFAULT: "DATABASE_URL", DEMO: "LUKE_DEMO_DATABASE_URL" },
+  UNPOOLED_URL: { DEFAULT: "DATABASE_URL_UNPOOLED", DEMO: "LUKE_DEMO_DATABASE_URL_UNPOOLED" },
 } as const;
+
+/** One connection's pair of variables. */
+type DatabaseVariables = (typeof DATABASE_ENVIRONMENT)[keyof typeof DATABASE_ENVIRONMENT];
+
+/** Vercel's own name for the environment a deployment runs as. */
+const DEPLOYMENT_VARIABLE = "VERCEL_ENV";
+
+/** The environment a deployment runs as, as its own `VERCEL_ENV` names it. */
+const DEPLOYMENT_ENVIRONMENT = { PRODUCTION: "production" } as const;
 
 /**
  * The `sslmode` values `pg-connection-string` (v2) already treats as
@@ -47,26 +59,80 @@ function connectionStringOf(value: string | undefined): string | undefined {
   return trimmed ? withExplicitSslMode(trimmed) : undefined;
 }
 
+/** What one connection's variables hold, beside the environment the deployment runs as. */
+interface HeldConnection {
+  readonly deployment: string | undefined;
+  readonly demo: string | undefined;
+  readonly fallback: string | undefined;
+}
+
+/**
+ * The one rule every reader picks a connection string by: the demo branch's
+ * variable where it holds one and the deployment is not production, and the
+ * default variable otherwise, each under `connectionStringOf`. Note that
+ * production ignores the demo variable even where it is set, so one scoped
+ * wider than the demo branch by mistake cannot move production off its own
+ * database.
+ */
+function chosenConnectionString(held: HeldConnection): string | undefined {
+  const demo =
+    held.deployment?.trim() === DEPLOYMENT_ENVIRONMENT.PRODUCTION
+      ? undefined
+      : connectionStringOf(held.demo);
+  return demo ?? connectionStringOf(held.fallback);
+}
+
+/** One connection's string as a `Config`, chosen by `chosenConnectionString`, or none where neither variable holds one. */
+function connectionStringConfig(
+  variables: DatabaseVariables,
+): Config.Config<Option.Option<Redacted.Redacted>> {
+  return Config.all({
+    deployment: Config.option(Config.String(DEPLOYMENT_VARIABLE)),
+    demo: Config.option(Config.Redacted(variables.DEMO)),
+    fallback: Config.option(Config.Redacted(variables.DEFAULT)),
+  }).pipe(
+    Config.map(({ deployment, demo, fallback }) =>
+      Option.map(
+        Option.fromUndefinedOr(
+          chosenConnectionString({
+            deployment: Option.getOrUndefined(deployment),
+            demo: Option.getOrUndefined(Option.map(demo, Redacted.value)),
+            fallback: Option.getOrUndefined(Option.map(fallback, Redacted.value)),
+          }),
+        ),
+        Redacted.make,
+      ),
+    ),
+  );
+}
+
+/** One connection's string as a `Config` that fails the read where neither variable holds one, as a missing variable does. */
+function requiredConnectionString(variables: DatabaseVariables): Config.Config<Redacted.Redacted> {
+  return connectionStringConfig(variables).pipe(
+    Config.mapEffect(
+      Option.match({
+        onNone: () =>
+          Effect.fail(
+            new Config.ConfigError(
+              new ConfigProvider.SourceError({
+                message: `${variables.DEFAULT} is missing or blank`,
+              }),
+            ),
+          ),
+        onSome: Effect.succeed,
+      }),
+    ),
+  );
+}
+
 /**
  * The connection string as a `Config`, for the `SqlClient` layer and any
  * other reader on a runtime. It is one reader with `getPool` below: both
- * read `DATABASE_URL` under `connectionStringOf`, so a blank value is absent
- * to both and neither pool can be built where the other refuses. A blank
- * value fails the read the way a missing one does.
+ * choose by `chosenConnectionString`, so a blank value is absent to both and
+ * neither pool can be built where the other refuses, or on another database.
  */
-export const databaseUrl: Config.Config<Redacted.Redacted> = Config.Redacted(
+export const databaseUrl: Config.Config<Redacted.Redacted> = requiredConnectionString(
   DATABASE_ENVIRONMENT.URL,
-).pipe(
-  Config.mapEffect((url) => {
-    const named = connectionStringOf(Redacted.value(url));
-    return named === undefined
-      ? Effect.fail(
-          new Config.ConfigError(
-            new ConfigProvider.SourceError({ message: `${DATABASE_ENVIRONMENT.URL} is blank` }),
-          ),
-        )
-      : Effect.succeed(Redacted.make(named));
-  }),
 );
 
 /**
@@ -76,18 +142,12 @@ export const databaseUrl: Config.Config<Redacted.Redacted> = Config.Redacted(
  * listener stays down without it, and every wait runs on its clock
  * (`sync/hub.ts`).
  */
-export const databaseUnpooledUrl: Config.Config<Option.Option<Redacted.Redacted>> = Config.option(
-  Config.Redacted(DATABASE_ENVIRONMENT.UNPOOLED_URL),
-).pipe(
-  Config.map((url) =>
-    Option.map(
-      Option.flatMap(url, (named) =>
-        Option.fromUndefinedOr(connectionStringOf(Redacted.value(named))),
-      ),
-      Redacted.make,
-    ),
-  ),
-);
+export const databaseUnpooledUrl: Config.Config<Option.Option<Redacted.Redacted>> =
+  connectionStringConfig(DATABASE_ENVIRONMENT.UNPOOLED_URL);
+
+/** The unpooled connection string for a run that cannot go on without it, the migrator's. */
+export const requiredDatabaseUnpooledUrl: Config.Config<Redacted.Redacted> =
+  requiredConnectionString(DATABASE_ENVIRONMENT.UNPOOLED_URL);
 
 /**
  * Connections one function instance may hold per pool. Several requests share
@@ -131,19 +191,22 @@ function createPool(connectionString: string): Pool {
 let pool: Pool | undefined;
 
 /**
- * The process-wide pool, read from `DATABASE_URL` on first request. Drizzle's
- * node-postgres session calls this synchronously with no fiber to read a
- * `Config` on, so the read is the record's under the same rule
- * `databaseUrl` applies.
+ * The process-wide pool, read on first request. Drizzle's node-postgres
+ * session calls this synchronously with no fiber to read a `Config` on, so
+ * the read is the record's under the same rule `databaseUrl` applies.
  */
 export function getPool(): Pool {
   if (pool) {
     return pool;
   }
 
-  const connectionString = connectionStringOf(process.env[DATABASE_ENVIRONMENT.URL]);
+  const connectionString = chosenConnectionString({
+    deployment: process.env[DEPLOYMENT_VARIABLE],
+    demo: process.env[DATABASE_ENVIRONMENT.URL.DEMO],
+    fallback: process.env[DATABASE_ENVIRONMENT.URL.DEFAULT],
+  });
   if (!connectionString) {
-    throw new Error(`${DATABASE_ENVIRONMENT.URL} is required to connect to the database.`);
+    throw new Error(`${DATABASE_ENVIRONMENT.URL.DEFAULT} is required to connect to the database.`);
   }
 
   pool = createPool(connectionString);
