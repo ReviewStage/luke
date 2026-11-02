@@ -135,7 +135,7 @@ pnpm --dir "$LUKE_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts --ch
 
 # The constants clients build /api/ URLs from are the other half of that
 # table: a path constant can outlive its route and nothing fails until
-# production answers 404 (LUKE-186). Every /api/ literal and path builder under
+# production answers 404. Every /api/ literal and path builder under
 # apps/desktop/src, packages/*/src, scripts, and tools must resolve to an
 # extensionless alias the Build Output emits, a rewrite of the table ahead of
 # its fallback, or a procedure of the hosted oRPC contract; the fallback alone
@@ -395,20 +395,36 @@ fi
 # This is the one scan for secrets the repository runs (AGENTS.md's "Never"), and
 # a test fixture shaped like a provider's live credential is what GitHub's
 # secret scanning raises an alert on, which history keeps open once pushed. So
-# a tracked file may hold no literal in the shape of a live provider key, a
-# GitHub token, a Slack token, an AWS access key id, or a private key block:
-# a test that needs one builds it at run time or uses a low-entropy fake.
+# a tracked file may hold no literal in the shape of a provider's key or token
+# (each pattern below is held to the length and characters the real one has),
+# an AWS access key id, or a private key block: a test that needs one builds it
+# at run time or uses a low-entropy fake shorter than the real shape.
 # Note that git grep answers 1 for no match and more for a scan that failed,
 # which must fail the check rather than pass it, and that a hit is named by its
-# file and line alone, so the literal never reaches a CI log.
+# file and line alone, so the literal never reaches a CI log. This file is
+# tracked too, so no pattern's own text may match a pattern.
 provider_shaped_status=0
 provider_shaped_literals=$(git -C "$LUKE_REPO_ROOT" grep -nIE \
-    -e 'sk_live_[0-9A-Za-z]{24,}' \
+    -e 'sk-ant-(api03|admin01|oat01)-[A-Za-z0-9_-]{93}AA' \
+    -e 'sk-proj-[A-Za-z0-9_-]{100,}' \
+    -e 'AIza[0-9A-Za-z_-]{35}' \
+    -e 'GOCSPX-[0-9A-Za-z_-]{28}' \
+    -e '(sk|rk)_(live|test)_[0-9A-Za-z]{24,}' \
+    -e 'whsec_[0-9A-Za-z+/]{32,}' \
     -e 'gh[pousr]_[A-Za-z0-9]{36}' \
     -e 'github_pat_[A-Za-z0-9_]{22,}' \
+    -e 'glpat-[0-9A-Za-z_-]{20,}' \
     -e 'xox[baprs]-[0-9]+-' \
-    -e 'AKIA[0-9A-Z]{16}' \
-    -e '-----BEGIN [A-Z ]*PRIVATE KEY-----' | cut -d: -f1,2) || provider_shaped_status=$?
+    -e 'xoxe(\.xox[bp])?-[0-9]+-[0-9A-Za-z]{40,}' \
+    -e 'xapp-[0-9]+-[0-9A-Za-z]+-[0-9]+-[0-9A-Za-z]{32,}' \
+    -e 'hooks\.slack\.com/services/T[0-9A-Z]{8,}/B[0-9A-Z]{8,}/[0-9A-Za-z]{24}' \
+    -e 'sntrys_eyJ[0-9A-Za-z+/=_]{40,}' \
+    -e 'phx_[0-9A-Za-z_]{43}' \
+    -e 'lin_api_[0-9A-Za-z]{40}' \
+    -e 'npm_[0-9A-Za-z]{36}' \
+    -e 'npg_[0-9A-Za-z]{12}([^0-9A-Za-z_]|$)' \
+    -e '(AKIA|ASIA)[0-9A-Z]{16}' \
+    -e '-----BEGIN [A-Z ]*PRIVATE KEY( BLOCK)?-----' | cut -d: -f1,2) || provider_shaped_status=$?
 if ((provider_shaped_status > 1)); then
     printf 'error: the scan for provider-shaped literals could not run (git grep exited %s)\n' \
         "$provider_shaped_status" >&2
