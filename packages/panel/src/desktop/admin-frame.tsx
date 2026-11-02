@@ -15,7 +15,6 @@ import { GLYPH } from "@luke/ui/icons";
 import type { AdminPlaceFrame } from "../admin/chrome/page-header.js";
 import { ADMIN_PLACES } from "../admin/chrome/places.js";
 import {
-  ADMIN_TAB,
   type AdminTab,
   type AdminView,
   adminSectionOf,
@@ -30,10 +29,8 @@ export const ADMIN_TITLE = "Admin";
 /** What Open in browser says, as its hint and to a reader. */
 const OPEN_IN_BROWSER = "Open in browser";
 
-/** The sections the app offers: every section but the face's reference, which only the web page draws. */
-const APP_SECTIONS = ADMIN_PLACES.filter((place) => place.tab !== ADMIN_TAB.ANIMATIONS).map(
-  (place) => ({ value: place.tab, label: place.label }),
-);
+/** The sections the app offers: every one the sidebar lists. */
+const APP_SECTIONS = ADMIN_PLACES.map((place) => ({ value: place.tab, label: place.label }));
 
 /** Open in browser: a link to the web page in a browser tab, a press the shell answers in the Mac app. */
 function OpenInBrowser(): React.JSX.Element {

@@ -104,7 +104,12 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
       const id = yield* pathUuid(params.id);
       const standing = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
       if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const written = yield* changeAutomationAs(userId, standing.value, asked);
+      const written = yield* changeAutomationAs(
+        userId,
+        standing.value,
+        asked,
+        SERVER_AUTOMATION_SOURCE.MEMBER,
+      );
       return {
         automation: written.automation,
         ...(written.webhookSecret === undefined
@@ -119,7 +124,9 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
       const id = yield* pathUuid(input.id);
       const standing = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
       if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { txid: yield* removeAutomationAs(userId, id) };
+      return {
+        txid: yield* removeAutomationAs(userId, standing.value, SERVER_AUTOMATION_SOURCE.MEMBER),
+      };
     }),
 
     /** The automation run now, under the client's key: 201 with the run this call made, 200 with the one the key already made. */

@@ -731,11 +731,16 @@ export function runUpdateAutomation(
             ...(disabledServers === undefined ? undefined : { disabledServers }),
           }
         : undefined;
-      const written = yield* changeAutomationAs(userId, standing, {
-        ...rest,
-        ...(action === undefined ? undefined : { action }),
-        ...(landing.success === undefined ? undefined : { target: landing.success }),
-      }).pipe(Effect.result);
+      const written = yield* changeAutomationAs(
+        userId,
+        standing,
+        {
+          ...rest,
+          ...(action === undefined ? undefined : { action }),
+          ...(landing.success === undefined ? undefined : { target: landing.success }),
+        },
+        SERVER_AUTOMATION_SOURCE.AGENT,
+      ).pipe(Effect.result);
       if (Result.isFailure(written)) {
         const refusal = written.failure;
         if (
@@ -771,7 +776,11 @@ export function runDeleteAutomation(
       const userId = callerUserId(call.caller);
       const found = yield* workspaceAutomation(userId, workspace.value, automationId);
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);
-      const deleted = yield* removeAutomationAs(userId, automationId).pipe(
+      const deleted = yield* removeAutomationAs(
+        userId,
+        found.value,
+        SERVER_AUTOMATION_SOURCE.AGENT,
+      ).pipe(
         Effect.as({
           status: ACTION_RESULT_STATUS.ACCEPTED,
           automation: { id: found.value.id, name: found.value.name },

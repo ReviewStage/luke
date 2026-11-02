@@ -12,16 +12,18 @@ import {
   DEVICE_ARCH,
   DEVICE_PLATFORM,
   type DeviceArch,
+  type DeviceMachine,
   type DevicePlatform,
 } from "@luke/features/device-agent-wire";
 import { resolveAppName } from "../app-identity.js";
 import type { LocalAgentPlatformSeam } from "../effect/seams.js";
 import type { AgentCliPins } from "../local-agent-setup.js";
 import { macDeviceName } from "../node/mac-device-name.js";
+import { linuxMachine, macMachine } from "../node/machine-identity.js";
 import { agentUnsavedWorkScript } from "../node/open-on-mac.js";
 
 /**
- * host-os.ts -- what a host's daemon does differently on each OS it runs on (`HostOs`): the platform it enrolls and registers as, the architectures it is built for, its default name, which builds of the agent CLIs it keeps, whether agents ran on the developer's own logins on it before, and whether its agents' folders are its own alone.
+ * host-os.ts -- what a host's daemon does differently on each OS it runs on (`HostOs`): the platform it enrolls and registers as, the architectures it is built for, its default name, how it reads which machine it is, which builds of the agent CLIs it keeps, whether agents ran on the developer's own logins on it before, and whether its agents' folders are its own alone.
  *
  * Everything else, the connect, the follower, and each agent run straight
  * on the box, is the same program on every OS (`hostPlatform`,
@@ -39,6 +41,8 @@ export interface HostOs {
   readonly arches: readonly DeviceArch[];
   /** The machine's own name, which it enrolls and registers under where it is given none. */
   readonly deviceName: () => string;
+  /** Which machine it is, as it pairs and registers (`node/machine-identity.ts`), each part absent where it could not be read. */
+  readonly machine: () => DeviceMachine;
   /** The builds of the agent CLIs it fetches and keeps, for the architecture it runs on (`LocalAgentPlatformSeam.clis`). */
   readonly agentClis: (arch: DeviceArch) => AgentCliPins;
   /** Whether agents may have run on the developer's own logins on the machine before (`LocalAgentPlatformSeam.formerlyDirect`). */
@@ -65,6 +69,7 @@ export const LINUX_HOST: HostOs = {
   platform: DEVICE_PLATFORM.LINUX,
   arches: [DEVICE_ARCH.X64, DEVICE_ARCH.ARM64],
   deviceName: () => os.hostname(),
+  machine: linuxMachine,
   agentClis: (arch) => ({
     claude: CLAUDE_CODE_LINUX_PINS[arch],
     codex: CODEX_LINUX_PINS[arch],
@@ -95,6 +100,7 @@ export const DARWIN_HOST: HostOs = {
   platform: DEVICE_PLATFORM.DARWIN,
   arches: [DEVICE_ARCH.ARM64],
   deviceName: macDeviceName,
+  machine: macMachine,
   // Note that the arch is not read, since a Mac host is built for Apple silicon alone (`arches`).
   agentClis: () => ({ claude: CLAUDE_CODE_MAC_PIN, codex: CODEX_MAC_PIN, gh: GH_MAC_PIN }),
   formerlyDirect: true,

@@ -19,6 +19,11 @@ import {
 import { noNetwork } from "@luke/wire/testing";
 import { Clock, type Context, Duration, Effect, Layer, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
+import {
+  recordingProductAnalytics,
+  SERVER_AGENT_TOOL,
+  SERVER_EVENT,
+} from "../events/server-events.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { openGithubUser, openTokenMember } from "../testing/github-app-fake.js";
@@ -152,6 +157,15 @@ const openTokenAgent = Effect.gen(function* () {
   return { userId, reader, tokenless, agent };
 });
 
+/** What the routes counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+/** The tools the account was counted as opening, each with the workspace it was counted in, in order. */
+const toolsCounted = (userId: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === SERVER_EVENT.AGENT_TOOL_OPEN)
+    .map((event) => ({ workspaceId: event.workspaceId, ...event.properties }));
+
 /** The agents procedures over the test's store and the sandbox given, each bearer answering for the account it maps to. */
 const standing = (
   bearers: ReadonlyMap<string, string>,
@@ -169,6 +183,7 @@ const standing = (
         Layer.mergeAll(
           Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
           Layer.succeed(Database, yield* Database),
+          ANALYTICS.layer,
           noNetwork,
         ),
       ),
@@ -276,6 +291,7 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
         assert.equal(started.status, 409);
         assert.deepEqual(started.body, { error: HOSTED_API_ERROR.SANDBOX_STOPPED });
         assert.equal(woken, false, "nothing but the resume path wakes the sandbox");
+        assert.deepEqual(toolsCounted(userId), [], "a shell refused is not counted");
         assert.deepEqual(resumed.body, { sandbox: SANDBOX_STATE.RUNNING });
         assert.deepEqual(sandbox.asked.at(-1), { what: "resume", sessionId });
       }),
@@ -356,6 +372,9 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
 
       assert.equal(started.status, 201);
       assert.notEqual(started.body.terminal.id, SHELL.id);
+      assert.deepEqual(toolsCounted(userId), [
+        { workspaceId: agent.organizationId, tool: SERVER_AGENT_TOOL.TERMINAL },
+      ]);
     }),
   );
 

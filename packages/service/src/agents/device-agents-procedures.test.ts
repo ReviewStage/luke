@@ -30,7 +30,11 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HOST_VERSION } from "../auth/device-secret.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
-import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
+import {
+  recordingProductAnalytics,
+  SERVER_EVENT,
+  SERVER_HOST_PAIRING_ACTION,
+} from "../events/server-events.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
@@ -465,6 +469,11 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
       assert.equal(removed, HOSTED_HTTP_STATUS.OK);
       assert.equal(beat, HOSTED_HTTP_STATUS.UNAUTHORIZED);
       assert.deepEqual(listed.body.hosts, []);
+      assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_PAIRING_CHANGE), [
+        { action: SERVER_HOST_PAIRING_ACTION.APPROVE },
+        { action: SERVER_HOST_PAIRING_ACTION.REMOVE },
+      ]);
+      assert.deepEqual(countedProperties(other, SERVER_EVENT.HOST_PAIRING_CHANGE), []);
     }),
   );
 
@@ -651,6 +660,9 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
         assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_INSTALL), [
           { kind: "luke_host" },
         ]);
+        assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_PAIRING_CHANGE), [
+          { action: SERVER_HOST_PAIRING_ACTION.APPROVE },
+        ]);
       }),
   );
 
@@ -665,6 +677,9 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
       assert.deepEqual(denied, { status: HOSTED_HTTP_STATUS.OK, body: { done: true } });
       assert.deepEqual(polled.body, { status: "denied" });
       assert.deepEqual((yield* answerOf(request(owner, PATH.HOSTS))).body.hosts, []);
+      assert.deepEqual(countedProperties(owner, SERVER_EVENT.HOST_PAIRING_CHANGE), [
+        { action: SERVER_HOST_PAIRING_ACTION.DENY },
+      ]);
     }),
   );
 

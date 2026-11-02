@@ -161,7 +161,6 @@ const STILL_MOTION_CSS = `
   --luke-settle-delay: 0s !important;
   --luke-loop-motion: paused !important;
   --luke-wait-motion: paused !important;
-  --luke-face-motion: paused !important;
   --luke-scroll-glide: auto !important;
 }`;
 

@@ -11,6 +11,7 @@ import type {
   DeviceArch,
   DeviceCapability,
   DeviceIsolation,
+  DeviceMachine,
   DevicePlatform,
 } from "@luke/features/device-agent-wire";
 import {
@@ -205,6 +206,8 @@ export interface LocalAgentPlatformSeam {
   readonly runnerBundle: string;
   readonly runnerEnv: Readonly<Record<string, string>>;
   readonly deviceName: string;
+  /** Which machine the device runs on, as it registers (`DeviceMachine`), each part absent where it could not be read. */
+  readonly deviceMachine: DeviceMachine;
   /** The platform and architecture the device registers as. */
   readonly devicePlatform: DevicePlatform;
   readonly deviceArch: DeviceArch;
@@ -270,12 +273,14 @@ export interface ThisMacHostSeam {
   readonly stateRoot: string;
   /** Whether this Mac can run the host: Apple silicon, on the oldest macOS the install script takes or later. */
   readonly runsHost: boolean;
-  /** The Mac as its host registers it, which its enroll names so the service creates the device where it never saw this Mac. */
-  readonly machine: Effect.Effect<{
-    readonly name: string;
-    readonly platform: DevicePlatform;
-    readonly arch: DeviceArch;
-  }>;
+  /** The Mac as its host registers it, which its enroll names so the service creates the device where it never saw this Mac, and which machine it is where it was read. */
+  readonly machine: Effect.Effect<
+    {
+      readonly name: string;
+      readonly platform: DevicePlatform;
+      readonly arch: DeviceArch;
+    } & DeviceMachine
+  >;
   /** Whether launchd holds the host's LaunchAgent now. */
   readonly loaded: Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner>;
   /** The install script given run with `/bin/sh`, the LaunchAgent let start first: the release installed or upgraded, and the host started. */

@@ -242,8 +242,7 @@ function AppWindow(): React.JSX.Element {
     setFeedbackKind(FEEDBACK_KIND.FEEDBACK);
   }, []);
 
-  // Session replay and the editor and markdown-parser prefetches start once the renderer is idle, not beside the first interactions.
-  useSessionReplay(run, useAppSlice(APP_SLICE.SESSION_REPLAY));
+  // The editor and markdown-parser prefetches start once the renderer is idle, not beside the first interactions; so does session replay, below.
   usePrefetchBundles();
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
   // The shell hears the ask too, and whether a plan holds words not saved, which no page's ask
@@ -383,6 +382,8 @@ function AppWindow(): React.JSX.Element {
     leaveGuard,
     room,
   });
+  // Session replay starts once the renderer is idle, filed under the workspace the sidebar lists.
+  useSessionReplay(run, useAppSlice(APP_SLICE.SESSION_REPLAY), tasks.workspace?.id);
   // The workspace Settings shows: the sidebar's, or one a link named while Settings stays open.
   const settingsWorkspace = useSettingsWorkspace({
     listedId: tasks.workspace?.id,

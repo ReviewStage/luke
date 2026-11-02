@@ -23,6 +23,7 @@ import {
   DEVICE_KIND,
   DEVICE_PLATFORM,
   type DeviceArch,
+  type DeviceMachine,
   type DevicePlatform,
   deviceSetupSchema,
   hostUpdateSchema,
@@ -34,6 +35,7 @@ import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from
 import { agentTable } from "../schemas/agent.js";
 import { device } from "../schemas/device.js";
 import { hostPairing } from "../schemas/host-pairing.js";
+import { MachineColumnsSchema, machineColumns } from "./device-store.js";
 
 type HostEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
@@ -46,11 +48,13 @@ const HostCallerSchema = Schema.Struct({
 
 export type HostCaller = typeof HostCallerSchema.Type;
 
-/** One of the account's enrolled machines, as Settings lists it: beside its name and beat, its home folder, none before it first registered, where its setup stands and why it failed, none once it is ready, and where its update stands and why it failed, as its last beat said, none while no update is under way. */
+/** One of the account's enrolled machines, as Settings lists it: beside its name and beat, which machine it runs on and its model, none where its host never said, its home folder, none before it first registered, where its setup stands and why it failed, none once it is ready, and where its update stands and why it failed, as its last beat said, none while no update is under way. */
 const HostRowSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   platform: Schema.Literals(Object.values(DEVICE_PLATFORM)),
+  machineId: Schema.NullOr(Schema.String),
+  model: Schema.NullOr(Schema.String),
   lastSeenAt: Schema.Date,
   version: Schema.NullOr(Schema.String),
   home: Schema.NullOr(Schema.String),
@@ -96,12 +100,13 @@ const insertOwnDevice = SqlSchema.findAll({
     name: Schema.String,
     platform: Schema.Literals(Object.values(DEVICE_PLATFORM)),
     arch: Schema.Literals(Object.values(DEVICE_ARCH)),
+    ...MachineColumnsSchema.fields,
     version: Schema.String,
     secretHash: Schema.String,
     now: Schema.Date,
   }),
   Result: KeptSchema,
-  execute: ({ userId, id, name, platform, arch, version, secretHash, now }) =>
+  execute: ({ userId, id, name, platform, arch, machineId, model, version, secretHash, now }) =>
     Database.use((db) =>
       db
         .insert(device)
@@ -112,13 +117,20 @@ const insertOwnDevice = SqlSchema.findAll({
           kind: DEVICE_KIND.HOST,
           platform,
           arch,
+          ...machineColumns({ machineId, model }),
           version,
           secretHash,
           lastSeenAt: now,
         })
         .onConflictDoUpdate({
           target: device.id,
-          set: { kind: DEVICE_KIND.HOST, version, secretHash, removedAt: null },
+          set: {
+            kind: DEVICE_KIND.HOST,
+            ...machineColumns({ machineId, model }),
+            version,
+            secretHash,
+            removedAt: null,
+          },
           // Note that another account's device is never keyed, so its id answers no row, as an id the account never registered once did.
           setWhere: sql`${device.userId} = ${userId}`,
         })
@@ -131,15 +143,22 @@ const keyOwnDevice = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
     id: Schema.String,
+    ...MachineColumnsSchema.fields,
     version: Schema.String,
     secretHash: Schema.String,
   }),
   Result: KeptSchema,
-  execute: ({ userId, id, version, secretHash }) =>
+  execute: ({ userId, id, machineId, model, version, secretHash }) =>
     Database.use((db) =>
       db
         .update(device)
-        .set({ kind: DEVICE_KIND.HOST, version, secretHash, removedAt: null })
+        .set({
+          kind: DEVICE_KIND.HOST,
+          ...machineColumns({ machineId, model }),
+          version,
+          secretHash,
+          removedAt: null,
+        })
         .where(and(eq(device.id, id), eq(device.userId, userId)))
         .returning({ id: device.id }),
     ),
@@ -197,6 +216,8 @@ const findHosts = SqlSchema.findAll({
           id: device.id,
           name: device.name,
           platform: device.platform,
+          machineId: device.machineId,
+          model: device.model,
           lastSeenAt: device.lastSeenAt,
           version: device.version,
           home: device.home,
@@ -224,8 +245,8 @@ const stampRemoved = SqlSchema.findAll({
     ),
 });
 
-/** What a signed-in session enrolls its own machine with: its id, its daemon's version, its new secret's hash, and the machine as it names itself, which creates the device where the account never registered the id. */
-export interface OwnEnrollment {
+/** What a signed-in session enrolls its own machine with: its id, its daemon's version, its new secret's hash, which machine it is where it read it, and the machine as it names itself, which creates the device where the account never registered the id. */
+export interface OwnEnrollment extends DeviceMachine {
   readonly id: string;
   readonly version: string;
   readonly secretHash: string;
@@ -243,7 +264,8 @@ export interface OwnEnrollment {
  * the id and the enroll names the machine, a device created under the
  * account with the machine's name, platform and architecture, which its
  * host program's first register fills in. Either is keyed with the new
- * secret's hash and the version it enrolled with. A machine already
+ * secret's hash and the version it enrolled with, and given which machine
+ * it is where the enroll named it (`machineColumns`). A machine already
  * enrolled is keyed again, its old secret refused from now on, and a
  * removed one brought back, since the session holds the account's whole
  * say over its devices; when to ask is its caller's. False where the id is

@@ -526,6 +526,24 @@ secret, or within a few minutes of the code lapsing. To stop codes being
 guessed, our service also counts, for 15 minutes at a time, how many codes
 your account named that matched none.
 
+**Which machine a host is.** This Mac and every host tell our service which
+machine they run on, so that two of your machines with one name can be told
+apart, and two installs on one machine known as one. A Mac reads its hardware
+UUID (`IOPlatformUUID`) and a Linux box its machine id (`/etc/machine-id`),
+asking nothing of you; that id never leaves the machine and is never logged.
+What is sent in its place is a keyed SHA-256 hash (HMAC) of it under a fixed
+key of Vespin's own, which the id cannot be worked back from and no other
+app's hash of it matches, but which stays the same for as long as the
+machine's id does: for a Mac's life, and on a Linux box until its machine id
+is made anew. A Mac also sends its model as macOS names it, such as "MacBook
+Air (M2, 2022)"; a Linux box sends none. Nothing else the system reports beside
+them, its serial number among it, is kept or sent. They go with This Mac's
+enroll as you turn it on, with a box's ask for its code, and each time the
+host program starts; our service keeps them with the host from its enroll or
+its first call after you approve it, keeping none from the ask for a code,
+lists them only to your own account's apps, and keeps them for as long as it
+keeps the host, which goes with your account.
+
 **An agent that runs on Claude Code.** For the accounts in the early
 test of Claude plans, an agent your Claude plan pays for runs on
 Anthropic's Claude Code, and so does a Claude agent your own Anthropic
@@ -1074,34 +1092,52 @@ or say and nothing from a session can appear in one: no titles, branches, file
 paths, prompts, or error text. Each count also carries Vespin's version, whether
 it is a released build or a development one, whether it came from Vespin for Mac
 or Vespin in a browser tab (`platform`), and which deployment of our
-service recorded it. Settings › Account › "Share usage data" turns these
-counts off (see "Your choices").
+service recorded it. Our service also files them under a workspace, by its id
+alone, from its own record of the workspaces you are a member of, never from
+anything Vespin sends: the one workspace you share with others, or your own
+first workspace if you share none; if you are a member of two or more shared
+workspaces, they carry none. So if you are a member of a team's workspace,
+what you count while working in your own first workspace is filed under the
+team's. Settings › Account › "Share usage data" turns these counts off (see
+"Your choices").
 
 Our service also counts, under the same account, the work done through it:
-a task or a workspace made (with where it was started from), an agent started (with the model and effort
-it runs on, and whether an automation started it), a message you sent an agent
-(with what runs it, where, what kind of agent it is, and whether it was at
-work), each of an agent's turns ended (with how it ended: answered, failed,
-stopped, or given up on by our service, roughly how long it ran, and what
+a task or a workspace made (with where it was started from), a task finished or
+canceled (by you, or on the merge of its work), an agent started (with the model and effort
+it runs on, who started it (you, another agent, or an automation), and what kind of agent it is),
+an agent whose start failed (with how it failed), a message you sent an agent
+(with what runs it, where, what kind of agent it is, whether it was at
+work, and whether it waited in the agent's queue), each of an agent's turns ended (with how it ended: answered, failed,
+stopped, or given up on by our service, why a failed one failed, roughly how long it ran, and what
 kind of agent it is), an agent stopped or archived (with what kind of agent
-it is), a pull
+it is), an agent's model or effort changed, a pull
 request an agent opened (as you or as Vespin's GitHub App, and whether as a
-draft) and one it opened merged, an Inbox item
-answered, an automation made (with
-what triggers it), a message handed to an agent's runner (with which harness it
+draft), one it opened merged, and one you merged, reviewed, set to merge
+automatically, or closed from Vespin (which of those), an Inbox item
+answered, an automation made (with what triggers it), edited, or deleted (with
+whether you or an agent made the change), a message handed to an agent's runner (with which harness it
 runs, how the message reached it, whether a turn was under way, and how long the
 agent had been idle), an integration connected or disconnected (with which
 provider), and a pull request's chapters generated (with how it came out, how
 many chapters and parts of the diff they hold, and how long it took). It
 counts how a team comes together and sets up the same way, each under the
 account that did it: an account's first sign-in (with whether it was through
-Google or GitHub), an invitation to a workspace sent (with the role it offers)
-and accepted, a post a member made on a thread (with whether it answered an ask
+Google or GitHub), a GitHub account linked or a GitHub token saved, a model
+provider's key or sign-in added (with which provider), a repository pinned or
+unpinned (never which), an invitation to a workspace sent (with the role it offers)
+and accepted or canceled, a member removed, given another role, or handed the
+workspace, a member who left, a workspace renamed, a post a member made on a thread (with whether it answered an ask
 and whether it carried a picture or a file), a plan a member edited, a comment
 a member wrote on one (with whether it replied on a thread or started one), an
 automation run started (with what fired it: its schedule, GitHub, a webhook, an
 integration, or Run now), counted under the automation's owner, the GitHub App
-connected to a workspace, and a Linux host or this Mac enrolled (with which).
+connected to a workspace, a Linux host or this Mac enrolled (with which), a
+box's pairing approved or denied and a host removed, a channel made, edited, or
+archived and a thread moved into one, a skill installed, turned on or off,
+updated, shared with a workspace, or removed (never which), a workspace memory
+forgotten (never what it held), a clip you dictated (with a rough length, never
+its words), and a terminal or a browser tab you opened in an agent's sandbox, a
+browser tab you took over or handed back, or a file you added to a plan.
 What an agent writes on a thread or in a plan is not counted among these. These counts are event names and values from a fixed list too, are labelled
 `platform: server`, and
 carry no titles, names, repositories, branches, prompts, messages, or the
@@ -1112,10 +1148,12 @@ with the rest of your usage data.
 Our service's counts are also grouped by workspace, so PostHog can count
 workspaces as well as people: a count of something done in a workspace (a
 task, an agent and its messages and turns, a pull request, a thread, a plan, an
-automation, an invitation, the GitHub App, or the workspace made) carries the
-workspace's id, and a count of your account's own setup (your first sign-in, a
-GitHub account or token, an integration, an API key, a pinned repository, or an
-enrolled host) carries none. For each workspace it counts, PostHog holds that
+automation, an invitation, a member or workspace change, a channel, a memory, a
+tool you opened for an agent, the GitHub App, or the workspace made) carries the
+workspace's id, and a count of your account's own setup and belongings (your
+first sign-in, a GitHub account or token, an integration, an API key, a pinned
+repository, an enrolled host or a pairing, a skill, or a dictated clip) carries
+none. For each workspace it counts, PostHog holds that
 workspace's name, as its members see it, and when it was made, and nothing
 else of it; our service sends them beside the workspace's first count on each
 of its servers, again once a day, and when the workspace is renamed. Your own
@@ -1158,10 +1196,15 @@ account, which carries your name and email address as you are shown in
 Vespin, so that we can find the recordings of a person who reports a problem;
 deleting your account erases them. Each recording carries Vespin's version,
 whether it is a released build or a development one, and whether it came
-from the Mac app or the web app; only a released build records at all.
+from the Mac app or the web app; only a released build records at all. It is
+also filed under the workspace Vespin's sidebar was showing as it was made, by
+the workspace's id alone, and under the next one when you switch; signing out
+lets it go with your account.
 Each also carries what PostHog's library reports of your device by default:
 its operating system and that system's version, the browser, your language
-and time zone, and the size of your screen.
+and time zone, and the size of your screen. The Mac app sends its recordings
+to PostHog directly; Vespin in a browser sends them through vespin.dev, which
+passes them on to PostHog (see "Our website").
 
 **Tab switcher previews.** When you hold ⌃Tab in the Mac app, each card shows a
 small, downscaled still of a screen you visited, taken by the app as you
@@ -1364,9 +1407,10 @@ only when you press Send.
   under its own retention policy.
 - PostHog, for usage data and screen recordings from the Mac app, screen
   recordings from Vespin in a browser, and the counts our service makes of the
-  work done through it, grouped by workspace, with each workspace's name and
-  creation date. The counts go through our own service; the
-  recordings go from Vespin, on the Mac or in your browser, to PostHog directly.
+  work done through it, all grouped by workspace, with each workspace's name
+  and creation date. The counts go through our own service; the
+  recordings go from the Mac app to PostHog directly, and from your browser
+  through vespin.dev, which passes them on to PostHog.
 - Sentry, for the Mac app's and Vespin in a browser's crash and performance
   reports, and our service's and Vespin's agents' error, performance, log, and
   agent reports, described above.
@@ -1566,8 +1610,12 @@ is shown, the site names you to PostHog by your account's id, name, and
 email address, which links your earlier visits to your account, and counts
 the sign-in once, remembering in your browser which sign-in it last counted.
 The hand-off page is one of the sign-in pages above: not recorded, its
-address cut to the page itself. Your browser contacts PostHog directly, so
-PostHog sees your network address, as it does for the app's recordings.
+address cut to the page itself. Your browser sends all of this to a path on
+vespin.dev rather than to PostHog, and our hosting passes each request on to
+PostHog as your browser sent it, without the site's cookies. So PostHog still
+sees what the request carries, your browser's user agent among it, and is
+handed your network address beside it; our PostHog project is set to discard
+client IP addresses, so PostHog does not keep it.
 
 Vespin in a browser, the app at vespin.dev/app and at every link to something
 in Vespin, is not one of the site's pages above: it records and reports what the
@@ -1588,9 +1636,10 @@ word for it, such as inline, all using Sentry's default data
 collection and each naming the account signed in in that tab, as described
 under "Crash and performance reports from the Mac app", where the page's
 address, your browser's details, and the addresses of the requests it made
-take the place of the Mac's. Your browser contacts
-PostHog and Sentry (see "Who we send it to") directly, so each sees your
-network address.
+take the place of the Mac's. Your browser contacts Sentry (see "Who we send
+it to") directly, so Sentry sees your network address. It sends the app's
+recordings through vespin.dev as the site's pages do, so PostHog is handed
+your network address too, and does not keep it.
 
 A link to something in Vespin, pasted into Slack, iMessage, or anywhere else
 that previews links, shows only Vespin's own card: the Vespin name and logo, the

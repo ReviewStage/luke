@@ -1,3 +1,4 @@
+import { POSTHOG_PROXY } from "@luke/features/posthog-proxy";
 import type { CapturedNetworkRequest, PostHog } from "posthog-js";
 
 /**
@@ -6,12 +7,14 @@ import type { CapturedNetworkRequest, PostHog } from "posthog-js";
  * session drop-off is only visible from the point someone already has an
  * account.
  *
- * The browser talks to the analytics processor directly, so the processor
- * sees the visitor's address and user agent. Nothing forwards on their behalf
- * — where the desktop's *counted* events still reach it through our own
- * service, and its recorder now posts here directly too. Say so in
- * `PRIVACY.md` rather than letting the counted events' stronger claim bleed
- * onto either.
+ * The browser posts to a path of this site's own origin, which the web
+ * service passes on to the analytics processor (`@luke/features/posthog-proxy`),
+ * because ad blockers refuse the processor's own host. What the processor is
+ * handed is the browser's request, the visitor's address and user agent
+ * among it, but for the site's cookies, which the rewrite takes off — where
+ * the desktop's *counted* events reach it through our own service, built
+ * from an allowlist. Say so in `PRIVACY.md` rather than letting the counted
+ * events' stronger claim bleed onto this.
  *
  * The recorder here masks less than the app's: the desktop panel's recording
  * masks every word it draws (`apps/desktop/src/renderer/session-replay.ts`),
@@ -27,7 +30,6 @@ import type { CapturedNetworkRequest, PostHog } from "posthog-js";
  */
 
 const PROJECT_API_KEY = import.meta.env.VITE_POSTHOG_PROJECT_API_KEY;
-const HOST = import.meta.env.VITE_POSTHOG_HOST ?? "https://us.i.posthog.com";
 
 export const SITE_EVENT = {
   DOWNLOAD_PRESS: "site:download_press",
@@ -202,7 +204,10 @@ export function startSiteAnalytics(): void {
   if (client || !projectApiKey) return;
   client = import("posthog-js").then(({ default: posthog }) => {
     posthog.init(projectApiKey, {
-      api_host: HOST,
+      // A path rather than an address, so it stands on whichever of the
+      // product's origins served the page.
+      api_host: POSTHOG_PROXY.PATH,
+      ui_host: POSTHOG_PROXY.UI_ORIGIN,
       autocapture: true,
       capture_pageview: true,
       capture_pageleave: false,

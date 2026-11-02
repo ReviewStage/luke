@@ -1,6 +1,5 @@
 {
   "apps/catalog/src/catalog.css": 4,
-  "apps/web/src/admin/screens/animations.tsx": 1,
   "packages/panel/src/actor-ref.tsx": 1,
   "packages/panel/src/desktop/section-icon-picker.tsx": 1,
   "packages/panel/src/picture-block.tsx": 1,

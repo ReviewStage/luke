@@ -5,9 +5,7 @@
    them here rather than component by component, keeping hover feedback's
    70ms (a colour settling is not motion) and `--luke-late-delay`, a wait that
    holds back a blip rather than moving anything, and pauses `--luke-loop-motion`,
-   the play state of a loop with no end of its own (a busy button's ring),
-   and `--luke-face-motion`, the face's: paused, every motion holds its first
-   frame, the resting pose each starts from — head upright, eyes open.
+   the play state of a loop with no end of its own (a busy button's ring).
    `--luke-scroll-glide` is how a scroller a component moves itself gets
    there, a tab strip bringing a tab into view: a glide, or at once where
    motion is held still. `--luke-wait-motion` is the play state of a wait
@@ -19,7 +17,6 @@
 :root {
   --luke-loop-motion: running;
   --luke-wait-motion: running;
-  --luke-face-motion: running;
   --luke-scroll-glide: smooth;
 }
 
@@ -32,7 +29,6 @@
     --luke-duration-shape: 1ms;
     --luke-row-stagger: 0ms;
     --luke-loop-motion: paused;
-    --luke-face-motion: paused;
     --luke-scroll-glide: auto;
   }
 }

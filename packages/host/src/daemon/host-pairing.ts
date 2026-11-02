@@ -4,7 +4,7 @@ import {
   pollHostPairing,
   startHostPairing,
 } from "@luke/features";
-import type { DeviceArch, DevicePlatform } from "@luke/features/device-agent-wire";
+import type { DeviceArch, DeviceMachine, DevicePlatform } from "@luke/features/device-agent-wire";
 import {
   HOST_PAIRING_POLL_STATUS,
   HOST_WIRE,
@@ -92,6 +92,8 @@ export interface HostConnectInput {
   readonly name: string;
   readonly platform: DevicePlatform;
   readonly arch: DeviceArch;
+  /** Which machine the box is, where it read it (`HostOs.machine`). */
+  readonly machine: DeviceMachine;
   /** The daemon's version, which every call carries as every call of a host's does. */
   readonly version: string;
   /** Shows the code and its link, once the service answered them and before the first poll. */
@@ -181,6 +183,7 @@ const connected = Effect.fnUntraced(function* (input: HostConnectInput) {
     name: input.name,
     platform: input.platform,
     arch: input.arch,
+    ...input.machine,
   });
   if (started.outcome !== HOST_PAIRING_OUTCOME.ANSWERED) return endedBy(started);
   const { userCode, url, expiresInMs, intervalMs } = started.answer;

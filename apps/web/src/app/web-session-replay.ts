@@ -6,8 +6,8 @@
  * window records through, so the tab records exactly what the Mac app does:
  * every word masked. Whether to record at all is the host's word, as on the
  * desktop. What this file decides is only what is the tab's own: the project
- * key, the address it says it has, where its recorder's chunk is, and what
- * the other tabs of this browser say.
+ * key, where it posts, the address it says it has, where its recorder's chunk
+ * is, and what the other tabs of this browser say.
  *
  * Each tab runs a host of its own, so an account deleted in one tab is
  * nothing its neighbours' hosts hear of until their next read finds the
@@ -18,6 +18,7 @@
  */
 
 import { PRODUCT_PLATFORM } from "@luke/features/analytics";
+import { POSTHOG_PROXY } from "@luke/features/posthog-proxy";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import type { BundleImporter } from "@luke/panel/bundle-loader";
 import { type ApplySessionReplay, sessionReplay } from "@luke/panel/session-replay";
@@ -116,6 +117,9 @@ const importSessionRecorder: BundleImporter<unknown> = () => import("./session-r
 const recording: ApplySessionReplay = sessionReplay({
   platform: PRODUCT_PLATFORM.WEB,
   projectApiKey,
+  // A path of whichever origin served the tab, which the web service passes on
+  // to PostHog, because ad blockers refuse PostHog's own host.
+  host: { api: POSTHOG_PROXY.PATH, ui: POSTHOG_PROXY.UI_ORIGIN },
   address: `${location.origin}${PANEL_PATH}`,
   namesOwnAddress: namesAddress,
   importRecorder: importSessionRecorder,

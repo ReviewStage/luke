@@ -17,6 +17,7 @@ import {
   type DeviceArch,
   type DeviceCapability,
   type DeviceIsolation,
+  type DeviceMachine,
   type DevicePlatform,
   type DeviceSetup,
   type DeviceSignedIn,
@@ -37,13 +38,15 @@ type DeviceEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 const DeviceKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
 
-/** One device as Start reads it: its id, the account it is, its name, kind, and platform, when it last beat, which harnesses it is signed in to, the Codex it checked, where it has one, and where its setup stands, none once it is ready. */
+/** One device as Start reads it: its id, the account it is, its name, kind, and platform, which machine it runs on and its model, none where its host never said, when it last beat, which harnesses it is signed in to, the Codex it checked, where it has one, and where its setup stands, none once it is ready. */
 const DeviceSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
   name: Schema.String,
   kind: Schema.Literals(Object.values(DEVICE_KIND)),
   platform: Schema.Literals(Object.values(DEVICE_PLATFORM)),
+  machineId: Schema.NullOr(Schema.String),
+  model: Schema.NullOr(Schema.String),
   lastSeenAt: Schema.Date,
   signedIn: deviceSignedInSchema,
   codexExecutable: Schema.NullOr(Schema.String),
@@ -72,17 +75,39 @@ export type DeviceStanding = typeof DeviceStandingSchema.Type;
 
 type DeviceLayout = typeof DeviceLayoutSchema.Type;
 
-/** What a Mac registers with beside its id and name: its platform and architecture, how it runs its agents, its layout, its Codex where it checked one, which harnesses it is signed in to where it says, what its follower takes beyond the first lines, none where it names none, and where its setup stands and why it failed, none once it is ready. */
-export type DeviceRegistration = Omit<DeviceLayout, "codexExecutable"> & {
-  readonly platform: DevicePlatform;
-  readonly arch: DeviceArch;
-  readonly isolation?: DeviceIsolation | undefined;
-  readonly codexExecutable?: string | undefined;
-  readonly signedIn?: DeviceSignedIn | undefined;
-  readonly capabilities?: readonly DeviceCapability[] | undefined;
-  readonly setup?: DeviceSetup | undefined;
-  readonly setupFailure?: string | undefined;
-};
+/** Which machine a call names, each part absent where it named none. */
+export const MachineColumnsSchema = Schema.Struct({
+  machineId: Schema.optionalKey(Schema.String),
+  model: Schema.optionalKey(Schema.String),
+});
+
+/**
+ * The machine columns a call writes: each part of the machine it named,
+ * and none it left out, so a call naming none, from a host older than the
+ * field or one whose read failed, leaves what an earlier call wrote.
+ */
+export function machineColumns(machine: {
+  readonly machineId?: string | undefined;
+  readonly model?: string | undefined;
+}): DeviceMachine {
+  return {
+    ...(machine.machineId === undefined ? undefined : { machineId: machine.machineId }),
+    ...(machine.model === undefined ? undefined : { model: machine.model }),
+  };
+}
+
+/** What a Mac registers with beside its id and name: its platform and architecture, which machine it runs on where its host read it, how it runs its agents, its layout, its Codex where it checked one, which harnesses it is signed in to where it says, what its follower takes beyond the first lines, none where it names none, and where its setup stands and why it failed, none once it is ready. */
+export type DeviceRegistration = Omit<DeviceLayout, "codexExecutable"> &
+  DeviceMachine & {
+    readonly platform: DevicePlatform;
+    readonly arch: DeviceArch;
+    readonly isolation?: DeviceIsolation | undefined;
+    readonly codexExecutable?: string | undefined;
+    readonly signedIn?: DeviceSignedIn | undefined;
+    readonly capabilities?: readonly DeviceCapability[] | undefined;
+    readonly setup?: DeviceSetup | undefined;
+    readonly setupFailure?: string | undefined;
+  };
 
 const upsertDevice = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -91,6 +116,7 @@ const upsertDevice = SqlSchema.findAll({
     name: Schema.String,
     platform: Schema.Literals(Object.values(DEVICE_PLATFORM)),
     arch: Schema.Literals(Object.values(DEVICE_ARCH)),
+    ...MachineColumnsSchema.fields,
     capabilities: Schema.Array(Schema.Literals(Object.values(DEVICE_CAPABILITY))),
     setup: Schema.NullOr(deviceSetupSchema),
     setupFailure: Schema.NullOr(Schema.String),
@@ -103,6 +129,8 @@ const upsertDevice = SqlSchema.findAll({
     name,
     platform,
     arch,
+    machineId,
+    model,
     isolation,
     home,
     claudeExecutable,
@@ -124,6 +152,7 @@ const upsertDevice = SqlSchema.findAll({
           kind: DEVICE_KIND.HOST,
           platform,
           arch,
+          ...machineColumns({ machineId, model }),
           isolation,
           home,
           claudeExecutable,
@@ -140,6 +169,7 @@ const upsertDevice = SqlSchema.findAll({
             name,
             platform,
             arch,
+            ...machineColumns({ machineId, model }),
             isolation,
             home,
             claudeExecutable,
@@ -198,6 +228,8 @@ const findSeen = SqlSchema.findAll({
           name: device.name,
           kind: device.kind,
           platform: device.platform,
+          machineId: device.machineId,
+          model: device.model,
           lastSeenAt: device.lastSeenAt,
           signedIn: device.signedIn,
           codexExecutable: device.codexExecutable,
@@ -230,6 +262,8 @@ const findNamed = SqlSchema.findAll({
           name: device.name,
           kind: device.kind,
           platform: device.platform,
+          machineId: device.machineId,
+          model: device.model,
           lastSeenAt: device.lastSeenAt,
           signedIn: device.signedIn,
           codexExecutable: device.codexExecutable,
@@ -274,8 +308,9 @@ const findLayout = SqlSchema.findOneOption({
 
 /**
  * Registers the Mac under the account, or renames, relocates, and beats it
- * where the account holds it already; false where another account holds the
- * id, and nothing was written.
+ * where the account holds it already, with the machine it runs on where it
+ * named one (`machineColumns`); false where another account holds the id,
+ * and nothing was written.
  */
 export function registerDevice(
   userId: string,

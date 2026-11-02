@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
 import { desktopSessionPageUrl } from "@luke/features/desktop-session-wire";
+import { POSTHOG_PROXY } from "@luke/features/posthog-proxy";
 import { act } from "react";
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 
@@ -26,12 +27,13 @@ Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 const PROJECT_KEY = "phc_site_sign_in_test";
 const TRANSFER_PATH = "/api/auth/electron/transfer-user";
 const SESSION_PATH = "/api/auth/get-session";
-/** Where the library posts events before the project's remote configuration says otherwise. */
-const DEFAULT_CAPTURE_PATH = "/e/";
+/** Where the library posts events before the project's remote configuration says otherwise, on this origin's path to PostHog. */
+const DEFAULT_CAPTURE_PATH = `${POSTHOG_PROXY.PATH}/e/`;
 /** Where the project's remote configuration routes events, and what it serves beside that. */
-const CAPTURE_PATH = "/i/v0/e/";
+const CAPTURE_ENDPOINT = "/i/v0/e/";
+const CAPTURE_PATH = `${POSTHOG_PROXY.PATH}${CAPTURE_ENDPOINT}`;
 const PROJECT_CONFIG = {
-  analytics: { endpoint: CAPTURE_PATH },
+  analytics: { endpoint: CAPTURE_ENDPOINT },
   supportedCompression: ["gzip", "gzip-js"],
 } as const;
 const CAPTURE_PATHS: ReadonlySet<string> = new Set([DEFAULT_CAPTURE_PATH, CAPTURE_PATH]);

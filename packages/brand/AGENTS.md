@@ -1,20 +1,22 @@
 # `@luke/brand`
 
-Luke's brand: the design sources, the generators that cut every committed copy
-from them, and what those copies are.
+The product's brand: the design sources, the generators that cut every
+committed copy from them, and what those copies are.
 
 - `assets/` holds the SVG and PNG sources and the cut artwork: icon, mark,
-  logo, avatar, DMG background, social card, motion. `README.md` is the asset
-  sheet.
-- `scripts/` holds the two generators (`pnpm --filter @luke/brand generate`)
-  and the DMG window layout the desktop's packaging reads.
-- `src/` holds geometry and the generated face art, motion tokens, and
-  provider-mark paths the apps draw from.
+  logo, wordmark, avatar, DMG background, social card, download button.
+  `README.md` is the asset sheet.
+- `scripts/` holds the two generators (`pnpm --filter @luke/brand generate`),
+  the brand's colour table both read (`brand-palette.mjs`), and the DMG window
+  layout the desktop's packaging reads.
+- `src/` holds geometry and the generated mark art, brand palette, motion
+  tokens, and provider-mark paths the apps draw from.
 
 Regenerate the generated files (under `src/generated/`, `assets/`, and
-`@luke/ui`'s `src/face/face-motion.css`) from the sources rather than hand-editing;
-`pnpm --filter @luke/brand check` reports drift when run by hand.
+`@luke/ui`'s `src/tokens/brand.css` and `motion-tokens.css`) from the sources
+rather than hand-editing; `pnpm --filter @luke/brand check` reports drift when
+run by hand.
 
 This package draws nothing itself. `@luke/ui` is the shared React layer
-that traces the generated artwork into the desktop window, so the face and the
-glyphs have one implementation.
+that traces the generated artwork into the window (`ProductMark`), so the mark
+and the glyphs have one implementation.

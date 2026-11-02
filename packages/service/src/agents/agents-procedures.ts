@@ -64,7 +64,13 @@ import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { Clock, Duration, Effect, type Layer, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { HostedEnvironment } from "../environment.js";
-import { recordServerEvent, SERVER_AGENT_SETTING, SERVER_EVENT } from "../events/server-events.js";
+import {
+  recordServerEvent,
+  recordServerEventIn,
+  SERVER_AGENT_SETTING,
+  SERVER_AGENT_TOOL,
+  SERVER_EVENT,
+} from "../events/server-events.js";
 import { changesPeople, namedReviewOptions } from "../github/github-people.js";
 import {
   imageCommits,
@@ -700,7 +706,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const sessionId = yield* reachedSession(context.userId, input.params.id);
       if (sessionId === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
       const { title } = input.body;
-      return yield* inSandbox(
+      const opened = yield* inSandbox(
         Effect.gen(function* () {
           const sandbox = yield* AgentSandbox;
           const started = yield* sandboxOrUpstream(sandbox.start(sessionId, randomUUID(), title));
@@ -708,6 +714,13 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           return { terminal: started.success };
         }),
       );
+      yield* recordServerEventIn(
+        SERVER_EVENT.AGENT_TOOL_OPEN,
+        context.userId,
+        readVisibleAgentWorkspace(context.userId, input.params.id),
+        { tool: SERVER_AGENT_TOOL.TERMINAL },
+      );
+      return opened;
     }),
     /** One shell named anew, answering the shells as they stand after. */
     renameTerminal: signedIn.renameTerminal.effect(function* ({ input, context }) {

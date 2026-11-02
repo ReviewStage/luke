@@ -20,12 +20,10 @@ import { DayScreen } from "@luke/panel/admin/screens/day";
 import { ReliabilityScreen } from "@luke/panel/admin/screens/reliability";
 import { UsersScreen } from "@luke/panel/admin/screens/users";
 import { WorkspacesScreen } from "@luke/panel/admin/screens/workspaces";
-import { ADMIN_READ_STATUS } from "@luke/panel/admin/use-admin-read";
 import { useCallback, useEffect, useState } from "react";
 import { authClient } from "./admin/auth-client";
-import { ForbiddenCard, SignInCard } from "./admin/chrome/gate-cards";
+import { SignInCard } from "./admin/chrome/gate-cards";
 import { AdminShell } from "./admin/chrome/sidebar";
-import { AnimationsScreen } from "./admin/screens/animations";
 import { WebAdminDoors } from "./admin/web-admin-doors";
 
 /** The standalone page: the dashboard under this page's own doors (`web-admin-doors.tsx`). */
@@ -170,19 +168,6 @@ function AdminDashboardPage(): React.JSX.Element {
         frame={(content) => shell(ADMIN_TAB.DASHBOARD, content)}
       />
     );
-  }
-
-  if (view.kind === ADMIN_TAB.ANIMATIONS) {
-    // The reference page fetches nothing, so it cannot learn the gate's
-    // answers the way the data views do; it honors the refusals the overview's
-    // read already holds and otherwise stands on the local sign-in press
-    // alone, which the artwork — committed in the repository, observed from
-    // nobody — is content with.
-    if (metrics.state.status === ADMIN_READ_STATUS.SIGNED_OUT) return <SignInCard />;
-    if (metrics.state.status === ADMIN_READ_STATUS.FORBIDDEN) {
-      return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
-    }
-    return shell(ADMIN_TAB.ANIMATIONS, <AnimationsScreen />);
   }
 
   if (view.kind === ADMIN_TAB.COST) {

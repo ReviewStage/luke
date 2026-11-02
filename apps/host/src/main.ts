@@ -51,7 +51,7 @@ import {
   NodePath,
   NodeRuntime,
 } from "@effect/platform-node";
-import { HOST_WIRE, hostInstallCommand } from "@luke/features/host-wire";
+import { HOST_COMMAND, HOST_WIRE, hostInstallCommand } from "@luke/features/host-wire";
 import { LINK_ORIGIN } from "@luke/features/link-home";
 import { PRODUCT_NAME } from "@luke/features/product-name";
 import { buildCarriesDeveloperIdSigning } from "@luke/host/app-identity";
@@ -189,7 +189,7 @@ const follow = (runtime: HostRuntime) =>
     const device = yield* readHostDevice(stateRoot);
     if (Option.isNone(device)) {
       reportToStderr(
-        `${PRODUCT_NAME} host: this box is not connected. Run luke-host connect, or the install command from Settings › Hosts › Add hosts (${DEFAULT_INSTALL_COMMAND}), and approve the code it shows in ${PRODUCT_NAME}.`,
+        `${PRODUCT_NAME} host: this box is not connected. Run ${HOST_COMMAND} connect, or the install command from Settings › Hosts › Add hosts (${DEFAULT_INSTALL_COMMAND}), and approve the code it shows in ${PRODUCT_NAME}.`,
       );
       yield* Effect.sleep(UNENROLLED_REST);
       return undefined;
@@ -275,8 +275,8 @@ const run = (runtime: HostRuntime) =>
 /** The command that connects this box to the service given: its origin named where it is not the one `connect` takes by default. */
 function connectCommand(origin: string): string {
   return origin === DEFAULT_SERVICE_ORIGIN
-    ? "luke-host connect"
-    : `luke-host connect --origin ${origin}`;
+    ? `${HOST_COMMAND} connect`
+    : `${HOST_COMMAND} connect --origin ${origin}`;
 }
 
 /** How the code is shown: its link to open and the code to check against the one the app shows, then that the box waits. */
@@ -305,6 +305,7 @@ const connect = (runtime: HostRuntime, name: string, origin: string) =>
       name,
       platform: runtime.os.platform,
       arch: yield* arch(runtime),
+      machine: runtime.os.machine(),
       version: VERSION,
       shown: showCode,
     });

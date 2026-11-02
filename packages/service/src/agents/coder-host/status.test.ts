@@ -168,6 +168,8 @@ test("a local agent's summary names its Mac and when it last beat; an agent in a
             name: "Charles's MacBook Pro",
             kind: DEVICE_KIND.DESKTOP,
             platform: DEVICE_PLATFORM.DARWIN,
+            machineId: null,
+            model: null,
             lastSeenAt: new Date(lastSeenAt),
             signedIn: {},
             codexExecutable: null,

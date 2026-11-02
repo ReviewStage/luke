@@ -1854,6 +1854,7 @@ export function composeLocalAgents(
             name: platform.deviceName,
             platform: platform.devicePlatform,
             arch: platform.deviceArch,
+            ...platform.deviceMachine,
             isolation: platform.deviceIsolation,
             home: folder,
             claudeExecutable: tools.claude,

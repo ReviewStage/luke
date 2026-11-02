@@ -166,7 +166,7 @@ function sectionNames(navigation: Element): (string | null)[] {
   return Array.from(navigation.querySelectorAll("a"), (link) => link.textContent);
 }
 
-test("one sidebar lists the measures, Animations last among them at its own address", async () => {
+test("one sidebar lists the measures", async () => {
   const page = await openAdmin();
   await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
 
@@ -174,15 +174,7 @@ test("one sidebar lists the measures, Animations last among them at its own addr
   expect(navigations).toHaveLength(1);
   const [sidebar] = Array.from(navigations);
   if (sidebar === undefined) throw new Error("No navigation");
-  expect(sectionNames(sidebar)).toEqual([
-    "Overview",
-    "Cost",
-    "Reliability",
-    "Workspaces",
-    "Users",
-    "Animations",
-  ]);
-  expect(sectionLink(page, "Animations").getAttribute("href")).toBe("/admin?view=animations");
+  expect(sectionNames(sidebar)).toEqual(["Overview", "Cost", "Reliability", "Workspaces", "Users"]);
 });
 
 test("the toggle at the sidebar's top hides it and shows it again, remembered across visits", async () => {

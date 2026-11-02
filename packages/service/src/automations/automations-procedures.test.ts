@@ -64,6 +64,12 @@ import {
 } from "../agents/eve-host/eve-sessions.js";
 import { requestUserId } from "../auth/bearer.js";
 import { TURN_FAILURE } from "../core.js";
+import {
+  recordingProductAnalytics,
+  SERVER_AUTOMATION_CHANGE_ACTION,
+  SERVER_AUTOMATION_SOURCE,
+  SERVER_EVENT,
+} from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
@@ -101,6 +107,9 @@ const automationRunsPath = (automationId: string): string => `${automationPath(a
  * GitHub a script, the catalog fixed, and the store PGlite. Synthetic
  * accounts, bearers, tasks, and words throughout.
  */
+
+/** What the routes counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
 
 const ORIGIN = "https://luke.test";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
@@ -173,6 +182,7 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
           Layer.succeed(Database, yield* Database),
           Layer.succeed(Clock.Clock, yield* Clock.Clock),
           githubReaching(INSTALLATIONS).layer,
+          ANALYTICS.layer,
           modelCatalogOf(CATALOG),
           scriptedHarnessLayer((account) => sessionsAs(harnessFor(account))),
         ),
@@ -962,6 +972,25 @@ it.layer(getTestDB())("the automation routes", (it) => {
         );
         assert.ok(deleted.txid !== undefined, "a delete answers its transaction");
         assert.notEqual(deleted.txid, renamed.txid);
+        assert.deepEqual(
+          ANALYTICS.recorded
+            .filter(
+              (event) => event.userId === owner && event.name === SERVER_EVENT.AUTOMATION_CHANGE,
+            )
+            .map((event) => ({ workspaceId: event.workspaceId, ...event.properties })),
+          [
+            {
+              workspaceId: task.workspaceId,
+              action: SERVER_AUTOMATION_CHANGE_ACTION.EDIT,
+              source: SERVER_AUTOMATION_SOURCE.MEMBER,
+            },
+            {
+              workspaceId: task.workspaceId,
+              action: SERVER_AUTOMATION_CHANGE_ACTION.DELETE,
+              source: SERVER_AUTOMATION_SOURCE.MEMBER,
+            },
+          ],
+        );
       }),
   );
 

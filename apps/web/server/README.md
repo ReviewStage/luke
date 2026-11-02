@@ -371,6 +371,28 @@ or `vercel.json`) deploys nothing. A Vercel `vercel.ts` is not used: Vercel's Gi
 `{ service }` destination in a `vercel.ts` (`rewrites[0].destination should be
 string`, #2838) although `vercel.json` takes the same rewrites.
 
+## The local server
+
+`pnpm --filter @luke/web local-server --port <n>` (`scripts/local-server.ts`)
+serves the same routes from this machine, on 127.0.0.1 alone, over the
+database `DATABASE_URL` names. It builds each grouped function's dispatcher
+over the route modules where they stand, as the generated bundle entry does,
+and lands each request by `api-rewrites.json` through the same replay the tests
+use (`server/local-deployment.ts`, `server/platform-landing.ts`). Every path no
+rewrite takes is the site's, which Vite serves in middleware mode from the page
+the web service's page routes in `vercel.json` land it on, as `/app` and a
+workspace's links land on `app.html`, without those routes' headers. The two
+WebSocket functions and the feedback courier are not served, and the scheduled
+sweep is called in process on the cron's cadence under `CRON_SECRET`.
+
+It refuses to start beside any `VERCEL*` variable or over a database host off
+the loopback (`server/local-server-guard.ts`), and imports no route until it
+has, because the auth service reads the environment as it loads. Where
+`BETTER_AUTH_URL` is unset it names the server's own address there first. A
+route that only the local server answers, such as a local-only sign-in, mounts
+in the entry's `localRoutes` and never under `server/routes/`, so no deployed
+function reaches it.
+
 ## The data layer
 
 Drizzle is the statement layer and nothing else. A query module builds its
@@ -795,7 +817,9 @@ nothing.
 
 The browser half of the funnel is separate and weaker: `VITE_POSTHOG_PROJECT_API_KEY`
 is a build-time variable that lets the site's own pages talk to PostHog
-directly, so PostHog sees a visitor's address there. A build without it never
+through a path of the deployment's own origin (`@luke/features/posthog-proxy`),
+which `vercel.json` passes on to PostHog with the request's cookies taken off,
+so PostHog is still handed a visitor's address there. A build without it never
 loads the library at all.
 
 Use is counted per user per UTC day in the Vespin-owned `hosted_usage` table:

@@ -58,7 +58,13 @@ import {
   type WorkspaceRole,
 } from "@luke/features/workspace-wire";
 import { type Cause, Effect, Option } from "effect";
-import { recordServerEvent, SERVER_EVENT, workspaceRenamed } from "../events/server-events.js";
+import {
+  recordServerEvent,
+  SERVER_EVENT,
+  SERVER_WORKSPACE_MEMBER_ACTION,
+  type ServerWorkspaceMemberAction,
+  workspaceRenamed,
+} from "../events/server-events.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -151,6 +157,15 @@ const membersNow = (
   DatabaseServices
 > => Effect.map(hostedStoreOrUnavailable(listMembers(workspaceId)), (members) => ({ members }));
 
+/** A change to a workspace's members, or to the workspace, counted under the member who made it. */
+function memberChanged(userId: string, workspaceId: string, action: ServerWorkspaceMemberAction) {
+  return recordServerEvent(
+    SERVER_EVENT.WORKSPACE_MEMBER_CHANGE,
+    { userId, workspaceId },
+    { action },
+  );
+}
+
 /** The workspaces resource: the list, a workspace created, and its members read under the OAuth token; every other write under the Mac's session. */
 export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
   const account = hosted.workspaces.use(accountMiddleware(seams.resolveUserId));
@@ -193,6 +208,7 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
       yield* pluginCallOrRefused(
         seams.members.removeMember({ headers, organizationId: workspaceId, memberId }),
       );
+      yield* memberChanged(userId, workspaceId, SERVER_WORKSPACE_MEMBER_ACTION.REMOVE);
       return yield* membersNow(workspaceId);
     }),
     changeRole: session.changeRole.effect(function* ({ context, input }) {
@@ -211,6 +227,7 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
           role,
         }),
       );
+      yield* memberChanged(userId, workspaceId, SERVER_WORKSPACE_MEMBER_ACTION.ROLE_CHANGE);
       return yield* membersNow(workspaceId);
     }),
     /**
@@ -242,6 +259,7 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
         yield* giveRole(other.memberId, WORKSPACE_ROLE.OWNER);
       }
       yield* giveRole(ownMemberId.value, WORKSPACE_ROLE.ADMIN);
+      yield* memberChanged(userId, workspaceId, SERVER_WORKSPACE_MEMBER_ACTION.TRANSFER);
       return yield* membersNow(workspaceId);
     }),
     leave: session.leave.effect(function* ({ context, input }) {
@@ -254,6 +272,7 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
       yield* pluginCallOrRefused(
         seams.members.leaveOrganization({ headers, organizationId: workspaceId }),
       );
+      yield* memberChanged(userId, workspaceId, SERVER_WORKSPACE_MEMBER_ACTION.LEAVE);
       return { workspaceId };
     }),
     /**
@@ -269,6 +288,7 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
         seams.members.updateOrganization({ headers, organizationId: workspace.id, data: { name } }),
       );
       yield* workspaceRenamed(userId, workspace.id);
+      yield* memberChanged(userId, workspace.id, SERVER_WORKSPACE_MEMBER_ACTION.RENAME);
       return { workspace: yield* answeredWorkspace(userId, workspace.id) };
     }),
     /**

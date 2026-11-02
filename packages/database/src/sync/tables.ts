@@ -153,6 +153,8 @@ export const deviceSync = defineSyncTable(device, {
     device.kind,
     device.platform,
     device.arch,
+    device.machineId,
+    device.model,
     device.isolation,
     device.home,
     device.claudeExecutable,

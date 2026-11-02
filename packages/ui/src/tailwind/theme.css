@@ -327,7 +327,7 @@
      List, a column's width, a row's height, a maker's name's measure, and the
      List's columns as the view draws them. */
   --spacing-welcome-tile: 56px; /* off-scale: the welcome's tile, a masthead's size */
-  --spacing-welcome-face: 34px; /* off-scale: the app's face on the welcome's tile */
+  --spacing-welcome-mark: 34px; /* off-scale: the product's mark on the welcome's tile */
   --spacing-welcome-composer: min(var(--luke-page-measure), 100%);
   --spacing-page-measure: var(--luke-page-measure);
   --spacing-row-context: 20ch; /* off-scale: a row's context, bounded in letters */
@@ -758,7 +758,7 @@
     inset 0 0 0 1px var(--luke-color-border-strong),
     0 0 0 2px var(--actor-stack-ground, var(--luke-color-ground));
   --shadow-actor-for-ring: 0 0 0 1.5px var(--actor-stack-ground, var(--luke-color-ground));
-  --spacing-actor-face-share: 80%; /* off-scale: the app's face, a share of its square */
+  --spacing-actor-mark-share: 80%; /* off-scale: the product's mark, a share of its square */
   --spacing-actor-for-x: 22%; /* off-scale: how far the face acted for stands past the mark's end */
   --spacing-actor-for-y: 18%; /* off-scale: and past its foot */
   --spacing-actor-for-near: 8%; /* off-scale: both, at a card's and a page's size */

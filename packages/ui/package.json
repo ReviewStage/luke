@@ -3,7 +3,7 @@
   "version": "0.24.0",
   "private": true,
   "type": "module",
-  "description": "Shared React for the desktop panel: Vespin's face and glyphs, traced from the brand's generated art",
+  "description": "Shared React for the desktop panel: the product's mark and glyphs, traced from the brand's generated art",
   "exports": {
     ".": "./src/index.js",
     "./account-initials": "./src/account-initials.js",
@@ -14,7 +14,6 @@
     "./composing-key": "./src/composing-key.js",
     "./accounts-sort": "./src/accounts-sort.js",
     "./activity-calendar": "./src/activity-calendar.js",
-    "./admin-animations": "./src/admin-animations.js",
     "./admin-format": "./src/admin-format.js",
     "./daily-series": "./src/daily-series.js",
     "./chart": "./src/chart/chart.js",

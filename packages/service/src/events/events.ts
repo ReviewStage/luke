@@ -1,4 +1,5 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { memberWorkspaceIds, personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import type { productEventsAnswerSchema } from "@luke/features/analytics";
 import { Clock, Effect, Option, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -35,7 +36,19 @@ import {
  * builds each event from the event's own property allowlist rather than from
  * what arrived, so a `distinct_id`, an `$ip`, or a `$set` on the way in is not
  * copied forward, and no property can hold free text.
+ *
+ * Nor does anything arrive that names a workspace. A batch is filed under the
+ * workspace's group (`$groups`, never a property) that the service's own
+ * membership rows name for the caller: the one workspace they share with
+ * others, or, for a member of none, their own personal one; a member of two
+ * or more shared workspaces is filed under none, since the batch cannot say
+ * which they were in. Note that what such a member does in their personal
+ * workspace is then counted under the team, which is the trade for asking the
+ * apps for nothing: only the window knows which workspace it lists.
  */
+
+/** The group type a workspace is filed under in PostHog, one of the project's five, shared by the service's own counts (`server-events.ts`). */
+export const WORKSPACE_GROUP_TYPE = "workspace";
 
 /** The `$lib` tag a batch is stamped with, by the platform that sent it. */
 const PRODUCT_EVENT_LIB = {
@@ -91,6 +104,23 @@ export interface EventsOptions {
 }
 
 /**
+ * The workspace a member's batch is filed under: their one shared workspace,
+ * else their personal one where it is the only one they are in, else none
+ * (the header says why).
+ */
+function batchWorkspaceOf(
+  userId: string,
+): Effect.Effect<string | undefined, QueryError | Schema.SchemaError, DatabaseServices> {
+  return Effect.gen(function* () {
+    const memberOf = yield* memberWorkspaceIds(userId);
+    const personal = Option.getOrUndefined(yield* personalWorkspaceOf(userId));
+    const shared = memberOf.filter((workspaceId) => workspaceId !== personal);
+    if (shared.length > 0) return shared.length === 1 ? shared[0] : undefined;
+    return personal !== undefined && memberOf.includes(personal) ? personal : undefined;
+  });
+}
+
+/**
  * Builds the documented batch document. Three of its fields are the whole
  * privacy posture, and each fails silently if got wrong: `distinct_id` sits
  * at each item's top level, where PostHog's capture docs ask for it, and an
@@ -111,7 +141,8 @@ export interface EventsOptions {
  * a local service's, or a development build's counts can be filtered from
  * production's. A batch that names no platform comes from a build older than
  * the label, which was the desktop alone, so it reads as desktop. They go under the event's own properties, so an event that
- * names its own `app_version` keeps it.
+ * names its own `app_version` keeps it. Each is filed under the batch's
+ * workspace where it has one (`batchWorkspaceOf`).
  */
 function batchDocument(
   events: ProductEventBatch,
@@ -123,6 +154,7 @@ function batchDocument(
   userId: string,
   now: number,
   person: PosthogPerson | undefined,
+  workspaceId: string | undefined,
 ): PosthogBatch {
   return {
     api_key: projectApiKey,
@@ -133,6 +165,9 @@ function batchDocument(
         ...event.properties,
         $geoip_disable: true,
         $lib: PRODUCT_EVENT_LIB[stamp.platform],
+        ...(workspaceId === undefined
+          ? undefined
+          : { $groups: { [WORKSPACE_GROUP_TYPE]: workspaceId } }),
       };
       return {
         event: event.name,
@@ -201,8 +236,12 @@ export function recordEvents(
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     }
     const person = Option.getOrUndefined(read);
+    // A failed read costs the workspace's group, never the counts.
+    const workspaceId = yield* batchWorkspaceOf(userId).pipe(
+      Effect.orElseSucceed((): string | undefined => undefined),
+    );
     const response = yield* postBatchEffect(
-      batchDocument(events, stamp, options.projectApiKey, userId, now, person),
+      batchDocument(events, stamp, options.projectApiKey, userId, now, person, workspaceId),
       upstream,
     );
     if (!response) return yield* Effect.fail(HOSTED_REFUSAL.UPSTREAM_ERROR);

@@ -47,6 +47,11 @@ import { HOST_WIRE, hostUserCodeOf, hostVersionMeets } from "@luke/features/host
 import { Clock, Effect } from "effect";
 import { HOST_VERSION } from "../auth/device-secret.js";
 import {
+  recordServerEvent,
+  SERVER_EVENT,
+  SERVER_HOST_PAIRING_ACTION,
+} from "../events/server-events.js";
+import {
   HOSTED_REFUSAL,
   hostedStoreOrUnavailable,
   hostPairingHeld,
@@ -141,6 +146,8 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
           ...(row.setupFailure === null ? undefined : { setupFailure: row.setupFailure }),
           ...(row.update === null ? undefined : { update: row.update }),
           ...(row.updateFailure === null ? undefined : { updateFailure: row.updateFailure }),
+          ...(row.machineId === null ? undefined : { machineId: row.machineId }),
+          ...(row.model === null ? undefined : { model: row.model }),
           // Note that a register always writes the home folder and nothing else does, so a host with none has not called in since it joined.
           calledIn: row.home !== null,
         })),
@@ -160,7 +167,14 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
     }),
     remove: hosts.remove.effect(function* ({ context, input }) {
       const removed = yield* hostedStoreOrUnavailable(removeHost(context.userId, input.id));
-      if (removed) yield* endedHostAgents(context.userId, input.id);
+      if (removed) {
+        yield* endedHostAgents(context.userId, input.id);
+        yield* recordServerEvent(
+          SERVER_EVENT.HOST_PAIRING_CHANGE,
+          { userId: context.userId },
+          { action: SERVER_HOST_PAIRING_ACTION.REMOVE },
+        );
+      }
       return yield* keptOrNotFound(removed);
     }),
     readPairing: hosts.readPairing.effect(function* ({ context, input }) {
@@ -176,11 +190,21 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
       const deviceId = yield* foundOrRefused(
         yield* hostedStoreOrUnavailable(approveHostPairing(context.userId, code, randomUUID())),
       );
+      yield* recordServerEvent(
+        SERVER_EVENT.HOST_PAIRING_CHANGE,
+        { userId: context.userId },
+        { action: SERVER_HOST_PAIRING_ACTION.APPROVE },
+      );
       return { deviceId };
     }),
     denyPairing: hosts.denyPairing.effect(function* ({ context, input }) {
       const code = yield* codeOf(input.code);
       yield* foundOrRefused(yield* hostedStoreOrUnavailable(denyHostPairing(context.userId, code)));
+      yield* recordServerEvent(
+        SERVER_EVENT.HOST_PAIRING_CHANGE,
+        { userId: context.userId },
+        { action: SERVER_HOST_PAIRING_ACTION.DENY },
+      );
       return DONE;
     }),
   };

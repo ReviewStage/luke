@@ -124,7 +124,9 @@ export type CatalogModel = typeof catalogModelSchema.Type;
  * older than them, which offered only the devices there now. A device still
  * setting itself up says where that stands (`DEVICE_SETUP`), and why for one
  * that failed, and takes no agent until it is ready; both are absent for a
- * ready one.
+ * ready one. It says which machine it runs on, and its model, as its host
+ * last reported them (`deviceMachineFields`); each is absent where it never
+ * did, and from a service older than them.
  */
 export const macOfferSchema = EffectSchema.Struct({
   deviceId: wireUuidSchema,
@@ -137,6 +139,8 @@ export const macOfferSchema = EffectSchema.Struct({
   setupFailure: EffectSchema.optionalKey(
     EffectSchema.String.check(EffectSchema.isMaxLength(DEVICE_SETUP_FAILURE_MAX_CHARS)),
   ),
+  machineId: EffectSchema.optionalKey(EffectSchema.String),
+  model: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type MacOffer = typeof macOfferSchema.Type;

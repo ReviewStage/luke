@@ -108,7 +108,7 @@ remove_launch_agent() {
 uninstall_account() {
   home="$1"
   if [ "$(readlink -f "${HOME:-/}")" != "$home" ]; then
-    printf 'This Vespin host is installed in the account whose home is %s. Run luke-host uninstall as that account, without sudo.\n' "$home" >&2
+    printf 'This Vespin host is installed in the account whose home is %s. Run ~/%s uninstall as that account, without sudo.\n' "$home" "$ACCOUNT_LINK" >&2
     exit 1
   fi
   agents=0
