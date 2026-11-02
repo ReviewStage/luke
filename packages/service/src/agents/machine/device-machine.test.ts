@@ -300,12 +300,13 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
     );
 
     it.effect(
-      "a line queued, claimed, settled, and withdrawn, and a request queued, claimed, answered, and withdrawn, each notify the agent's account",
+      "a line queued, claimed, settled, and withdrawn each notify the agent's account and the agent, and a request queued, claimed, answered, and withdrawn the account",
       () =>
         Effect.gen(function* () {
           const opened = yield* openLocalAgent;
           const { userId, deviceId, agent } = opened;
           const account: readonly SyncTopic[] = [[TOPIC.ACCOUNT, userId]];
+          const accountAndAgent: readonly SyncTopic[] = [...account, [TOPIC.AGENT, agent.id]];
           const id = randomUUID();
           const request = {
             id,
@@ -314,10 +315,13 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             args: { path: "/tmp/shot.png", maxBytes: 1_025 },
           };
 
-          const { value: runner } = yield* expectTopicsFire(launched(opened), account);
+          const { value: runner } = yield* expectTopicsFire(launched(opened), accountAndAgent);
           const line = runner.handle.command;
-          yield* expectTopicsFire(claimedDeviceAgentLine(userId, deviceId, line), account);
-          yield* expectTopicsFire(settleDeviceAgentLine(userId, deviceId, line, 0), account);
+          yield* expectTopicsFire(claimedDeviceAgentLine(userId, deviceId, line), accountAndAgent);
+          yield* expectTopicsFire(
+            settleDeviceAgentLine(userId, deviceId, line, 0),
+            accountAndAgent,
+          );
           yield* expectTopicsFire(queueDeviceAgentRequest(userId, request), account);
           yield* expectTopicsFire(claimDeviceAgentRequest(userId, deviceId, id), account);
           yield* expectTopicsFire(
@@ -329,7 +333,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
           );
           yield* expectTopicsFire(withdrawDeviceAgentRequest(userId, id), account);
           const later = new Date((yield* Clock.currentTimeMillis) + 1);
-          yield* expectTopicsFire(withdrawExpiredDeviceAgentRows(userId, later), account);
+          yield* expectTopicsFire(withdrawExpiredDeviceAgentRows(userId, later), accountAndAgent);
           assert.ok(
             Option.isNone(yield* deviceAgentLineStanding(userId, line)),
             "the settled line was withdrawn",

@@ -1,5 +1,5 @@
 /**
- * device-agents.ts -- a local agent's Mac (`device-agent-wire.ts`): it registers and beats, reads which of its agents should still stand, holds a read for its lines and one for its requests, claims each, and settles a line or answers a request.
+ * device-agents.ts -- a local agent's Mac (`device-agent-wire.ts`): it registers and beats, reads which of its agents should still stand, holds a read for its lines and one for its requests, claims each, says which step a launch it claimed has reached, and settles a line or answers a request.
  *
  * A host joins first (`../host-wire.ts`), a box pairing with a code
  * (`startPairing`, then `pollPairing` until a member approves it) for its
@@ -29,6 +29,7 @@ import {
   deviceAgentRequestClaimAnswerSchema,
   deviceAgentRequestsAnswerSchema,
   deviceAgentSettleRequestSchema,
+  deviceAgentStepRequestSchema,
 } from "../device-agent-wire.js";
 import {
   hostEnrollAnswerSchema,
@@ -84,6 +85,11 @@ export const deviceAgentsContract = {
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_LINE_CLAIM }))
     .input(exactInput(deviceAgentClaimRequestSchema))
     .output(EffectSchema.flip(deviceAgentLineClaimAnswerSchema)),
+  lineStep: hostedProcedure
+    .meta(bodyCap(SMALL_BODY_BYTES))
+    .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_LINE_STEP }))
+    .input(exactInput(deviceAgentStepRequestSchema))
+    .output(EffectSchema.flip(deviceAgentDoneAnswerSchema)),
   settleLine: hostedProcedure
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_LINES }))

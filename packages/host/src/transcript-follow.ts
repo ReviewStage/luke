@@ -55,9 +55,10 @@ import { decodedLiveRows, LIVE_STATE, type SealedRead } from "./live-follow.js";
  * the rows it holds by message id (`joinedWindowRows`), and takes an answer whole
  * where it names no cursor of the follow's, as after a rewind; a page is
  * read again only when the
- * turns, the titles, or the workers move, since what it carries beside its
- * messages, the agent's status, its usage priced from the model catalog,
- * its context and its workers, is still the service's.
+ * turns, the titles, the workers, the queue, or a device agent's launch
+ * move, since what it carries beside its messages, the agent's status, its
+ * usage priced from the model catalog, its context, its workers, and where
+ * its launch stands, is still the service's.
  * Where the service says the clock alone may move the page in so long, as
  * an agent passing the grace its first turn had to land in or the window of
  * a title it waits on closing, which no row says, the page is read again
@@ -140,8 +141,8 @@ export type TranscriptFollows<Key = TranscriptKey> = RcMap.RcMap<Key, Standing, 
 /**
  * The rows a page beside the messages is read by as one text, in no order of
  * Postgres's, so only a change to one moves it: the turns, the titles, the
- * workers, the queue's revision, and the developer's lines still awaiting a
- * turn. Note that the messages and the journal's revision are left out,
+ * workers, the queue's revision, a device agent's newest launch line, and
+ * the developer's lines still awaiting a turn. Note that the messages and the journal's revision are left out,
  * because the window's own rows carry the messages; and that a line awaiting
  * its turn is in, because whoever wrote it, a queue's hand-off or another
  * member, the agent's status moves with it, which only a page says. Held
@@ -155,6 +156,7 @@ function digestOf(rows: typeof agentTranscriptLiveRowsSchema.Type): string {
     agent: rows.agent,
     workers: rows.workers,
     queue: rows.queueRevision ?? [],
+    launch: rows.launch ?? [],
     awaiting: rows.window
       .filter((row) => row.role === MESSAGE_ROLE.USER && row.turnStatus === null)
       .map(({ id }) => ({ id })),
@@ -376,7 +378,7 @@ function joinedWindow(
  * otherwise the newest page, read beside the transcript's live read; then
  * the page past that one's cursor once the live read stands, the next at
  * once while the last came back full, and otherwise once the turns,
- * titles, or workers move, or the clock reaches the edge the service named; meanwhile each message the
+ * titles, workers, queue, or launch move, or the clock reaches the edge the service named; meanwhile each message the
  * window's rows draw anew is told at once, beside what the last page said
  * of the agent, as caught up. A held cursor the service refuses is let go
  * for the newest page, as a follow holding nothing opens with. One the

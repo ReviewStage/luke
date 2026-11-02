@@ -30,6 +30,7 @@ import {
   channelLookSync,
   channelSync,
   conversationsSync,
+  deviceAgentLineSync,
   deviceSync,
   githubInstallationSync,
   githubPersonalTokenSync,
@@ -600,7 +601,8 @@ export const agentBrowserTabsLive = defineLiveQuery({
  * read by `readerId` while it is a member of the agent's workspace
  * (`transcript-live.ts`). It is woken by a write to the transcript's
  * messages, turns, or conversation, to a worker's conversation or
- * delegation under the agent's, to the agent itself, and to what admits the
+ * delegation under the agent's, to the agent itself, its queue, or a line
+ * queued for its device, and to what admits the
  * reader to its workspace or repository; the agent's task is read for the
  * reader's reach of it (`agentVisibleTo`) and wakes nothing, as a task's
  * reach moves with what admits the reader.
@@ -637,6 +639,7 @@ export const agentTranscriptLive = defineLiveQuery({
     githubPersonalTokenSync,
     githubRepositoryReadSync,
     agentQueueSync,
+    deviceAgentLineSync,
   ],
   topics: ({ conversationId, parentConversationId, agentId, readerId }) => {
     const parent: readonly SyncTopic[] =

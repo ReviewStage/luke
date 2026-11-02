@@ -13,6 +13,7 @@ import {
   type DeviceCapability,
   type DeviceIsolation,
   type DeviceLaunchRefusal,
+  type DeviceLaunchStep,
   type DevicePlatform,
   type DeviceSetup,
   type DeviceSignedIn,
@@ -37,7 +38,7 @@ import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
- * device-agent-client.ts -- a local agent's Mac as it asks the service (`contract/device-agents.ts`): it registers and beats, reads which of its agents should still stand, holds a read for its lines and one for its requests, claims each by its id, settles a line or answers a request, and saves its agents' state.
+ * device-agent-client.ts -- a local agent's Mac as it asks the service (`contract/device-agents.ts`): it registers and beats, reads which of its agents should still stand, holds a read for its lines and one for its requests, claims each by its id, says which step a launch it claimed has reached, settles a line or answers a request, and saves its agents' state.
  *
  * Each is a procedure of the hosted contract over the one account call, so
  * the bearer is read fresh per attempt and a 401 is renewed and retried
@@ -45,7 +46,7 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
  * which the caller asks again after a pause; a claim refused is
  * `DEVICE_AGENT_NOT_CLAIMED` (another claim took it, or its caller withdrew
  * it) and one unanswered nothing; a
- * register, a settle, or an answer not taken is false, and a beat or a
+ * register, a step, a settle, or an answer not taken is false, and a beat or a
  * read of the live agents not taken is nothing. A save of an agent's
  * state, or its commit, refused says whether a newer save made it stale,
  * and one unanswered, or refused as unavailable, is nothing. A host also
@@ -393,6 +394,23 @@ export class HostedDeviceAgentClient {
       Effect.catch((failed) =>
         Effect.succeed(failed._tag === "HostedRefused" ? DEVICE_AGENT_NOT_CLAIMED : undefined),
       ),
+    );
+  }
+
+  /**
+   * The step a launch line this Mac claimed has reached (`DEVICE_LAUNCH_STEP`),
+   * which the agent's transcript words until its harness's first event;
+   * whether the service kept it. A service from before the procedure
+   * refuses it, which is false too, so a report never holds up the launch.
+   */
+  lineStep(
+    deviceId: string,
+    id: string,
+    step: DeviceLaunchStep,
+  ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+    return askHosted(this.#hosted.deviceAgents.lineStep, { deviceId, id, step }).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
     );
   }
 

@@ -269,13 +269,17 @@ export const agentQueueSync = defineSyncTable(agentQueue, {
 /**
  * A line queued for a local agent's runner, on its account's topic, which
  * the account's Macs' held read of their lines and a wait for a runner's
- * exit are woken on. Note that what the line says is ignored, because it is
- * written once as the line is queued and never changed, and an update
- * comparing it would weigh a files line's every file at its claim and its
- * settle.
+ * exit are woken on, and on its agent's, which the agent's transcript is
+ * woken on as its launch is claimed, steps, and settles. Note that what the
+ * line says is ignored, because it is written once as the line is queued
+ * and never changed, and an update comparing it would weigh a files line's
+ * every file at its claim and its settle.
  */
-const deviceAgentLineSync = defineSyncTable(deviceAgentLine, {
-  topics: [{ kind: TOPIC.ACCOUNT, column: deviceAgentLine.userId }],
+export const deviceAgentLineSync = defineSyncTable(deviceAgentLine, {
+  topics: [
+    { kind: TOPIC.ACCOUNT, column: deviceAgentLine.userId },
+    { kind: TOPIC.AGENT, column: deviceAgentLine.agentId },
+  ],
   ignore: [deviceAgentLine.payload],
 });
 

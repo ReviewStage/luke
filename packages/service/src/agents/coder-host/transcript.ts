@@ -18,6 +18,7 @@ import {
   turnUsagesOf,
   untitledDelegationsSince,
 } from "@luke/database/models/agent-store";
+import { latestDeviceAgentLaunch } from "@luke/database/models/device-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import {
   type LatestTurn,
@@ -39,11 +40,14 @@ import {
   AGENT_BOUNDS,
   AGENT_CURSOR_START,
   AGENT_DELEGATE_TOOL,
+  AGENT_LAUNCH,
+  AGENT_MACHINE,
   AGENT_SENDER,
   AGENT_STATUS,
   type AgentContext,
   type AgentDelegationStart,
   type AgentFailure,
+  type AgentLaunch,
   type AgentPayer,
   type AgentSender,
   type AgentStatus,
@@ -52,6 +56,7 @@ import {
   type AgentUsage,
   type TurnRecord,
 } from "@luke/features/agent-wire";
+import { DEVICE_LAUNCH_STEPS } from "@luke/features/device-agent-wire";
 import { turnRecordOf } from "@luke/features/turn-record";
 import type { ToolSet } from "ai";
 import { Clock, Duration, Effect, Option, type Schema } from "effect";
@@ -106,8 +111,10 @@ import { usageOfTurns } from "./usage.js";
  * else, and what the agent has cost, its workers' turns included, and its
  * newest turn, each read once with the page that is answered rather than
  * on every look inside the hold, and on the agent's own transcript what
- * its model's context holds as its newest step left it (`context.ts`) and
- * when each worker its newest turn still waits on began. A line that
+ * its model's context holds as its newest step left it (`context.ts`),
+ * when each worker its newest turn still waits on began, and, for an
+ * agent on a device, where the launch it waits on stands until that
+ * launch's turn opens (`launchOf`). A line that
  * steered a turn under way carries the turn's journal and the steps it had
  * begun before the line, since the journal closes behind every line its
  * turn took and the order alone would draw the line ahead of the turn's
@@ -178,6 +185,8 @@ export interface TranscriptPage {
   readonly subagents?: readonly AgentSubagentStanding[];
   /** The messages queued behind its turn and the queue's pause, on its own transcript; absent while none is queued and on a worker's. */
   readonly queue?: AgentQueue;
+  /** Where the launch it waits on stands, on its own transcript while it runs on a device and that launch's turn has not opened; absent otherwise and on a worker's. */
+  readonly launch?: AgentLaunch;
 }
 
 type TranscriptEffect<A, R = never> = Effect.Effect<
@@ -189,8 +198,8 @@ type TranscriptEffect<A, R = never> = Effect.Effect<
 /** The newest turn as a page reads it: which it is, and what it ran under and cost; nothing before the first. */
 type NewestTurn = LatestTurn | undefined;
 
-/** The agent whose own transcript a page is, as its context is read: its row. */
-type OwnAgent = Pick<Agent, "id">;
+/** The agent whose own transcript a page is, as its context and its launch are read: its row. */
+type OwnAgent = Pick<Agent, "id" | "machine">;
 
 /** The statuses a read waits through: more may still land. */
 const WAITING_STATUSES: ReadonlySet<AgentStatus> = new Set([
@@ -223,6 +232,37 @@ const statusNow = (target: ConversationTarget, { createdAt, blank }: AgentStart)
     const graceEdge = statusClockEdge(turn, { createdAt, now, awaitingLineAt, blank });
     return { status, runStartedAt, failureReason, ranDirectly, turn, graceEdge };
   });
+
+/**
+ * Where the launch the agent waits on stands (`AGENT_LAUNCH`), on its own
+ * transcript while it runs on a device and is at work: its newest launch
+ * line, while that stands unsettled with no stop queued after it and no
+ * turn was queued since it was written. A native turn is queued by its
+ * harness's first event, so a turn queued after the line is that launch's
+ * own opening, and a line a former run's turn opened, as a warm runner's
+ * that a new message reaches, is never read as the one waited on. Waiting
+ * while no host has claimed it, then the step its host reported. None
+ * where the host reported no step this build knows, and on a worker's or a
+ * cloud agent's transcript, which no launch line stands for.
+ */
+const launchOf = (
+  target: ConversationTarget,
+  own: OwnAgent | undefined,
+  turn: NewestTurn,
+  status: AgentStatus,
+): TranscriptEffect<AgentLaunch | undefined> => {
+  if (own?.machine !== AGENT_MACHINE.DEVICE || !WAITING_STATUSES.has(status)) {
+    return Effect.succeed(undefined);
+  }
+  return Effect.map(latestDeviceAgentLaunch(target.userId, own.id), (newest) => {
+    if (Option.isNone(newest)) return undefined;
+    const { createdAt, claimed, step, settled, stopped } = newest.value;
+    const opened = turn !== undefined && turn.queuedAt >= createdAt;
+    if (settled || stopped || opened) return undefined;
+    if (!claimed) return AGENT_LAUNCH.WAITING;
+    return DEVICE_LAUNCH_STEPS.find((known) => known === step);
+  });
+};
 
 /** The agent's context as its row holds it, on its own transcript; nothing on a worker's. */
 const heldContextOf = (target: ConversationTarget, own: OwnAgent | undefined) =>
@@ -462,7 +502,8 @@ const payerOf = (target: ConversationTarget, own: OwnAgent | undefined) =>
  * price the window draws means the whole run's. On the agent's own transcript, with what
  * its model's context holds, against the window the same catalog lists,
  * and every title its workers have so far, which land beside their starts
- * and so on no page of their own. The usage names the agent's payer where its
+ * and so on no page of their own, and where the launch it waits on stands.
+ * The usage names the agent's payer where its
  * row records one, so a plan's is drawn as the plan's rather than in dollars.
  */
 const withUsage = (
@@ -475,7 +516,7 @@ const withUsage = (
   Effect.gen(function* () {
     const catalog = yield* ModelCatalog;
     // Note that every read here stands apart from the others, so they run at once rather than one round trip after another.
-    const { rows, offered, payer, held, delegations, subagentTitles, subagents, queue } =
+    const { rows, offered, payer, held, delegations, subagentTitles, subagents, queue, launch } =
       yield* Effect.all(
         {
           rows: turnUsagesOf(target.userId, target.conversationId),
@@ -496,6 +537,7 @@ const withUsage = (
               : subagentStandingsOf(target),
           // Note that the queue is read after the page's messages, so a message the page lists as sent has left it.
           queue: own === undefined ? Effect.succeed(undefined) : queueOnPage(own.id),
+          launch: launchOf(target, own, turn, page.status),
         },
         { concurrency: CODER.READ_CONCURRENCY },
       );
@@ -512,6 +554,7 @@ const withUsage = (
       ...(subagentTitles.length === 0 ? undefined : { subagentTitles }),
       ...(subagents.length === 0 ? undefined : { subagents }),
       ...(queue === undefined ? undefined : { queue }),
+      ...(launch === undefined ? undefined : { launch }),
     };
   });
 

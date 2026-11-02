@@ -741,6 +741,7 @@ const TRANSCRIPT_PARTS = [
   "window",
   "windowParts",
   "queueRevision",
+  "launch",
 ] as const;
 const SCOPE_PARTS = ["items", "messages", "files"] as const;
 const ACCOUNT_PARTS = ["items", "planless", "plans", "automations", "failedRuns"] as const;
@@ -1310,6 +1311,7 @@ function transcriptRows(live: { readonly transcript: TranscriptLive }, seq: numb
     window: [],
     windowParts: [],
     queueRevision: [],
+    launch: [],
   });
 }
 
