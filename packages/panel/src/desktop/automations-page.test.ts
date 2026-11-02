@@ -2200,7 +2200,7 @@ test("the agent a same-agent automation was saved with is not offered once its r
   // The repository's row names it, then its owner after it.
   act(() => optionWords("webacme").click());
   await settle();
-  assert.equal(picked(page, "Agent"), "Choose an agent");
+  assert.equal(picked(page, "Agent"), "Started by its first run");
   act(() => picker(page, "Agent").click());
 
   assert.deepEqual(
@@ -2211,21 +2211,21 @@ test("the agent a same-agent automation was saved with is not offered once its r
   );
 });
 
-test("Same agent is chosen from the workspace's agents on the automation's repository, and saved as its target", async () => {
+test("Same agent saves with none chosen, its first run starting one, or with one chosen from the workspace's agents on the automation's repository", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
   pick(page, "Runs land in", "Same agent");
   await settle();
   assert.deepEqual(agentsAsked, [{ workspaceId: WORKSPACE.id, repository: "acme/ledger" }]);
+  assert.ok(
+    pickerDescription(page, "Agent").some((words) =>
+      words?.includes("Its first run starts an agent"),
+    ),
+    "the Agent picker says its first run starts one",
+  );
   act(() => button("Save").click());
   await settle();
-  assert.deepEqual(changes, [], "a same agent with none chosen is not saved");
-  assert.ok(announced("Choose the agent its runs go to."), "the refusal is announced");
-  assert.ok(
-    pickerDescription(page, "Agent").includes("Choose the agent its runs go to."),
-    "the refusal describes the Agent picker it is about",
-  );
 
   pick(page, "Agent", "CI digest");
   assert.equal(picked(page, "Agent"), "CI digest");
@@ -2233,6 +2233,10 @@ test("Same agent is chosen from the workspace's agents on the automation's repos
   await settle();
 
   assert.deepEqual(changes, [
+    {
+      automationId: SWEEP.id,
+      change: { target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: null } },
+    },
     {
       automationId: SWEEP.id,
       change: { target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: CI_DIGEST.id } },
@@ -2276,7 +2280,7 @@ test("the Agent picker draws each agent as every agent menu does: its glyph, its
   await settle();
   pick(page, "Runs land in", "Same agent");
   await settle();
-  assert.equal(picked(page, "Agent"), "Choose an agent");
+  assert.equal(picked(page, "Agent"), "Started by its first run");
   assert.equal(
     chipWearsGlyph(page, "Agent"),
     false,
@@ -3656,7 +3660,7 @@ test("workspace agents that could not be read say so in the Agent row, and Retry
   await settle();
 
   assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
-  assert.equal(picked(page, "Agent"), "Choose an agent");
+  assert.equal(picked(page, "Agent"), "Started by its first run");
 });
 
 test("a search of the Agent picker that failed says it failed rather than that no agent matches, and Retry searches again", async () => {

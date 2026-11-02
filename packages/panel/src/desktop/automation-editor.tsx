@@ -1872,6 +1872,11 @@ const AGENT_SEARCH_FAILED = readFailedWords("the search for agents");
 const AGENT_DETAIL =
   "Each run is sent to that agent as a message, even mid-turn. It keeps its own model and effort.";
 
+/** What the agent row names and says where no agent is chosen, so the first run starts one. */
+const FIRST_RUN_LABEL = "Started by its first run";
+const FIRST_RUN_DETAIL =
+  "Its first run starts an agent, and every run after is sent to it. If that agent is archived or deleted, the next run starts another. Or choose an agent already at work.";
+
 /**
  * The agent each run goes to, chosen from the workspace's agents on the
  * repository, each drawn as every agent menu draws it (`agentMenuRow`). The
@@ -1885,15 +1890,12 @@ function AgentRow({
   draft,
   savedAgentId,
   choices,
-  problem,
   onDraft,
 }: {
   draft: AutomationDraft;
   /** The agent its runs go to as saved, or none. */
   savedAgentId: string | null;
   choices: RunChoices;
-  /** What stops a save here, or nothing. */
-  problem: string | undefined;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   const {
@@ -1910,12 +1912,12 @@ function AgentRow({
   const place = useAgentRowPlace();
   // Note that the catalog this row read names the models, since the window's own may not hold it yet.
   const drawn = { ...place, models: models ?? place.models };
+  const detail = draft.agentId === null ? FIRST_RUN_DETAIL : AGENT_DETAIL;
   if (agents !== undefined && "failed" in agents) {
     return (
       <SettingsRow
         label="Agent"
-        description={AGENT_DETAIL}
-        error={inputProblem(problem)}
+        description={detail}
         below={() => (
           <ErrorState
             onRetry={retryAgents}
@@ -1964,14 +1966,16 @@ function AgentRow({
     <PickerRow
       width={CHIP_WIDTH.MIN_FIELD}
       label="Agent"
-      detail={AGENT_DETAIL}
+      detail={detail}
       value={draft.agentId ?? ""}
       valueLabel={
         chosenRow !== undefined
           ? chosenRow.label
-          : draft.agentId !== null && draft.agentId === kept
-            ? KEPT_AGENT_LABEL
-            : "Choose an agent"
+          : draft.agentId === null
+            ? FIRST_RUN_LABEL
+            : draft.agentId === kept
+              ? KEPT_AGENT_LABEL
+              : "Choose an agent"
       }
       valueIcon={chosenRow?.icon}
       rows={rows}
@@ -1993,7 +1997,6 @@ function AgentRow({
         ) : undefined
       }
       noMatch={NO_MATCH.AGENTS}
-      error={inputProblem(problem)}
       onOpen={() => searchAgents("")}
       onSearch={searchAgents}
       onPick={(agentId) => {
@@ -2088,7 +2091,6 @@ function RunsGroup({
               draft={draft}
               savedAgentId={savedAgentId}
               choices={choices}
-              problem={problems[DRAFT_FIELD.AGENT]}
               onDraft={onDraft}
             />
           ) : (
@@ -2573,7 +2575,7 @@ export function AutomationEditor({
   const change = automation === undefined ? undefined : changeOf(draft, automation, defaults);
   const saved = automation === undefined ? undefined : automationDraft(automation, defaults);
   // Note that a draft is unsaved wherever it differs from the automation, even where what differs
-  // cannot be written yet, a same agent with none chosen, so Save stands to say what is missing.
+  // cannot be written yet, so Save stands to say what is missing.
   // Note that words the time's field holds that are no time are unsaved work too, though no draft holds them.
   const [unreadableTime, setUnreadableTime] = useState(false);
   const dirty = saved === undefined || !sameDraft(draft, saved) || unreadableTime;

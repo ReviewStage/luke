@@ -418,10 +418,12 @@ test("runs land in a new agent each time on the account's default until a model 
     },
   );
   const same = { ...fresh, target: AUTOMATION_TARGET.SAME_AGENT };
-  assert.equal(
-    draftProblems(same, false, NOW)[DRAFT_FIELD.AGENT],
-    "Choose the agent its runs go to.",
-  );
+  // None chosen, its first run starts the agent every later run goes to.
+  assert.deepEqual(draftProblems(same, false, NOW), {});
+  assert.deepEqual(createRequestOf(same, "workspace-acme").target, {
+    kind: AUTOMATION_TARGET.SAME_AGENT,
+    agentId: null,
+  });
   assert.deepEqual(createRequestOf({ ...same, agentId: AGENT_ID }, "workspace-acme").target, {
     kind: AUTOMATION_TARGET.SAME_AGENT,
     agentId: AGENT_ID,
@@ -458,10 +460,10 @@ test("a saved automation opens on where its runs land, and a save sends only the
       disabledServers: [],
     },
   });
-  assert.equal(
+  assert.deepEqual(
     changeOf({ ...opened, agentId: null }, onAgent, DEFAULTS),
-    undefined,
-    "a same agent with none chosen is a problem, not a write",
+    { target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: null } },
+    "a same agent with none chosen is written, for the next run to start one",
   );
   const gone = { ...SAVED, target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: null } } as const;
   assert.equal(

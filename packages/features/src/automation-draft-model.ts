@@ -76,7 +76,6 @@ export const DRAFT_FIELD = {
   SCHEDULE: "schedule",
   PROMPT: "prompt",
   REPOSITORY: "repository",
-  AGENT: "agent",
   /** An integration trigger's filters. */
   FILTERS: "filters",
   /** An integration trigger's subject cooldown. */
@@ -120,7 +119,7 @@ export interface AutomationDraft {
   readonly owner: AutomationScope;
   /** Where a run lands: a new agent each time, or the one agent each run goes to. */
   readonly target: AutomationTargetKind;
-  /** The agent each run goes to where runs land in the same agent, or none chosen yet. */
+  /** The agent each run goes to where runs land in the same agent, or none chosen, so its first run starts one. */
   readonly agentId: string | null;
   /** The model and effort a new agent runs on, or none for the account's default as it stands when a run starts. */
   readonly choice: ModelChoice | null;
@@ -228,9 +227,9 @@ function actionOf(draft: AutomationDraft): AutomationAction {
   };
 }
 
-/** Where a draft's runs land, as the service takes it: a new agent, or the one chosen; a same agent with none chosen lands nowhere and is a problem before it is a write. */
+/** Where a draft's runs land, as the service takes it: a new agent, or the same one, chosen or, with none chosen, the one its first run starts. */
 function targetOf(draft: AutomationDraft): AutomationTarget {
-  return draft.target === AUTOMATION_TARGET.SAME_AGENT && draft.agentId !== null
+  return draft.target === AUTOMATION_TARGET.SAME_AGENT
     ? { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: draft.agentId }
     : { kind: AUTOMATION_TARGET.NEW_AGENT };
 }
@@ -504,16 +503,11 @@ export function draftProblems(draft: AutomationDraft, held: boolean, now: Date):
     !held && draft.repository === null && draft.triggerKind === AUTOMATION_TRIGGER.GITHUB
       ? "Choose the repository whose events start it."
       : undefined;
-  const agent =
-    draft.target === AUTOMATION_TARGET.SAME_AGENT && draft.agentId === null
-      ? "Choose the agent its runs go to."
-      : undefined;
   const problems: { [Field in DraftField]?: string } = {};
   if (name !== undefined) problems[DRAFT_FIELD.NAME] = name;
   if (schedule !== undefined) problems[DRAFT_FIELD.SCHEDULE] = schedule;
   if (prompt !== undefined) problems[DRAFT_FIELD.PROMPT] = prompt;
   if (repository !== undefined) problems[DRAFT_FIELD.REPOSITORY] = repository;
-  if (agent !== undefined) problems[DRAFT_FIELD.AGENT] = agent;
   if (filters !== undefined) problems[DRAFT_FIELD.FILTERS] = filters;
   if (cooldown !== undefined) problems[DRAFT_FIELD.COOLDOWN] = cooldown;
   return problems;
@@ -642,9 +636,7 @@ export function changeOf(
   }
   // Note that a change names its servers even where none are off, because a change that names none keeps the saved ones.
   if (actionMoved) change.action = { ...actionOf(draft), disabledServers: draft.disabledServers };
-  if (targetMoved && (draft.target === AUTOMATION_TARGET.NEW_AGENT || draft.agentId !== null)) {
-    change.target = targetOf(draft);
-  }
+  if (targetMoved) change.target = targetOf(draft);
   if (draft.archiveSuccessful !== was.archiveSuccessful) {
     change.archiveSuccessful = draft.archiveSuccessful;
   }

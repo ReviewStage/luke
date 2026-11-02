@@ -328,6 +328,16 @@ test("a run's line says why it did not start, else where its agent stands, or th
   );
   assert.equal(automationRunLine(run({ agent: agent(AGENT_STATUS.RUNNING) })), "Working");
   assert.equal(automationRunLine(run({ agent: agent(AGENT_STATUS.COMPLETED) })), "Finished");
+  // A run that started a fresh agent in place of a gone one still says where that agent stands.
+  assert.equal(
+    automationRunLine(
+      run({
+        agent: agent(AGENT_STATUS.RUNNING),
+        reason: AUTOMATION_RUN_REASON.AGENT_REPLACED,
+      }),
+    ),
+    "Working · Started a fresh agent: the one its runs went to was gone or archived.",
+  );
   assert.equal(automationRunLine(run({ agent: null })), "Its agent is gone");
   assert.equal(automationRunLine(run({ agent: agent(AGENT_STATUS.FAILED) })), "Failed");
   assert.equal(

@@ -822,13 +822,18 @@ const CLAIMED = and(
 );
 
 const writeAgent = SqlSchema.findAll({
-  Request: Schema.Struct({ id: Schema.String, agentId: Schema.String, now: Schema.Date }),
+  Request: Schema.Struct({
+    id: Schema.String,
+    agentId: Schema.String,
+    reason: Schema.NullOr(automationRunReasonSchema),
+    now: Schema.Date,
+  }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ id, agentId, now }) =>
+  execute: ({ id, agentId, reason, now }) =>
     Database.use((db) =>
       db
         .update(automationRun)
-        .set({ status: AUTOMATION_RUN_STATUS.STARTED, agentId, settledAt: now })
+        .set({ status: AUTOMATION_RUN_STATUS.STARTED, agentId, reason, settledAt: now })
         .where(
           and(
             eq(automationRun.id, id),
@@ -836,6 +841,30 @@ const writeAgent = SqlSchema.findAll({
           ),
         )
         .returning({ id: automationRun.id }),
+    ),
+});
+
+const writeAgentAdopted = SqlSchema.findAll({
+  Request: Schema.Struct({
+    id: Schema.String,
+    held: Schema.NullOr(Schema.String),
+    agentId: Schema.String,
+    now: Schema.Date,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ id, held, agentId, now }) =>
+    Database.use((db) =>
+      db
+        .update(automation)
+        .set({ targetAgentId: agentId, updatedAt: now })
+        .where(
+          and(
+            eq(automation.id, id),
+            eq(automation.targetKind, AUTOMATION_TARGET.SAME_AGENT),
+            held === null ? isNull(automation.targetAgentId) : eq(automation.targetAgentId, held),
+          ),
+        )
+        .returning({ id: automation.id }),
     ),
 });
 
@@ -1424,10 +1453,36 @@ export function claimAutomationRun(
   );
 }
 
-/** The run started with the agent named, from queued or from its claim; false where it settled otherwise. */
-export function attachRunAgent(runId: string, agentId: string): TaskStoreEffect<boolean> {
+/** The run started with the agent named, from queued or from its claim, and the note it started under where it has one; false where it settled otherwise. */
+export function attachRunAgent(
+  runId: string,
+  agentId: string,
+  reason: AutomationRunReason | null = null,
+): TaskStoreEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(writeAgent({ id: runId, agentId, now }), (rows) => rows.length > 0),
+    Effect.map(writeAgent({ id: runId, agentId, reason, now }), (rows) => rows.length > 0),
+  );
+}
+
+/**
+ * The agent a run started kept as the one a same-agent automation hands
+ * every later run to, where the automation still holds `held`: none yet, or
+ * the agent that agent replaces; false where it holds another since, such
+ * as one a concurrent run kept first or its owner chose, or no longer hands
+ * runs to the same agent. Note that the compare is the whole of the guard,
+ * so two runs that both started an agent keep one and the other's agent
+ * stays the start of its own run alone.
+ */
+export function adoptAutomationAgent(
+  automationId: string,
+  held: string | null,
+  agentId: string,
+): TaskStoreEffect<boolean> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(
+      writeAgentAdopted({ id: automationId, held, agentId, now }),
+      (rows) => rows.length > 0,
+    ),
   );
 }
 
