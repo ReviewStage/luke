@@ -51,7 +51,7 @@ import {
 } from "@luke/database/models/provider-key-store";
 import { readRunsOnPick } from "@luke/database/models/runs-on-pick";
 import type { TaskRunsOnWrite } from "@luke/database/models/task-store";
-import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import {
   AGENT_MACHINE,
   AGENT_PAYER,

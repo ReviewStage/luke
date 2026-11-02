@@ -5,7 +5,6 @@ import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import {
   AGENT_BRIEF,
-  AGENT_DELEGATE_TOOL,
   AGENT_KIND,
   AGENT_MACHINE,
   AGENT_MESSAGE_LEAD,
@@ -26,7 +25,6 @@ import { CODER } from "./bounds.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { NATIVE_SKILLS_PATH } from "./native-skills.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
-import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 const AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;

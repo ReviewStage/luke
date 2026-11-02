@@ -29,7 +29,6 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "../../testing/github-app-fake.js";
-import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
