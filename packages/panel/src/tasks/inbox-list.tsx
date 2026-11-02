@@ -192,7 +192,7 @@ import { cardTitle } from "./tool-call-model.js";
  * item listed, the list says so in the Inbox's empty state, offering the
  * view that holds something, as a mail app's empty unread view does; the
  * item the pane shows keeps its place there, though no row. A channel
- * offers the same menu, on a scope of the channels' own; a task's own
+ * offers the same menu, on the Inbox's own scope; a task's own
  * Inbox lists every item it holds, with no view's menu. Either says
  * "Nothing here" where it holds none. Either list
  * is resized from its right edge as the sidebar is, and keeps one width

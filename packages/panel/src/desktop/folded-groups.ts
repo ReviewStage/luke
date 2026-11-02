@@ -1,7 +1,6 @@
 import { Schema, SchemaTransformation } from "effect";
 import { useCallback, useState } from "react";
 import {
-  EVERYONES,
   INBOX_SHOW,
   INBOX_WHOSE,
   type InboxShow,
@@ -27,10 +26,9 @@ import { keptKey, useKept } from "../use-kept.js";
  * and keeps nothing, so its frames never wear a developer's folds. The
  * Inbox's view choices are kept on the same terms, the scope it shows and
  * whom the items it lists are addressed to, a teammate by their account's
- * id, and so is its list's width; a task's own Inbox lists every item it
- * holds, and keeps no choice; and the channels keep one scope and one choice of whose items
- * they list, shared by every channel, apart from the window's, All of
- * everyone's until first turned. A choice kept before its scope was is read
+ * id, and so is its list's width, a channel listing under the same
+ * choices; a task's own Inbox lists every item it holds, and keeps no
+ * choice. A choice kept before its scope was is read
  * as the scope that now lists what it listed: a tab kept before the scopes, Needs you or
  * Unread, as Open, and All open or Everything as All; and the Needs you
  * button's press, kept before the tabs, as Open where it was pressed and
@@ -38,7 +36,8 @@ import { keptKey, useKept } from "../use-kept.js";
  * scope kept as To do reads as Open. A grouping or a sort kept before the
  * list was always one run, the latest first, is left where it was and
  * read by nothing, and so is the scope a task's own Inbox kept before it
- * listed everything. A fixture run draws no inbox, so it has nothing staged to keep apart. An automation's Runs panel keeps its width and whether it
+ * listed everything, and the one the channels kept apart before they
+ * shared the Inbox's. A fixture run draws no inbox, so it has nothing staged to keep apart. An automation's Runs panel keeps its width and whether it
  * stands on the same terms, one for every automation, as the side panel
  * keeps one for every plan, and so does the tree beside every File and
  * Changes tab, one width for them all.
@@ -55,7 +54,6 @@ const STORAGE_KEY = {
   /** Where the Inbox's Needs you button kept its press, before its tabs, which stood before its scopes. */
   INBOX_WAITING_ONLY: "luke.inboxWaitingOnly",
   INBOX_WHOSE: "luke.inboxWhose",
-  CHANNEL_SCOPE: "luke.channelScope",
   INBOX_LIST_WIDTH: "luke.inboxListWidth",
   RUNS_PANEL: "luke.automationRunsPanel",
   FILE_TREE_WIDTH: "luke.fileTreeWidth",
@@ -109,23 +107,17 @@ const storedRunsPanel = Schema.fromJsonString(
   Schema.Struct({ width: Schema.Finite, open: Schema.Boolean }),
 );
 
-/** Whom the items an Inbox lists are addressed to. */
-const whoseSchema = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal(INBOX_WHOSE.EVERYONE) }),
-  Schema.Struct({ kind: Schema.Literal(INBOX_WHOSE.MINE) }),
-  Schema.Struct({
-    kind: Schema.Literal(INBOX_WHOSE.PERSON),
-    userId: Schema.String,
-    name: Schema.String,
-  }),
-]);
-
 /** Whom the items the Inbox lists are addressed to. */
-const storedWhose = Schema.fromJsonString(whoseSchema);
-
-/** The channels' scope and whose items they list, one for every channel. */
-const storedChannelScope = Schema.fromJsonString(
-  Schema.Struct({ show: Schema.Literals(Object.values(INBOX_SHOW)), whose: whoseSchema }),
+const storedWhose = Schema.fromJsonString(
+  Schema.Union([
+    Schema.Struct({ kind: Schema.Literal(INBOX_WHOSE.EVERYONE) }),
+    Schema.Struct({ kind: Schema.Literal(INBOX_WHOSE.MINE) }),
+    Schema.Struct({
+      kind: Schema.Literal(INBOX_WHOSE.PERSON),
+      userId: Schema.String,
+      name: Schema.String,
+    }),
+  ]),
 );
 
 /** The tabs an earlier version kept, before the scopes: Needs you, Unread, and All open; Everything was kept as All is. */
@@ -169,12 +161,6 @@ const storedShow = Schema.fromJsonString(
   ),
 );
 
-/** The channels' scope: which items they show, and whose. */
-interface ChannelScope {
-  readonly show: InboxShow;
-  readonly whose: InboxWhose;
-}
-
 /** The Inbox's view choices, each kept on this Mac under its own key. */
 const KEPT = {
   INBOX_SHOW: keptKey<InboxShow>(
@@ -183,7 +169,6 @@ const KEPT = {
     STORAGE_KEY.INBOX_WAITING_ONLY,
   ),
   WHOSE: keptKey<InboxWhose>(STORAGE_KEY.INBOX_WHOSE, storedWhose),
-  CHANNEL_SCOPE: keptKey<ChannelScope>(STORAGE_KEY.CHANNEL_SCOPE, storedChannelScope),
   FOLDED_GROUPS: keptKey(STORAGE_KEY.GROUPS, storedFolds),
   PINNED_FOLDED: keptKey(STORAGE_KEY.PINNED, storedFlag),
   CHANNELS_FOLDED: keptKey(STORAGE_KEY.CHANNELS, storedFlag),
@@ -294,22 +279,6 @@ export function useInboxViewChoices(): InboxViewChoices {
   const [show, onShow] = useKept(KEPT.INBOX_SHOW, INBOX_SHOW.OPEN);
   const [whose, onWhose] = useKept(KEPT.WHOSE, MINE);
   return { show, onShow, whose, onWhose };
-}
-
-/** The channels' scope until the reader turns it: All of everyone's, since a channel is everyone's threads on one topic. */
-const CHANNEL_SCOPE_OPENING: ChannelScope = { show: INBOX_SHOW.ALL, whose: EVERYONES };
-
-/** The channels' view choices, one scope for every channel, All of everyone's until first turned, and kept as it is turned. */
-export function useChannelViewChoices(): InboxViewChoices {
-  const [scope, , change] = useKept(KEPT.CHANNEL_SCOPE, CHANNEL_SCOPE_OPENING);
-  // Note that each turn is merged over what storage holds now, so another window's turn of the other choice is kept beside it.
-  const turn = (turned: Partial<ChannelScope>) => change((kept) => ({ ...kept, ...turned }));
-  return {
-    show: scope.show,
-    onShow: (show) => turn({ show }),
-    whose: scope.whose,
-    onWhose: (whose) => turn({ whose }),
-  };
 }
 
 /** A width held within the list's bounds, in whole pixels. */

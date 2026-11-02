@@ -1285,7 +1285,7 @@ test("a channel narrows the Inbox to its own threads, everyone's, under its name
   );
 });
 
-test("a channel's view's menu narrows it as the Inbox's does, its scope standing in every channel and when the reader comes back, apart from the Inbox's", async () => {
+test("a channel's view's menu narrows it as the Inbox's does, its scope standing in every channel and in the Inbox", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
   answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
@@ -1311,15 +1311,17 @@ test("a channel's view's menu narrows it as the Inbox's does, its scope standing
 
   act(() => leaveChannel());
   await settle();
-  assert.deepEqual(
-    rowTitles(page),
-    [RETRY.title, THRESHOLD.title],
-    "the Inbox keeps its own scope",
-  );
+  assert.deepEqual(rowTitles(page), [], "the Inbox stands on it too");
 
+  showScope(page, "All");
+  chooseView(page, "Addressed to", "Anyone");
   act(() => chooseChannel(GENERAL.id));
   await settle();
-  assert.deepEqual(rowTitles(page), [], "#general is still on it");
+  assert.deepEqual(
+    rowTitles(page),
+    [THRESHOLD.title],
+    "a scope turned in the Inbox stands in a channel",
+  );
 });
 
 test("a channel chosen while the workspace's channels could not be read says so with Retry, and ⌘K's Mark all as read marks the chosen channel's threads alone", async () => {

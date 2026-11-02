@@ -5,7 +5,7 @@ import { searchTokens } from "@luke/ui/search-tokens";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { afterPaint } from "../after-paint.js";
-import { useChannelViewChoices, useInboxViewChoices } from "../desktop/folded-groups.js";
+import { useInboxViewChoices } from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
 import {
   channelGroups,
@@ -59,12 +59,9 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * window's choice, draw it a frame later rather than holding up the thread.
  *
  * Narrowed to a channel, it lists and counts that channel's items alone
- * (`channelGroups`), under the channels' scope, one for every channel and
- * apart from the Inbox's, offered in the same view's menu: All of
- * everyone's until the reader turns it, since a channel is everyone's
- * threads on one topic, and then whatever they turned it to, in every
- * channel and across a launch (`useChannelViewChoices`). Its order, the
- * latest first, is the Inbox's own.
+ * (`channelGroups`), under the Inbox's own view choices, so a scope turned
+ * in a channel stands in every channel and in the Inbox, and across a
+ * launch. Its order, the latest first, is the Inbox's own.
  */
 
 /**
@@ -163,10 +160,8 @@ function useChoiceFirst(
 export function useInboxListing(tasks: TasksControl, channelId?: string) {
   const view = tasks.inboxView;
   const { act } = useAct();
-  // Note that a channel keeps a scope of its own, so the Inbox's kept choices stand only while it lists every channel.
-  const kept = useInboxViewChoices();
-  const channelChoices = useChannelViewChoices();
-  const choices = channelId === undefined ? kept : channelChoices;
+  // Note that a channel lists under the Inbox's kept choices, so one scope stands wherever the page is narrowed.
+  const choices = useInboxViewChoices();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   // Note that the Inbox reads the automations whenever it stands, because the items of agents with no task it lists are every one an automation's.
   const openAutomation = useCallback(
