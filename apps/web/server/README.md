@@ -371,6 +371,26 @@ or `vercel.json`) deploys nothing. A Vercel `vercel.ts` is not used: Vercel's Gi
 `{ service }` destination in a `vercel.ts` (`rewrites[0].destination should be
 string`, #2838) although `vercel.json` takes the same rewrites.
 
+## The local server
+
+`pnpm --filter @luke/web local-server --port <n>` (`scripts/local-server.ts`)
+serves the same routes from this machine, on 127.0.0.1 alone, over the
+database `DATABASE_URL` names. It builds each grouped function's dispatcher
+over the route modules where they stand, as the generated bundle entry does,
+and lands each request by `api-rewrites.json` through the same replay the tests
+use (`server/local-deployment.ts`, `server/platform-landing.ts`). Every path no
+rewrite takes is the site's, which Vite serves in middleware mode. The two
+WebSocket functions and the feedback courier are not served, and the scheduled
+sweep is called in process on the cron's cadence under `CRON_SECRET`.
+
+It refuses to start beside any `VERCEL*` variable or over a database host off
+the loopback (`server/local-server-guard.ts`), and imports no route until it
+has, because the auth service reads the environment as it loads. Where
+`BETTER_AUTH_URL` is unset it names the server's own address there first. A
+route that only the local server answers, such as a local-only sign-in, mounts
+in the entry's `localRoutes` and never under `server/routes/`, so no deployed
+function reaches it.
+
 ## The data layer
 
 Drizzle is the statement layer and nothing else. A query module builds its
