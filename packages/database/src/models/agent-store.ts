@@ -39,14 +39,13 @@ import {
   isNull,
   lte,
   ne,
-  not,
   notInArray,
   or,
   type SQL,
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { Data, DateTime, Effect, Exit, Option, Schema, SchemaTransformation } from "effect";
+import { DateTime, Effect, Exit, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import {
@@ -69,7 +68,7 @@ import {
   type ConversationRuntime,
   MESSAGE_SENDER,
 } from "../storage-vocabulary.js";
-import { agentAutomationNameSql, agentGivenNameSql } from "./agent-name.js";
+import { agentAutomationNameSql } from "./agent-name.js";
 import { ArchivedByColumnSchema, InstantColumnSchema } from "./columns.js";
 import { reopenAgentInboxItems, settleAgentInboxItems } from "./inbox-settle.js";
 import {
@@ -150,11 +149,6 @@ import type { ConversationTarget } from "./writer.js";
  * (`agent-pin.ts`), as a plan's is, so one member's pin reads pinned for
  * them alone, and is kept apart from the archive, so an agent archived and
  * brought back is pinned again.
- * A member's operator is an agent of kind operator with no task and no
- * repository, started blank, of which the member holds at most one standing
- * per workspace: a Start of one under the workspace's lock answers the one
- * standing, and the partial unique index on the row holds it to one where
- * anything else inserted it first (`ensureOperator` in the coder host).
  * Who the agent writes as on GitHub is settled once, by its first session,
  * and a later session's word is answered with the one standing rather than
  * written over it; it is written over only where the developer's token was
@@ -209,7 +203,7 @@ export interface Agent {
   readonly author: AgentAuthor | null;
   /** How its repository was reached as it started: the workspace's GitHub App, or its starter's own token. */
   readonly githubAccess: GitHubAccess;
-  /** What the agent is: a coder, a task's pilot, or its member's operator. */
+  /** What the agent is: a coder, or a task's pilot. */
   readonly kind: AgentKind;
   readonly createdAt: Date;
   /** Where its runner runs: a Vercel Sandbox, or its starter's Mac; a Vercel Sandbox where unsaid. */
@@ -280,8 +274,7 @@ export type AgentBriefText =
  * Where a Start puts the agent: on a task, whose workspace it joins and
  * whose text or the developer's prompt it is handed, a coder or the task's
  * pilot; or in a workspace with no task, as an automation's run puts one,
- * handed a prompt, since there is no plan to hand it; or, as the member's
- * operator alone, in a workspace with no task and handed nothing.
+ * handed a prompt, since there is no plan to hand it.
  */
 export type AgentPlace =
   | (AgentBriefText & {
@@ -295,13 +288,6 @@ export type AgentPlace =
       readonly planSnapshot: null;
       readonly prompt: string;
       readonly kind?: typeof AGENT_KIND.CODER | undefined;
-    }
-  | {
-      readonly taskId: null;
-      readonly organizationId: string;
-      readonly planSnapshot: null;
-      readonly prompt: null;
-      readonly kind: typeof AGENT_KIND.OPERATOR;
     };
 
 /** A Start: where it goes, the request's own key, what to run on, what the agent is handed, and the repository as it stands now. */
@@ -730,16 +716,6 @@ const CommittedAgentRowSchema = Schema.Struct({
 /** The transaction a pin's write committed in; none where the pin stood as asked already. */
 const TxidRowSchema = Schema.Struct({ txid: Schema.String });
 
-/** The member's operator standing in the workspace, archived ones left out. */
-function liveOperatorOf(userId: string, organizationId: string): SQL | undefined {
-  return and(
-    eq(agentTable.organizationId, organizationId),
-    eq(agentTable.userId, userId),
-    eq(agentTable.kind, AGENT_KIND.OPERATOR),
-    isNull(agentTable.archivedAt),
-  );
-}
-
 /**
  * The task's pilot standing unarchived, any but the one named, by the task's
  * id alone: a pilot is the task's whoever started it and whoever asks, so no
@@ -765,68 +741,7 @@ const findLivePilot = SqlSchema.findOneOption({
     ),
 });
 
-/** Read under the workspace's lock a Start takes, by the member alone, since only they reach their operator. */
-const findLiveOperator = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
-  Result: AgentRowSchema,
-  execute: ({ userId, organizationId }) =>
-    Database.use((db) =>
-      db
-        .select(AGENT_COLUMNS)
-        .from(agentTable)
-        .where(
-          and(
-            liveOperatorOf(userId, organizationId),
-            workspaceReachableBy(userId, agentTable.organizationId),
-          ),
-        )
-        .limit(1),
-    ),
-});
-
-/**
- * Whether bringing the agent back would stand a second operator of its
- * member in its workspace: it is an operator, and another of that member's
- * stands there, as after a Reset. Every unarchive is held to this
- * (`operatorReplaced`), since the partial unique index would refuse it.
- */
-function replacedOperator(): SQL {
-  const standing = alias(agentTable, "standing_operator");
-  const another = exists(
-    queryBuilder
-      .select({ id: standing.id })
-      .from(standing)
-      .where(
-        and(
-          eq(standing.organizationId, agentTable.organizationId),
-          eq(standing.userId, agentTable.userId),
-          eq(standing.kind, AGENT_KIND.OPERATOR),
-          isNull(standing.archivedAt),
-          ne(standing.id, agentTable.id),
-        ),
-      ),
-  );
-  return sql`(${eq(agentTable.kind, AGENT_KIND.OPERATOR)} and ${another})`;
-}
-
-const findReplacedOperator = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
-  Result: IdRowSchema,
-  execute: ({ userId, agentId }) =>
-    Database.use((db) =>
-      db
-        .select({ id: agentTable.id })
-        .from(agentTable)
-        .where(and(reachableAgent(userId, agentId), replacedOperator())),
-    ),
-});
-
-/**
- * Note that a row the partial unique index already holds is answered as no
- * row rather than a failure, because the operator a concurrent Start made
- * first is the answer, which the Start then reads.
- */
-const insertAgent = SqlSchema.findOneOption({
+const insertAgent = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
     conversationId: Schema.String,
@@ -886,11 +801,6 @@ const insertAgent = SqlSchema.findOneOption({
           deviceId: write.deviceId,
           idempotencyKey: write.idempotencyKey,
           createdAt: write.now,
-        })
-        .onConflictDoNothing({
-          target: [agentTable.organizationId, agentTable.userId],
-          // Note that the predicate spells its literal, because Postgres infers the index from it at plan time.
-          where: sql`${agentTable.kind} = ${sql.raw(`'${AGENT_KIND.OPERATOR}'`)} and ${agentTable.archivedAt} is null`,
         })
         .returning({ ...AGENT_COLUMNS, txid: TXID }),
     ),
@@ -1193,11 +1103,7 @@ const updateAgentArchived = SqlSchema.findOneOption({
       db
         .update(agentTable)
         .set({ archivedAt, archivedBy })
-        .where(
-          archivedAt === null
-            ? and(reachableAgent(userId, agentId), not(replacedOperator()))
-            : reachableAgent(userId, agentId),
-        )
+        .where(reachableAgent(userId, agentId))
         .returning({ ...AGENT_COLUMNS, txid: TXID }),
     ),
 });
@@ -1611,14 +1517,12 @@ function containing(words: string): string {
 }
 
 /**
- * The name an agent is shown by, as `agentName` names it: Luke for an
- * operator, else its title, else the name of the automation whose run started
+ * The name an agent is shown by, as `agentName` names it: its title, else the name of the automation whose run started
  * it, else its model. Note that the model is named as `modelLabel` spells an
  * id the catalog has not been read for, its provider dropped and its words
  * spaced, because the catalog's own names live with the client.
  */
 const AGENT_SHOWN_NAME = sql<string>`coalesce(
-  ${agentGivenNameSql(agentTable)},
   ${agentTable.title},
   ${agentTable.automationOrigin} ->> 'name',
   replace(regexp_replace(${agentTable.model}, '^[^/]*/', ''), '-', ' ')
@@ -2178,10 +2082,7 @@ const kindUnderLock = Effect.fnUntraced(function* (started: NewAgent) {
  * took over from it before started, that stand unarchived report to the
  * new pilot from then on. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
- * A Start of the member's operator answers the one standing in the
- * workspace where there is one, whatever its key, and writes nothing; one
- * the index finds another Start made first meanwhile is answered too, the
- * conversation opened for it taken back. A task has one pilot, so a pilot
+ * A task has one pilot, so a pilot
  * asked of a task another stands on unarchived, as a Start that raced
  * another finds under the task's lock, is made a coder; the pilot a
  * continue goes on from is no other.
@@ -2206,12 +2107,6 @@ export function createAgent(
         }
         const organizationId = reached.value.organizationId;
         const kind = yield* kindUnderLock(started);
-        // A member's operator is one per workspace, so a Start of it answers the one standing.
-        if (started.kind === AGENT_KIND.OPERATOR) {
-          const standing = yield* findLiveOperator({ userId, organizationId });
-          if (Option.isSome(standing))
-            return Option.some({ agent: standing.value, created: false });
-        }
         const now = yield* DateTime.nowAsDate;
         const conversation = yield* insertAgentConversation({
           userId,
@@ -2221,7 +2116,7 @@ export function createAgent(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
-        const inserted = yield* insertAgent({
+        const { txid, ...row } = yield* insertAgent({
           userId,
           conversationId: conversation.id,
           taskId: started.taskId,
@@ -2247,22 +2142,15 @@ export function createAgent(
           machine: started.machine ?? AGENT_MACHINE.VERCEL,
           deviceId: started.deviceId ?? null,
           now,
-        });
-        if (Option.isSome(inserted)) {
-          const { txid, ...row } = inserted.value;
-          // The pilot's agents report to the one that continues it from the moment it stands.
-          if (started.takesOverFrom !== undefined) {
-            yield* updateTakenOver({ userId, from: started.takesOverFrom, to: row.id });
-          }
-          return Option.some({ agent: row, created: true, txid });
+        }).pipe(
+          // An insert that returned no row is the database breaking its own contract, not an outcome.
+          Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+        );
+        // The pilot's agents report to the one that continues it from the moment it stands.
+        if (started.takesOverFrom !== undefined) {
+          yield* updateTakenOver({ userId, from: started.takesOverFrom, to: row.id });
         }
-        // Only the operator's index answers an insert with no row: the one another Start made stands.
-        yield* deleteConversationRow(conversation.id);
-        const made = yield* findLiveOperator({ userId, organizationId });
-        // A row the index refused and no read then finds is the database breaking its own contract.
-        if (Option.isNone(made))
-          return yield* Effect.die(new Error("operator conflict found no row"));
-        return Option.some({ agent: made.value, created: false });
+        return Option.some({ agent: row, created: true, txid });
       }),
     ),
   );
@@ -2920,209 +2808,9 @@ export function archiveAgent(
   );
 }
 
-const updateLiveOperatorArchived = SqlSchema.findAll({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    organizationId: Schema.String,
-    agentId: Schema.String,
-    archivedAt: Schema.Date,
-    archivedBy: ArchivedByColumnSchema,
-  }),
-  Result: IdRowSchema,
-  execute: ({ userId, organizationId, agentId, archivedAt, archivedBy }) =>
-    Database.use((db) =>
-      db
-        .update(agentTable)
-        .set({ archivedAt, archivedBy })
-        .where(
-          and(
-            eq(agentTable.id, agentId),
-            liveOperatorOf(userId, organizationId),
-            workspaceReachableBy(userId, agentTable.organizationId),
-          ),
-        )
-        .returning({ id: agentTable.id }),
-    ),
-});
-
 /** Whether a pilot of the task stands unarchived, whoever started it, read by the task's id alone for a caller that has reached the task. */
 export function taskPilotStands(taskId: string): AgentStoreEffect<boolean> {
   return Effect.map(findLivePilot({ taskId, besides: null }), Option.isSome);
-}
-
-/** The member's operator standing in the workspace; none where none stands or the member is no member of it. */
-export function readStandingOperator(
-  userId: string,
-  organizationId: string,
-): AgentStoreEffect<Option.Option<Agent>> {
-  return findLiveOperator({ userId, organizationId });
-}
-
-/**
- * Whether the agent is an operator another of its member's has replaced in
- * its workspace, which no unarchive brings back while that one stands: the
- * archive by hand and the agent tool refuse it by this, and their writes
- * change nothing where it holds.
- */
-export function operatorReplaced(userId: string, agentId: string): AgentStoreEffect<boolean> {
-  return Effect.map(findReplacedOperator({ userId, agentId }), (rows) => rows.length > 0);
-}
-
-/**
- * The member's operator standing in the workspace archived by the member,
- * its conversation kept, as a Reset does before it ensures a fresh one; only
- * the one named, read and stopped before, and only while it still stands,
- * so two Resets that read the same one never archive the fresh one the
- * other made. Answers its id where it was archived, or none where it no
- * longer stood or the member is no member of the workspace.
- */
-export function archiveOperatorAgent(
-  userId: string,
-  organizationId: string,
-  agentId: string,
-): AgentStoreEffect<Option.Option<string>> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        const now = yield* DateTime.nowAsDate;
-        const archived = yield* updateLiveOperatorArchived({
-          userId,
-          organizationId,
-          agentId,
-          archivedAt: now,
-          archivedBy: { by: AGENT_ARCHIVER.MEMBER, userId },
-        });
-        yield* settleAgentInboxItems(
-          archived.map(({ id }) => id),
-          now,
-        );
-        return Option.fromNullishOr(archived[0]?.id);
-      }),
-    ),
-  );
-}
-
-/** One of the member's own operators in the workspace that a Reset archived, archived still: only theirs, never a teammate's. */
-function archivedOperatorOf(
-  userId: string,
-  organizationId: string,
-  agentId: string,
-): SQL | undefined {
-  return and(
-    eq(agentTable.id, agentId),
-    eq(agentTable.organizationId, organizationId),
-    eq(agentTable.userId, userId),
-    eq(agentTable.kind, AGENT_KIND.OPERATOR),
-    isNotNull(agentTable.archivedAt),
-    workspaceReachableBy(userId, agentTable.organizationId),
-  );
-}
-
-const findArchivedOperator = SqlSchema.findOneOption({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    organizationId: Schema.String,
-    agentId: Schema.String,
-  }),
-  Result: AgentRowSchema,
-  execute: ({ userId, organizationId, agentId }) =>
-    Database.use((db) =>
-      db
-        .select(AGENT_COLUMNS)
-        .from(agentTable)
-        .where(archivedOperatorOf(userId, organizationId, agentId))
-        .limit(1),
-    ),
-});
-
-const unarchiveOperator = SqlSchema.findOneOption({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    organizationId: Schema.String,
-    agentId: Schema.String,
-  }),
-  Result: CommittedAgentRowSchema,
-  execute: ({ userId, organizationId, agentId }) =>
-    Database.use((db) =>
-      db
-        .update(agentTable)
-        .set({ archivedAt: null, archivedBy: null })
-        .where(and(archivedOperatorOf(userId, organizationId, agentId), not(replacedOperator())))
-        .returning({ ...AGENT_COLUMNS, txid: TXID }),
-    ),
-});
-
-/** Rolls back a restore whose operator could not be brought back once the one standing was archived. */
-class OperatorNotRestored extends Data.TaggedError("OperatorNotRestored") {}
-
-/** The member's archived operator in the workspace, by its id; none for anyone else's, one standing, or a workspace they are no member of. */
-export function readArchivedOperator(
-  userId: string,
-  organizationId: string,
-  agentId: string,
-): AgentStoreEffect<Option.Option<Agent>> {
-  return findArchivedOperator({ userId, organizationId, agentId });
-}
-
-/** What a restore of an operator came to: the one brought back, the transaction it went in, and the one it archived in its place. */
-export interface OperatorRestored extends AgentCommitted {
-  readonly retiredId: string | undefined;
-}
-
-/**
- * The member's archived operator in the workspace brought back in place of
- * the one standing, as an Undo of a Reset does: under the workspace's lock a
- * Start takes, the one standing archived by the member, but only while it is
- * `standingId`, the one its caller read and stopped, and then the one named
- * brought back, in one transaction, so a member is never left with none or
- * with two. Only the member's own operator, archived, in a workspace they
- * are a member of, is brought back; none for anything else, and none where
- * another operator than `standingId` stands, with nothing written.
- */
-export function restoreOperatorAgent(
-  userId: string,
-  organizationId: string,
-  agentId: string,
-  standingId: string | undefined,
-): AgentStoreEffect<Option.Option<OperatorRestored>> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client
-      .withTransaction(
-        Effect.gen(function* () {
-          const locked = yield* lockReachableWorkspace({ userId, organizationId });
-          if (Option.isNone(locked)) return Option.none<OperatorRestored>();
-          // The one named is read archived before anything is written, so the one standing is never archived in favour of itself.
-          const named = yield* findArchivedOperator({ userId, organizationId, agentId });
-          if (Option.isNone(named)) return Option.none();
-          const standing = yield* findLiveOperator({ userId, organizationId });
-          if (Option.isSome(standing) && standing.value.id !== standingId) return Option.none();
-          const archivedAt = yield* DateTime.nowAsDate;
-          const retired = Option.isSome(standing)
-            ? yield* updateLiveOperatorArchived({
-                userId,
-                organizationId,
-                agentId: standing.value.id,
-                archivedAt,
-                archivedBy: { by: AGENT_ARCHIVER.MEMBER, userId },
-              })
-            : [];
-          yield* settleAgentInboxItems(
-            retired.map(({ id }) => id),
-            archivedAt,
-          );
-          // Brought back, the operator's items its Reset's archive settled open again, and only those.
-          if (named.value.archivedAt !== null) {
-            yield* reopenAgentInboxItems(agentId, named.value.archivedAt);
-          }
-          const restored = yield* unarchiveOperator({ userId, organizationId, agentId });
-          // Note that the archive above is taken back where nothing came back, since a member must never be left with no operator.
-          if (Option.isNone(restored)) return yield* Effect.fail(new OperatorNotRestored());
-          const { txid, ...agent } = restored.value;
-          return Option.some({ agent, txid, retiredId: retired[0]?.id });
-        }),
-      )
-      .pipe(Effect.catchTag("OperatorNotRestored", () => Effect.succeed(Option.none()))),
-  );
 }
 
 /** An archive's or a bring-back's write: the agent as it then stands, and whether this write archived one that stood unarchived. */
@@ -3278,13 +2966,7 @@ const unarchiveIfStamped = SqlSchema.findAll({
       db
         .update(agentTable)
         .set({ archivedAt: null, archivedBy: null })
-        .where(
-          and(
-            reachableAgent(userId, agentId),
-            eq(agentTable.archivedAt, archivedAt),
-            not(replacedOperator()),
-          ),
-        )
+        .where(and(reachableAgent(userId, agentId), eq(agentTable.archivedAt, archivedAt)))
         .returning({ id: agentTable.id }),
     ),
 });

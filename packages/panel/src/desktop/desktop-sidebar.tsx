@@ -153,7 +153,6 @@ import { withoutFinishedRuns } from "./finished-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
-import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { childTasksFold, movedBeside, storedSlot, useNestedRows } from "./nested-rows.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
@@ -165,7 +164,6 @@ import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-c
 import { type CountNoun, foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { SidebarFoot } from "./sidebar-foot.js";
 import { SidebarInboxRow } from "./sidebar-inbox-row.js";
-import { SidebarLuke } from "./sidebar-luke.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
 import { useSidebarReadAll } from "./sidebar-read-all.js";
 import {
@@ -1865,18 +1863,8 @@ function SidebarColumn({
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.agentView.onOpen(agentId);
   };
-  // Luke stands in his own row at the list's head, so every other place leaves him out.
-  const operator = useLukeOperator({
-    accountId: tasks.me,
-    workspaceId: tasks.signedIn ? tasks.workspace?.id : undefined,
-  });
-  const lukeId = operator?.agentId;
   // The list is the chosen workspace's; the unread marks above read every task.
-  const { listed: listedRows } = tasks;
-  const listedAgents = {
-    standing: withoutLuke(tasks.listedAgents.standing),
-    archived: tasks.listedAgents.archived,
-  };
+  const { listed: listedRows, listedAgents } = tasks;
   const pinned = tasks.listed.tasks.filter((task) => task.pinnedAt !== undefined);
   const pinnedAgents = listedAgents.standing.filter((agent) => agent.pinnedAt !== undefined);
   const pinnedSection = pinnedRows(pinned, pinnedAgents, listedAgents.standing, tasks);
@@ -2247,22 +2235,6 @@ function SidebarColumn({
                   {...motionRows()}
                 >
                   {places}
-                  {operator === undefined ? null : (
-                    <nav className="sidebar-group" aria-label="Luke">
-                      <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} className="sidebar-tasks">
-                        <SidebarLuke
-                          operator={operator}
-                          agent={tasks.listedAgents.standing.find(
-                            (agent) => agent.workspaceId === operator.workspaceId && isLuke(agent),
-                          )}
-                          current={lukeId !== undefined && lukeId === agentShown}
-                          unread={lukeId !== undefined && context.unseenAgent(lukeId)}
-                          shown={tasks.shown && overlay.inSight}
-                          onOpen={chosen(openAgent)}
-                        />
-                      </Stack>
-                    </nav>
-                  )}
                   {/* Pinned stands once something is pinned, or, while the account keeps sections, as the place a carried row drops in, and leaves after its exit once neither holds. */}
                   <LeavingGroups
                     groups={

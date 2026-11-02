@@ -381,7 +381,6 @@ function memory(
     text,
     keptBy,
     forgettable: true,
-    private: false,
     createdAt: NOW - agoDays * DAY,
     updatedAt: NOW - agoDays * DAY,
     ...patch,
@@ -394,13 +393,7 @@ const { ADA, MAYA, THEO } = FIXTURE_PERSON;
 const MEMORIES: readonly MemorySummary[] = [
   memory(1, "Migrations are generated with `pnpm db:generate`, never written by hand.", MAYA, 1),
   memory(2, "Invite links expire after 7 days; an accepted one is never reused.", ADA, 2),
-  memory(
-    3,
-    "I review pull requests in the morning, so a review request after noon waits a day.",
-    ADA,
-    4,
-    { private: true },
-  ),
+  memory(3, "Pull requests are reviewed in the morning; one asked after noon waits a day.", ADA, 4),
   memory(4, "The billing export runs nightly at 02:00 UTC and must finish by 04:00.", THEO, 9),
   memory(5, "Feature flags live in `src/flags.ts`, one constant per flag.", null, 30),
 ];

@@ -7,11 +7,7 @@ import { Database } from "@luke/database/core/query";
 import { user } from "@luke/database/schemas/auth";
 import { joinWorkspace, openWorkspace, unmigratedPgliteSqlClient } from "@luke/database/testing";
 import { INBOX_MESSAGE_AUTHOR } from "@luke/features/inbox-wire";
-import {
-  memberOpenAsks,
-  readInboxAttachment,
-  readInboxItem,
-} from "@luke/service/inbox/inbox-store";
+import { readInboxAttachment, readInboxItem } from "@luke/service/inbox/inbox-store";
 import { Effect, Layer, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
@@ -26,8 +22,7 @@ import * as SqlClient from "effect/sql/SqlClient";
  * address escaped as a post writes them, its picture as that message's
  * file, and the ask its response stood for, open, answered, or withdrawn as
  * the item stood; an answer reads as the member's message answering that
- * ask, with the note as its words and the answer's files as its own; the
- * open ask is the one the operator's read finds; an item the version 4
+ * ask, with the note as its words and the answer's files as its own; an item the version 4
  * tool posted after the bump is written the same way; and a second run
  * writes nothing twice. Synthetic accounts throughout.
  */
@@ -220,12 +215,6 @@ it.effect(
             "answered",
             { ask: posted?.id, reply: "chose", choices: ["Approve"] },
           ],
-        );
-
-        const waiting = yield* memberOpenAsks("dean", workspaceId, 10);
-        assert.deepEqual(
-          waiting.map(({ id, askType }) => ({ id, askType })),
-          [{ id: branch, askType: "do" }],
         );
       }),
     ).pipe(Effect.provide(Layer.provideMerge(unmigratedPgliteSqlClient, NodeServices.layer))),

@@ -323,8 +323,6 @@ export function agentTranscript(input: {
   brief: AgentBrief | undefined;
   /** The task a worker was handed, where the transcript is a worker's rather than the agent's own. */
   task?: string | undefined;
-  /** Whether it is a member's operator's, whose heartbeat that found nothing is copied, as it is drawn, as no reply (`placedMessages`). */
-  quiet?: boolean;
 }): CopiedTranscript {
   const { title, brief, task } = input;
   const messages = task === undefined ? input.messages : workerLines(task, input.messages);
@@ -346,17 +344,15 @@ export function agentTranscript(input: {
   const opening = first === undefined || task !== undefined ? undefined : replayOpening(first);
   const note = opening?.note === undefined ? [] : [developerTurn(opening.note)];
   // A line that reached a turn while it ran is copied where the tab draws it, between the turn's work before and after it.
-  const turns = placedMessages(messages, input.quiet === true).flatMap(
-    ({ message, arrived }): CopiedTurn[] => {
-      if (message === first) return [];
-      if (message.role === MESSAGE_ROLE.USER) return [developerTurn(message)];
-      return turnStretches(agentRows(message, false, { arrived })).map((stretch) =>
-        stretch.line === undefined
-          ? { speaker, blocks: rowBlocks(stretch.rows).flatMap(agentBlock) }
-          : developerTurn(stretch.line),
-      );
-    },
-  );
+  const turns = placedMessages(messages).flatMap(({ message, arrived }): CopiedTurn[] => {
+    if (message === first) return [];
+    if (message.role === MESSAGE_ROLE.USER) return [developerTurn(message)];
+    return turnStretches(agentRows(message, false, { arrived })).map((stretch) =>
+      stretch.line === undefined
+        ? { speaker, blocks: rowBlocks(stretch.rows).flatMap(agentBlock) }
+        : developerTurn(stretch.line),
+    );
+  });
   return {
     title,
     brief: first === undefined ? undefined : { label, text: messageWords(opening?.brief ?? first) },

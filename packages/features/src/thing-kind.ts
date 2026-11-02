@@ -7,7 +7,7 @@ import {
   pullRequestAddressOf,
 } from "./link-grammar.js";
 import { MENTION_KIND, type Mention } from "./mention-link.js";
-import { OPERATOR_NAME } from "./model-label.js";
+import { PRODUCT_NAME } from "./model-label.js";
 import type { KnownNames } from "./place-chip-model.js";
 import { TERM } from "./words.js";
 
@@ -222,7 +222,7 @@ export const THING_NAME: ThingNames = {
   },
   [THING_KIND.AGENT]: { live: true, held: (agent, known) => known.agents.get(agent.agentId) },
   [THING_KIND.WORKER]: NO_LIVE_NAME,
-  [THING_KIND.LUKE]: { live: true, held: () => OPERATOR_NAME },
+  [THING_KIND.LUKE]: { live: true, held: () => PRODUCT_NAME },
   [THING_KIND.CHANGES]: {
     live: false,
     held: (changes, known) => byAgent("Changes by", changes.agentId, known),

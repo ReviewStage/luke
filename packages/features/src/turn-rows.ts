@@ -112,8 +112,6 @@ export const CALL_KIND = {
   REMEMBER: "remember",
   /** The workspace's shared memory searched (`recall`), its row naming the query where there was one. */
   RECALL: "recall",
-  /** Every open ask waiting on the member listed (`list_open_asks`). */
-  LIST_OPEN_ASKS: "list-open-asks",
   /** The plan's comment threads read (`read_comments`). */
   READ_COMMENTS: "read-comments",
   /** An answer written in one of the plan's comment threads (`reply_to_comment`), its row saying it. */
@@ -189,7 +187,6 @@ export const CALL_WORDS = {
   [CALL_KIND.LIST_TASKS]: { verb: "Listed the tasks", code: false },
   [CALL_KIND.REMEMBER]: { verb: "Saved to memory:", code: false },
   [CALL_KIND.RECALL]: { verb: "Searched memory", code: false },
-  [CALL_KIND.LIST_OPEN_ASKS]: { verb: "Listed the open asks", code: false },
   [CALL_KIND.READ_COMMENTS]: { verb: "Read the comments", code: false },
   [CALL_KIND.REPLY_TO_COMMENT]: { verb: "Replied to a comment:", code: false },
   [CALL_KIND.RESOLVE_THREAD]: { verb: "Resolved a thread", code: false },

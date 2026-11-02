@@ -1,6 +1,6 @@
 import type { Agent } from "@luke/database/models/agent-store";
 import { CLAUDE_CODE_TOOL, CODEX_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
-import { AGENT_KIND, AGENT_MACHINE } from "@luke/features/agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import { WireValueSchema } from "@luke/wire";
 import { verbatimJsonSchema } from "@luke/wire/effect";
@@ -61,7 +61,6 @@ export const CODER_TOOL = {
   CREATE_CHANNEL: AGENT_TOOL.CREATE_CHANNEL,
   UPDATE_CHANNEL: AGENT_TOOL.UPDATE_CHANNEL,
   MOVE_THREAD: AGENT_TOOL.MOVE_THREAD,
-  LIST_OPEN_ASKS: AGENT_TOOL.LIST_OPEN_ASKS,
   OPEN_PULL_REQUEST: AGENT_TOOL.OPEN_PULL_REQUEST,
   LIST_AGENTS: AGENT_TOOL.LIST_AGENTS,
   READ_AGENT: AGENT_TOOL.READ_AGENT,
@@ -114,30 +113,6 @@ export function repositoryToolsOf(agent: Pick<Agent, "repository">): ReadonlySet
   return new Set([CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.APPLY_PATCH]);
 }
 
-/** The tools offered by what kind of agent it is: `list_open_asks` to an operator alone, and `delete_section` and `delete_automation` to every agent but an operator. */
-export type KindTool =
-  | typeof CODER_TOOL.LIST_OPEN_ASKS
-  | typeof CODER_TOOL.DELETE_SECTION
-  | typeof CODER_TOOL.DELETE_AUTOMATION;
-
-/**
- * The tools an agent is offered by its kind, on every turn: an operator
- * reads every open ask to its member across their agents, and deletes
- * nothing, under Dean's Steward policy (`../steward.ts`), so it is offered
- * `list_open_asks` and never `delete_section` or `delete_automation`; every
- * other agent the reverse.
- * Note that each tool withheld is one its call would only be refused by,
- * since the tools a harness is offered are narrowed by role and kind: an operator's delete by its
- * door (`agent-doors.ts`'s `runAgentTools`), and another agent's read of the
- * member's asks by the tool itself (`../operator-desk.ts`); and that the
- * instructions leave out the same words (`instructions.ts`).
- */
-export function kindToolsOf(agent: Pick<Agent, "kind">): ReadonlySet<KindTool> {
-  return agent.kind === AGENT_KIND.OPERATOR
-    ? new Set([CODER_TOOL.LIST_OPEN_ASKS])
-    : new Set([CODER_TOOL.DELETE_SECTION, CODER_TOOL.DELETE_AUTOMATION]);
-}
-
 /** The tools offered by who started the agent: `post_thread` to every agent but one under a pilot. */
 export type StarterTool = typeof CODER_TOOL.POST_THREAD;
 
@@ -174,7 +149,7 @@ export function machineToolsOf(agent: Pick<Agent, "machine">): ReadonlySet<Machi
 }
 
 /** What of an agent decides which tools eve offers it. */
-export type CoderOfferedTo = Pick<Agent, "repository" | "kind" | "machine">;
+export type CoderOfferedTo = Pick<Agent, "repository" | "machine">;
 
 /** What beside its own row decides which tools an agent is offered: whether its starter has Memory on, and whether it is under a pilot (`starterToolsOf`). */
 export interface OfferedBeside {
@@ -184,7 +159,7 @@ export interface OfferedBeside {
 
 /**
  * The coder's tools eve offers some agents and not others: each one some
- * agent's repository, kind, starter, machine, or Memory withholds. Note that
+ * agent's repository, starter, machine, or Memory withholds. Note that
  * no tool is withheld by the agent's task, since every one that acts on a
  * task names it or acts on the agent itself where it works on none: the
  * plan's notes, pictures, and comments any task of its workspace, and a
@@ -192,8 +167,6 @@ export interface OfferedBeside {
  */
 const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
   ...repositoryToolsOf({ repository: "any" }),
-  ...kindToolsOf({ kind: AGENT_KIND.OPERATOR }),
-  ...kindToolsOf({ kind: AGENT_KIND.CODER }),
   ...starterToolsOf({ underPilot: false }),
   ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
   CODER_TOOL.REMEMBER,
@@ -203,10 +176,10 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
 /**
  * Every tool eve offers the agent on a turn, in the registry's order: each
  * coder's tool no agent is denied, and each narrowed one where its
- * repository, its kind, who started it, or where it runs offers it, and `remember` and `recall` where
+ * repository, who started it, or where it runs offers it, and `remember` and `recall` where
  * its starter has Memory on, the same rules eve's tool files read as each
  * turn starts (`apps/dev/host.ts`'s `offeredRepositoryTools`,
- * `offeredKindTools`, `offeredStarterTools`, and `memoryOffered`).
+ * `offeredStarterTools`, and `memoryOffered`).
  */
 export function offeredCoderTools(
   agent: CoderOfferedTo,
@@ -214,7 +187,6 @@ export function offeredCoderTools(
 ): readonly AgentTool[] {
   const offered: ReadonlySet<AgentTool> = new Set<AgentTool>([
     ...repositoryToolsOf(agent),
-    ...kindToolsOf(agent),
     ...starterToolsOf(beside),
     ...machineToolsOf(agent),
     ...(beside.memoryOn ? [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL] : []),

@@ -28,8 +28,6 @@ import {
   agentStartRequestFields,
   agentSummarySchema,
   localAgentRefusalSchema,
-  operatorEnsureAnswerSchema,
-  operatorEnsureRequestSchema,
   refusedDeviceSchema,
 } from "./agent-wire.js";
 import { CONVERSATION_MEDIA_TYPE } from "./conversation-picture-wire.js";
@@ -352,14 +350,6 @@ export const agentDeleteAnswerViewSchema = EffectSchema.Union([agentDeleteAnswer
 
 export type AgentDeleteAnswerView = typeof agentDeleteAnswerViewSchema.Type;
 
-/** The account's operator in a workspace ensured, as the window hears it: its id, or why there is none. */
-export const agentOperatorEnsureAnswerViewSchema = EffectSchema.Union([
-  operatorEnsureAnswerSchema,
-  failed,
-]);
-
-export type AgentOperatorEnsureAnswerView = typeof agentOperatorEnsureAnswerViewSchema.Type;
-
 /** One agent's transcript past a cursor, as the window asks it: the agent, and where the window stands; or, naming the delegation call that started one, a worker's transcript under the agent. */
 export const agentMessagesParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
@@ -498,14 +488,6 @@ export const agentPinParamsSchema = EffectSchema.Struct({
 });
 
 export type AgentPinParams = typeof agentPinParamsSchema.Type;
-
-/** The account's operator in a workspace ensured, as the window asks it: the workspace, and whether a fresh one replaces the one standing. */
-export const agentOperatorEnsureParamsSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.NonEmptyString,
-  ...operatorEnsureRequestSchema.fields,
-});
-
-export type AgentOperatorEnsureParams = typeof agentOperatorEnsureParamsSchema.Type;
 
 /** One agent, as the window names it to stop or to delete. */
 export const agentStopParamsSchema = EffectSchema.Struct({

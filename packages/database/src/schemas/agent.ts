@@ -114,10 +114,8 @@ import { task } from "./task.js";
  * GitHub records its base.
  *
  * `kind` is what the agent is (`AGENT_KIND`): a coder, as every agent
- * started on work is and every row from before the column reads, or its
- * member's operator, started blank with no task and no repository, of which
- * a member holds at most one standing per workspace; a Reset archives it,
- * transcript kept, and ensures a fresh one.
+ * started on work is and every row from before the column reads, or a
+ * task's pilot.
  *
  * `machine` is where the agent's runner and checkout live
  * (`AGENT_MACHINE`): a Vercel Sandbox, as every row from before the
@@ -131,9 +129,6 @@ import { task } from "./task.js";
  * starting a second. The row goes with its task, its account, and its
  * conversation alike.
  */
-/** A literal in an index's predicate, which Postgres takes no parameter in. */
-const literal = (value: string) => sql.raw(`'${value}'`);
-
 /**
  * The newest model step of an agent's own conversation, as the coder host
  * relayed it: the tokens its provider counted, the share of them its
@@ -312,7 +307,7 @@ export const agentTable = pgTable(
      * conversation's lock (`steer.ts`), from another function's connection where the eve apps relay.
      */
     runnerTokenHash: text("runner_token_hash"),
-    /** What the agent is (`AGENT_KIND`): a coder, a task's pilot, or its member's operator; a coder for every row from before the column. */
+    /** What the agent is (`AGENT_KIND`): a coder, or a task's pilot; a coder for every row from before the column. */
     kind: text("kind").$type<AgentKind>().notNull().default(AGENT_KIND.CODER),
     /** Where the agent's runner and checkout live; a Vercel Sandbox for every row from before the column. */
     machine: text("machine").$type<AgentMachineKind>().notNull().default(AGENT_MACHINE.VERCEL),
@@ -348,10 +343,6 @@ export const agentTable = pgTable(
     index("agent_device_live")
       .on(table.deviceId)
       .where(sql`${table.deviceId} is not null and ${table.archivedAt} is null`),
-    // A member holds one standing operator per workspace, so two ensures that race make one row.
-    uniqueIndex("agent_member_operator")
-      .on(table.organizationId, table.userId)
-      .where(sql`${table.kind} = ${literal(AGENT_KIND.OPERATOR)} and ${table.archivedAt} is null`),
   ],
 );
 

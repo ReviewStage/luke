@@ -1,5 +1,5 @@
 /**
- * turn-message.ts -- a coding agent's turn message composed, on either runtime: the call's words, the time, the task where it changed, and an operator's desk.
+ * turn-message.ts -- a coding agent's turn message composed, on either runtime: the call's words, the time, and the task where it changed.
  *
  * What a turn opens with after the history is the same whatever answers the
  * agent's conversation, eve or a native harness: the pieces are
@@ -28,11 +28,7 @@ import { logStoreFailure } from "../../http/store-failure.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
 import type { EveHostTurn } from "../eve-host/bounds.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
-import { markDeskNoticesRead, type OperatorDesk, readOperatorDesk } from "../operator-desk.js";
-import { isOperator } from "../steward.js";
 import {
-  contentKey,
-  FLUSH_LINE,
   handedAfterCompaction,
   savedByAnotherSince,
   type TurnHanded,
@@ -55,29 +51,11 @@ export interface CoderTurnMessage {
   readonly handed: TurnHanded;
 }
 
-/** A turn's message composed, with the desk it hands, whose notices are marked read once the message is delivered (`deskHandedRead`). */
-export interface ComposedTurnMessage extends CoderTurnMessage {
-  readonly desk: OperatorDesk | undefined;
-}
-
 /** The newest turns read to find the agent's previous one: the turn opening, where the relay queued it already, and the one before. */
 const PREVIOUS_TURN_READ = 2;
 
 const readHanded = Schema.decodeUnknownResult(TurnHandedSchema);
 const writeHanded = Schema.encodeUnknownResult(TurnHandedSchema);
-
-/**
- * The operator's desk as its turn opens (`../operator-desk.ts`), its
- * member's open work as it stands; nothing for any other agent, or where
- * a read failed, which is logged, so the turn still opens.
- */
-const deskOf = (agent: Agent): Effect.Effect<OperatorDesk | undefined, never, DatabaseServices> =>
-  isOperator(agent)
-    ? readOperatorDesk(agent).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.orElseSucceed(() => undefined),
-      )
-    : Effect.succeed(undefined);
 
 /**
  * When the agent's turn before the one opening started, or nothing for its
@@ -148,69 +126,31 @@ const taskOf = (
 /**
  * The message the agent's turn opens with after the history, and what the
  * session has handed once it is: after a spoken turn, the line saying the
- * call's words no longer hold (`turnKindWords`); the
- * developer's time on every turn; the task as it stands where someone other
- * than the agent saved the plan since its previous turn started, or the rest
- * of it is not what the session last handed (`handed`); an operator's desk,
- * its member's open work (`../operator-desk.ts`), where its standing work is
- * not what was last handed or it carries notices of what its member's agents
- * did since, which the caller marks read once the message is delivered
- * (`deskHandedRead`), so a message a runner never took leaves them for the
- * next; and, where the caller says so (`flush`), the line telling an
- * operator to keep what is durable before its history is summarised. A
- * read that fails is logged and leaves its part out, so the turn still
- * opens.
+ * call's words no longer hold (`turnKindWords`); the developer's time on
+ * every turn; and the task as it stands where someone other than the agent
+ * saved the plan since its previous turn started, or the rest of it is not
+ * what the session last handed (`handed`). A read that fails is logged and
+ * leaves its part out, so the turn still opens.
  */
-export function coderTurnMessage<R>(
+export function coderTurnMessage(
   admitted: AdmittedConversation,
   agent: Agent,
   turn: CoderTurn,
   handed: TurnHanded,
   now: number,
-  flush: Effect.Effect<boolean, never, R>,
-): Effect.Effect<ComposedTurnMessage, never, DatabaseServices | R> {
+): Effect.Effect<CoderTurnMessage, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const [task, desk, flushed] = yield* Effect.all(
-      [taskOf(admitted, agent, turn, handed, now), deskOf(agent), flush],
-      { concurrency: "unbounded" },
-    );
+    const task = yield* taskOf(admitted, agent, turn, handed, now);
     const clock = { now, timeZone: admitted.timeZone };
     const standing = task?.text ?? timeWithLead(standingContext(undefined, clock));
-    // An operator's desk is handed again only where its standing work changed since the session
-    // last handed it, or where it carries notices, which are marked read once delivered.
-    const deskKey = desk === undefined ? handed.desk : contentKey(desk.standing);
-    const fresh = desk !== undefined && (desk.notices.length > 0 || deskKey !== handed.desk);
-    const desked = fresh ? [desk.text] : [];
     const kind = turnKindWords(handed);
     const taskHanded = task === undefined ? handed.task : task.key;
     const next: TurnHanded = {
       ...(taskHanded === undefined ? undefined : { task: taskHanded }),
-      ...(deskKey === undefined ? undefined : { desk: deskKey }),
-      opened: true,
-      ...(flushed || handed.flushTold === true ? { flushTold: true } : undefined),
     };
-    const flushLine = flushed ? [FLUSH_LINE] : [];
-    const parts = [...(kind === undefined ? [] : [kind]), ...flushLine, standing, ...desked];
-    return { text: parts.join("\n\n"), handed: next, desk: fresh ? desk : undefined };
+    const parts = [...(kind === undefined ? [] : [kind]), standing];
+    return { text: parts.join("\n\n"), handed: next };
   });
-}
-
-/**
- * The notices the message's desk showed marked read, once the message is
- * delivered: as eve's turn starts, or once a native runner took the line.
- * Nothing where the message handed no desk or it showed none; a write that
- * fails is logged, and the notices are handed again on the next turn.
- */
-export function deskHandedRead(
-  agent: Agent,
-  message: ComposedTurnMessage,
-): Effect.Effect<void, never, DatabaseServices> {
-  const { desk } = message;
-  if (desk === undefined || desk.notices.length === 0) return Effect.void;
-  return markDeskNoticesRead(agent, desk).pipe(
-    Effect.tapError(logStoreFailure),
-    Effect.orElseSucceed(() => undefined),
-  );
 }
 
 /**
@@ -254,8 +194,7 @@ export function recordNativeTurnHanded(
 /**
  * What a native harness's session has handed once its harness compacted its
  * history (`handedAfterCompaction`), so the next message hands the call's
- * words, the task, and the desk again, as eve's store hook does on eve's
- * compaction.
+ * words and the task again, as eve's store hook does on eve's compaction.
  */
 export function compactNativeTurnHanded(
   target: ConversationTarget,

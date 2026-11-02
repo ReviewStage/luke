@@ -72,8 +72,6 @@ export const AGENT_TOOL = {
   CREATE_CHANNEL: CHANNEL_TOOL.CREATE,
   UPDATE_CHANNEL: CHANNEL_TOOL.UPDATE,
   MOVE_THREAD: CHANNEL_TOOL.MOVE,
-  // Every open inbox ask to an operator's member, across all their agents, the operator's alone.
-  LIST_OPEN_ASKS: "list_open_asks",
   OPEN_PULL_REQUEST: "open_pull_request",
   // eve's own, which loads one of the skills a session is offered.
   LOAD_SKILL: "load_skill",

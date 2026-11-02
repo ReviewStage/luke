@@ -10,8 +10,6 @@ import { Option, Schema } from "effect";
 export const EXPERIMENT = {
   /** A workspace's memory: its coding agents keep and recall facts with remember and recall, reviewed in Settings › Memory. */
   MEMORY: "memory",
-  /** Luke as the member's operator: one standing agent per workspace that manages their other agents. */
-  OPERATOR: "operator",
   /** Channels: a workspace's threads read as Slack-style streams by topic, the sidebar listing channels in place of the Inbox and the tasks. */
   CHANNELS: "channels",
   /** Pilot: a new task can start with one pilot agent that plans the work, splits it into child tasks, and runs a coding agent on each. */
@@ -87,15 +85,6 @@ export const EXPERIMENTS = [
       "shared across your workspace.",
     owner: "Dean",
     since: "2026-10-23",
-  },
-  {
-    key: EXPERIMENT.OPERATOR,
-    name: "Luke, your operator",
-    detail:
-      "One Luke of your own in each workspace that keeps an eye on your agents, steers them, " +
-      "and tells you what needs you.",
-    owner: "Dean",
-    since: "2026-10-22",
   },
 ] as const satisfies readonly ExperimentEntry[];
 

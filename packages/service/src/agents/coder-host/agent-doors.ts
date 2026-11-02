@@ -67,8 +67,6 @@ import {
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { EVE_MOUNT, eveSessionsComposer } from "../eve-host/eve-sessions.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
-import { runListOpenAsks } from "../operator-desk.js";
-import { isOperator, STEWARD_DELETE_REFUSAL, stewardTaskRefusal } from "../steward.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
 import { runMessageAgent } from "./agent-message.js";
@@ -102,7 +100,6 @@ export type AgentDoorSeams = Pick<
 export interface AgentToolCall {
   readonly tool:
     | typeof CODER_TOOL.LIST_AGENTS
-    | typeof CODER_TOOL.LIST_OPEN_ASKS
     | typeof CODER_TOOL.READ_AGENT
     | typeof CODER_TOOL.MESSAGE_AGENT
     | typeof CODER_TOOL.START_AGENT
@@ -148,7 +145,6 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.DELETE_AUTOMATION]: runDeleteAutomation,
   [CODER_TOOL.RUN_AUTOMATION]: runRunAutomation,
   [CODER_TOOL.LIST_MODELS]: runListModels,
-  [CODER_TOOL.LIST_OPEN_ASKS]: runListOpenAsks,
   [CODER_TOOL.REMEMBER]: runAgentRemember,
   [CODER_TOOL.RECALL]: runAgentRecall,
 } as const;
@@ -180,9 +176,7 @@ function agentHeaderOfConversation(admitted: AdmittedConversation) {
 /**
  * The task a call names, where it stands in the agent's own workspace, as
  * the member whose turn this is reaches it; nothing otherwise, which each
- * tool refuses as no task in its own words. A call that changes the task
- * holds it to the Steward rule beside this (`stewardTaskRefusal`), as
- * `update_task` does, and a read does not. Note that a task of another
+ * tool refuses as no task in its own words. Note that a task of another
  * workspace the member is also in is none of the agent's, as `read_task`
  * reads one, and answers as no task at all.
  */
@@ -211,8 +205,6 @@ export function runAgentEditPlan(
     if (taskId === undefined) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK_NAMED);
     const task = yield* agentTaskOf(admitted, found.success, taskId);
     if (Option.isNone(task)) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK);
-    const refusal = stewardTaskRefusal(found.success, task.value);
-    if (refusal !== undefined) return planEditRejected(refusal);
     const agentId = found.success.id;
     // The plan is written as the member whose turn this is, whoever started the agent.
     const binding = { userId: admitted.caller, taskId };
@@ -268,9 +260,7 @@ export function runAgentOpenPullRequest(
 /**
  * Runs one call of a comment tool (`tasks/comment-tools.ts`) on the plan of
  * the task it names, in the agent's workspace, as the member whose turn it
- * is, written under the agent. Note that a reply, a resolve, and a reopen
- * change the task's threads, so an operator makes them only on its member's
- * own task, while it reads a teammate's, as it reads the task itself.
+ * is, written under the agent.
  */
 export function runAgentComment(
   admitted: AdmittedConversation,
@@ -284,9 +274,6 @@ export function runAgentComment(
     if (taskId === undefined) return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_TASK_NAMED);
     const task = yield* agentTaskOf(admitted, found.success, taskId);
     if (Option.isNone(task)) return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_TASK);
-    const refusal =
-      name === CODER_TOOL.READ_COMMENTS ? undefined : stewardTaskRefusal(found.success, task.value);
-    if (refusal !== undefined) return commentToolRejected(refusal);
     const agentId = found.success.id;
     // The comments are read and written as the member whose turn this is, as `editPlan` writes the plan.
     const writer = {
@@ -360,13 +347,6 @@ export function runAgentTools(
     if (Result.isFailure(found)) return agentToolRejected(found.failure);
     // The agent asking is the one the conversation is, and eve is reached as its starter.
     const sender = found.success;
-    // An operator deletes nothing: it is not offered a delete, and a native harness's call of one is refused.
-    if (
-      (call.tool === CODER_TOOL.DELETE_SECTION || call.tool === CODER_TOOL.DELETE_AUTOMATION) &&
-      isOperator(sender)
-    ) {
-      return agentToolRejected(STEWARD_DELETE_REFUSAL);
-    }
     const secret = seams.deploymentSecret();
     const origin = seams.eveOrigin();
     const compose = yield* eveSessionsComposer;

@@ -66,14 +66,14 @@ export function agentTablesRename(): Effect.Effect<{
   readonly forward: readonly string[];
 }> {
   return Effect.map(migrationStatements(RENAME_AGENT_TABLES), (statements) => {
-    const forward = statements.filter((statement) =>
+    const forward = replayable(statements).filter((statement) =>
       /^ALTER (TABLE|INDEX) "[^"]+" RENAME /u.test(statement),
     );
     return { back: [...forward].reverse().map(undoneRename), forward };
   });
 }
 
-/** The tables a later migration dropped: the attachments' old names (`20261021000416_attachment_views_drop`), Chat's (`drop_chat`), and the cut features' (`drop_retired_storage`). */
+/** The tables a later migration dropped: the attachments' old names (`20261021000416_attachment_views_drop`), Chat's (`drop_chat`), the cut features' (`drop_retired_storage`), and the operator's (`operator_drop`). */
 const DROPPED_TABLES = [
   "chat_attachment",
   "inbox_attachment",
@@ -93,15 +93,21 @@ const DROPPED_TABLES = [
   "voice_transcript_segments",
   "voice_sessions",
   "voice_session_usage",
+  "operator_notice",
+  "operator_wake",
 ] as const;
 
-/** The columns a later migration dropped, by every name each held, and the indexes that went with them: an automation's task (`20261028195432_automation_task_drop`). */
+/** The indexes a later migration dropped on a table that stands, by every name each held: the operator's one per member (`operator_drop`). */
+const DROPPED_INDEXES = ["coding_agent_member_operator", "agent_member_operator"] as const;
+
+/** The columns a later migration dropped, by every name each held, and the indexes that went with them: an automation's task (`20261028195432_automation_task_drop`), and a private memory's member (`operator_drop`). */
 const DROPPED_COLUMNS = [
   {
     table: "automation",
     columns: ["plan_id", "task_id"],
     indexes: ["automation_trigger_plan", "automation_trigger_task"],
   },
+  { table: "memory", columns: ["private_to"], indexes: [] },
 ] as const;
 
 /** Whether the statement names a column since dropped, or an index that went with it. */
@@ -114,11 +120,12 @@ function namesDroppedColumn(statement: string): boolean {
   );
 }
 
-/** An earlier migration's statements as a replay over today's schema can run them: every one naming a table or column since dropped, or an index or constraint named after one, left out. */
+/** An earlier migration's statements as a replay over today's schema can run them: every one naming a table, column, or index since dropped, or an index or constraint named after one, left out. */
 export function replayable(statements: readonly string[]): readonly string[] {
   return statements.filter(
     (statement) =>
       DROPPED_TABLES.every((table) => !statement.includes(`"${table}`)) &&
+      DROPPED_INDEXES.every((index) => !statement.includes(`"${index}"`)) &&
       !namesDroppedColumn(statement),
   );
 }

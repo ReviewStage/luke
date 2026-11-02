@@ -15,10 +15,8 @@ import {
   Button,
   CardPress,
   CHIP_LOOK,
-  CHOICE_BAR_LOOK,
   Chip,
   ChipName,
-  ChoiceBar,
   CONFIRM_LOSS,
   Comment,
   CommentSkeleton,
@@ -71,16 +69,11 @@ import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
  * memory-page.tsx -- Settings › Memory: the facts and conventions the workspace's coding agents kept, found by search and by whose they are, and forgotten one at a time or several at once.
  *
  * A coding agent keeps a memory as it works without asking, and corrects one
- * in place when its developer says otherwise. Most are the workspace's: every
+ * in place when its developer says otherwise. They are the workspace's: every
  * member's agents in it recall them, and nothing crosses into another
- * workspace. A private one is the reader's alone, recalled only by their own
- * agents. So the page splits them as Automations splits its owners, the
- * workspace's and the reader's, but switched by a segmented bar at the top
- * rather than stacked, so the reader's own are one press away however many
- * the workspace keeps; each side counts what the search and the filter leave
- * of it, so a search says at once which side holds its matches.
+ * workspace.
  *
- * Under the bar, a search over the words and their keeper's name
+ * At the top, a search over the words and their keeper's name
  * (`searchTokens`), lit where it landed, and the Tasks page's Filter, its
  * glyph alone with a dot while it keeps anything, whose one field is Kept by,
  * each keeper with their face and how many they kept, and everyone who left
@@ -94,7 +87,7 @@ import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
  * press on it only marks where a run of ⇧-clicks starts. Its ⋯ and a
  * right-click offer Copy words and Forget, which stands unavailable, saying
  * who may, on a memory the reader may not forget: its words are theirs, or
- * they own or administer the workspace, or for a private one, it is theirs.
+ * they own or administer the workspace.
  *
  * Memories are chosen together as the Tasks page's rows are (#5761): the box
  * in a row's gutter under the pointer, X, ⌘- and ⇧-clicks, ⌘A, and Esc. A
@@ -119,17 +112,6 @@ const PAGE_LINE = {
   NO_MATCH: "No memories match",
   CLEAR: "Clear search and filter",
 } as const;
-
-/** Whose memories the page shows: the workspace's, which every member's agents recall, or the reader's own. */
-const MEMORY_SCOPE = {
-  WORKSPACE: "workspace",
-  PERSONAL: "personal",
-} as const;
-
-type MemoryScope = (typeof MEMORY_SCOPE)[keyof typeof MEMORY_SCOPE];
-
-/** What the reader's own side is called, as Automations calls the reader's own automations. */
-const PERSONAL_NAME = "Only you";
 
 /** What the Filter is called, on its tooltip and its menu, and its one field. */
 const FILTER = "Filter";
@@ -208,11 +190,6 @@ interface WordsNode {
 function wordsIn(node: WordsNode): string {
   if (typeof node.value === "string") return node.value;
   return (node.children ?? []).map((child) => wordsIn(child)).join("");
-}
-
-/** The side a memory stands on. */
-function scopeOf(memory: MemorySummary): MemoryScope {
-  return memory.private ? MEMORY_SCOPE.PERSONAL : MEMORY_SCOPE.WORKSPACE;
 }
 
 /** Whom the Kept by filter files a memory under: its keeper, or everyone who left as one. */
@@ -481,11 +458,8 @@ function KeptByChips(props: {
 /** What Forget asks, of one memory or of several, and what it says of those the reader may not forget. */
 function forgetQuestion(asked: readonly MemorySummary[], left: number) {
   const one = asked.length === 1;
-  const mine = asked.every((memory) => memory.private);
   const them = one ? "it" : "them";
-  const body = mine
-    ? `Your Luke will not recall ${them} again in this workspace.`
-    : `No agent will recall ${them} in any later task in this workspace, for anyone.`;
+  const body = `No agent will recall ${them} in any later task in this workspace, for anyone.`;
   const kept =
     left === 0
       ? ""
@@ -499,16 +473,12 @@ function forgetQuestion(asked: readonly MemorySummary[], left: number) {
   };
 }
 
-/** What the list says where it holds nothing: a search or the filter that leaves nothing, or a side that holds nothing yet. */
+/** What the list says where it holds nothing: a search or the filter that leaves nothing, or a workspace that has kept nothing yet. */
 function NothingShown({
   narrowed,
-  scope,
-  total,
   onClear,
 }: {
   narrowed: boolean;
-  scope: MemoryScope;
-  total: number;
   onClear: () => void;
 }): React.JSX.Element {
   if (narrowed) {
@@ -520,25 +490,16 @@ function NothingShown({
       />
     );
   }
-  if (total === 0) return <SettingsLine>{PAGE_LINE.EMPTY}</SettingsLine>;
-  return (
-    <SettingsLine>
-      {scope === MEMORY_SCOPE.PERSONAL
-        ? "Nothing only your agents recall yet."
-        : "Nothing every member's agents recall yet."}
-    </SettingsLine>
-  );
+  return <SettingsLine>{PAGE_LINE.EMPTY}</SettingsLine>;
 }
 
-/** The memories as read: the switcher, the search and the filter, the list, and the bar over what is chosen. */
+/** The memories as read: the search and the filter, the list, and the bar over what is chosen. */
 function MemoryList({
-  workspace,
   readerId,
   memories,
   forgetting,
   onForget,
 }: {
-  workspace: Workspace;
   /** The signed-in account, whose own memories read as You and Me. */
   readerId: string | undefined;
   memories: readonly MemorySummary[];
@@ -549,7 +510,6 @@ function MemoryList({
   const { members, former } = useMemberDirectory();
   const copy = useCopyToast();
   const regionId = useId();
-  const [scope, setScope] = useState<MemoryScope>(MEMORY_SCOPE.WORKSPACE);
   const [query, setQuery] = useState("");
   const [kept, setKept] = useState<ReadonlySet<string>>(new Set());
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -561,13 +521,10 @@ function MemoryList({
     return { memory, actor, keeper };
   });
   const searched = all.filter((each) => matchesTokens([each.memory.text, each.keeper], found));
-  const narrowed = searched.filter(
+  const listed = searched.filter(
     (each) => kept.size === 0 || kept.has(keeperKey(each.memory, each.actor)),
   );
-  const listed = narrowed.filter((each) => scopeOf(each.memory) === scope);
-  const countOf = (side: MemoryScope) =>
-    String(narrowed.filter((each) => scopeOf(each.memory) === side).length);
-  // Note that a memory no longer drawn leaves the selection for good, as a task does, so one a search or the other side hid is not chosen again unasked.
+  // Note that a memory no longer drawn leaves the selection for good, as a task does, so one a search hid is not chosen again unasked.
   const drawn = new Set(listed.map((each) => each.memory.id));
   const standing: ReadonlySet<string> = new Set([...selected].filter((id) => drawn.has(id)));
   if (standing.size !== selected.size) setSelected(standing);
@@ -601,29 +558,11 @@ function MemoryList({
     setQuery("");
     setKept(new Set());
   };
-  const keepers = keepersOf(searched.filter((each) => scopeOf(each.memory) === scope));
+  const keepers = keepersOf(searched);
   return (
     <SettingsSection anchor={SETTINGS_SEARCH_ROW.MEMORY} frame={SETTINGS_SECTION_FRAME.NONE}>
       <Stack gap={GAP.SECTION}>
         <Stack gap={GAP.CONTROL}>
-          <ChoiceBar<MemoryScope>
-            label="Whose memories"
-            look={CHOICE_BAR_LOOK.SEGMENTED}
-            value={scope}
-            onChange={setScope}
-            items={[
-              {
-                value: MEMORY_SCOPE.WORKSPACE,
-                label: workspace.name,
-                count: countOf(MEMORY_SCOPE.WORKSPACE),
-              },
-              {
-                value: MEMORY_SCOPE.PERSONAL,
-                label: PERSONAL_NAME,
-                count: countOf(MEMORY_SCOPE.PERSONAL),
-              },
-            ]}
-          />
           <div className={SEARCH_LINE}>
             <SearchField
               label="Search memories"
@@ -639,12 +578,7 @@ function MemoryList({
           <KeptByChips keepers={keepersOf(all)} kept={kept} onKept={setKept} />
         </Stack>
         {listed.length === 0 ? (
-          <NothingShown
-            narrowed={found.length > 0 || kept.size > 0}
-            scope={scope}
-            total={memories.length}
-            onClear={clear}
-          />
+          <NothingShown narrowed={found.length > 0 || kept.size > 0} onClear={clear} />
         ) : (
           <SelectionRegion id={regionId} selection={{ selected: standing, onChange: setSelected }}>
             <ul className={MEMORY_LIST}>
@@ -826,7 +760,6 @@ export function MemorySection({
         // Note that the keepers are read in the workspace Settings shows, which may not be the one the window's tasks stand in.
         <MemberDirectory workspace={workspace} readerId={readerId}>
           <MemoryList
-            workspace={workspace}
             readerId={readerId}
             memories={memories}
             forgetting={forgetting !== undefined}

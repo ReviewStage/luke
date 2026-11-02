@@ -37,8 +37,7 @@ import {
  * cron in a known zone, no more often than every fifteen minutes, which the
  * desktop checks with the same module before it sends), a model choice must
  * be one the catalog offers the account, and the task must name a
- * repository, but for an automation aimed at the account's own operator,
- * which works in none; those checks, and the webhook secret a write mints,
+ * repository; those checks, and the webhook secret a write mints,
  * are `automation-writes.ts`'s, which the agents' automation tools write
  * through too.
  *

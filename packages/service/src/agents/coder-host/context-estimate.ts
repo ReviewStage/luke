@@ -32,7 +32,6 @@ import {
 import { BROWSER_TOOL } from "../browser/browser-tool.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { RECALL_TOOL, REMEMBER_TOOL } from "../memory-tools.js";
-import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";
 import { READ_WEB_PAGE_TOOL } from "../public-research.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
@@ -136,10 +135,6 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.MOVE_THREAD]: {
     description: INBOX_TOOLS.MOVE_THREAD.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.MOVE_THREAD.inputSchema),
-  },
-  [CODER_TOOL.LIST_OPEN_ASKS]: {
-    description: LIST_OPEN_ASKS_TOOL.description,
-    inputSchema: emitJsonSchema(LIST_OPEN_ASKS_TOOL.inputSchema),
   },
   [CODER_TOOL.OPEN_PULL_REQUEST]: {
     description: OPEN_PULL_REQUEST_TOOL.description,

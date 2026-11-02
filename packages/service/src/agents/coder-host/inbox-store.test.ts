@@ -24,7 +24,7 @@ import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
 import { task as taskTable } from "@luke/database/schemas/task";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import type { AccountInboxTask } from "@luke/features/account-inbox-wire";
-import { AGENT_ATTACHMENT_TYPE, AGENT_KIND, type AgentAttachment } from "@luke/features/agent-wire";
+import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -115,8 +115,7 @@ import { accountInboxPast, agentInboxPast, taskInboxPast } from "./inbox-page.js
  * workspace's members as one on a task does to its task's, a member writes
  * on an item's thread whatever its status, which moves the item's last
  * change and nothing else of it, and nothing of a workspace the account is
- * not in is read or written. A member's operator's items are that member's
- * alone. On Luke Sync, a task's, an agent's, and the account's held reads
+ * not in is read or written. On Luke Sync, a task's, an agent's, and the account's held reads
  * each answer an agent's post within a coalesce window.
  *
  * Synthetic accounts, tasks, and words throughout.
@@ -1838,83 +1837,6 @@ it.layer(getTestDB())("a member's writes on an item", (it) => {
   );
 });
 
-it.layer(getTestDB())("the inbox store's operator, private to its member", (it) => {
-  it.effect(
-    "a teammate reads, counts, answers, closes, and writes on none of a member's operator's items, nor is addressed one, while its member reads, answers, and is addressed them",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openUser;
-        const teammate = yield* openUser;
-        const workspaceId = yield* openWorkspace(owner);
-        yield* joinWorkspace(workspaceId, teammate);
-        const operator = Option.getOrThrow(
-          yield* createAgent(owner, {
-            taskId: null,
-            organizationId: workspaceId,
-            planSnapshot: null,
-            prompt: null,
-            kind: AGENT_KIND.OPERATOR,
-            idempotencyKey: randomUUID(),
-            model: "anthropic/claude-opus-5.5",
-            effort: "high",
-            repository: null,
-          }),
-        ).agent;
-        const operatorAgent = { userId: owner, taskId: null, agentId: operator.id };
-        const posted = yield* post(operatorAgent);
-        const addressed = (key: string, addresseeId: string) =>
-          postInboxThread(operatorAgent, { ...SETTINGS, key, addresseeId });
-        const stampIds = (userId: string) =>
-          Effect.map(accountWaitingStamps(userId), (stamps) => stamps.map((stamp) => stamp.id));
-
-        assert.deepEqual(
-          [
-            Option.isNone(yield* readInboxItem(teammate, posted.id)),
-            (yield* stampIds(teammate)).includes(posted.id),
-            Option.isNone(
-              yield* postInboxMessage(teammate, posted.id, {
-                text: "Done it for you.",
-                clientKey: randomUUID(),
-              }),
-            ),
-            Option.isNone(
-              yield* closeInboxItemAsMember(teammate, posted.id, posted.revision, randomUUID()),
-            ),
-            Option.isNone(yield* answerDone(teammate, posted)),
-          ],
-          [true, false, true, true, true],
-        );
-        assert.deepEqual(
-          yield* addressed("for-teammate", teammate),
-          Result.fail(INBOX_POST_REFUSAL.NOT_ITS_MEMBER),
-        );
-        assert.ok(Result.isSuccess(yield* addressed("for-owner", owner)));
-
-        assert.ok((yield* stampIds(owner)).includes(posted.id));
-        // Note that the account's read carries an agent with no repository only to a reader that asks for one, as an older build would fail on its null.
-        const planlessOf = (userId: string, repositoryless: boolean) =>
-          Effect.map(
-            accountInboxPast(userId, INBOX_CURSOR_START, repositoryless),
-            (answer) => answer.planless ?? [],
-          );
-        const carried = (yield* planlessOf(owner, true)).find((each) => each.id === posted.id);
-        assert.deepEqual(
-          [carried?.id, carried?.agentKind, carried?.repository, carried?.channelId !== undefined],
-          [posted.id, AGENT_KIND.OPERATOR, null, true],
-          "its member's read carries the operator's ask, its kind, and its channel",
-        );
-        assert.deepEqual(
-          [(yield* planlessOf(owner, false)).length, (yield* planlessOf(teammate, true)).length],
-          [0, 0],
-          "an older build's read carries none, nor a teammate's",
-        );
-        const read = Option.getOrThrow(yield* readInboxItem(owner, posted.id));
-        assert.equal(read.item.status, INBOX_STATUS.OPEN, "nothing the teammate tried landed");
-        assert.ok(Option.isSome(yield* answerDone(owner, posted)));
-      }),
-  );
-});
-
 it.layer(getTestDB())("who an inbox item waits on", (it) => {
   /** A plan's inbox as the desktop builds it from the live rows. */
   const liveTaskInbox = (readerId: string, taskId: string) =>
@@ -2048,27 +1970,13 @@ it.layer(getTestDB())("who an inbox item waits on", (it) => {
   );
 
   it.effect(
-    "a settled item still unread of an agent with no task, the member's operator's among them, is counted in the account's read of its starter alone, never a teammate's",
+    "a settled item still unread of an agent with no task is counted in the account's read of its starter alone, never a teammate's",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openTasklessAgent;
         const owner = agent.userId;
         const teammate = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
-        const operator = Option.getOrThrow(
-          yield* createAgent(owner, {
-            taskId: null,
-            organizationId: workspaceId,
-            planSnapshot: null,
-            prompt: null,
-            kind: AGENT_KIND.OPERATOR,
-            idempotencyKey: randomUUID(),
-            model: "anthropic/claude-opus-5.5",
-            effort: "high",
-            repository: null,
-          }),
-        ).agent;
-        const operatorAgent = { userId: owner, taskId: null, agentId: operator.id };
         // Each answered by the owner, then written on again by its agent: settled, and unread for the owner.
         const settledOf = (of: InboxAgent) =>
           Effect.gen(function* () {
@@ -2079,13 +1987,12 @@ it.layer(getTestDB())("who an inbox item waits on", (it) => {
             return item.id;
           });
         const coder = yield* settledOf(agent);
-        const operated = yield* settledOf(operatorAgent);
         const stampIds = (readerId: string) =>
           Effect.map(accountWaitingStamps(readerId), (stamps) => stamps.map((stamp) => stamp.id));
 
         assert.deepEqual(
           [(yield* stampIds(owner)).toSorted(), yield* stampIds(teammate)],
-          [[coder, operated].toSorted(), []],
+          [[coder], []],
         );
       }),
   );

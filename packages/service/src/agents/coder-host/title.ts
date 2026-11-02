@@ -11,7 +11,7 @@ import { nameUntitledTask } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { StoredAutomationOrigin } from "@luke/database/schemas/agent";
 import { firstMessageParts } from "@luke/features/agent-replay";
-import { AGENT_BOUNDS, AGENT_KIND } from "@luke/features/agent-wire";
+import { AGENT_BOUNDS } from "@luke/features/agent-wire";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { titlesNothing } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
@@ -437,9 +437,7 @@ export function titleInboxThread(
  * exchange with no words in it asks nothing. A call that answers nothing
  * writes nothing, so the next words or turn's end ask again. The title
  * written also names the agent's task where it still stands untitled.
- * With no model the title is cut from the opening's first words. An
- * operator is never titled, since it goes by Luke wherever it is named and
- * a title would leak through every read that takes the plain title.
+ * With no model the title is cut from the opening's first words.
  */
 export function titleAgent(
   model: LanguageModel | undefined,
@@ -447,7 +445,7 @@ export function titleAgent(
   agent: Agent,
 ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.gen(function* () {
-    if (agent.title !== null || agent.kind === AGENT_KIND.OPERATOR) return;
+    if (agent.title !== null) return;
     const title = yield* titleOfConversation(model, target, CODER_TOOL_SET, agent.automationOrigin);
     if (Option.isNone(title)) return;
     yield* titledWithTask(target.userId, agent, title.value);

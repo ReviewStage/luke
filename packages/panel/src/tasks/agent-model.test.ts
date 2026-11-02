@@ -8,7 +8,6 @@ import {
   CHECK_SUMMARY,
   CONTEXT_WINDOW,
   LOCAL_AGENT_REFUSAL,
-  OPERATOR_QUIET_REPLY,
   PULL_REQUEST_STATE,
 } from "@luke/features/agent-wire";
 import { FAILURE_REASON, remedyLabel } from "@luke/features/failure-remedy";
@@ -152,7 +151,7 @@ test("a line after a turn still open is placed in that turn, unless it did not g
   };
   const steer = developer("m-3", "Use the mailer.");
   const placed = (unsent: (id: string) => boolean) =>
-    placedMessages([ask, open, steer], false, unsent).map((each) => [
+    placedMessages([ask, open, steer], unsent).map((each) => [
       each.message.id,
       each.arrived.map((line) => line.id),
     ]);
@@ -169,47 +168,6 @@ test("a line after a turn still open is placed in that turn, unless it did not g
       ["m-1", []],
       ["m-2", []],
       ["m-3", []],
-    ],
-  );
-});
-
-test("an operator's heartbeat that found nothing draws no reply, a line it took in stands in order, and a reply that says more, or any other agent's, is drawn", () => {
-  const heartbeat = developer("m-1", "Your heartbeat: look over the developer's open work.");
-  const quiet: AgentTranscriptMessage = {
-    id: "m-2",
-    role: MESSAGE_ROLE.ASSISTANT,
-    parts: [{ type: "step-start" }, { type: "text", text: `${OPERATOR_QUIET_REPLY}\n` }],
-  };
-  const typed: AgentTranscriptMessage = {
-    ...developer("m-3", "Anything new?"),
-    arrivedIn: { journalId: "m-2", afterStep: 1 },
-  };
-  const said: AgentTranscriptMessage = {
-    id: "m-4",
-    role: MESSAGE_ROLE.ASSISTANT,
-    parts: [{ type: "text", text: `Stopped Ana. ${OPERATOR_QUIET_REPLY}` }],
-  };
-  assert.deepEqual(
-    placedMessages([heartbeat, quiet, typed, said], true).map((each) => [
-      each.message.id,
-      each.arrived.map((line) => line.id),
-    ]),
-    [
-      ["m-1", []],
-      ["m-3", []],
-      ["m-4", []],
-    ],
-  );
-  // Any other agent's reply is drawn whatever it says.
-  assert.deepEqual(
-    placedMessages([heartbeat, quiet, typed, said]).map((each) => [
-      each.message.id,
-      each.arrived.map((line) => line.id),
-    ]),
-    [
-      ["m-1", []],
-      ["m-2", ["m-3"]],
-      ["m-4", []],
     ],
   );
 });

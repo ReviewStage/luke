@@ -132,7 +132,6 @@ export const FAILURE_SURFACE = {
   MESSAGE_EDIT: "message.edit",
   MESSAGE_REVEAL: "message.reveal",
   MODELS_READ: "models.read",
-  OPERATOR_RESET: "operator.reset",
   PAGE_READ: "page.read",
   PALETTE_READ: "palette.read",
   PERSON_AUTOMATIONS_READ: "person_automations.read",

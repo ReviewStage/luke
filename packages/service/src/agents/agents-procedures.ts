@@ -16,11 +16,7 @@
  * hands the agent nothing and reaches no eve. A Start from an agent
  * (`POST /api/agents/{id}/agents`) takes the same path in the place that
  * agent stands in, its task or, with none, its workspace and repository,
- * and answers alike. The asking member's operator in a workspace
- * (`PUT /api/workspaces/{id}/operator`) is ensured on that same path
- * (`coder-host/operator.ts`), or reset and ensured afresh where the body
- * asks, and answered by its id; it reaches no eve, since an operator is
- * made with no session. The calls into an agent
+ * and answers alike. The calls into an agent
  * (`GET /api/agents/{id}/calls`) are read as a task's are, by the agent. A change
  * (`PATCH /api/agents/{id}`) names one of a title, an archive, a pin, the
  * MCP servers switched off, or a model and effort, and answers the agent as
@@ -48,7 +44,6 @@ import {
   listAgentLines,
   listWorkspaceAgentLines,
   nativeRuntimesOfReached,
-  operatorReplaced,
   pinAgentCommitted,
   readAgentUnderPilot,
   readVisibleAgentWorkspace,
@@ -88,7 +83,6 @@ import { accountMiddleware, hosted } from "../orpc/base.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
 import { controlsAgent, reachedAgentById } from "./agent-reach.js";
 import { askedPullRequest, githubReadRefusal, pullRequestNumberOf } from "./asked-pull-request.js";
-import { ensureOperator } from "./coder-host/operator.js";
 import {
   agentPullRequestReach,
   instancePublishedCache,
@@ -428,29 +422,6 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       );
       return startAnswer(started);
     }),
-    /**
-     * The asking member's operator in the workspace the path names, the one
-     * standing or one made blank now, after the standing one is archived
-     * where the body asks for a Reset, or the member's own archived one
-     * the body names brought back in its place (`coder-host/operator.ts`).
-     */
-    ensureOperator: signedIn.ensureOperator.effect(function* ({ input, context }) {
-      const { agent, txid, retired } = yield* ensureOperator(
-        eveFor<EveTypedTurn>(seams, context.request, context.userId),
-        context.userId,
-        input.params.id,
-        {
-          reset: input.body.reset === true,
-          restore: input.body.restore,
-          timeZone: input.body.timeZone,
-          stopStanding: (standing) =>
-            stoppedForGood(seams, writer, context.request, context.userId, standing),
-        },
-      );
-      // The operator a Reset archived has its sandbox stopped, as an archive by hand stops one.
-      if (retired !== undefined) yield* stoppedInBackground(seams, [retired]);
-      return txid === undefined ? { agentId: agent.id } : { agentId: agent.id, txid };
-    }),
     /** The agent as its own page, an agent with no task as much as one on a task. */
     read: signedIn.read.effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.id);
@@ -502,9 +473,6 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         if (body.archived) {
           // An archived agent works on unseen, so a turn still running is stopped before the stamp.
           yield* stoppedForGood(seams, writer, context.request, userId, agent);
-        } else if (yield* hostedStoreOrUnavailable(operatorReplaced(userId, agent.id))) {
-          // An operator a Reset replaced stays archived while the fresh one stands.
-          return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
         }
         const archived = yield* hostedStoreOrUnavailable(
           archiveAgentCommitted(userId, agent.id, body.archived),

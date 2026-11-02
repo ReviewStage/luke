@@ -7,7 +7,6 @@ import { createTask, readTask } from "@luke/database/models/task-store";
 import { messages } from "@luke/database/schemas/storage";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { firstMessageText, REPLAY_STEP_KIND } from "@luke/features/agent-replay";
-import { AGENT_KIND } from "@luke/features/agent-wire";
 import { AUTOMATION_FIRING, GITHUB_TRIGGER_EVENT } from "@luke/features/automation-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
@@ -176,38 +175,6 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
       yield* titledAs(owner, agent, "Expire teammate invitations");
 
       assert.equal(yield* taskName(owner, task.id), "Untitled");
-    }),
-  );
-});
-
-it.layer(getTestDB())("an operator's title", (it) => {
-  it.effect("an operator is never titled, so no read that takes the plain title names it", () =>
-    Effect.gen(function* () {
-      const owner = yield* openGithubUser();
-      const organizationId = yield* openWorkspace(owner);
-      const started = Option.getOrThrow(
-        yield* createAgent(owner, {
-          taskId: null,
-          organizationId,
-          planSnapshot: null,
-          prompt: null,
-          kind: AGENT_KIND.OPERATOR,
-          idempotencyKey: randomUUID(),
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          repository: null,
-        }),
-      );
-      const operator = yield* openedOn(
-        owner,
-        started.agent,
-        "Read my open work and say what stands.",
-      );
-
-      yield* titledAs(owner, operator, "Review open work");
-
-      const read = Option.getOrThrow(yield* readAgent(owner, operator.id));
-      assert.equal(read.title, null);
     }),
   );
 });

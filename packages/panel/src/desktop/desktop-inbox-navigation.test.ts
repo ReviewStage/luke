@@ -6,7 +6,6 @@ import {
   type AgentInboxStartParams,
   INBOX_SCOPE_KIND,
 } from "@luke/features/agent-view";
-import { AGENT_KIND } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -458,22 +457,21 @@ const SWEEP: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-const LUKE_AGENT = "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e";
+const TASKLESS_AGENT = "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e";
 const DOMAIN: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-00000000000d", "Name a domain?", 1_200),
-  agentId: LUKE_AGENT,
+  agentId: TASKLESS_AGENT,
 };
 
-/** An item of the reader's operator, Luke, as main lists it: no task, no automation, and no repository. */
-function lukeTaskless(asked: InboxItem): AppInboxTasklessItem {
+/** An item of an agent of the reader's with no task, as main lists it: no automation, and no repository. */
+function tasklessItem(asked: InboxItem): AppInboxTasklessItem {
   return {
     id: asked.id,
     agentId: asked.agentId,
-    agentKind: AGENT_KIND.OPERATOR,
     title: asked.title,
     postedAt: asked.postedAt,
     updatedAt: asked.updatedAt,
-    agentTitle: "Luke",
+    agentTitle: "Domain setup",
     agentModel: "anthropic/claude-opus-5.5",
     automationId: null,
     automationName: null,
@@ -482,7 +480,7 @@ function lukeTaskless(asked: InboxItem): AppInboxTasklessItem {
   };
 }
 
-test("an agent's row hangs a card naming the agent and the automation that started it; its crumb wears the automation's clock tile and hangs its card, opening its page; the agents no automation names stand under no actor; the member's operator stands under Luke, by his face", async () => {
+test("an agent's row hangs a card naming the agent and the automation that started it; its crumb wears the automation's clock tile and hangs its card, opening its page; the agents no automation names stand under no actor", async () => {
   handState({});
   world.listedWorkspace = {
     id: "workspace-acme",
@@ -494,12 +492,12 @@ test("an agent's row hangs a card naming the agent and the automation that start
   world.agentInboxes = new Map([
     [SWEEP_AGENT, [QUARANTINE]],
     [STRAY_AGENT, [BUMP]],
-    [LUKE_AGENT, [DOMAIN]],
+    [TASKLESS_AGENT, [DOMAIN]],
   ]);
   const { page, asked } = mount([
     { ...waitingTaskless(QUARANTINE), agentTitle: "Sweep the flaky tests" },
     { ...waitingTaskless(BUMP), automationId: null, automationName: null },
-    lukeTaskless(DOMAIN),
+    tasklessItem(DOMAIN),
   ]);
   await settle();
 
@@ -545,13 +543,6 @@ test("an agent's row hangs a card naming the agent and the automation that start
     stray?.querySelector(".lucide-zap"),
     "it wears the automation glyph, as its group does",
   );
-
-  act(() => rowNamed(page, "Name a domain?").click());
-  await settle();
-  // Note that the title joins the path only once the heading scrolls away, so his own crumb stands alone.
-  const path = [...page.querySelectorAll<HTMLElement>('nav[aria-label="Path"] li')];
-  assert.equal(path.length, 1, "his path names him once, under no group");
-  assert.ok(path[0]?.querySelector(".luke-face"), "his crumb wears his face");
 });
 
 test("an item's card names the automation that holds it by a chip that hangs the automation's card, read as it is hung where the Inbox has read no automations", async () => {
@@ -1694,14 +1685,14 @@ function sidebarRowCount(page: HTMLElement, name: string): number | undefined {
   return count === undefined ? undefined : Number(count);
 }
 
-test("the channels' counts add up to the Inbox's, Luke's question among them, but for one in an archived channel, which has no row, and neither counts another workspace's", async () => {
+test("the channels' counts add up to the Inbox's, a taskless agent's question among them, but for one in an archived channel, which has no row, and neither counts another workspace's", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
   // Note that the service's own tally of each channel is not what a row counts, so it is set wrong here.
   answerChannels({
     channels: () => [GENERAL, APP_CHANNEL].map((each) => ({ ...each, waiting: 5 })),
   });
-  world.agentInboxes = new Map([[LUKE_AGENT, [DOMAIN]]]);
+  world.agentInboxes = new Map([[TASKLESS_AGENT, [DOMAIN]]]);
   const waiting: readonly AppInboxTask[] = [
     { taskId: BILLING.id, items: [waitingOf({ ...THRESHOLD, channelId: GENERAL.id })] },
     { taskId: INVITES.id, items: [waitingOf({ ...EXPIRY, channelId: APP_CHANNEL.id })] },
@@ -1709,16 +1700,16 @@ test("the channels' counts add up to the Inbox's, Luke's question among them, bu
   const archived = "c0ffee00-0000-4000-8000-000000000009";
   const { page } = mount(
     [
-      { ...lukeTaskless({ ...DOMAIN, channelId: APP_CHANNEL.id }), workspaceId: ACME.id },
+      { ...tasklessItem({ ...DOMAIN, channelId: APP_CHANNEL.id }), workspaceId: ACME.id },
       {
-        ...lukeTaskless({ ...BUMP, agentId: LUKE_AGENT, channelId: archived }),
+        ...tasklessItem({ ...BUMP, agentId: TASKLESS_AGENT, channelId: archived }),
         workspaceId: ACME.id,
       },
       // Note that another workspace's question is set in #general's place, so it would show on that row were it counted.
       {
-        ...lukeTaskless({
+        ...tasklessItem({
           ...item("a1b2c3d4-0000-4000-8000-00000000000e", "Rotate the beta key?", 1_100),
-          agentId: LUKE_AGENT,
+          agentId: TASKLESS_AGENT,
           channelId: GENERAL.id,
         }),
         workspaceId: "workspace-beta",
@@ -1727,11 +1718,15 @@ test("the channels' counts add up to the Inbox's, Luke's question among them, bu
     { withSidebar: true, waiting },
   );
   await settle();
-  assert.equal(sidebarRowCount(page, "Inbox"), 4, "both tasks' questions and Luke's two");
+  assert.equal(
+    sidebarRowCount(page, "Inbox"),
+    4,
+    "both tasks' questions and the taskless agent's two",
+  );
   assert.deepEqual(
     [sidebarRowCount(page, "general"), sidebarRowCount(page, "app")],
     [1, 2],
-    "the channels count three of them, Luke's in #app among them, the archived channel's on no row",
+    "the channels count three of them, the taskless agent's in #app among them, the archived channel's on no row",
   );
 });
 

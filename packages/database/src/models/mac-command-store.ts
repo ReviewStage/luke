@@ -1,4 +1,3 @@
-import { AGENT_KIND } from "@luke/features/agent-wire";
 import {
   AUTOMATION_FIRING,
   AUTOMATION_RUN_STATUS,
@@ -235,7 +234,7 @@ const sendingAgent = alias(agentTable, "sending_agent");
 /** The root's developer lines before one of them, read for whether it is the first, the prompt the agent was started on. */
 const earlierLine = alias(messages, "earlier_line");
 
-/** The agent the root conversation is of, read for whether it is an operator, whether it was started on a prompt or a plan at all, and what fired the automation's run that started it. */
+/** The agent the root conversation is of, read for whether it was started on a prompt or a plan at all, and what fired the automation's run that started it. */
 const startedAgent = alias(agentTable, "started_agent");
 
 /** The firings whose run hands its agent words its owner did not write beside the automation's prompt. */
@@ -307,8 +306,7 @@ export type ForeignLine = typeof ForeignLineSchema.Type;
  * as the line says itself (`outside_words`); a line kept before it said
  * counts where the run that started the agent was so fired, or a run so
  * fired was sent to it while its automation stands. A schedule's run and a
- * "Run now" carry the owner's prompt alone, so an operator's heartbeat is
- * its owner's. A GitHub line counts where it carries a review's or a
+ * "Run now" carry the owner's prompt alone. A GitHub line counts where it carries a review's or a
  * comment's words by a person other than the owner, which on a public
  * repository anyone may write, as the line says itself (`outside_words`,
  * `github/agent-wakes.ts`); an App's words never count. A line kept before
@@ -322,12 +320,7 @@ export type ForeignLine = typeof ForeignLineSchema.Type;
  * with its sender (`coder-host/start.ts`), unless the automation's run that
  * started the agent was fired by words its owner did not write, which that
  * first line holds. A blank agent was started on
- * none, so its first line is whoever's first steer, and counts. An
- * operator's untagged lines are its owner's and never count, because its
- * conversation is its owner's alone: anyone else's words reach it tagged,
- * and its untagged lines are the opening eve's relay wrote before the
- * service sent it as Luke's (`coder-host/operator.ts`) and its owner's own
- * from before senders were kept. A line its hand-over withdrew counts as
+ * none, so its first line is whoever's first steer, and counts. A line its hand-over withdrew counts as
  * well, unlike in every read that shows a line, because eve may still hand
  * it to a turn (`writer.ts`'s `withdrawUntakenLine`).
  */
@@ -383,7 +376,6 @@ const findForeignLine = SqlSchema.findOneOption({
               and(
                 eq(messages.role, MESSAGE_ROLE.USER),
                 isNull(messages.sender),
-                or(isNull(startedAgent.kind), ne(startedAgent.kind, AGENT_KIND.OPERATOR)),
                 or(
                   and(isNull(startedAgent.prompt), isNull(startedAgent.planSnapshot)),
                   STARTED_ON_OUTSIDE_WORDS,
@@ -432,8 +424,7 @@ export function macListeningSince(userId: string, since: Date): TaskStoreEffect<
  * another member sent, one an agent that is not the owner's own sent, one an
  * automation sent with words its owner did not write, such as a webhook's
  * body, one GitHub sent with a review or a comment by a person other than
- * the owner, or one whose sender was never kept past the opening prompt, of
- * an agent that is not an operator, in the conversation
+ * the owner, or one whose sender was never kept past the opening prompt, in the conversation
  * or, for a worker's, in the agent's it was delegated from. Note that a line
  * the service itself sends, such as a wakeup or a failed check, is not
  * counted, because no other account wrote it.

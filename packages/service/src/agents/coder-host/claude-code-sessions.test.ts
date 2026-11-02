@@ -30,7 +30,6 @@ import {
 import { readNativeRewind, rewindConversation } from "@luke/database/models/conversation-rewind";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import { installSkill } from "@luke/database/models/installed-skill-store";
-import { unreadOperatorNotices, writeOperatorNotice } from "@luke/database/models/operator-notices";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
   removeProviderKey,
@@ -44,9 +43,9 @@ import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { messages, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_RUNTIME, OPERATOR_NOTICE_KIND } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
-import { AGENT_FAILURE, AGENT_KIND, AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
+import { AGENT_FAILURE, AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -107,7 +106,6 @@ import {
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { RUNNER_TAG, vercelMachineLayer } from "../machine/vercel-machine.js";
 import { NATIVE_TEMPLATE } from "../native-sandbox-template.js";
-import { DESK_LEAD } from "../operator-desk.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { REPOSITORY_SNAPSHOT } from "../repository-snapshot.js";
@@ -283,23 +281,6 @@ const textsOf = (command: Parameters<typeof launchLines>[0]) =>
         ? [each.content.map((block) => (block.type === "text" ? block.text : ""))]
         : [],
     ),
-  );
-
-/** The account's operator in the agent's workspace, on the same plan. */
-const openOperator = (userId: string, agent: Agent) =>
-  Effect.map(
-    createAgent(userId, {
-      taskId: null,
-      organizationId: agent.organizationId,
-      idempotencyKey: `operator-${randomUUID()}`,
-      model: "anthropic/claude-opus-5.5",
-      effort: "high",
-      planSnapshot: null,
-      prompt: null,
-      repository: null,
-      kind: AGENT_KIND.OPERATOR,
-    }),
-    (started) => Option.getOrThrow(started).agent,
   );
 
 /** A turn of the agent's under way, as the events route queues one, by the id a Stop names it by. */
@@ -2831,50 +2812,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           typedAfter?.[0] ?? "",
         );
         assert.deepEqual(typedAfter?.slice(1), ["Also the docs."]);
-      }),
-  );
-
-  it.effect(
-    "an operator's first message opens with its desk, a notice reaches the message the runner took and is read once, and a later message hands the desk again only where it changed",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = runnerSandboxApi();
-        const { userId, agent } = yield* openAgent;
-        const operator = yield* openOperator(userId, agent);
-        const sequence = { next: 0 };
-        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
-        const opened = yield* sessions.open(message(operator, "What stands?"));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        // The member's agent settled a turn, which the desk tells of once. The runner is gone by
-        // the time the next write lands, so the message relaunches it: the notice goes with the
-        // message the new runner takes, not with the line the old one never took.
-        yield* writeOperatorNotice(
-          { agentId: agent.id },
-          OPERATOR_NOTICE_KIND.TURN_SETTLED,
-          new Date(yield* Clock.currentTimeMillis),
-        );
-        yield* runnerTook(operator.id);
-        sequence.next = 1;
-        const gone = api.commands[0];
-        assert.ok(gone !== undefined);
-        gone.exitCode = 0;
-
-        const sent = yield* sessions.send(opened.sessionId, message(operator, "And now?"));
-        const again = yield* sessions.send(opened.sessionId, message(operator, "Anything else?"));
-
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.equal(again.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.equal(api.commands.length, 2);
-        const [first] = yield* textsOf(api.commands[0]);
-        const [told, later] = yield* textsOf(api.commands[1]);
-        assert.ok(first?.[0]?.includes(DESK_LEAD), first?.[0] ?? "");
-        assert.deepEqual(first?.slice(1), ["What stands?"]);
-        assert.ok(told?.[0]?.includes("New since your last turn"), told?.[0] ?? "");
-        assert.deepEqual(told?.slice(1), ["And now?"]);
-        assert.ok(!later?.[0]?.includes(DESK_LEAD), later?.[0] ?? "");
-        assert.deepEqual(later?.slice(1), ["Anything else?"]);
-        assert.deepEqual(yield* unreadOperatorNotices(operator.id, 10), []);
       }),
   );
 

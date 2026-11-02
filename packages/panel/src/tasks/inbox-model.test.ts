@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { AGENT_KIND } from "@luke/features/agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -797,7 +796,7 @@ function waitingTaskless(
   };
 }
 
-test("each item of an agent with no plan is held by its agent, named by the automation that started it, the member's operator as Luke, the unnamed ones alike, and only the listed workspace's are listed", () => {
+test("each item of an agent with no plan is held by its agent, named by the automation that started it, the unnamed ones alike, and only the listed workspace's are listed", () => {
   // An item from a service before workspaces were named, which stands in every workspace's list.
   const { workspaceId: _unnamed, ...unnamedWorkspace } = waitingTaskless("agent-5", {
     automationId: "automation-old",
@@ -810,12 +809,6 @@ test("each item of an agent with no plan is held by its agent, named by the auto
     waitingTaskless("agent-3", { automationId: null, automationName: null }),
     waitingTaskless("agent-4", { workspaceId: "workspace-beta" }),
     unnamedWorkspace,
-    waitingTaskless("agent-6", {
-      agentKind: AGENT_KIND.OPERATOR,
-      automationId: null,
-      automationName: null,
-      repository: null,
-    }),
   ];
   const read = new Map([
     ["agent-1", [item({ id: "one", agentId: "agent-1", updatedAt: 60 })]],
@@ -829,7 +822,6 @@ test("each item of an agent with no plan is held by its agent, named by the auto
     ["agent-3", [item({ id: "three", agentId: "agent-3", updatedAt: 40 })]],
     ["agent-4", [item({ id: "four", agentId: "agent-4", updatedAt: 30 })]],
     ["agent-5", [item({ id: "five", agentId: "agent-5", updatedAt: 25 })]],
-    ["agent-6", [item({ id: "six", agentId: "agent-6", updatedAt: 20 })]],
   ]);
   const view = inboxList(agentGroups(waiting, read, "workspace-acme"), {
     show: INBOX_SHOW.ALL,
@@ -848,7 +840,6 @@ test("each item of an agent with no plan is held by its agent, named by the auto
       ["two", "agent-2", "Nightly flake sweep"],
       ["three", "agent-3", "Other agents"],
       ["five", "agent-5", "Old"],
-      ["six", "agent-6", "Luke"],
       ["settled", "agent-2", "Nightly flake sweep"],
     ],
   );

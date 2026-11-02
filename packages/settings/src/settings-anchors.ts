@@ -53,7 +53,6 @@ export const SETTINGS_SEARCH_ROW = {
  * without one.
  */
 export const EXPERIMENT_ANCHOR = {
-  [EXPERIMENT.OPERATOR]: "experiment-operator",
   [EXPERIMENT.MEMORY]: "experiment-memory",
   [EXPERIMENT.CHANNELS]: "experiment-channels",
   [EXPERIMENT.PILOT]: "experiment-pilot",

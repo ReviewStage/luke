@@ -1,6 +1,6 @@
 import { isWireUuid } from "@luke/features";
 import { MEMORY_BOUNDS } from "@luke/features/memory-wire";
-import { and, desc, eq, isNull, or } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -9,7 +9,7 @@ import { memory } from "../schemas/memory.js";
 import { InstantColumnSchema } from "./columns.js";
 
 /**
- * memory-store.ts -- a workspace's memories, shared or private to one member, kept and corrected by its coding agents and read and forgotten from Settings.
+ * memory-store.ts -- a workspace's memories, shared by its members, kept and corrected by its coding agents and read and forgotten from Settings.
  *
  * Every function is an effect over the ambient `SqlClient`, keyed by the
  * workspace, so no workspace reads, corrects, or forgets another's memory:
@@ -25,14 +25,8 @@ import { InstantColumnSchema } from "./columns.js";
  * the row, and only for the member whose words it holds or one who manages
  * the workspace. A memory outlives the account whose words it holds, as a
  * workspace's git history outlives its committers: its member is then null.
- *
- * A private memory is one member's alone (`private_to`): only that member
- * reads, corrects, and forgets it, and to everyone else its id reads exactly
- * as an id that names nothing, a manager included. The same words kept twice
- * stand once only within one visibility, so a private memory never folds into
- * a shared one or the reverse, and a correction keeps the visibility of the
- * memory it corrects. The workspace's bound counts every memory, private ones
- * included, so a recall's read of one workspace's rows stays bounded.
+ * The workspace's bound counts every memory, so a recall's read of one
+ * workspace's rows stays bounded.
  */
 
 /** What a memory store operation answers: an effect over the ambient client. */
@@ -76,8 +70,6 @@ export interface StoredMemory {
   readonly id: string;
   readonly userId: string | null;
   readonly text: string;
-  /** The one member who reads it, null for a memory the workspace shares. */
-  readonly privateTo: string | null;
   readonly createdAt: number;
   readonly updatedAt: number;
 }
@@ -85,12 +77,6 @@ export interface StoredMemory {
 export type MemoryOutcome =
   | { readonly kind: MemoryWritten; readonly memory: StoredMemory }
   | { readonly kind: typeof MEMORY_OUTCOME.NOT_FOUND | typeof MEMORY_OUTCOME.FULL };
-
-/** How a keep stands to private memories: whether it keeps one, and whether the keeper's agent reaches private memories at all, which only the member's operator does. */
-export interface MemoryKeep {
-  readonly privately?: boolean;
-  readonly readsPrivate?: boolean;
-}
 
 /** Who asks to forget: the member, and whether they own or administer the workspace. */
 export interface MemoryForgetter {
@@ -102,7 +88,6 @@ const MemoryRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.NullOr(Schema.String),
   text: Schema.String,
-  privateTo: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
 });
@@ -111,14 +96,13 @@ const ROW_COLUMNS = {
   id: memory.id,
   userId: memory.userId,
   text: memory.text,
-  privateTo: memory.privateTo,
   createdAt: memory.createdAt,
   updatedAt: memory.updatedAt,
 };
 
 const MemoryKeySchema = Schema.Struct({ organizationId: Schema.String, id: Schema.String });
 
-/** Every memory of the workspace, private ones included: what a keep counts and dedupes against under its lock. */
+/** Every memory of the workspace, most recently kept or corrected first: what a keep counts and dedupes against under its lock, and what a read answers. */
 const findMemories = SqlSchema.findAll({
   Request: Schema.String,
   Result: MemoryRowSchema,
@@ -128,27 +112,6 @@ const findMemories = SqlSchema.findAll({
         .select(ROW_COLUMNS)
         .from(memory)
         .where(eq(memory.organizationId, organizationId))
-        .orderBy(desc(memory.updatedAt), desc(memory.createdAt)),
-    ),
-});
-
-/** The workspace's memories one member reads: the shared ones and their own private ones, or the shared ones alone for no reader. */
-const findReadableMemories = SqlSchema.findAll({
-  Request: Schema.Struct({ organizationId: Schema.String, readerId: Schema.NullOr(Schema.String) }),
-  Result: MemoryRowSchema,
-  execute: (read) =>
-    Database.use((db) =>
-      db
-        .select(ROW_COLUMNS)
-        .from(memory)
-        .where(
-          and(
-            eq(memory.organizationId, read.organizationId),
-            read.readerId === null
-              ? isNull(memory.privateTo)
-              : or(isNull(memory.privateTo), eq(memory.privateTo, read.readerId)),
-          ),
-        )
         .orderBy(desc(memory.updatedAt), desc(memory.createdAt)),
     ),
 });
@@ -184,7 +147,6 @@ const insertMemory = SqlSchema.findOneOption({
     organizationId: Schema.String,
     userId: Schema.String,
     text: Schema.String,
-    privateTo: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
   Result: MemoryRowSchema,
@@ -196,7 +158,6 @@ const insertMemory = SqlSchema.findOneOption({
           organizationId: write.organizationId,
           userId: write.userId,
           text: write.text,
-          privateTo: write.privateTo,
           createdAt: write.now,
           updatedAt: write.now,
         })
@@ -239,7 +200,6 @@ function storedOf(row: typeof MemoryRowSchema.Type): StoredMemory {
     id: row.id,
     userId: row.userId,
     text: row.text,
-    privateTo: row.privateTo,
     createdAt: row.createdAt.getTime(),
     updatedAt: row.updatedAt.getTime(),
   };
@@ -265,61 +225,35 @@ function sameWords(text: string): string {
     .replace(/[.!]+$/u, "");
 }
 
-/** Whether a member reads a memory: it is shared, or private to them. */
-function readableBy(kept: StoredMemory, readerId: string): boolean {
-  return kept.privateTo === null || kept.privateTo === readerId;
+/** The workspace's memories, most recently kept or corrected first. */
+export function listMemories(organizationId: string): MemoryStoreEffect<readonly StoredMemory[]> {
+  return Effect.map(findMemories(organizationId), (rows) => rows.map(storedOf));
 }
 
 /**
- * The workspace's memories one member reads, the shared and their own
- * private ones, most recently kept or corrected first; with no reader, the
- * shared ones alone, for a read whose answer teammates may see.
- */
-export function listMemories(
-  organizationId: string,
-  readerId: string | null,
-): MemoryStoreEffect<readonly StoredMemory[]> {
-  return Effect.map(findReadableMemories({ organizationId, readerId }), (rows) =>
-    rows.map(storedOf),
-  );
-}
-
-/**
- * Keeps one memory in the workspace as the member's words, private to them
- * where `keep.privately`, or corrects the one `replaces` names, and answers
- * what that came to. The words are taken as handed: the caller holds them to
- * the bound and to what may be kept at all. A new memory past the bound, or a
- * correction of a memory the keeper does not read, writes nothing; a keeper
- * whose agent reaches no private memory (`keep.readsPrivate` false) reads
- * none, even its own member's.
+ * Keeps one memory in the workspace as the member's words, or corrects the
+ * one `replaces` names, and answers what that came to. The words are taken
+ * as handed: the caller holds them to the bound and to what may be kept at
+ * all. A new memory past the bound, or a correction of a memory the
+ * workspace does not hold, writes nothing.
  */
 export function rememberMemory(
   organizationId: string,
   userId: string,
   text: string,
   replaces: string | undefined,
-  keep: MemoryKeep = {},
 ): MemoryStoreEffect<MemoryOutcome> {
-  const { privately = false, readsPrivate = true } = keep;
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const workspace = yield* lockWorkspace(organizationId);
         if (Option.isNone(workspace)) return { kind: MEMORY_OUTCOME.NOT_FOUND } as const;
         const every = (yield* findMemories(organizationId)).map(storedOf);
-        const readable = every.filter((kept) =>
-          readsPrivate ? readableBy(kept, userId) : kept.privateTo === null,
-        );
         const now = yield* DateTime.nowAsDate;
-        // Note that words are the same only within one visibility, because folding would publish a private memory or hide a shared one.
-        const sameIn = (privateTo: string | null) =>
-          readable.find(
-            (kept) => kept.privateTo === privateTo && sameWords(kept.text) === sameWords(text),
-          );
+        const same = every.find((kept) => sameWords(kept.text) === sameWords(text));
         if (replaces !== undefined) {
-          const target = readable.find((kept) => kept.id === replaces.toLowerCase());
+          const target = every.find((kept) => kept.id === replaces.toLowerCase());
           if (target === undefined) return { kind: MEMORY_OUTCOME.NOT_FOUND } as const;
-          const same = sameIn(target.privateTo);
           // Note that a correction to words another memory already holds folds the two, because keeping both would hold one fact twice.
           if (same !== undefined && same.id !== target.id) {
             yield* deleteMemory({ organizationId, id: target.id });
@@ -328,8 +262,6 @@ export function rememberMemory(
           const kept = yield* updateMemory({ organizationId, id, userId, text, now });
           return outcomeOf(MEMORY_OUTCOME.CORRECTED, kept);
         }
-        const privateTo = privately ? userId : null;
-        const same = sameIn(privateTo);
         if (same !== undefined) {
           // Note that the same words kept again stay the words of whoever kept them first.
           const kept = yield* updateMemory({
@@ -344,7 +276,7 @@ export function rememberMemory(
         if (every.length >= MEMORY_BOUNDS.MAX_MEMORIES) {
           return { kind: MEMORY_OUTCOME.FULL } as const;
         }
-        const kept = yield* insertMemory({ organizationId, userId, text, privateTo, now });
+        const kept = yield* insertMemory({ organizationId, userId, text, now });
         return outcomeOf(MEMORY_OUTCOME.KEPT, kept);
       }),
     ),
@@ -354,9 +286,8 @@ export function rememberMemory(
 /**
  * Forgets one of the workspace's memories for good, where the forgetter may:
  * its words are theirs, or they manage the workspace, the only ones who may
- * forget a memory whose member's account is gone. A private memory only its
- * member forgets. An id that names none of the memories the forgetter reads,
- * another workspace's or a teammate's private one included, forgets nothing
+ * forget a memory whose member's account is gone. An id that names none of
+ * the workspace's memories, another workspace's included, forgets nothing
  * and answers forgotten, so a forget retried after it landed answers the same.
  */
 export function forgetMemory(
@@ -369,10 +300,7 @@ export function forgetMemory(
     if (!isWireUuid(id)) return MEMORY_FORGET.FORGOTTEN;
     const found = yield* findMemory({ organizationId, id });
     if (Option.isNone(found)) return MEMORY_FORGET.FORGOTTEN;
-    const kept = storedOf(found.value);
-    if (!readableBy(kept, by.userId)) return MEMORY_FORGET.FORGOTTEN;
-    const own = kept.userId === by.userId || kept.privateTo === by.userId;
-    if (!own && !by.manages) return MEMORY_FORGET.NOT_PERMITTED;
+    if (found.value.userId !== by.userId && !by.manages) return MEMORY_FORGET.NOT_PERMITTED;
     yield* deleteMemory({ organizationId, id });
     return MEMORY_FORGET.FORGOTTEN;
   });

@@ -179,7 +179,7 @@ export interface ServerEventProperties {
     start_kind: Values<typeof SERVER_AGENT_START_KIND>;
     is_from_automation: boolean;
     has_task: boolean;
-    /** What the agent is, so a member's operator, started with no task, is not counted as a taskless coder. */
+    /** What the agent is: a coder, or a task's pilot. */
     agent_kind: AgentKind;
   };
   [SERVER_EVENT.PULL_REQUEST_CREATE]: {

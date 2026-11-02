@@ -17,7 +17,6 @@ import type { DeviceLeaseSweepOutcome } from "./device-lease-sweep.js";
 import type { EveSandboxSweepOutcome } from "./eve-sandbox-sweep.js";
 import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
 import type { NativeWakeupSweepOutcome } from "./native-wakeup-sweep.js";
-import type { OperatorWakeSweepOutcome } from "./operator-wake-sweep.js";
 import type { SandboxRetentionSweepOutcome } from "./sandbox-retention-sweep.js";
 import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 
@@ -33,8 +32,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * run's own end did not stop it, an eve agent's sandbox left running with
  * no turn and no terminal to hold it is stopped where its turn's end did
  * not stop it, the wakeups a native agent's released wait left are
- * delivered once due, an operator whose member's agent failed is woken, at
- * most once an hour for each agent, a developer's line whose hand-over
+ * delivered once due, a developer's line whose hand-over
  * answered nothing and that no turn took within a coding agent's turn
  * bound is deleted, the automations whose schedule is due are fired, a picture pasted into a
  * plan a day ago that no save ever named is deleted, and the pull requests of
@@ -69,8 +67,6 @@ interface MaintenanceSweeps {
   sweepSandboxRetention: (now: number) => SweepRead<SandboxRetentionSweepOutcome>;
   /** Delivers the native agents' wakeups due, a sweep's worth, each as a message from Luke. */
   sweepNativeWakeups: (now: number) => SweepRead<NativeWakeupSweepOutcome>;
-  /** Wakes the operators whose member's agents failed with no wake in the hour before, a sweep's worth. */
-  sweepOperatorWakes: (now: number) => SweepRead<OperatorWakeSweepOutcome>;
   /** Deletes the withdrawn lines no turn took within a coding agent's turn bound, a sweep's worth, answering how many went. */
   purgeWithdrawnLines: (now: number) => SweepRead<number>;
   /** Fires the automations whose schedule is due, a sweep's worth, each once. */
@@ -125,8 +121,6 @@ interface MaintenanceSweepAnswer {
   sandboxRetention: Swept<SandboxRetentionSweepOutcome>;
   /** What the delivery of the native agents' wakeups due did. */
   nativeWakeups: Swept<NativeWakeupSweepOutcome>;
-  /** What the wake of the operators whose member's agents failed did. */
-  operatorWakes: Swept<OperatorWakeSweepOutcome>;
   /** Withdrawn lines no turn took in time, deleted. */
   withdrawnLines: Swept<number>;
   /** What the sweep over the automations due did. */
@@ -186,7 +180,6 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     eveSandboxes: yield* isolated("sweepEveSandboxes", sweeps.sweepEveSandboxes(now)),
     sandboxRetention: yield* isolated("sweepSandboxRetention", sweeps.sweepSandboxRetention(now)),
     nativeWakeups: yield* isolated("sweepNativeWakeups", sweeps.sweepNativeWakeups(now)),
-    operatorWakes: yield* isolated("sweepOperatorWakes", sweeps.sweepOperatorWakes(now)),
     withdrawnLines: yield* isolated("purgeWithdrawnLines", sweeps.purgeWithdrawnLines(now)),
     automations: yield* isolated("sweepAutomations", sweeps.sweepAutomations(now)),
     purgedPictures: yield* isolated("purgeUnsavedPictures", sweeps.purgeUnsavedPictures(now)),

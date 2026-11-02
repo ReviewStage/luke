@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AGENT_ARCHIVER, AGENT_KIND, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+import { AGENT_ARCHIVER, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { INBOX_ASK_STATUS, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
@@ -15,11 +15,9 @@ import { getTestDB, openInboxItem, openTaskAgent, openWorkspace } from "../../te
 import {
   archiveAgent,
   archiveIdleAgent,
-  archiveOperatorAgent,
   archiveUnmovedAgent,
   readAgent,
   recordAgentPublished,
-  restoreOperatorAgent,
   unarchiveAgentFrom,
 } from "../agent-store.js";
 import { beginTaskWork, createTask, finishTaskWork, updateTask } from "../task-store.js";
@@ -239,29 +237,6 @@ it.layer(getTestDB())("an inbox item settling with its agent", (it) => {
         yield* unarchive(dean, archived.agentId);
         yield* assertOpen(archived.items);
         yield* assertSettled(shipped.items, "Its task is done.");
-      }),
-  );
-
-  it.effect(
-    "opens again the operator's items its Reset settled when the Reset is undone, settling the one it replaced",
-    () =>
-      Effect.gen(function* () {
-        const dean = yield* openAccount;
-        const workspace = yield* openWorkspace(dean);
-        const reset = yield* openTaskAgent(dean, workspace, null, AGENT_KIND.OPERATOR);
-        const asked = yield* openInboxItem(dean, workspace, null, reset, true);
-
-        assert.equal(Option.isSome(yield* archiveOperatorAgent(dean, workspace, reset)), true);
-        yield* assertSettled([asked], "Its agent was archived.");
-        const fresh = yield* openTaskAgent(dean, workspace, null, AGENT_KIND.OPERATOR);
-        const freshAsked = yield* openInboxItem(dean, workspace, null, fresh, true);
-
-        assert.equal(
-          Option.isSome(yield* restoreOperatorAgent(dean, workspace, reset, fresh)),
-          true,
-        );
-        yield* assertOpen([asked]);
-        yield* assertSettled([freshAsked], "Its agent was archived.");
       }),
   );
 });

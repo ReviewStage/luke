@@ -14,7 +14,6 @@ import {
   unarchiveChannel,
 } from "@luke/database/models/channel-store";
 import { GENERAL_CHANNEL } from "@luke/database/schemas/channel";
-import { OPERATOR_NOTICE_KIND } from "@luke/database/storage-vocabulary";
 import { isWireUuid } from "@luke/features";
 import {
   CHANNEL_BOUNDS,
@@ -67,7 +66,6 @@ import {
   moveChannelThread,
   postInboxThread,
 } from "../../inbox/inbox-store.js";
-import { noticedForOperator } from "../operator-notice.js";
 import { pageStepOf } from "../written-mentions.js";
 import { CODER } from "./bounds.js";
 import {
@@ -379,8 +377,6 @@ export const INBOX_REFUSAL = {
   NO_MEMBER:
     "Not posted: to names no member; write a member of your workspace by their mention link, [@Name](link), as a person's chip is written.",
   NO_ADDRESSEE: "Not posted: the member you addressed is not in your workspace.",
-  NOT_ITS_MEMBER:
-    "Not posted: your threads are the developer's alone, which no teammate sees; name the developer in to, or leave to out.",
   ADDRESSEE_CANNOT_SEE:
     "Not posted: the member you addressed cannot see your task, so they would never see the thread; address someone who can, or leave to out.",
   UNDER_PILOT:
@@ -655,8 +651,6 @@ function storeRefusal(refusal: InboxPostRefusal): string {
       return INBOX_REFUSAL.NO_CHANNEL;
     case INBOX_POST_REFUSAL.NO_ADDRESSEE:
       return INBOX_REFUSAL.NO_ADDRESSEE;
-    case INBOX_POST_REFUSAL.NOT_ITS_MEMBER:
-      return INBOX_REFUSAL.NOT_ITS_MEMBER;
     case INBOX_POST_REFUSAL.ADDRESSEE_CANNOT_SEE:
       return INBOX_REFUSAL.ADDRESSEE_CANNOT_SEE;
     case INBOX_POST_REFUSAL.UNDER_PILOT:
@@ -781,17 +775,11 @@ export function postToInbox(
     const pictures = yield* bodyPictures(post.body, sandbox);
     if (Result.isFailure(pictures)) return inboxRejected(pictures.failure);
     const thread = threadPost(post, place.success);
-    return yield* Effect.flatMap(postInboxThread(agent, thread, pictures.success), (posted) => {
-      if (Result.isFailure(posted)) {
-        return Effect.succeed(inboxRejected(storeRefusal(posted.failure)));
-      }
-      // A new ask waits on the member, so their operator is told of it once it is kept.
-      const noticed =
-        post.ask === undefined
-          ? Effect.void
-          : noticedForOperator(agent.agentId, OPERATOR_NOTICE_KIND.INBOX_ASK);
-      return Effect.andThen(noticed, accepted(agent));
-    });
+    return yield* Effect.flatMap(postInboxThread(agent, thread, pictures.success), (posted) =>
+      Result.isFailure(posted)
+        ? Effect.succeed(inboxRejected(storeRefusal(posted.failure)))
+        : accepted(agent),
+    );
   }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),

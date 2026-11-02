@@ -216,7 +216,6 @@ export function agentHoldingsOf(
     const latest = was !== undefined && was.updatedAt > entry.updatedAt ? was : entry;
     held.set(entry.agentId, {
       agentId: entry.agentId,
-      ...(latest.agentKind === undefined ? undefined : { agentKind: latest.agentKind }),
       agentTitle: latest.agentTitle,
       agentModel: latest.agentModel,
       automationId: latest.automationId,

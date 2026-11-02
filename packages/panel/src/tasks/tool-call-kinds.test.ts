@@ -73,7 +73,6 @@ test("each of Luke's tools that fell through to 'Used' reads as its own verb, wi
       "Saved to memory: Words are lowercase mid-sentence.",
     ],
     [AGENT_TOOL.RECALL, { query: "transcript words" }, "Searched memory transcript words"],
-    [AGENT_TOOL.LIST_OPEN_ASKS, {}, "Listed the open asks"],
     [AGENT_TOOL.READ_COMMENTS, {}, "Read the comments"],
     [
       AGENT_TOOL.REPLY_TO_COMMENT,
