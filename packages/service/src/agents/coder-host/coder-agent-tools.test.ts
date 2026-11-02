@@ -4271,7 +4271,7 @@ test("a coding agent remembers for its workspace, as its starter's words: a team
   await turnMemoryOn(agents.caller.userId, agents.teammates.userId, agents.otherWorkspaces.userId);
   const asCaller = await peerCaller(host, agents.caller, eve.services);
 
-  const kept = await asCaller(CODER_TOOL.REMEMBER, {
+  const kept = await asCaller(CODER_TOOL.SAVE_MEMORY, {
     text: fact,
     workspaceId: elsewhere,
     userId: agents.strangers.userId,
@@ -4280,10 +4280,11 @@ test("a coding agent remembers for its workspace, as its starter's words: a team
   const asOtherWorkspace = await peerCaller(host, agents.otherWorkspaces, eve.services);
 
   assert.equal(kept.status, ACTION_RESULT_STATUS.ACCEPTED);
-  assert.deepEqual(recalledWords(await asTeammate(CODER_TOOL.RECALL, { query: "hosted routes" })), [
-    fact,
-  ]);
-  assert.deepEqual(recalledWords(await asOtherWorkspace(CODER_TOOL.RECALL, {})), []);
+  assert.deepEqual(
+    recalledWords(await asTeammate(CODER_TOOL.SEARCH_MEMORY, { query: "hosted routes" })),
+    [fact],
+  );
+  assert.deepEqual(recalledWords(await asOtherWorkspace(CODER_TOOL.SEARCH_MEMORY, {})), []);
   assert.deepEqual(
     (await database.run(listMemories(workspaceId))).map((memory) => [memory.text, memory.userId]),
     [[fact, agents.caller.userId]],
@@ -4298,14 +4299,14 @@ test("a teammate's agent corrects a memory in place as its own starter's words, 
   await turnMemoryOn(agents.caller.userId, agents.teammates.userId);
   const asCaller = await peerCaller(host, agents.caller, eve.services);
   const asTeammate = await peerCaller(host, agents.teammates, eve.services);
-  const kept = await asCaller(CODER_TOOL.REMEMBER, { text: "Deploys go out from main." });
+  const kept = await asCaller(CODER_TOOL.SAVE_MEMORY, { text: "Deploys go out from main." });
   assert.ok(isRecord(kept.memory) && isWireString(kept.memory.id));
 
-  const corrected = await asTeammate(CODER_TOOL.REMEMBER, {
+  const corrected = await asTeammate(CODER_TOOL.SAVE_MEMORY, {
     text: "Deploys go out from the release branch.",
     replaces: kept.memory.id,
   });
-  const refused = await asTeammate(CODER_TOOL.REMEMBER, {
+  const refused = await asTeammate(CODER_TOOL.SAVE_MEMORY, {
     text: `The deploy key is ${["ghp", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"].join("_")}.`,
   });
 
@@ -4324,10 +4325,12 @@ test("while its starter has Memory off, a coding agent's remember and recall are
   await turnMemoryOn(agents.teammates.userId);
   const asCaller = await peerCaller(host, agents.caller, eve.services);
   const asTeammate = await peerCaller(host, agents.teammates, eve.services);
-  await asTeammate(CODER_TOOL.REMEMBER, { text: "Deploys go out from main." });
+  await asTeammate(CODER_TOOL.SAVE_MEMORY, { text: "Deploys go out from main." });
 
-  const kept = await asCaller(CODER_TOOL.REMEMBER, { text: "Every route is an oRPC procedure." });
-  const recalled = await asCaller(CODER_TOOL.RECALL, {});
+  const kept = await asCaller(CODER_TOOL.SAVE_MEMORY, {
+    text: "Every route is an oRPC procedure.",
+  });
+  const recalled = await asCaller(CODER_TOOL.SEARCH_MEMORY, {});
 
   assert.equal(kept.status, ACTION_RESULT_STATUS.REJECTED);
   assert.equal(recalled.status, ACTION_RESULT_STATUS.REJECTED);
@@ -4340,7 +4343,7 @@ test("while its starter has Memory off, a coding agent's remember and recall are
 
 test("remember and recall are a coding agent's alone, never a worker's", () => {
   assert.deepEqual(
-    [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL].map((tool) => [
+    [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY].map((tool) => [
       toolsOf(AGENT_ROLE.CODER).has(tool),
       toolsOf(AGENT_ROLE.CODER_WORKER).has(tool),
     ]),

@@ -28,7 +28,7 @@ import { MEMORY_PROVENANCE_REFUSAL } from "./memory-provenance.js";
 import { runAgentRemember } from "./memory-tools.js";
 
 /**
- * memory-provenance.test.ts -- a coding agent's `remember` refused on a turn whose words are no member's.
+ * memory-provenance.test.ts -- a coding agent's `save_memory` refused on a turn whose words are no member's.
  *
  * Through `runAgentRemember`, over a real dialect, with the turn under way
  * written as the relay writes it: a turn an automation's run opened keeps

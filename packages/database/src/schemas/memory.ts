@@ -8,7 +8,7 @@ import { organization, user } from "./auth.js";
  * A memory is the workspace's, shared by every member, never a task's or a
  * repository's, so every agent working in the workspace may recall it and no
  * agent of another workspace ever does. A coding agent writes it through the
- * remember tool (`packages/service/src/agents/memory-tools.ts`), and corrects
+ * `save_memory` tool (`packages/service/src/agents/memory-tools.ts`), and corrects
  * it in place, so a newer fact replaces the older one's text under the same
  * id and the workspace never holds both. `user_id` names the member whose
  * words it holds: the starter of the agent that kept it, or of the one that

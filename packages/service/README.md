@@ -1419,7 +1419,7 @@ and deleting the account sets `user_id` null, read as a former member.
 Recall and Settings read through `listMemories(workspaceId)`, and the same
 words stand once.
 
-The agent keeps and searches it through `remember` and `recall`
+The agent keeps and searches it through `save_memory` and `search_memory`
 (`src/agents/memory-tools.ts`), offered to the `coder` role alone and never a
 worker, on both the eve tool files and Fullspin's MCP server through the shared
 agent door (`coder-host/agent-doors.ts`). The workspace and the starter are
