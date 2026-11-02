@@ -45,8 +45,19 @@ import {
 } from "@luke/features/workspace-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { jsonResponse, recordingHttpClient } from "@luke/wire/testing";
 import { and, eq } from "drizzle-orm";
-import { Cause, Clock, type Context, Effect, Layer, Option, Result, Schema } from "effect";
+import {
+  Cause,
+  Clock,
+  ConfigProvider,
+  type Context,
+  Effect,
+  Layer,
+  Option,
+  Result,
+  Schema,
+} from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -64,6 +75,7 @@ import {
   openGithubUser,
 } from "../testing/github-app-fake.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
+import { INVITATION_MAIL_ENVIRONMENT, invitationMailFromEnvironment } from "./invitation-mail.js";
 import { workspaceGithubProcedures } from "./workspace-github-procedures.js";
 import { workspaceInvitationsLiveStatement } from "./workspace-invitations.js";
 import { workspaceInvitationsProcedures } from "./workspace-invitations-procedures.js";
@@ -92,6 +104,35 @@ const countedProperties = (userId: string, name: string) =>
   ANALYTICS.recorded
     .filter((event) => event.userId === userId && event.name === name)
     .map((event) => event.properties);
+
+/** What Resend was asked to send, across the file; a test reads its own invitee's. */
+const RESEND = recordingHttpClient(() => jsonResponse({ id: "email-1" }));
+
+/** The sender invitations are emailed from in these tests. */
+const INVITE_FROM = "Invites <invites@luke.test>";
+
+/** The invitation mailer over the recorded Resend, as a deployment naming a key and a sender builds it. */
+const INVITATION_MAIL = invitationMailFromEnvironment.pipe(
+  Layer.provide(
+    Layer.merge(
+      RESEND.layer,
+      ConfigProvider.layer(
+        ConfigProvider.fromUnknown({
+          [INVITATION_MAIL_ENVIRONMENT.RESEND_API_KEY]: "re_test",
+          [INVITATION_MAIL_ENVIRONMENT.FROM]: INVITE_FROM,
+        }),
+      ),
+    ),
+  ),
+);
+
+/** The emails Resend was asked to send to `address`, as their bodies. */
+const emailsTo = (address: string) =>
+  RESEND.requests
+    .map(
+      (request) => JSON.parse(request.body ?? "{}") as { from: string; to: string[]; text: string },
+    )
+    .filter((email) => email.to.includes(address));
 
 const ORIGIN = "https://luke.test";
 const INSTALL_ADDRESS = "https://github.com/apps/luke/installations/new";
@@ -183,6 +224,7 @@ const answered = <A>(
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       github.layer,
       ANALYTICS.layer,
+      INVITATION_MAIL,
     );
     if (HOSTED_PATHS.has(new URL(request.url).pathname)) {
       const context = yield* Effect.context<never>().pipe(Effect.provide(services));
@@ -2364,7 +2406,7 @@ it.effect(
 );
 
 it.effect(
-  "an address already a member or already invited is refused as already invited, and nothing is sent twice",
+  "an address already a member or already invited is refused as already invited, and is emailed its link once",
   () =>
     Effect.gen(function* () {
       const plugin = yield* openWorkspacePlugin;
@@ -2373,8 +2415,8 @@ it.effect(
         const grace = yield* openGithubAccount("Grace Hopper");
         const acme = yield* openTeam(plugin.api, ada, [{ userId: grace, role: "member" }]);
 
-        yield* inviting(plugin, ada, acme, "alan@example.com");
-        const again = yield* inviting(plugin, ada, acme, "alan@example.com");
+        yield* inviting(plugin, ada, acme, "lin@example.com");
+        const again = yield* inviting(plugin, ada, acme, "lin@example.com");
         const member = yield* inviting(plugin, ada, acme, `${grace}@luke.test`);
 
         const alreadyInvited = refusedAs(
@@ -2390,8 +2432,13 @@ it.effect(
         ).invitations;
         assert.deepEqual(
           pending.map((one) => one.email),
-          ["alan@example.com"],
+          ["lin@example.com"],
         );
+        const emails = emailsTo("lin@example.com");
+        assert.equal(emails.length, 1);
+        assert.equal(emails[0]?.from, INVITE_FROM);
+        assert.ok(emails[0]?.text.includes(pending[0]?.acceptUrl ?? "missing"));
+        assert.deepEqual(emailsTo(`${grace}@luke.test`), []);
       }).pipe(Effect.provide(plugin.database));
     }),
 );

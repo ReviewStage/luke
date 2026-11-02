@@ -133,8 +133,9 @@ import {
  * owner makes a member an admin, an admin a member or the owner, and
  * removes anyone else, and an admin removes members. An owner or an admin
  * then invites people by address and role, an admin as a member alone,
- * sees the invitations still pending with each one's accept link to copy and
- * send, and cancels one. Workspace connections holds what the workspace
+ * sees the invitations still pending with each one's accept link, which the
+ * service has emailed to the invitee and which can still be copied and sent
+ * by hand, and cancels one. Workspace connections holds what the workspace
  * connects for everyone, named apart from the account's own Integrations
  * page, each drawn as Settings › Integrations draws its rows. GitHub,
  * the one place a workspace's repositories are set: every GitHub
@@ -205,8 +206,8 @@ const OWNER_INVITES_ADMINS = "Only the owner invites admins";
 /** What the toast says once an invitation's accept link is on the clipboard. */
 const INVITE_LINK_COPIED = "Invite link copied";
 
-/** What the invitations say where none is pending, with the one fact a reader cannot guess: Fullspin mails no one. */
-const INVITATIONS_EMPTY = `No invitations. ${PRODUCT_NAME} sends no email, so copy each invitation's link and send it yourself.`;
+/** What the invitations say where none is pending, with the one fact a reader cannot guess: the invitee is emailed their link. */
+const INVITATIONS_EMPTY = `No invitations. ${PRODUCT_NAME} emails each invitee their link, which you can also copy and send yourself.`;
 
 /** What a list's line says where its read did not land, in `ErrorState`'s words. */
 const READ_FAILED = {

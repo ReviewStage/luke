@@ -813,7 +813,11 @@ you delete your account, as every workspace you own does, with only your
 membership removed. A workspace you create is a record
 named as you name it, holding you as its owner; every member of a workspace
 sees every other member's name, email address, and
-role in it, and an owner or admin of it can remove a member. A workspace may
+role in it, and an owner or admin of it can remove a member. An owner or
+admin invites someone by email address: the service keeps the address, the
+role offered, who invited them, and whether the invitation is still pending,
+and emails the invitation's link to that address through Resend, named
+under "Who we send it to" below. A workspace may
 show a photo an owner or admin of it uploads: the service keeps it with the
 workspace, a PNG, JPEG, or WebP image, and serves its bytes only to Vespin
 signed in as one of the workspace's members, never caching it on the way;
@@ -1311,6 +1315,13 @@ only when you press Send.
 - Sentry, for the Mac app's and Vespin in a browser's crash and performance
   reports, and our service's and Vespin's agents' error, performance, log, and
   agent reports, described above.
+- Resend, for email. When an owner or admin of a workspace invites someone,
+  our service sends Resend the invited address, the workspace's name, the
+  inviter's name (or their email address where their account has none), and
+  the invitation's link, and Resend delivers that one email to the invited
+  address and keeps it under its own policy. Nothing is emailed when an
+  invitation is canceled. A feedback note you send also reaches us by email
+  through Resend, with what it carries as described above.
 - Anthropic, for a pull request's chapters. Pressing Generate chapters in a
   agent's Pull request tab sends the pull request's title, description,
   commit messages, and patches, except those of files a reader reads past, to
