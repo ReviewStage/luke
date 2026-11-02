@@ -659,6 +659,38 @@ admits PostHog's assets as a script source, because the analytics client
 `tests/vercel-services.test.ts` holds every page the build emits to these
 headers at every address it answers at.
 
+## The sandbox's host
+
+An agent's page runs the script the agent wrote, so the web app draws it from
+a registrable domain of its own, `fullspin.page`
+(`@luke/features/page-frame`'s `PAGE_SANDBOX_ORIGIN`), attached to this
+project beside the app's. That host serves one route and nothing else. The
+first top-level rewrite sends every request made to it into the web service,
+ahead of eve's mount, and the web service's first two routes, which the
+generator keeps ahead of the `/api/` table (`function-rewrites.ts`), send a
+link's `/p/<token>` to the page route with its token in a query and every
+other path of the host to that same function with no route named, which it
+answers 404, a status the route forces besides. A host condition is written
+as `{"eq": …}`, because a bare string is a pattern to Vercel whose `.`
+matches any character. The page route is a function group of its own
+(`function-durations.ts`), because a dispatcher holding any other route would
+hand that route a request whose query named it, and it refuses any host but
+the sandbox's, so its own `/api/` path on the app's host answers 404 too.
+
+A frame on the app's host asks the app's own `…/versions/{version}/frame`
+procedure under the session cookie, which answers 303 to a link on the
+sandbox minted for that account, signed with `AGENT_PAGES_SECRET` and good
+for a minute (`packages/service/src/pages/`), or to `/page-in-mac-app.html`
+where the deployment has no sandbox. The app's policy frames the sandbox's
+origin by name, because `vercel.json` cannot read the environment; the
+service takes `AGENT_PAGES_ORIGIN` only where it names that same origin, so
+the environment turns the sandbox on or off per deployment but never sends a
+frame to a host the routing does not lock. A Preview answers on its own
+hosts alone and has no sandbox: it leaves both variables unset, and its
+frames show the page saying pages open in the Mac app. Vercel's own request
+log records the sandbox's paths, a link's token among them, as it records
+every path; a token is good for a minute, for one version, to one account.
+
 ## Signing in on a Preview deployment
 
 A Preview deployment answers on hostnames minted for the branch, so

@@ -204,6 +204,8 @@
     "./tasks/task-tree": "./src/tasks/task-tree.js",
     "./tasks/tasks-app": "./src/tasks/tasks-app.js",
     "./tasks/shown-file": "./src/tasks/shown-file.js",
+    "./pages/page-links": "./src/pages/page-links.js",
+    "./pages/page-sandbox-app": "./src/pages/page-sandbox-app.js",
     "./providers/model-catalog": "./src/providers/model-catalog.js",
     "./providers/openai": "./src/providers/openai.js",
     "./providers/posthog": "./src/providers/posthog.js",

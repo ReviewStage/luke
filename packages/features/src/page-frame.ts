@@ -1,5 +1,5 @@
 /**
- * page-frame.ts -- where a page is drawn from: one version of one page, at its own `luke-page:` address.
+ * page-frame.ts -- where a page is drawn from: one version of one page, at its own `luke-page:` address on the Mac, and on the sandbox's own site on the web.
  *
  * The window's process serves the scheme, reading the version from the
  * service on the account's own bearer, so the frame that draws a page holds
@@ -10,9 +10,47 @@
  * the address says. A page on a task is `/<taskId>/<pageId>/<version>`, and
  * one a coding agent on no task showed is `/agent/<agentId>/<pageId>/<version>`;
  * a task's id is a uuid, so it is never the word `agent`.
+ *
+ * A browser has no scheme of Luke's own, so the web draws a page from a site
+ * of its own instead (`PAGE_SANDBOX_ORIGIN`). Its frame loads the version
+ * through the service's same-origin answer, which sends it on to a link
+ * minted for the account that asked, or to the page saying pages open in the
+ * Mac app where the deployment has no sandbox (`PAGE_IN_MAC_APP_PATH`).
  */
 
+import { Schema as EffectSchema } from "effect";
+
 export const PAGE_SCHEME = "luke-page";
+
+/**
+ * The sandbox's own site, where the web draws a page: a registrable domain
+ * apart from the app's, so nothing a page runs shares a site with the app or
+ * is sent its cookie. The deployment's routing (the root `vercel.json`) locks
+ * this host to the page route and lets the app frame it, and the service
+ * serves pages there only where `AGENT_PAGES_ORIGIN` names it.
+ */
+export const PAGE_SANDBOX_ORIGIN = "https://fullspin.page";
+
+/** What a page's frame shows on the web where the deployment has no sandbox: the site's page saying pages open in the Mac app. */
+export const PAGE_IN_MAC_APP_PATH = "/page-in-mac-app.html";
+
+/** The status a page frame's load is answered with: See Other, the address the version is drawn from. */
+export const PAGE_FRAME_STATUS = 303;
+
+/**
+ * A page frame's load as the service answers it: sent on to the address the
+ * version is drawn from, which no cache keeps and no referrer carries on,
+ * since a link minted for one account stands in it.
+ */
+export const pageFrameAnswerSchema = EffectSchema.Struct({
+  status: EffectSchema.Literal(PAGE_FRAME_STATUS),
+  headers: EffectSchema.Struct({
+    location: EffectSchema.String,
+    "referrer-policy": EffectSchema.Literal("no-referrer"),
+  }),
+});
+
+export type PageFrameAnswer = typeof pageFrameAnswerSchema.Type;
 
 const PAGE_HOST = "page";
 

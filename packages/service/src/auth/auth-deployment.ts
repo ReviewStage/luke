@@ -35,7 +35,7 @@ const DEPLOYMENT_ENVIRONMENT = {
 } as const;
 
 /** The variables the deployment's shape is read from; a blank value is absent. */
-const AUTH_DEPLOYMENT_ENVIRONMENT = {
+export const AUTH_DEPLOYMENT_ENVIRONMENT = {
   ENVIRONMENT: "VERCEL_ENV",
   DEPLOYMENT_HOST: "VERCEL_URL",
   BRANCH_HOST: "VERCEL_BRANCH_URL",

@@ -9,6 +9,7 @@ import {
   MAINTENANCE_SWEEP,
   MAINTENANCE_SWEEP_PATH,
 } from "@luke/service/maintenance/maintenance-bounds";
+import { PAGE_LINK_ROUTE } from "@luke/service/pages/page-links";
 import { ORPC_ROUTE_KEY } from "./function-dispatch.js";
 
 /**
@@ -33,11 +34,17 @@ function routeKeyOf(path: string): string {
  * builder reads `maxDuration` from the function file and nothing narrower.
  * Grouping never moves a bound: a route joins a group whose duration is the
  * one it already had.
+ *
+ * The one group not drawn by a bound is the sandbox's page route's, which
+ * shares its function with nothing: its function is all the sandbox's host
+ * reaches (the root `vercel.json`), and a dispatcher holding any other route
+ * would hand that route a request whose query named it, the API's among them.
  */
 const FUNCTION_GROUP = {
   DEFAULT: "default",
   LUKE_MCP: "luke-mcp",
   MAINTENANCE_SWEEP: "maintenance-sweep",
+  PAGE_SANDBOX: "page-sandbox",
   PULL_REQUEST_CHAPTERS: "pull-request-chapters",
 } as const;
 type FunctionGroup = (typeof FUNCTION_GROUP)[keyof typeof FUNCTION_GROUP];
@@ -60,7 +67,8 @@ export interface FunctionDefinition {
 
 interface GroupDefinition {
   readonly file: FunctionGroup;
-  readonly maxDuration: number;
+  /** The group's bound; absent for the platform's default. */
+  readonly maxDuration?: number;
   readonly routes: readonly string[];
 }
 
@@ -82,6 +90,8 @@ const GROUPS: readonly GroupDefinition[] = [
     maxDuration: LUKE_MCP_FUNCTION.MAX_DURATION_SECONDS,
     routes: [routeKeyOf(LUKE_MCP_PATH)],
   },
+  // A page on the sandbox's host answers within the platform's default, in a function holding no other route.
+  { file: FUNCTION_GROUP.PAGE_SANDBOX, routes: [routeKeyOf(PAGE_LINK_ROUTE.PATH)] },
 ];
 
 /** The WebSocket services, each a function of its own: the terminal relay and the Browser tab's live view. */

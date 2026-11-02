@@ -12,7 +12,9 @@
  * wrote for the task, each by its newest version, and
  * `/api/plans/{id}/pages/{page}/versions/{version}` one version's HTML,
  * answered inside JSON so no page is ever a document of this origin
- * (`@luke/database/models/plan-pages`). `POST /api/plans/{id}/attachments`
+ * (`@luke/database/models/plan-pages`), and `…/versions/{version}/frame`
+ * a browser's frame of it, sent on to the sandbox's own site
+ * (`../pages/page-frame.ts`). `POST /api/plans/{id}/attachments`
  * keeps one picture on the plan, pasted, dropped, or chosen into its text by
  * any member of its workspace, and answers the id the text then names it by
  * (201), or refuses in band where the plan holds its bound of pictures
@@ -53,6 +55,7 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import { pageFrameAnswer } from "../pages/page-frame.js";
 import { readTaskFile } from "./task-file.js";
 import { readTaskSkills } from "./task-skills.js";
 import { readTaskTree } from "./task-tree.js";
@@ -178,6 +181,12 @@ export function taskFilesProcedures(seams: TaskFilesProcedureSeams) {
         readPageVersion(context.userId, taskPageOwner(taskId), pageId, version),
       );
       return { page: yield* found(page) };
+    }),
+    pageFrame: taskFiles.pageFrame.effect(function* ({ input, context }) {
+      const taskId = yield* pathUuid(input.id);
+      const pageId = yield* pathUuid(input.page);
+      const version = yield* pageVersionOf(input.version);
+      return yield* pageFrameAnswer(context.userId, taskPageOwner(taskId), pageId, version);
     }),
   };
 }
