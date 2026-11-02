@@ -292,7 +292,7 @@ test("Claude Code's TodoWrite is drawn as the agent's to-do list, a completed it
   }
 });
 
-test("Claude Code's task calls are drawn as the agent's to-do list as it stood after each, the newest open", () => {
+test("Claude Code's task calls are drawn as the agent's to-do list as it stood after each, the newest folded until pressed", () => {
   const { container } = drawn(
     [
       storedPart(
@@ -312,9 +312,12 @@ test("Claude Code's task calls are drawn as the agent's to-do list as it stood a
     ],
     true,
   );
-  // The newest list stands open on a row of its own; the calls before it fold with the turn, as a whole list's writes do.
-  const lines = [...container.querySelectorAll("summary")].map((line) => line.textContent ?? "");
-  assert.ok(lines.at(-1)?.includes("1 of 2 done"), lines.join("\n"));
+  // The newest list stands folded on a row of its own; the calls before it fold with the turn, as a whole list's writes do.
+  const lines = [...container.querySelectorAll("summary")];
+  const newest = lines.at(-1) ?? assert.fail("the newest list is a fold's line");
+  assert.ok(newest.textContent?.includes("1 of 2 done"), newest.textContent ?? "");
+  assert.ok(!container.textContent?.includes("Export the invoices"), container.textContent ?? "");
+  act(() => newest.click());
   const words = container.textContent ?? "";
   for (const item of ["Round the totals", "Export the invoices"]) {
     assert.ok(words.includes(item), `${words} lists ${item}`);
