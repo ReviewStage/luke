@@ -178,7 +178,7 @@ function passThroughPaths(definitions: readonly FunctionDefinition[]): readonly 
 }
 
 /**
- * The generated rewrites, in the order they must stand: PostHog's, the
+ * The generated rewrites onto functions, in the order they must stand: the
  * public paths outside `/api/`, the segment rewrites,
  * one exact rule per route file a dispatcher holds, the pass-through rules of
  * the functions that answer by their own name, and last the fallback, which
@@ -198,7 +198,7 @@ export function apiRewrites(
   );
   const orpc = functionOf.get(ORPC_ROUTE_KEY);
   if (orpc === undefined) throw new Error("no function holds the hosted oRPC route");
-  const rewrites: Rewrite[] = [...POSTHOG_REWRITES];
+  const rewrites: Rewrite[] = [];
   for (const { path, route } of publics) {
     const definition = functionOf.get(route);
     if (definition === undefined) throw new Error(`no route behind the public path ${path}`);
@@ -229,6 +229,11 @@ export function apiRewrites(
     dest: dest(orpc, ORPC_ROUTE_KEY, `${DISPATCH_QUERY.PATH}=$1`),
   });
   return rewrites;
+}
+
+/** The whole generated table: PostHog's rewrites, which land on no function of ours, ahead of the functions' own. */
+export function generatedRewrites(definitions: readonly FunctionDefinition[]): readonly Rewrite[] {
+  return [...POSTHOG_REWRITES, ...apiRewrites(definitions)];
 }
 
 /** The deployment's configuration, at the repository root two steps above the web app. */
@@ -420,7 +425,7 @@ export async function rewritesDrifted(web: string): Promise<boolean> {
   // The file's shape is refused ahead of anything else being read, so the refusal names where the routes belong.
   const committed = (await readVercelConfig(web)).services.web.routes.filter(isTableRewrite);
   const table = await readApiRewritesTable(web);
-  const generated = apiRewrites(await webFunctions(web));
+  const generated = generatedRewrites(await webFunctions(web));
   return !sameRewrites(table, generated) || !sameRewrites(committed, table);
 }
 

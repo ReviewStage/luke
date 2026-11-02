@@ -9,7 +9,11 @@ import { temporaryDirectory } from "@luke/runtime/testing";
 import { PAGE_LINK_ROUTE } from "@luke/service/pages/page-links";
 import { test } from "vitest";
 import { functionPublicPath, webFunctions } from "../server/function-layout";
-import { apiRewrites, readVercelConfig, vercelConfigSource } from "../server/function-rewrites";
+import {
+  generatedRewrites,
+  readVercelConfig,
+  vercelConfigSource,
+} from "../server/function-rewrites";
 import { changelogRoutes } from "../src/changelog-releases";
 import { parseReleases } from "../src/site-markdown";
 
@@ -28,7 +32,7 @@ const vercel = await readVercelConfig(WEB);
 const heldToAHost = (route: object) => "has" in route;
 
 test("the /api/ rewrites are generated into the web service's routes, ahead of its other routes but the sandbox host's", async () => {
-  const generated = apiRewrites(await webFunctions(WEB));
+  const generated = generatedRewrites(await webFunctions(WEB));
   const { routes } = vercel.services[SERVICE.WEB];
   const locked = routes.filter(heldToAHost);
   const rest = routes.slice(locked.length);
