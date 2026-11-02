@@ -1,5 +1,44 @@
 [
   {
+    "src": "/k7x2/static/(.*)",
+    "dest": "https://us-assets.i.posthog.com/static/$1",
+    "transforms": [
+      {
+        "type": "request.headers",
+        "op": "delete",
+        "target": {
+          "key": "cookie"
+        }
+      }
+    ]
+  },
+  {
+    "src": "/k7x2/array/(.*)",
+    "dest": "https://us-assets.i.posthog.com/array/$1",
+    "transforms": [
+      {
+        "type": "request.headers",
+        "op": "delete",
+        "target": {
+          "key": "cookie"
+        }
+      }
+    ]
+  },
+  {
+    "src": "/k7x2/(.*)",
+    "dest": "https://us.i.posthog.com/$1",
+    "transforms": [
+      {
+        "type": "request.headers",
+        "op": "delete",
+        "target": {
+          "key": "cookie"
+        }
+      }
+    ]
+  },
+  {
     "src": "/install\\.sh",
     "dest": "/api/default.js?route=hosts/install-script"
   },

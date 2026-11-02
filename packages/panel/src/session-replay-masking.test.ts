@@ -32,6 +32,7 @@ async function mask(): Promise<Mask> {
   sessionReplay({
     platform: PRODUCT_PLATFORM.DESKTOP,
     projectApiKey: () => "test-project-key",
+    host: { api: "https://us.i.posthog.com", ui: "https://us.posthog.com" },
     address: "luke://panel",
     namesOwnAddress: () => false,
     importRecorder: () => Promise.resolve(undefined),
