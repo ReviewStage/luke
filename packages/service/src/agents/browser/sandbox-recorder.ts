@@ -322,6 +322,7 @@ fetch("http://127.0.0.1:" + port + "/json/version").then((answer) => answer.json
       const page = pages.get(message.sessionId);
       if (page) {
         page.painted = false;
+        page.latest = undefined;
         page.navigation += 1;
       }
     } else if (message.method === "Target.detachedFromTarget") {
