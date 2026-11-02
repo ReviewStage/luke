@@ -184,6 +184,20 @@ const CLI_CALLS: readonly {
     body: ["Wait for CI", "Wakeup scheduled"],
   },
   {
+    tool: "TaskStop",
+    input: { task_id: "b7k2" },
+    output: "Successfully stopped task: b7k2 (pnpm dev)",
+    line: ["Stopped", "b7k2"],
+    body: ["Successfully stopped task"],
+  },
+  {
+    tool: "SendMessage",
+    input: { to: "worker", message: "Also read the export callers." },
+    output: "Message sent to worker.",
+    line: ["Messaged the worker", "worker"],
+    body: ["Also read the export callers.", "Message sent"],
+  },
+  {
     tool: "Monitor",
     input: {
       description: "Watch the checks",
