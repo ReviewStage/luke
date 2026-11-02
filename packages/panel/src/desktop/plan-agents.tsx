@@ -199,58 +199,66 @@ export function PlanAgents({
     held,
   );
   const starts = phone?.starts ?? [];
-  if (entries.length === 0 && starts.length === 0) return null;
+  // Note that a phone's group stands for its archived agents too, on a task whose every agent is archived, which starts none.
+  const archived = phone === undefined ? 0 : (agents.archived?.length ?? 0);
+  const grouped = entries.length > 0 || starts.length > 0 || archived > 0;
+  const waiting = phone !== undefined && phone.waiting > 0 ? phone : undefined;
+  if (!grouped && waiting === undefined) return null;
   return (
     // Note that the group is pulled out by a row's inset on each side, so its marks stand on the title's edge and its fills hang past it.
     <div className="plan-agents -mx-row-inset mb-block-gap">
-      <GroupHeader
-        heading={GROUP_HEADING.NONE}
-        label={AGENTS_LIST}
-        // Note that a phone's group over no agent, standing for New agent, counts none.
-        count={
-          entries.length === 0
-            ? undefined
-            : {
-                value: entries.length,
-                noun: entries.length === 1 ? AGENTS_NOUN.one : AGENTS_NOUN.many,
-              }
-        }
-        fold={{ defaultOpen: !folded }}
-      >
-        <List label={AGENTS_LIST} density={LIST_DENSITY.DENSE} moves>
-          {listedOrder(entries).map((entry) => (
-            <PlanAgentRow
-              key={entry.row.id}
-              entry={entry}
-              pullRequest={agents.pullRequests.get(entry.row.id)}
-              agents={agents}
-              held={held}
-              tab={tab}
-              runsOn={runsOn}
-              onOpenPullRequest={() => onOpenPullRequest(entry.row.id)}
-            />
-          ))}
-          {starts.map((start) => (
-            <ListRow
-              key={start.label}
-              leading={start.icon ?? <GLYPH.ADD />}
-              title={start.label}
-              description={start.detail}
-              disabled={start.disabled}
-              chevron
-              onPress={start.onSelect}
-            />
-          ))}
-        </List>
-        {phone?.archived}
-      </GroupHeader>
-      {phone === undefined || phone.waiting === 0 ? null : (
+      {grouped ? (
+        <GroupHeader
+          heading={GROUP_HEADING.NONE}
+          label={AGENTS_LIST}
+          // Note that a phone's group over no agent, standing for New agent, counts none.
+          count={
+            entries.length === 0
+              ? undefined
+              : {
+                  value: entries.length,
+                  noun: entries.length === 1 ? AGENTS_NOUN.one : AGENTS_NOUN.many,
+                }
+          }
+          fold={{ defaultOpen: !folded }}
+        >
+          {entries.length + starts.length === 0 ? null : (
+            <List label={AGENTS_LIST} density={LIST_DENSITY.DENSE} moves>
+              {listedOrder(entries).map((entry) => (
+                <PlanAgentRow
+                  key={entry.row.id}
+                  entry={entry}
+                  pullRequest={agents.pullRequests.get(entry.row.id)}
+                  agents={agents}
+                  held={held}
+                  tab={tab}
+                  runsOn={runsOn}
+                  onOpenPullRequest={() => onOpenPullRequest(entry.row.id)}
+                />
+              ))}
+              {starts.map((start) => (
+                <ListRow
+                  key={start.label}
+                  leading={start.icon ?? <GLYPH.ADD />}
+                  title={start.label}
+                  description={start.detail}
+                  disabled={start.disabled}
+                  chevron
+                  onPress={start.onSelect}
+                />
+              ))}
+            </List>
+          )}
+          {phone?.archived}
+        </GroupHeader>
+      ) : null}
+      {waiting === undefined ? null : (
         <List label={NEEDS_YOU.LABEL} density={LIST_DENSITY.DENSE}>
           <ListRow
             leading={<GLYPH.INBOX />}
-            title={threadsWaitingWords(phone.waiting)}
+            title={threadsWaitingWords(waiting.waiting)}
             chevron
-            onPress={phone.onOpenInbox}
+            onPress={waiting.onOpenInbox}
           />
         </List>
       )}

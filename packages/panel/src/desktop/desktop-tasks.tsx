@@ -27,12 +27,7 @@ import {
 import { GLYPH } from "@luke/ui/icons";
 import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
-import {
-  agentOfTab,
-  followedAgent,
-  isDraftTab,
-  sameTab,
-} from "@luke/ui/tab-strip-model";
+import { agentOfTab, followedAgent, isDraftTab, sameTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -50,7 +45,7 @@ import { agentActor, agentName, type SentLine, startsOwnAgents } from "../tasks/
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
-import { startCloudDraft } from "../tasks/cloud-browser-tabs.js";
+import { startCloudDraft, useCloudBrowserTabs } from "../tasks/cloud-browser-tabs.js";
 import { keyedItem } from "../tasks/inbox-model.js";
 import { PlanBody, type SectionLinks, type TitleRename } from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
@@ -405,6 +400,11 @@ function PlanDocument({
   const views = useTabViews();
   const { act } = useAct();
   const inboxTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
+  // The task's agents' cloud browser tabs, which a phone's Show browser goes back to, read only on a phone.
+  const agentBrowsers = useCloudBrowserTabs(
+    inboxTaskId === undefined ? undefined : { taskId: inboxTaskId },
+    phone,
+  );
   const inbox = useTaskInbox({
     taskId: inboxTaskId,
     shown: tasks.shown,
@@ -1110,9 +1110,23 @@ function PlanDocument({
     </Fill>
   );
   const pane = taskPaneOf({ open: sidePanel.open, column: tab });
-  // A phone's agent's ⋯ opens a new tab of its cloud browser, as the panel's "+", which a phone draws nowhere, does.
-  const openBrowser = (agentId: string) =>
-    openPanelTab({ cloudBrowser: startCloudDraft({ taskId: task.id }, agentId).id });
+  // A phone's agent's ⋯ shows its cloud browser: the tab it opened last, or a new one, as the panel's
+  // "+" offers either, which a phone draws nowhere.
+  const openBrowser = (agentId: string) => {
+    const newest = (agentBrowsers ?? [])
+      .filter((each) => each.agentId === agentId)
+      .toSorted((one, other) => other.createdAt - one.createdAt)[0];
+    openPanelTab({
+      cloudBrowser: newest?.id ?? startCloudDraft({ taskId: task.id }, agentId).id,
+    });
+  };
+  // ⌘T on a phone starts New agent at once, since no "+" stands in sight to drop its menu.
+  const newAgentOnPhone = () => {
+    const [start] = phoneAgentStarts(mainTabs, agents);
+    if (start === undefined || start.disabled === true) return;
+    if (sidePanel.open) sidePanel.onToggle();
+    start.onSelect();
+  };
   // What the column shows, by name: the agent's or the draft's screen, and where a tab of the panel goes back to.
   const columnLabel =
     tab === undefined || isOverviewTab(tab) ? OVERVIEW_BACK : mainTabLabel(tab, agents);
@@ -1261,7 +1275,13 @@ function PlanDocument({
                                 {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
                                 {tasks.history.viewing === undefined ? (
                                   <NewTabChord
-                                    onNewTab={sideFocused ? sidePanel.onNewTab : mainTabs.onNewTab}
+                                    onNewTab={
+                                      switched
+                                        ? newAgentOnPhone
+                                        : sideFocused
+                                          ? sidePanel.onNewTab
+                                          : mainTabs.onNewTab
+                                    }
                                   />
                                 ) : null}
                                 {/* The chosen agent's ⋯, portalled in from its tab (`strip-tabs.tsx`'s `DoorsTab`), so it acts on what is under the bar. */}

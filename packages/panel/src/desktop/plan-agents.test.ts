@@ -18,7 +18,8 @@ import { PlanAgents } from "./plan-agents.js";
  * the newest started; a row opens its agent, its pull request's chip opens
  * the pull request and not the agent, and a task with no agent draws no
  * list; on a phone the group ends with New agent, even on a task with no
- * agent, and the task's Inbox follows it only while something waits there.
+ * agent, and the task's Inbox follows it only while something waits there,
+ * on a task that starts no agent too.
  * Synthetic agents throughout.
  */
 
@@ -66,7 +67,7 @@ afterEach(() => {
 });
 
 /** The group over `agents`, `NEWEST` holding a merged pull request, unfolded unless `folded` says; every agent and pull request it opens recorded. */
-function mount(agents: readonly AgentSummary[], folded = false, waiting?: number) {
+function mount(agents: readonly AgentSummary[], folded = false, waiting?: number, starts = true) {
   const opened: { agents: string[]; pullRequests: string[]; phone: string[] } = {
     agents: [],
     pullRequests: [],
@@ -109,7 +110,9 @@ function mount(agents: readonly AgentSummary[], folded = false, waiting?: number
           waiting === undefined
             ? undefined
             : {
-                starts: [{ label: "New agent", onSelect: () => opened.phone.push("new agent") }],
+                starts: starts
+                  ? [{ label: "New agent", onSelect: () => opened.phone.push("new agent") }]
+                  : [],
                 archived: null,
                 waiting,
                 onOpenInbox: () => opened.phone.push("inbox"),
@@ -175,4 +178,11 @@ test("on a phone the group ends with New agent even on a task with no agent, and
   const waiting = mount([OLDEST], false, 2);
   press(waiting.host, "2 threads need you");
   assert.deepEqual(waiting.opened.phone, ["inbox"]);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  // A task whose agents are all archived starts none, and its waiting threads still stand.
+  const archived = mount([], false, 1, false);
+  press(archived.host, "1 thread needs you");
+  assert.deepEqual(archived.opened.phone, ["inbox"]);
 });

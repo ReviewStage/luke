@@ -4,11 +4,13 @@ import assert from "node:assert/strict";
 import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { Task } from "@luke/features/task-wire";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
 import { useTaskRenameOffer } from "../tasks/task-menu-items.js";
@@ -300,6 +302,14 @@ test("on a phone a draft's screen is titled New agent, and its ⋯ discards it a
 
   page.choose("Discard draft");
   assert.deepEqual(page.told, [`close column ${JSON.stringify(DRAFT)}`, `discard ${DRAFT.draft}`]);
+});
+
+test("on a phone ⌘T starts New agent at once, the panel shut over it, since no + stands in sight", () => {
+  const page = mount(SHELL_ROOM.NARROW, true, SIDE_PANEL_TAB.COMMENTS);
+  act(() => {
+    runAppCommand(APP_COMMAND.NEW_TAB);
+  });
+  assert.deepEqual(page.told, ["toggle", `column ${JSON.stringify(DRAFT)}`]);
 });
 
 test("on a phone a tab of the panel is pushed over the column, titled by the tab, going back shutting the panel, its ⋯ the tab's own", () => {
