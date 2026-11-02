@@ -11,7 +11,7 @@ import {
   type DeviceAgentAnswer,
   type DeviceLaunchStep,
 } from "@luke/features/device-agent-wire";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
@@ -266,6 +266,14 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         ];
         const late = yield* stepped(queued.id, DEVICE_LAUNCH_STEP.FETCHING);
         const held = yield* latestDeviceAgentLaunch(userId, agentId);
+        // A step a newer build wrote is one this build cannot place, so a late report it knows leaves it.
+        const db = yield* Database;
+        yield* db
+          .update(deviceAgentLine)
+          .set({ launchStep: sql`'checking'` })
+          .where(eq(deviceAgentLine.id, queued.id));
+        yield* stepped(queued.id, DEVICE_LAUNCH_STEP.STARTING);
+        const newer = yield* latestDeviceAgentLaunch(userId, agentId);
         yield* settleDeviceAgentLine(userId, deviceId, queued.id, 0);
         const settled = yield* stepped(queued.id, DEVICE_LAUNCH_STEP.STARTING);
 
@@ -277,6 +285,10 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         assert.deepEqual(
           Option.map(held, (line) => line.step),
           Option.some(DEVICE_LAUNCH_STEP.STARTING),
+        );
+        assert.deepEqual(
+          Option.map(newer, (line) => line.step),
+          Option.some("checking"),
         );
         assert.equal(settled, false);
       }),

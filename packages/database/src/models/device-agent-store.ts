@@ -436,10 +436,14 @@ const writeLaunchStep = SqlSchema.findAll({
       db
         .update(deviceAgentLine)
         .set({
-          // Note that a step at or behind the one the line holds leaves it as it stands, because a report that lands late must never take the launch back.
+          // Note that a step at or behind the one the line holds leaves it as it stands, because a report that lands late must never take the launch back,
+          // and so does a step held that this build cannot place, which a newer build wrote, since this build cannot tell whether it is behind.
           launchStep: sql<DeviceLaunchStep>`case
-            when array_position(${LAUNCH_STEP_ORDER}, ${deviceAgentLine.launchStep})
-              >= array_position(${LAUNCH_STEP_ORDER}, ${step}::text)
+            when ${deviceAgentLine.launchStep} is not null and coalesce(
+              array_position(${LAUNCH_STEP_ORDER}, ${deviceAgentLine.launchStep})
+                >= array_position(${LAUNCH_STEP_ORDER}, ${step}::text),
+              true
+            )
             then ${deviceAgentLine.launchStep}
             else ${step}::text
           end`,
@@ -902,7 +906,8 @@ export function claimDeviceAgentLine(
 /**
  * Keeps the step the account's Mac reported its launch of a launch line it
  * claimed and has not settled has reached, where it moves the line's step
- * forward, and leaves it as it stands where it does not; whether the Mac
+ * forward, and leaves it as it stands where it does not, or where the line
+ * holds a step a newer build wrote that this build cannot place; whether the Mac
  * holds such a line, which is false for another Mac's or account's line, a
  * line of any other kind, one waiting, and one settled.
  */
