@@ -38,26 +38,26 @@ Command Line Tools.
 - **On a Mac**, `./scripts/run.sh --fixture smoke` runs the app on fixture data
   and needs no credentials.
 - **A live run** (`./scripts/run.sh` without `--fixture`) signs in to the
-  production service at tryluke.dev; `--preview` signs in to a Vercel Preview
+  production service at fullspin.dev; `--preview` signs in to a Vercel Preview
   instead.
 - **Not supported yet:** self-hosting the backend (`packages/service` and
   `apps/web`).
 
-### Running more than one Luke Dev
+### Running more than one Fullspin Dev
 
-A plain `./scripts/run.sh` is the plain development instance, "Luke Dev", and
+A plain `./scripts/run.sh` is the plain development instance, "Fullspin Dev", and
 replaces its own earlier run (and a running test or release build). `--instance
-<name>` (lower-case letters, digits, and single hyphens) launches "Luke Dev
+<name>` (lower-case letters, digits, and single hyphens) launches "Fullspin Dev
 <name>" beside it, replacing only that instance's earlier run. A `--preview` run
 is a named instance without asking: `preview-<branch>` for the Preview the script
 looks up, `preview-<host>` for an address given by hand, so each Preview keeps a
 sign-in of its own and never touches the plain instance's.
 
-Each instance has its own profile under `~/Library/Application Support/Luke Dev
+Each instance has its own profile under `~/Library/Application Support/Fullspin Dev
 <name>/` (sign-in, settings, window place, single-instance lock) and its own
-`Luke Dev <name> Safe Storage` Keychain entry. Its windows' titles end in `(<name>)`, and its app menu
-says "Quit Luke Dev <name>". No development run claims the
-`tryluke:` links, named or not.
+`Fullspin Dev <name> Safe Storage` Keychain entry. Its windows' titles end in `(<name>)`, and its app menu
+says "Quit Fullspin Dev <name>". No development run claims the
+`fullspin:` links, named or not.
 Agents' commands for this Mac go to whichever signed-in instance of the account
 reads them first, once each, and every instance runs them in the same login
 shell; turn "Let agents run commands" off in an instance that should not take

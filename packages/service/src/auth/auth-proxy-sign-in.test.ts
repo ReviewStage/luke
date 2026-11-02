@@ -24,7 +24,7 @@ import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "./oauth-clients.js";
  * resumes the desktop's authorization and hands its loopback the code.
  */
 
-const PRODUCTION_URL = "https://tryluke.dev";
+const PRODUCTION_URL = "https://fullspin.dev";
 const PREVIEW_URL = "https://luke-abc123-stage-review.vercel.app";
 const PROXY_SECRET = "proxy-secret-shared-by-both-ends-of-the-relay";
 const REGISTERED_CALLBACK = `${PRODUCTION_URL}/api/auth/callback/github`;

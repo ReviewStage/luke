@@ -49,7 +49,7 @@ const UNHELD_PAGE = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
 const ITEM = "item_4b9e";
 const SAM = "user-sam";
 const AT = 1_792_000_000_000;
-const HOME = "https://tryluke.dev/acme";
+const HOME = "https://fullspin.dev/acme";
 
 // A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));

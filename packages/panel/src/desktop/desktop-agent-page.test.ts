@@ -1547,7 +1547,7 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
   assert.ok(item, "the ⋯ offers Copy link");
   await act(async () => item.click());
 
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${AGENT_ID}`]);
+  assert.deepEqual(copied, [`https://fullspin.dev/acme/agent/${AGENT_ID}`]);
   assert.equal(newestToastSays(), "Link copied");
 });
 

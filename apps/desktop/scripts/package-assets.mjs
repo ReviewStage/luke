@@ -19,7 +19,7 @@ export function packageAssetPaths({ appRoot }) {
     binary: helper.binary,
     folder: helper.folder,
   }));
-  const iconPath = path.join(appRoot, ".build", "Luke.icns");
+  const iconPath = path.join(appRoot, ".build", "Fullspin.icns");
   const licensePath = path.join(appRoot, ".build", LICENSE_RESOURCE_NAME);
   const noticePath = path.join(appRoot, ".build", NOTICE_RESOURCE_NAME);
   const entitlementsPath = path.join(appRoot, "native", "macos", "entitlements.plist");

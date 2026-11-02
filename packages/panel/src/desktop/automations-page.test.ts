@@ -398,7 +398,7 @@ beforeEach(() => {
           scope: scope ?? AUTOMATION_SCOPE.PERSONAL,
           repositories: repositories ?? [],
           ...(hooked
-            ? { webhookUrl: "https://tryluke.dev/api/automations/made/webhook" }
+            ? { webhookUrl: "https://fullspin.dev/api/automations/made/webhook" }
             : undefined),
         });
         // A webhook's secret is answered once, by the write that minted it.
@@ -2789,7 +2789,7 @@ test("a new secret, asked for first, is shown once on the page that asked, and i
   const hooked = automation(8, {
     name: "Fix Sentry alerts",
     trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
-    webhookUrl: "https://tryluke.dev/api/automations/hooked/webhook",
+    webhookUrl: "https://fullspin.dev/api/automations/hooked/webhook",
   });
   standing = [hooked];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: hooked.id });
@@ -2893,7 +2893,7 @@ test("an automation's ⋯ in its editor, its row's right-click in the list, and 
   });
   await act(async () => menuItem("Copy link").click());
 
-  const automationLink = `https://tryluke.dev/${WORKSPACE.id}/automation/${SWEEP.id}`;
+  const automationLink = `https://fullspin.dev/${WORKSPACE.id}/automation/${SWEEP.id}`;
   assert.deepEqual(copied.slice(-4), [
     automationLink,
     `${automationLink}/run/6a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d`,
@@ -2976,7 +2976,7 @@ test("an automation row's ⋯, its right-click and the menu key open the same me
   doors[2]?.();
   await settle();
   await act(async () => menuItem("Copy link").click());
-  assert.equal(copied.at(-1), `https://tryluke.dev/${WORKSPACE.id}/automation/${SWEEP.id}`);
+  assert.equal(copied.at(-1), `https://fullspin.dev/${WORKSPACE.id}/automation/${SWEEP.id}`);
   doors[0]?.();
   await settle();
   await act(async () => menuItem("Run now").click());

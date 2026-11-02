@@ -5,7 +5,7 @@ import { PRODUCT_NAME } from "@luke/features/product-name";
  * open-on-mac.ts -- the script Open on this Mac runs in a terminal of this Mac drawn in Fullspin: a coding agent's pushed branch checked out in a worktree of Fullspin's own clone of the repository, and the repository's run command run there.
  *
  * Nothing is asked of the developer first. Fullspin keeps one clone of each
- * repository under `~/.luke`, shared by every Fullspin install, made the first
+ * repository under `~/.fullspin`, shared by every Fullspin install, made the first
  * time a branch of it is opened, under a lock, and a worktree per branch
  * beside it; a worktree an earlier Fullspin kept under its application data is
  * left there and said. The script runs in the
@@ -37,7 +37,7 @@ import { PRODUCT_NAME } from "@luke/features/product-name";
  * worktree reads to a repository's own scripts as any checkout of it would.
  */
 export function worktreesRoot(home: string): string {
-  return path.join(home, ".luke");
+  return path.join(home, ".fullspin");
 }
 
 /** The folders under the root Fullspin's clones and every agent branch's worktree live in. */

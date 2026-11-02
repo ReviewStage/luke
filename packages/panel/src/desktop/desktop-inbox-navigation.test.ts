@@ -702,7 +702,7 @@ test("an item's row offers Copy link on a right-click, copying the item's link u
   await act(async () => item.click());
 
   assert.deepEqual(world.copied, [
-    `https://tryluke.dev/acme/agent/${THRESHOLD.agentId}/inbox/${THRESHOLD.id}`,
+    `https://fullspin.dev/acme/agent/${THRESHOLD.agentId}/inbox/${THRESHOLD.id}`,
   ]);
 });
 

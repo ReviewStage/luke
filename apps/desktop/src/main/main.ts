@@ -43,7 +43,7 @@ import { PAGE_SCHEME_PRIVILEGES } from "./window/page-protocol";
  */
 const RUNTIME_CLOSE_WAIT_MS = 15_000;
 
-// A Fullspin link macOS hands the app (`tryluke://`) is heard from the first
+// A Fullspin link macOS hands the app (`fullspin://`) is heard from the first
 // moment, since the one that launched the app arrives before it is ready,
 // and held until a window can open it (`@luke/features/app-links`).
 const appLinks = appLinkInbox();

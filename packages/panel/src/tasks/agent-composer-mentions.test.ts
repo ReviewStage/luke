@@ -879,7 +879,7 @@ test("a page picked from the @ list is drawn as its chip and sent as its link, w
   const pageMention: Mention = { kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE.id };
   assert.deepEqual(chips.map(chipName), ["Invites by week"]);
   assert.deepEqual(sent, [`Build ${mentionMarkdown(pageMention, "Invites by week", PLACE)}`]);
-  assert.equal(sent[0], "Build [@Invites by week](https://tryluke.dev/acme/plan/pl_1/page/page-1)");
+  assert.equal(sent[0], "Build [@Invites by week](https://fullspin.dev/acme/plan/pl_1/page/page-1)");
 });
 
 test("on the page of an agent no plan holds an @ offers the pages it showed, a pick sent as the agent's page's link", async () => {
@@ -902,7 +902,7 @@ test("on the page of an agent no plan holds an @ offers the pages it showed, a p
 
   assert.deepEqual(offered, ["Invites by week"]);
   assert.deepEqual(sent, [
-    "Build [@Invites by week](https://tryluke.dev/acme/agent/agent-9/page/page-1)",
+    "Build [@Invites by week](https://fullspin.dev/acme/agent/agent-9/page/page-1)",
   ]);
 });
 
@@ -916,7 +916,7 @@ test("another agent picked from the @ list is drawn as its chip and sent as its 
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(sent, ["Build on [@Wire the desktop](https://tryluke.dev/acme/agent/agent-2)"]);
+  assert.deepEqual(sent, ["Build on [@Wire the desktop](https://fullspin.dev/acme/agent/agent-2)"]);
 });
 
 test("a sent message's mention of a page or an agent is drawn as the chip that opens its tab through the window's opener, its target on no attribute", () => {
@@ -1176,7 +1176,7 @@ it.effect(
       yield* Effect.promise(settle);
 
       assert.deepEqual(sent, [
-        `Ask [@Bill by seat](https://tryluke.dev/acme/agent/${BILLING_AGENT.id}) and [@Sweep flaky tests](https://tryluke.dev/acme/agent/${SWEEPER.id})`,
+        `Ask [@Bill by seat](https://fullspin.dev/acme/agent/${BILLING_AGENT.id}) and [@Sweep flaky tests](https://fullspin.dev/acme/agent/${SWEEPER.id})`,
       ]);
     }),
 );
@@ -1410,7 +1410,7 @@ test("a page's address pasted in the app's own scheme is called by the name the 
   const file = "https://github.com/acme/relay/blob/HEAD/apps/web/rollout-store.ts";
 
   typeInComposer(container, "Build ");
-  pasteInComposer(container, page.replace("https:", "tryluke:"));
+  pasteInComposer(container, page.replace("https:", "fullspin:"));
   typeInComposer(container, "on ");
   pasteInComposer(container, agent);
   typeInComposer(container, "in ");
@@ -1868,7 +1868,7 @@ test("a person picked from the @ list is drawn as their chip and sent as their p
     chips.map((chip) => chip.textContent),
     ["Dana Reyes"],
   );
-  assert.deepEqual(sent, ["Ask [@Dana Reyes](https://tryluke.dev/acme/person/u_dana)"]);
+  assert.deepEqual(sent, ["Ask [@Dana Reyes](https://fullspin.dev/acme/person/u_dana)"]);
 });
 
 test("a sent message's mention of a person is drawn as the chip wearing their mark and their name now that opens their page, its target on no attribute", async () => {
@@ -1910,8 +1910,8 @@ test("off a members' directory an @ offers no people", async () => {
 
 test("a person's page pasted into the box becomes their chip called by their name, and one of another workspace pastes as the words it is", async () => {
   const { container, sent } = await memberBox();
-  const here = "https://tryluke.dev/acme/person/u_dana";
-  const elsewhere = "https://tryluke.dev/other/person/u_dana";
+  const here = "https://fullspin.dev/acme/person/u_dana";
+  const elsewhere = "https://fullspin.dev/other/person/u_dana";
 
   typeInComposer(container, "Ask ");
   pasteInComposer(container, here);
@@ -1931,7 +1931,7 @@ test("a person's page pasted into the box becomes their chip called by their nam
 
 test("an old Vespin issue page's link pasted into the box stays the words it is, since Vespin keeps no issues of its own", async () => {
   const { container, sent } = await box(taskPage());
-  const old = "https://tryluke.dev/acme/issue/3f0e6f5c-7d1a-4f6e-9a55-000000000007";
+  const old = "https://fullspin.dev/acme/issue/3f0e6f5c-7d1a-4f6e-9a55-000000000007";
 
   typeInComposer(container, "Fix ");
   pasteInComposer(container, old);

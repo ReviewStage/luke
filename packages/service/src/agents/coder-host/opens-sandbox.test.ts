@@ -30,7 +30,7 @@ test("a thread post opens the sandbox only where its body draws a picture from a
   assert.equal(opens('The hero:\n\n![The landing page](shots/landing.png "Hero")'), true);
   assert.equal(opens("![The form](</workspace/repository/shot one.png>)"), true);
   assert.equal(opens("The hero reads **Plan by voice**."), false);
-  assert.equal(opens("![Kept](https://tryluke.dev/acme/plan/p1/inbox/i1/files/f1)"), false);
+  assert.equal(opens("![Kept](https://fullspin.dev/acme/plan/p1/inbox/i1/files/f1)"), false);
   assert.equal(opens("Write `![alt](shot.png)` for a picture."), false);
   assert.equal(opens("[a link](shots/landing.png)"), false);
 });

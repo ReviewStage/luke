@@ -113,11 +113,11 @@ luke_app_lock_holder_pid() {
     local command_line
     command_line=$(ps -o command= -p "$pid" 2>/dev/null || true)
     case $command_line in
-    */Electron.app/Contents/MacOS/Electron* | */Luke.app/Contents/MacOS/Luke*)
+    */Electron.app/Contents/MacOS/Electron* | */Fullspin.app/Contents/MacOS/Fullspin*)
         printf '%s\n' "$pid"
         ;;
     *)
-        printf 'error: pid %s holds the "%s" lock but is not Luke: %s\n' "$pid" "$app_name" "$command_line" >&2
+        printf 'error: pid %s holds the "%s" lock but is not Fullspin: %s\n' "$pid" "$app_name" "$command_line" >&2
         return 1
         ;;
     esac

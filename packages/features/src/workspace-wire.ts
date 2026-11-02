@@ -44,7 +44,7 @@ import { workspaceIdSchema } from "./task-wire.js";
  * name alone: the slug stays the one the workspace was made under.
  *
  * A workspace's slug is the first step of a Fullspin link's path
- * (`https://tryluke.dev/<slug>/plan/<id>`, `mention-link.ts`), so no workspace
+ * (`https://fullspin.dev/<slug>/plan/<id>`, `mention-link.ts`), so no workspace
  * takes one Fullspin's own pages stand under: `RESERVED_WORKSPACE_SLUGS`. The
  * slug only reads well; a link is found by the task's id alone, so a slug
  * spelled differently later breaks no link written under the old one.
@@ -85,7 +85,7 @@ export const ASSIGNABLE_ROLE = {
 } as const;
 
 /**
- * The first steps of tryluke.dev's paths that are Fullspin's own, now or likely
+ * The first steps of fullspin.dev's paths that are Fullspin's own, now or likely
  * soon, which no workspace's slug may be: every page the web app serves
  * under its own name (the root `vercel.json`, `apps/web/vite.config.ts`),
  * and the words a later page is likeliest to want.

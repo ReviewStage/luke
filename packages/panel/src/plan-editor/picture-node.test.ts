@@ -15,8 +15,8 @@ import { mountPlanEditor } from "./plan-editor.js";
 
 const TASK_ID = "5d8e2a61-7c3b-4f0e-9b1a-2c6d4e8f0a13";
 const OTHER_TASK_ID = "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d";
-const KEPT = `https://tryluke.dev/acme/plan/${TASK_ID}/files/0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01`;
-const OTHERS = `https://tryluke.dev/acme/plan/${OTHER_TASK_ID}/files/3c9e1a77-58b2-4d0f-8e6a-1b2c3d4e5f02`;
+const KEPT = `https://fullspin.dev/acme/plan/${TASK_ID}/files/0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01`;
+const OTHERS = `https://fullspin.dev/acme/plan/${OTHER_TASK_ID}/files/3c9e1a77-58b2-4d0f-8e6a-1b2c3d4e5f02`;
 
 const TEXT = "## Approach\n\nThe invite email follows the mock.\n\n## Decisions\n\nSingle use.\n";
 

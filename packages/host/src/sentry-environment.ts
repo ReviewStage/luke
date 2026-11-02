@@ -8,9 +8,9 @@ import type { AppIdentityContext } from "./app-identity.js";
 export const SENTRY_ENVIRONMENT = {
   /** A packaged build signed with the Developer ID: what users run. */
   PRODUCTION: "production",
-  /** A locally packaged, ad-hoc signed build (`Luke Test`). */
+  /** A locally packaged, ad-hoc signed build (`Fullspin Test`). */
   TEST: "test",
-  /** `electron .` (`Luke Dev`), a named instance among them. */
+  /** `electron .` (`Fullspin Dev`), a named instance among them. */
   DEVELOPMENT: "development",
 } as const;
 export type SentryEnvironment = (typeof SENTRY_ENVIRONMENT)[keyof typeof SENTRY_ENVIRONMENT];

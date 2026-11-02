@@ -3,27 +3,26 @@
  *
  * A Fullspin link is the thing's address on the web, `https://<host>/<workspace>/…`,
  * and the desktop is handed the same address with its scheme swapped for the
- * app's own. The product's name, and so
- * the host and the scheme, may still change, so both are spelled here and
- * nowhere else: a rename is this constant and an alias, the old name moved
- * into `HOST_ALIASES` and `SCHEME_ALIASES` below, which every reader goes on
- * taking as the home's, so no link already pasted anywhere stops opening.
+ * app's own. Both are spelled here and nowhere else. The product was
+ * Luke, at `tryluke.dev` and `tryluke:`, which stand in `HOST_ALIASES` and
+ * `SCHEME_ALIASES` below: every reader goes on taking them as the home's, so
+ * no link already pasted anywhere stops opening.
  * The bundle's own claim on the scheme (`electron-builder-config.mjs`'s
  * `protocols`) is the one spelling outside this module, since the build reads
  * no TypeScript; a rename names its alias there too.
  */
 
-/** Hosts a link was once written on, read as the home's. */
-const HOST_ALIASES: readonly string[] = [];
+/** Hosts a link was once written on, read as the home's: Luke's. */
+const HOST_ALIASES: readonly string[] = ["tryluke.dev"];
 
-/** Schemes the desktop was once handed a link in, read as its own. */
-const SCHEME_ALIASES: readonly string[] = [];
+/** Schemes the desktop was once handed a link in, read as its own: Luke's. */
+const SCHEME_ALIASES: readonly string[] = ["tryluke"];
 
 export const LINK_HOME = {
   /** The host every link is written on. */
-  HOST: "tryluke.dev",
+  HOST: "fullspin.dev",
   /** The desktop's own scheme, without its colon, as the bundle registers it with macOS. */
-  APP_SCHEME: "tryluke",
+  APP_SCHEME: "fullspin",
 } as const;
 
 /** The origin every link is written under. */

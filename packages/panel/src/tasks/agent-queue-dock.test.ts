@@ -134,7 +134,7 @@ test("a queued message naming a mention draws the mention's chip, not its link's
   const dock = drawn(true, [
     {
       id: "m1",
-      text: "Wait 102 seconds [@Goal](https://tryluke.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b#goal)",
+      text: "Wait 102 seconds [@Goal](https://fullspin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b#goal)",
       queuedBy: "user-1",
     },
   ]);

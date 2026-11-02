@@ -1,7 +1,7 @@
 import type { CapturedNetworkRequest, PostHog } from "posthog-js";
 
 /**
- * What tryluke.dev counts about itself. It exists to close the funnel the
+ * What fullspin.dev counts about itself. It exists to close the funnel the
  * desktop opens: without the landing page and the sign-in, install-to-first-
  * session drop-off is only visible from the point someone already has an
  * account.

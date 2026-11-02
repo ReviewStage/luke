@@ -29,7 +29,7 @@ import { SLEEP_TOOL } from "./sleep.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /** The link of the task an agent on one works on, as its instructions are handed it. */
-const TASK_ADDRESS = "https://tryluke.dev/acme/plan/pl_1";
+const TASK_ADDRESS = "https://fullspin.dev/acme/plan/pl_1";
 
 const SECRET = "eve-deployment-secret-1";
 const ACCOUNT = "user-a";
@@ -294,9 +294,9 @@ test("a local agent is told its folders on the Mac, its own harness's sandbox, a
   const MAC = {
     local: true,
     isolation: DEVICE_ISOLATION.BARE,
-    checkoutPath: "/Users/dev/.luke/agents/a1/repository",
-    installedSkills: "/Users/dev/.luke/agents/a1/installed-skills",
-    sharedFiles: "/Users/dev/.luke/agents/a1/tmp",
+    checkoutPath: "/Users/dev/.fullspin/agents/a1/repository",
+    installedSkills: "/Users/dev/.fullspin/agents/a1/installed-skills",
+    sharedFiles: "/Users/dev/.fullspin/agents/a1/tmp",
   };
   const SANDBOX_OF = [
     [CODER_HARNESS.CLAUDE_CODE, "Claude Code's own sandbox", "Codex's own sandbox"],
@@ -358,9 +358,9 @@ test.each([
     const VM = {
       local: true,
       isolation,
-      checkoutPath: "/home/luke-host/.luke/agents/a1/repository",
-      installedSkills: "/home/luke-host/.luke/agents/a1/installed-skills",
-      sharedFiles: "/home/luke-host/.luke/agents/a1/tmp",
+      checkoutPath: "/home/luke-host/.fullspin/agents/a1/repository",
+      installedSkills: "/home/luke-host/.fullspin/agents/a1/installed-skills",
+      sharedFiles: "/home/luke-host/.fullspin/agents/a1/tmp",
     };
     for (const repository of ["Acme/Relay", null]) {
       const words = coderInstructions(
@@ -463,7 +463,7 @@ test("a Codex agent is told of Codex's own tools and never of Vespin's it is not
 });
 
 test("an agent on a task is told of the task's links, pages, and comments, and one an automation started with no task of its own pages alone", () => {
-  const TASK_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names a task";
+  const TASK_LINK = "`https://fullspin.dev/<workspace>/plan/<id>` link names a task";
   const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;
   const COMMENTS = `answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\``;
   for (const brief of Object.values(AGENT_BRIEF)) {
@@ -738,7 +738,7 @@ test("every agent is told to look at a UI it built in the image's Chromium and s
 });
 
 /** The task link the golden's on-task prompts were composed with. */
-const TASK_LINK = "https://tryluke.dev/acme/task/5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
+const TASK_LINK = "https://fullspin.dev/acme/task/5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
 
 /** A coding agent's instructions, recorded for each brief, on a task and on none, byte for byte. */
 const CODER_PATH = fileURLToPath(

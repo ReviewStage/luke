@@ -88,10 +88,10 @@ function shouldNotarize() {
 export async function notarizeElectronBuilderApp(context) {
   if (!shouldNotarize()) return;
   const credentials = resolveNotaryCredentials(process.env);
-  const appPath = path.join(context.appOutDir, "Luke.app");
+  const appPath = path.join(context.appOutDir, "Fullspin.app");
   const submissionDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-builder-notary-"));
   try {
-    const submissionPath = path.join(submissionDirectory, "Luke.app.zip");
+    const submissionPath = path.join(submissionDirectory, "Fullspin.app.zip");
     execFileSync("ditto", ["-c", "-k", "--keepParent", appPath, submissionPath], {
       stdio: "inherit",
     });

@@ -523,7 +523,7 @@ function stateRootOf(instance: string): string {
     process.platform === "darwin"
       ? path.join(homedir(), "Library", "Application Support")
       : process.env.XDG_CONFIG_HOME || path.join(homedir(), ".config");
-  return path.join(appData, `Luke Dev ${instance}`);
+  return path.join(appData, `Fullspin Dev ${instance}`);
 }
 
 /** Sizes `window` to `frame` and zooms its page, then waits for the page to lay out at it, sizing it once more where it never did; answers what the page stood at where it still did not. */

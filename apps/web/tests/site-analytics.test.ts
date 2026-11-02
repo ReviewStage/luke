@@ -14,7 +14,7 @@ import { sanitizeAnalyticsUrls } from "../src/analytics";
  */
 
 const SIGN_IN_URL =
-  "https://tryluke.dev/sign-in.html?state=github.abc&code_challenge=xyz&redirect_uri=luke%3A%2F%2Fauth&expires_at=1700000000&signature=deadbeef";
+  "https://fullspin.dev/sign-in.html?state=github.abc&code_challenge=xyz&redirect_uri=luke%3A%2F%2Fauth&expires_at=1700000000&signature=deadbeef";
 const AUTH_CODE = "c".repeat(64);
 const LANDING_WITH_CODE = `/?code=${AUTH_CODE}&state=s1&utm_source=hn`;
 const PROJECT_KEY = "phc_site_analytics_test";
@@ -105,7 +105,7 @@ afterAll(() => {
 
 test("a sign-in address keeps its path and drops the authorization query", () => {
   const clean = sanitizeAnalyticsUrls({ $current_url: SIGN_IN_URL });
-  assert.equal(clean.$current_url, "https://tryluke.dev/sign-in.html");
+  assert.equal(clean.$current_url, "https://fullspin.dev/sign-in.html");
   assert.doesNotMatch(clean.$current_url, /state|code_challenge|signature|redirect_uri|expires_at/);
 });
 
@@ -113,24 +113,24 @@ test("any page's address loses its credential parameters and keeps the rest", ()
   const credentials =
     "code=a&state=b&sig=c&signature=d&token=e&access_token=f&id_token=g&refresh_token=h&error=i&error_description=j&code_challenge=k&code_verifier=l";
   const clean = sanitizeAnalyticsUrls({
-    $current_url: `https://tryluke.dev/?${credentials}&utm_source=hn&ref=launch`,
-    $set_once: { $initial_current_url: `https://tryluke.dev/about.html?code=${AUTH_CODE}` },
+    $current_url: `https://fullspin.dev/?${credentials}&utm_source=hn&ref=launch`,
+    $set_once: { $initial_current_url: `https://fullspin.dev/about.html?code=${AUTH_CODE}` },
   });
-  assert.equal(clean.$current_url, "https://tryluke.dev/?utm_source=hn&ref=launch");
-  assert.equal(clean.$set_once.$initial_current_url, "https://tryluke.dev/about.html");
+  assert.equal(clean.$current_url, "https://fullspin.dev/?utm_source=hn&ref=launch");
+  assert.equal(clean.$set_once.$initial_current_url, "https://fullspin.dev/about.html");
 });
 
 test("a credential in a fragment written as parameters is taken out too", () => {
   const clean = sanitizeAnalyticsUrls({
-    $current_url: "https://tryluke.dev/#access_token=secret&token_type=bearer",
-    $referrer: "https://tryluke.dev/changelog.html#code",
+    $current_url: "https://fullspin.dev/#access_token=secret&token_type=bearer",
+    $referrer: "https://fullspin.dev/changelog.html#code",
   });
-  assert.equal(clean.$current_url, "https://tryluke.dev/#token_type=bearer");
-  assert.equal(clean.$referrer, "https://tryluke.dev/changelog.html#code");
+  assert.equal(clean.$current_url, "https://fullspin.dev/#token_type=bearer");
+  assert.equal(clean.$referrer, "https://fullspin.dev/changelog.html#code");
 });
 
 test("an address with no credential in it is sent exactly as it came", () => {
-  const campaign = "https://tryluke.dev/?utm_campaign=spring%20launch&q=a+b#pricing";
+  const campaign = "https://fullspin.dev/?utm_campaign=spring%20launch&q=a+b#pricing";
   assert.equal(sanitizeAnalyticsUrls({ $current_url: campaign }).$current_url, campaign);
 });
 

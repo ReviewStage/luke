@@ -78,7 +78,7 @@ export type AppLinkClaim = (typeof APP_LINK_CLAIM)[keyof typeof APP_LINK_CLAIM];
  * shares; it outlives the run, and the next link launches a bare Electron on
  * no app, its "To run a local app" page, rather than Fullspin. A live
  * development run instead gives back a claim an earlier one left, so the
- * installed Fullspin answers links again. `pnpm package:dir`'s Luke.app declares
+ * installed Fullspin answers links again. `pnpm package:dir`'s Fullspin.app declares
  * the scheme and is the local build to try a link against. A fixture or
  * capture run leaves the scheme alone, so a deterministic run never touches
  * the developer's links.

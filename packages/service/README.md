@@ -177,7 +177,7 @@ none carrying an account bearer. `GET /api/github/install` sends the browser
 to `https://github.com/apps/<slug>/installations/new`, where the developer
 installs the App on an account or organization and chooses its repositories.
 The App's registered Setup URL, with "Redirect on update", is
-`https://tryluke.dev/api/github/installed`: GitHub lands the browser there
+`https://fullspin.dev/api/github/installed`: GitHub lands the browser there
 with `installation_id` and `setup_action`, and the route sends it on to
 `/github-installed.html?status=…` with one word from `GITHUB_INSTALL_STATUS`
 (`@luke/features`). Without a `state`, the route confirms the installation
@@ -219,7 +219,7 @@ GitHub's "Request user authorization (OAuth) during installation" stays off:
 it disables the Setup URL and returns the code to the App's first callback
 URL, the sign-in's, and GitHub's docs say to run the full web flow with
 `redirect_uri` to choose the callback instead. So the App lists
-`https://tryluke.dev/api/github/installed/authorized` among its callback
+`https://fullspin.dev/api/github/installed/authorized` among its callback
 URLs, beside the sign-in's.
 
 The page draws a fixed card per status and interpolates nothing the address
@@ -537,7 +537,7 @@ A rotation is two steps. First put a new version at the head of the list,
 rows on version 1 still open. Then ask that deployment for the rewrap:
 
 ```
-CRON_SECRET=<the deployment's own> scripts/rewrap-provider-keys.sh https://tryluke.dev
+CRON_SECRET=<the deployment's own> scripts/rewrap-provider-keys.sh https://fullspin.dev
 ```
 
 The script is a `POST /api/maintenance/provider-keys-rewrap` under the

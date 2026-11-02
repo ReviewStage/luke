@@ -35,7 +35,7 @@ declare const PACKAGED_SENTRY_DSN: string;
 /**
  * `Fullspin@X.Y.Z`, the release `build.mjs` uploads this bundle's source maps
  * under, baked from that same string. Note that the SDK's own default is the
- * app's name, which is `Luke Dev` or `Luke Test` outside a Developer ID
+ * app's name, which is `Fullspin Dev` or `Fullspin Test` outside a Developer ID
  * build, so a report from one would name a release no map was uploaded to;
  * which build it was is the environment's to say instead.
  */

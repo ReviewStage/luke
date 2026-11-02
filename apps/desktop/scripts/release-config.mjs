@@ -5,14 +5,14 @@ import { PACKAGED_ARCHITECTURE } from "./package-layout.mjs";
 const NOTARY_KEYCHAIN_PROFILE = "luke-notary";
 // The version-free asset name every release carries beside the versioned DMG,
 // so the download link on the website can point at the latest release forever.
-export const RELEASE_LATEST_DMG_FILE_NAME = "Luke.dmg";
+export const RELEASE_LATEST_DMG_FILE_NAME = "Fullspin.dmg";
 // The version-free manifest name every release carries, so the app's update
 // feed URL — releases/latest/download/latest-mac.yml — never moves either.
 // The name is electron-updater's own convention for a macOS generic feed.
 export const RELEASE_UPDATE_FEED_FILE_NAME = "latest-mac.yml";
-// The mounted installer volume is not named bare "Luke": it appears beside
-// Luke.app in Finder, and both wear Luke's icon.
-export const RELEASE_VOLUME_NAME = "Luke Installer";
+// The mounted installer volume is not named bare "Fullspin": it appears beside
+// Fullspin.app in Finder, and both wear Fullspin's icon.
+export const RELEASE_VOLUME_NAME = "Fullspin Installer";
 export const NOTARY_CREDENTIAL_SOURCE = {
   KEYCHAIN_PROFILE: "keychain-profile",
   KEY_FILE: "key-file",
@@ -27,14 +27,14 @@ export const NOTARY_POLL_INTERVAL_MS = 30_000;
 export const NOTARY_POLL_TIMEOUT_MS = 20 * 60_000;
 
 export function releaseDmgFileName(version) {
-  return `Luke-${version}-${PACKAGED_ARCHITECTURE}.dmg`;
+  return `Fullspin-${version}-${PACKAGED_ARCHITECTURE}.dmg`;
 }
 
 // The zip is the auto-update path's food — Squirrel.Mac updates from an
 // archive of the app, never a DMG — so every release carries it beside the
 // DMG people actually open.
 export function releaseZipFileName(version) {
-  return `Luke-${version}-macos-${PACKAGED_ARCHITECTURE}.zip`;
+  return `Fullspin-${version}-macos-${PACKAGED_ARCHITECTURE}.zip`;
 }
 
 export function builderReleaseArtifactDirectory(repoRoot) {

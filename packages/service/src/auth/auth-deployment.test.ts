@@ -4,7 +4,7 @@ import { memoryAdapter } from "better-auth/adapters/memory";
 import { test } from "vitest";
 import { authDeployment } from "./auth-deployment.js";
 
-const PRODUCTION_URL = "https://tryluke.dev";
+const PRODUCTION_URL = "https://fullspin.dev";
 
 const PRODUCTION = {
   VERCEL_ENV: "production",

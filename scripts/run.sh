@@ -84,7 +84,7 @@ fi
 # inherited from the shell, so it is always the plain instance.
 if [[ -n $instance ]]; then
     export LUKE_INSTANCE=$instance
-    printf 'instance: launching as "%s", beside the plain Luke Dev\n' "$(luke_instance_app_name "$instance")" >&2
+    printf 'instance: launching as "%s", beside the plain Fullspin Dev\n' "$(luke_instance_app_name "$instance")" >&2
 else
     unset LUKE_INSTANCE
 fi

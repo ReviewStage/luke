@@ -27,7 +27,7 @@ import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "./oauth-clients.js";
  * session it carries as a signed bearer token. Synthetic accounts throughout.
  */
 
-const SERVICE_URL = "https://tryluke.dev";
+const SERVICE_URL = "https://fullspin.dev";
 const LOOPBACK = "http://127.0.0.1:54698/callback";
 
 const GITHUB_CODE = "github-code-under-test";

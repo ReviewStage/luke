@@ -30,7 +30,7 @@ import { linkLabels, linksIn, mentionLinksIn, mentionsIn } from "./mention-link.
 const TASK = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const AGENT = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const OTHER = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
-const HOME = "https://tryluke.dev/acme";
+const HOME = "https://fullspin.dev/acme";
 
 /** Every kind of place, and the link it is shared by, spelled out. */
 const LINKS: readonly (readonly [LinkPlace, string])[] = [
@@ -134,7 +134,7 @@ test("every place's link, by the web's scheme or the desktop's, names that place
   for (const [place, link] of LINKS) {
     assert.deepEqual(readLink(link), { workspace: "acme", place }, link);
     assert.deepEqual(
-      readLink(link.replace("https:", "tryluke:")),
+      readLink(link.replace("https:", "fullspin:")),
       { workspace: "acme", place },
       `${link} in the app's scheme`,
     );
@@ -145,7 +145,7 @@ test("a workspace written by id, or by a slug that must be encoded, is read back
   const place = { kind: LINK_PLACE.AGENT, agentId: AGENT } as const;
   const link = linkOf(place, "personal-u_1 (Dean)");
 
-  assert.equal(link, `https://tryluke.dev/personal-u_1%20%28Dean%29/agent/${AGENT}`);
+  assert.equal(link, `https://fullspin.dev/personal-u_1%20%28Dean%29/agent/${AGENT}`);
   assert.deepEqual(readLink(link), { workspace: "personal-u_1 (Dean)", place });
 });
 
@@ -168,7 +168,7 @@ test("a task's link names one of its comment threads by its comment query alone,
   });
   assert.equal(
     appLinkOf(`${HOME}/plan/${TASK}?comment=${OTHER}&from=slack`),
-    `tryluke://tryluke.dev/acme/plan/${TASK}?comment=${OTHER}`,
+    `fullspin://fullspin.dev/acme/plan/${TASK}?comment=${OTHER}`,
   );
 });
 
@@ -176,7 +176,7 @@ test("a task's own link, or a section's, is read under /task/ and with a slash a
   for (const target of [
     `${HOME}/task/${TASK}#rollout`,
     `${HOME}/plan/${TASK}/#rollout`,
-    `tryluke://tryluke.dev/acme/task/${TASK}/#Rollout`,
+    `fullspin://fullspin.dev/acme/task/${TASK}/#Rollout`,
   ]) {
     assert.deepEqual(
       readLink(target),
@@ -184,7 +184,7 @@ test("a task's own link, or a section's, is read under /task/ and with a slash a
       target,
     );
   }
-  assert.equal(appLinkOf(`${HOME}/task/${TASK}/`), `tryluke://tryluke.dev/acme/plan/${TASK}`);
+  assert.equal(appLinkOf(`${HOME}/task/${TASK}/`), `fullspin://fullspin.dev/acme/plan/${TASK}`);
 });
 
 test("a section headed by the longest heading a plan takes, percent-encoded, is still its link", () => {
@@ -196,7 +196,7 @@ test("a section headed by the longest heading a plan takes, percent-encoded, is 
     workspace: "acme",
     place: { kind: LINK_PLACE.SECTION, planId: TASK, anchor },
   });
-  assert.equal(appLinkOf(link), link.replace("https:", "tryluke:"));
+  assert.equal(appLinkOf(link), link.replace("https:", "fullspin:"));
 });
 
 test("a task's places are read under the name the unit of work is taking, /task/, as under /plan/", () => {
@@ -236,9 +236,9 @@ test("a picture in a plan's address names its task, and nothing of the picture",
 test("an address that names no place in Vespin names nothing", () => {
   for (const target of [
     `https://example.com/acme/agent/${AGENT}`,
-    `http://tryluke.dev/acme/agent/${AGENT}`,
-    `https://tryluke.dev/agent/${AGENT}`,
-    `https://tryluke.dev//agent/${AGENT}`,
+    `http://fullspin.dev/acme/agent/${AGENT}`,
+    `https://fullspin.dev/agent/${AGENT}`,
+    `https://fullspin.dev//agent/${AGENT}`,
     `${HOME}/agent`,
     `${HOME}/agents/${AGENT}`,
     `${HOME}/agent/${AGENT}/changes/checks/thread/PRRT_1`,
@@ -297,21 +297,21 @@ test("an address that names no place in Vespin names nothing", () => {
 test("a link is handed to the desktop in its own scheme, written again from the place it names", () => {
   assert.equal(
     appLinkOf(`${HOME}/plan/${TASK}/agent/${AGENT}?from=slack#top`),
-    `tryluke://tryluke.dev/acme/plan/${TASK}/agent/${AGENT}`,
+    `fullspin://fullspin.dev/acme/plan/${TASK}/agent/${AGENT}`,
   );
   assert.equal(
-    appLinkOf(`https://tryluke.dev/acme/plan/${TASK}?from=slack#Rollout`),
-    `tryluke://tryluke.dev/acme/plan/${TASK}#rollout`,
+    appLinkOf(`https://fullspin.dev/acme/plan/${TASK}?from=slack#Rollout`),
+    `fullspin://fullspin.dev/acme/plan/${TASK}#rollout`,
   );
   assert.equal(
-    appLinkOf(`tryluke://tryluke.dev/personal-u_1/plan/${TASK}/inbox/${OTHER}`),
-    `tryluke://tryluke.dev/personal-u_1/plan/${TASK}/inbox/${OTHER}`,
+    appLinkOf(`fullspin://fullspin.dev/personal-u_1/plan/${TASK}/inbox/${OTHER}`),
+    `fullspin://fullspin.dev/personal-u_1/plan/${TASK}/inbox/${OTHER}`,
   );
   for (const target of [
     `https://example.com/acme/plan/${TASK}`,
     `luke://plan/${TASK}`,
     "https://github.com/acme/checkout/blob/HEAD/src/a.ts",
-    `https://tryluke.dev/acme/plan/${TASK}#a%20b`,
+    `https://fullspin.dev/acme/plan/${TASK}#a%20b`,
   ]) {
     assert.equal(appLinkOf(target), undefined, target);
   }
@@ -320,26 +320,26 @@ test("a link is handed to the desktop in its own scheme, written again from the 
 test("a box's pairing link names its code under no workspace, read whatever its case and dash, and is handed to the desktop as the box shows it", () => {
   const place = { kind: ACCOUNT_PLACE.CONNECT, code: "BCDFGHJK" } as const;
   for (const target of [
-    "https://tryluke.dev/connect/BCDF-GHJK",
-    "https://tryluke.dev/connect/bcdfghjk/?from=box#top",
-    "tryluke://tryluke.dev/connect/BCDF-GHJK",
+    "https://fullspin.dev/connect/BCDF-GHJK",
+    "https://fullspin.dev/connect/bcdfghjk/?from=box#top",
+    "fullspin://fullspin.dev/connect/BCDF-GHJK",
   ]) {
     assert.deepEqual(readShownLink(target), { place }, target);
   }
   assert.equal(
-    appLinkOf("https://tryluke.dev/connect/bcdf-ghjk?from=box"),
-    "tryluke://tryluke.dev/connect/BCDF-GHJK",
+    appLinkOf("https://fullspin.dev/connect/bcdf-ghjk?from=box"),
+    "fullspin://fullspin.dev/connect/BCDF-GHJK",
   );
   // A code holds no vowel, so a step of any workspace's place is never read as one.
   for (const target of [
-    "https://tryluke.dev/connect",
-    "https://tryluke.dev/connect/BCDF-GHJA",
-    "https://tryluke.dev/connect/BCDF-GHJK/more",
+    "https://fullspin.dev/connect",
+    "https://fullspin.dev/connect/BCDF-GHJA",
+    "https://fullspin.dev/connect/BCDF-GHJK/more",
     "https://example.com/connect/BCDF-GHJK",
   ]) {
     assert.equal(readShownLink(target), undefined, target);
   }
-  assert.deepEqual(readShownLink(`https://tryluke.dev/connect/plan/${TASK}`), {
+  assert.deepEqual(readShownLink(`https://fullspin.dev/connect/plan/${TASK}`), {
     workspace: "connect",
     place: { kind: LINK_PLACE.TASK, planId: TASK },
   });

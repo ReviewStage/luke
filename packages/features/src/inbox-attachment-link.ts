@@ -4,13 +4,13 @@ import { insideCode } from "./mention-link.js";
 import { parsedUrl } from "./parsed-url.js";
 
 /**
- * inbox-attachment-link.ts -- a picture in an Inbox item's Markdown as its address on tryluke.dev: written, read back, and found in the item's words.
+ * inbox-attachment-link.ts -- a picture in an Inbox item's Markdown as its address on fullspin.dev: written, read back, and found in the item's words.
  *
  * A message on an item's thread, its agent's or a member's, draws a picture
  * as a plan does, `![alt](<address> "caption")`, its address the item's own
  * link (`link-grammar.ts`) with `/files/<attachment>` after it, as a plan's
  * picture stands under its plan's (`plan-attachment-link.ts`):
- * `https://tryluke.dev/<workspace>/plan/<task>/inbox/<item>/files/<attachment>`,
+ * `https://fullspin.dev/<workspace>/plan/<task>/inbox/<item>/files/<attachment>`,
  * or `/agent/<agent>/inbox/<item>/files/<attachment>` for an item of an
  * agent with no task. The address is a real one on purpose: opened in a
  * browser it lands on the item, which opens to its readers alone, and

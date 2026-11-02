@@ -241,7 +241,7 @@ export type DeviceAgentAnswer = typeof deviceAgentAnswerSchema.Type;
 /** The folders under a Mac's home its local agents' things stand in (`deviceAgentLayout`). */
 export const DEVICE_AGENT_FOLDER = {
   /** Every local agent's folder, one per agent under its id. */
-  ROOT: ".luke/agents",
+  ROOT: ".fullspin/agents",
   /** The agent's worktree, which the Mac makes as it takes the launch line. */
   REPOSITORY: "repository",
   /** The files a message carries, one folder per line, made `0700`. */

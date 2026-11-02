@@ -686,7 +686,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
             email: "sam@example.com",
             role: WORKSPACE_ROLE.MEMBER,
             expiresAt: new Date(NOW + 5 * DAY).toISOString(),
-            acceptUrl: "https://tryluke.dev/invite/fixture",
+            acceptUrl: "https://fullspin.dev/invite/fixture",
           },
         ]
       : [],

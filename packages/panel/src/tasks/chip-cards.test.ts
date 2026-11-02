@@ -115,7 +115,7 @@ const ACME: Workspace = {
 
 const PLACE: MentionPlace = { workspace: "acme", repository: "acme/relay" };
 
-const HOME = "https://tryluke.dev/acme";
+const HOME = "https://fullspin.dev/acme";
 
 const MEMBERS: readonly WorkspaceMember[] = [
   { userId: SAM, name: "Sam Okafor", email: "sam@example.com", role: WORKSPACE_ROLE.OWNER },
@@ -784,7 +784,7 @@ test("an automation's chip hangs its card, who made it and when at its foot, the
 test("a member's and an automation's chips under another workspace's link are read as that workspace holds them, not the words' own", async () => {
   vi.useFakeTimers({ now: CHANNELS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
   const container = await drawn(
-    `Ask [Sam](https://tryluke.dev/beta/person/${SAM}) about [the audit](https://tryluke.dev/beta/automation/${AUDIT.id}).`,
+    `Ask [Sam](https://fullspin.dev/beta/person/${SAM}) about [the audit](https://fullspin.dev/beta/automation/${AUDIT.id}).`,
   );
   const [person, automation] = chipsOf(container);
 
@@ -797,7 +797,7 @@ test("a member's and an automation's chips under another workspace's link are re
 });
 
 test("a member's chip under a link naming its workspace by id, as one with no slug is written, is read as that workspace holds them", async () => {
-  const container = await drawn(`Ask [Sam](https://tryluke.dev/${BETA.id}/person/${SAM}).`);
+  const container = await drawn(`Ask [Sam](https://fullspin.dev/${BETA.id}/person/${SAM}).`);
 
   const member = await cardOf(chipsOf(container)[0]);
 

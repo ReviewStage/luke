@@ -1269,7 +1269,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
 });
 
 test("a plan's chip in a plan's version history hangs the plan's card, as the plan's own words do", () => {
-  const body = `## Rollout\n\nAs in [@the plan](https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}).\n`;
+  const body = `## Rollout\n\nAs in [@the plan](https://fullspin.dev/acme/plan/${DOCUMENT_TASK.id}).\n`;
   const control = tasksControl();
   const page = mount(false, false, {
     page: TASKS_PAGE.DOCUMENT,

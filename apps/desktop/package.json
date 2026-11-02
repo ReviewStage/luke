@@ -1,9 +1,9 @@
 {
   "name": "@luke/desktop",
-  "productName": "Luke",
+  "productName": "Fullspin",
   "version": "0.24.0",
   "private": true,
-  "description": "Luke desktop application",
+  "description": "Fullspin desktop application",
   "main": "dist/main.js",
   "imports": {
     "#main/*": [

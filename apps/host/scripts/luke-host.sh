@@ -1,5 +1,5 @@
 #!/bin/sh
-# luke-host -- the host's one command: `uninstall` removes Luke host from the account it is installed in, with no sudo, with its service, its agents' folders, its state and its releases; or, for an install that came before, as root, from a Linux box with the smolvm the install script put beside it and, with the luke-host user's home, smolvm's state and every machine left behind, or from a Mac for the user who runs it under sudo, with its LaunchAgent, its folder, its logs, and the machines and folders of the agents it made, by the record its daemon keeps of them; every other command is the daemon's own (lib/luke-host.mjs), run on the Node the release carries.
+# luke-host -- the host's one command: `uninstall` removes Fullspin host from the account it is installed in, with no sudo, with its service, its agents' folders, its state and its releases; or, for an install that came before, as root, from a Linux box with the smolvm the install script put beside it and, with the luke-host user's home, smolvm's state and every machine left behind, or from a Mac for the user who runs it under sudo, with its LaunchAgent, its folder, its logs, and the machines and folders of the agents it made, by the record its daemon keeps of them; every other command is the daemon's own (lib/luke-host.mjs), run on the Node the release carries.
 #
 # Shipped as bin/luke-host in every release tarball, a Mac's among them
 # (scripts/package.ts). The account install unpacks each release into
@@ -8,14 +8,14 @@
 # ~/.local/bin/luke-host to current/bin/luke-host; its state root is
 # ~/.local/state/luke-host, and a systemd --user unit or a LaunchAgent runs it.
 # An install that came before put the release in /opt/luke-host, or on a Mac
-# in ~/Library/Application Support/Luke Host, linked from /usr/local/bin.
+# in ~/Library/Application Support/Fullspin Host, linked from /usr/local/bin.
 set -eu
 
 root="$(dirname "$(dirname "$(readlink -f "$0")")")"
 HOST_USER="luke-host"
 UNIT="luke-host.service"
 SMOLVM_DIR="/opt/luke-smolvm"
-# Where the account install puts Luke host, under the home of the account it
+# Where the account install puts Fullspin host, under the home of the account it
 # runs as, by the names apps/web/install/install.sh gives them: the releases,
 # the state root, the command's link, and on Linux the folder of its unit.
 ACCOUNT_RELEASES=".local/share/luke-host"
@@ -23,14 +23,14 @@ ACCOUNT_STATE=".local/state/luke-host"
 ACCOUNT_LINK=".local/bin/luke-host"
 ACCOUNT_UNIT_FOLDER=".config/systemd/user"
 # Where a Mac's install puts its LaunchAgent and its log, under the home of the user it runs as.
-MAC_LABEL="dev.reviewstage.luke.host.standalone"
-MAC_LOG_FOLDER="Library/Logs/Luke Host"
-# Where a Mac's install that came before put Luke host, under the home of the user it ran as.
-MAC_APP_FOLDER="Library/Application Support/Luke Host"
+MAC_LABEL="dev.fullspin.host.standalone"
+MAC_LOG_FOLDER="Library/Logs/Fullspin Host"
+# Where a Mac's install that came before put Fullspin host, under the home of the user it ran as.
+MAC_APP_FOLDER="Library/Application Support/Fullspin Host"
 # The daemon's record of the agents whose folder it made, an empty file named for each, in its state root (OWNED_FOLDER in packages/host/src/local-agent-state.ts).
 OWNED_AGENTS="owned-agents"
 # Every agent's folder, one per agent under its id, under the home (DEVICE_AGENT_FOLDER.ROOT in packages/features/src/device-agent-wire.ts).
-AGENTS_FOLDER=".luke/agents"
+AGENTS_FOLDER=".fullspin/agents"
 
 # The home of the account whose install this release is, where it is one: the
 # release stands in a version folder of that home's releases.
@@ -81,7 +81,7 @@ remove_launch_agent() {
   agent="gui/$(id -u)/$MAC_LABEL"
   launchctl bootout "$agent" >/dev/null 2>&1 || true
   if launchctl print "$agent" >/dev/null 2>&1; then
-    printf 'Could not stop Luke host, so nothing was removed. Stop it with launchctl bootout %s, then run this again.\n' "$agent" >&2
+    printf 'Could not stop Fullspin host, so nothing was removed. Stop it with launchctl bootout %s, then run this again.\n' "$agent" >&2
     exit 1
   fi
   if [ -e "$plist" ]; then
@@ -96,11 +96,11 @@ remove_launch_agent() {
 
 # Removes the account install this release is, run as that account with no
 # sudo: its service stopped and removed, then the folders of the agents its
-# daemon made (~/.luke/agents/<id>, by the record it keeps of them), its
+# daemon made (~/.fullspin/agents/<id>, by the record it keeps of them), its
 # state root, its releases and its link, saying each. Before it changes
 # anything it says that the agents' folders go, with any work in them that
 # was not pushed, and asks to go on where a person runs it at a terminal.
-# Note that ~/.luke/clones stays, since every Luke install for the account
+# Note that ~/.fullspin/clones stays, since every Fullspin install for the account
 # shares it, and so does an install that came before, under /opt or a Mac's
 # Application Support, which is removed with its own sudo luke-host
 # uninstall, said where one stands, and so does a Linux account's lingering,
@@ -108,7 +108,7 @@ remove_launch_agent() {
 uninstall_account() {
   home="$1"
   if [ "$(readlink -f "${HOME:-/}")" != "$home" ]; then
-    printf 'This Luke host is installed in the account whose home is %s. Run luke-host uninstall as that account, without sudo.\n' "$home" >&2
+    printf 'This Fullspin host is installed in the account whose home is %s. Run luke-host uninstall as that account, without sudo.\n' "$home" >&2
     exit 1
   fi
   agents=0
@@ -117,9 +117,9 @@ uninstall_account() {
     agents=$((agents + 1))
   done
   if [ "$agents" -gt 0 ]; then
-    printf 'This removes the folders under %s of the agents Luke host ran here (%s). Work in them that was not pushed goes with them.\n' "$HOME/$AGENTS_FOLDER" "$agents" >&2
+    printf 'This removes the folders under %s of the agents Fullspin host ran here (%s). Work in them that was not pushed goes with them.\n' "$HOME/$AGENTS_FOLDER" "$agents" >&2
     if [ -t 0 ]; then
-      printf 'Remove Luke host and those folders? [y/N] ' >&2
+      printf 'Remove Fullspin host and those folders? [y/N] ' >&2
       read -r go_on || go_on=""
       case "$go_on" in
         y | Y | yes | Yes | YES) ;;
@@ -142,7 +142,7 @@ uninstall_account() {
     rm -rf "$folder"
     printf 'Removed %s.\n' "$folder"
   done
-  rmdir "${HOME:?}/$AGENTS_FOLDER" "${HOME:?}/.luke" 2>/dev/null || true
+  rmdir "${HOME:?}/$AGENTS_FOLDER" "${HOME:?}/.fullspin" 2>/dev/null || true
   for folder in "${HOME:?}/$ACCOUNT_STATE" "${HOME:?}/$ACCOUNT_RELEASES"; do
     [ -e "$folder" ] || continue
     rm -rf "$folder"
@@ -156,36 +156,36 @@ uninstall_account() {
       printf 'Removed %s.\n' "$link"
       ;;
   esac
-  if [ -e "$HOME/.luke/clones" ]; then
-    printf 'Kept the clones in %s, which every Luke install for this account shares.\n' "$HOME/.luke/clones"
+  if [ -e "$HOME/.fullspin/clones" ]; then
+    printf 'Kept the clones in %s, which every Fullspin install for this account shares.\n' "$HOME/.fullspin/clones"
   fi
   if [ -e /opt/luke-host ] || [ -e "/etc/systemd/system/$UNIT" ]; then
-    printf 'Left the install of Luke host under /opt/luke-host as it stands. Remove it with: sudo /opt/luke-host/bin/luke-host uninstall\n'
+    printf 'Left the install of Fullspin host under /opt/luke-host as it stands. Remove it with: sudo /opt/luke-host/bin/luke-host uninstall\n'
   fi
   if [ -e "$HOME/$MAC_APP_FOLDER" ]; then
-    printf "Left the install of Luke host in %s as it stands. Remove it with: sudo '%s' uninstall\n" "$HOME/$MAC_APP_FOLDER" "$HOME/$MAC_APP_FOLDER/luke-host/bin/luke-host"
+    printf "Left the install of Fullspin host in %s as it stands. Remove it with: sudo '%s' uninstall\n" "$HOME/$MAC_APP_FOLDER" "$HOME/$MAC_APP_FOLDER/luke-host/bin/luke-host"
   fi
   # Note that lingering is left on, since another service of the account may need it to run while no one is logged in.
   if [ "$kernel" != Darwin ] && [ "$(loginctl show-user "$(id -un)" --property=Linger --value 2>/dev/null)" = yes ]; then
     printf 'Left lingering on for %s, since other services of this account may need it. Turn it off with: loginctl disable-linger\n' "$(id -un)"
   fi
-  printf 'Luke host is removed from this account. Remove it in Settings › Hosts too, if it is still listed.\n'
+  printf 'Fullspin host is removed from this account. Remove it in Settings › Hosts too, if it is still listed.\n'
 }
 
 # Removes a Mac's install for the user who ran the command under sudo: its
 # LaunchAgent booted out, which stops the daemon and every agent's runner with
-# it, then each of its agents' folder (~/.luke/agents/<id>) removed, with any
+# it, then each of its agents' folder (~/.fullspin/agents/<id>) removed, with any
 # machine an older release ran it in deleted, and its LaunchAgent, folder (the
-# release and the Mac's secret) and logs removed. Note that ~/.luke/clones and ~/.luke/worktrees stay, since every
-# Luke install on the Mac shares them, the desktop app's own repositories among
+# release and the Mac's secret) and logs removed. Note that ~/.fullspin/clones and ~/.fullspin/worktrees stay, since every
+# Fullspin install on the Mac shares them, the desktop app's own repositories among
 # them.
 # Note that the machines are those older releases ran agents in, smolvm's, kept in the
 # user's own smolvm store rather than the state, so each is deleted by name, with the
 # smolvm such a release fetched, before the state goes; smolvm's cache of the sandbox
 # image stays with that store.
-# Note that the store and ~/.luke/agents are shared with every Luke app profile
+# Note that the store and ~/.fullspin/agents are shared with every Fullspin app profile
 # whose This Mac runs beside this install, so only the agents the daemon's
-# record names are removed, and ~/.luke/agents and ~/.luke only where nothing
+# record names are removed, and ~/.fullspin/agents and ~/.fullspin only where nothing
 # else stands in them.
 uninstall_darwin() {
   if [ "$(id -u)" -ne 0 ]; then
@@ -194,7 +194,7 @@ uninstall_darwin() {
   fi
   user="${SUDO_USER:-}"
   if [ -z "$user" ] || [ "$user" = "root" ]; then
-    printf 'Run it with sudo from the Mac account Luke host was installed for: sudo luke-host uninstall\n' >&2
+    printf 'Run it with sudo from the Mac account Fullspin host was installed for: sudo luke-host uninstall\n' >&2
     exit 1
   fi
   home="$(dscl . -read "/Users/$user" NFSHomeDirectory 2>/dev/null | sed -n 's/^NFSHomeDirectory: //p')"
@@ -207,7 +207,7 @@ uninstall_darwin() {
   launchctl bootout "$agent" >/dev/null 2>&1 || true
   # Note that nothing is removed while the LaunchAgent is still loaded, since its daemon and its agents' runners would run on with their folders gone.
   if launchctl print "$agent" >/dev/null 2>&1; then
-    printf 'Could not stop Luke host for %s, so nothing was removed. Stop it with launchctl bootout %s, then run this again.\n' "$user" "$agent" >&2
+    printf 'Could not stop Fullspin host for %s, so nothing was removed. Stop it with launchctl bootout %s, then run this again.\n' "$user" "$agent" >&2
     exit 1
   fi
   rm -f "$home/Library/LaunchAgents/$MAC_LABEL.plist"
@@ -218,15 +218,15 @@ uninstall_darwin() {
       [ -x "$smolvm" ] || continue
       sudo -u "$user" -H "$smolvm" machine delete --name "luke-$id" -f >/dev/null 2>&1 || true
     done
-    rm -rf "${home:?}/.luke/agents/$id"
+    rm -rf "${home:?}/.fullspin/agents/$id"
   done
   # Note that the link is read as the install wrote it, before its target goes, since a link to nothing resolves to nothing.
   if [ "$(readlink /usr/local/bin/luke-host 2>/dev/null)" = "$app/luke-host/bin/luke-host" ]; then
     rm -f /usr/local/bin/luke-host
   fi
   rm -rf "$app" "$home/$MAC_LOG_FOLDER"
-  rmdir "$home/.luke/agents" "$home/.luke" 2>/dev/null || true
-  printf 'Luke host is removed from this Mac for %s. Remove it in Settings › Hosts too, if it is still listed.\n' "$user"
+  rmdir "$home/.fullspin/agents" "$home/.fullspin" 2>/dev/null || true
+  printf 'Fullspin host is removed from this Mac for %s. Remove it in Settings › Hosts too, if it is still listed.\n' "$user"
 }
 
 uninstall() {
@@ -241,7 +241,7 @@ uninstall() {
       return
       ;;
     *)
-      printf 'luke-host uninstall removes Luke host from a Linux box or a Mac only.\n' >&2
+      printf 'luke-host uninstall removes Fullspin host from a Linux box or a Mac only.\n' >&2
       exit 1
       ;;
   esac
@@ -282,7 +282,7 @@ uninstall() {
   fi
   # Note that smolvm is the install script's own, beside the release rather than in it; its state and any machines left behind are under the luke-host user's home and processes, which went with the user above.
   rm -rf "$SMOLVM_DIR"
-  printf 'Luke host is removed from this box. Remove it in Settings › Hosts too, if it is still listed.\n'
+  printf 'Fullspin host is removed from this box. Remove it in Settings › Hosts too, if it is still listed.\n'
 }
 
 if [ "${1:-}" = "uninstall" ]; then

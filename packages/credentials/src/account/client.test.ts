@@ -15,7 +15,7 @@ function json(body: JsonValue, status = 200): Response {
 
 test("the authorization URL carries the native public-client contract", () => {
   const client = new AccountClient({
-    baseUrl: "https://tryluke.dev/api/auth/",
+    baseUrl: "https://fullspin.dev/api/auth/",
     clientId: "luke-desktop",
   });
   const url = new URL(
@@ -44,7 +44,7 @@ it.effect("the code exchange sends the verifier and redirect as form fields", ()
       return json({ access_token: "access", refresh_token: "refresh" });
     };
     const client = new AccountClient({
-      baseUrl: "https://tryluke.dev/api/auth",
+      baseUrl: "https://fullspin.dev/api/auth",
       clientId: "luke-desktop",
       httpClient: fakeHttpClientLayer(fetch),
     });
@@ -81,7 +81,7 @@ it.effect("userinfo returns the identity fields and nothing else the claim carri
       });
     };
     const client = new AccountClient({
-      baseUrl: "https://tryluke.dev/api/auth",
+      baseUrl: "https://fullspin.dev/api/auth",
       clientId: "luke-desktop",
       httpClient: fakeHttpClientLayer(fetch),
     });
@@ -98,7 +98,7 @@ it.effect("userinfo returns the identity fields and nothing else the claim carri
 it.effect("invalid token and identity responses are refused", () =>
   Effect.gen(function* () {
     const tokenClient = new AccountClient({
-      baseUrl: "https://tryluke.dev/api/auth",
+      baseUrl: "https://fullspin.dev/api/auth",
       clientId: "luke-desktop",
       httpClient: fakeHttpClientLayer(async () => json({ access_token: "access-only" })),
     });
@@ -112,7 +112,7 @@ it.effect("invalid token and identity responses are refused", () =>
     assert.match(tokens.message, /both tokens/);
 
     const identityClient = new AccountClient({
-      baseUrl: "https://tryluke.dev/api/auth",
+      baseUrl: "https://fullspin.dev/api/auth",
       clientId: "luke-desktop",
       httpClient: fakeHttpClientLayer(async () => json({ provider: "unknown" })),
     });
@@ -157,7 +157,7 @@ function recordingClient(answer: () => Response) {
     return answer();
   };
   const client = new AccountClient({
-    baseUrl: "https://tryluke.dev/api/auth",
+    baseUrl: "https://fullspin.dev/api/auth",
     clientId: "luke-desktop",
     httpClient: fakeHttpClientLayer(fetch),
   });
@@ -189,7 +189,7 @@ it.effect(
         email: "dev@example.com",
       });
       const request = sent();
-      assert.equal(request?.url, "https://tryluke.dev/api/auth/electron/token");
+      assert.equal(request?.url, "https://fullspin.dev/api/auth/electron/token");
       assert.equal(request?.method, "POST");
       assert.deepEqual(yield* Effect.promise(() => request?.json() ?? Promise.resolve()), {
         token: "plugin-code",
@@ -219,7 +219,7 @@ it.effect("ending the session signs out under the session as a bearer", () =>
 
     yield* client.endSession("bare-session.signature");
 
-    assert.equal(sent()?.url, "https://tryluke.dev/api/auth/sign-out");
+    assert.equal(sent()?.url, "https://fullspin.dev/api/auth/sign-out");
     assert.equal(sent()?.headers.get("authorization"), "Bearer bare-session.signature");
   }),
 );

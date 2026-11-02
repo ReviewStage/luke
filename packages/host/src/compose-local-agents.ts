@@ -192,7 +192,7 @@ import type { RunMode } from "./run-mode.js";
  * gate opens, so every agent this machine made (`ownedAgents`) has its turn
  * let go of too, whatever a run that died left in its folder. An agent this
  * machine did not make is never touched, since This Mac and a Mac's own
- * `luke-host` share the user's `~/.luke/agents`.
+ * `luke-host` share the user's `~/.fullspin/agents`.
  *
  * The service's list of the device's open launches is what the device
  * runs: every beat answers it (`DeviceAgentBeat`), and the device converges
@@ -1879,7 +1879,7 @@ export function composeLocalAgents(
           }
           if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
         }
-        // Note that no runner runs yet, so whatever a run cut off left in the folder of any agent this machine made is let go of too; the agents of another Fullspin install sharing `~/.luke/agents` are never named here.
+        // Note that no runner runs yet, so whatever a run cut off left in the folder of any agent this machine made is let go of too; the agents of another Fullspin install sharing `~/.fullspin/agents` are never named here.
         const kept = new Set(left.flatMap((launch) => launch.agentId ?? []));
         for (const agentId of yield* ownedAgents(kernel.stateRoot)) {
           if (!kept.has(agentId)) yield* turnLetGo(deviceAgentLayout(folder, agentId));

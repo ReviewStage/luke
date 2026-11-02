@@ -41,7 +41,7 @@ const CONTENT = {
 
 function client(): HostedInstalledSkillClient {
   return new HostedInstalledSkillClient({
-    serviceBaseUrl: "https://tryluke.dev",
+    serviceBaseUrl: "https://fullspin.dev",
     credential: accountBearer({
       readAccessToken: () => Effect.succeed("token-1"),
       refreshAccount: () => Effect.void,

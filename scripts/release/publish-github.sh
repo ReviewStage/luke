@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Publishes a manual macOS release from what pnpm release:macos just built.
 # The asset set is load-bearing on both ends and encoded here so a by-hand
-# release cannot break either: the version-free Luke.dmg is what the website's
+# release cannot break either: the version-free Fullspin.dmg is what the website's
 # download link reaches through releases/latest, and the version-free
 # latest-mac.yml is the electron-updater manifest the app updates from — so
 # the release must end up a published, non-draft, non-prerelease one whose
@@ -86,7 +86,7 @@ if ! gh release view "$TAG" > /dev/null 2>&1; then
     gh release create "$TAG" \
         --draft \
         --verify-tag \
-        --title "Luke $VERSION" \
+        --title "Fullspin $VERSION" \
         --generate-notes
 fi
 gh release upload "$TAG" \

@@ -62,7 +62,7 @@ export const device = pgTable(
     arch: text("arch").$type<DeviceArch>().notNull(),
     /** How the device runs its agents, as it last registered (`DEVICE_ISOLATION`); a row from before the column runs them bare, as every Mac did. */
     isolation: text("isolation").$type<DeviceIsolation>().notNull().default(DEVICE_ISOLATION.BARE),
-    /** The Mac's home folder, absolute, as the desktop read it: where a local agent's folder is (`~/.luke/agents/<agent>`); null for a host that has not registered yet. */
+    /** The Mac's home folder, absolute, as the desktop read it: where a local agent's folder is (`~/.fullspin/agents/<agent>`); null for a host that has not registered yet. */
     home: text("home"),
     /** The Claude Code CLI the desktop bundles, by its absolute path, which a local agent's launch names; null for a host that has not registered yet. */
     claudeExecutable: text("claude_executable"),

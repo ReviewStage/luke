@@ -85,7 +85,7 @@ export const LINUX_HOST: HostOs = {
  * desktop app, so its state is the app's own folder, which Electron puts
  * under Application Support by the app's name (`resolveAppName`, a
  * packaged build's), and the app's device ids and agent folders are where
- * it looks. Those folders stand in the member's own `~/.luke/agents`,
+ * it looks. Those folders stand in the member's own `~/.fullspin/agents`,
  * which a standalone `luke-host` shares, so they are never its own alone.
  * Its runner is the app's own bundle, beside the release in
  * `Contents/Resources/agent-runner`.

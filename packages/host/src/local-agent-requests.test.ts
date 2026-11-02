@@ -52,27 +52,27 @@ describe("answeredLocalAgentRequest", () => {
     {
       case: "a path that climbs out with ..",
       path: (root: string) =>
-        `${root}/home/.luke/agents/${AGENT}/repository/../../../../../secret.txt`,
+        `${root}/home/.fullspin/agents/${AGENT}/repository/../../../../../secret.txt`,
     },
     {
       case: "a symlink in the worktree pointing outside",
-      path: (root: string) => `${root}/home/.luke/agents/${AGENT}/repository/escape.txt`,
+      path: (root: string) => `${root}/home/.fullspin/agents/${AGENT}/repository/escape.txt`,
     },
     {
       case: "the agent's own gh sign-in, where a host keeps its GitHub token",
-      path: (root: string) => `${root}/home/.luke/agents/${AGENT}/gh/hosts.yml`,
+      path: (root: string) => `${root}/home/.fullspin/agents/${AGENT}/gh/hosts.yml`,
     },
     {
       case: "a symlink in the worktree pointing at the agent's gh sign-in",
-      path: (root: string) => `${root}/home/.luke/agents/${AGENT}/repository/gh.yml`,
+      path: (root: string) => `${root}/home/.fullspin/agents/${AGENT}/repository/gh.yml`,
     },
     {
       case: "gh's config in the agent's home, where a host whose agents run on the box keeps its GitHub token",
-      path: (root: string) => `${root}/home/.luke/agents/${AGENT}/home/.config/gh/hosts.yml`,
+      path: (root: string) => `${root}/home/.fullspin/agents/${AGENT}/home/.config/gh/hosts.yml`,
     },
     {
       case: "a symlink in the worktree pointing at gh's config in the agent's home",
-      path: (root: string) => `${root}/home/.luke/agents/${AGENT}/repository/home-gh.yml`,
+      path: (root: string) => `${root}/home/.fullspin/agents/${AGENT}/repository/home-gh.yml`,
     },
   ])("refuses $case", ({ path }) =>
     Effect.gen(function* () {

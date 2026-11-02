@@ -28,7 +28,7 @@ const OFF_THE_WEB = [
   "data:text/html,<script>alert(document.cookie)</script>",
   "vbscript:msgbox(1)",
   "file:///etc/passwd",
-  "tryluke://acme/plan/3f6c1b2a",
+  "fullspin://acme/plan/3f6c1b2a",
 ] as const;
 
 afterEach(() => {
@@ -102,7 +102,7 @@ test("a download's file stays readable once its press returns, and is let go of 
 test("the way to the Mac app is offered on a Mac, and on no other platform", () => {
   window.history.replaceState(null, "", "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b");
 
-  assert.match(webPlatform(COUNTING, LINK_PLATFORM.MAC).macAppLink?.() ?? "", /^tryluke:/u);
+  assert.match(webPlatform(COUNTING, LINK_PLATFORM.MAC).macAppLink?.() ?? "", /^fullspin:/u);
   assert.equal(webPlatform(COUNTING, LINK_PLATFORM.OTHER).macAppLink, undefined);
   // jsdom's browser says it runs on Linux, where the Mac app cannot open.
   assert.equal(webPlatform(COUNTING).macAppLink, undefined);

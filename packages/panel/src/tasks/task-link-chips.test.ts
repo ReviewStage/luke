@@ -27,7 +27,7 @@ const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const REPOSITORY = "acme/relay";
 
 const LINKS = [
-  `Read [the rollout](https://tryluke.dev/acme/plan/${TASK_ID}#rollout),`,
+  `Read [the rollout](https://fullspin.dev/acme/plan/${TASK_ID}#rollout),`,
   `[the store](https://github.com/${REPOSITORY}/blob/0a1b2c3d/apps/web/store.ts#L3-L5),`,
   "https://linear.app/acme/issue/LUKE-142/fix-the-thing, and [the docs](https://example.com/docs).",
   "Not `https://linear.app/acme/issue/LUKE-9`.",

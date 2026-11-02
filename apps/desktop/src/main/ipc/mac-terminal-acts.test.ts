@@ -90,7 +90,7 @@ function fixture(
         setMacRepository: () =>
           Effect.succeed(repositories === undefined ? undefined : { repositories }),
       },
-      worktreesRoot: "/home/.luke",
+      worktreesRoot: "/home/.fullspin",
       home: "/home",
       stateRoot: "/state",
       openInTerminal: (folder) => void terminalOpenedIn.push(folder),
@@ -165,7 +165,7 @@ it.effect("an open asks nothing first: with no command set it brings the branch 
     assert.ok("answer" in answer);
     assert.equal(opened.length, 1);
     const script = started[0]?.script ?? "";
-    assert.match(script, /'\/home\/\.luke\/clones\/acme\/app'/u);
+    assert.match(script, /'\/home\/\.fullspin\/clones\/acme\/app'/u);
     assert.match(script, /'https:\/\/github\.com\/acme\/app\.git'/u);
     assert.doesNotMatch(script, /Running/u);
   }),
@@ -184,16 +184,16 @@ it.effect(
       const [terminal] = started;
       const [port] = opened;
       assert.ok(terminal !== undefined && port !== undefined);
-      assert.match(terminal.script, /clone='\/home\/\.luke\/clones\/acme\/app'/u);
+      assert.match(terminal.script, /clone='\/home\/\.fullspin\/clones\/acme\/app'/u);
       assert.match(terminal.script, /'luke\/add-thing'/u);
       assert.match(
         terminal.script,
-        /worktree='\/home\/\.luke\/worktrees\/acme\/app\/luke\+2Fadd-thing'/u,
+        /worktree='\/home\/\.fullspin\/worktrees\/acme\/app\/luke\+2Fadd-thing'/u,
       );
       // Note that the worktrees an earlier Vespin kept under its application data are named, to be pointed to.
       assert.match(terminal.script, /earlier_worktrees='\/state\/worktrees\/acme\/app'/u);
-      // Note that worktrees past their use are moved under the shared root to be deleted, and an earlier Vespin's clone is named to be tidied.
-      assert.match(terminal.script, /trash='\/home\/\.luke\/trash'/u);
+      // Note that worktrees past their use are moved under the shared root to be deleted, and an earlier Fullspin's clone is named to be tidied.
+      assert.match(terminal.script, /trash='\/home\/\.fullspin\/trash'/u);
       assert.match(terminal.script, /earlier_clone='\/state\/clones\/acme\/app'/u);
       assert.match(terminal.script, /pnpm dev/u);
 
@@ -274,8 +274,8 @@ it.effect(
   "Open in Terminal opens the worktree, or the clone where it is not made, and refuses before any run",
   () =>
     Effect.gen(function* () {
-      const worktree = "/home/.luke/worktrees/acme/app/luke+2Fadd-thing";
-      const clone = "/home/.luke/clones/acme/app";
+      const worktree = "/home/.fullspin/worktrees/acme/app/luke+2Fadd-thing";
+      const clone = "/home/.fullspin/clones/acme/app";
       const reveal = { kind: ACT_KIND.MAC_TERMINAL_REVEAL, payload: { agentId: AGENT_ID } };
       const before = fixture([SET], Effect.void, new Set([worktree, clone]));
       const refused = yield* before.actPort.perform(reveal, panelOf());
@@ -294,10 +294,10 @@ it.effect(
 );
 
 it.effect(
-  "a local agent's Terminal opens its worktree under ~/.luke/agents, and refuses before it is made",
+  "a local agent's Terminal opens its worktree under ~/.fullspin/agents, and refuses before it is made",
   () =>
     Effect.gen(function* () {
-      const worktree = `/home/.luke/agents/${AGENT_ID}/repository`;
+      const worktree = `/home/.fullspin/agents/${AGENT_ID}/repository`;
       const local = { kind: ACT_KIND.MAC_TERMINAL_LOCAL_AGENT, payload: { agentId: AGENT_ID } };
       const unmade = fixture([SET]);
       const refused = yield* unmade.actPort.perform(local, panelOf());

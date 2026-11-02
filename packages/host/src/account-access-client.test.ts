@@ -47,7 +47,7 @@ const NOT_ADMIN: AppAccessSlice = { admin: false };
 
 function client(fetchLike: Parameters<typeof fakeHttpClientLayer>[0]) {
   return new AccountAccessClient({
-    serviceBaseUrl: "https://tryluke.dev",
+    serviceBaseUrl: "https://fullspin.dev",
     credential: fixedBearer("token-1"),
     httpClient: fakeHttpClientLayer(fetchLike),
   });
@@ -70,7 +70,7 @@ it.effect("asks the service for the signed-in account's access under its bearer"
     const { requests, client } = service([json({ admin: true })]);
     assert.deepEqual(yield* client.readAccess(), ADMIN);
     const [request] = requests;
-    assert.equal(request?.url, "https://tryluke.dev/api/account/access");
+    assert.equal(request?.url, "https://fullspin.dev/api/account/access");
     assert.equal(request?.init?.method, "GET");
     assert.equal(new Headers(request?.init?.headers).get("authorization"), "Bearer token-1");
   }),

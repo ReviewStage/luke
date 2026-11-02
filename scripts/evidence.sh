@@ -21,7 +21,7 @@ luke_ensure_dependencies
 cd "$LUKE_REPO_ROOT"
 pnpm package:dir
 PACKAGED_APP=$(node -e "import('./apps/desktop/scripts/package-layout.mjs').then((layout) => process.stdout.write(layout.packagedAppPath(process.cwd())))")
-APP_EXECUTABLE="$PACKAGED_APP/Contents/MacOS/Luke"
+APP_EXECUTABLE="$PACKAGED_APP/Contents/MacOS/Fullspin"
 if [[ ! -x "$APP_EXECUTABLE" ]]; then
     printf 'error: electron-builder did not produce a runnable app at %s\n' "$PACKAGED_APP" >&2
     exit 1
@@ -41,8 +41,8 @@ if [[ ! -f "$PACKAGED_ICON" ]]; then
     printf 'error: packaged app is missing its declared icon: %s\n' "$PACKAGED_ICON" >&2
     exit 1
 fi
-if ! cmp -s "$PACKAGED_ICON" "$LUKE_DESKTOP_APP_ROOT/.build/Luke.icns"; then
-    printf 'error: packaged app icon does not match the generated Luke icon\n' >&2
+if ! cmp -s "$PACKAGED_ICON" "$LUKE_DESKTOP_APP_ROOT/.build/Fullspin.icns"; then
+    printf 'error: packaged app icon does not match the generated Fullspin icon\n' >&2
     exit 1
 fi
 
@@ -109,7 +109,7 @@ validate_evidence() {
     fi
 }
 
-# Every capture is Luke's one app window at the size it opens at
+# Every capture is Fullspin's one app window at the size it opens at
 # (DESKTOP_WINDOW in apps/desktop/src/main/window/panel-manager.ts).
 for evidence_path in \
     "$LUKE_EXPANDED_EVIDENCE_PATH" \

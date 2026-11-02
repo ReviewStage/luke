@@ -113,7 +113,7 @@ test("a correction that drops a mention the developer placed is not taken", () =
 test("a correction that drops a mention written as a page's address, a file's on GitHub or a plan's, is not taken", () => {
   for (const target of [
     "https://github.com/acme/checkout/blob/HEAD/src/a.ts",
-    "https://tryluke.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b#goal",
+    "https://fullspin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b#goal",
   ]) {
     const text = `## Rollout\n\n- Ship as [@a.ts](${target}) says, store first.\n`;
     const note: PlanNote = {
@@ -305,7 +305,7 @@ test("an agent's deletion is journaled as a strike, and a long replaced text is 
 
 /** A picture's address in a plan's text, under the plan's own address. */
 const PICTURE_ADDRESS =
-  "https://tryluke.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/9d2e4c61-7a3b-4f0e-8b1a-2c6d4e8f0a13";
+  "https://fullspin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/9d2e4c61-7a3b-4f0e-8b1a-2c6d4e8f0a13";
 
 /** A picture's line as the plan's text writes it: alt text, address, and caption. */
 const PICTURE_LINE = `![Members page with two pending invites](${PICTURE_ADDRESS} "Pending invites sit in the list")`;

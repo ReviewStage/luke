@@ -894,7 +894,7 @@ test("a page's row in the sidebar offers Copy link on a right-click, copying the
   assert.ok(item, "the row's menu offers Copy link");
   await act(async () => item.click());
 
-  assert.deepEqual(copied, ["https://tryluke.dev/acme/settings/workspace"]);
+  assert.deepEqual(copied, ["https://fullspin.dev/acme/settings/workspace"]);
 });
 
 test("the page list is one Tab stop, and ↑ and ↓ walk its pages across the groups without opening one", () => {

@@ -40,7 +40,7 @@ const CHOICE = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
 
 function client(): HostedAgentClient {
   return new HostedAgentClient({
-    serviceBaseUrl: "https://tryluke.dev",
+    serviceBaseUrl: "https://fullspin.dev",
     credential: accountBearer({
       readAccessToken: () => Effect.succeed("token-1"),
       refreshAccount: () => Effect.void,
@@ -309,11 +309,11 @@ it.effect(
       });
       assert.equal(
         removal?.url,
-        `https://tryluke.dev/api/account/provider-keys?provider=${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
+        `https://fullspin.dev/api/account/provider-keys?provider=${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
       );
       assert.equal(
         tokenRemoval?.url,
-        `https://tryluke.dev/api/account/provider-keys?provider=${PROVIDER_KEY_PROVIDER.ANTHROPIC}&kind=${PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN}`,
+        `https://fullspin.dev/api/account/provider-keys?provider=${PROVIDER_KEY_PROVIDER.ANTHROPIC}&kind=${PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN}`,
       );
     }),
 );
@@ -655,7 +655,7 @@ it.effect(
       assert.deepEqual(nowhere, { failure: AGENT_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(
         api.requests().map((each) => [each.url, JSON.parse(each.body ?? "{}")]),
-        [[`https://tryluke.dev/api/agents/${AGENT_ID}/agents`, request]],
+        [[`https://fullspin.dev/api/agents/${AGENT_ID}/agents`, request]],
       );
     }),
 );

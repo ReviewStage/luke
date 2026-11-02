@@ -16,7 +16,7 @@ Vespin is a macOS app for planning a change with coding agents, handing it to
 them to build, and reviewing what they ship.
 
 **Status:** an early MVP. It runs on Apple silicon Macs with macOS 14 or newer,
-and in a browser at [tryluke.dev/app](https://tryluke.dev/app). It is free.
+and in a browser at [fullspin.dev/app](https://fullspin.dev/app). It is free.
 
 You describe the change to a coding agent, typed or dictated. It reads the
 repository, asks about what you left open, and writes the plan as a design doc
@@ -110,7 +110,7 @@ data to, and how long each keeps it.
 ## Open source and the hosted service
 
 The app is open source under the [Apache License 2.0](LICENSE). It signs in to
-a hosted service at [tryluke.dev](https://tryluke.dev), run by Stage Inc.,
+a hosted service at [fullspin.dev](https://fullspin.dev), run by Stage Inc.,
 which is free to use. The service's code is in this repository to read, but
 running your own copy of it is not supported yet.
 

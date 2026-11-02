@@ -10,7 +10,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * reads exactly as it was shown. Versions count from one within their page.
  *
  * The service answers a page's HTML inside JSON and never as a document of
- * its own origin, so nothing an agent wrote ever runs as tryluke.dev; the Mac
+ * its own origin, so nothing an agent wrote ever runs as fullspin.dev; the Mac
  * draws it in a sandboxed frame of its own scheme.
  */
 

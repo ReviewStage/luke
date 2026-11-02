@@ -463,11 +463,11 @@ test(
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     const head = push("first\n");
-    const earlierRoot = path.join(scratch, "Application Support", "Luke Dev");
+    const earlierRoot = path.join(scratch, "Application Support", "Fullspin Dev");
     const earlier = path.join(earlierRoot, "worktrees", "acme", "app", "luke%2Ffix-relay");
     mkdirSync(path.join(earlier, ".git"), { recursive: true });
     writeFileSync(path.join(earlier, "mine.txt"), "");
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".fullspin");
     const worktree = worktreeFolder(root, "acme/app", "luke/fix-relay");
 
     const printed = run(
@@ -499,7 +499,7 @@ test(
     writeFileSync(path.join(origin, "README.md"), "other\n");
     git(origin, ["commit", "--quiet", "-am", "other"]);
     const other = git(origin, ["rev-parse", "HEAD"]);
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".fullspin");
     const opening = (branch: string, name: string) => {
       const file = path.join(scratch, `${name}.sh`);
       writeFileSync(
@@ -558,7 +558,7 @@ test(
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     const head = push("first\n");
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".fullspin");
     const clone = cloneFolder(root, "acme/app");
     const worktree = worktreeFolder(root, "acme/app", "luke/fix-relay");
     const holder = spawn("sleep", ["60"]);
@@ -602,7 +602,7 @@ test(
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     const head = push("first\n");
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".fullspin");
     const clone = cloneFolder(root, "acme/app");
     const worktree = worktreeFolder(root, "acme/app", "luke/fix-relay");
     const lock = `${clone}.lock`;
@@ -733,7 +733,7 @@ test(
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".fullspin");
     const trash = path.join(root, "trash");
     const branches = ["luke/merged", "luke/changed", "luke/recent", "luke/running", "luke/open"];
     for (const branch of branches) git(origin, ["branch", branch]);
@@ -787,7 +787,7 @@ test(
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
     git(origin, ["branch", "luke/merged"]);
-    const earlierRoot = path.join(scratch, "Application Support", "Luke Dev");
+    const earlierRoot = path.join(scratch, "Application Support", "Fullspin Dev");
     const earlierClone = cloneFolder(earlierRoot, "acme/app");
     const earlierWorktree = worktreeFolder(earlierRoot, "acme/app", "luke/merged");
     run(
@@ -808,7 +808,7 @@ test(
     const then = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
     utimesSync(opened, then, then);
     git(origin, ["branch", "-D", "luke/merged"]);
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".fullspin");
 
     const printed = run(
       scratch,
@@ -838,7 +838,7 @@ test.for(["notes.txt", ".git\n"])(
   async (file: string, t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
-    const earlierRoot = path.join(scratch, "Application Support", "Luke Dev");
+    const earlierRoot = path.join(scratch, "Application Support", "Fullspin Dev");
     const earlierClone = cloneFolder(earlierRoot, "acme/app");
     run(
       scratch,
@@ -859,7 +859,7 @@ test.for(["notes.txt", ".git\n"])(
     ]);
     // Note that a name ending in a newline, beside the `.git` it imitates, is the developer's as much as any.
     writeFileSync(path.join(earlierClone, file), "mine\n");
-    const root = path.join(state, ".luke");
+    const root = path.join(state, ".fullspin");
 
     run(
       scratch,
