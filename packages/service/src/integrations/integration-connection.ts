@@ -1,5 +1,5 @@
 /**
- * integration-connection.ts -- the one connection per integration every agent of Fullspin's is handed.
+ * integration-connection.ts -- the one connection per integration every agent of ours is handed.
  *
  * The brain, the coding agent, and each one's declared worker
  * are four eve agents, and each is handed this definition for every
@@ -15,7 +15,7 @@
  * eve's own user-scoped auth would refuse it before reading any token. So
  * the auth here is eve's plain `getToken` form, credentialed as the app, and
  * the account is chosen inside it. That form has no interactive half, so
- * eve never parks a turn on a sign-in: sign-in happens in Fullspin's account
+ * eve never parks a turn on a sign-in: sign-in happens in the app's account
  * settings, before any run.
  *
  * A connection that cannot be used fails only the call that tried it: the

@@ -12,7 +12,7 @@
  * to the one rule, eve's and a native harness's alike: the line that opened
  * it, by the sender its row keeps (`MESSAGE_SENDER.AUTOMATION`), or by
  * keeping none on an agent an automation started, and its
- * journal, by the calls of any web read it holds, Fullspin's own page read,
+ * journal, by the calls of any web read it holds, our own page read,
  * eve's provider-run search, the agent's browser, and Claude Code's and
  * Codex's own. Note that a web read the relay has not yet written, such as
  * one made in the same step as the remember, is not seen, because the

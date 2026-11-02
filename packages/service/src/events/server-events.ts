@@ -17,7 +17,7 @@ import { afterResponse } from "../http/after-response.js";
 import { type PosthogBatch, postBatchEffect } from "../providers/posthog.js";
 
 /**
- * What Fullspin's service counts about the work done through it: the core loop the
+ * What the service counts about the work done through it: the core loop the
  * desktop cannot see, because it happens on the service or in an agent's
  * sandbox — a task started, a coding agent started, a member's message to it,
  * each of its turns ended, a Stop, an archive, a pull request opened and

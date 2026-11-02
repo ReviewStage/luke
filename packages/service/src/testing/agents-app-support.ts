@@ -108,7 +108,7 @@ export const AGENT_STARTS = "/api/agents/agents";
 export const WORKSPACE_STARTS = "/api/workspaces/agents";
 export const AGENT = "/api/agents/agent";
 export const AGENT_INBOX = "/api/agents/{id}/inbox";
-/** Vespin's own tools an agent is offered and where its `run_on_mac` stands, as its MCP popover reads them. */
+/** Our own tools an agent is offered and where its `run_on_mac` stands, as its MCP popover reads them. */
 export const AGENT_LUKE_TOOLS = "/api/agents/luke-tools";
 export const WORKSPACE_AGENTS = "/api/agents";
 /** The overview's three reads, each its own route. */
@@ -123,8 +123,8 @@ const INBOX_PROCEDURE_PATH = /^\/api\/(?:inbox(?:\/.*)?|(?:plans|agents)\/[^/]+\
 export const TASKS = "/api/plans";
 /** One task, served by the hosted oRPC router, whose delete stops the task's agents through the same Stop. */
 export const TASK = (taskId: string) => `${TASKS}/${taskId}`;
-/** Vespin's Stop on a task, served by the hosted oRPC router, which reaches the brain's eve as the request's caller. */
-/** Vespin's own transcript of a task, served by the hosted oRPC router. */
+/** A Stop on a task, served by the hosted oRPC router, which reaches the brain's eve as the request's caller. */
+/** The brain's own transcript of a task, served by the hosted oRPC router. */
 /** A task's own path, its Stop, or its transcript, by the task's id, which the router serves where the old groups serve flattened keys. */
 const TASK_PATH =
   /^\/api\/plans\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/stop|\/messages)?$/u;
@@ -474,7 +474,7 @@ export const standing = (
       plans: tasksProcedures(seams),
     });
     yield* Effect.addFinalizer(() => Effect.promise(() => agents.dispose()));
-    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, Vespin's Stop, an agent's transcript, its Pull request tab, and the inbox land on the hosted oRPC router. */
+    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, a task's Stop, an agent's transcript, its Pull request tab, and the inbox land on the hosted oRPC router. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
         const procedure = publicRequest(request);
@@ -642,7 +642,7 @@ export const openTask = (
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     const other = yield* otherAccount(options.otherToken);
-    // Vespin's key pays for no coding agent, so both accounts start and message theirs on their own keys.
+    // Our key pays for no coding agent, so both accounts start and message theirs on their own keys.
     yield* connectAgentApiKeys(owner);
     yield* connectAgentApiKeys(other);
     const task = yield* startTask(owner, {

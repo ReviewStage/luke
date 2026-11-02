@@ -318,7 +318,7 @@ export function runRecall(
  * tool reads them (`callerWorkspace`), then the call itself. An agent whose
  * workspace cannot be read for its starter now keeps and recalls nothing, and
  * neither does one whose starter has Memory off (`EXPERIMENT.MEMORY`): eve
- * and Fullspin's MCP server (`luke-mcp/tools.ts`) list neither tool to such an
+ * and our MCP server (`luke-mcp/tools.ts`) list neither tool to such an
  * agent, but a harness may still call a tool it was not listed, or Memory
  * may go off mid-run, so the refusal stands here as well.
  */

@@ -23,7 +23,7 @@ import { productionSummaryModel } from "./replay-summary.js";
  * The key a coding agent's step runs on, read from the account's rows over a
  * real dialect and spent against a provider faked at its fetch: the
  * account's own key where it saved one, and a step refused, never moved
- * onto Vespin's key, where it saved none or its key cannot be read; the row's
+ * onto our key, where it saved none or its key cannot be read; the row's
  * status kept as the provider answers the account's key; a fast step run on
  * the account's key with what it showed of the key's organization kept on
  * the row; and the own key a call beside the agents spends on.
@@ -320,7 +320,7 @@ test("a fast step runs on the account's own key, and the key's row keeps what it
   assert.equal(await rowFastAccess(refused), FAST_ACCESS.NOT_ENABLED);
 });
 
-/** The deployment's environment as a call beside the agents reads it: the ring the account's keys open under, and no key of Vespin's, which it holds none of. */
+/** The deployment's environment as a call beside the agents reads it: the ring the account's keys open under, and no key of ours, which it holds none of. */
 const ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,

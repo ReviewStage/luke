@@ -81,7 +81,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 /**
  * A coding agent's sessions on Codex, against a fake of Vercel Sandbox's
  * REST API and of OpenAI's token endpoint, over a real store: on the plan,
- * the runner launched naming Vespin's token route and handed no token, the
+ * the runner launched naming our token route and handed no token, the
  * account's token renewed first where less than forty-five minutes are left;
  * a local agent's launch on its Mac, sealed in its line with no token in it,
  * on the plan's route or on the Mac's own Codex sign-in; a stop and a reset; a

@@ -9,7 +9,7 @@ import { EDIT_PLAN_TOOL } from "./coder-host/plan-edit.js";
 
 /**
  * link-examples.test.ts -- the link every author is shown how to write a
- * file, a pull request, or an issue with is one Vespin draws as a chip: the
+ * file, a pull request, or an issue with is one the app draws as a chip: the
  * coding agent's instructions, which show every kind it names as a mention,
  * and its inbox and plan tools; the coding agent's last example is another
  * agent's. An example spelled with `<owner>/<name>` and `<path>` is
@@ -49,7 +49,7 @@ function examplesIn(words: string): string[] {
   return linksIn(words).map(({ target }) => target);
 }
 
-/** What each example link is drawn as: the kind of mention its chip names, else the kind of place in Vespin it names, or nothing where it stays a link. */
+/** What each example link is drawn as: the kind of mention its chip names, else the kind of place in the app it names, or nothing where it stays a link. */
 function drawnAs(words: string): (string | undefined)[] {
   return examplesIn(words).map(
     (target) => decodeMention(target, REPOSITORY)?.kind ?? readLink(target)?.place.kind,

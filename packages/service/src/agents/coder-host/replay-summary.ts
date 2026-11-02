@@ -23,7 +23,7 @@ import { ownKeyOf } from "./account-keys.js";
 import { CODER } from "./bounds.js";
 
 /**
- * replay-summary.ts -- how much of another agent's transcript a new agent's first message holds, and the summary Fullspin writes of the steps that do not fit.
+ * replay-summary.ts -- how much of another agent's transcript a new agent's first message holds, and the summary we write of the steps that do not fit.
  *
  * The replay is sized against the new agent's own context: the share of its
  * model's window eve compacts at, less its instructions, its brief and note,
@@ -419,7 +419,7 @@ export function withinWindow(
 
 /**
  * The deployment's summary model, on the account's own API key and never
- * Fullspin's (`account-keys.ts`'s `ownKeyOf`): the new agent's own model, its
+ * ours (`account-keys.ts`'s `ownKeyOf`): the new agent's own model, its
  * fast version's base where it chose one, at the effort named and with no
  * thinking asked for, where the account saved a key for its provider; the
  * other provider's balanced model where it saved only that one; nothing

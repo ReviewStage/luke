@@ -50,7 +50,7 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
  * which tells the brain and the notetaker the sections the developer
  * wrote, is read back off those revisions. The developer's edit is the
  * same save with their text in place of notes, laid over what the text holds
- * now where Fullspin wrote meanwhile, or answered as a conflict with nothing
+ * now where we wrote meanwhile, or answered as a conflict with nothing
  * saved (`@luke/features/plan-edit`). Their restore of one of the plan's
  * revisions is the same save with the revision's text, kept as a revision of
  * the developer's that names the one it brought back.

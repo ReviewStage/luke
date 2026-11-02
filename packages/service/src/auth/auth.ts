@@ -68,7 +68,7 @@ function socialProvider(client: SocialClient) {
 export function socialProviders(registered: Pick<AuthSecrets, "google" | "github">) {
   return {
     google: { ...socialProvider(registered.google), scope: ["email", "profile"] },
-    // The Fullspin GitHub App's client: signing in is the user's authorization
+    // Our GitHub App's client: signing in is the user's authorization
     // of the App, and the token it leaves on the account row is the App's
     // expiring user token, refreshed by `github/github-app.ts`.
     github: { ...socialProvider(registered.github), ...GITHUB_SIGN_IN },
