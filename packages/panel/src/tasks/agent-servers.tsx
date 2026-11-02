@@ -566,6 +566,7 @@ function ServersPopover({
   statuses,
   onClose,
   onBack = onClose,
+  takesFocus = true,
   onLeave,
   onExited,
 }: {
@@ -578,6 +579,8 @@ function ServersPopover({
   onClose: () => void;
   /** Escape on the home: back to the menu row that opened it, where it stands as a submenu; the close otherwise. */
   onBack?: (() => void) | undefined;
+  /** Whether its field takes the focus as it opens: not where the pointer resting on the + menu's row opened it, which leaves the keyboard in the menu until the pointer arrives. */
+  takesFocus?: boolean | undefined;
   /** Focus left the popover for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
   onExited: () => void;
@@ -653,12 +656,17 @@ function ServersPopover({
     ? query
     : "";
 
-  // The field takes focus as the popover opens and as any page with one is
-  // drawn, and a tool's page its body, so the keys and focus leaving it are heard.
+  // The field takes focus as the popover opens, unless its owner leaves the
+  // keyboard where it was, and as any page with one is drawn, and a tool's
+  // page its body, so the keys and focus leaving it are heard.
+  const opening = useRef(true);
   useEffect(() => {
+    const first = opening.current;
+    opening.current = false;
+    if (first && !takesFocus) return;
     if (tool !== undefined || onRunOnMac) toolBody.current?.focus({ preventScroll: true });
     else field.current?.focus();
-  }, [page?.connection, tool, onLuke, onRunOnMac]);
+  }, [page?.connection, tool, onLuke, onRunOnMac, takesFocus]);
 
   useLayoutEffect(() => {
     if (tool !== undefined || onRunOnMac) return;
@@ -1315,6 +1323,7 @@ function ServersPopover({
                 ? `${page.name} tools`
                 : SERVERS_LABEL
       }
+      takesFocus={takesFocus}
       onDismiss={dismiss}
       onLeave={onLeave}
       onExited={onExited}
@@ -1353,11 +1362,14 @@ function ServersPopover({
 function ServersMenuPanel({
   servers,
   statuses,
+  entered,
   onBack,
   onClose,
 }: {
   servers: AgentServersControl;
   statuses: IntegrationStatuses;
+  /** Whether a press or a key opened it, which takes the keyboard into its field. */
+  entered: boolean;
   onBack: () => void;
   onClose: () => void;
 }): React.JSX.Element {
@@ -1371,6 +1383,7 @@ function ServersMenuPanel({
       statuses={statuses}
       onClose={onClose}
       onBack={onBack}
+      takesFocus={entered}
       onLeave={() => undefined}
       onExited={() => undefined}
     />
@@ -1389,8 +1402,14 @@ export function serversMenuPanel(
   return {
     label: SERVERS_ROW,
     icon: <McpIcon />,
-    panel: ({ back, close }) => (
-      <ServersMenuPanel servers={servers} statuses={statuses} onBack={back} onClose={close} />
+    panel: ({ back, close, entered }) => (
+      <ServersMenuPanel
+        servers={servers}
+        statuses={statuses}
+        entered={entered}
+        onBack={back}
+        onClose={close}
+      />
     ),
   };
 }

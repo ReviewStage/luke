@@ -47,6 +47,7 @@ export function AttachFilesButton({
 }: {
   /** Takes the files picked, in the order the picker handed them. */
   onFiles: (files: readonly File[]) => void;
+  /** Whether the box takes no files now: the + itself where it opens the picker, its menu's Attachment where it opens a menu. */
   disabled?: boolean;
   /** What the press says, where the box takes only some files, or more than files; `ATTACH_FILES` otherwise. */
   label?: string;
@@ -61,10 +62,16 @@ export function AttachFilesButton({
   useImperativeHandle(handed, () => ({ open: picker.open }));
   const menu = useMenu(true);
   const press = more.length === 0 ? { onClick: picker.open } : menu.trigger(riseAbove);
+  // Note that a box held from taking files still opens its menu, its Attachment dimmed, because its other rows, the agent's servers, are no files.
   return (
     <>
       <Tooltip label={label}>
-        <IconButton icon={<PlusIcon />} label={label} disabled={disabled} {...press} />
+        <IconButton
+          icon={<PlusIcon />}
+          label={label}
+          disabled={disabled && more.length === 0}
+          {...press}
+        />
       </Tooltip>
       {picker.input}
       {menu.drawn === undefined ? null : (

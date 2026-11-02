@@ -679,13 +679,21 @@ test("an item that opens a panel opens it beside the standing menu with its fiel
   expect(document.activeElement).toBe(more);
 });
 
-test("the mouse resting on an item that opens a panel opens it, and resting on another item closes it", () => {
+test("the mouse resting on an item that opens a panel opens it with the keyboard left in the menu, arriving in the panel takes the keyboard in, and resting on another item closes it", () => {
   mount(createElement(Harness, { groups: plusGroups([]) }));
   press(button("More"));
-  const resting = mouseMove(null, button("MCP servers"), { clientX: 50, clientY: 50 });
+  const item = button("MCP servers");
+  const resting = mouseMove(null, item, { clientX: 50, clientY: 50 });
   expect(serversPanel()).not.toBeNull();
   expect(openMenu()).not.toBeNull();
-  mouseMove(resting, button("Attachment"), { clientX: 50, clientY: 20 });
+  expect(searching()).toBe(false);
+
+  const field =
+    document.querySelector<HTMLElement>('[aria-label="Search servers"]') ??
+    expect.fail("the panel searches");
+  const arrived = mouseMove(resting, field, { clientX: 300, clientY: 50 });
+  expect(searching()).toBe(true);
+  mouseMove(arrived, button("Attachment"), { clientX: 50, clientY: 20 });
   expect(serversPanel()).toBeNull();
 });
 

@@ -70,7 +70,8 @@ import { useTouchHold } from "./touch-hold.js";
  * item, pressing it, Right, or Enter opens it, and the pointer crossing the
  * menu's other items on its way there leaves it standing (`submenu-aim.ts`);
  * pressing, Right, or Enter takes the keyboard in, to its search field
- * first. Its keys are its own; Escape, or Left where it moves no caret,
+ * first, as the pointer arriving in it does, while resting on the item
+ * leaves the keyboard in the menu. Its keys are its own; Escape, or Left where it moves no caret,
  * goes back to the item, and Escape there closes the menu. It is handed
  * its way back and the menu's close, and the menu stands while the window
  * is away from it, as a sign-in it began in the browser takes it.
@@ -240,6 +241,8 @@ export interface MenuPanelDoors {
   readonly back: () => void;
   /** Closes the whole menu, focus going back to what opened it. */
   readonly close: () => void;
+  /** Whether it opened with the keyboard taken in, as a press or a key opens it; the pointer resting on its item leaves the keyboard in the menu, so a panel that focuses its field as it opens does so only then. */
+  readonly entered: boolean;
 }
 
 /**
@@ -1267,7 +1270,7 @@ function MenuPanelLayer({
   seen,
   leaving,
   surface,
-  entering,
+  entered,
   onBack,
   onClose,
 }: {
@@ -1282,7 +1285,7 @@ function MenuPanelLayer({
   /** The panel's element, which the menu counts as its own when it hears a press. */
   surface: React.RefObject<HTMLDivElement | null>;
   /** Whether it takes the keyboard as it opens, as a press or a key opened it. */
-  entering: React.RefObject<boolean>;
+  entered: boolean;
   onBack: () => void;
   onClose: (returnFocus: boolean) => void;
 }): React.ReactPortal {
@@ -1321,12 +1324,14 @@ function MenuPanelLayer({
     return () => resized.disconnect();
   }, [menu, entry.label, seen]);
   // Note that a panel whose own drawing took the keyboard, as a search field taking it on mount does, keeps it where it went.
+  const [enteredFirst] = useState(entered);
   useEffect(() => {
-    if (!entering.current || box.current === null) return;
-    entering.current = false;
-    focusInto(box.current);
-  }, [entering]);
-  const doors = useMemo(() => ({ back: onBack, close: () => onClose(true) }), [onBack, onClose]);
+    if (enteredFirst && box.current !== null) focusInto(box.current);
+  }, [enteredFirst]);
+  const doors = useMemo(
+    () => ({ back: onBack, close: () => onClose(true), entered: enteredFirst }),
+    [onBack, onClose, enteredFirst],
+  );
   return createPortal(
     // biome-ignore lint/a11y/useSemanticElements: a panel beside its menu holds a list and its search, not a form's fields, so it is no `<fieldset>`.
     <div
@@ -1343,6 +1348,10 @@ function MenuPanelLayer({
         top: place?.top ?? 0,
         width: askedStyleWidth(entry.width ?? POPOVER_WIDTH.REGULAR),
         ...cssCustomProperties({ "--luke-popover-room": `${seen.height - 2 * MENU_MARGIN}px` }),
+      }}
+      // The pointer arriving in a panel the pointer opened hands it the keyboard, as resting on a submenu's item focuses it.
+      onPointerEnter={(event) => {
+        if (event.pointerType !== "touch" && box.current !== null) focusInto(box.current);
       }}
       onKeyDown={(event) => {
         event.stopPropagation();
@@ -1439,8 +1448,8 @@ function FloatingMenu({
   const submenuElement = useRef<HTMLDivElement | null>(null);
   const panelElement = useRef<HTMLDivElement | null>(null);
   const panelId = useId();
-  // Whether the panel opening takes the keyboard in, as a press or a key opened it.
-  const enteringPanel = useRef(false);
+  // Whether the panel standing took the keyboard in as it opened, as a press or a key opens it, where resting on its item does not.
+  const [panelEntered, setPanelEntered] = useState(false);
   // Opened again while it was leaving, the menu stands as one opened anew does: on the submenu asked, or none.
   const [wasLeaving, setWasLeaving] = useState(leaving);
   if (wasLeaving !== leaving) {
@@ -1553,6 +1562,7 @@ function FloatingMenu({
       // Note that a panel going that held the keyboard hands it to the item the pointer rests on, so the arrows still walk the menu.
       const holds = panelElement.current?.contains(document.activeElement) === true;
       if (opens !== submenu && holds && item instanceof HTMLElement) item.focus();
+      if (opens !== submenu) setPanelEntered(false);
       setSubmenu(opens);
     });
   };
@@ -1562,7 +1572,7 @@ function FloatingMenu({
       focusInto(panelElement.current);
       return;
     }
-    enteringPanel.current = true;
+    setPanelEntered(true);
     setSubmenu(label);
   };
   const backFromPanel = useCallback((label: string) => {
@@ -1664,7 +1674,7 @@ function FloatingMenu({
           seen={seen}
           leaving={leaving}
           surface={panelElement}
-          entering={enteringPanel}
+          entered={panelEntered}
           onBack={panelBack}
           onClose={onClose}
         />
@@ -1811,7 +1821,7 @@ function SheetPanel({
         onBack();
       }}
     >
-      {entry.panel({ back: onBack, close: onClose })}
+      {entry.panel({ back: onBack, close: onClose, entered: true })}
     </div>
   );
 }
