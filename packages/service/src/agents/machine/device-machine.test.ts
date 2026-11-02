@@ -9,7 +9,6 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import {
-  createAgent,
   hasRepository,
   latestTurnsOfReached,
   recordAgentRunnerToken,
@@ -25,16 +24,13 @@ import {
   withdrawDeviceAgentRequest,
   withdrawExpiredDeviceAgentRows,
 } from "@luke/database/models/device-agent-store";
-import { beatDevice, registerDevice } from "@luke/database/models/device-store";
+import { beatDevice } from "@luke/database/models/device-store";
 import { enrollOwnDevice, removeHost } from "@luke/database/models/host-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { agentTable } from "@luke/database/schemas/agent";
-import { user } from "@luke/database/schemas/auth";
 import { deviceAgentLine } from "@luke/database/schemas/device-agent";
-import { conversations } from "@luke/database/schemas/storage";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
-import { DEVICE_LAYOUT, expectTopicsFire, getTestDB, startTask } from "@luke/database/testing";
-import { AGENT_MACHINE } from "@luke/features/agent-wire";
+import { DEVICE_LAYOUT, expectTopicsFire, getTestDB } from "@luke/database/testing";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
@@ -49,15 +45,14 @@ import { eq } from "drizzle-orm";
 import { Clock, Effect, Fiber, Layer, Option, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
-import { LINK_OUTCOME } from "../../github/github-installations.js";
 import { sweepDeviceLeases } from "../../maintenance/device-lease-sweep.js";
 import {
-  connectWorkspaceGitHub,
   GITHUB_FIXTURE_BOT,
   githubReaching,
   type InstallationFixture,
   NO_GITHUB,
 } from "../../testing/github-app-fake.js";
+import { openLocalAgent } from "../../testing/local-agent.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { wokenOnHub } from "../../testing/sync-woken.js";
 import { checkOutAgentRepository, deepenAgentCheckout } from "../coder-host/checkout.js";
@@ -98,51 +93,8 @@ const RELAY_INSTALLATION: InstallationFixture = {
   repositories: [RELAY],
 };
 
-/**
- * An account with a Mac that just registered, and an agent pinned to it
- * whose conversation runs in a session: in no repository, or in the one the
- * installation given reaches, connected to the task's workspace.
- */
-const openLocalAgentIn = (installation?: InstallationFixture) =>
-  Effect.gen(function* () {
-    const db = yield* Database;
-    const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-    const deviceId = randomUUID();
-    yield* registerDevice(userId, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
-    const reached = installation?.repositories[0];
-    const repository = reached === undefined ? null : `${reached.owner}/${reached.name}`;
-    const task = yield* startTask(userId, { name: "Invitations", repository });
-    if (installation !== undefined) {
-      assert.equal(
-        yield* connectWorkspaceGitHub(task.workspaceId, installation),
-        LINK_OUTCOME.LINKED,
-      );
-    }
-    const started = yield* createAgent(userId, {
-      taskId: task.id,
-      idempotencyKey: randomUUID(),
-      model: "anthropic/claude-opus-5.5",
-      effort: "high",
-      planSnapshot: "# Invitations\n",
-      prompt: null,
-      repository,
-      machine: AGENT_MACHINE.DEVICE,
-      deviceId,
-    });
-    const { agent } = Option.getOrThrow(started);
-    const session = `cc-${randomUUID()}`;
-    yield* db
-      .update(conversations)
-      .set({ runtimeSessionId: session })
-      .where(eq(conversations.id, agent.conversationId));
-    return { userId, deviceId, agent, session };
-  });
-
-const openLocalAgent = openLocalAgentIn();
-
 /** The runner launched in the agent's place, found by its session as a relaunch finds it. */
-const launched = (opened: Effect.Success<typeof openLocalAgent>) =>
+const launched = (opened: Effect.Success<ReturnType<typeof openLocalAgent>>) =>
   Effect.gen(function* () {
     const machine = yield* deviceMachine;
     const [found] = yield* machine.findPlaces(opened.session);
@@ -173,7 +125,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
       "an agent on a host its account removed is refused by name, and one on a Mac with no layout as before",
       () =>
         Effect.gen(function* () {
-          const { userId, deviceId, agent } = yield* openLocalAgent;
+          const { userId, deviceId, agent } = yield* openLocalAgent();
           // The Mac the agent is pinned to is enrolled and removed, as Settings › Hosts removes one.
           yield* enrollOwnDevice(userId, {
             id: deviceId,
@@ -201,7 +153,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
 
     it.effect("a launch's secrets are sealed in its line and handed over open once", () =>
       Effect.gen(function* () {
-        const opened = yield* openLocalAgent;
+        const opened = yield* openLocalAgent();
         const { handle } = yield* launched(opened);
         const db = yield* Database;
         const [row] = yield* db
@@ -238,7 +190,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
       "a launch in a repository carries who the agent's commits are by, as the cloud's checkout sets it",
       () =>
         Effect.gen(function* () {
-          const opened = yield* openLocalAgentIn(RELAY_INSTALLATION);
+          const opened = yield* openLocalAgent({ installation: RELAY_INSTALLATION });
           const github = githubReaching([RELAY_INSTALLATION]);
           const { handle } = yield* launched(opened).pipe(Effect.provide(github.layer));
           const db = yield* Database;
@@ -269,7 +221,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
 
     it.effect("a read waits for its Mac's answer, and is unavailable while the Mac is away", () =>
       Effect.gen(function* () {
-        const { userId, deviceId, session } = yield* openLocalAgent;
+        const { userId, deviceId, session } = yield* openLocalAgent();
         const machine = yield* deviceMachine;
         const bytes = new Uint8Array([137, 80, 78, 71]);
 
@@ -303,7 +255,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
       "a line queued, claimed, settled, and withdrawn each notify the agent's account and the agent, and a request queued, claimed, answered, and withdrawn the account",
       () =>
         Effect.gen(function* () {
-          const opened = yield* openLocalAgent;
+          const opened = yield* openLocalAgent();
           const { userId, deviceId, agent } = opened;
           const account: readonly SyncTopic[] = [[TOPIC.ACCOUNT, userId]];
           const accountAndAgent: readonly SyncTopic[] = [...account, [TOPIC.AGENT, agent.id]];
@@ -346,7 +298,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
       () =>
         Effect.scoped(
           Effect.gen(function* () {
-            const opened = yield* openLocalAgent;
+            const opened = yield* openLocalAgent();
             const { userId, deviceId, agent, session } = opened;
             const machine = yield* deviceMachine;
             const bytes = new Uint8Array([137, 80, 78, 71]);
@@ -404,7 +356,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
       "a turn under way is settled lost once its Mac settles the newest launch, and only then",
       () =>
         Effect.gen(function* () {
-          const opened = yield* openLocalAgent;
+          const opened = yield* openLocalAgent();
           const { userId, deviceId, agent } = opened;
           const older = yield* launched(opened);
           const newer = yield* launched(opened);
@@ -439,7 +391,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
     /** A local agent's launch claimed with a turn queued, then settled unstarted by its device with the refusal given: the agent, and its turn as the store reads it after. */
     const refusedTurn = (refusal: DeviceLaunchRefusal) =>
       Effect.gen(function* () {
-        const opened = yield* openLocalAgent;
+        const opened = yield* openLocalAgent();
         const { userId, deviceId, agent } = opened;
         const launch = yield* launched(opened);
         yield* claimedDeviceAgentLine(userId, deviceId, launch.handle.command);
@@ -474,7 +426,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
       "a launch, a message, or its files to an agent whose Mac is away are refused as a Start on it is, and by name on a host its account removed, while a stop still goes",
       () =>
         Effect.gen(function* () {
-          const opened = yield* openLocalAgent;
+          const opened = yield* openLocalAgent();
           const { handle } = yield* launched(opened);
           yield* claimedDeviceAgentLine(opened.userId, opened.deviceId, handle.command);
           const machine = yield* deviceMachine;
@@ -521,8 +473,8 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
       "a Mac quiet past its lease loses its open run once: the launch settled, the bearer let go, the turn ended naming the Mac, and a stop queued; a Mac that beat within it keeps its run",
       () =>
         Effect.gen(function* () {
-          const lapsed = yield* openLocalAgent;
-          const kept = yield* openLocalAgent;
+          const lapsed = yield* openLocalAgent();
+          const kept = yield* openLocalAgent();
           const lapsedLaunch = yield* launched(lapsed);
           const keptLaunch = yield* launched(kept);
           yield* claimedDeviceAgentLine(
@@ -599,7 +551,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             Effect.flatMap(Clock.currentTimeMillis, (now) =>
               sweepDeviceLeases(writer, { now, limit }),
             );
-          const opened = yield* openLocalAgent;
+          const opened = yield* openLocalAgent();
           const older = yield* launched(opened);
           const newer = yield* launched(opened);
           yield* claimedDeviceAgentLine(opened.userId, opened.deviceId, older.handle.command);

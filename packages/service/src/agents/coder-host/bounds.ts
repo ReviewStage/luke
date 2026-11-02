@@ -1,4 +1,5 @@
 import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/agent-status";
+import { AGENT_MACHINE, type AgentMachineKind } from "@luke/features/agent-wire";
 import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
 import { Duration } from "effect";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
@@ -23,8 +24,8 @@ export const CODER = {
    * idle rather than by this: an eve turn's end stops it at once, and so
    * does a pause from `SLEEP_STOPS_AT` on; a native runner keeps its sandbox
    * alive by its heartbeat for as long as it runs, and its end stops it,
-   * which comes `RUNNER_WARM` after the agent's turn is over, or two minutes
-   * into a wait on wakeups alone (`@luke/agent-runner`'s `RUNNER_RELEASE`,
+   * which comes the sandbox's `RUNNER_WARM` after the agent's turn is over,
+   * or two minutes into a wait on wakeups alone (`@luke/agent-runner`'s `RUNNER_RELEASE`,
    * whose process table tells the harness's own processes from the
    * agent's). A shorter timeout would stop none of those sooner, so this is
    * only the backstop for one nothing stopped, which bills its memory until
@@ -199,11 +200,17 @@ export const CODER = {
   },
   /**
    * How long a native agent's runner stays warm once its turn is over, for
-   * the next message to reach it as a line on its stdin rather than through
-   * a resumed sandbox and a relaunched CLI; past it, the sweep retires the
-   * runner (`retireWarmRunner`) and its END stops the sandbox. Zero, so the
-   * events route retires a runner as its IDLE lands (`runnerIdled`), under
-   * the runner lease, and its END stops the sandbox within seconds: ten warm
+   * the next message to reach it as a line rather than through a relaunched
+   * CLI, one window per machine: read by the machine the runner's place is on
+   * (`FoundPlace.machine`), never by a flag. Past its window, a sweep retires
+   * the runner (`retireWarmRunner`): a sandbox's in
+   * `../../maintenance/native-sandbox-sweep.ts`, whose END then stops the
+   * sandbox, and a device's in `../../maintenance/device-warm-sweep.ts`, which
+   * ends it before its own idle cap does (`@luke/agent-runner`'s
+   * `RUNNER_WARM.IDLE_CAP_MS`), since a message its host writes in that
+   * instant is lost. Both are zero, so the events route retires a runner as
+   * its IDLE lands (`runnerIdled`), under the runner lease, and the sweeps
+   * retry only a retire that failed. The sandbox's is zero because ten warm
    * minutes kept a 4 vCPU, 8 GB sandbox up for up to 62 sandbox-hours a day
    * over Oct 23–24, about $5–10 a day, for the 636 of 1,536 finished turns a
    * follow-up reached within three minutes. Those now resume from the stop's
@@ -213,9 +220,12 @@ export const CODER = {
    * then would be taken as delivered and never run; a runner that reads its
    * lines from Luke leaves such a message waiting instead, and its END hands
    * it on (`runner-sessions.ts`'s `LINES_WAITING`). A window is one line
-   * here: raise it, and the sweep retires runners past it again.
+   * here: raise it, and its sweep retires runners past it.
    */
-  RUNNER_WARM: Duration.zero,
+  RUNNER_WARM: {
+    [AGENT_MACHINE.VERCEL]: Duration.zero,
+    [AGENT_MACHINE.DEVICE]: Duration.zero,
+  } satisfies Record<AgentMachineKind, Duration.Duration>,
   /**
    * How long a message to a runner that reads its lines waits on that
    * runner's exit, its liveness in place of the 404 a write to an exited

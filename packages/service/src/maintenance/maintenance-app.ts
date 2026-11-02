@@ -24,6 +24,7 @@ import { type CronMonitor, sentryCronCheckIns } from "../observability/sentry.js
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { sweepDeviceLeases } from "./device-lease-sweep.js";
+import { sweepDeviceWarmRunners } from "./device-warm-sweep.js";
 import { sweepEveSandboxes } from "./eve-sandbox-sweep.js";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./maintenance-sweep.js";
@@ -84,6 +85,10 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     sweepDeviceLeases: (now) =>
       Effect.flatMap(storeWriter({ tools: CODER_TOOL_SET }), (writer) =>
         sweepDeviceLeases(writer, { now }),
+      ),
+    sweepDeviceWarmRunners: (now) =>
+      sweepDeviceWarmRunners(new Date(now)).pipe(
+        Effect.provideService(HttpClient.HttpClient, httpClient),
       ),
     sweepSandboxes: (now) => sweepSessionSandboxes(new Date(now)).pipe(Effect.provide(sandboxes)),
     sweepTerminalLeases: (now) =>
