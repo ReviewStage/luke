@@ -45,13 +45,13 @@ import {
   listWorkspaceAgentLines,
   nativeRuntimesOfReached,
   pinAgentCommitted,
-  readAgentUnderPilot,
   readVisibleAgentWorkspace,
   renameAgentCommitted,
   updateAgentChoiceCommitted,
   updateAgentServersCommitted,
 } from "@luke/database/models/agent-store";
 import { devicesNamed } from "@luke/database/models/device-store";
+import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
@@ -647,15 +647,13 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         nativeRuntimesOfReached([agent.conversationId]),
       );
       const memoryOn = yield* memoryOnFor(agent.userId);
-      const underPilot = yield* hostedStoreOrUnavailable(
-        readAgentUnderPilot(context.userId, agent.id),
-      );
+      const heard = yield* hostedStoreOrUnavailable(heardFromAnotherAccount(target));
       return {
         tools: offeredLukeTools({
           agent,
           native: runtimes.has(agent.conversationId),
           memoryOn,
-          underPilot,
+          heardFromAnotherAccount: heard,
         }),
         runOnMac: yield* hostedStoreOrUnavailable(runOnMacStanding(target)),
       };

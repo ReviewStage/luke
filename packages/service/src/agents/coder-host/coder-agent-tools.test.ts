@@ -806,12 +806,11 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.ok(message.startsWith(prompt), message);
   assert.ok(message.includes(START_NOTE_HEADING.AGENT), message);
   assert.ok(message.includes(`"${caller.name}"`) && message.includes(caller.id), message);
-  // It reports back by message, and threads to the developer are the starter's: what it would post goes to it instead.
+  // It reports back by message.
   assert.ok(
     message.includes(`call ${CODER_TOOL.MESSAGE_AGENT} with its agentId, ${caller.id}.`),
     message,
   );
-  assert.ok(message.includes("Threads to the developer are that agent's to post"), message);
   // An agent's own pick of a model is no member's new default.
   assert.equal((await database.run(readAccountPreferences(caller.userId)))?.agent, undefined);
 

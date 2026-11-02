@@ -6,11 +6,12 @@ import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { listAgentBrowserTabs } from "@luke/database/models/agent-browser-tabs";
 import { createAgent, recordAgentRunnerToken } from "@luke/database/models/agent-store";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
+import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
-import { conversations, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { conversations, messages, turns } from "@luke/database/schemas/storage";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace, startTask } from "@luke/database/testing";
-import { AGENT_PAYER } from "@luke/features/agent-wire";
+import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
 import { BROWSER_AGENT_ACTION } from "@luke/features/browser-agent-actions";
 import { CHANNEL_TOOL } from "@luke/features/channel-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
@@ -618,21 +619,69 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       }),
   );
 
-  it.effect(
-    "tools/list leaves out what eve offers no agent in no repository, the checkout's, and the memory where its starter has Memory off, and lists the plan's tools to one on no task",
-    () =>
+  it.effect.each([
+    {
+      // An agent on no task is listed the plan's tools all the same.
+      why: "in no repository, the checkout's",
+      agent: agentOnNoTaskWithBearer,
+      withheld: ["open_pull_request"],
+    },
+    {
+      why: "a teammate has put words into, run_on_mac",
+      agent: Effect.gen(function* () {
+        const agent = yield* agentInSandbox;
+        const teammate = `user-${randomUUID()}`;
+        yield* Database.use((db) =>
+          db
+            .insert(user)
+            .values({ id: teammate, name: "Teammate", email: `${teammate}@luke.test` }),
+        );
+        yield* Database.use((db) =>
+          db.insert(messages).values({
+            userId: agent.userId,
+            conversationId: agent.conversationId,
+            seq: 1,
+            clientId: randomUUID(),
+            role: "user",
+            parts: [],
+            placedAt: new Date(0),
+            sender: MESSAGE_SENDER.MEMBER,
+            senderUserId: teammate,
+          }),
+        );
+        return agent;
+      }),
+      withheld: ["run_on_mac"],
+    },
+    {
+      why: "on a device, the browser and run_on_mac",
+      agent: Effect.gen(function* () {
+        const agent = yield* agentWithBearer;
+        yield* Database.use((db) =>
+          db
+            .update(agentTable)
+            .set({ machine: AGENT_MACHINE.DEVICE })
+            .where(eq(agentTable.id, agent.agentId)),
+        );
+        return agent;
+      }),
+      withheld: ["browser", "run_on_mac"],
+    },
+  ])(
+    "tools/list leaves out what eve offers no agent $why, and the memory where its starter has Memory off",
+    ({ agent: made, withheld }) =>
       Effect.gen(function* () {
         const fetch = yield* standing;
-        const agent = yield* agentOnNoTaskWithBearer;
+        const agent = yield* made;
         const client = yield* connected(fetch, agent.bearer);
 
         const listed = yield* Effect.promise(() => client.listTools());
         yield* Effect.promise(() => client.close());
 
-        const withheld = ["open_pull_request", "save_memory", "search_memory"];
+        const left = [...withheld, "save_memory", "search_memory"];
         assert.deepEqual(
           listed.tools.map((tool) => tool.name).sort(),
-          SERVED_TOOLS.filter((name) => !withheld.includes(name)).sort(),
+          SERVED_TOOLS.filter((name) => !left.includes(name)).sort(),
         );
       }),
   );

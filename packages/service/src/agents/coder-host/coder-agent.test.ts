@@ -362,7 +362,7 @@ test("the thread post tool tells the session never to ask for a credential or a 
   );
 });
 
-test("the session sends whatever is ready for the developer to look at or review to a thread, a pull request among it, and a test only the developer can run, save an agent another coding agent started, which sends that agent what it would post", () => {
+test("the session sends whatever is ready for the developer to look at or review to a thread, a pull request among it, and a test only the developer can run, and an agent another coding agent started may message that agent before its report", () => {
   const READY = "ready for them to look at or review";
   for (const brief of Object.values(AGENT_BRIEF)) {
     for (const taskLink of [TASK_ADDRESS, null]) {
@@ -370,10 +370,10 @@ test("the session sends whatever is ready for the developer to look at or review
       assert.ok(inbox?.includes(READY), brief);
       assert.ok(inbox?.includes("a pull request you opened or marked ready"), brief);
       assert.ok(inbox?.includes("needs to test something by hand"), brief);
-      // An agent another coding agent started sends that agent what it would post instead.
+      // An agent another coding agent started reports to it, and is not told to keep off the threads.
       assert.ok(
         inbox?.includes(
-          "Where another agent started you, as your first message says, threads to the developer are that agent's to post",
+          "Where another agent started you, as your first message says, your final message reaches it by itself as your report",
         ),
         brief,
       );
