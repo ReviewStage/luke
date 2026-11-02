@@ -342,6 +342,12 @@ test("the servers the words mention, by themselves or by a tool, are named each 
   assert.deepEqual(mentionedServers(`See ${section("Rollout")}.`, TASK.repository), []);
 });
 
+test("a Google Doc's page names Google Drive's server, which reads it", () => {
+  const words = "Read [@the proposal](https://docs.google.com/document/d/abc/edit).";
+
+  assert.deepEqual(mentionedServers(words, TASK.repository), [INTEGRATION_PROVIDER.GOOGLE_DRIVE]);
+});
+
 test("a Google Maps page names no server and hands no note, since its address is in the words", () => {
   const words = "Meet at [@Ferry Building](https://www.google.com/maps/place/Ferry+Building).";
 

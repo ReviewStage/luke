@@ -124,7 +124,7 @@ const INTEGRATION_HOSTS = {
   [INTEGRATION_PROVIDER.EXECUTOR]: [],
   [INTEGRATION_PROVIDER.GITHUB]: ["github.com"],
   [INTEGRATION_PROVIDER.GMAIL]: ["mail.google.com"],
-  [INTEGRATION_PROVIDER.GOOGLE_CALENDAR]: ["calendar.google.com"],
+  [INTEGRATION_PROVIDER.GOOGLE_CALENDAR]: ["calendar.google.com", "calendar.app.google"],
   [INTEGRATION_PROVIDER.GOOGLE_DRIVE]: ["drive.google.com"],
   [INTEGRATION_PROVIDER.GRANOLA]: ["granola.ai"],
   [INTEGRATION_PROVIDER.LINEAR]: ["linear.app"],

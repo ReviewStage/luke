@@ -1,7 +1,12 @@
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import { AGENT_TOOL, CONNECTION_TOOL } from "@luke/features/agent-tools";
-import { INTEGRATION_NAME } from "@luke/features/integration-wire";
+import {
+  INTEGRATION_NAME,
+  INTEGRATION_PROVIDER,
+  type IntegrationProvider,
+} from "@luke/features/integration-wire";
 import { mentionMarkdownLink } from "@luke/features/link-grammar";
+import { LINK_SITE, type LinkSite } from "@luke/features/link-site";
 import {
   handedMentionsIn,
   linkMention,
@@ -131,6 +136,17 @@ export const NO_MENTIONED_READS: MentionedReads = {
 
 /** The room an excerpt leaves in the part for the closing line saying what was left out, which never names a heading. */
 const LEFT_OUT_ROOM = 120;
+
+/**
+ * The integration whose server reads a well-known site's page, for a site
+ * that is not an integration's own: a Google Doc, Sheet, or Slides deck is a
+ * file Google Drive's server reads, though its chip stays the site's.
+ */
+const SITE_READ_BY: Readonly<Partial<Record<LinkSite, IntegrationProvider>>> = {
+  [LINK_SITE.GOOGLE_DOCS]: INTEGRATION_PROVIDER.GOOGLE_DRIVE,
+  [LINK_SITE.GOOGLE_SHEETS]: INTEGRATION_PROVIDER.GOOGLE_DRIVE,
+  [LINK_SITE.GOOGLE_SLIDES]: INTEGRATION_PROVIDER.GOOGLE_DRIVE,
+};
 
 /** How much of the text is kept when it is cut on a line to the bound: all of it where it fits. */
 function keptLength(text: string, bound: number): number {
@@ -465,8 +481,11 @@ export function mentionedServers(words: string, repository: string | null): read
     if (mention.kind === MENTION_KIND.SERVER || mention.kind === MENTION_KIND.TOOL) {
       return [mention.connection ?? mention.provider];
     }
+    if (mention.kind !== MENTION_KIND.LINK) return [];
     // A page names its provider and no account, so it brings in the provider's first.
-    return mention.kind === MENTION_KIND.LINK && "provider" in mention ? [mention.provider] : [];
+    if ("provider" in mention) return [mention.provider];
+    const reader = SITE_READ_BY[mention.site];
+    return reader === undefined ? [] : [reader];
   });
   return [...new Set(connections)];
 }
