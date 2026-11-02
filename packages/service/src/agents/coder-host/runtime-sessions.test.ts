@@ -500,7 +500,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a message to an agent on eve, its session recorded as every one's was, is refused as ended whoever paid for it, Vespin's key or none recorded, and one to an agent on Claude Code whose API key was since removed is refused by name; nothing reaches eve and no payer moves",
+      "a message to an agent on eve, its session recorded as every one's was, is refused as ended whoever paid for it, Vespin's key, an API key since removed, or none recorded, and one to an agent on Claude Code whose API key was since removed is refused by name; nothing reaches eve and no payer moves",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
@@ -531,9 +531,11 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
           const lukes = yield* onEveAs(owner, taskId, AGENT_PAYER.LUKE);
           const unrecorded = yield* onEveAs(bare, bareTask.id, undefined);
+          const eveKeyRemoved = yield* onEveAs(bare, bareTask.id, AGENT_PAYER.API_KEY);
           for (const [starter, agent] of [
             [owner, lukes],
             [bare, unrecorded],
+            [bare, eveKeyRemoved],
           ] as const) {
             yield* claimRuntimeSession(
               { userId: starter, conversationId: agent.conversationId },
@@ -564,6 +566,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           for (const [name, starter, agent] of [
             ["Vespin's key paid, an API key saved since", owner, lukes],
             ["no payer recorded, no API key", bare, unrecorded],
+            ["its API key removed", bare, eveKeyRemoved],
             ["on Claude Code, its API key removed", bare, nativeKeyRemoved],
           ] as const) {
             const sent = yield* send(starter, agent);

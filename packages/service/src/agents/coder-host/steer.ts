@@ -61,6 +61,7 @@ import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../menti
 import { readMentioned } from "../mentioned-reads.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
+import { harnessOf } from "./native-runtime.js";
 import { failedCallRefusal } from "./runtime-sessions.js";
 import { agentStatusOf } from "./status.js";
 
@@ -355,8 +356,12 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   const { runtime, payer } = routing.value;
   if (!writesToAgent(userId, agent, payer)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   // Note that our key pays for no coding agent, so an agent on its starter's API key whose starter
-  // keeps none for its model now is refused by name and never moved to another payer.
-  const missing = yield* hostedStoreOrUnavailable(messageCredentialMissing(agent, { payer }));
+  // keeps none for its model now is refused by name and never moved to another payer; one on no
+  // harness has ended for good whatever paid for it, which the router below refuses it as.
+  const missing =
+    harnessOf(runtime) === undefined
+      ? undefined
+      : yield* hostedStoreOrUnavailable(messageCredentialMissing(agent, { payer }));
   if (missing !== undefined) return yield* Effect.fail(credentialMissing(missing));
   if (yield* Effect.fromResult(read.repeated)) return { outcome: STEER_OUTCOME.REPEATED };
   const held = yield* Effect.fromResult(read.task);
