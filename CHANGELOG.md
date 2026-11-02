@@ -2,8 +2,8 @@
 
 <!-- Every release adds its entry here before its tag is pushed:
      .github/RELEASE.md describes the step. The landing page
-     renders this document at tryluke.dev/changelog, ten releases a page, and
-     each release on a page of its own at tryluke.dev/changelog/<version>.
+     renders this document at vespin.dev/changelog, ten releases a page, and
+     each release on a page of its own at vespin.dev/changelog/<version>.
      Each release heading is a contract with those pages: exactly
      `## <version> — <YYYY-MM-DD>`, which becomes the release's sticky
      version-and-date rail and its address. A release's first feature
@@ -62,8 +62,9 @@
      synthetic: the acme organisation, its teal mark, and its repositories,
      never a real account's titles, branches, or conversations. -->
 
-Notable changes to Luke, newest first. Each heading is a released version and
-the date its release was published.
+Vespin is an inbox for all your coding agents. These are its notable changes,
+newest first. Each heading is a released version and the date its release was
+published.
 
 ## 0.24.0 — 2026-11-01
 

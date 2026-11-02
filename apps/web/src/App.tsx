@@ -34,7 +34,7 @@ export function App(): React.JSX.Element {
       footer={<SiteFooterLinks current={{ page: SITE_PAGE.HOME }} />}
       title="A better way to plan with agents."
       titleStyle={PUBLIC_TITLE.HERO}
-      lead={`Talk through a feature with ${PRODUCT_NAME}. It reads the code while you talk and writes a plan you can paste into Claude Code or Codex.`}
+      lead={`${PRODUCT_NAME} is an inbox for all your coding agents.`}
     >
       <PublicSection>
         <div className="flex flex-wrap items-center gap-3">
