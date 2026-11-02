@@ -6,6 +6,7 @@
     "packages/panel/src/renderer-runtime.ts",
     "apps/desktop/src/renderer/window-root.tsx",
     "apps/host/src/main.ts",
+    "apps/web/scripts/local-server.ts",
     "apps/web/scripts/preview-probe.ts",
     "apps/web/server/db/migrate.ts",
     "apps/web/server/orpc-route.ts",
