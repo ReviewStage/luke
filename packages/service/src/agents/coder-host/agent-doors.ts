@@ -19,9 +19,10 @@ import {
   readAgentOfConversation,
 } from "@luke/database/models/agent-store";
 import { readTaskHeader } from "@luke/database/models/task-store";
+import type { StoreWriter } from "@luke/database/models/writer";
 import { PAGE_OWNER, PAGE_SHOWER } from "@luke/features/page-wire";
 import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option, type Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
@@ -79,22 +80,28 @@ import {
   planEditRejected,
   recordPlanEdit,
 } from "./plan-edit.js";
-import type { CoderHostSeams } from "./production.js";
 import {
   openPullRequest,
   PULL_REQUEST_UNAVAILABLE,
   type PullRequestToolResult,
   pullRequestRejected,
 } from "./pull-request.js";
+import type { SummaryModelOf } from "./replay-summary.js";
 import { sessionsRouter } from "./runtime-sessions.js";
 import { runShowImage } from "./show-image.js";
 import { CODER_TOOL } from "./tool-set.js";
 
-/** What the doors that reach eve or the store's writer read of the deployment: a part of the coder host's own seams, which a web function builds without eve (`../luke-mcp/door-seams.ts`). */
-export type AgentDoorSeams = Pick<
-  CoderHostSeams,
-  "writer" | "deploymentSecret" | "eveOrigin" | "summaryModel"
->;
+/** What the doors that reach an agent's session or the store's writer read of the deployment, as the web function serving the MCP server builds them (`../luke-mcp/door-seams.ts`). */
+export interface AgentDoorSeams {
+  /** The writer over the coding agent's tool set, composed once per instance. */
+  readonly writer: () => Effect.Effect<StoreWriter>;
+  /** The secret the deployment acts for an account under (`EVE_DEPLOYMENT_SECRET`, never the cron's), sealed; nothing while the environment names none. */
+  readonly deploymentSecret: () => Redacted.Redacted | undefined;
+  /** The deployment's own origin, which no request between agents carries; nothing on a machine neither configured nor deployed. */
+  readonly eveOrigin: () => string | undefined;
+  /** How an agent this one starts from another summarizes the steps its replay cannot keep, as the Start route's does; none leaves them out. */
+  readonly summaryModel?: SummaryModelOf;
+}
 
 /** One call of the agent's tools about the workspace's coding agents, by the tool's name, the input its runtime held to its schema, and the call's own id. */
 export interface AgentToolCall {

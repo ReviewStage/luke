@@ -73,7 +73,7 @@ import { Clock, Data, Duration, Effect, Option, type Redacted, Result } from "ef
 import { HostedEnvironment } from "../../environment.js";
 import type { StoreFailure } from "../../http/store-failure.js";
 import { type AccountFastOffer, providerModelOf } from "../../providers/model-catalog.js";
-import { isNativeRuntime, type NativeRuntime } from "./native-runtime.js";
+import type { NativeRuntime } from "./native-runtime.js";
 
 /** No credential of the account's pays for a coding agent on the provider's models: neither its subscription, selected in Settings, nor its API key. */
 export class AgentCredentialMissing extends Data.TaggedError("AgentCredentialMissing")<{
@@ -477,16 +477,15 @@ export const agentMadeRunsOn = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * The provider whose credential an agent lacks to take a message, or none
- * where it may: an agent on a native harness on its starter's API key needs
- * that key for its model's provider; one on its plan is the plan's, which
- * refuses by its own words. An agent on eve lacks nothing here, since it
- * takes no message at all (`runtime-sessions.ts`).
+ * where it may: an agent on its starter's API key needs that key for its
+ * model's provider; one on its plan is the plan's, which refuses by its own
+ * words.
  */
 export const messageCredentialMissing = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: { readonly userId: string; readonly model: string },
-  routing: { readonly runtime: ConversationRuntime; readonly payer: AgentPayer | null },
+  routing: { readonly payer: AgentPayer | null },
 ): Effect.fn.Return<ModelProvider | undefined, StoreFailure, DatabaseServices> {
-  if (!isNativeRuntime(routing.runtime) || routing.payer !== AGENT_PAYER.API_KEY) return undefined;
+  if (routing.payer !== AGENT_PAYER.API_KEY) return undefined;
   const provider = yield* providerOfModel(agent.model);
   const rows = yield* keyRowsOf(agent.userId, undefined);
   return keepsApiKey(provider, rows) ? undefined : provider;

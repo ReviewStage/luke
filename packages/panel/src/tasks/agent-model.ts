@@ -750,9 +750,6 @@ export function unrunnableChoice(
   return model === undefined ? undefined : modelConnectFailure(model);
 }
 
-/** What an agent our key paid for says to a message, since it never moves to another payer. */
-const LUKE_PAID_REFUSAL = `${PRODUCT_NAME}'s key no longer runs agents. Continue in a new one.`;
-
 /** The one sentence a missing credential says: the harness to connect, by the provider the service named, and what it unblocks. */
 function credentialMissingWords(
   provider: ModelProvider | undefined,
@@ -1086,13 +1083,6 @@ export function messageFailureNote(
         refused.refusedDevice,
       ),
     );
-  }
-  // Note that an agent our key paid for is refused whatever is connected now, so Settings mends nothing.
-  if (
-    refused.failure === AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING &&
-    payer === AGENT_PAYER.LUKE
-  ) {
-    return callFailure(LUKE_PAID_REFUSAL);
   }
   const theirs = starter === undefined ? undefined : starterKeyWords(refused.failure, starter);
   if (theirs !== undefined) return callFailure(theirs);
