@@ -148,9 +148,9 @@ import { taskCardOf } from "./task-card.js";
  *
  * With Channels on, a channel chosen from the sidebar narrows the page to
  * its own items, the same list, reading pane, and keys, under the channel's
- * name and purpose (`channel-head.tsx`), every one of its items listed with no
- * view's menu (`use-inbox-listing.ts`), and "Nothing here" where it holds
- * none; Mark all as read, which ⌘K and a phone's ⋯ offer, marks its items
+ * name and purpose (`channel-head.tsx`), under the Inbox's own view's menu
+ * and scope (`use-inbox-listing.ts`), and "Nothing here" where it holds none; Mark
+ * all as read, which ⌘K and a phone's ⋯ offer, marks its items
  * alone; leaving it stamps the
  * reader's look at it; and a row's ⋯ moves its thread to another channel
  * (`move-thread-dialog.tsx`). An item opened into a channel from a link
