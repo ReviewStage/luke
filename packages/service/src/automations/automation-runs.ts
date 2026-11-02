@@ -778,6 +778,31 @@ export const executeAutomationRun = /* @__PURE__ */ Effect.fn("web/executeAutoma
 );
 
 /**
+ * What a recovered start of a same-agent automation's run does as its act
+ * would have: keeps the agent where the automation still holds what the run
+ * was claimed for, none or the gone agent, and answers that it replaced the
+ * gone one where it did so, or had already before the act died. Note that
+ * the keep is no guard of its own, because the store's compare holds every
+ * other automation and target to its own (`adoptAutomationAgent`).
+ */
+const recoveredAdoption = Effect.fnUntraced(function* (stranded: StrandedRun, agentId: string) {
+  const adopted = yield* adoptAutomationAgent(
+    stranded.automationId,
+    stranded.claimedAgentId,
+    agentId,
+  );
+  const kept =
+    adopted ||
+    Option.exists(
+      yield* readAutomationToRun(stranded.automationId),
+      (automation) =>
+        automation.targetKind === AUTOMATION_TARGET.SAME_AGENT &&
+        automation.targetAgentId === agentId,
+    );
+  return kept && stranded.claimedAgentId !== null ? AUTOMATION_RUN_REASON.AGENT_REPLACED : null;
+});
+
+/**
  * A claimed run whose function died between the claim and its agent,
  * settled as the start its key made where that agent's session ran, and
  * failed as unavailable where none did, an agent made but never opened let
@@ -813,7 +838,8 @@ export const recoverStrandedRun = /* @__PURE__ */ Effect.fn("web/recoverStranded
     ? (yield* latestTurnsOfReached([started.value.conversationId])).size > 0
     : false;
   if (Option.isSome(started) && opened) {
-    yield* attachRunAgent(stranded.id, started.value.id);
+    const reason = yield* recoveredAdoption(stranded, started.value.id);
+    yield* attachRunAgent(stranded.id, started.value.id, reason);
     return;
   }
   if (Option.isSome(started)) yield* discardAgent(stranded.userId, started.value.id);

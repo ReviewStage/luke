@@ -1872,8 +1872,9 @@ const AGENT_SEARCH_FAILED = readFailedWords("the search for agents");
 const AGENT_DETAIL =
   "Each run is sent to that agent as a message, even mid-turn. It keeps its own model and effort.";
 
-/** What the agent row names and says where no agent is chosen, so the first run starts one. */
+/** What the agent row names and says where no agent is chosen, so the first run starts one, and the menu's row that chooses none. */
 const FIRST_RUN_LABEL = "Started by its first run";
+const FIRST_RUN_ROW = "first-run";
 const FIRST_RUN_DETAIL =
   "Its first run starts an agent, and every run after is sent to it. If that agent is archived or deleted, the next run starts another. Or choose an agent already at work.";
 
@@ -1957,8 +1958,9 @@ function AgentRow({
     savedAgentId !== null && !offered.some((agent) => agent.id === savedAgentId)
       ? savedAgentId
       : undefined;
-  // Note that a search lists only what it found, so the kept agent stands in the menu while none is typed.
+  // Note that a search lists only what it found, so choosing none and the kept agent stand in the menu while none is typed.
   const rows = [
+    ...(words !== "" ? [] : [{ id: FIRST_RUN_ROW, label: FIRST_RUN_LABEL }]),
     ...(kept === undefined || words !== "" ? [] : [{ id: kept, label: KEPT_AGENT_LABEL }]),
     ...listed.map((agent) => agentMenuRow(agent, drawn)),
   ];
@@ -1967,7 +1969,7 @@ function AgentRow({
       width={CHIP_WIDTH.MIN_FIELD}
       label="Agent"
       detail={detail}
-      value={draft.agentId ?? ""}
+      value={draft.agentId ?? FIRST_RUN_ROW}
       valueLabel={
         chosenRow !== undefined
           ? chosenRow.label
@@ -1992,14 +1994,15 @@ function AgentRow({
           ) : undefined
         ) : agents === undefined ? (
           <Spinner delay label={readingWords("agents")} />
-        ) : rows.length === 0 ? (
+        ) : listed.length === 0 && kept === undefined ? (
           "No agents of this workspace work in it yet."
         ) : undefined
       }
       noMatch={NO_MATCH.AGENTS}
       onOpen={() => searchAgents("")}
       onSearch={searchAgents}
-      onPick={(agentId) => {
+      onPick={(id) => {
+        const agentId = id === FIRST_RUN_ROW ? null : id;
         setPicked(listed.find((agent) => agent.id === agentId));
         onDraft({ agentId });
       }}

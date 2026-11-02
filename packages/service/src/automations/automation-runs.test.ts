@@ -640,6 +640,72 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
+    "a same-agent run left claimed after it opened a fresh agent is settled with that agent, which the automation keeps in place of the gone one",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation, workspaceId } = yield* openAutomation();
+        const archived = Option.getOrThrow(
+          yield* createAgent(owner, {
+            taskId: null,
+            organizationId: workspaceId,
+            idempotencyKey: randomUUID(),
+            model: SOL,
+            effort: "low",
+            planSnapshot: null,
+            prompt: "Keep the flaky tests quarantined.",
+            repository: `${RELAY.owner}/${RELAY.name}`,
+            runtime: CONVERSATION_RUNTIME.CODEX,
+            payer: AGENT_PAYER.API_KEY,
+          }),
+        ).agent.id;
+        yield* archiveAgent(owner, archived, true);
+        const same = yield* toSameAgent(automation, archived);
+        const run = yield* runNow(same);
+        // The run claimed for the gone agent opened a fresh one under its key, and its function died there.
+        const fresh = Option.getOrThrow(
+          yield* createAgent(owner, {
+            taskId: null,
+            organizationId: workspaceId,
+            idempotencyKey: run.id,
+            model: SOL,
+            effort: "low",
+            planSnapshot: null,
+            prompt: PROMPT,
+            repository: `${RELAY.owner}/${RELAY.name}`,
+            runtime: CONVERSATION_RUNTIME.CODEX,
+            payer: AGENT_PAYER.API_KEY,
+          }),
+        ).agent.id;
+        yield* ranTurn(owner, fresh, TURN_STATUS.RUNNING);
+        yield* Database.use((db) =>
+          db
+            .update(automationRun)
+            .set({ status: AUTOMATION_RUN_STATUS.STARTED, agentId: null, claimedAgentId: archived })
+            .where(eq(automationRun.id, run.id)),
+        );
+
+        yield* recoverStrandedRun({
+          id: run.id,
+          automationId: automation.id,
+          userId: owner,
+          claimedAgentId: archived,
+        });
+
+        assert.equal(
+          Option.getOrThrow(yield* readAutomationToRun(automation.id)).targetAgentId,
+          fresh,
+        );
+        const settled = (yield* listAutomationRuns(owner, automation.id)).find(
+          (each) => each.id === run.id,
+        );
+        assert.deepEqual(
+          [settled?.status, settled?.agentId, settled?.reason],
+          [AUTOMATION_RUN_STATUS.STARTED, fresh, AUTOMATION_RUN_REASON.AGENT_REPLACED],
+        );
+      }),
+  );
+
+  it.effect(
     "a run handed to a teammate's agent stands as a line under the teammate, and left claimed it is settled with that agent still, even once its creator left",
     () =>
       Effect.gen(function* () {

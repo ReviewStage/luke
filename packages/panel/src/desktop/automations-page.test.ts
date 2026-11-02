@@ -2207,7 +2207,7 @@ test("the agent a same-agent automation was saved with is not offered once its r
     [...document.querySelectorAll("[role=option] .luke-combobox-option-label")].map(
       (name) => name.textContent,
     ),
-    ["CI digest"],
+    ["Started by its first run", "CI digest"],
   );
 });
 
@@ -2231,6 +2231,11 @@ test("Same agent saves with none chosen, its first run starting one, or with one
   assert.equal(picked(page, "Agent"), "CI digest");
   act(() => button("Save").click());
   await settle();
+  // A picked agent is let go again, for the next run to start one.
+  pick(page, "Agent", "Started by its first run");
+  assert.equal(picked(page, "Agent"), "Started by its first run");
+  act(() => button("Save").click());
+  await settle();
 
   assert.deepEqual(changes, [
     {
@@ -2240,6 +2245,10 @@ test("Same agent saves with none chosen, its first run starting one, or with one
     {
       automationId: SWEEP.id,
       change: { target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: CI_DIGEST.id } },
+    },
+    {
+      automationId: SWEEP.id,
+      change: { target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: null } },
     },
   ]);
 });
@@ -2289,11 +2298,12 @@ test("the Agent picker draws each agent as every agent menu does: its glyph, its
 
   act(() => picker(page, "Agent").click());
   assert.deepEqual(agentRows(), [
+    { glyph: false, name: "Started by its first run", detail: null, ends: [] },
     { glyph: true, name: "Nightly sweep", detail: "No task", ends: ["Failed"] },
     { glyph: true, name: "CI digest", detail: "No task", ends: [] },
   ]);
 
-  const row = [...document.querySelectorAll<HTMLElement>("[role=option]")][1];
+  const row = [...document.querySelectorAll<HTMLElement>("[role=option]")][2];
   assert.ok(row, "the menu lists the second agent");
   act(() => row.click());
   assert.equal(picked(page, "Agent"), "CI digest");
@@ -2307,7 +2317,8 @@ test("the Agent picker's rows each hang their agent's card while the pointer res
   await settle();
   act(() => picker(page, "Agent").click());
 
-  restOn(document.querySelector("[role=option]") ?? assert.fail("the menu lists the agent"));
+  // The first row chooses none, so the agent's is the second.
+  restOn(document.querySelectorAll("[role=option]")[1] ?? assert.fail("the menu lists the agent"));
   const card = document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "CI digest");
 });
@@ -2361,7 +2372,7 @@ test("a word typed in the Agent picker keeps the newest agents whose rows hold i
   pick(page, "Runs land in", "Same agent");
   await settle();
   act(() => picker(page, "Agent").click());
-  const [named] = agentRows();
+  const [, named] = agentRows();
   assert.ok(named?.name, "the untitled agent is drawn under a name of its own");
 
   type(
@@ -2387,7 +2398,7 @@ test("the agent a same-agent automation was saved with, once the list no longer 
   await settle();
   act(() => picker(page, "Agent").click());
   const names = () => agentRows().map((row) => row.name);
-  assert.deepEqual(names(), ["The agent it goes to now", "CI digest"]);
+  assert.deepEqual(names(), ["Started by its first run", "The agent it goes to now", "CI digest"]);
 
   const search = () =>
     document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Agent"] input');
@@ -2397,7 +2408,7 @@ test("the agent a same-agent automation was saved with, once the list no longer 
   type(search(), "");
   await settle();
 
-  assert.deepEqual(names(), ["The agent it goes to now", "CI digest"]);
+  assert.deepEqual(names(), ["Started by its first run", "The agent it goes to now", "CI digest"]);
 });
 
 /** What each row's glyph draws, in order: Sentry's or GitHub's mark, or the lucide icon's name. */
