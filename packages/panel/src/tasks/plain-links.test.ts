@@ -30,10 +30,9 @@ import { VersionView } from "./version-view.js";
 /**
  * plain-links.test.ts -- a link the window has no chip for is one plain
  * link wherever words are drawn: a transcript, the plan read and edited, and
- * a version. A bare address says its host and path with a ↗, but in a
- * transcript, which draws it as its website chip, and a labelled one its
- * label, and a plain link pressed in the plan or a version opens in the
- * browser without opening the section's editor. Synthetic plan and
+ * a version. A bare address says its host and path and a labelled one its
+ * label, and a plain link pressed opens in the browser, in the plan or a
+ * version without opening the section's editor. Synthetic plan and
  * repository.
  */
 
@@ -57,10 +56,7 @@ const TASK: Task = {
 };
 
 /** What every surface draws the two plain links as: the label, and the bare address cut short. */
-const PLAIN = [
-  ["the docs", false],
-  ["postgresql.org/docs/…/sql-createindex.html", true],
-];
+const PLAIN = ["the docs", "postgresql.org/docs/…/sql-createindex.html"];
 
 const PAGE: TaskMentionsValue = {
   holder: { taskId: TASK_ID },
@@ -115,12 +111,11 @@ function drawn(node: ReactNode): HTMLElement {
   return container;
 }
 
-/** Each plain link drawn: what it says, and whether it wears the ↗ of an address cut short. */
-function plainLinks(container: HTMLElement): [string | null, boolean][] {
-  return [...container.querySelectorAll<HTMLElement>(".luke-text-link")].map((link) => [
-    link.textContent,
-    link.querySelector("svg") !== null,
-  ]);
+/** What each plain link drawn says. */
+function plainLinks(container: HTMLElement): (string | null)[] {
+  return [...container.querySelectorAll<HTMLElement>(".luke-text-link")].map(
+    (link) => link.textContent,
+  );
 }
 
 /** A plan's version, read and ready, as the version history draws it. */
@@ -154,14 +149,13 @@ test("the plan and a version draw a link they have no chip for as one plain link
   }
 });
 
-test("a transcript draws a bare address as its website chip, called by its site, which opens in the browser", async () => {
+test("a transcript draws a bare address as the plan does, cut short, and opens it in the browser", async () => {
   const transcript = drawn(createElement(TranscriptWords, { text: WORDS }));
-  const site = transcript.querySelector<HTMLElement>("[data-site-chip]");
+  const bare = [...transcript.querySelectorAll<HTMLElement>(".luke-text-link")].at(-1);
 
-  assert.deepEqual(plainLinks(transcript), [["the docs", false]]);
+  assert.deepEqual(plainLinks(transcript), PLAIN);
   assert.equal(transcript.querySelectorAll("[data-mention-ref]").length, 2);
-  assert.equal(site?.textContent, "postgresql.org");
-  act(() => site?.click());
+  act(() => bare?.click());
   await act(async () => undefined);
   assert.deepEqual(sent, [{ kind: ACT_KIND.WEB_OPEN, payload: { url: BARE } }]);
 });
@@ -230,7 +224,7 @@ test("a bare address a change marks inside is drawn whole, its marks where they 
     }),
   );
 
-  assert.deepEqual(plainLinks(changed), [[BARE, false]]);
+  assert.deepEqual(plainLinks(changed), [BARE]);
   assert.equal(
     changed.querySelector(".luke-text-link ins.markdown-inserted")?.textContent,
     "current",

@@ -1,5 +1,5 @@
 import { WRITING_BLOCK, WRITING_SHORTCUTS } from "@luke/settings/shortcuts";
-import { TEXT_LINK_MARK_ATTRIBUTES } from "@luke/ui/link-face";
+import { linkMarkAttributes } from "@luke/ui/link-face";
 import { MARKDOWN_CLASS } from "@luke/ui/markdown-class";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { type AnyExtension, Editor, Extension } from "@tiptap/core";
@@ -165,8 +165,9 @@ const MENTION_LINK_CLASS = "plan-mention-link";
  * How a link looks in the editor: a link whose target names a mention,
  * which the read view draws as its chip, wears a chip's light look, so
  * opening a section to edit it does not turn its chips into underlined
- * words; any other is the plain link every place draws (`TEXT_LINK_MARK_ATTRIBUTES`).
- * Note that one attribute decides between the two, so a mention's link
+ * words; a web page's is the plain link every place draws, and any other,
+ * a `mailto:` one say, its words alone, as the read view draws it
+ * (`linkMarkAttributes`). Note that one attribute decides between them, so a mention's link
  * never wears the plain link's class beside its own, that only a class and
  * the link's look are added, never the target in an attribute of its own, and that the
  * attribute is drawn alone and never read or written as markdown.
@@ -182,10 +183,12 @@ function linkLook(namesMention: ((target: string) => boolean) | undefined) {
             look: {
               default: null,
               parseHTML: () => null,
-              renderHTML: (attributes) =>
-                namesMention?.(String(attributes.href ?? "")) === true
+              renderHTML: (attributes) => {
+                const href = String(attributes.href ?? "");
+                return namesMention?.(href) === true
                   ? { class: MENTION_LINK_CLASS }
-                  : TEXT_LINK_MARK_ATTRIBUTES,
+                  : linkMarkAttributes(href);
+              },
             },
           },
         },
