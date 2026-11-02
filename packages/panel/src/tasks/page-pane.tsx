@@ -268,12 +268,26 @@ function useFramePick(frame: RefObject<HTMLIFrameElement | null>, pick: FramePic
     (ask: PagePickAsk) => frame.current?.contentWindow?.postMessage(ask, "*"),
     [frame],
   );
-  const sync = useCallback(() => {
+  // Note that the frame is told only what changed, and a frame loaded again only what stands, so a page no one comments on is asked nothing.
+  const told = useRef<{ picking: boolean; shown: string | undefined }>({
+    picking: false,
+    shown: undefined,
+  });
+  useEffect(() => {
+    const { picking, shown } = pick;
+    if (picking !== told.current.picking) {
+      post({ type: PAGE_PICK_TYPE, act: picking ? PAGE_PICK_ACT.START : PAGE_PICK_ACT.STOP });
+    }
+    if (shown !== told.current.shown) {
+      post({ type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.SHOW, path: shown ?? "" });
+    }
+    told.current = { picking, shown };
+  }, [post, pick]);
+  const loaded = useCallback(() => {
     const { picking, shown } = latest.current;
-    post({ type: PAGE_PICK_TYPE, act: picking ? PAGE_PICK_ACT.START : PAGE_PICK_ACT.STOP });
-    post({ type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.SHOW, path: shown ?? "" });
+    if (picking) post({ type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.START });
+    if (shown !== undefined) post({ type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.SHOW, path: shown });
   }, [post]);
-  useEffect(sync, [sync, pick.picking, pick.shown]);
   useEffect(() => {
     const hear = (event: MessageEvent) => {
       const framed = frame.current?.contentWindow;
@@ -287,7 +301,7 @@ function useFramePick(frame: RefObject<HTMLIFrameElement | null>, pick: FramePic
     window.addEventListener("message", hear);
     return () => window.removeEventListener("message", hear);
   }, [frame]);
-  return sync;
+  return loaded;
 }
 
 /**
@@ -773,7 +787,10 @@ export function PagePane({
             />
           )}
           {comments === undefined || !commenting.open ? null : (
-            <div className="page-comments-column">
+            <div
+              className="page-comments-column"
+              data-picking={commenting.pick.picking ? "" : undefined}
+            >
               <PageComments
                 control={comments.control}
                 doors={comments.doors}

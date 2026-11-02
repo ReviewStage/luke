@@ -639,6 +639,20 @@ export function readPlanCommentThreads(
   });
 }
 
+/** One of the task's threads by its id, the plan's or a page's, with its entries; nothing where the account reaches no such plan or the plan no such thread. */
+export function readPlanCommentThread(
+  userId: string,
+  taskId: string,
+  threadId: string,
+): TaskStoreEffect<Option.Option<PlanCommentThread>> {
+  return Effect.gen(function* () {
+    const reached = yield* findReachableTask({ userId, taskId });
+    if (Option.isNone(reached)) return Option.none();
+    const [thread] = yield* threadsOf(taskId, { ids: [threadId] });
+    return Option.fromNullishOr(thread);
+  });
+}
+
 /** Where each of the plan's threads, or the named page's, stands, read without its words; none where the account reaches no such plan. */
 export function planCommentStamps(
   userId: string,

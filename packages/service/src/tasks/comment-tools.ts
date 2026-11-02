@@ -5,6 +5,7 @@ import {
   PLAN_COMMENT_OUTCOME,
   type PlanCommentOutcome,
   type PlanCommentWriterRef,
+  readPlanCommentThread,
   readPlanCommentThreads,
 } from "@luke/database/models/plan-comments";
 import {
@@ -245,9 +246,8 @@ export function runCommentTool(
       case AGENT_TOOL.REPLY_TO_COMMENT: {
         const read = readEither(REPLY_INPUT)(input);
         if (Result.isFailure(read)) return commentToolRejected(COMMENT_TOOL_REFUSAL.UNREADABLE);
-        const threads = yield* readPlanCommentThreads(writer.userId, taskId);
-        const thread = Option.getOrUndefined(threads)?.find(
-          (each) => each.id === read.success.thread,
+        const thread = Option.getOrUndefined(
+          yield* readPlanCommentThread(writer.userId, taskId, read.success.thread),
         );
         if (thread?.status === PLAN_COMMENT_STATUS.RESOLVED)
           return commentToolRejected(COMMENT_TOOL_REFUSAL.RESOLVED);

@@ -2905,6 +2905,9 @@ const NO_PAGE_COMMENTS = {
   [COMMENTS_FILTER.RESOLVED]: NO_COMMENTS[COMMENTS_FILTER.RESOLVED],
 } as const satisfies Record<CommentsFilter, { title: string; line: string | undefined }>;
 
+/** No threads, which a page's column lists while an element is picked. */
+const NO_THREADS: readonly PlanCommentThread[] = [];
+
 /** What a page's comments column says and offers while a comment's element is picked. */
 const PICK_WORDS = {
   COMMENT: "Comment on the page",
@@ -2918,7 +2921,8 @@ const PICK_WORDS = {
  * element on the page, and over them the thread being started. Comment asks
  * the page's frame for an element, which a press there picks, or Whole page
  * comments on the page as a whole; either opens the first comment's field
- * under its quote, which starts the thread on the version shown.
+ * under its quote, which starts the thread on the version shown. While an
+ * element is picked the column lists nothing but the pick's line.
  */
 export function PageComments({
   control,
@@ -3010,9 +3014,10 @@ export function PageComments({
           }
         />
         <ScrollArea fade={SCROLL_FADE.BOTH}>
+          {/* Note that while an element is picked the list holds the pick's line alone, so a column standing over a narrow page leaves the page to press. */}
           <ThreadList
             control={control}
-            listed={listed}
+            listed={picking ? NO_THREADS : listed}
             empty={NO_PAGE_COMMENTS[filter]}
             doors={full}
             lead={lead}
