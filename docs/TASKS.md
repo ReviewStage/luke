@@ -574,12 +574,6 @@ The service lays each save over what others wrote meanwhile
   caret's block stays, the selection maps through, and it is no step of the
   developer's undo. While the editor is closed, the document redraws in
   place on each save that lands.
-- **What agents are told.** A turn's standing context names the sections
-  the developer last wrote, by heading, under `[sections the developer
-  wrote]`, as their decisions, and the agent is told never to reword or
-  strike them (`packages/service/src/agents/coder-host/turn-context.ts`). A
-  section an agent writes again leaves that list. The voice is not told
-  mid-call.
 - **Failures.** A save that fails keeps the words and says why under the
   editor ("Not saved: the service did not answer.", "Not saved: this task no
   longer exists.", "Not saved: this task is archived.", or "Not saved: the

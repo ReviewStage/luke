@@ -55,7 +55,9 @@ import { useWorkspaceMembers } from "./use-workspace-members.js";
  * workspace's GitHub does not reach is offered, so a task never starts on
  * a repository its workspace cannot work in; a pick the read finds out of
  * reach is handed back, and with nothing to offer the chip reads No
- * repository, which a task can start with. With no
+ * repository, which a task can start with. An opener that may stand on
+ * no repository, as an automation's editor may, is offered No repository
+ * pinned under the list, which lets the pick go. With no
  * GitHub connected to the workspace, or one GitHub removed or suspended,
  * the menu says which in the list's place: an owner or an admin is offered
  * Open Settings at the workspace's GitHub repositories, the one place they
@@ -112,8 +114,11 @@ const PLACE_LOOK = {
 /** The chip's words while it waits on a pick. */
 const CHOOSE_LABEL = "Choose a repository";
 
-/** The chip's words where the workspace's GitHub reaches nothing to pick. */
+/** The chip's words where the workspace's GitHub reaches nothing to pick, or where none is chosen and none may stand, and the row that chooses none. */
 const NONE_LABEL = "No repository";
+
+/** The id of the row pinned under the list that chooses no repository. */
+const NONE_ROW = "none";
 
 /** What the menu says in the list's place. */
 const MENU_NOTE = {
@@ -235,6 +240,8 @@ interface RepositoryMenuProps {
   value: string | null;
   chooser: RepositoryChooser;
   onChoose: (repository: string) => void;
+  /** Lets the pick go, offered as No repository pinned under the list, where the opener may stand on none, as an automation's runs may; a null value then reads No repository. */
+  onClear?: (() => void) | undefined;
   /** Lets go of a pick the read finds the workspace's GitHub does not reach, where the pick is the opener's own to drop. */
   onUnreached?: (() => void) | undefined;
   /** Hears the repositories each successful read lists, `owner/name`. */
@@ -270,7 +277,7 @@ export interface RepositoryMenu {
 
 /** The repository's menu, read and placed as the chip's always was, for whatever opener draws it (`RepositoryMenu`). */
 export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
-  const { chooser, openRequest, onAsked, onUnreached, onListed, value } = props;
+  const { chooser, openRequest, onAsked, onUnreached, onListed, onClear, value } = props;
   const openSettings = useOpenSettings();
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -348,7 +355,9 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     setOpen(!open);
   };
   const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);
-  const label = value ?? (rows.length === 0 && listed !== undefined ? NONE_LABEL : CHOOSE_LABEL);
+  // Note that no repository is a choice of its own where the opener lets one go, so it is not said as a pick still owed.
+  const none = onClear !== undefined || (rows.length === 0 && listed !== undefined);
+  const label = value ?? (none ? NONE_LABEL : CHOOSE_LABEL);
   // A list with nothing to pick says why, then offers an owner Settings and a member the owners to ask.
   const deadEnd = (lines: readonly string[], ask: OwnerAsk, askedOf: string | undefined) => (
     <>
@@ -425,6 +434,18 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
         noMatch={MENU_NOTE.NO_MATCH}
         align={props.align ?? POPOVER_ALIGN.END}
         onPick={(repository) => choose(() => props.onChoose(repository))}
+        foot={
+          onClear === undefined
+            ? undefined
+            : [
+                {
+                  id: NONE_ROW,
+                  label: NONE_LABEL,
+                  icon: <GLYPH.REPOSITORY />,
+                  onPress: () => choose(onClear),
+                },
+              ]
+        }
         onClose={close}
         onLeave={(left) => {
           if (!(left instanceof Node && room.current?.contains(left))) setOpen(false);

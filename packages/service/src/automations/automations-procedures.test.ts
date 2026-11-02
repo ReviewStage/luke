@@ -351,7 +351,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
-    "an automation on a workspace is refused for an account outside it, one naming a plan, with no repositories, or on a repository its installation does not reach, and is made on a GitHub event",
+    "an automation on a workspace is refused for an account outside it, one naming a plan, not naming its repositories, on a repository its installation does not reach, or on a GitHub event with no repository, and is made on a GitHub event, and in no repository on any other trigger",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask } = yield* openAccounts;
@@ -368,18 +368,33 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const { repositories: _none, ...bare } = weekdays(task.workspaceId, [relay]);
         const noRepositories = yield* post(owner, bare);
         const unreached = yield* post(owner, weekdays(task.workspaceId, ["acme/elsewhere"]));
-        const onGitHub = yield* post(owner, {
-          ...weekdays(task.workspaceId, [relay]),
+        const github = {
           trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.ISSUE_OPENED },
+        };
+        const onGitHubNowhere = yield* post(owner, {
+          ...weekdays(task.workspaceId, []),
+          ...github,
         });
+        const onGitHub = yield* post(owner, { ...weekdays(task.workspaceId, [relay]), ...github });
+        const nowhere = yield* post(owner, weekdays(task.workspaceId, []));
 
         assert.deepEqual(
-          [outside.status, onPlan.status, noRepositories.status, unreached.status, onGitHub.status],
+          [
+            outside.status,
+            onPlan.status,
+            noRepositories.status,
+            unreached.status,
+            onGitHubNowhere.status,
+            onGitHub.status,
+            nowhere.status,
+          ],
           [
             HOSTED_HTTP_STATUS.NOT_FOUND,
             HOSTED_HTTP_STATUS.BAD_REQUEST,
             HOSTED_HTTP_STATUS.BAD_REQUEST,
             HOSTED_HTTP_STATUS.FORBIDDEN,
+            HOSTED_HTTP_STATUS.CONFLICT,
+            HOSTED_HTTP_STATUS.CREATED,
             HOSTED_HTTP_STATUS.CREATED,
           ],
         );

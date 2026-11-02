@@ -243,6 +243,8 @@ export interface FailureAbout {
   readonly agentId?: string | undefined;
   readonly conversationId?: string | undefined;
   readonly turnId?: string | undefined;
+  /** The call that started the worker a failure is about, among its agent's workers. */
+  readonly callId?: string | undefined;
   readonly inboxItemId?: string | undefined;
   readonly automationId?: string | undefined;
   readonly channelId?: string | undefined;
@@ -337,6 +339,7 @@ const ABOUT_ATTRIBUTE = {
   agentId: "agent.id",
   conversationId: "conversation.id",
   turnId: "turn.id",
+  callId: "call.id",
   inboxItemId: "inbox_item.id",
   automationId: "automation.id",
   channelId: "channel.id",

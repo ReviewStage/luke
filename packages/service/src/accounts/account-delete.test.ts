@@ -1,4 +1,4 @@
-// account-delete.test.ts -- an account's deletion retires its sessions as its caller reaches eve, over a bearer or a browser's session cookie, then erases it.
+// account-delete.test.ts -- an account's deletion retires its agents' sessions, over a bearer or a browser's session cookie, then erases it.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -21,6 +21,8 @@ import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted } from "effect";
 import { SqlClient } from "effect/sql";
 import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
+import { NATIVE_SESSION_PREFIX } from "../agents/coder-host/native-runtime.js";
+import type { NativeAgentSessions } from "../agents/coder-host/runtime-sessions.js";
 import { type AgentSessions, EVE_RESET_OUTCOME } from "../agents/eve-host/eve-sessions.js";
 import { requestUserId, type SessionEndpoint, type UserInfoEndpoint } from "../auth/bearer.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
@@ -28,21 +30,23 @@ import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
+import { harnessFor, scriptedHarnessLayer } from "../testing/native-harness-fake.js";
 import { accountProcedures } from "./account-procedures.js";
 
 /**
  * An account's deletion, answered by the account procedures the way the
  * hosted oRPC route answers it, over a real dialect, with the request's account resolved as
  * `resolveHostedUserId` resolves it and the auth service faked. Before
- * anything is erased, every eve session the account's standing
- * conversations run in is retired as the request's own caller: over the
- * bearer where the request carries one, and, where only a browser's session
- * cookie names the account, as the deployment acting for that account. The
- * account a cookie names is the only one it erases, and the only one whose
- * sessions it retires.
+ * anything is erased, every session the account's standing agents'
+ * conversations run in is retired through its harness, acting for the
+ * account the request named, over its bearer or, where only a browser's
+ * session cookie names the account, as the deployment acting for it, which
+ * a deployment with no secret of its own cannot be. The account a cookie
+ * names is the only one it erases, and the only one whose sessions it
+ * retires.
  *
- * eve is a fake that writes down each retire with who asked it. Synthetic
- * accounts, bearers, sessions, and session ids throughout.
+ * The harness is a fake that writes down each retire with whom it acted
+ * for. Synthetic accounts, bearers, sessions, and session ids throughout.
  */
 
 const ORIGIN = "https://luke.test";
@@ -74,7 +78,7 @@ function deploymentFor(account: string): string {
   return `deployment for ${account}`;
 }
 
-/** eve as a deletion reaches it: every retire written down with who asked it, and nothing else a deletion asks. */
+/** A harness as a deletion reaches it: every retire written down with whom it acted for, and nothing else a deletion asks. */
 function retiringEve() {
   const retired: (readonly [string, string])[] = [];
   const asked = (caller: string): AgentSessions => ({
@@ -91,6 +95,7 @@ function retiringEve() {
     retired,
     eve: (authorization: Redacted.Redacted) => asked(Redacted.value(authorization)),
     eveAs: (account: string) => asked(deploymentFor(account)),
+    harness: scriptedHarnessLayer((account) => asked(harnessFor(account))),
   };
 }
 
@@ -101,14 +106,14 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** A standing conversation of the account, of the kind given, recorded as running in a session of its own: the session's id. */
+/** A standing conversation of the account, of the kind given, recorded as running in a Claude Code session of its own: the session's id. */
 const sessionOf = (
   userId: string,
   kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND],
 ) =>
   Effect.gen(function* () {
     const db = yield* Database;
-    const sessionId = `wrun_${randomUUID()}`;
+    const sessionId = `${NATIVE_SESSION_PREFIX.claude_code}${randomUUID()}`;
     yield* db.insert(conversations).values({ userId, kind, runtimeSessionId: sessionId });
     return sessionId;
   });
@@ -151,10 +156,19 @@ const openAccounts = (eve: ReturnType<typeof retiringEve> | undefined) =>
         db.select({ id: user.id }).from(user).where(eq(user.id, userId)),
         (rows) => rows.length === 1,
       );
-    return { owner, other, stands, ask: (request: Request) => answer(procedures, request) };
+    return {
+      owner,
+      other,
+      stands,
+      ask: (request: Request) => answer(procedures, request, eve?.harness ?? Layer.empty),
+    };
   });
 
-const answer = (procedures: ReturnType<typeof accountProcedures>, request: Request) =>
+const answer = (
+  procedures: ReturnType<typeof accountProcedures>,
+  request: Request,
+  harness: Layer.Layer<NativeAgentSessions> | Layer.Layer<never>,
+) =>
   Effect.gen(function* () {
     // The procedures run on oRPC's own fiber, so they are handed the test's clock and services.
     const services = Layer.mergeAll(
@@ -162,6 +176,7 @@ const answer = (procedures: ReturnType<typeof accountProcedures>, request: Reque
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
+      harness,
       noNetwork,
       modelCatalogOf([]),
       // A delete revokes each provider's first grant whatever the account holds, which Connect takes; nothing else is asked.
@@ -180,7 +195,7 @@ function sent(path: string, method: string, headers: Record<string, string>): Re
 
 it.layer(getTestDB())("an account's deletion", (it) => {
   it.effect(
-    "over a browser's session cookie erases the account the cookie names alone, retiring every session of that account's standing agents' conversations as the deployment acting for it, none of another account's, and none of a conversation of another kind",
+    "over a browser's session cookie erases the account the cookie names alone, retiring every session of that account's standing agents' conversations through the harness acting for it, none of another account's, and none of a conversation of another kind",
     () =>
       Effect.gen(function* () {
         const eve = retiringEve();
@@ -200,14 +215,14 @@ it.layer(getTestDB())("an account's deletion", (it) => {
         );
 
         assert.notEqual(mainSession, agentSession);
-        assert.deepEqual(eve.retired, [[deploymentFor(owner), agentSession]]);
+        assert.deepEqual(eve.retired, [[harnessFor(owner), agentSession]]);
         assert.equal(yield* stands(owner), false, "the cookie erased its account");
         assert.equal(yield* stands(other), true, "and no other");
       }),
   );
 
   it.effect(
-    "over the bearer retires the account's sessions over that bearer as it came, whatever cookie rides beside it, and erases the bearer's account",
+    "over the bearer retires the account's sessions through the harness acting for the bearer's account, whatever cookie rides beside it, and erases that account",
     () =>
       Effect.gen(function* () {
         const eve = retiringEve();
@@ -225,7 +240,7 @@ it.layer(getTestDB())("an account's deletion", (it) => {
           { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } },
         );
 
-        assert.deepEqual(eve.retired, [[`Bearer ${owner}`, agentSession]]);
+        assert.deepEqual(eve.retired, [[harnessFor(owner), agentSession]]);
         assert.equal(yield* stands(owner), false);
         assert.equal(yield* stands(other), true);
       }),

@@ -23,7 +23,8 @@ import { Tooltip } from "../tooltip/hint.js";
  * which a card draws at its head beside an optional × and a menu holds
  * unseen, since a menu's search field is its head. It takes the focus as it
  * opens, onto the control its owner names or else onto itself, so its keys
- * and focus leaving it are heard. Escape is the panel's, never the window's:
+ * and focus leaving it are heard, unless its owner opened it with the
+ * keyboard left where it was, as a menu's panel the pointer opened is. Escape is the panel's, never the window's:
  * it stops there, so the surface behind stays open, and is handed to the
  * owner, who decides what it costs (closing, or going back a page), never
  * while an input method composes. Focus moving anywhere outside the panel
@@ -119,6 +120,7 @@ export function PopoverPanel({
   closeLabel,
   hint = Tooltip,
   initialFocus,
+  takesFocus = true,
   onDismiss,
   onLeave,
   onExited,
@@ -138,6 +140,8 @@ export function PopoverPanel({
   hint?: PopoverPanelHint | undefined;
   /** The control that takes focus as it opens; the panel itself where it names none. */
   initialFocus?: RefObject<HTMLElement | null> | undefined;
+  /** Whether it takes the focus as it opens: it does unless its owner leaves the keyboard where it was, as a menu's panel the pointer opened. */
+  takesFocus?: boolean | undefined;
   /** Escape, or a press on the ×: the owner decides what putting it away costs. */
   onDismiss: () => void;
   /** Focus left the panel for `left`; the owner closes unless that is still its own. */
@@ -160,8 +164,9 @@ export function PopoverPanel({
   );
 
   useEffect(() => {
-    if (open) (initialFocus?.current ?? panel.current)?.focus({ preventScroll: true });
-  }, [open, initialFocus]);
+    if (open && takesFocus)
+      (initialFocus?.current ?? panel.current)?.focus({ preventScroll: true });
+  }, [open, initialFocus, takesFocus]);
 
   // Note that the owner hears it gone only once the panel has stood, because one that never opened has left nothing to let go of.
   const stood = useRef(false);

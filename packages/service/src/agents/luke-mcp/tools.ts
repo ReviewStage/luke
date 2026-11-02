@@ -3,9 +3,9 @@
  *
  * A Claude Code or Codex agent keeps its harness's own shell, files, todos,
  * and subagents; what touches the app reaches it as an MCP tool of our own
- * server (`app.ts`). Each tool here is the one the agent's eve tool file
- * declares (`apps/dev/tools/<name>.ts`): the same name, the same description,
- * the same input schema, and the same door the coder host's method for it
+ * server (`app.ts`). Each tool here is the one eve's agent was offered: the
+ * same name, the same description, the same input schema, and the same door
+ * the coder host's method for it
  * runs (`../coder-host/inbox-door.ts` for the inbox, `../coder-host/agent-doors.ts`
  * for the rest), so the two runtimes run one implementation. A door is
  * reached directly rather than through the coder host, because the host
@@ -432,7 +432,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
 /** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
 export type LukeMcpOfferedTo = Pick<Agent, "repository" | "machine">;
 
-/** The workspace's shared memory, which eve offers only where the agent's starter turned Memory on (`apps/dev/tools/save_memory.ts`'s `memoryOffered`). */
+/** The workspace's shared memory, offered only where the agent's starter turned Memory on. */
 const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY];
 
 /** The tools eve offers some agents and not others: each one some agent's repository, starter, or starter's Memory withholds. */

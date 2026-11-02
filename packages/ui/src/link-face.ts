@@ -7,21 +7,31 @@
  * says the address as a reader names a page instead: the host without its
  * `www.`, then the path, a short query kept and the fragment dropped, and
  * past a bound the middle steps folded to `…` and a long last step cut. The
- * whole address stays the link's own, shown on hover. A bare address the
- * transcript draws as a website chip says its site alone (`siteName`).
+ * whole address stays the link's own, shown on hover. A page a call's row
+ * in a transcript names by its website chip says its site alone (`siteName`).
  * Nothing here draws: both of the desktop's Markdown renderers read the
  * same face.
  */
 
+import { TEXT_LINK_MARK_CLASS } from "./components/text-link/text-link.js";
 import { TEXT_LINK_LOOK } from "./components/text-link/text-link-look.js";
 
 /**
- * What a link an engine draws without React wears, the plan editor's link
- * mark, so it looks as an underlined TextLink does.
+ * What a link an engine draws without React wears, an editor's link mark:
+ * an underlined TextLink's own classes, so it looks as one does.
  */
 export const TEXT_LINK_MARK_ATTRIBUTES = {
-  class: "luke-text-link",
+  class: TEXT_LINK_MARK_CLASS,
   "data-look": TEXT_LINK_LOOK.UNDERLINED,
+} as const;
+
+/**
+ * What a link mark to an address no place opens wears, a `mailto:` one
+ * say: its words alone, in the words' own ink and the caret's cursor, as
+ * the read view draws such a link.
+ */
+const INERT_LINK_MARK_ATTRIBUTES = {
+  class: "text-inherit no-underline cursor-text",
 } as const;
 
 /** A link's face: the words it says, and whether they are its address cut short. */
@@ -43,6 +53,13 @@ const FOLD = "…";
 
 /** The schemes a link's words may spell its address with. */
 const WEB_SCHEME = /^https?:\/\//iu;
+
+/** What a link mark to `href` wears in an editor: a web page's the underlined link, any other address its words alone. */
+export function linkMarkAttributes(
+  href: string,
+): typeof TEXT_LINK_MARK_ATTRIBUTES | typeof INERT_LINK_MARK_ATTRIBUTES {
+  return WEB_SCHEME.test(href) ? TEXT_LINK_MARK_ATTRIBUTES : INERT_LINK_MARK_ATTRIBUTES;
+}
 
 /** An address as a reader compares it with words: no scheme, no trailing slash. */
 function bareAddress(address: string): string {
@@ -82,7 +99,7 @@ export function shortUrl(href: string): string | undefined {
 }
 
 /** Whether a link's words are its own address, spelled with or without its scheme and trailing slash. */
-export function saysOwnAddress(href: string, words: string): boolean {
+function saysOwnAddress(href: string, words: string): boolean {
   return bareAddress(words) === bareAddress(href);
 }
 

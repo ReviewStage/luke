@@ -434,7 +434,7 @@ const HARNESS_TOOLS = [
   "task_wait",
   "task_cancel",
   "load_skill",
-  "search_web",
+  "web_search",
   "read_web_page",
 ] as const;
 

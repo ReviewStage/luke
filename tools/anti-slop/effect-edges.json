@@ -5,13 +5,6 @@
     "apps/desktop/src/utility/task-code.ts",
     "packages/panel/src/renderer-runtime.ts",
     "apps/desktop/src/renderer/window-root.tsx",
-    "apps/dev/agent.ts",
-    "apps/dev/channels/eve.ts",
-    "apps/dev/hooks/store.ts",
-    "apps/dev/host.ts",
-    "apps/dev/instructions/prompt.ts",
-    "apps/dev/runtime.ts",
-    "apps/dev/sandbox.ts",
     "apps/host/src/main.ts",
     "apps/web/scripts/preview-probe.ts",
     "apps/web/server/db/migrate.ts",
@@ -23,7 +16,6 @@
     "tools/claude-code-probe/src/cli.ts"
   ],
   "runShims": [
-    "apps/dev/evals/coder.eval.ts",
     "packages/database/src/testing/hosted-store-database.ts",
     "packages/database/src/testing/sql-client.ts",
     "packages/host/src/host-kernel.ts",

@@ -12,7 +12,7 @@ import { apiRewrites, readVercelConfig, vercelConfigSource } from "../server/fun
 import { changelogRoutes } from "../src/changelog-releases";
 import { parseReleases } from "../src/site-markdown";
 
-const SERVICE = { WEB: "web", DEV: "dev" } as const;
+const SERVICE = { WEB: "web" } as const;
 
 const VERCEL_JSON = readFileSync(
   fileURLToPath(new URL("../../../vercel.json", import.meta.url)),
@@ -79,26 +79,6 @@ test("a vercel.json key the generator does not know refuses the generation rathe
   mkdirSync(web, { recursive: true });
   writeFileSync(join(root, "vercel.json"), JSON.stringify({ ...vercel, images: { sizes: [256] } }));
   await assert.rejects(vercelConfigSource(web), /images/u);
-});
-
-/**
- * The name eve knows each agent service by, which it derives from the
- * service's package name without its scope and names the service's Workflow
- * queue after. A standing session wakes only on its owning deployment's
- * queue, so these never change once a session has started under them.
- */
-const EVE_AGENT_NAME = { [SERVICE.DEV]: "coder" } as const;
-
-test("each eve service keeps the agent name its standing sessions' queue is named after, whatever its directory or service key", () => {
-  for (const service of [SERVICE.DEV] as const) {
-    const manifest = new URL(
-      `../../../${vercel.services[service].root}/package.json`,
-      import.meta.url,
-    );
-    // SAFETY: the service's own package.json, read for its name.
-    const { name } = JSON.parse(readFileSync(fileURLToPath(manifest), "utf8")) as { name: string };
-    assert.equal(name.slice(name.lastIndexOf("/") + 1), EVE_AGENT_NAME[service], service);
-  }
 });
 
 /** The first step of a path, where it is spelled as itself rather than matched. */
@@ -333,7 +313,7 @@ test("a link to any place in Vespin, a plan's, a section's, a picture's, and a b
 /** A link's token as the routing sees it: its claims and its signature, base64url, joined by a dot. */
 const LINK_TOKEN = "eyJzaXRlIjoiaHR0cHM6Ly9mdWxsc3Bpbi5wYWdlIn0.c2lnbmVkLWJ5LXRoZS1zZXJ2aWNl";
 
-/** The paths of the app, its API, auth, eve, and its files, none of which the sandbox's host may serve. */
+/** The paths of the app, its API, auth, and its files, none of which the sandbox's host may serve. */
 const APP_PATHS = [
   "/",
   "/app",
@@ -343,7 +323,6 @@ const APP_PATHS = [
   "/api/plans/x/revisions",
   "/api/pages/sandbox",
   "/api/default.js",
-  "/eve/coder/v1/sessions",
   "/sign-in.html",
   "/page-in-mac-app.html",
   "/favicon.svg",
@@ -354,7 +333,7 @@ const APP_PATHS = [
 /** The file the sandbox's host answers every path but a link's with, under a forced 404. */
 const SANDBOX_NOT_FOUND = "/sandbox-not-found.txt";
 
-test("the sandbox's host, spelled with a trailing dot or without, reaches the page route alone, by a link's address, and answers every other path, the app's, the API's, auth's, and eve's among them, not found from a static file", async () => {
+test("the sandbox's host, spelled with a trailing dot or without, reaches the page route alone, by a link's address, and answers every other path, the app's, the API's, and auth's among them, not found from a static file", async () => {
   const pageRoute = PAGE_LINK_ROUTE.PATH.slice("/api/".length);
   const pages = (await webFunctions(WEB)).find((definition) =>
     definition.routes.includes(pageRoute),
@@ -366,7 +345,7 @@ test("the sandbox's host, spelled with a trailing dot or without, reaches the pa
   const linkPath = `/${PAGE_LINK_ROUTE.STEP}/${LINK_TOKEN}`;
   assert.ok(readdirSync(join(WEB, "public")).includes(SANDBOX_NOT_FOUND.slice(1)));
   for (const host of SANDBOX_HOSTS) {
-    // Every path of the host enters the web service, whose routes hold it, eve's mount among them.
+    // Every path of the host enters the web service, whose routes hold it.
     for (const path of [linkPath, ...APP_PATHS]) {
       assert.equal(serviceFor(path, host), SERVICE.WEB, `${host}${path}`);
     }
@@ -409,7 +388,6 @@ test("on any host but the sandbox's, a link's address reaches no route, and the 
     // Left to the build's own files, which hold none at that path.
     assert.equal(servedFile(linkPath, host), undefined, host);
     assert.equal(servedFile("/app", host), "/app.html", host);
-    assert.equal(serviceFor("/eve/coder/v1/sessions", host), SERVICE.DEV, host);
   }
 });
 
