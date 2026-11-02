@@ -27,6 +27,16 @@ it.each([
     refused: true,
   },
   {
+    beside: "a loopback address whose last host query names a host off this machine",
+    variables: { DATABASE_URL: `${ON_LOOPBACK}?host=127.0.0.1&host=ep-demo.example.com` },
+    refused: true,
+  },
+  {
+    beside: "a host shaped like a loopback address that is none",
+    variables: { DATABASE_URL: "postgres://luke:luke@127.999.999.999:54329/luke" },
+    refused: true,
+  },
+  {
     beside: "a database on this machine's loopback",
     variables: {
       DATABASE_URL: ON_LOOPBACK,

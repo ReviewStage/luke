@@ -379,7 +379,9 @@ database `DATABASE_URL` names. It builds each grouped function's dispatcher
 over the route modules where they stand, as the generated bundle entry does,
 and lands each request by `api-rewrites.json` through the same replay the tests
 use (`server/local-deployment.ts`, `server/platform-landing.ts`). Every path no
-rewrite takes is the site's, which Vite serves in middleware mode. The two
+rewrite takes is the site's, which Vite serves in middleware mode from the page
+the web service's page routes in `vercel.json` land it on, as `/app` and a
+workspace's links land on `app.html`, without those routes' headers. The two
 WebSocket functions and the feedback courier are not served, and the scheduled
 sweep is called in process on the cron's cadence under `CRON_SECRET`.
 

@@ -11,6 +11,8 @@
  * own path to it too.
  */
 
+import { isIPv4 } from "node:net";
+
 /** The prefix every variable Vercel sets on a deployment, a build, or a pulled environment carries. */
 const VERCEL_PREFIX = "VERCEL";
 
@@ -20,29 +22,39 @@ const DATABASE_VARIABLE = {
   UNPOOLED_URL: "DATABASE_URL_UNPOOLED",
 } as const;
 
-/** The loopback names a database host may go by; any `127.x.y.z` besides. */
+/** The loopback names a database host may go by; any IPv4 address in `127.0.0.0/8` besides. */
 const LOOPBACK_NAMES = new Set(["localhost", "::1", "[::1]"]);
 
-const LOOPBACK_IPV4 = /^127(?:\.\d{1,3}){3}$/;
+const LOOPBACK_IPV4_NETWORK = "127";
+
+function loopbackHost(host: string): boolean {
+  const named = host.toLowerCase();
+  return (
+    LOOPBACK_NAMES.has(named) || (isIPv4(named) && named.split(".")[0] === LOOPBACK_IPV4_NETWORK)
+  );
+}
 
 /**
- * The host a connection string reaches, as `pg`'s parser reads it: a `host`
- * query names the host in place of the address's own. Undefined where the
- * string is no URL, since what it reaches cannot be read here.
+ * Every host a connection string names: the address's own and each `host`
+ * query, since `pg`'s parser takes the last `host` query in the address's
+ * place. Undefined where the string is no URL, since what it reaches cannot
+ * be read here.
  */
-function databaseHost(connectionString: string): string | undefined {
+function databaseHosts(connectionString: string): readonly string[] | undefined {
   try {
     const url = new URL(connectionString);
-    const named = url.searchParams.get("host");
-    return named !== null && named !== "" ? named : decodeURIComponent(url.hostname);
+    return [decodeURIComponent(url.hostname), ...url.searchParams.getAll("host")].filter(
+      (host) => host !== "",
+    );
   } catch {
     return undefined;
   }
 }
 
+/** Whether a connection string names a host and every host it names is this machine's loopback. */
 function onLoopback(connectionString: string): boolean {
-  const host = databaseHost(connectionString)?.toLowerCase();
-  return host !== undefined && (LOOPBACK_NAMES.has(host) || LOOPBACK_IPV4.test(host));
+  const hosts = databaseHosts(connectionString);
+  return hosts !== undefined && hosts.length > 0 && hosts.every(loopbackHost);
 }
 
 /**

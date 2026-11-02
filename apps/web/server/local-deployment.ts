@@ -10,7 +10,9 @@
  * cloud sandbox's terminal and Browser tab, which a local run has none of,
  * and export the `http.Server` Vercel upgrades into, which no fetch
  * dispatcher fronts. Nor is the feedback courier, which is no route's. A
- * path the table lands on a function not served here answers 404.
+ * path the table lands on a function not served here answers 404. A page's
+ * path is served from the built page the web service's own page rewrites
+ * land it on (`vercel.json`), as an app link lands on `app.html`.
  *
  * No route module is imported until `localDeployment` is called, which the
  * caller does once the environment the routes read as they load is settled.
@@ -27,8 +29,8 @@ import {
   routeSourcePath,
   webFunctions,
 } from "./function-layout.js";
-import { readApiRewritesTable } from "./function-rewrites.js";
-import { landed, landingRule } from "./platform-landing.js";
+import { type Rewrite, readApiRewritesTable, readVercelConfig } from "./function-rewrites.js";
+import { landed, landedPath, landingRule } from "./platform-landing.js";
 
 const NOT_FOUND = 404;
 
@@ -96,5 +98,33 @@ export async function localDeployment(web: string): Promise<LocalDeployment> {
         ? Promise.resolve(new Response(null, { status: NOT_FOUND }))
         : served.fetch(arrived);
     },
+  };
+}
+
+/**
+ * The page a path of the site is served from, as the web service's routes in
+ * `vercel.json` rewrite it: the first route that rewrites a path it matches
+ * whole onto a page, which is `app.html` for `/app`, a connect link, and a
+ * workspace's links, and the path itself where none does. The routes held to
+ * a host of their own are the sandbox's host's, which the local server is
+ * not, and the `/api/` table is the deployment's (`localDeployment`). Their
+ * headers are not sent, since the dev server's pages run scripts inline that
+ * the deployed pages' policies refuse, and the redirect of `app.html` to
+ * `/app` is not followed, so the page keeps both of its addresses here.
+ */
+export async function localPages(web: string): Promise<(pathname: string) => string> {
+  const [{ services }, table] = await Promise.all([
+    readVercelConfig(web),
+    readApiRewritesTable(web),
+  ]);
+  const deployment = new Set(table.map((rewrite) => rewrite.src));
+  const pages: Rewrite[] = services.web.routes.flatMap((route) =>
+    "dest" in route && route.has === undefined && !deployment.has(route.src)
+      ? [{ src: route.src, dest: route.dest }]
+      : [],
+  );
+  return (pathname) => {
+    const rule = landingRule(pathname, pages);
+    return rule === undefined ? pathname : landedPath(pathname, rule);
   };
 }

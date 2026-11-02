@@ -24,10 +24,15 @@ export function landingRule(pathname: string, rewrites: readonly Rewrite[]): Rew
   return rewrites.find((rewrite) => wholePath(rewrite).test(pathname));
 }
 
+/** Where a rule lands a path: its destination, the pattern's groups written into it. */
+export function landedPath(pathname: string, rule: Rewrite): string {
+  return pathname.replace(wholePath(rule), rule.dest);
+}
+
 /** The client's request as it arrives at its function by the rule its path landed on: rewritten, its own query, headers, body, and signal kept. */
 export function landed(request: Request, rule: Rewrite): Request {
   const asked = new URL(request.url);
-  const url = new URL(asked.pathname.replace(wholePath(rule), rule.dest), asked.origin);
+  const url = new URL(landedPath(asked.pathname, rule), asked.origin);
   for (const [name, value] of asked.searchParams) url.searchParams.append(name, value);
   const init: StreamingRequestInit = {
     method: request.method,

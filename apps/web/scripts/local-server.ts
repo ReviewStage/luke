@@ -134,14 +134,21 @@ function localRoutes(): Promise<ReadonlyMap<string, Route>> {
   return Promise.resolve(new Map());
 }
 
-/** A page's request, handed to Vite as the Node request and response it came as; Vite writes the answer, so the empty response returned is never written. */
+/**
+ * A page's request, handed to Vite as the Node request and response it came
+ * as, addressed to the page it is served from; Vite writes the answer, so the
+ * empty response returned is never written. The browser keeps the address it
+ * asked for, which the app reads its link from.
+ */
 function page(
   vite: ViteDevServer,
   request: HttpServerRequest.HttpServerRequest,
+  served: URL,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse> {
   return Effect.callback((resume) => {
     const incoming = NodeHttpServerRequest.toIncomingMessage(request);
     const outgoing = NodeHttpServerRequest.toServerResponse(request);
+    incoming.url = `${served.pathname}${served.search}`;
     outgoing.once("close", () => resume(Effect.succeed(HttpServerResponse.empty())));
     vite.middlewares(incoming, outgoing, (error?: unknown) => {
       outgoing.statusCode = error === undefined ? STATUS.NOT_FOUND : STATUS.SERVER_ERROR;
@@ -150,20 +157,27 @@ function page(
   });
 }
 
+/** What a request is answered by: a local-only route, the deployment's routes, or the page a path of the site is served from. */
+interface LocalSite {
+  readonly local: ReadonlyMap<string, Route>;
+  readonly deployment: LocalDeployment;
+  readonly pageOf: (pathname: string) => string;
+  readonly vite: ViteDevServer;
+}
+
 /** Every request as this server answers it: a local-only route's, the deployment's, or a page's, in that order. */
-function answer(
-  origin: string,
-  local: ReadonlyMap<string, Route>,
-  deployment: LocalDeployment,
-  vite: ViteDevServer,
-) {
+function answer(origin: string, site: LocalSite) {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const { pathname } = new URL(request.url, origin);
-    const own = local.get(pathname);
+    const asked = new URL(request.url, origin);
+    const own = site.local.get(asked.pathname);
     if (own !== undefined) return yield* HttpEffect.fromWebHandler(own.fetch);
-    if (deployment.answers(pathname)) return yield* HttpEffect.fromWebHandler(deployment.fetch);
-    return yield* page(vite, request);
+    if (site.deployment.answers(asked.pathname)) {
+      return yield* HttpEffect.fromWebHandler(site.deployment.fetch);
+    }
+    const served = new URL(asked);
+    served.pathname = site.pageOf(asked.pathname);
+    return yield* page(site.vite, request, served);
   });
 }
 
@@ -197,8 +211,11 @@ const program = Effect.gen(function* () {
     if (!process.env[ENV.AUTH_URL]?.trim()) process.env[ENV.AUTH_URL] = origin;
   });
   yield* Effect.sync(answerRawImports);
-  const { localDeployment } = yield* Effect.promise(() => import("../server/local-deployment.js"));
+  const { localDeployment, localPages } = yield* Effect.promise(
+    () => import("../server/local-deployment.js"),
+  );
   const deployment = yield* Effect.promise(() => localDeployment(WEB));
+  const pageOf = yield* Effect.promise(() => localPages(WEB));
   const local = yield* Effect.promise(localRoutes);
   const vite = yield* Effect.acquireRelease(
     Effect.promise(() => createViteServer(VITE)),
@@ -215,7 +232,7 @@ const program = Effect.gen(function* () {
     gracefulShutdownTimeout: SHUTDOWN_GRACE,
   });
   return yield* Layer.launch(
-    HttpServer.serve(answer(origin, local, deployment, vite)).pipe(
+    HttpServer.serve(answer(origin, { local, deployment, pageOf, vite })).pipe(
       HttpServer.withLogAddress,
       Layer.provide(listening),
     ),
