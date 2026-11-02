@@ -80,6 +80,7 @@ import {
   TURN_ORIGIN,
   TURN_TRIGGER,
 } from "../core.js";
+import { SERVER_EVENT } from "../events/server-events.js";
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -92,6 +93,7 @@ import {
   AGENT_PULL_REQUEST_ACTION,
   AGENT_PULL_REQUEST_VIEWED,
   type Answer,
+  countedWith,
   drivenWhileStarting,
   fakeEve,
   freshInstallation,
@@ -516,6 +518,11 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(started.agent, undefined);
         assert.deepEqual(started.agentRefusal, { error: HOSTED_API_ERROR.UNAVAILABLE });
         assert.equal(opened.status, HOSTED_HTTP_STATUS.OK);
+        // The Start that failed is counted under the member as a failure of its own, and not as a start.
+        assert.deepEqual(countedWith(owner, SERVER_EVENT.AGENT_START_FAIL), [
+          { failure: "unreachable", agent_kind: "coder" },
+        ]);
+        assert.deepEqual(countedWith(owner, SERVER_EVENT.AGENT_START), []);
       }),
   );
 

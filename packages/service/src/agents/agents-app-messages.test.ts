@@ -679,6 +679,14 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           [taken.model, taken.effort, taken.runtime],
           [SMALL_WINDOW.model, "low", "claude_code"],
         );
+        // Each setting a change moved is counted under the member, and one it left as it was is not, nor a change refused.
+        yield* change(onClaudeCode, { model: SMALL_WINDOW.model, effort: "high" });
+        yield* change(onClaudeCode, { model: SMALL_WINDOW.model, effort: "high" });
+        assert.deepEqual(countedWith(onClaudeCode.owner, SERVER_EVENT.AGENT_SETTINGS_CHANGE), [
+          { changed: "model" },
+          { changed: "effort" },
+          { changed: "effort" },
+        ]);
       }),
   );
 

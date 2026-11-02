@@ -74,9 +74,11 @@ import { Cause, Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   recordServerEvent,
+  SERVER_AGENT_START_FAILURE,
   SERVER_AGENT_START_KIND,
   SERVER_AGENT_STARTER,
   SERVER_EVENT,
+  type ServerAgentStartFailure,
 } from "../../events/server-events.js";
 import { GitHubApp } from "../../github/github-app.js";
 import { githubReachOrRefusal } from "../../github/github-refusal.js";
@@ -768,13 +770,30 @@ const archivedPilot = (userId: string, pilot: Agent, by: Agent | undefined) => {
  * retry under the same key starts it afresh and no agent stands to read as
  * never started: why said once as an error and reported
  * (`agentFailureSaid`), in the caller's scope, which names the agent; a
- * discard that fails is logged.
+ * discard that fails is logged. The failed Start is counted
+ * (`startFailed`) once the agent is discarded.
  */
-const discardedAt = (userId: string, agent: Agent, said: string, reason: string) =>
+const discardedAt = (
+  userId: string,
+  agent: Agent,
+  said: string,
+  reason: string,
+  failure: ServerAgentStartFailure,
+) =>
   Effect.andThen(
     agentFailureSaid(said, reason, true),
-    Effect.ignore(hostedStoreOrUnavailable(discardAgent(userId, agent.id))),
+    Effect.andThen(
+      Effect.ignore(hostedStoreOrUnavailable(discardAgent(userId, agent.id))),
+      startFailed(userId, agent, failure),
+    ),
   );
+
+/** A Start that failed to open its agent's session, counted under the member who made it, in the count's words. */
+const startFailed = (userId: string, agent: Agent, failure: ServerAgentStartFailure) =>
+  recordServerEvent(SERVER_EVENT.AGENT_START_FAIL, userId, {
+    failure,
+    agent_kind: agent.kind,
+  });
 
 /**
  * The pilot a continue keeps as its starter: the one that started its
@@ -1208,6 +1227,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
             agent,
             `eve could not be reached to start a coding agent: ${refusal.error}`,
             refusal.error,
+            SERVER_AGENT_START_FAILURE.UNREACHABLE,
           ),
         ),
       );
@@ -1243,6 +1263,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
             agent,
             `a Start's first line was not written: ${refusal.error}`,
             refusal.error,
+            SERVER_AGENT_START_FAILURE.FIRST_LINE,
           ),
         ),
       );
@@ -1282,6 +1303,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
                 agent,
                 `a Start was cut short before its agent's session opened: ${causeKind(cause)}`,
                 causeKind(cause),
+                SERVER_AGENT_START_FAILURE.CUT_SHORT,
               ),
       ),
       Effect.annotateLogs(agentLogIds(agent)),
@@ -1300,6 +1322,13 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       }
       yield* hostedStoreOrUnavailable(discardAgent(userId, agent.id)).pipe(
         Effect.annotateLogs(agentLogIds(agent)),
+      );
+      yield* startFailed(
+        userId,
+        agent,
+        opened === undefined
+          ? SERVER_AGENT_START_FAILURE.UNREACHABLE
+          : SERVER_AGENT_START_FAILURE.REFUSED,
       );
       return yield* Effect.fail(refusal);
     }
