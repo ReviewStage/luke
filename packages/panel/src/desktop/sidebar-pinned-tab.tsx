@@ -35,6 +35,7 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useRef } from "react";
 import { askAct } from "../act.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { rendererRuntime } from "../renderer-runtime.js";
@@ -79,7 +80,9 @@ import { PullRequestLine, RepositoryDetail } from "./task-card.js";
  * task's own row is pressed or another task opens. Its Unpin stands at the row's end while it is hovered or
  * reached from the keyboard, in the task rows' Pin and Archive style, and
  * part of the row to its card, as theirs are, and
- * a menu, opened by its ⋯, a right-click, or the menu key, offers Unpin, the
+ * a menu, opened by its ⋯, a right-click, a long press, or the menu key,
+ * a finger's row drawing neither its ⋯ nor its Unpin, as a task's row,
+ * offers Unpin, the
  * pin's own keeping, first, as a tab's keeping leads its tab's menu, then,
  * for an agent's pin, the agent's one menu (`agent-actions.tsx`'s
  * `agentMenuGroups`): the whole of it while its task is open, whose agents
@@ -428,6 +431,7 @@ function PinnedTabRow({
 }): React.JSX.Element {
   const { pin, card, glyph, gone, current, inSight, tasks, onOpen, onUnpin } = drawn;
   const place = useRowPlace();
+  const coarse = useCoarsePointer();
   const editing = editor !== undefined;
   return (
     <RowHintOptions card={card}>
@@ -467,9 +471,10 @@ function PinnedTabRow({
             ? undefined
             : rowMenu("Pinned tab", withRowMoves(groups, place), tasks.shown && inSight)
         }
+        more={!coarse}
         actionsAt={LIST_ROW_ACTIONS.HOVER}
         actions={
-          editing ? null : (
+          editing || coarse ? null : (
             <Tooltip label={UNPIN.label}>
               <IconButton
                 icon={UNPIN.icon}
