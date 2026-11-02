@@ -1116,6 +1116,9 @@ Vespin, so that we can find the recordings of a person who reports a problem;
 deleting your account erases them. Each recording carries Vespin's version,
 whether it is a released build or a development one, and whether it came
 from the Mac app or the web app; only a released build records at all.
+Each also carries what PostHog's library reports of your device by default:
+its operating system and that system's version, the browser, your language
+and time zone, and the size of your screen.
 
 **Tab switcher previews.** When you hold ⌃Tab in the Mac app, each card shows a
 small, downscaled still of a screen you visited, taken by the app as you

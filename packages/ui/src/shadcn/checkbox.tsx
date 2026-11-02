@@ -1,6 +1,7 @@
 import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox";
 import { cn } from "../cn.js";
 import { CheckIcon } from "../face/glyphs.js";
+import { ignoredByReplay } from "../session-replay-marks.js";
 
 /**
  * checkbox.tsx -- shadcn/ui's checkbox (style `base-nova`, on Base UI), vendored and drawn in our field and accent inks.
@@ -19,7 +20,8 @@ import { CheckIcon } from "../face/glyphs.js";
  * utilities, which no surface of ours sets; and none of its outline or ring
  * utilities, because the window's own focus ring (`@luke/panel`'s base.css)
  * draws the keyboard's ring and a utility would outrank it
- * (`anti-slop/no-shadcn-focus-ring`). `@luke/ui`'s `Checkbox`
+ * (`anti-slop/no-shadcn-focus-ring`); and its hidden input kept out of the
+ * screen recording (`session-replay-marks.ts`). `@luke/ui`'s `Checkbox`
  * (`components/checkbox/checkbox.tsx`) is what an app draws; this is its inside.
  */
 
@@ -33,6 +35,7 @@ function Checkbox({ className, indeterminate, ...props }: CheckboxPrimitive.Root
         className,
       )}
       {...props}
+      inputRef={ignoredByReplay}
     >
       <CheckboxPrimitive.Indicator
         data-slot="checkbox-indicator"

@@ -5,6 +5,7 @@ import { RadioGroup } from "@base-ui/react/radio-group";
 import type { ReactNode } from "react";
 import { cn } from "../../cn.js";
 import { pulsePress } from "../../press-pulse.js";
+import { ignoredByReplay } from "../../session-replay-marks.js";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import { Badge } from "../badge/badge.js";
 import {
@@ -491,6 +492,8 @@ function ChoiceRow({
     nativeButton: true,
     value: option.value,
     "data-value": option.value,
+    // Note that the hidden input Base UI draws beside the row holds the option's value, which the screen recording must never read.
+    inputRef: ignoredByReplay,
     ...rovingItem(),
     // Note that a radio is drawn out of the tab order, which quiets the group's own roving stop, so the stop its keys keep is the only one.
     tabIndex: tabStop && !readOnly ? 0 : -1,
