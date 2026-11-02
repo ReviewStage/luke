@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readAgent, readVisibleAgent } from "@luke/database/models/agent-store";
+import { readVisibleAgent } from "@luke/database/models/agent-store";
 import {
   AUTOMATION_ACCESS,
   type Automation,
@@ -15,7 +15,7 @@ import {
   updateAutomationCommitted,
 } from "@luke/database/models/automation-store";
 import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
-import { AGENT_KIND, AGENT_STATUS } from "@luke/features/agent-wire";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import { nextScheduledRun, readSchedule } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_DEFAULT_GUARDS,
@@ -62,8 +62,7 @@ import { type EveForAccount, executeAutomationRun } from "./automation-runs.js";
  * known zone, no more often than every fifteen minutes), a model choice
  * must be one the catalog offers the account, an automation stands on a
  * task that names a repository or on a workspace with repositories its
- * installation reaches, but for one aimed at the account's own operator,
- * which works in none. A schedule's next due instant is computed whenever
+ * installation reaches. A schedule's next due instant is computed whenever
  * the automation is made, resumed, or given a new trigger, and cleared
  * while it is paused. A webhook trigger's secret is minted here, kept only
  * as its SHA-256, and answered once, on the write that made it.
@@ -266,27 +265,6 @@ const reachedRepositories = /* @__PURE__ */ Effect.fnUntraced(function* (
   return reached.map((one) => one.repository.fullName);
 });
 
-/**
- * Whether the target is the account's own operator, standing in the
- * workspace the automation stands in: the one target an automation with no
- * repository may hand its runs to, since its runs steer an agent that works
- * in none and start no agent in a repository.
- */
-const aimedAtOwnOperator = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  organizationId: string,
-  target: AutomationTarget | undefined,
-): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices> {
-  if (target?.kind !== AUTOMATION_TARGET.SAME_AGENT) return false;
-  const agent = yield* hostedStoreOrUnavailable(readAgent(userId, target.agentId));
-  return (
-    Option.isSome(agent) &&
-    agent.value.kind === AGENT_KIND.OPERATOR &&
-    agent.value.userId === userId &&
-    agent.value.organizationId === organizationId
-  );
-});
-
 /** Where a new automation stands: a workspace and the repositories named, each reached through it. */
 interface Standing {
   readonly organizationId: string;
@@ -297,9 +275,7 @@ interface Standing {
  * Where the request puts a new automation, read as the account: on a
  * workspace the account is a member of with repositories its installation
  * reaches; a request naming a task, or no workspace, or a workspace with no
- * repositories, is refused as no request at all. The one automation that
- * needs no repository is one aimed at the account's own operator
- * (`aimedAtOwnOperator`), its heartbeat or one like it.
+ * repositories, is refused as no request at all.
  */
 const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -310,13 +286,7 @@ const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, made.workspaceId));
-  if (made.repositories === undefined) {
-    // Note that only a run handed to the account's own operator works in no repository.
-    if (!member || !(yield* aimedAtOwnOperator(userId, made.workspaceId, made.target))) {
-      return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-    }
-    return { organizationId: made.workspaceId, repositories: [] };
-  }
+  if (made.repositories === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const repositories = yield* reachedRepositories(made.workspaceId, made.repositories);
   return { organizationId: made.workspaceId, repositories };
@@ -377,12 +347,11 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       : yield* checkedScope(userId, standing.organizationId, asked.scope);
   const target =
     asked.target === undefined ? undefined : yield* checkedTarget(userId, asked.target);
-  // An automation with no repository hands its runs to its owner's operator, and to no other target.
+  // An automation with no repository has nothing for a target to work in.
   if (
     asked.target !== undefined &&
     asked.repositories === undefined &&
-    standing.repositories.length === 0 &&
-    !(yield* aimedAtOwnOperator(userId, standing.organizationId, asked.target))
+    standing.repositories.length === 0
   ) {
     return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
   }

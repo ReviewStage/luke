@@ -38,8 +38,6 @@ import {
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
   type AgentModelsAnswer,
-  type AgentOperatorEnsureAnswerView,
-  type AgentOperatorEnsureParams,
   type AgentOverviewChecksAnswerView,
   type AgentOverviewConversationAnswerView,
   type AgentOverviewPullRequestAnswerView,
@@ -83,7 +81,6 @@ import {
   agentLukeToolsAnswerViewSchema,
   agentMessagesAnswerViewSchema,
   agentModelsAnswerSchema,
-  agentOperatorEnsureAnswerViewSchema,
   agentOverviewChecksAnswerViewSchema,
   agentOverviewConversationAnswerViewSchema,
   agentOverviewPullRequestAnswerViewSchema,
@@ -708,10 +705,6 @@ export interface HostOperator {
   /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
   agentDelete(params: AgentStopParams): Effect.Effect<AgentDeleteAnswerView>;
   agentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
-  /** The account's operator in a workspace, Luke, ensured, or reset and ensured afresh: its id, or why there is none. */
-  agentEnsureOperator(
-    params: AgentOperatorEnsureParams,
-  ): Effect.Effect<AgentOperatorEnsureAnswerView>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   agentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
   /** A channel made; the workspace's channels as they then stand, or why it was not made. */
@@ -1861,16 +1854,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...(params.position === undefined ? undefined : { position: params.position }),
         }),
         answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
-      ),
-    agentEnsureOperator: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_ENSURE_OPERATOR, {
-          workspaceId: params.workspaceId,
-          ...(params.reset === undefined ? undefined : { reset: params.reset }),
-          ...(params.restore === undefined ? undefined : { restore: params.restore }),
-          ...(params.timeZone === undefined ? undefined : { timeZone: params.timeZone }),
-        }),
-        answerOf(agentOperatorEnsureAnswerViewSchema, AGENT_UNANSWERED),
       ),
     agentPage: (params) =>
       Effect.map(

@@ -445,6 +445,9 @@
      menu does (`menu.css`'s keyframes); a hint fades and grows in, and fades
      out once seen. */
   --animate-dialog-scrim: luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit);
+  /* A phone's sheet rises and sinks on the pane's beat, so its scrim and its card fade on it too. */
+  --animate-sheet-scrim: luke-dialog-fade var(--luke-duration-pane) var(--luke-motion-pane);
+  --animate-sheet-leave: leave-fade var(--luke-duration-pane) var(--luke-motion-pane) forwards;
   --animate-dialog-in:
     luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit),
     luke-dialog-rise var(--luke-duration-fast) var(--luke-spring-fast);

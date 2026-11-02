@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { createAgent, readAgent } from "@luke/database/models/agent-store";
+import { readAgent } from "@luke/database/models/agent-store";
 import { member as memberTable } from "@luke/database/schemas/auth";
 import { automation as automationTable } from "@luke/database/schemas/automation";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
@@ -15,7 +15,7 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { automationPath, HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@luke/features";
-import { AGENT_FAILURE, AGENT_KIND, AGENT_STATUS } from "@luke/features/agent-wire";
+import { AGENT_FAILURE, AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   automationRunsLiveRowsSchema,
   automationRunsOfLiveRows,
@@ -494,104 +494,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK);
         const gone = yield* ask(automationPath(automation.id), owner);
         assert.equal(gone.status, HOSTED_HTTP_STATUS.NOT_FOUND);
-      }),
-  );
-
-  it.effect(
-    "an automation aimed at its owner's operator needs no repository, made on a workspace naming none, and run there; every other automation still needs one",
-    () =>
-      Effect.gen(function* () {
-        const { owner, task, ask } = yield* openAccounts;
-        const agentOf = (kind: "operator" | "coder") =>
-          Effect.map(
-            createAgent(
-              owner,
-              kind === "operator"
-                ? {
-                    taskId: null,
-                    organizationId: task.workspaceId,
-                    planSnapshot: null,
-                    prompt: null,
-                    kind: AGENT_KIND.OPERATOR,
-                    idempotencyKey: randomUUID(),
-                    model: AGENT_DEFAULT_CHOICE.model,
-                    effort: AGENT_DEFAULT_CHOICE.effort,
-                    repository: null,
-                  }
-                : {
-                    taskId: null,
-                    organizationId: task.workspaceId,
-                    planSnapshot: null,
-                    prompt: PROMPT,
-                    idempotencyKey: randomUUID(),
-                    model: AGENT_DEFAULT_CHOICE.model,
-                    effort: AGENT_DEFAULT_CHOICE.effort,
-                    repository: `${RELAY.owner}/${RELAY.name}`,
-                  },
-            ),
-            (made) => Option.getOrThrow(made).agent,
-          );
-        const opened = yield* agentOf("operator");
-        const operator = opened.id;
-        const coder = (yield* agentOf("coder")).id;
-        // Its opening turn ended, as an ensure's does, so it is at work on nothing a run must wait for.
-        yield* Database.use((db) =>
-          db.insert(turns).values({
-            userId: owner,
-            conversationId: opened.conversationId,
-            origin: TURN_ORIGIN.TYPED,
-            status: TURN_STATUS.SETTLED,
-            settledAt: new Date(0),
-          }),
-        );
-        const aimed = (agentId: string) => ({ kind: AUTOMATION_TARGET.SAME_AGENT, agentId });
-        const { repositories: _none, ...noRepositories } = weekdays(task.workspaceId, []);
-        const make = (body: WireBoundaryInput) =>
-          ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, { method: "POST", body });
-
-        const heartbeat = readAnswer(
-          automationAnswerSchema,
-          HOSTED_HTTP_STATUS.CREATED,
-          yield* make({ ...noRepositories, target: aimed(operator) }),
-        ).automation;
-        const coderNoRepositories = yield* make({ ...noRepositories, target: aimed(coder) });
-        const newAgentNoRepositories = yield* make(noRepositories);
-        const toNewAgent = yield* ask(automationPath(heartbeat.id), owner, {
-          method: "PATCH",
-          body: { target: { kind: AUTOMATION_TARGET.NEW_AGENT } },
-        });
-        const toCoder = yield* ask(automationPath(heartbeat.id), owner, {
-          method: "PATCH",
-          body: { target: aimed(coder) },
-        });
-        const { run } = readAnswer(
-          automationRunAnswerSchema,
-          HOSTED_HTTP_STATUS.CREATED,
-          yield* ask(automationRunPath(heartbeat.id), owner, {
-            method: "POST",
-            body: { idempotencyKey: randomUUID() },
-          }),
-        );
-
-        assert.deepEqual(
-          [heartbeat.repositories, heartbeat.target],
-          [[], aimed(operator)],
-          "made on the workspace with no repository, aimed at the operator",
-        );
-        assert.deepEqual(
-          [coderNoRepositories.body, newAgentNoRepositories.body, toNewAgent.body, toCoder.body],
-          [
-            { error: HOSTED_API_ERROR.INVALID_REQUEST },
-            { error: HOSTED_API_ERROR.INVALID_REQUEST },
-            { error: HOSTED_API_ERROR.NO_REPOSITORY },
-            { error: HOSTED_API_ERROR.NO_REPOSITORY },
-          ],
-        );
-        assert.deepEqual(
-          [run.status, run.agent?.id],
-          [AUTOMATION_RUN_STATUS.STARTED, operator],
-          "its run is handed to the operator",
-        );
       }),
   );
 

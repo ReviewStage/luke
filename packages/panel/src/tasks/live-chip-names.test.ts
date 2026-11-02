@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_KIND, AGENT_STATUS } from "@luke/features/agent-wire";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import { type TaskSummary, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW, TASKS_READ } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
@@ -23,8 +23,8 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * live-chip-names.test.ts -- a chip of a plan, an agent, a page, or a
  * section is called by what it is called now wherever the window holds it,
  * whatever words its link was written with: a plan written while still
- * Untitled by its name, an agent by its tab's name (Luke for an operator,
- * its model for one untitled), a page by its title, a section by its
+ * Untitled by its name, an agent by its tab's name (its model for one
+ * untitled), a page by its title, a section by its
  * heading; one the window cannot read keeps the words it was written with.
  * A chip naming a plan before the window ever read its task list has the
  * list followed, once between every chip and every draw, so the name lands;
@@ -38,7 +38,7 @@ const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const PAGE_ID = "26494df1-595a-4364-abf7-85781c65a9f8";
 const TITLED_AGENT = "7b1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f";
 const UNTITLED_AGENT = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e60";
-const OPERATOR = "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f61";
+const TASKLESS_AGENT = "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f61";
 
 /** A plan the window lists, still Untitled, and two it lists not. */
 const UNTITLED_TASK = "4e5f6a7b-8c9d-4e0f-8a1b-2c3d4e5f6a72";
@@ -82,7 +82,7 @@ const TASK: TaskSummary = {
 /** A plan whose agents have not named it yet. */
 const { agents: _agents, ...UNNAMED } = TASK;
 
-/** Main's document: the plans listed, the operator on no task, and the open plan's page. */
+/** Main's document: the plans listed, an agent on no task, and the open plan's page. */
 const STATE: AppStateSnapshot = stateWith(
   {},
   {
@@ -92,11 +92,10 @@ const STATE: AppStateSnapshot = stateWith(
       tasks: [TASK, { ...UNNAMED, id: UNTITLED_TASK, name: UNTITLED_TASK_NAME }],
       tasklessAgents: [
         {
-          id: OPERATOR,
-          kind: AGENT_KIND.OPERATOR,
+          id: TASKLESS_AGENT,
           planId: null,
           turnId: null,
-          title: "Workspace questions",
+          title: "Answer workspace questions",
           model: "openai/gpt-5.5",
           effort: "medium",
           status: AGENT_STATUS.COMPLETED,
@@ -192,7 +191,7 @@ test("a chip written under an old name is called by the name the window holds no
       `[@Untitled](${PLAN}),`,
       `[@Wire it](${PLAN}/agent/${TITLED_AGENT}),`,
       `[@Agent](${PLAN}/agent/${UNTITLED_AGENT}),`,
-      `[@Workspace questions](${HOME}/agent/${OPERATOR}),`,
+      `[@Workspace questions](${HOME}/agent/${TASKLESS_AGENT}),`,
       `[@Old funnel](${PLAN}/page/${PAGE_ID}),`,
       `[@Rollout](${PLAN}#rollout-plan),`,
       `[@Rollout](${PLAN}#rollout),`,
@@ -205,7 +204,7 @@ test("a chip written under an old name is called by the name the window holds no
     ["plan", "Teammate invitations"],
     ["agent", "Wire the desktop"],
     ["agent", "Opus 5.5"],
-    ["agent", "Luke"],
+    ["agent", "Answer workspace questions"],
     ["page", "Invite funnel"],
     ["section", "Rollout plan"],
     ["section", "Rollout"],

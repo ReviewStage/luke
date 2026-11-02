@@ -341,7 +341,7 @@ const GITHUB_LINE_METADATA = EffectSchema.Struct({
 
 export type GitHubLineMetadata = EffectSchema.Schema.Type<typeof GITHUB_LINE_METADATA>;
 
-/** A Luke line is one Luke sent the agent on its own: a wakeup it set, or an operator's opening or wake. */
+/** A Luke line is one Luke sent the agent on its own, such as a wakeup it set. */
 const LUKE_LINE_METADATA = EffectSchema.Struct({
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.LUKE),
 });

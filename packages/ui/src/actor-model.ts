@@ -1,7 +1,7 @@
 import { githubUserAvatarUrl } from "@luke/features/account-picture";
 import type { GitHubPerson } from "@luke/features/agent-wire";
 import type { AutomationFiring, AutomationTrigger } from "@luke/features/automation-wire";
-import { OPERATOR_NAME } from "@luke/features/model-label";
+import { PRODUCT_NAME } from "@luke/features/model-label";
 import type { ModelProvider } from "@luke/features/models-wire";
 import {
   PLAN_ACTOR,
@@ -90,8 +90,6 @@ export type Actor =
       readonly taskId?: string | undefined;
       readonly name: string;
       readonly provider: ModelProvider | undefined;
-      /** Whether the agent is a member's operator, who wears Luke's face rather than his harness's mark; absent for any other agent. */
-      readonly operator?: true | undefined;
       readonly state: ActorState;
     }
   | {
@@ -220,7 +218,7 @@ export function actorName(
       case ACTOR_KIND.AUTOMATION:
         return actor.name;
       case ACTOR_KIND.LUKE:
-        return OPERATOR_NAME;
+        return PRODUCT_NAME;
       case ACTOR_KIND.SOMEONE:
         return actor.name ?? inSentence(SOMEONE_WORDS[actor.reason], sentence);
       case ACTOR_KIND.GITHUB:

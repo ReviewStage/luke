@@ -2,7 +2,6 @@ import { AGENT_TOOL } from "@luke/features/agent-tools";
 import { TRANSCRIPT_KIND } from "@luke/features/agent-view";
 import {
   AGENT_BRIEF,
-  AGENT_KIND,
   AGENT_STATUS,
   type AgentBrief,
   type AgentOrigin,
@@ -2087,15 +2086,12 @@ function useReplySaid({
   messages,
   status,
   name,
-  quiet,
   tab,
 }: {
   messages: readonly AgentTranscriptMessage[];
   /** Where the agent stood as the page holding `messages` said; none before a page landed. */
   status: AgentStatus | undefined;
   name: string;
-  /** Whether a quiet reply leaves the reader nothing to hear, as an operator's does. */
-  quiet: boolean;
   tab: RefObject<HTMLElement | null>;
 }): void {
   const writing = useRef<boolean | undefined>(undefined);
@@ -2105,13 +2101,13 @@ function useReplySaid({
     const was = writing.current;
     writing.current = agentStillWriting(status);
     if (was !== true || status !== AGENT_STATUS.COMPLETED) return;
-    const reply = finishedReplyLead(messages, quiet);
+    const reply = finishedReplyLead(messages);
     if (reply === undefined || reply.messageId === said.current) return;
     said.current = reply.messageId;
     const log = tab.current?.querySelector('[role="log"]');
     const reading = log?.contains(document.activeElement) === true;
     announce(ANNOUNCE.POLITE, replyFromWords(name, reading ? undefined : reply.lead));
-  }, [messages, status, name, quiet, tab]);
+  }, [messages, status, name, tab]);
 }
 
 /**
@@ -2126,7 +2122,6 @@ function transcriptPlacing(
   undelivered: ReadonlySet<string>,
   unsent: ReadonlySet<string>,
   replayed: boolean,
-  quietReplies: boolean,
 ) {
   const todos = todosPlace(messages, working);
   const first = messages.find(
@@ -2138,11 +2133,7 @@ function transcriptPlacing(
   // An agent started from another opens on the brief as its source's did, then the replay's card, then the note.
   const opening = !replayed || first === undefined ? undefined : replayOpening(first);
   // A line that reached a turn while it ran is drawn inside that turn, where it arrived.
-  const placed = placedMessages(
-    messages,
-    quietReplies,
-    (id) => undelivered.has(id) || unsent.has(id),
-  );
+  const placed = placedMessages(messages, (id) => undelivered.has(id) || unsent.has(id));
   const open = openReply(messages, working);
   return { todos, first, opening, placed, open };
 }
@@ -2150,7 +2141,6 @@ function transcriptPlacing(
 /** The transcript as the tab draws it: the messages, or what stands in their place. */
 function AgentTranscriptView({
   messages,
-  quietReplies = false,
   brief,
   lead = AGENT_LEAD,
   delegation,
@@ -2191,8 +2181,6 @@ function AgentTranscriptView({
   bringIn?: RefObject<MessageBringer | undefined> | undefined;
   /** What the agent was handed first: the plan, drawn as the plan's card, a prompt, drawn as the developer's message, or nothing, for one started blank, whose first line is drawn as any other; unsaid reads as the plan. */
   brief?: AgentBrief | undefined;
-  /** Whether this is a member's operator's transcript, which draws no reply of a heartbeat that found nothing (`placedMessages`). */
-  quietReplies?: boolean;
   /** Whose transcript this is: an agent's, with its plan, unless said otherwise. */
   lead?: TranscriptLead;
   /** What a delegation's row draws from; with none, a row says the pair its part carries and opens no tab. */
@@ -2257,8 +2245,8 @@ function AgentTranscriptView({
   const replayed = replay !== undefined;
   // Read through once for the messages held, so a draw that brings no page reads none of them again.
   const placing = useMemo(
-    () => transcriptPlacing(messages, working, undelivered, unsent, replayed, quietReplies),
-    [messages, working, undelivered, unsent, replayed, quietReplies],
+    () => transcriptPlacing(messages, working, undelivered, unsent, replayed),
+    [messages, working, undelivered, unsent, replayed],
   );
   // Each line that reached a turn, with who sent it, kept from draw to draw while neither moved.
   const arrivals = useArrivals(placing.placed, readerId, members, former);
@@ -2675,7 +2663,6 @@ function AgentTabView({
     messages: transcript.messages,
     status: transcript.pageStatus,
     name,
-    quiet: agent.kind === AGENT_KIND.OPERATOR,
     tab,
   });
   const steering = useKept(
@@ -2753,7 +2740,6 @@ function AgentTabView({
                 <RewindProvider value={rewind}>
                   <AgentTranscriptView
                     messages={lines}
-                    quietReplies={agent.kind === AGENT_KIND.OPERATOR}
                     brief={agent.brief}
                     briefSender={starter === undefined ? undefined : starterActor}
                     origin={origin}
@@ -3344,7 +3330,7 @@ export function AgentSubagentTab({
   // A worker's reply streams into a log as quiet as its agent's, so it is said once whole, under the worker's name.
   const name = cardTitle(task);
   const tab = useRef<HTMLElement>(null);
-  useReplySaid({ messages, status: pageStatus, name, quiet: false, tab });
+  useReplySaid({ messages, status: pageStatus, name, tab });
   return (
     <AgentTabFrame ref={tab} label={name}>
       <MacOwnerProvider value={macOwner}>

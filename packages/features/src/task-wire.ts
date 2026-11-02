@@ -3,7 +3,6 @@ import { Schema as EffectSchema } from "effect";
 import {
   AGENT_MACHINE,
   AGENT_STATUS,
-  agentKindSchema,
   agentPullRequestSchema,
   agentStartRequestFields,
   agentSummarySchema,
@@ -677,8 +676,6 @@ const taskAgentLineSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   /** The agent's title; null where it has none, when it is named by its model. */
   title: EffectSchema.NullOr(EffectSchema.String),
-  /** What kind of agent it is, said only of a member's operator, which every window names Luke (`agentName`); absent for a coder, and from a service before it was said. */
-  kind: EffectSchema.optionalKey(agentKindSchema),
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: EffectSchema.String,
   effort: EffectSchema.String,

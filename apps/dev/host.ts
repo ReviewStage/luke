@@ -43,8 +43,6 @@ import {
 } from "@luke/service/agents/coder-host/pull-request";
 import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
-  type KindTool,
-  kindToolsOf,
   type RepositoryTool,
   repositoryToolsOf,
   type StarterTool,
@@ -210,26 +208,6 @@ export function offeredRepositoryTools(
       const agent = yield* host.agent(admitted.success);
       if (Result.isFailure(agent)) return new Set<RepositoryTool>();
       return repositoryToolsOf(agent.success);
-    }),
-  );
-}
-
-/**
- * The tools the session is offered by its agent's kind for the turn it
- * opens, for those tools' own files (`kindToolsOf`): none for a session the
- * host does not admit or whose conversation is no agent's.
- */
-export function offeredKindTools(
-  auth: SessionAuth,
-  sessionId: string,
-): Promise<ReadonlySet<KindTool>> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return new Set<KindTool>();
-      const agent = yield* host.agent(admitted.success);
-      if (Result.isFailure(agent)) return new Set<KindTool>();
-      return kindToolsOf(agent.success);
     }),
   );
 }

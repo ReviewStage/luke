@@ -5,7 +5,6 @@ import {
   AGENT_SENDER,
   type AgentTranscriptMessage,
   agentMessageReplyLine,
-  OPERATOR_QUIET_REPLY,
 } from "@luke/features/agent-wire";
 import { INBOX_REPLY, inboxAnswerMessage } from "@luke/features/inbox-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
@@ -466,34 +465,4 @@ test("an agent started blank is copied with no brief, its first line, spoken on 
       "\n\n",
     ) + "\n",
   );
-});
-
-test("an operator's heartbeat that found nothing is copied, and previewed, as no reply, and any other agent's same words are copied as said", () => {
-  const messages = [
-    said("asked", MESSAGE_ROLE.USER, "What stands?"),
-    said("answered", MESSAGE_ROLE.ASSISTANT, "Two agents run; nothing waits on you."),
-    said("heartbeat", MESSAGE_ROLE.USER, "Your heartbeat: look over the developer's open work."),
-    said("quiet", MESSAGE_ROLE.ASSISTANT, OPERATOR_QUIET_REPLY),
-  ];
-  const operator = agentTranscript({
-    title: "Luke",
-    messages,
-    brief: AGENT_BRIEF.BLANK,
-    quiet: true,
-  });
-  const coder = agentTranscript({
-    title: "Tile",
-    messages,
-    brief: AGENT_BRIEF.BLANK,
-  });
-
-  assert.deepEqual(latestActivity(operator), {
-    kind: LATEST_ACTIVITY.WORDS,
-    text: "Two agents run; nothing waits on you.",
-  });
-  assert.ok(!transcriptMarkdown(operator, TRANSCRIPT_COPY.CONCISE).includes(OPERATOR_QUIET_REPLY));
-  assert.deepEqual(latestActivity(coder), {
-    kind: LATEST_ACTIVITY.WORDS,
-    text: OPERATOR_QUIET_REPLY,
-  });
 });

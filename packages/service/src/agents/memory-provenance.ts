@@ -4,8 +4,7 @@
  * What the workspace keeps is meant to be what a member settled, so where a
  * turn's words came from decides whether it may keep anything, whatever the
  * words are (`memory-tools.ts`'s `runAgentRemember`). A turn an automation's
- * run opened, its member's operator's heartbeat among them, since that is an
- * ordinary automation aimed at the operator, has no member behind it: its
+ * run opened has no member behind it: its
  * line is the automation's prompt, and a webhook's or an integration's body
  * may ride in it. A turn that read the web has a page's words in its
  * context, which anyone could have written. Both are read from the store's
@@ -30,7 +29,6 @@ import {
 } from "@luke/database/models/agent-store";
 import {
   latestTurnsOf,
-  listRecentMessages,
   listTurnOpeners,
   readMessageByClientId,
 } from "@luke/database/models/message-reads";
@@ -39,7 +37,6 @@ import { CLAUDE_CODE_TOOL, CODEX_TOOL } from "@luke/features/agent-tools";
 import { automationRun } from "@luke/features/model-label";
 import { toolPartName } from "@luke/wire/ui-messages";
 import { Effect } from "effect";
-import { MESSAGE_ROLE } from "../core.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./coder-host/tool-set.js";
@@ -47,7 +44,7 @@ import { CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./coder-host/tool-set.js";
 /** Why a turn may keep no memory, in words the model can act on. */
 export const MEMORY_PROVENANCE_REFUSAL = {
   AUTOMATION:
-    "Not remembered: an automation opened this turn, a heartbeat among them, so no member " +
+    "Not remembered: an automation opened this turn, so no member " +
     "settled what it holds. Keep a fact on a turn a member's own words open, if it still matters then.",
   WEB_READ:
     "Not remembered: this turn read the web, and a page's words are no settled fact of the " +
@@ -55,9 +52,6 @@ export const MEMORY_PROVENANCE_REFUSAL = {
   UNREADABLE:
     "Not remembered: where this turn's words came from could not be read. Carry on without it.",
 } as const;
-
-/** How many of the conversation's newest messages are read for its newest line: it, and the journals a few turns queued behind it wrote. */
-const NEWEST_LINES_READ = 8;
 
 /** Every tool that reads the public web, under each name a journal stores a call of it. */
 const WEB_READS: ReadonlySet<string> = new Set([
@@ -145,29 +139,5 @@ export function rememberRefusal(
     if (web === true) return MEMORY_PROVENANCE_REFUSAL.WEB_READ;
     if (automation === undefined || web === undefined) return MEMORY_PROVENANCE_REFUSAL.UNREADABLE;
     return undefined;
-  });
-}
-
-/**
- * Whether the newest line of the agent's conversation, the one a turn opens
- * on as it starts, is an automation's run, as above: what holds an
- * operator's flush back to a turn that may keep what it is told to
- * (`coder-host/host.ts`'s `turnMessage`). None among the newest messages, or
- * a page that does not read, is no automation's.
- */
-export function newestLineIsAutomation(
-  agent: Agent,
-): Effect.Effect<boolean, StoreFailure, DatabaseServices> {
-  return Effect.gen(function* () {
-    const read = yield* listRecentMessages(
-      agent.userId,
-      agent.conversationId,
-      CODER_TOOL_SET,
-      NEWEST_LINES_READ,
-    );
-    const line = read.ok
-      ? read.value.findLast((record) => record.message.role === MESSAGE_ROLE.USER)
-      : undefined;
-    return line === undefined ? false : yield* automationLine(agent, line.id);
   });
 }

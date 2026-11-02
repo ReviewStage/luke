@@ -21,7 +21,7 @@ import {
   type RunOnMacReason,
   runOnMacDetail,
 } from "@luke/features/luke-tools-model";
-import { OPERATOR_NAME } from "@luke/features/model-label";
+import { PRODUCT_NAME } from "@luke/features/model-label";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
   AnchoredPopover,
@@ -230,9 +230,9 @@ const LUKE_WORDS = {
   ALWAYS_ON: "Always on",
   ON: "On",
   OFF: "Off",
-  READ_FAILED: `${OPERATOR_NAME}'s tools could not be read`,
-  TOOLS: `${OPERATOR_NAME}'s tools`,
-  READING: `Reading ${OPERATOR_NAME}'s tools…`,
+  READ_FAILED: `${PRODUCT_NAME}'s tools could not be read`,
+  TOOLS: `${PRODUCT_NAME}'s tools`,
+  READING: `Reading ${PRODUCT_NAME}'s tools…`,
   RUN_ON_MAC_OFF: `${AGENT_TOOL.RUN_ON_MAC} off`,
 } as const;
 
@@ -485,7 +485,7 @@ function AlwaysOn(): React.JSX.Element {
 function LukeRowWords({ luke }: { luke: LukeToolsRead }): React.JSX.Element {
   return (
     <span className="flex min-w-0 flex-auto items-center gap-icon-gap">
-      <ServerName name={OPERATOR_NAME} />
+      <ServerName name={PRODUCT_NAME} />
       {luke.answer !== undefined ? (
         <span className={SERVER_COUNT_CLASS}>{toolsCount(luke.answer.tools.length)}</span>
       ) : null}
@@ -525,7 +525,7 @@ function opensLukeTool(tool: LukeToolRow): boolean {
 /** Whether a search finds Luke: by his name, or by a tool's name or what it does. */
 function lukeFound(names: readonly string[], tokens: readonly string[]): boolean {
   return (
-    matchesTokens([OPERATOR_NAME], tokens) ||
+    matchesTokens([PRODUCT_NAME], tokens) ||
     names.some((name) => matchesTokens([name, lukeToolSummary(name) ?? ""], tokens))
   );
 }
@@ -1003,7 +1003,7 @@ function ServersPopover({
         keepFocus
         tabbable={false}
         onPress={() => openLuke(lukeSearch)}
-        hint={{ Hint: PointerHighlight, label: OPERATOR_NAME }}
+        hint={{ Hint: PointerHighlight, label: PRODUCT_NAME }}
       />
     </RowHighlight.Provider>
   );
@@ -1169,7 +1169,7 @@ function ServersPopover({
           onBack={backFromLuke}
         />
         <LukeMark />
-        <ServerPageTitle name={OPERATOR_NAME} />
+        <ServerPageTitle name={PRODUCT_NAME} />
         {luke.answer !== undefined ? (
           <span className={SERVER_COUNT_CLASS}>{toolsCount(lukeNames.length)}</span>
         ) : null}

@@ -30,7 +30,6 @@ export * from "./integration-installation.js";
 export * from "./mac-command.js";
 export * from "./memory.js";
 export * from "./native-call-key.js";
-export * from "./operator-notice.js";
 export * from "./personal-workspace.js";
 export * from "./plan-comment.js";
 export * from "./plan-page.js";

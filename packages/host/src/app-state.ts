@@ -1,7 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
-import type { AgentKind } from "@luke/features/agent-wire";
 import type { WorkspaceChannels } from "@luke/features/channel-live";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { LIVE_READ } from "@luke/features/live-wire";
@@ -184,14 +183,11 @@ export interface AppInboxTaskHolding {
  * the developer: the item as a task's are, the agent as its row names it
  * now, and the automation and repository standing where a task would; the
  * automation, and its name, null where the reader may not read it or none
- * stands, and the repository null for an agent that works in none, the
- * member's operator above all.
+ * stands, and the repository null for an agent that works in none.
  */
 export interface AppInboxTasklessItem extends AppInboxWaitingItem {
   /** When the item last changed, by the service's clock, which a follow of its agent's inbox is current once it holds. */
   updatedAt: number;
-  /** What kind of agent posted it, which sets the member's operator apart; absent from a service before it, which reads as a coder. */
-  agentKind?: AgentKind;
   agentTitle: string | null;
   agentModel: string;
   automationId: string | null;
@@ -221,7 +217,6 @@ interface AppInboxAutomationHolding {
 export type AppInboxAgentHolding = Pick<
   AppInboxTasklessItem,
   | "agentId"
-  | "agentKind"
   | "agentTitle"
   | "agentModel"
   | "automationId"

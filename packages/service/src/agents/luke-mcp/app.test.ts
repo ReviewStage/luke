@@ -335,7 +335,6 @@ const SERVED_TOOLS = [
   "message_agent",
   "update_agent",
   "list_models",
-  "list_open_asks",
   "list_tasks",
   "read_task",
   "create_task",
@@ -404,7 +403,6 @@ const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, Di
   message_agent: agentTool("message_agent"),
   update_agent: agentTool("update_agent"),
   list_models: agentTool("list_models"),
-  list_open_asks: agentTool("list_open_asks"),
   list_tasks: agentTool("list_tasks"),
   read_task: agentTool("read_task"),
   create_task: agentTool("create_task"),
@@ -609,11 +607,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         yield* Effect.promise(() => client.close());
 
         const names = listed.tools.map((tool) => tool.name);
-        // Note that an operator's own read is the one tool eve offers no agent on a task.
-        assert.deepEqual(
-          [...names].sort(),
-          SERVED_TOOLS.filter((name) => name !== "list_open_asks").sort(),
-        );
+        assert.deepEqual([...names].sort(), [...SERVED_TOOLS].sort());
         for (const native of HARNESS_TOOLS) assert.ok(!names.includes(native), native);
         for (const tool of listed.tools) {
           const served = LUKE_MCP_TOOLS.get(tool.name);
@@ -637,7 +631,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         const listed = yield* Effect.promise(() => client.listTools());
         yield* Effect.promise(() => client.close());
 
-        const withheld = ["open_pull_request", "list_open_asks", "remember", "recall"];
+        const withheld = ["open_pull_request", "remember", "recall"];
         assert.deepEqual(
           listed.tools.map((tool) => tool.name).sort(),
           SERVED_TOOLS.filter((name) => !withheld.includes(name)).sort(),

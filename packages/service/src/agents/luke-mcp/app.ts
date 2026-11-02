@@ -37,7 +37,7 @@
  */
 
 import { readAgentOfConversation, readAgentUnderPilot } from "@luke/database/models/agent-store";
-import { AGENT_KIND, AGENT_MACHINE } from "@luke/features/agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { MAC_COMMAND_BOUNDS } from "@luke/features/mac-command-wire";
 import { failureKind } from "@luke/runtime/effect";
@@ -237,12 +237,8 @@ function toolResult(tool: LukeMcpTool, result: LukeMcpToolResult): McpToolCallRe
  */
 const TOOL_META = { "anthropic/maxResultSizeChars": 500_000 } as const;
 
-/** What an agent whose row is gone is offered by: no repository, and no operator's tools. */
-const NO_AGENT_OFFERED: LukeMcpOfferedTo = {
-  repository: null,
-  kind: AGENT_KIND.CODER,
-  machine: AGENT_MACHINE.VERCEL,
-};
+/** What an agent whose row is gone is offered by: no repository, on Luke's own machine. */
+const NO_AGENT_OFFERED: LukeMcpOfferedTo = { repository: null, machine: AGENT_MACHINE.VERCEL };
 
 /** What beside its row an agent whose row is gone is offered by: no Memory, and under no pilot. */
 const NO_AGENT_BESIDE: OfferedBeside = { memoryOn: false, underPilot: false };

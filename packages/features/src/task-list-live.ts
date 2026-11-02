@@ -9,13 +9,11 @@ import {
 import {
   AGENT_ARCHIVER,
   AGENT_BRIEF,
-  AGENT_KIND,
   AGENT_MACHINE,
   AGENT_STATUS,
   type AgentArchivedBy,
   type AgentStatus,
   type AgentSummary,
-  agentKindSchema,
   agentPullRequestSchema,
   agentSummarySchema,
   CONTEXT_WINDOW,
@@ -130,14 +128,12 @@ const agentLiveRowSchema = EffectSchema.Struct({
   effort: EffectSchema.String,
   contextWindow: EffectSchema.NullOr(EffectSchema.String),
   title: EffectSchema.NullOr(EffectSchema.String),
-  /** What kind of agent it is, a member's operator or a coder, as which a task's pilot is delivered too; absent from a statement before operators. */
-  kind: EffectSchema.optionalKey(agentKindSchema),
   /** Whether the agent is its task's pilot; absent from a statement before pilots. */
   pilot: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Whether the agent was handed a prompt rather than its plan. */
   /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
   brief: EffectSchema.Literals(Object.values(AGENT_BRIEF)),
-  /** The repository the agent works in; null for a member's operator, which works in none. */
+  /** The repository the agent works in; null for one that works in none. */
   repository: EffectSchema.NullOr(EffectSchema.String),
   starterId: EffectSchema.String,
   starterName: EffectSchema.NullOr(EffectSchema.String),
@@ -170,8 +166,6 @@ const agentLiveRowSchema = EffectSchema.Struct({
   awaitingLineAt: EffectSchema.NullOr(countedNumber),
   /** When the newest turn to end ended, the newest turn's own end being null while it runs; absent from a statement before it was carried. */
   lastSettledAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
-  /** Whether the newest turn's reply is a member's operator's quiet reply alone; absent from a statement before heartbeats. */
-  quietTurn: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.Boolean)),
   /** The harness the agent's conversation runs on, as it was started; absent from a statement before it was carried, as is each below. */
   runtime: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   /** Where the agent's runner lives (`AGENT_MACHINE`). */
@@ -474,13 +468,11 @@ function agentSummaryOf(row: AgentLiveRow, now: number, continued: Continuations
       : undefined),
     ...(runtime === undefined ? undefined : { runtime }),
     title: row.title,
-    ...(row.kind === AGENT_KIND.OPERATOR ? { kind: row.kind } : undefined),
     ...(row.pilot === true ? { pilot: true } : undefined),
     ...(row.machine === AGENT_MACHINE.DEVICE ? { machine: AGENT_MACHINE.DEVICE } : undefined),
     ...(mac === undefined ? undefined : { mac }),
     createdAt: row.createdAt,
     status,
-    ...(row.quietTurn === true ? { quietTurn: true } : undefined),
     turnId: row.turnId,
     brief: row.brief,
     ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt }),

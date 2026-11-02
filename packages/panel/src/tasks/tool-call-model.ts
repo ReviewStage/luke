@@ -1059,8 +1059,6 @@ const AGENT_TOOL_VIEWS = {
     namedCall(CALL_KIND.UPDATE_CHANNEL, input, output, "channel"),
   [AGENT_TOOL.MOVE_THREAD]: ({ input, output }) =>
     namedCall(CALL_KIND.MOVE_THREAD, input, output, "channel"),
-  [AGENT_TOOL.LIST_OPEN_ASKS]: ({ input, output }) =>
-    namedCall(CALL_KIND.LIST_OPEN_ASKS, input, output, undefined),
   [AGENT_TOOL.OPEN_PULL_REQUEST]: ({ input, output }) => openedPullRequestView(input, output),
   [AGENT_TOOL.LOAD_SKILL]: ({ input, output }) => {
     const skillName = loadedSkill(input);

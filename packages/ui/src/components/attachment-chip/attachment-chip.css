@@ -24,13 +24,14 @@
   }
 
   /* A file that lands takes a check on its corner, which springs in on the
-     pair an arriving element rides and fades after a beat. */
+     pair an arriving element rides and fades once it has stood as long as
+     any confirmation does (`--luke-confirm-delay`). */
   .luke-attachment-chip-landed {
     animation:
       luke-attachment-chip-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-attachment-chip-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards,
       luke-attachment-chip-leave var(--luke-duration-exit) var(--luke-motion-exit)
-      var(--luke-late-delay) forwards;
+      var(--luke-confirm-delay) forwards;
   }
 
   /* Note that the sweep starts with its segment in the track's middle

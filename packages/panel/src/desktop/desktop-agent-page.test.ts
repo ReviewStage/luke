@@ -11,7 +11,6 @@ import {
 import {
   AGENT_ARCHIVER,
   AGENT_BRIEF,
-  AGENT_KIND,
   AGENT_SENDER,
   AGENT_STATUS,
   type AgentPage,
@@ -1643,47 +1642,6 @@ test("a taskless agent the sidebar lists gains its row's own items on its page's
     "Archive",
     "Permanently delete⌘⌫",
   ]);
-});
-
-test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, nor Permanently delete, while the account has the experiment off too", async () => {
-  pages = [{ agent: { ...PAGE, kind: AGENT_KIND.OPERATOR } }];
-  handState(
-    {},
-    {
-      run: { ...stateWith({}, {}).run, capabilities: DESKTOP_CAPABILITIES },
-    },
-  );
-  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
-  await settle();
-  const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
-  assert.ok(more);
-  act(() => more.click());
-
-  assert.equal(page.querySelector("h1")?.textContent, "Luke");
-  assert.deepEqual(
-    [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
-    ["Copy link", "Copy concise transcript⌥⌘C", "Copy full transcript⌥⇧⌘C", "Show terminal⌘J"],
-  );
-});
-
-test("a Luke a Reset retired is still known by his kind: titled Luke, offering neither Rename, Unarchive, nor Permanently delete", async () => {
-  pages = [{ agent: { ...PAGE, kind: AGENT_KIND.OPERATOR, archivedAt: 2 } }];
-  handState(experimentsOn(EXPERIMENT.OPERATOR), {
-    run: { ...stateWith({}, {}).run, capabilities: DESKTOP_CAPABILITIES },
-  });
-  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
-  await settle();
-  const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
-  assert.ok(more);
-  act(() => more.click());
-
-  assert.equal(page.querySelector("h1")?.textContent, "Luke");
-  const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
-    (each) => each.textContent,
-  );
-  assert.ok(!offered.includes("Rename"));
-  assert.ok(!offered.includes("Unarchive"));
-  assert.ok(!offered.includes("Permanently delete"));
 });
 
 /** What a side panel is asked to show. */

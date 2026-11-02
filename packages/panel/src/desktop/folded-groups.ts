@@ -26,16 +26,18 @@ import { keptKey, useKept } from "../use-kept.js";
  * and keeps nothing, so its frames never wear a developer's folds. The
  * Inbox's view choices are kept on the same terms, the scope it shows and
  * whom the items it lists are addressed to, a teammate by their account's
- * id, and so is its list's width; a task's own Inbox and a channel list
- * every item they hold, and keep no choice. A choice kept before its scope was is read
+ * id, and so is its list's width, a channel listing under the same
+ * choices; a task's own Inbox lists every item it holds, and keeps no
+ * choice. A choice kept before its scope was is read
  * as the scope that now lists what it listed: a tab kept before the scopes, Needs you or
  * Unread, as Open, and All open or Everything as All; and the Needs you
  * button's press, kept before the tabs, as Open where it was pressed and
  * All where it was not. Open is kept under the value To do was, so a
  * scope kept as To do reads as Open. A grouping or a sort kept before the
  * list was always one run, the latest first, is left where it was and
- * read by nothing, and so is the scope a task's own Inbox and the channels
- * kept before they listed everything. A fixture run draws no inbox, so it has nothing staged to keep apart. An automation's Runs panel keeps its width and whether it
+ * read by nothing, and so is the scope a task's own Inbox kept before it
+ * listed everything, and the one the channels kept apart before they
+ * shared the Inbox's. A fixture run draws no inbox, so it has nothing staged to keep apart. An automation's Runs panel keeps its width and whether it
  * stands on the same terms, one for every automation, as the side panel
  * keeps one for every plan, and so does the tree beside every File and
  * Changes tab, one width for them all.

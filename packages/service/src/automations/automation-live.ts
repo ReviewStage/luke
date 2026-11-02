@@ -4,7 +4,6 @@ import {
   liveStatementOf,
 } from "@luke/database/core/live-statement";
 import { queryBuilder } from "@luke/database/core/query";
-import { agentGivenNameSql } from "@luke/database/models/agent-name";
 import { AUTOMATION_COLUMNS, automationReadableBy } from "@luke/database/models/automation-store";
 import { agentTable } from "@luke/database/schemas/agent";
 import { automation, automationRun } from "@luke/database/schemas/automation";
@@ -43,10 +42,7 @@ function runAgentSelection(userId: string, latest: ReturnType<typeof latestTurnO
   return liveSelection(
     {
       agentId: agentTable.id,
-      // The name the agent goes by: Luke for an operator, else its title.
-      agentTitle: sql<
-        string | null
-      >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+      agentTitle: agentTable.title,
       ownKey: eq(agentTable.userId, userId),
       turnId: latest.id,
       turnStatus: latest.status,

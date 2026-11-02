@@ -3,20 +3,15 @@
  */
 
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import {
   archiveAgent,
-  createAgent,
   readAgentPublished,
   updateAgentBranch,
 } from "@luke/database/models/agent-store";
-import { unreadOperatorNotices } from "@luke/database/models/operator-notices";
-import { OPERATOR_NOTICE_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import {
-  AGENT_KIND,
   agentChangesAnswerSchema,
   agentOverviewConversationAnswerSchema,
   agentOverviewPullRequestAnswerSchema,
@@ -26,7 +21,7 @@ import {
 } from "@luke/features/agent-wire";
 import { PULL_REQUEST_WRITE_BOUNDS, REACTION } from "@luke/features/pull-request-write-wire";
 import type { WireBoundaryInput } from "@luke/wire";
-import { Duration, Effect, Option } from "effect";
+import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { SERVER_EVENT } from "../events/server-events.js";
 import { PULL_REQUEST_QUEUED_OPERATION } from "../github/pull-request-merging.js";
@@ -2197,34 +2192,17 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
   );
 
   it.effect(
-    "a read that first finds the pull request merged notes it for the owner's operator, and counts it, once however often it is read",
+    "a read that first finds the pull request merged counts it, once however often it is read",
     () =>
       Effect.gen(function* () {
         const standing: Standing = { mergedAt: null };
-        const { owner, task, read } = yield* publishedAs(standing);
-        const operator = Option.getOrThrow(
-          yield* createAgent(owner, {
-            taskId: null,
-            organizationId: task.workspaceId,
-            planSnapshot: null,
-            prompt: null,
-            kind: AGENT_KIND.OPERATOR,
-            idempotencyKey: randomUUID(),
-            model: "anthropic/claude-opus-5.5",
-            effort: "high",
-            repository: null,
-          }),
-        ).agent;
-        const kinds = Effect.map(unreadOperatorNotices(operator.id, 10), (notices) =>
-          notices.map(({ kind }) => kind),
-        );
+        const { owner, read } = yield* publishedAs(standing);
 
         yield* read;
-        assert.deepEqual(yield* kinds, [], "an open pull request is no notice");
+        assert.equal(countedFor(owner, SERVER_EVENT.PULL_REQUEST_MERGE), 0);
         standing.mergedAt = MERGED_AT;
         yield* read;
         yield* read;
-        assert.deepEqual(yield* kinds, [OPERATOR_NOTICE_KIND.PR_MERGED]);
         assert.equal(countedFor(owner, SERVER_EVENT.PULL_REQUEST_MERGE), 1);
       }),
   );

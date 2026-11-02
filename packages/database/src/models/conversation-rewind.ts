@@ -26,7 +26,7 @@ import type { ConversationTarget } from "./writer.js";
  * Codex runner to cut the harness's own session before, and clears what
  * that session's turns' messages handed it (`native_handed`), since the
  * cut may drop the turns that handed it, so the next message hands the
- * call's words, the task, and the desk again. A line no turn
+ * call's words and the task again. A line no turn
  * took yet never reached the harness's session, so a cut at one leaves a
  * cut still waiting for a launch as it stands, since that one is earlier.
  *

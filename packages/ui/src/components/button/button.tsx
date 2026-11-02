@@ -15,6 +15,7 @@ import { PRESS_FACE, PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { replayMotion } from "../../replay-motion.js";
 import { buttonVariants, Button as ShadcnButton } from "../../shadcn/button.js";
 import { STATUS_TONE } from "../../status-tone.js";
+import { useDisclosure } from "../../use-disclosure.js";
 import { Badge } from "../badge/badge.js";
 import { rovingItem } from "../roving-keys/roving-keys.js";
 import { useSettled } from "../spinner/settle-wait.js";
@@ -74,8 +75,8 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * check has been seen, at once where no motion runs. A busy button told its
  * press `succeeded` as its ring leaves lands the same way for a moment: the
  * check stands in the ring's place for `--luke-confirm-delay`, a hold reduced
- * motion keeps, so the check is still seen there without its spring, and its
- * words come back after; one that failed just stops, its words back at once.
+ * motion keeps, so the check is still seen there without its spring, and then
+ * fades out as its words fade back; one that failed just stops, its words back at once.
  * A button that `turns`, a refresh's or a retry's, turns its glyph once as a
  * press lands, beside the pulse of its face. The ring
  * holds still on `--luke-loop-motion`, as every endless loop does under reduced
@@ -455,10 +456,16 @@ function running(element: HTMLElement): Animation[] {
 function DoneMark({
   onShown,
   hold = false,
+  leaving = false,
+  held,
 }: {
   onShown: (() => void) | undefined;
   /** Whether it stands its hold before it is shown, as a busy button's landing does. */
   hold?: boolean;
+  /** Whether it is fading out as the words it stood over fade back. */
+  leaving?: boolean;
+  /** The ref for whatever holds it drawn through its fade. */
+  held?: ((element: HTMLElement | null) => void) | undefined;
 }): React.JSX.Element {
   const mark = useRef<HTMLSpanElement | null>(null);
   const shown = useRef(onShown);
@@ -483,14 +490,35 @@ function DoneMark({
   }, []);
   return (
     <span
-      ref={mark}
+      ref={(element) => {
+        mark.current = element;
+        held?.(element);
+      }}
       className="luke-button-done absolute inset-0 grid place-items-center"
       data-hold={hold || undefined}
+      data-leaving={leaving || undefined}
       aria-hidden="true"
     >
       <CheckIcon />
     </span>
   );
+}
+
+/**
+ * A busy button's landing check: drawn from its landing, held through its
+ * hold, then faded out as its words fade back over it, on the same beat, so
+ * the one hands over to the other rather than leaving at once.
+ */
+function LandingMark({
+  landed,
+  onShown,
+}: {
+  landed: boolean;
+  onShown: () => void;
+}): React.JSX.Element | null {
+  const shown = useDisclosure(landed);
+  if (!shown.mounted) return null;
+  return <DoneMark hold leaving={shown.leaving} held={shown.ref} onShown={onShown} />;
 }
 
 /**
@@ -608,7 +636,7 @@ export function Button({
         )}
       </span>
       {ringShown ? <BusyRing /> : null}
-      {done ? <DoneMark onShown={onDone} /> : landed ? <DoneMark hold onShown={settle} /> : null}
+      {done ? <DoneMark onShown={onDone} /> : <LandingMark landed={landed} onShown={settle} />}
     </ShadcnButton>
   );
 }
@@ -832,7 +860,7 @@ export function IconButton({
         {submit === undefined ? icon : submitGlyph(submit)}
       </span>
       {ringShown ? <BusyRing /> : null}
-      {landed ? <DoneMark hold onShown={settle} /> : null}
+      <LandingMark landed={landed} onShown={settle} />
     </ShadcnButton>
   );
 }

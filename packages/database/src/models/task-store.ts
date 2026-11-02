@@ -484,7 +484,7 @@ const findAgentLabels = SqlSchema.findAll({
 /**
  * The agents the journal and the sections' writers name, by id, as their rows
  * name them now, so a renamed agent reads renamed everywhere: the label is
- * the name its tab shows (`agentName`), Luke for an operator. The row's own
+ * the name its tab shows (`agentName`). The row's own
  * account is the one they are read under. Note that an agent is found by
  * its id alone, wherever it works now, because an agent edits any plan of
  * its workspace by naming the task (`edit_plan`), and the task may move to

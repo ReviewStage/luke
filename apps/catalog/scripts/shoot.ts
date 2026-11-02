@@ -61,6 +61,7 @@ const STILL_MOTION_CSS = `
   --luke-late-delay: 0s !important;
   --luke-hint-delay: 0s !important;
   --luke-settle-delay: 0s !important;
+  --luke-confirm-delay: 0s !important;
   --luke-loop-motion: paused !important;
   --luke-wait-motion: paused !important;
   --luke-face-motion: paused !important;

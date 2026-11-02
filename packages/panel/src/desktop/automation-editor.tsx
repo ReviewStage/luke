@@ -2593,7 +2593,7 @@ export function AutomationEditor({
   useEffect(() => {
     if (linked?.runId !== undefined) showRuns.current();
   }, [linked]);
-  const drafted = draftProblems(draft, repositoryHeld(draft, automation), new Date());
+  const drafted = draftProblems(draft, repositoryHeld(automation), new Date());
   // Note that a time the field cannot read stops a save as the schedule's own problem does, since the draft holds only what read before it.
   const problems: DraftProblems =
     unreadableTime && drafted[DRAFT_FIELD.SCHEDULE] === undefined

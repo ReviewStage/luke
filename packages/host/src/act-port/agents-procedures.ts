@@ -29,8 +29,6 @@ import {
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
   type AgentModelsAnswer,
-  type AgentOperatorEnsureAnswerView,
-  type AgentOperatorEnsureParams,
   type AgentOverviewChecksAnswerView,
   type AgentOverviewConversationAnswerView,
   type AgentOverviewPullRequestAnswerView,
@@ -108,9 +106,6 @@ export interface AgentProceduresDependencies {
     agentRewind(params: AgentRewindParams): Effect.Effect<AgentAgentAnswer>;
     agentArchive(params: AgentArchiveParams): Effect.Effect<AgentAgentAnswer>;
     agentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
-    agentEnsureOperator(
-      params: AgentOperatorEnsureParams,
-    ): Effect.Effect<AgentOperatorEnsureAnswerView>;
     agentDelete(params: AgentStopParams): Effect.Effect<AgentDeleteAnswerView>;
     /** The plan list read again, which carries every agent with no plan beside the plans. */
     tasksRefresh(): Effect.Effect<void>;
@@ -438,15 +433,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* notedAgent(host.agentPin(input));
     }),
-    [AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR]: actPort[AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        // Note that an ensure that wrote a row made the operator, or a fresh one in a reset's place, so the plan list, which carries it, is read again.
-        return yield* Effect.tap(host.agentEnsureOperator(input), (answer) =>
-          "txid" in answer ? host.tasksRefresh() : Effect.void,
-        );
-      },
-    ),
     [AGENT_ACT_KIND.AGENTS_DELETE]: actPort[AGENT_ACT_KIND.AGENTS_DELETE].effect(function* ({
       input,
       context,

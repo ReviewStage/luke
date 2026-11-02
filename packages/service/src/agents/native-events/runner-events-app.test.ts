@@ -796,7 +796,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
         yield* recordNativeTurnHanded(agent.target, {
           task: "task-key",
           spoken: true,
-          opened: true,
         });
 
         yield* post(agent.bearer, events);

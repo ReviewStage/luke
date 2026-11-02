@@ -1137,8 +1137,7 @@ notes. Every agent is offered `edit_plan`, `show_page`, `look_at_picture`,
 and the comment tools, one on no task among them, as an automation's run
 starts one: its pages stand on the agent itself, a look names its plan by
 the picture's address, and every `edit_plan` and comment call names its
-task, any of its workspace, an operator's change held to its member's own
-tasks (`steward.ts`).
+task, any of its workspace.
 Beside them stand
 the agent tools (`src/agents/agent-tools.ts`): `list_agents`, every other agent on
 any task and by any member, each with its task, narrowed to one task or its
@@ -1194,7 +1193,7 @@ a write answers the start of the prompt, as the list does, and a
 switched-off connection named by no connection's name is refused; a run now
 records a manual firing under a key drawn from the call's and acts on it
 through the same guards and start a Run now takes, reaching eve as the
-deployment acting for the starter; an operator is offered no delete; and `list_models`, the models and efforts the agent's starter may
+deployment acting for the starter; and `list_models`, the models and efforts the agent's starter may
 start one on and their default, read from the one source a start is checked
 against (`accountModelChoices` in `src/agents/coder-host/start.ts`), so a
 choice it lists is one `start_agent` takes. A list, a read, or a start of an agent, a list of tasks,
@@ -1417,20 +1416,8 @@ the starter of the agent that kept it, or of the one that last corrected it.
 Like the workspace's git history it outlives that member: leaving keeps it,
 and deleting the account sets `user_id` null, read as a former member.
 
-A memory kept with `remember`'s `private` is the one exception: `private_to`
-names the one member whose operator recalls it and who reads and forgets it
-in Settings, and to every other member, an owner or admin included, its id
-names nothing. Only the member's operator keeps or recalls one
-(`MemoryCall.readsPrivate`), because an operator's transcript is its member's
-alone (`agentNoTeammatesOperator`) while a coder's is read by every member, so
-a coder's recall reads the shared memories alone and its `private` is
-refused. It is that member's, not the workspace's, so its foreign key cascades
-and it leaves with their account. Recall and Settings read through
-`listMemories(workspaceId, readerId)`, which answers the shared memories and
-the reader's own private ones; the same words stand once only within one
-visibility, and a correction keeps the visibility of the memory it corrects.
-The operator is told to keep the member's own preferences and what they are
-juggling private (`coder-host/instructions.ts`'s `PRIVATE_MEMORY_WORDS`).
+Recall and Settings read through `listMemories(workspaceId)`, and the same
+words stand once.
 
 The agent keeps and searches it through `remember` and `recall`
 (`src/agents/memory-tools.ts`), offered to the `coder` role alone and never a

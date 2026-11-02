@@ -156,8 +156,6 @@ export const AGENT_ACT_KIND = {
   AGENTS_REWIND: "agents.rewind",
   AGENTS_ARCHIVE: "agents.archive",
   AGENTS_PIN: "agents.pin",
-  /** The account's operator in a workspace, Luke, ensured: the one standing, made where none stands, or, with a reset, a fresh one in place of it. */
-  AGENTS_ENSURE_OPERATOR: "agents.ensureOperator",
   AGENTS_DELETE: "agents.delete",
   /**
    * Which agent's tab the panel shows, or none: what an agent's end leaves no

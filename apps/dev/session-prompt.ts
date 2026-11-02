@@ -41,8 +41,8 @@ export const planNotesTaken = defineState<NotesTaken>(
 );
 
 /**
- * What the session's turns have handed the agent of its task and its desk
- * in their own messages (`TurnHanded`), in eve's durable session state:
+ * What the session's turns have handed the agent of its task in their own
+ * messages (`TurnHanded`), in eve's durable session state:
  * read and written by the turn's message as each turn opens
  * (`instructions/turn-message.ts`), so a turn hands only what changed.
  */

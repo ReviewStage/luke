@@ -130,23 +130,6 @@ Luke.
 
 A fixture or evidence run keeps no conversation at all.
 
-**Your operator.** With the "Luke, your operator" experiment on, our
-service keeps one agent of yours in each workspace, your operator,
-with no task and no repository, to manage your other agents. It can read
-what you reach in that workspace: the agents you can open and their
-transcripts, the workspace's tasks, and your inbox. Its own conversation, what you and it said, what it
-read, and the tools it called, is visible in Luke only to you: no other
-member of the workspace can list it, open it, read its transcript, message
-it, or call it. The agents, tasks, pull requests, and posts it makes
-are visible to the workspace as anyone's. It may also hand on a picture of
-its own conversation, such as one it showed you, to an agent it starts, as an image on that agent's first message.
-A picture it hands on is then visible where it lands, as that agent's
-conversation is: kept in that agent's transcript, which every member of the
-workspace who can open the agent reads, and sent to that agent's model
-provider with the rest of its conversation. The operator's conversation is
-stored on our service like any agent's, bound to your account and
-readable by our own operators. Deleting your account removes it.
-
 **Tasks.** When you start a named task, our service stores it in a
 workspace: the first workspace made for your account unless you start it in
 another workspace you are a member of, and the task records which, and who
@@ -264,26 +247,16 @@ memory is the workspace's shared knowledge: any member's agent there
 may read it, and Settings › Memory shows it to every member with your name on
 it. No agent of another workspace reads it. Luke refuses to keep words that
 look like a key, token, or password, and agents are told never to keep a
-remark about one member as a shared memory. An agent keeps nothing on a turn an automation
-started, Luke's own heartbeat included, or once that turn has read the web,
-since neither's words are a member's. When Luke, your operator agent, starts
-a fresh session, it is handed your workspace's most recent memories, your
-private ones among them, beside what was said, as it would read them through recall. In Settings › Memory you can forget a memory
+remark about one member. An agent keeps nothing on a turn an automation
+started, or once that turn has read the web, since neither's words are a
+member's. In Settings › Memory you can forget a memory
 holding your words, and the workspace's owners and admins can forget any;
 forgetting deletes it at once, so no later agent recalls it. Like a
 project's history, a memory outlives the person who said it: leaving a
 workspace, or deleting your account, leaves the memories you kept with the
 workspace, and once your account is gone they no longer carry your name.
 Deleting a task does not remove a memory kept while working on it, and a
-workspace's memories go when the workspace does. A memory your Luke, the operator
-agent of yours that keeps track of your other agents, keeps private, such as
-your own preferences or what you are juggling, is yours alone: only your Luke
-recalls it, since its conversation is the one no other member can read, while
-your agents, whose transcripts your teammates can open, neither keep
-nor recall one. Settings › Memory shows it to you alone, marked Only you, no
-other member, an owner or admin included, can read or forget it, and it
-leaves with your account when you delete it rather than staying with the
-workspace.
+workspace's memories go when the workspace does.
 
 **Pinned repositories.** When you pin a repository in the sidebar, our
 service stores its name and when you pinned it under your account, so the pin

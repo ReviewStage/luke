@@ -261,7 +261,6 @@ export const PRODUCT_EXPERIMENT = {
   GITHUB_TOKEN: "github-token",
   /** Removed with the Inbox-first sidebar, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   INBOX_FIRST: "inbox-first",
-  OPERATOR: "operator",
   /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   LOCAL_AGENTS: "local-agents",
   CHANNELS: "channels",

@@ -1,7 +1,6 @@
 import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import {
   AGENT_BOUNDS,
-  AGENT_KIND,
   type AgentStatus,
   type AgentSummary,
   type TasklessAgent,
@@ -141,8 +140,7 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * has a row of its own among the sidebar's tasks, what that row offers too:
  * Mark as unread or Mark as read, through a task's marks
  * (`agent-read-marks.ts`), and Pin or Unpin and Move to section, the
- * reader's own, while the agent is not archived, and never for Luke, who
- * has a row of his own kind; ⌘J and New terminal open its terminal as on a
+ * reader's own, while the agent is not archived; ⌘J and New terminal open its terminal as on a
  * task (`terminal-commands.tsx`). An archived agent takes no message, so
  * its composer gives way to its own Unarchive, which its ⋯ offers in
  * Archive's place, and it is not renamed. An agent the service will not hand the reader,
@@ -259,9 +257,8 @@ function AgentPageBar({
           unread: unseen || reads.markedUnread(agent.id),
           onMark: (next: boolean) => reads.mark(listed, next),
         };
-  // Note that an archived agent offers neither a pin nor a section, as an archived task, and Luke never does.
-  const own =
-    listed !== undefined && agent.archivedAt === undefined && agent.kind !== AGENT_KIND.OPERATOR;
+  // Note that an archived agent offers neither a pin nor a section, as an archived task.
+  const own = listed !== undefined && agent.archivedAt === undefined;
   const agentPin = own
     ? {
         pinned: listed.pinnedAt !== undefined,

@@ -184,7 +184,6 @@ const MEMORY: MemorySummary = {
   text: "Deployments go out from the release branch.",
   keptBy: { userId: "user-1", name: "Dean" },
   forgettable: true,
-  private: false,
   createdAt: 1,
   updatedAt: 2,
 };
@@ -419,11 +418,6 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`pin:${agentId}:${String(request.pinned)}`);
         return { agent: AGENT };
-      }),
-    ensureOperator: (workspaceId, request) =>
-      Effect.sync(() => {
-        asked.push(`ensureOperator:${workspaceId}:${String(request.reset === true)}`);
-        return { agentId: AGENT_ID, txid: "9103" };
       }),
     agent: (agentId) =>
       Effect.sync(() => {
@@ -858,27 +852,6 @@ function subject(
     };
   });
 }
-
-it.effect(
-  "an ensure of the operator that made one waits for the task list to carry it before it answers",
-  () =>
-    Effect.gen(function* () {
-      const waited: (string | undefined)[] = [];
-      const { call, asked } = yield* subject({
-        listed: (txid) => Effect.sync(() => void waited.push(txid)),
-      });
-
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.AGENTS_ENSURE_OPERATOR, {
-          workspaceId: "workspace-1",
-          reset: true,
-        }),
-        { agentId: AGENT_ID, txid: "9103" },
-      );
-      assert.deepEqual(waited, ["9103"]);
-      assert.ok(asked.includes("ensureOperator:workspace-1:true"));
-    }),
-);
 
 it.effect("a delete waits for the task list to carry its transaction before it answers", () =>
   Effect.gen(function* () {
