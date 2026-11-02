@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/ReviewStage/vespin/blob/main/SECURITY.md
     about: Email founders@stagereview.app rather than opening a public issue.
   - name: Ask a question or get support
-    url: https://vespin.dev
+    url: https://github.com/ReviewStage/vespin/discussions
     about: Questions about using Vespin, or an account problem, rather than a bug or feature request.

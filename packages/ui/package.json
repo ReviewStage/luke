@@ -3,7 +3,7 @@
   "version": "0.24.0",
   "private": true,
   "type": "module",
-  "description": "Shared React for the desktop panel: the product's mark and glyphs, traced from the brand's generated art",
+  "description": "Vespin's design system: tokens, components, and page patterns the apps draw with, the product's mark and glyphs, and the view models more than one app reads",
   "exports": {
     ".": "./src/index.js",
     "./account-initials": "./src/account-initials.js",

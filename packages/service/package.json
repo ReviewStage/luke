@@ -3,6 +3,7 @@
   "version": "0.24.0",
   "private": true,
   "type": "module",
+  "description": "The hosted service's logic: accounts, agents, tasks, automations, integrations, the maintenance sweep, and observability",
   "exports": {
     "./accounts/account-person": "./src/accounts/account-person.js",
     "./accounts/account-seams": "./src/accounts/account-seams.js",

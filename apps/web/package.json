@@ -3,7 +3,7 @@
   "version": "0.24.0",
   "private": true,
   "type": "module",
-  "description": "Vespin landing page",
+  "description": "Vespin's web app and public site, the Vercel function routes behind them, and the deployment shell",
   "engines": {
     "node": "24.x"
   },
