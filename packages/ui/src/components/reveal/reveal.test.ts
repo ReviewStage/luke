@@ -180,8 +180,7 @@ test("a setting turned off holds its rows drawn as they roll up, the row under t
   const close = played.find((each) => each.element === rowOf("Under"));
   expect(close?.keyframes[0]).toEqual({ transform: `translate(0px, ${2 * ROW}px)` });
   expect(close?.timing.delay).toBe(0);
-  // Note that the rows roll up on the beat they unrolled on, `--luke-duration-shape`, so the gesture takes as long each way.
-  expect(close?.timing.duration).toBe(460);
+  expect(close?.timing.duration).toBe(90);
 
   act(() => played.find((each) => each.element === box)?.finish());
 

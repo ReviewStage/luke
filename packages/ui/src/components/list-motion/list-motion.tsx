@@ -55,9 +55,8 @@
  * row arriving is unrolled from its top edge by a clip as it fades in, on
  * the spring the rows under it glide down on, so its clip's foot and the
  * row under it travel as one edge; a row leaving is rolled up the same way
- * on that same spring and length, so the gesture takes as long each way,
- * and the rows under it close over it on that beat at once, rather than
- * after it, since what it goes into is the
+ * on the exit's tokens, and the rows under it close over it on those same
+ * tokens at once, rather than after it, since what it goes into is the
  * room they close. Where rows arrive in its place in the same change, as a
  * choice's next rows do, they unroll on the spring as ever, and what they
  * move glides with them.
@@ -719,23 +718,17 @@ class ListMotionPlayer extends Component<
     if (leaving.length === 0 && moversOf(root).length === 0) return;
     // Note that a DOM with no animation engine, a test's, marks what leaves and lets it go at once.
     const engine = animates(root);
-    const { way } = this.props;
-    // Note that a row that unrolled rolls up on the beat it unrolled on, where every other way leaves on the exit's.
-    const unrolls = way === LIST_MOTION_WAY.UNROLL;
     const exit = engine
-      ? tokenTiming(
-          root,
-          unrolls ? MOTION_TOKEN.DURATION_SHAPE : MOTION_TOKEN.DURATION_EXIT,
-          unrolls ? MOTION_TOKEN.SPRING : MOTION_TOKEN.EASE_EXIT,
-        )
+      ? tokenTiming(root, MOTION_TOKEN.DURATION_EXIT, MOTION_TOKEN.EASE_EXIT)
       : undefined;
+    const { way } = this.props;
     playExits(root, leaving, before, exit, way);
     const shape = engine
       ? tokenTiming(root, MOTION_TOKEN.DURATION_SHAPE, MOTION_TOKEN.SPRING)
       : undefined;
     if (shape === undefined) return;
     const left = leaving.length > 0 && exit !== undefined;
-    const closes = left && unrolls;
+    const closes = left && way === LIST_MOTION_WAY.UNROLL;
     // Note that the change that ends the read lands the last of it, which arrives as the rest of it did.
     playMoves(root, before, {
       wait: left && !closes ? Number(exit.duration) : 0,
