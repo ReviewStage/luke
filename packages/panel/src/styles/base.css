@@ -57,10 +57,9 @@
      canvas, which reads none of this itself, so the bundle reads the colour
      each resolves to off the host and draws again when the appearance flips
      (`terminal/terminal-theme.ts`). */
-  /* The well's own colour in each appearance, restated rather than read
-     through `--luke-color-well`, so every colour the canvas is handed is one
-     this sheet names. */
-  --terminal-ground: light-dark(#f8f8f9, #0f0f12);
+  /* The well read through its brand role, so a change of brand
+     (`@luke/brand`'s `brand-palette.mjs`) recolours the screen with it. */
+  --terminal-ground: var(--luke-color-well);
   --terminal-text: var(--code-text);
   --terminal-cursor: var(--code-text);
   --terminal-selection: light-dark(rgba(9, 105, 218, 0.2), rgba(56, 139, 253, 0.4));

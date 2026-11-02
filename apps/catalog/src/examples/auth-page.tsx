@@ -29,7 +29,7 @@ import { CatalogSection } from "../section";
 /** The Open link as a page offers it; the catalog goes nowhere. */
 const OPEN_LUKE = { label: `Open ${PRODUCT_NAME}`, href: "#" } as const;
 
-function Face(): React.JSX.Element {
+function Mark(): React.JSX.Element {
   return (
     <span className="catalog-auth-mark">
       <ProductMark />
@@ -71,7 +71,7 @@ function AuthPages(): React.JSX.Element {
       <CatalogSection id="auth-providers" title="Provider choices">
         <div className="catalog-screen">
           <AuthPage
-            mark={<Face />}
+            mark={<Mark />}
             title={`Sign in to ${PRODUCT_NAME}`}
             footnote={`You can close this window after ${PRODUCT_NAME} confirms the sign-in.`}
           >
@@ -83,7 +83,7 @@ function AuthPages(): React.JSX.Element {
         <div className="catalog-screens">
           <div className="catalog-screen catalog-screen-phone">
             <SocialSignInCard
-              mark={<Face />}
+              mark={<Mark />}
               title={`${PRODUCT_NAME} admin`}
               pending={undefined}
               onPress={() => undefined}
@@ -91,7 +91,7 @@ function AuthPages(): React.JSX.Element {
           </div>
           <div className="catalog-screen catalog-screen-phone">
             <SocialSignInCard
-              mark={<Face />}
+              mark={<Mark />}
               title="Sign in to accept your invitation"
               description="Sign in with the account that uses someone@acme-corporation.example."
               pending="github"
@@ -152,7 +152,7 @@ function AuthPages(): React.JSX.Element {
         <div className="catalog-screens">
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
-              mark={<Face />}
+              mark={<Mark />}
               title="Join acme-corporation-engineering-platform"
               description="Sign in with the provider your workspace administrator connected."
               error={{
@@ -164,7 +164,7 @@ function AuthPages(): React.JSX.Element {
             </AuthPage>
           </div>
           <div className="catalog-screen catalog-screen-phone">
-            <AuthPage mark={<Face />} title="Sign in with email">
+            <AuthPage mark={<Mark />} title="Sign in with email">
               <EmailForm />
             </AuthPage>
           </div>
