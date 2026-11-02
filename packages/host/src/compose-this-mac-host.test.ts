@@ -31,6 +31,7 @@ import { scriptedSpawner } from "./testing/scripted-spawner.js";
 const USER_ID = "user-fixture";
 const MINTED_ID = "5f0c7a1e-2b3d-4e5f-8a9b-0c1d2e3f4a5b";
 const KEPT_ID = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+const MACHINE_ID = "e".repeat(64);
 const SERVICE = "https://luke.test";
 const SECRET = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${"c".repeat(43)}`;
 const OLD_SECRET = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${"d".repeat(43)}`;
@@ -136,6 +137,7 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
               name: "Studio",
               platform: DEVICE_PLATFORM.DARWIN,
               arch: DEVICE_ARCH.ARM64,
+              machineId: MACHINE_ID,
             }),
             loaded: Effect.succeed(options.loaded ?? false),
             install: (script) =>
@@ -189,7 +191,7 @@ it.effect(
         const fileSystem = yield* FileSystem.FileSystem;
         const mode = (yield* fileSystem.stat(join(stateRoot, "device.json"))).mode & 0o777;
         assert.equal(mode, 0o600, "the record is readable by its owner alone");
-        assert.deepEqual(yield* mac.read, { deviceId: MINTED_ID });
+        assert.deepEqual(yield* mac.read, { deviceId: MINTED_ID, machineId: MACHINE_ID });
       }).pipe(Effect.provide(FILES)),
     ),
 );

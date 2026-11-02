@@ -227,11 +227,18 @@ export function composeThisMacHost(
       ),
     );
 
-    /** This Mac's host as Hosts reads it: the device its record names, where it was enrolled with this app's service. */
+    // Note that which machine this is never changes, so it is read once, at the panel's first ask.
+    const machineId = yield* Effect.cached(
+      Effect.map(host.machine, (machine) => machine.machineId),
+    );
+
+    /** This Mac as the panel reads it: which machine it is, and the device its record names, where it was enrolled with this app's service. */
     const read = Effect.map(
-      ownServiceRecord,
-      (record): ThisMacHostRead =>
-        Option.isSome(record) ? { deviceId: record.value.deviceId } : {},
+      Effect.all([ownServiceRecord, machineId]),
+      ([record, id]): ThisMacHostRead => ({
+        ...(Option.isSome(record) ? { deviceId: record.value.deviceId } : undefined),
+        ...(id === undefined ? undefined : { machineId: id }),
+      }),
     );
 
     const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.LOCAL_AGENTS> = {
