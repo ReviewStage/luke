@@ -1,5 +1,4 @@
 import os from "node:os";
-import path from "node:path";
 import { DEVICE_ARCH } from "@luke/features/device-agent-wire";
 import { DARWIN_HOST } from "@luke/host/daemon";
 import { ThisMacHost, type ThisMacHostSeam } from "@luke/host/effect";
@@ -23,9 +22,6 @@ import { app } from "electron";
 
 /** The account install's LaunchAgent, by its label (`MAC_LABEL` in the install script). */
 const LABEL = "dev.vespin.host.standalone";
-
-/** The account install's state folder, under the home (`ACCOUNT_STATE` in `apps/host/scripts/luke-host.sh`). */
-const STATE_FOLDER = path.join(".local", "state", "luke-host");
 
 /** The oldest macOS the install script installs on (`MAC_MIN_VERSION` in the install script). */
 const MAC_MIN_VERSION = [12, 3] as const;
@@ -84,7 +80,7 @@ function thisMacHost(): ThisMacHostSeam {
   const agent = `gui/${process.getuid?.() ?? 0}/${LABEL}`;
   const loaded = Effect.map(launchctl(["print", agent]), Result.isSuccess);
   return {
-    stateRoot: path.join(os.homedir(), STATE_FOLDER),
+    stateRoot: DARWIN_HOST.stateRoot(os.homedir()),
     runsHost:
       process.platform === "darwin" &&
       (process.arch === "arm64" || app.runningUnderARM64Translation) &&

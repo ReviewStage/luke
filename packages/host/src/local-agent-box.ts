@@ -153,7 +153,7 @@ export interface AgentBox {
  * home: pnpm's store in both pnpm's settings files, and npm's cache in its
  * `.npmrc`, each written only where it stands nowhere, so whatever the
  * agent set there itself is kept. A value is quoted as JSON, which ini and
- * YAML both read, since a Mac's state stands under `Application Support`.
+ * YAML both read, since the state root's path may hold a space.
  * Note that an agent that already keeps a pnpm store of its own goes on
  * with it, because pnpm, with no terminal to ask, refuses to install into
  * a `node_modules` linked from another store; once its folder is cleared,

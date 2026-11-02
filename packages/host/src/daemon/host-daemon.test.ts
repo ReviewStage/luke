@@ -56,12 +56,8 @@ const NEWER_RELEASE = {
 };
 /** The Node the daemon runs on, which its runners run on too. */
 const NODE = "/opt/luke-host/node/bin/node";
-/** The runner's bundle each OS runs: a Linux release's own, and on a Mac the app's. */
-const RUNNER_BUNDLE = {
-  LINUX: "/opt/luke-host/lib/agent-runner.mjs",
-  DARWIN: "/opt/agent-runner/agent-runner.mjs",
-} as const;
-const RUNNER_BUNDLES: ReadonlySet<string> = new Set(Object.values(RUNNER_BUNDLE));
+/** The runner's bundle every OS runs: the release's own. */
+const RUNNER_BUNDLE = "/opt/luke-host/lib/agent-runner.mjs";
 const HTTP = {
   OK: 200,
   UNAUTHORIZED: 401,
@@ -108,7 +104,7 @@ const box = Effect.gen(function* () {
 
 /** Whether a spawn is the runner, started straight on the box on the daemon's own Node. */
 const isRunner = (each: { readonly program: string; readonly args: readonly string[] }) =>
-  each.program === NODE && each.args.some((arg) => RUNNER_BUNDLES.has(arg));
+  each.program === NODE && each.args.includes(RUNNER_BUNDLE);
 
 /** The daemon's world: its home and shell, a spawner whose login shell answers a PATH and whose runners run, and the reports it makes. */
 const world = (home: string, reports: string[]) => {
@@ -137,7 +133,6 @@ describe("a host's daemon", () => {
       platform: "linux",
       uid: 0,
       sandboxed: "1",
-      runnerBundle: RUNNER_BUNDLE.LINUX,
       pnpmConfig: ".config/pnpm",
     },
     {
@@ -147,12 +142,11 @@ describe("a host's daemon", () => {
       platform: "darwin",
       uid: 501,
       sandboxed: undefined,
-      runnerBundle: RUNNER_BUNDLE.DARWIN,
       pnpmConfig: "Library/Preferences/pnpm",
     },
   ])(
     "registers as its OS ($platform) and machine on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets and the box's one pnpm store and npm cache named in its agent's home, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group and ends once Vespin refuses its secret",
-    ({ os, name, machine, platform: devicePlatform, uid, sandboxed, runnerBundle, pnpmConfig }) =>
+    ({ os, name, machine, platform: devicePlatform, uid, sandboxed, pnpmConfig }) =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
         const reports: string[] = [];
@@ -237,7 +231,7 @@ describe("a host's daemon", () => {
         expect(launched).toHaveLength(1);
         const [runner] = launched;
         const folder = `${home}/.vespin/agents/${AGENT_ID}`;
-        expect(runner?.args).toEqual([runnerBundle]);
+        expect(runner?.args).toEqual([RUNNER_BUNDLE]);
         expect(runner?.cwd).toBe(`${folder}/repository`);
         expect(runner?.extendEnv).toBe(false);
         expect(runner?.env).toMatchObject({
@@ -267,7 +261,7 @@ describe("a host's daemon", () => {
         removed = true;
         yield* TestClock.adjust(Duration.seconds(20));
         yield* Fiber.join(daemon);
-        // Note that a daemon handed no releases, as This Mac's copy inside the app, neither fetches the release named nor says it updates.
+        // Note that a daemon handed no releases, as a development run, neither fetches the release named nor says it updates.
         expect(http.requests.filter((request) => new URL(request.url).origin !== SERVICE)).toEqual(
           [],
         );
@@ -445,7 +439,7 @@ describe("hostRuntime", () => {
       platform: "darwin",
       home: "/Users/ada",
       os: DARWIN_HOST,
-      stateRoot: "/Users/ada/Library/Application Support/Vespin",
+      stateRoot: "/Users/ada/.local/state/luke-host",
     },
     {
       platform: "linux",
@@ -454,9 +448,9 @@ describe("hostRuntime", () => {
       stateRoot: "/var/lib/luke-host/state",
     },
   ])(
-    "runs $platform as its own OS, with its state where its app or service keeps it",
+    "runs $platform as its own OS, with its state where its service keeps it",
     ({ platform, home, os, stateRoot }) => {
-      const runtime = hostRuntime({ platform, home, app: { developerIdSigned: true } });
+      const runtime = hostRuntime({ platform, home });
       expect(runtime?.os).toBe(os);
       expect(runtime?.stateRoot).toBe(stateRoot);
     },

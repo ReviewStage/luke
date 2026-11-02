@@ -23,9 +23,9 @@ export const EXPERIMENT = {
   /**
    * One host program: This Mac's host is the account install the install
    * command puts on a Mac, kept running while Bring your own host is on and
-   * stopped while it is off, in place of the one inside the app. It has no
-   * entry in `EXPERIMENTS`, so no switch: it is turned on for an account in
-   * its stored choices alone, while its owner tests it by hand.
+   * stopped while it is off. It has no entry in `EXPERIMENTS`, so no
+   * switch: it is turned on for an account in its stored choices alone,
+   * while its owner tests it by hand.
    */
   THIS_MAC_ACCOUNT_HOST: "this-mac-account-host",
 } as const;

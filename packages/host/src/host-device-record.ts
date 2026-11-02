@@ -6,8 +6,8 @@ import * as FileSystem from "effect/FileSystem";
  * host-device-record.ts -- a machine's record of the device it enrolled as (`device.json` in `luke-host`'s state): its id, its device secret, the service it enrolled with, and whether that service has since refused the secret.
  *
  * A box writes it as `luke-host connect` pairs it with a code
- * (`daemon/host-pairing.ts`); on a Mac the desktop app writes it as it turns
- * This Mac's `luke-host` on (`compose-this-mac-host.ts`), into the app's own
+ * (`daemon/host-pairing.ts`); on a Mac the desktop app writes it as it
+ * enrolls This Mac (`compose-this-mac-host.ts`), into the account install's
  * state folder, which is the daemon's there. Either way it is made `0600` in
  * a folder made `0700` before a byte of the secret is written, beside the
  * file and moved over it, so a write cut off leaves the last whole record.

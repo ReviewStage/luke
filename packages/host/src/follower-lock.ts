@@ -4,11 +4,12 @@ import * as FileSystem from "effect/FileSystem";
 /**
  * follower-lock.ts -- the one follower a machine runs at a time: a lease in the state root that whoever follows the machine's local agents holds, renewed while it follows, and that every other follower is refused by.
  *
- * Two followers on one machine, the desktop app's own and its `luke-host`
- * login item, share the state root's `local-agents.json` and would each
- * claim lines and write that file over the other's, so a follower takes
- * this lease before it registers, holds it for as long as its gate stands
- * open, and gives it back as its follow ends. The lease names its holder,
+ * Two daemons on one state root, the one its service runs and a
+ * `luke-host run` started by hand beside it, share the state root's
+ * `local-agents.json` and would each claim lines and write that file over
+ * the other's, so a follower takes this lease before it registers, holds it
+ * for as long as its gate stands open, and gives it back as its follow
+ * ends. The lease names its holder,
  * an id each follower mints once, and when it was last renewed, on the
  * follower's own clock; a lease not renewed for `LEASE` was left by a
  * follower that died with its process, and is taken over.

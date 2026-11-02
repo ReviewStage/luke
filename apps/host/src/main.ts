@@ -11,10 +11,9 @@
  * `current` beside them linking to the one that runs, its state under
  * `~/.local/state/luke-host`, which the release's `luke-host` names
  * (`luke-host.sh`), and a systemd user unit or a LaunchAgent running `run`
- * through `current`, and again a minute after any exit. This Mac's copy is
- * a folder inside the desktop app (`Contents/Resources/luke-host`), run as
- * the member on the app's own state folder by the app's login item
- * (`apps/desktop/native/macos/HostLoginItem.swift`).
+ * through `current`, and again a minute after any exit. This Mac's host is
+ * that same install, which the desktop app starts and stops through launchd
+ * (`apps/desktop/src/main/native/host-login-item.ts`).
  *
  * `run` is the command the service runs. A box that never connected says
  * so and reads its record again every `UNENROLLED_REST`, rather than
@@ -54,7 +53,6 @@ import {
 import { HOST_COMMAND, HOST_WIRE, hostInstallCommand } from "@luke/features/host-wire";
 import { LINK_ORIGIN } from "@luke/features/link-home";
 import { PRODUCT_NAME } from "@luke/features/product-name";
-import { buildCarriesDeveloperIdSigning } from "@luke/host/app-identity";
 import {
   connectHostDevice,
   HOST_CONNECT_OUTCOME,
@@ -119,8 +117,8 @@ const installFolder = path.resolve(path.dirname(process.argv[1] ?? "."), "..");
 /**
  * The account install's releases, where this release's own real path
  * stands in a version folder of them, as `luke-host.sh`'s `account_home`
- * reads it; none for This Mac's copy inside the app, a development run, and
- * an install that came before, none of which updates itself.
+ * reads it; none for a development run and an install that came before,
+ * neither of which updates itself.
  */
 function accountReleases(): HostReleases | undefined {
   let real: string;
@@ -148,14 +146,13 @@ function accountReleases(): HostReleases | undefined {
 const runtimeOfOs = hostRuntime({
   platform: process.platform,
   home: process.env.HOME ?? os.homedir(),
-  app: { developerIdSigned: buildCarriesDeveloperIdSigning() },
 });
 
 /**
  * The runtime the daemon runs as, its state folder named by
- * `LUKE_HOST_STATE_ROOT` where a development build of the desktop app runs
- * it as a child (`apps/desktop/src/main/native/host-login-item.ts`), since
- * that build's own state folder is not the one a packaged app's is.
+ * `LUKE_HOST_STATE_ROOT` where the release's `luke-host` names it
+ * (`luke-host.sh`, for the account install), so a command run by hand reads
+ * and writes the record its service runs on.
  */
 const runtime: HostRuntime | undefined =
   runtimeOfOs === undefined || process.env.LUKE_HOST_STATE_ROOT === undefined
@@ -207,7 +204,6 @@ const follow = (runtime: HostRuntime) =>
       installFolder,
       arch: boxArch,
       stateRoot,
-      runnerFolder: process.env.LUKE_HOST_RUNNER_FOLDER,
       node: process.execPath,
       // Note that every agent runs as the daemon's user, the member's own or root on a dedicated box.
       user: { uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0 },

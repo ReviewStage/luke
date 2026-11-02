@@ -40,9 +40,8 @@ import {
  *
  * Only a host the account install put in place updates itself: `apps/host`
  * hands it the install's releases (`HostReleases`) where the daemon's own
- * real path stands in a version folder of them. This Mac's copy inside the
- * app, a development run, and an install that came before are handed none,
- * and take no notice of a release.
+ * real path stands in a version folder of them. A development run and an
+ * install that came before are handed none, and take no notice of a release.
  *
  * Each answered beat names the release we publish where it is newer
  * than the daemon (`deviceAgentBeatAnswerSchema`'s `release`), and the

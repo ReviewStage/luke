@@ -458,39 +458,44 @@ it expire. The sandbox of each session a task's own Vespin ran, before tasks
 lost him, is deleted the same way, shortly after his conversation is removed.
 
 **A local agent on your Mac.** Once you turn on Bring your own host in
-Settings › Experimental and then This Mac in Settings › Hosts, an agent you
-start on This Mac runs Claude Code, or Codex for a GPT model, straight on your
-Mac, as you, in a folder of its own under `~/.vespin/agents` that holds its
-repository, its home, and its caches. It has full access to whatever your
-account on the Mac can reach, as a program you run yourself does: your files,
-the folders of your other agents, your running programs, and the network;
-neither Claude Code nor Codex runs a sandbox of its own there or asks before a
-command. Its transcript, its events, and the files its tools read still reach
-our service as any agent's do. It runs on the plan or key you saved in Vespin,
-never on the sign-in of Claude Code or Codex on your Mac; a Codex agent asks
-our service for your ChatGPT plan's access token over HTTPS as it needs one, so
-no token waits in our database for your Mac. A Claude Code agent's plan token
-or key is in the agent's environment, where any command it runs can read it,
-unlike in a Vercel Sandbox. It reaches GitHub with a short-lived token our
-service hands your Mac, as for a host below, which your Mac writes into `gh`'s
-sign-in in the agent's own folder, where the agent's `git` and `gh` read it
-and any command it runs can too, rewrites as it renews, and deletes as each
-turn ends. No copy of an agent's work goes to Vespin: its folder stays on your
-Mac for the agent's life, and each turn goes on from it. An agent you archive or delete loses its
-folder from your Mac as soon as the archive reaches it, or within minutes of
-your Mac's next being online once our service no longer lists the agent; one
-where your Mac's check finds work that no remote has, or cannot tell, is kept
-for seven days, and then deleted. Only the agents this copy of Vespin started
-are ever touched, never another copy's sharing your Mac. Nothing of this
-happens until you turn This Mac on. Turning it on registers a login item that
-runs Vespin's host program, `luke-host`, on your Mac at each login, whether the
-app is open or not, and the app keeps it registered from then on; removing
-This Mac in Settings › Hosts stops its agents, and it runs none until you turn
-it on again. To run them, `luke-host` downloads Claude Code, Codex, and
-GitHub's CLI from their publishers once, and keeps each in Vespin's own folder
-on your Mac only once it matches the checksum Vespin pins. An agent that ran on
-your Mac before Vespin gave each agent a folder of its own is not started again;
-continue it into a new agent.
+Settings › Experimental, an agent you start on This Mac runs Claude Code, or
+Codex for a GPT model, straight on your Mac, as you, in a folder of its own
+under `~/.vespin/agents` that holds its repository, its home, and its caches.
+It has full access to whatever your account on the Mac can reach, as a program
+you run yourself does: your files, the folders of your other agents, your
+running programs, and the network; neither Claude Code nor Codex runs a
+sandbox of its own there or asks before a command. Its transcript, its events,
+and the files its tools read still reach our service as any agent's do. It
+runs on the plan or key you saved in Vespin, never on the sign-in of Claude
+Code or Codex on your Mac; a Codex agent asks our service for your ChatGPT
+plan's access token over HTTPS as it needs one, so no token waits in our
+database for your Mac. A Claude Code agent's plan token or key is in the
+agent's environment, where any command it runs can read it, unlike in a Vercel
+Sandbox. It reaches GitHub with a short-lived token our service hands your
+Mac, as for a host below, which your Mac writes into `gh`'s sign-in in the
+agent's own folder, where the agent's `git` and `gh` read it and any command
+it runs can too, rewrites as it renews, and deletes as each turn ends. No copy
+of an agent's work goes to Vespin: its folder stays on your Mac for the
+agent's life, and each turn goes on from it. An agent you archive or delete
+loses its folder from your Mac as soon as the archive reaches it, or within
+minutes of your Mac's next being online once our service no longer lists the
+agent; one where your Mac's check finds work that no remote has, or cannot
+tell, is kept for seven days, and then deleted. Only the folders of the agents
+your Mac's host made are ever touched. Nothing of this happens until you turn
+Bring your own host on. Turning it on enrolls your Mac on your sign-in and
+installs Vespin's host program, `luke-host`, into your account on the Mac, as
+the install command in Settings › Hosts does: the app runs the install script
+our service serves, which puts the host under `~/.local` with a LaunchAgent
+that runs it at each login, whether the app is open or not, and the host keeps
+the secret it acts on in `~/.local/state/luke-host`, readable by you alone.
+Every copy of Vespin on your Mac drives that one host. Turning Bring your own
+host off stops it and keeps it from starting at the next login, with its files
+left in place; `luke-host uninstall` removes it, with the folders of the
+agents it ran. To run them, `luke-host` downloads Claude Code, Codex, and
+GitHub's CLI from their publishers once, and keeps each in its own folder on
+your Mac only once it matches the checksum Vespin pins. An agent that ran on
+your Mac before Vespin gave each agent a folder of its own is not started
+again; continue it into a new agent.
 
 **A local agent on a host.** A host is a Linux machine or Mac of your own
 that you add to Vespin to run your agents, as This Mac does. Each agent on
@@ -538,11 +543,11 @@ machine's id does: for a Mac's life, and on a Linux box until its machine id
 is made anew. A Mac also sends its model as macOS names it, such as "MacBook
 Air (M2, 2022)"; a Linux box sends none. Nothing else the system reports beside
 them, its serial number among it, is kept or sent. They go with This Mac's
-enroll as you turn it on, with a box's ask for its code, and each time the
-host program starts; our service keeps them with the host from its enroll or
-its first call after you approve it, keeping none from the ask for a code,
-lists them only to your own account's apps, and keeps them for as long as it
-keeps the host, which goes with your account.
+enroll as you turn on Bring your own host, with a box's ask for its code, and
+each time the host program starts; our service keeps them with the host from
+its enroll or its first call after you approve it, keeping none from the ask
+for a code, lists them only to your own account's apps, and keeps them for as
+long as it keeps the host, which goes with your account.
 
 **An agent that runs on Claude Code.** For the accounts in the early
 test of Claude plans, an agent your Claude plan pays for runs on

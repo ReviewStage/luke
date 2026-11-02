@@ -10,8 +10,8 @@ export const MICROPHONE_USAGE_DESCRIPTION =
   "Vespin uses the microphone for dictation. What you dictate is sent to OpenAI to be transcribed.";
 // The sentence macOS shows when it asks whether we may control another app,
 // so it is what consent is given against. Note that only a command an agent
-// runs on this Mac (an `osascript` through luke-host, which inherits the
-// app's entitlements) can raise it.
+// runs on this Mac (an `osascript` through `run_on_mac`, which the app runs
+// as its own child and so with its entitlements) can raise it.
 export const APPLE_EVENTS_USAGE_DESCRIPTION =
   "Vespin asks before a command an agent runs on this Mac controls another app.";
 // The bundle carries one icon for every mode, so the icns is cut from the dark

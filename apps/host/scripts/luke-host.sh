@@ -183,10 +183,10 @@ uninstall_account() {
 # user's own smolvm store rather than the state, so each is deleted by name, with the
 # smolvm such a release fetched, before the state goes; smolvm's cache of the sandbox
 # image stays with that store.
-# Note that the store and ~/.vespin/agents are shared with every app profile
-# whose This Mac runs beside this install, so only the agents the daemon's
-# record names are removed, and ~/.vespin/agents and ~/.vespin only where nothing
-# else stands in them.
+# Note that the store and ~/.vespin/agents are shared with every other host of
+# ours that ran agents on the Mac, so only the agents the daemon's record names
+# are removed, and ~/.vespin/agents and ~/.vespin only where nothing else stands
+# in them.
 uninstall_darwin() {
   if [ "$(id -u)" -ne 0 ]; then
     printf 'Run it as root: sudo luke-host uninstall\n' >&2
@@ -289,9 +289,6 @@ if [ "${1:-}" = "uninstall" ]; then
   uninstall
   exit 0
 fi
-# Note that the runner is named as the release's own, since a Mac daemon's default is the desktop app's copy beside its release, which a tarball has no sibling for.
-LUKE_HOST_RUNNER_FOLDER="${LUKE_HOST_RUNNER_FOLDER:-$root/lib}"
-export LUKE_HOST_RUNNER_FOLDER
 # Note that the account install's state root is named here, so a command run by hand, a connect among them, reads and writes the record its service runs on.
 if home="$(account_home)"; then
   LUKE_HOST_STATE_ROOT="${LUKE_HOST_STATE_ROOT:-$home/$ACCOUNT_STATE}"
