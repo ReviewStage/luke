@@ -8,8 +8,9 @@ import { ASSIGNABLE_ROLE } from "./workspace-wire.js";
  * An owner or an admin invites people from Settings on the Mac, under its
  * own Better Auth session, through Fullspin's routes over the organization
  * plugin's invitation calls; each pending invitation comes back with the
- * accept page's address, which the owner copies and sends by hand, and the
- * invitee opens to accept it on the browser's own session.
+ * accept page's address, which the service emails to the invitee where the
+ * deployment names a sender and the owner may also copy and send by hand,
+ * and the invitee opens to accept it on the browser's own session.
  *
  * The accept address carries the invited address beside the invitation's
  * id, because an invitation is read to its recipient alone: a browser

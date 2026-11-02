@@ -818,6 +818,18 @@ seconds of audio in the row's `dictation_seconds`. Nothing is refused on the cou
 the OpenAI project behind the key is the backstop and should be configured
 with it.
 
+## Invitation email
+
+A workspace invitation made from Settings is emailed to the invited address
+as it is made (`packages/service/src/accounts/invitation-mail.ts`), through
+Resend, with the accept link the owner can still copy by hand. It needs
+`RESEND_API_KEY`, the key the feedback form already sends with, and
+`INVITE_FROM`, the sender, such as `Name <invites@notifications.example>`
+on a domain Resend has verified. Without either the build logs it once by
+the variables' names and nothing is emailed, which is the intended state for
+a Preview. A send Resend refuses is logged by its status alone, and the
+invitation stands. Canceling an invitation emails nothing.
+
 ## Sentry
 
 The functions and both eve roots report to Sentry's `luke-web` project, set
