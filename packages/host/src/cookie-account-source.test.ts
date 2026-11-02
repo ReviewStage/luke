@@ -164,6 +164,7 @@ function scene(initial: Partial<ServiceState> = {}) {
   const door: CookieSessionDoor = {
     currentAddress: () => "/plan/task-1?tab=inbox",
     navigate: (url) => Effect.sync(() => void navigated.push(url)),
+    returnedFromSignIn: Effect.succeed(false),
     revisits: Stream.unwrap(Effect.map(revisits, Stream.fromQueue)),
   };
   /** The person coming back to the tab. */
@@ -1026,6 +1027,7 @@ const until = (holds: () => Effect.Effect<boolean>) =>
 const STILL_DOOR: CookieSessionDoor = {
   currentAddress: () => "/",
   navigate: () => Effect.void,
+  returnedFromSignIn: Effect.succeed(false),
   revisits: Stream.never,
 };
 

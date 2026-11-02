@@ -90,7 +90,6 @@ beforeAll(async () => {
   await vi.waitFor(() => assert.ok(captured.some((event) => event.event === "$pageview")));
   document.querySelector("h1")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   await vi.advanceTimersByTimeAsync(RECORDING_FLUSH_MS);
-  // Note that the sign-in comes last, because completing one shuts the client down.
   await completeSiteSignIn(
     Promise.resolve({ session: { id: "session-1" }, user: { id: "user-1" } }),
   );
