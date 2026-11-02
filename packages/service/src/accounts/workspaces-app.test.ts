@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import {
+  GITHUB_ACCOUNT_TYPE,
+  GITHUB_INSTALLATION_STATUS,
+} from "@luke/database/github-installation-vocabulary";
 import { createAgent } from "@luke/database/models/agent-store";
 import { createAutomation } from "@luke/database/models/automation-store";
 import { createTask, readTask } from "@luke/database/models/task-store";
@@ -12,6 +16,7 @@ import {
 } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { invitation, member, organization, user } from "@luke/database/schemas/auth";
+import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { task } from "@luke/database/schemas/task";
 import { joinWorkspace } from "@luke/database/testing";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
@@ -134,7 +139,13 @@ const INVITATION_MAIL = invitationMailFromEnvironment.pipe(
 const emailsTo = (address: string) =>
   RESEND.requests
     .map(
-      (request) => JSON.parse(request.body ?? "{}") as { from: string; to: string[]; text: string },
+      (request) =>
+        JSON.parse(request.body ?? "{}") as {
+          from: string;
+          to: string[];
+          text: string;
+          html: string;
+        },
     )
     .filter((email) => email.to.includes(address));
 
@@ -2468,7 +2479,7 @@ it.effect(
 );
 
 it.effect(
-  "an address already a member or already invited is refused as already invited, and is emailed its link, role, and expiry once",
+  "an address already a member or already invited is refused as already invited, and is emailed its link, role, and expiry once, with the workspace's GitHub avatar and the inviter's picture where they have them",
   () =>
     Effect.gen(function* () {
       const plugin = yield* openWorkspacePlugin;
@@ -2500,15 +2511,44 @@ it.effect(
         assert.equal(emails.length, 1);
         assert.equal(emails[0]?.from, INVITE_FROM);
         assert.ok(emails[0]?.text.includes(pending[0]?.acceptUrl ?? "missing"));
-        assert.ok(emails[0]?.text.includes("You'll join as an admin."));
+        assert.ok(emails[0]?.text.includes("Ada Lovelace invited you as an admin."));
         const expiryDay = new Date(pending[0]?.expiresAt ?? 0).toLocaleDateString("en-US", {
           month: "long",
           day: "numeric",
           year: "numeric",
           timeZone: "UTC",
         });
-        assert.ok(emails[0]?.text.includes(`This invitation expires on ${expiryDay}.`));
+        assert.ok(emails[0]?.text.includes(`Expires ${expiryDay}.`));
+        assert.ok(!emails[0]?.html.includes("<img"), "no picture stands in for the initials");
         assert.deepEqual(emailsTo(`${grace}@luke.test`), []);
+
+        const linkedAt = new Date(yield* Clock.currentTimeMillis);
+        yield* Database.use((db) =>
+          db.insert(githubInstallation).values({
+            organizationId: acme,
+            installationId: 41_001,
+            accountId: 51_001,
+            accountLogin: "acme",
+            accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
+            status: GITHUB_INSTALLATION_STATUS.ACTIVE,
+            createdAt: linkedAt,
+            updatedAt: linkedAt,
+          }),
+        );
+        yield* Database.use((db) =>
+          db
+            .update(user)
+            .set({ image: "https://avatars.githubusercontent.com/u/7?v=4" })
+            .where(eq(user.id, ada)),
+        );
+        yield* inviting(plugin, ada, acme, "max@example.com");
+        const pictured = emailsTo("max@example.com")[0]?.html ?? "";
+        assert.ok(
+          pictured.includes('src="https://avatars.githubusercontent.com/u/51001?v=4&amp;s=96"'),
+        );
+        assert.ok(
+          pictured.includes('src="https://avatars.githubusercontent.com/u/7?v=4&amp;s=40"'),
+        );
       }).pipe(Effect.provide(plugin.database));
     }),
 );

@@ -13,6 +13,7 @@ import {
   listWorkspaces,
   personalWorkspaceOf,
   readWorkspacePhoto,
+  workspaceGitHubAccountId,
   workspacesLiveStatements,
 } from "@luke/database/models/workspace-store";
 import { member, organization, user } from "@luke/database/schemas/auth";
@@ -257,6 +258,8 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         assert.ok(!theirs.includes(acme.id) && !theirs.includes(beta.id));
         const acmeListed = (yield* liveWorkspacesOf(teammate)).find((one) => one.id === acme.id);
         assert.deepEqual(acmeListed?.github, { login: "account-902", active: true });
+        assert.deepEqual(yield* workspaceGitHubAccountId(teammate, acme.id), Option.some(902));
+        assert.deepEqual(yield* workspaceGitHubAccountId(outsider, acme.id), Option.none());
 
         // A logo the held read refuses as a photo lists none live either, so the owner's own first workspace keeps the sign-in picture.
         const own = Option.getOrThrow(yield* personalWorkspaceOf(owner));

@@ -7,8 +7,12 @@
  * `/emails` (https://resend.com/docs/api-reference/emails/send-email) from
  * the sender the deployment names, to the invited address alone, saying who
  * invited them to which workspace, the role they join as, and the day the
- * link stops working, with a button and the bare link to the accept page. Nothing is mailed when an invitation is canceled, and an
- * address already invited is refused before anything is sent, as stage did.
+ * link stops working, with a button to the accept page, whose bare link the
+ * plain text carries. The letter is one quiet card: the workspace's picture,
+ * or its initial where it has none, a heading, the inviter's line with their
+ * picture or initial, the button, and the expiry. Nothing is mailed when an
+ * invitation is canceled, and an address already invited is refused before
+ * anything is sent, as stage did.
  *
  * The deployment holds the Resend key (`RESEND_API_KEY`, the one the
  * feedback form sends with) and the sender (`INVITE_FROM`, such as
@@ -22,6 +26,7 @@
  */
 
 import { BRAND_PALETTE } from "@luke/brand";
+import { githubAvatarAt } from "@luke/features/account-picture";
 import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   INVITATION_ROLE,
@@ -45,9 +50,6 @@ const RESEND = {
   REQUEST_TIMEOUT_MS: 5_000,
 } as const;
 
-/** The app's icon on the service's own site, which the email shows beside the product's name above its card. */
-const ICON_PATH = "/app-icon-192.png";
-
 /** What the build says once where a variable is unset, by the variables' names alone. */
 const MAIL_UNSET = `${INVITATION_MAIL_ENVIRONMENT.RESEND_API_KEY} or ${INVITATION_MAIL_ENVIRONMENT.FROM} is not set, so workspace invitations are not emailed: each one's link is copied by hand.`;
 
@@ -56,73 +58,68 @@ const MAIL_UNSET = `${INVITATION_MAIL_ENVIRONMENT.RESEND_API_KEY} or ${INVITATIO
  * table `@luke/brand` generates `@luke/ui`'s palette from, so a change of
  * brand reaches the letter with no second copy to forget. Each is spelled as
  * a plain hex because an email client reads no custom property. The page is
- * the sidebar's ground, the letter's card the overlay, the button the
- * accent's fill under its own words, and the link the accent's text ink. The
- * signature is the quiet ink, which still reads at AA on the page.
+ * the sidebar's ground, the letter's card the overlay, and the button the
+ * accent's fill under its own words. The inviter's initial sits on the chip's
+ * edge, and the footer is the quiet ink, which still reads at AA on the page.
  */
 const MAIL_PALETTE = {
   LIGHT: {
     GROUND: BRAND_PALETTE.LIGHT.SIDEBAR,
     SURFACE: BRAND_PALETTE.LIGHT.OVERLAY,
-    WELL: BRAND_PALETTE.LIGHT.WELL,
     EDGE: BRAND_PALETTE.LIGHT.CHIP_EDGE,
     TEXT: BRAND_PALETTE.LIGHT.TEXT,
     TEXT_MUTED: BRAND_PALETTE.LIGHT.TEXT_MUTED,
-    TEXT_FAINT: BRAND_PALETTE.LIGHT.TEXT_MUTED,
     ACCENT: BRAND_PALETTE.LIGHT.ACCENT,
     ON_ACCENT: BRAND_PALETTE.LIGHT.ON_ACCENT,
-    ACCENT_TEXT: BRAND_PALETTE.LIGHT.ACCENT_TEXT,
   },
   DARK: {
     GROUND: BRAND_PALETTE.DARK.SIDEBAR,
     SURFACE: BRAND_PALETTE.DARK.OVERLAY,
-    WELL: BRAND_PALETTE.DARK.WELL,
     EDGE: BRAND_PALETTE.DARK.CHIP_EDGE,
     TEXT: BRAND_PALETTE.DARK.TEXT,
     TEXT_MUTED: BRAND_PALETTE.DARK.TEXT_MUTED,
     ACCENT: BRAND_PALETTE.DARK.ACCENT,
     ON_ACCENT: BRAND_PALETTE.DARK.ON_ACCENT,
-    ACCENT_TEXT: BRAND_PALETTE.DARK.ACCENT_TEXT,
   },
 } as const;
 
 const LIGHT = MAIL_PALETTE.LIGHT;
 const DARK = MAIL_PALETTE.DARK;
 
+/** The pictures' sides in CSS pixels: the workspace's leading the card, the inviter's beside their line. */
+const PICTURE_SIDE = { WORKSPACE: 48, INVITER: 20 } as const;
+
+/** How many device pixels a GitHub avatar is asked for per CSS pixel, so it stays sharp on a dense screen. */
+const PICTURE_DENSITY = 2;
+
 /**
  * The email's look, inline, since an email client takes inline styles alone:
  * a light letter by default, which the dark-mode block below turns dark where
  * the client honours `prefers-color-scheme`. The layout is tables, which
- * every client, Outlook's Word engine among them, draws the same.
+ * every client, Outlook's Word engine among them, draws the same. One card
+ * holds the workspace's picture, the heading, the inviter's line, the button,
+ * and the expiry; the footer stands under it on the page.
  */
 const EMAIL_STYLE = {
   BODY: `background-color:${LIGHT.GROUND};margin:0;padding:0;-webkit-text-size-adjust:100%`,
-  OUTER: `background-color:${LIGHT.GROUND};padding:40px 16px`,
-  BRAND_CELL: "padding:0 4px 20px",
-  MARK: "display:block;width:28px;height:28px;border:0;outline:none;border-radius:7px",
-  WORDMARK: `color:${LIGHT.TEXT};font-size:17px;font-weight:600;letter-spacing:-0.02em;line-height:28px;padding-left:10px`,
-  CARD: `background-color:${LIGHT.SURFACE};border:1px solid ${LIGHT.EDGE};border-radius:14px`,
-  CARD_CELL: "padding:36px 36px 28px",
+  OUTER: `background-color:${LIGHT.GROUND};padding:48px 20px`,
+  CARD: `background-color:${LIGHT.SURFACE};border:1px solid ${LIGHT.EDGE};border-radius:16px;padding:40px`,
   FONT: "font-family:Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif",
-  HEADING: `color:${LIGHT.TEXT};font-size:24px;font-weight:700;letter-spacing:-0.03em;line-height:1.25;margin:0 0 12px`,
+  HEADING: `color:${LIGHT.TEXT};font-size:22px;font-weight:700;letter-spacing:-0.02em;line-height:1.3;margin:0`,
   HEADING_FONT:
     "font-family:'Bricolage Grotesque',Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif",
-  LEAD: `color:${LIGHT.TEXT_MUTED};font-size:15px;line-height:1.6;margin:0 0 24px`,
-  PLACE: `background-color:${LIGHT.WELL};border:1px solid ${LIGHT.EDGE};border-radius:10px`,
-  PLACE_CELL: "padding:14px 16px",
-  TILE: `background-color:${LIGHT.TEXT};border-radius:8px;color:${LIGHT.SURFACE};font-size:16px;font-weight:600;line-height:36px;text-align:center;width:36px;height:36px`,
-  PLACE_NAME: `color:${LIGHT.TEXT};font-size:15px;font-weight:600;line-height:20px;padding-left:12px`,
-  PLACE_ROLE: `color:${LIGHT.TEXT_MUTED};font-size:13px;font-weight:400;line-height:18px;padding-left:12px`,
-  BUTTON_ROW: "padding:24px 0 0",
+  PICTURE_CELL: "padding:0 0 24px",
+  PICTURE: "display:block;border:0;outline:none",
+  TILE: `background-color:${LIGHT.TEXT};color:${LIGHT.SURFACE};font-size:20px;font-weight:600;text-align:center`,
+  DISC: `background-color:${LIGHT.EDGE};color:${LIGHT.TEXT_MUTED};font-size:10px;font-weight:600;text-align:center`,
+  BYLINE_CELL: "padding:12px 0 0",
+  BYLINE: `color:${LIGHT.TEXT_MUTED};font-size:15px;line-height:20px;padding-left:8px;vertical-align:middle`,
+  BUTTON_ROW: "padding:28px 0 0",
   BUTTON_CELL: `background-color:${LIGHT.ACCENT};border-radius:10px`,
-  BUTTON: `display:inline-block;color:${LIGHT.ON_ACCENT};font-size:15px;font-weight:600;line-height:20px;padding:12px 22px;text-decoration:none;border-radius:10px`,
-  EXPIRY: `color:${LIGHT.TEXT_MUTED};font-size:13px;line-height:1.6;margin:16px 0 0`,
-  FALLBACK_LABEL: `color:${LIGHT.TEXT_MUTED};font-size:13px;line-height:1.6;margin:20px 0 2px`,
-  FALLBACK_LINK: `color:${LIGHT.ACCENT_TEXT};font-size:13px;line-height:1.6;text-decoration:underline;word-break:break-all`,
-  RULE: `border:0;border-top:1px solid ${LIGHT.EDGE};margin:28px 0 18px`,
-  FOOTNOTE: `color:${LIGHT.TEXT_MUTED};font-size:12px;line-height:1.6;margin:0`,
-  SIGNATURE: `color:${LIGHT.TEXT_FAINT};font-size:12px;line-height:1.6;padding:20px 0 0;text-align:center`,
-  SIGNATURE_LINK: `color:${LIGHT.TEXT_FAINT};text-decoration:none`,
+  BUTTON: `display:inline-block;color:${LIGHT.ON_ACCENT};font-size:15px;font-weight:600;line-height:20px;padding:12px 24px;text-decoration:none;border-radius:10px`,
+  EXPIRY: `color:${LIGHT.TEXT_MUTED};font-size:13px;line-height:1.6;padding:16px 0 0`,
+  FOOTER: `color:${LIGHT.TEXT_MUTED};font-size:12px;line-height:1.6;padding:24px 4px 0;text-align:center`,
+  FOOTER_LINK: `color:${LIGHT.TEXT_MUTED};text-decoration:none`,
 } as const;
 
 /**
@@ -134,14 +131,12 @@ const DARK_STYLE = [
   "@media (prefers-color-scheme: dark) {",
   `.v-body, .v-outer { background-color:${DARK.GROUND} !important; }`,
   `.v-card { background-color:${DARK.SURFACE} !important; border-color:${DARK.EDGE} !important; }`,
-  `.v-place { background-color:${DARK.WELL} !important; border-color:${DARK.EDGE} !important; }`,
   `.v-tile { background-color:${DARK.TEXT} !important; color:${DARK.GROUND} !important; }`,
+  `.v-disc { background-color:${DARK.EDGE} !important; color:${DARK.TEXT_MUTED} !important; }`,
   `.v-heading { color:${DARK.TEXT} !important; }`,
   `.v-muted { color:${DARK.TEXT_MUTED} !important; }`,
-  `.v-link { color:${DARK.ACCENT_TEXT} !important; }`,
   `.v-button-cell { background-color:${DARK.ACCENT} !important; }`,
   `.v-button { color:${DARK.ON_ACCENT} !important; }`,
-  `.v-rule { border-top-color:${DARK.EDGE} !important; }`,
   "}",
 ].join("\n");
 
@@ -158,6 +153,10 @@ export interface InvitationLetter {
   readonly role: WorkspaceInvitation["role"];
   /** When the link stops working, as the invitation's ISO time. */
   readonly expiresAt: string;
+  /** The workspace's picture, an https address a mail client loads with no session; absent where the letter draws the workspace's initial instead. */
+  readonly workspacePictureUrl?: string;
+  /** The inviter's sign-in picture, an https address a mail client loads with no session; absent where the letter draws their initial instead. */
+  readonly inviterPictureUrl?: string;
 }
 
 interface InvitationMailValues {
@@ -199,60 +198,86 @@ function table(cells: string, style = ""): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"${style === "" ? "" : ` style="${style}"`}><tr>${cells}</tr></table>`;
 }
 
+/** The first letter of a name, capitalized and escaped, for a picture's stand-in. */
+function initialOf(name: string): string {
+  return escapeHtml(Array.from(name.trim())[0]?.toUpperCase() ?? "");
+}
+
+/**
+ * A picture `side` pixels square with corners of `radius`, from `url`, or,
+ * where there is none, `initial` on a cell of the class and style given, the
+ * same size, so the letter keeps its shape either way.
+ */
+function picture(
+  url: string | undefined,
+  alt: string,
+  side: number,
+  radius: number,
+  stand: { readonly initial: string; readonly className: string; readonly style: string },
+): string {
+  const box = `width:${side}px;height:${side}px;border-radius:${radius}px`;
+  if (url !== undefined) {
+    const src = escapeHtml(githubAvatarAt(url, side * PICTURE_DENSITY));
+    return `<img src="${src}" alt="${escapeHtml(alt)}" width="${side}" height="${side}" style="${EMAIL_STYLE.PICTURE};${box}">`;
+  }
+  return table(
+    `<td class="${stand.className}" width="${side}" height="${side}" style="${stand.style};${box};line-height:${side}px;${EMAIL_STYLE.FONT}">${stand.initial}</td>`,
+  );
+}
+
 /** The email for one invitation: its subject, its HTML, and the plain text that says the same. */
 function invitationEmail(letter: InvitationLetter) {
   const { email, acceptUrl, workspaceName, inviterLabel, role, expiresAt } = letter;
   const subject = `You're invited to join ${workspaceName} on ${PRODUCT_NAME}`;
-  const heading = `${inviterLabel} invited you to join ${workspaceName}`;
-  const lead = `${PRODUCT_NAME} is where your team works each task through with coding agents, from the plan to the merged pull request.`;
-  const joinAs = `You'll join as ${ROLE_WORDS[role]}`;
-  const expiry = `This invitation expires on ${EXPIRY_DAY.format(Date.parse(expiresAt))}.`;
-  const fallback = "Or paste this link into your browser:";
-  const footnote = `This invitation was sent to ${email}. If you weren't expecting it, you can ignore this email.`;
+  const preheader = `${inviterLabel} invited you to join ${workspaceName} on ${PRODUCT_NAME}.`;
+  const heading = `Join ${workspaceName} on ${PRODUCT_NAME}`;
+  const byline = `${inviterLabel} invited you as ${ROLE_WORDS[role]}.`;
+  const expiry = `Expires ${EXPIRY_DAY.format(Date.parse(expiresAt))}.`;
+  const footnote = `Sent to ${email}. Not expecting it? You can ignore this email.`;
   const font = EMAIL_STYLE.FONT;
   const link = escapeHtml(acceptUrl);
   const site = new URL("/", acceptUrl);
-  const icon = escapeHtml(new URL(ICON_PATH, acceptUrl).href);
-  const initial = escapeHtml(Array.from(workspaceName.trim())[0]?.toUpperCase() ?? "");
+  const workspacePicture = picture(
+    letter.workspacePictureUrl,
+    workspaceName,
+    PICTURE_SIDE.WORKSPACE,
+    12,
+    { initial: initialOf(workspaceName), className: "v-tile", style: EMAIL_STYLE.TILE },
+  );
+  const inviterPicture = picture(
+    letter.inviterPictureUrl,
+    "",
+    PICTURE_SIDE.INVITER,
+    PICTURE_SIDE.INVITER / 2,
+    { initial: initialOf(inviterLabel), className: "v-disc", style: EMAIL_STYLE.DISC },
+  );
   const html = [
     "<!DOCTYPE html>",
     '<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">',
     `<title>${escapeHtml(subject)}</title><style>${DARK_STYLE}</style></head>`,
     `<body class="v-body" style="${EMAIL_STYLE.BODY}">`,
-    `<div style="display:none;max-height:0;overflow:hidden">${escapeHtml(heading)} on ${escapeHtml(PRODUCT_NAME)}.</div>`,
+    `<div style="display:none;max-height:0;overflow:hidden">${escapeHtml(preheader)}</div>`,
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="v-outer" style="${EMAIL_STYLE.OUTER}"><tr><td align="center">`,
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px">',
-    `<tr><td style="${EMAIL_STYLE.BRAND_CELL}">${table(
-      `<td><img src="${icon}" alt="" width="28" height="28" style="${EMAIL_STYLE.MARK}"></td><td class="v-heading" style="${EMAIL_STYLE.WORDMARK};${font}">${escapeHtml(PRODUCT_NAME)}</td>`,
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px">',
+    `<tr><td class="v-card" style="${EMAIL_STYLE.CARD}">`,
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">',
+    `<tr><td style="${EMAIL_STYLE.PICTURE_CELL}">${workspacePicture}</td></tr>`,
+    `<tr><td><h1 class="v-heading" style="${EMAIL_STYLE.HEADING};${EMAIL_STYLE.HEADING_FONT}">${escapeHtml(heading)}</h1></td></tr>`,
+    `<tr><td style="${EMAIL_STYLE.BYLINE_CELL}">${table(
+      `<td width="${PICTURE_SIDE.INVITER}" style="vertical-align:middle">${inviterPicture}</td><td class="v-muted" style="${EMAIL_STYLE.BYLINE};${font}">${escapeHtml(byline)}</td>`,
     )}</td></tr>`,
-    `<tr><td class="v-card" style="${EMAIL_STYLE.CARD}"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="${EMAIL_STYLE.CARD_CELL};${font}">`,
-    `<h1 class="v-heading" style="${EMAIL_STYLE.HEADING};${EMAIL_STYLE.HEADING_FONT}">${escapeHtml(heading)}</h1>`,
-    `<p class="v-muted" style="${EMAIL_STYLE.LEAD};${font}">${escapeHtml(lead)}</p>`,
-    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="v-place" style="${EMAIL_STYLE.PLACE}"><tr><td style="${EMAIL_STYLE.PLACE_CELL}">`,
-    table(
-      `<td class="v-tile" width="36" style="${EMAIL_STYLE.TILE};${font}">${initial}</td><td><div class="v-heading" style="${EMAIL_STYLE.PLACE_NAME};${font}">${escapeHtml(workspaceName)}</div><div class="v-muted" style="${EMAIL_STYLE.PLACE_ROLE};${font}">${escapeHtml(joinAs)}</div></td>`,
-    ),
-    "</td></tr></table>",
-    `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="${EMAIL_STYLE.BUTTON_ROW}">`,
-    table(
+    `<tr><td style="${EMAIL_STYLE.BUTTON_ROW}">${table(
       `<td class="v-button-cell" style="${EMAIL_STYLE.BUTTON_CELL}"><a href="${link}" class="v-button" style="${EMAIL_STYLE.BUTTON};${font}">Accept invitation</a></td>`,
-    ),
-    "</td></tr></table>",
-    `<p class="v-muted" style="${EMAIL_STYLE.EXPIRY};${font}">${escapeHtml(expiry)}</p>`,
-    `<p class="v-muted" style="${EMAIL_STYLE.FALLBACK_LABEL};${font}">${fallback}</p>`,
-    `<a href="${link}" class="v-link" style="${EMAIL_STYLE.FALLBACK_LINK};${font}">${link}</a>`,
-    `<hr class="v-rule" style="${EMAIL_STYLE.RULE}">`,
-    `<p class="v-muted" style="${EMAIL_STYLE.FOOTNOTE};${font}">${escapeHtml(footnote)}</p>`,
-    "</td></tr></table></td></tr>",
-    `<tr><td class="v-muted" style="${EMAIL_STYLE.SIGNATURE};${font}">${escapeHtml(PRODUCT_NAME)} · <a href="${escapeHtml(site.href)}" class="v-muted" style="${EMAIL_STYLE.SIGNATURE_LINK}">${escapeHtml(site.host)}</a></td></tr>`,
+    )}</td></tr>`,
+    `<tr><td class="v-muted" style="${EMAIL_STYLE.EXPIRY};${font}">${escapeHtml(expiry)}</td></tr>`,
+    "</table></td></tr>",
+    `<tr><td class="v-muted" style="${EMAIL_STYLE.FOOTER};${font}">${escapeHtml(footnote)}<br>${escapeHtml(PRODUCT_NAME)} · <a href="${escapeHtml(site.href)}" class="v-muted" style="${EMAIL_STYLE.FOOTER_LINK}">${escapeHtml(site.host)}</a></td></tr>`,
     "</table></td></tr></table></body></html>",
   ].join("\n");
   const text = [
-    `${heading} on ${PRODUCT_NAME}.`,
+    `${heading}.`,
     "",
-    lead,
-    "",
-    `${joinAs}.`,
+    byline,
     "",
     `Accept invitation: ${acceptUrl}`,
     "",
