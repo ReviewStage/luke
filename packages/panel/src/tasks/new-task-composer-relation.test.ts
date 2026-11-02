@@ -236,3 +236,22 @@ test("as Sub-task of, a task in another repository says why and takes no pick, a
     { repository: null, relations: [{ kind: "sub-task-of", taskId: LOGIN.id }] },
   ]);
 });
+
+test("swapping the card's one tree relation takes a task of another repository, the start following it", async () => {
+  const { container, starts } = await mount();
+
+  await relate(container, "Sub-task of", "Ship login");
+  const name =
+    container.querySelector<HTMLElement>(".new-task-relations-dock .luke-task-row-press") ??
+    assert.fail("the row's name stands");
+  act(() => name.click());
+  await settle();
+  act(() => row("API rate limit").click());
+  await settle();
+  pressInComposer(container, "Enter", { metaKey: true });
+  await settle();
+
+  assert.deepEqual(starts, [
+    { repository: null, relations: [{ kind: "sub-task-of", taskId: LIMIT.id }] },
+  ]);
+});

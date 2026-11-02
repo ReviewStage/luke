@@ -12,7 +12,11 @@ import {
 } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
-import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@luke/features/task-wire";
+import {
+  TASK_CREATE_RELATION_KIND,
+  TASK_SKILL_SOURCE,
+  TASK_TREE_ENTRY,
+} from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -400,6 +404,26 @@ test("a server switched off from the + menu's MCP servers is handed to the agent
     "the card opens again on the refusal",
   );
   assert.equal((await slackSwitch()).getAttribute("aria-checked"), "false");
+});
+
+test("a refused start related to a task of another workspace opens again there, and its Retry starts there", async () => {
+  const other = {
+    id: "1a2b3c4d-0000-4000-8000-000000000009",
+    workspaceId: "workspace-acme",
+    name: "Ship login",
+    number: 212,
+    createdAt: 1,
+    updatedAt: 1,
+    repository: "acme/web",
+  };
+  const card = await mount("The service is down.", {
+    relation: { kind: TASK_CREATE_RELATION_KIND.BLOCKS, task: other },
+  });
+  card.type("Post the release notes");
+  await card.key("Enter");
+  await card.key("Enter");
+
+  assert.deepEqual(card.startedIn, ["workspace-acme", "workspace-acme"]);
 });
 
 test("Command-Return while a file is still being read starts no bare task", async () => {

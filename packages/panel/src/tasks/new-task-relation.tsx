@@ -237,7 +237,9 @@ function relationRows(
   adds: boolean,
 ): readonly MenuRow[] {
   const related = new Map(relations.map((each) => [each.task.id, each.kind]));
-  const full = adds && relations.length >= TASK_BOUNDS.MAX_START_RELATIONS;
+  // Note that a Sub-task of beside the card's parent takes its place rather than adding one, so the card's most never holds it.
+  const replacesParent = relations.some((each) => takesParentOf(each, kind));
+  const full = adds && !replacesParent && relations.length >= TASK_BOUNDS.MAX_START_RELATIONS;
   return tasks.map((each) => {
     const key = each.number === undefined ? undefined : taskKey(workspaceName, each.number);
     const standing = related.get(each.id);
@@ -276,6 +278,18 @@ function placeOf(control: NewTaskRelations): RelationPlace {
     repository: control.repository,
     held: treeRelationOf(control.relations) !== undefined,
   };
+}
+
+/**
+ * Where a swap of the relation at `at` is judged from: the tree relations
+ * left beside it, whose repository holds it; none left, no repository, since
+ * the one swapped held the chip and the task it takes sets it afresh.
+ */
+function swapPlaceOf(control: NewTaskRelations, at: number): RelationPlace {
+  const left = treeRelationOf(control.relations.filter((_, index) => index !== at));
+  return left === undefined
+    ? { repository: null, held: false }
+    : { repository: left.task.repository, held: true };
 }
 
 /**
@@ -408,7 +422,14 @@ function RelationRow({
           id={menuId}
           label={WORDS.SWAP}
           placeholder={WORDS.FIND}
-          rows={relationRows(control.tasks, workspaceName, relations, kind, place, false)}
+          rows={relationRows(
+            control.tasks,
+            workspaceName,
+            relations,
+            kind,
+            swapPlaceOf(control, at),
+            false,
+          )}
           value={task.id}
           noMatch={WORDS.NO_MATCH}
           align={POPOVER_ALIGN.START}
