@@ -9,6 +9,7 @@ import {
   pageFindAnswerSchema,
 } from "@luke/features/page-find";
 import { pageFrameUrl } from "@luke/features/page-frame";
+import { PAGE_LINK_TYPE, pageLinkPressSchema } from "@luke/features/page-link";
 import { Effect, Schema } from "effect";
 import { afterEach, vi } from "vitest";
 import { pageResponse } from "./page-protocol";
@@ -17,7 +18,7 @@ import { pageResponse } from "./page-protocol";
  * The find a page is served with, as the side panel drives it: a page served
  * by the `luke-page:` scheme, drawn in a frame of the test's window, asked to
  * search and step as the panel's find bar asks, and answering with its tally
- * and its selection. jsdom lays nothing out, so where a match stands on
+ * and its selection; and the link pressed in it, handed to the panel. jsdom lays nothing out, so where a match stands on
  * screen is the one thing answered for it: every match below the fold, and
  * a scroll into view recorded on the element that holds it. Synthetic pages.
  */
@@ -28,10 +29,15 @@ const PAGE_ID = "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f";
 /** A page's frame as the test drives it: what it posted to the panel, an ask from the panel, and the elements scrolled into view. */
 interface DrawnPage {
   readonly frame: HTMLIFrameElement;
-  readonly posted: (typeof pageFindAnswerSchema.Type)[];
+  readonly posted: Posted[];
   readonly scrolled: string[];
   readonly ask: (ask: PageFindAsk, from?: MessageEventSource | null) => void;
 }
+
+/** What the page may post to the panel: the find's answer, or a link pressed. */
+const postedSchema = Schema.Union([pageFindAnswerSchema, pageLinkPressSchema]);
+
+type Posted = typeof postedSchema.Type;
 
 /** The pages drawn by the test running, each cleared as it ends so no find outlives its frame. */
 const drawn: DrawnPage[] = [];
@@ -59,8 +65,8 @@ const served = (html: string) =>
  */
 const draw = (html: string) => Effect.map(served(html), drawServed);
 
-/** Reads what the page posted as the find's answer, as the panel reads it. */
-const readAnswer = Schema.decodeUnknownSync(pageFindAnswerSchema);
+/** Reads what the page posted, as the panel reads it. */
+const readAnswer = Schema.decodeUnknownSync(postedSchema);
 
 /**
  * The prototype up `of`'s chain that defines `name` itself: one of a frame's
@@ -90,7 +96,7 @@ function drawServed(html: string): DrawnPage {
     script.textContent = parsedScript.textContent;
     parsedScript.replaceWith(script);
   }
-  const posted: (typeof pageFindAnswerSchema.Type)[] = [];
+  const posted: Posted[] = [];
   vi.spyOn(framed.parent, "postMessage").mockImplementation((message) => {
     posted.push(readAnswer(message));
   });
@@ -113,7 +119,7 @@ function drawServed(html: string): DrawnPage {
 }
 
 /** The tallies the page posted, oldest first. */
-function talliesOf(posted: readonly (typeof pageFindAnswerSchema.Type)[]) {
+function talliesOf(posted: readonly Posted[]) {
   return posted.flatMap((message) => ("tally" in message ? [message.tally] : []));
 }
 
@@ -318,4 +324,40 @@ it.effect("the words selected in the page are handed to the panel as the selecti
 
     assert.deepEqual(posted.at(-1), { type: PAGE_FIND_TYPE, selection: "Invite" });
   }),
+);
+
+it.effect(
+  "a link out pressed in the page is handed to the panel as the page left it, and not followed; a link within the page, or one the page took, stays the page's",
+  () =>
+    Effect.gen(function* () {
+      const { frame, posted } = yield* draw(
+        [
+          '<a id="out" href="https://example.com/docs?q=1"><b id="inner">Docs</b></a>',
+          '<a id="within" href="#totals">Totals</a>',
+          '<a id="taken" href="https://example.com/tab">Tab</a>',
+          '<a id="delegated" href="https://example.com/preview">Preview</a>',
+          '<a id="rewritten" href="https://example.com/old" onclick="this.href = \'https://example.com/new\'">Moved</a>',
+          '<a href="https://example.com/gone"><span id="vanishing" onclick="this.remove()">Gone</span></a>',
+          "<script>document.getElementById('taken').addEventListener('click', (event) => event.preventDefault());</script>",
+          "<script>addEventListener('click', (event) => { if (event.target.id === 'delegated') event.preventDefault(); });</script>",
+        ].join("\n"),
+      );
+      const page = frame.contentDocument ?? assert.fail();
+      const press = (id: string) => {
+        const event = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+        page.getElementById(id)?.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+
+      const prevented = ["inner", "within", "taken", "delegated", "rewritten", "vanishing"].map(
+        press,
+      );
+
+      assert.deepEqual(prevented, [true, false, true, true, true, true]);
+      assert.deepEqual(posted, [
+        { type: PAGE_LINK_TYPE, href: "https://example.com/docs?q=1" },
+        { type: PAGE_LINK_TYPE, href: "https://example.com/new" },
+        { type: PAGE_LINK_TYPE, href: "https://example.com/gone" },
+      ]);
+    }),
 );
