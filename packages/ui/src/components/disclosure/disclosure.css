@@ -161,9 +161,9 @@
     display: inline-flex;
     flex: none;
     color: var(--luke-color-text-muted);
-    /* The chevron turns on the spring small elements ride, so it settles
-       with the body unrolling under it rather than snapping ahead. */
-    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
+    /* The chevron turns on the beat the body unrolls on, so the fold reads
+       as one gesture rather than two that settle apart. */
+    transition: transform var(--luke-duration-pane) var(--luke-motion-pane);
   }
 
   .luke-disclosure-turn > svg {

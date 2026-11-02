@@ -77,6 +77,12 @@
     gap: var(--luke-space-6);
   }
 
+  /* The count gives way to the actions on their own fade, so the two swap
+     as one gesture rather than one snapping as the other fades. */
+  .luke-nav-item-rest {
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
   .luke-nav-item-count {
     color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);

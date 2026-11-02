@@ -517,8 +517,9 @@ export function FileHead({
     <IconButton
       ref={partAt(0)}
       icon={
+        // Note that the chevron turns at once, because the diff it folds lands at once: a file's diff is too long to unroll.
         <ChevronRightIcon
-          className="rotate-90 transition-transform duration-(--luke-duration-fast) ease-spring-fast group-data-collapsed/head:rotate-0"
+          className="rotate-90 group-data-collapsed/head:rotate-0"
           aria-hidden="true"
         />
       }

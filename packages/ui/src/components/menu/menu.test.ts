@@ -1223,6 +1223,35 @@ function FilterHarness(): React.JSX.Element {
   });
 }
 
+test("a sheet put away sinks out before it goes, held until its sink has played", () => {
+  inPhoneLayout();
+  // Note that the dialog's card fades as the sheet sinks, both on one motion here, as a browser plays them on one beat.
+  const sink = new EventTarget();
+  Object.defineProperty(HTMLElement.prototype, "getAnimations", {
+    configurable: true,
+    value(this: HTMLElement) {
+      return this.dataset.leaving === "true" || this.hasAttribute("data-ending-style")
+        ? [sink]
+        : [];
+    },
+  });
+  try {
+    mount(createElement(Harness, { groups: taskGroups([]) }));
+    press(button("More"));
+
+    key("Escape");
+
+    const sinking = document.querySelector<HTMLElement>(".luke-menu-sheet");
+    expect(sinking?.dataset.leaving).toBe("true");
+    act(() => {
+      sink.dispatchEvent(new Event("finish"));
+    });
+    expect(sheet()).toBeNull();
+  } finally {
+    Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
+  }
+});
+
 test("in a sheet a submenu's value that stays reads and toggles as its owner now draws it, keeping focus", () => {
   vi.stubGlobal("ResizeObserver", StandInResizeObserver);
   inPhoneLayout();
