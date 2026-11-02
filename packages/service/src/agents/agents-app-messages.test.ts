@@ -160,6 +160,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           machine: AGENT_MACHINE.VERCEL,
           agent_kind: AGENT_KIND.CODER,
           turn_running: false,
+          queued: false,
         };
         assert.deepEqual(countedWith(owner, SERVER_EVENT.MESSAGE_SEND), [counted, counted]);
       }),
@@ -222,6 +223,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
               machine: AGENT_MACHINE.VERCEL,
               agent_kind: AGENT_KIND.CODER,
               turn_running: true,
+              queued: false,
             },
           ],
           "a repeat is counted no second time",
