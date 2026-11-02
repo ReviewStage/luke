@@ -1992,7 +1992,7 @@ function SidebarColumn({
             tasks,
             { agent: true, id: agent.id },
             agent.workspaceId,
-            sectionDialogs.askNew,
+            sectionDialogs,
           )
         : undefined,
     childCount: (taskId) => childCounts.get(taskId),

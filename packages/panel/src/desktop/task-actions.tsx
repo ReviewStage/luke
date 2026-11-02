@@ -616,7 +616,7 @@ export function useTaskMenuItems(
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
   const section =
     task !== undefined
-      ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections.askNew)
+      ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections)
       : undefined;
   const setStanding = useStandingDoor(tasks);
   const assignees = useAssigneeRows(task?.assignee);
