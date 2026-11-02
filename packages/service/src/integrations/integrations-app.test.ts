@@ -947,7 +947,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
   );
 
   it.effect(
-    "a Google account, whose grant names nothing, is called by its email at Google, one stored unnamed before among them, read once",
+    "a Google account, whose grant names nothing, is called by its email at Google, one stored unnamed before among them, and keeps it",
     () =>
       Effect.gen(function* () {
         const userId = yield* openAccount("dean@google-email.example");
@@ -960,11 +960,15 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         // As a read before Google was asked for the email left it: read once, and named nothing.
         const [connected] = yield* readIntegrationConnections(userId);
         yield* fillIntegrationLabel(connected ?? assert.fail("Gmail has a row"), "");
-        const asked: string[] = [];
-        const google = fakeHttpClientLayer((url, init) => {
-          asked.push(`${url} ${new Headers(init.headers).get("authorization")}`);
-          return Response.json({ emailAddress: "dean.stratakos2026@gmail.example" });
-        });
+        let down = false;
+        // Gmail's profile, answered only to the account's own token.
+        const google = fakeHttpClientLayer((url, init) =>
+          !down &&
+          url === "https://gmail.googleapis.com/gmail/v1/users/me/profile" &&
+          new Headers(init.headers).get("authorization") === `Bearer token_${userId}`
+            ? Response.json({ emailAddress: "dean.stratakos2026@gmail.example" })
+            : new Response(null, { status: 401 }),
+        );
         const group = yield* standing({ GMAIL_CONNECTOR_UID: "google/gmail" }, undefined, google);
         const labels = Effect.map(
           group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }),
@@ -972,15 +976,14 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         );
 
         assert.deepEqual(yield* labels, ["dean.stratakos2026@gmail.example"]);
+        // The name is kept: a Google that no longer answers still leaves it.
+        down = true;
         assert.deepEqual(yield* labels, ["dean.stratakos2026@gmail.example"]);
-        assert.deepEqual(asked, [
-          `https://gmail.googleapis.com/gmail/v1/users/me/profile Bearer token_${userId}`,
-        ]);
       }),
   );
 
   it.effect(
-    "a provider that could not answer whose account a token is leaves the read as it was, and is not asked again while its hold stands",
+    "a provider that could not answer whose account a token is leaves the read as it was, and is asked again only once its hold lapses",
     () =>
       Effect.gen(function* () {
         const userId = yield* openAccount("dee@google-down.example");
@@ -990,11 +993,12 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           `state-gmail-down-${userId}`,
         );
         yield* completeIntegrationSignIn(userId, GMAIL, `state-gmail-down-${userId}`);
-        let asked = 0;
-        const google = fakeHttpClientLayer(() => {
-          asked += 1;
-          return new Response(null, { status: 503 });
-        });
+        let down = true;
+        const google = fakeHttpClientLayer(() =>
+          down
+            ? new Response(null, { status: 503 })
+            : Response.json({ emailAddress: "dee@gmail.example" }),
+        );
         const group = yield* standing({ GMAIL_CONNECTOR_UID: "google/gmail" }, undefined, google);
         const accounts = Effect.map(
           group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }),
@@ -1002,8 +1006,12 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         );
 
         assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, undefined]]);
+        // Google answers again, but the account is not asked until its hold lapses.
+        down = false;
+        yield* TestClock.adjust("4 minutes");
         assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, undefined]]);
-        assert.equal(asked, 1);
+        yield* TestClock.adjust("2 minutes");
+        assert.deepEqual(yield* accounts, [[INTEGRATION_STATUS.CONNECTED, "dee@gmail.example"]]);
       }),
   );
 
