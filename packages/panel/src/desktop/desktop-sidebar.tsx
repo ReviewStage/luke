@@ -173,6 +173,7 @@ import {
   newSectionAction,
   PINNED_DROP_ZONE,
   rowMember,
+  type ShownSection,
   SidebarSections,
   TASKS_DROP_ZONE,
   useSectionDialogs,
@@ -180,6 +181,7 @@ import {
 } from "./sidebar-sections.js";
 import {
   HiddenStatusesLine,
+  NONE_MATCH,
   TaskViewOptions,
   useTaskViewCommands,
   ViewChips,
@@ -1191,9 +1193,6 @@ function RepositorySection({
   );
 }
 
-/** What the list says where its filters leave nothing, as the Tasks page says it. */
-const NONE_MATCH = "No tasks match this view.";
-
 /** The listed tasks as the view groups them: by repository, or in one run. */
 type TaskSections =
   | {
@@ -1270,7 +1269,7 @@ function withTaskLists(
 }
 
 /** A section as it draws `rows` (`homedTaskRows`): the entries of its own rows among them, a child task standing under a parent it holds after them with no entry. */
-function homedSection(drawn: DrawnSection, rows: readonly TaskRow[]): DrawnSection {
+function homedSection(drawn: ShownSection, rows: readonly TaskRow[]): ShownSection {
   const kept = new Set(rows);
   const entries = drawn.entries.filter((_, at) => {
     const row = drawn.rows[at];
@@ -1591,17 +1590,21 @@ function sectionedTasks(
 /**
  * A section as the view leaves it: its tasks to do and in progress, any
  * with no status, an agent's among them, and any parent a child task keeps
- * open, of those Assigned to holds, each with its entry, in its order.
+ * open, of those Assigned to holds, each with its entry, in its order; and
+ * the rest of those it holds counted by status, so the section says what it
+ * holds where the view hides it. Note that a row Assigned to leaves out is
+ * counted in no status, because Show all, not the Tasks page, brings it back.
  */
 function sectionInView(
   drawn: DrawnSection,
   openParents: ReadonlySet<string>,
   assignedTo: AssignedTo,
   readerId: string | undefined,
-): DrawnSection {
-  const people = new Set(taskRowsAssignedTo(drawn.rows, assignedTo, readerId));
+): ShownSection {
+  const people = taskRowsAssignedTo(drawn.rows, assignedTo, readerId);
+  const held = new Set(people);
   const shown = (row: TaskRow) =>
-    people.has(row) && taskRowInStatuses(row, SHOWN_STATUSES, openParents);
+    held.has(row) && taskRowInStatuses(row, SHOWN_STATUSES, openParents);
   const kept = drawn.rows.flatMap((row, at) => {
     const entry = drawn.entries[at];
     return entry !== undefined && shown(row) ? [{ entry, row }] : [];
@@ -1610,6 +1613,8 @@ function sectionInView(
     ...drawn,
     entries: kept.map(({ entry }) => entry),
     rows: kept.map(({ row }) => row),
+    hidden: hiddenStatuses(people, SHOWN_STATUSES, openParents),
+    othersHeld: people.length < drawn.rows.length,
   };
 }
 
@@ -2041,11 +2046,8 @@ function SidebarColumn({
     unpinnedAgents.length === 0;
   const unpinned = [...unpinnedTasks.map(taskRow), ...unpinnedAgents.map(agentRow)];
   const rows = taskRowsAssignedTo(unpinned, assignedTo, tasks.me);
-  // The list holds the tasks to do and in progress, and says how many more the Tasks page holds.
-  const sectionRows = sectioned.sections.flatMap((drawn) =>
-    taskRowsAssignedTo(drawn.rows, assignedTo, tasks.me),
-  );
-  const hidden = hiddenStatuses([...sectionRows, ...rows], SHOWN_STATUSES, openParents);
+  // The list holds the tasks to do and in progress, and says how many more the Tasks page holds; a section says its own (`sectionInView`).
+  const hidden = hiddenStatuses(rows, SHOWN_STATUSES, openParents);
   const statusRows = taskRowsInStatuses(rows, SHOWN_STATUSES, openParents);
   const orderView: TaskOrderView = {
     workspaceId: tasks.workspace?.id,
@@ -2306,6 +2308,7 @@ function SidebarColumn({
                         );
                       },
                       onDropRow: dropRow,
+                      onOpenBoard: chosen(openBoard),
                       onCarried: setCarrying,
                     }}
                   />

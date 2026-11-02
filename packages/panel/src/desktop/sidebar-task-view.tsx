@@ -179,6 +179,9 @@ export function TaskViewOptions({
   );
 }
 
+/** What the list says where its filters leave nothing, as the Tasks page says it; a section says it where they leave none of its rows. */
+export const NONE_MATCH = "No tasks match this view.";
+
 /** What the hidden tasks' line says: how many, and in which statuses, as `4 more in Backlog, Done`. */
 function hiddenStatusesLine(hidden: readonly HiddenStatus[]): string {
   const count = hidden.reduce((sum, each) => sum + each.count, 0);
