@@ -61,7 +61,7 @@ test("an item carries the release's whole notes, its screenshots and links at th
   assert.match(description, /href="https:\/\/vespin\.dev\/privacy"/);
   assert.match(
     description,
-    /href="https:\/\/github\.com\/ReviewStage\/luke\/blob\/main\/PRIVACY\.md"/,
+    /href="https:\/\/github\.com\/ReviewStage\/vespin\/blob\/main\/PRIVACY\.md"/,
   );
   assert.match(description, /<code>]]&gt;<\/code>/);
 });

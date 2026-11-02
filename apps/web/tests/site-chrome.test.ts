@@ -59,7 +59,7 @@ for (const { path, page, marked } of PAGES) {
       "Vespin -> /",
       "About -> /about",
       "Changelog -> /changelog",
-      "Vespin on GitHub -> https://github.com/ReviewStage/luke",
+      "Vespin on GitHub -> https://github.com/ReviewStage/vespin",
     ]);
     assert.deepEqual(links(root.querySelector("footer")), [
       "About -> /about",
@@ -83,9 +83,9 @@ for (const { path, page, marked } of PAGES) {
 test("the landing offers the web app beside the download", () => {
   const body = drawn(App).querySelector("main");
   assert.deepEqual(links(body), [
-    "Download for macOS -> https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg",
+    "Download for macOS -> https://github.com/ReviewStage/vespin/releases/latest/download/Luke.dmg",
     `Open Vespin on the web -> ${PANEL_PATH}`,
-    "View on GitHub -> https://github.com/ReviewStage/luke",
+    "View on GitHub -> https://github.com/ReviewStage/vespin",
   ]);
 });
 

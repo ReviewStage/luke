@@ -13,7 +13,7 @@ as patches to an older one.
 ## Reporting a vulnerability
 
 Email **founders@stagereview.app**, or use GitHub's
-[private vulnerability reporting](https://github.com/ReviewStage/luke/security/advisories/new)
+[private vulnerability reporting](https://github.com/ReviewStage/vespin/security/advisories/new)
 on this repository. Please do not open a public issue for a security report.
 
 Include the Vespin version, your macOS version, steps to reproduce, and what an

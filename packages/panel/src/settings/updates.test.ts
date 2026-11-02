@@ -166,7 +166,7 @@ test("Download is a link to the release page whose press opens it through the up
   const download = link(page, "Download");
   assert.equal(
     download?.getAttribute("href"),
-    "https://github.com/ReviewStage/luke/releases/latest",
+    "https://github.com/ReviewStage/vespin/releases/latest",
   );
   assert.equal(button(page, "Download"), undefined, "no button opens the page");
 

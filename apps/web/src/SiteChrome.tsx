@@ -16,7 +16,7 @@ import {
 } from "@luke/ui";
 import { PANEL_PATH } from "./app/web-address";
 
-export const REPOSITORY_URL = "https://github.com/ReviewStage/luke";
+export const REPOSITORY_URL = "https://github.com/ReviewStage/vespin";
 /** The newest release's version-free DMG, under its old name until the first release under the new name publishes one of its own. */
 export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/Luke.dmg`;
 

@@ -103,5 +103,5 @@ export function replayProjectKeyDefine(env) {
  * `@luke/host`'s update-service.ts, and the cache directory must stay `luke-updater` so
  * downloaded updates from the pre-builder transition are not orphaned.
  */
-export const APP_UPDATE_FEED_URL = "https://github.com/ReviewStage/luke/releases/latest/download/";
+export const APP_UPDATE_FEED_URL = "https://github.com/ReviewStage/vespin/releases/latest/download/";
 export const APP_UPDATE_CACHE_DIR_NAME = "luke-updater";

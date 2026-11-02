@@ -6,8 +6,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ReviewStage/luke/actions/workflows/ci.yml"><img src="https://github.com/ReviewStage/luke/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/ReviewStage/luke/releases/latest"><img src="https://img.shields.io/github/v/release/ReviewStage/luke?label=release" alt="Latest release"></a>
+  <a href="https://github.com/ReviewStage/vespin/actions/workflows/ci.yml"><img src="https://github.com/ReviewStage/vespin/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/ReviewStage/vespin/releases/latest"><img src="https://img.shields.io/github/v/release/ReviewStage/vespin?label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License: Apache 2.0"></a>
   <img src="https://img.shields.io/badge/macOS-14%2B%20%C2%B7%20Apple%20silicon-black" alt="macOS 14 or newer, Apple silicon">
 </p>
@@ -71,7 +71,7 @@ Claude Code, Codex, or any other agent.
 
 Requires an Apple silicon Mac on macOS 14 or newer.
 
-1. Download [Luke.dmg](https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg),
+1. Download [Vespin for macOS](https://github.com/ReviewStage/vespin/releases/latest/download/Luke.dmg),
    open it, and drag **Vespin** into **Applications**.
 2. Open Vespin and sign in with Google or GitHub.
 3. Connect GitHub in Settings › Workspace › Integrations, which installs the
