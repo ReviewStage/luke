@@ -20,25 +20,30 @@ import * as SqlClient from "effect/sql/SqlClient";
 /**
  * eve-agents-archive-migration.test.ts -- the migration that archives every agent left on eve.
  *
- * Over a database migrated up to it, holding agents on eve, from before the
- * runtime column, on Claude Code, and on eve but archived by a member
- * already: once it runs, the agents on eve or with no runtime stand archived
- * by the app for their starter, with why, the others as they were; the
- * archived agent's open question is closed and its ask withdrawn, its
- * notice and the Claude Code agent's question left open; a second run
- * changes nothing; and the starter's unarchive opens the question again.
+ * Over a database migrated with every migration but it, holding agents on
+ * eve, from before the runtime column, on Claude Code, and on eve but
+ * archived by a member already: once it runs, the agents on eve or with no
+ * runtime stand archived by the app for their starter, with why, the others
+ * as they were; the archived agent's open question is closed and its ask
+ * withdrawn, its notice and the Claude Code agent's question left open; a
+ * second run changes nothing; and the starter's unarchive opens the
+ * question again.
  * Synthetic accounts throughout.
  */
 
 const MIGRATION = "20261102192712_eve_agents_archive";
 
-/** A migrations folder holding every migration named before this one, and none after. */
-const foldersBefore = Effect.gen(function* () {
+/**
+ * A migrations folder holding every migration but this one. Note that the
+ * ones named after it are held too, because the agents are seeded through
+ * the store, whose inserts name every column a later migration adds.
+ */
+const foldersBut = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-eve-archive-" });
+  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-but-eve-archive-" });
   const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
-    (name) => name.localeCompare(MIGRATION) < 0,
+    (name) => name !== MIGRATION,
   );
   for (const name of names) {
     yield* fileSystem.copy(path.join(MIGRATIONS_FOLDER, name), path.join(folder, name));
@@ -52,7 +57,7 @@ it.effect(
     Effect.scoped(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        yield* runWebMigrations(yield* foldersBefore);
+        yield* runWebMigrations(yield* foldersBut);
         yield* Database.use((db) =>
           db.insert(user).values({ id: "dean", name: "Dean", email: "dean@luke.test" }),
         );
