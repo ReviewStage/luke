@@ -1,0 +1,63 @@
+import { Schema as EffectSchema } from "effect";
+
+/**
+ * page-link.ts -- a link in a plan's page as drawn: the press of a link out of the page, which the page's frame hands the side panel to open outside it.
+ *
+ * A page is drawn in a frame sandboxed to its scripts alone, under a policy
+ * that refuses it a popup and a navigation to anywhere but itself
+ * (`@luke/features/page-policy`), so a link out of it, followed in the
+ * frame, goes nowhere. Every server of a page therefore answers it with one
+ * script of Fullspin's own ahead of the agent's HTML (`withPageScripts`),
+ * which takes a press of a link to another site from the page, so the frame
+ * does not follow it, and posts its address to the panel, which opens it as
+ * it opens any link outside the window (`page-pane.tsx`). A link within the
+ * page, to one of its own headings, is the page's, as is a press the page's
+ * own scripts took first.
+ *
+ * The script runs among the page's own, so whatever the frame posts is the
+ * page's word, not Fullspin's: the panel takes the message only from the frame it
+ * drew, only in the shape below, only for an address it would open from any
+ * other link, and only while the window holds a press of the developer's,
+ * which a press in the frame hands the window that framed it, so no script
+ * of the page's opens a site on its own.
+ */
+
+/** The mark every message of a link wears, setting it apart from whatever else the page posts. */
+export const PAGE_LINK_TYPE = "luke-page-link";
+
+/** A message the frame posts to the panel: the address of the link out pressed. */
+export const pageLinkPressSchema = EffectSchema.Struct({
+  type: EffectSchema.Literal(PAGE_LINK_TYPE),
+  href: EffectSchema.String,
+});
+
+/**
+ * The script the frame runs, ahead of the page's own. It is plain JavaScript in
+ * a string because it runs in the page, apart from every bundle of Fullspin's.
+ * It hears a press on the window, after every element of the page has heard
+ * it, so a press the page took for itself (`preventDefault`) stays the page's.
+ * A link out is one to a web address on another site than the one the page's
+ * links are read against, its own, since its policy refuses it a `<base>`;
+ * any other link is left to the frame.
+ */
+export const PAGE_LINK_SCRIPT = `(() => {
+  "use strict";
+  const TYPE = ${JSON.stringify(PAGE_LINK_TYPE)};
+  const WEB = new Set(["http:", "https:"]);
+
+  addEventListener("click", (event) => {
+    if (event.defaultPrevented || event.button !== 0) return;
+    const target = event.target;
+    const link = target instanceof Element ? target.closest("a[href], area[href]") : null;
+    if (link === null) return;
+    let address;
+    try {
+      address = new URL(link.href);
+    } catch {
+      return;
+    }
+    if (!WEB.has(address.protocol) || address.origin === new URL(document.baseURI).origin) return;
+    event.preventDefault();
+    parent.postMessage({ type: TYPE, href: address.href }, "*");
+  });
+})();`;

@@ -6,6 +6,7 @@ import {
   type PageFindAsk,
   pageFindAnswerSchema,
 } from "@luke/features/page-find";
+import { pageLinkPressSchema } from "@luke/features/page-link";
 import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
@@ -46,6 +47,7 @@ import {
 } from "../find-in-tab.js";
 import { openPageInBrowserItem } from "../open-in-browser-item.js";
 import { usePhoneRoom } from "../stage-room.js";
+import { opensAsLink, useOpenLink } from "./use-open-link.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
 
@@ -61,8 +63,11 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * top navigation, or modals; and no permission to delegate. The frame's
  * address names the version, so stepping to another loads that version,
  * and the newest is followed until the developer steps back from it. A
- * link the page follows goes nowhere, since this window may frame nothing
- * but a page, and Reload draws the page again. What the page draws is the
+ * link out of the page is not followed in the frame, which may draw nothing
+ * but a page: the frame hands its press to the pane
+ * (`@luke/features/page-link`), which opens it as any link of the window
+ * opens (`useOpenLink`), a site in the browser and a Fullspin link in the
+ * window. Reload draws the page again. What the page draws is the
  * task's, so the pane is left out of the screen recording (`ph-no-capture`);
  * the recording could not see into the frame in any case.
  *
@@ -120,6 +125,9 @@ const CHORD_OF_KEY = {
 
 /** Reads a message the frame posted as the find's answer, nothing for anything else the page posts. */
 const readFindAnswer = Schema.decodeUnknownOption(pageFindAnswerSchema);
+
+/** Reads a message the frame posted as a link pressed, nothing for anything else the page posts. */
+const readLinkPress = Schema.decodeUnknownOption(pageLinkPressSchema);
 
 /** The source's lines as the page's text. */
 function sourceText(lines: CodeLines): string {
@@ -189,6 +197,29 @@ function useFrameFind(frame: RefObject<HTMLIFrameElement | null>) {
 }
 
 /**
+ * Opens the link out the frame says was pressed, as any link of the window
+ * opens. Note that the press is taken only from the frame drawn, only for an
+ * address the window opens from any link, and only while the window holds a
+ * press of the developer's, which a press in the frame hands it, because the
+ * page's own scripts can post the same message without one.
+ */
+function useFrameLinks(frame: RefObject<HTMLIFrameElement | null>): void {
+  const open = useOpenLink();
+  useEffect(() => {
+    const hear = (event: MessageEvent) => {
+      const framed = frame.current?.contentWindow;
+      if (framed === null || framed === undefined || event.source !== framed) return;
+      const press = readLinkPress(event.data);
+      if (Option.isNone(press) || !opensAsLink(press.value.href)) return;
+      if (navigator.userActivation?.isActive !== true) return;
+      open(press.value.href);
+    };
+    window.addEventListener("message", hear);
+    return () => window.removeEventListener("message", hear);
+  }, [frame, open]);
+}
+
+/**
  * Says the focus went into the frame where this window hears it: a click
  * in a frame stirs no event of this document's but the window's blur, so
  * the focus the frame took is told as a `focusin` on the frame, which
@@ -209,7 +240,8 @@ function useFrameFocus(frame: RefObject<HTMLIFrameElement | null>): void {
 }
 
 /**
- * The page drawn in its sandboxed frame, found in through the frame (`useFrameFind`).
+ * The page drawn in its sandboxed frame, found in through the frame (`useFrameFind`), its links
+ * out opened outside it (`useFrameLinks`).
  * Note that the frame stands from the start, its ring over it until `onLoad` of the `src` it
  * shows, because the page reads only as the frame loads it, a version stepped to included, and a
  * frame left blank says nothing of that.
@@ -218,6 +250,7 @@ function PageFrame({ title, src }: { title: string; src: string }): React.JSX.El
   const frame = useRef<HTMLIFrameElement>(null);
   const [framedSrc, setFramedSrc] = useState<string>();
   const found = useFrameFind(frame);
+  useFrameLinks(frame);
   useFrameFocus(frame);
   return (
     <div className="page-view-room relative flex min-h-0 flex-1">
