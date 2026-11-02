@@ -25,7 +25,8 @@ import type { TaskStoreEffect } from "./task-store.js";
  * gives it now, and where that differs from the one its id was last seen
  * under, or from the one a rename's delivery says it had, relabels every
  * stored name in the same transaction, case-insensitively as GitHub reads
- * names. The relabel is the one write here that names no account, as
+ * names, unless GitHub's `updated_at` says the sighting is older than the
+ * one the id was last seen in. The relabel is the one write here that names no account, as
  * GitHub's delivery names a repository and nothing of who stored it; it
  * answers nothing of any row, so no account reads another's through it.
  *
@@ -36,47 +37,71 @@ import type { TaskStoreEffect } from "./task-store.js";
  * redirected from.
  */
 
-/** One sighting of a repository: GitHub's id for it, its name now, and the name it went by before where the sighting says. */
+/** One sighting of a repository: GitHub's id for it, its name now, when GitHub last saw it change, and the name it went by before where the sighting says. */
 export interface RepositorySighting {
   /** GitHub's id for the repository, which a rename or a transfer keeps. */
   readonly id: number;
-  /** `owner/name` as GitHub spells it now. */
+  /** `owner/name` as GitHub spelled it as of the sighting. */
   readonly fullName: string;
+  /** GitHub's `updated_at` for the repository as of the sighting, which a rename or a transfer moves; how a late delivery is told from a newer one. */
+  readonly updatedAt: Date;
   /** `owner/name` as it was before, where the sighting names it: a rename's or a transfer's delivery, or a read redirected from it. */
   readonly formerly?: string | undefined;
 }
 
-const SightingSchema = Schema.Struct({ id: Schema.Number, fullName: Schema.String });
+const SightingSchema = Schema.Struct({
+  id: Schema.Number,
+  fullName: Schema.String,
+  updatedAt: Schema.Date,
+});
 
 const RelabelSchema = Schema.Struct({ from: Schema.String, to: Schema.String });
 
 const insertSeen = SqlSchema.void({
   Request: SightingSchema,
-  execute: ({ id, fullName }) =>
+  execute: ({ id, fullName, updatedAt }) =>
     Database.use((db) =>
-      db.insert(githubRepository).values({ id, fullName }).onConflictDoNothing(),
+      db
+        .insert(githubRepository)
+        .values({ id, fullName, githubUpdatedAt: updatedAt })
+        .onConflictDoNothing(),
     ),
 });
 
-/** The name the id was last seen under, held for the transaction, where it is another than this one; nothing where it is this one, which locks no row. */
-const lockStaleName = SqlSchema.findOneOption({
-  Request: SightingSchema,
-  Result: Schema.Struct({ fullName: Schema.String }),
-  execute: ({ id, fullName }) =>
+/**
+ * The id's row, held for the transaction, where the sighting may move it:
+ * where it stands under another name, or for every sighting that names a
+ * name before (`named`); nothing otherwise, which locks no row, so a
+ * sighting under the name the id was last seen under locks nothing.
+ */
+const lockSeen = SqlSchema.findOneOption({
+  Request: Schema.Struct({ ...SightingSchema.fields, named: Schema.Boolean }),
+  Result: Schema.Struct({ fullName: Schema.String, githubUpdatedAt: Schema.Date }),
+  execute: ({ id, fullName, named }) =>
     Database.use((db) =>
       db
-        .select({ fullName: githubRepository.fullName })
+        .select({
+          fullName: githubRepository.fullName,
+          githubUpdatedAt: githubRepository.githubUpdatedAt,
+        })
         .from(githubRepository)
-        .where(and(eq(githubRepository.id, id), ne(githubRepository.fullName, fullName)))
+        .where(
+          named
+            ? eq(githubRepository.id, id)
+            : and(eq(githubRepository.id, id), ne(githubRepository.fullName, fullName)),
+        )
         .for("update"),
     ),
 });
 
 const updateSeen = SqlSchema.void({
   Request: SightingSchema,
-  execute: ({ id, fullName }) =>
+  execute: ({ id, fullName, updatedAt }) =>
     Database.use((db) =>
-      db.update(githubRepository).set({ fullName }).where(eq(githubRepository.id, id)),
+      db
+        .update(githubRepository)
+        .set({ fullName, githubUpdatedAt: updatedAt })
+        .where(eq(githubRepository.id, id)),
     ),
 });
 
@@ -326,22 +351,30 @@ function relabel(move: typeof RelabelSchema.Type): TaskStoreEffect<void> {
  * Records a sighting of the repository, and where the name it was last seen
  * under, or the one the sighting says it had, is another than its name now,
  * moves every stored name from each of those to its name now, all in one
- * transaction. A sighting under the name it was last seen under writes
- * nothing past the first, and locks nothing.
+ * transaction. A sighting older than the one the id was last seen in, by
+ * GitHub's own `updated_at`, moves nothing, since GitHub delivers late and
+ * redelivers, and a late delivery's name may be one the repository left
+ * behind. A sighting under the name it was last seen under writes nothing
+ * past the first, and locks nothing.
  */
 export function noteGitHubRepository(sighting: RepositorySighting): TaskStoreEffect<void> {
-  const seen = { id: sighting.id, fullName: sighting.fullName };
+  const seen = { id: sighting.id, fullName: sighting.fullName, updatedAt: sighting.updatedAt };
+  const named = sighting.formerly !== undefined && sighting.formerly !== sighting.fullName;
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         yield* insertSeen(seen);
-        const stale = yield* lockStaleName(seen);
-        if (Option.isSome(stale)) yield* updateSeen(seen);
+        const stood = yield* lockSeen({ ...seen, named });
+        if (Option.isNone(stood) && !named) return;
         const formerNames = new Set<string>();
-        if (Option.isSome(stale)) formerNames.add(stale.value.fullName);
-        if (sighting.formerly !== undefined && sighting.formerly !== sighting.fullName) {
-          formerNames.add(sighting.formerly);
+        if (Option.isSome(stood)) {
+          if (stood.value.githubUpdatedAt.getTime() > sighting.updatedAt.getTime()) return;
+          if (stood.value.fullName !== sighting.fullName) {
+            yield* updateSeen(seen);
+            formerNames.add(stood.value.fullName);
+          }
         }
+        if (named && sighting.formerly !== undefined) formerNames.add(sighting.formerly);
         for (const from of formerNames) yield* relabel({ from, to: sighting.fullName });
       }),
     ),

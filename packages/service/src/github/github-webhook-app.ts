@@ -65,7 +65,8 @@ import { setInstallationStatus } from "./github-installations.js";
  * (`@luke/database/models/github-repositories`), which relabels every stored
  * name of the repository where GitHub renamed or transferred it since it was
  * last seen, so the agents, tasks, and automations below are found under
- * its name now. A `repository` delivery, which the App reads where it
+ * its name now; a delivery late or redelivered, older by the repository's
+ * own `updated_at` than the one it was last seen in, moves nothing back. A `repository` delivery, which the App reads where it
  * subscribes to the Repository event, is read for that alone, its
  * `renamed` and `transferred` actions naming the name it had before, so a
  * repository renamed before the service ever saw it is relabeled too.
@@ -211,9 +212,13 @@ const InstallationDeliverySchema = Schema.Struct({
   installation: Schema.Struct({ id: Schema.Number }),
 });
 
-/** The repository any delivery names, by GitHub's id and its name now; absent from an installation's or an authorization's. */
+/** The repository any delivery names, by GitHub's id, its name, and when GitHub last saw it change, as of the delivery; absent from an installation's or an authorization's. */
 const SightedDeliverySchema = Schema.Struct({
-  repository: Schema.Struct({ id: Schema.Number, full_name: Schema.String }),
+  repository: Schema.Struct({
+    id: Schema.Number,
+    full_name: Schema.String,
+    updated_at: Schema.DateFromString,
+  }),
 });
 
 const OwnerLoginSchema = Schema.Struct({ login: Schema.String });
@@ -345,9 +350,9 @@ function repositorySighting(
 ): RepositorySighting | undefined {
   const read = readDelivery(SightedDeliverySchema, payload);
   if (Result.isFailure(read)) return undefined;
-  const { id, full_name: fullName } = read.success.repository;
+  const { id, full_name: fullName, updated_at: updatedAt } = read.success.repository;
   const formerly = event === WEBHOOK_EVENT.REPOSITORY ? formerName(payload) : undefined;
-  return { id, fullName, formerly };
+  return { id, fullName, updatedAt, formerly };
 }
 
 /** The installation an installation delivery is about and the status its action leaves it at, where its action moves one. */

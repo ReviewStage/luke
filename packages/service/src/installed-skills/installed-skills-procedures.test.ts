@@ -40,6 +40,7 @@ import {
   type InstallationFixture,
   openGithubUser,
   openTokenMember,
+  repositoryIdOf,
   type SentToGitHub,
 } from "../testing/github-app-fake.js";
 import { installedSkillsProcedures } from "./installed-skills-procedures.js";
@@ -198,6 +199,7 @@ function repositoryScript(
     }
     if (rest === "") {
       return Response.json({
+        id: repositoryIdOf(repository),
         name: repository.name,
         full_name: `${repository.owner}/${repository.name}`,
         owner: { login: repository.owner },

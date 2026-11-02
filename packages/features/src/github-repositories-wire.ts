@@ -43,6 +43,8 @@ export type GitHubAccess = (typeof GITHUB_ACCESS)[keyof typeof GITHUB_ACCESS];
 
 /** One repository the App, or the developer's own token, reaches for the developer. */
 export const githubRepositorySchema = EffectSchema.Struct({
+  /** GitHub's id for it, which a rename or a transfer keeps; absent from a service older than it. */
+  id: EffectSchema.optionalKey(EffectSchema.Number),
   /** The user or organization that owns it. */
   owner: EffectSchema.String,
   name: EffectSchema.String,

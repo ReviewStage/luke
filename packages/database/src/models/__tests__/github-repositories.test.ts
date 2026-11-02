@@ -49,6 +49,9 @@ const repositoryId = () => Math.floor(Math.random() * 1_000_000_000) + 1;
 const repositoryName = (owner: string, name: string) =>
   `${owner}/${name}-${randomUUID().slice(0, 8)}`;
 
+/** GitHub's `updated_at` for a sighting, by the minute of an hour it names. */
+const at = (minute: number) => new Date(Date.UTC(2026, 10, 2, 12, minute));
+
 const taskRepository = (userId: string, taskId: string) =>
   Effect.map(readTask(userId, taskId), (read) => Option.getOrThrow(read).task.repository);
 
@@ -123,9 +126,9 @@ it.layer(getTestDB())("GitHub's repositories by their id", (it) => {
           now,
         });
 
-        yield* noteGitHubRepository({ id, fullName: relay });
+        yield* noteGitHubRepository({ id, fullName: relay, updatedAt: at(0) });
         assert.equal(yield* taskRepository(owner, relayTask.id), relay);
-        yield* noteGitHubRepository({ id, fullName: rocket });
+        yield* noteGitHubRepository({ id, fullName: rocket, updatedAt: at(5) });
 
         assert.equal(yield* taskRepository(owner, relayTask.id), rocket);
         assert.equal(yield* taskRepository(stranger, strangerTask.id), rocket);
@@ -176,8 +179,28 @@ it.layer(getTestDB())("GitHub's repositories by their id", (it) => {
         yield* noteGitHubRepository({
           id: repositoryId(),
           fullName: rocket,
+          updatedAt: at(5),
           formerly: relay,
         });
+
+        assert.equal(yield* taskRepository(owner, renamed.id), rocket);
+      }),
+  );
+
+  it.effect(
+    "a delivery late or redelivered under the name a repository left behind moves nothing back",
+    () =>
+      Effect.gen(function* () {
+        const id = repositoryId();
+        const relay = repositoryName("acme", "relay");
+        const rocket = repositoryName("acme", "rocket");
+        const owner = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        const renamed = yield* createTask(owner, { organizationId: workspace, repository: relay });
+        yield* noteGitHubRepository({ id, fullName: rocket, updatedAt: at(5), formerly: relay });
+
+        yield* noteGitHubRepository({ id, fullName: relay, updatedAt: at(1) });
+        yield* noteGitHubRepository({ id, fullName: relay, updatedAt: at(1), formerly: rocket });
 
         assert.equal(yield* taskRepository(owner, renamed.id), rocket);
       }),

@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "723086a2-d1f3-4ec9-8036-fe30612cf086",
+  "id": "475f266a-a920-47dd-b575-b782eb13b0ce",
   "prevIds": [
     "9bfc4873-0637-4f78-a2c4-2a333fb40cd4",
     "c33a8619-a9bc-43d6-a45f-5491104a1e6a"
@@ -5835,6 +5835,19 @@
       "generated": null,
       "identity": null,
       "name": "full_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_repository"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "github_updated_at",
       "entityType": "columns",
       "schema": "public",
       "table": "github_repository"

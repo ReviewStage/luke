@@ -13,7 +13,6 @@ import {
   updateAgentBranch,
 } from "@luke/database/models/agent-store";
 import { createAutomation, listAutomationRuns } from "@luke/database/models/automation-store";
-import { noteGitHubRepository } from "@luke/database/models/github-repositories";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { readTask } from "@luke/database/models/task-store";
 import { listWorkspaces } from "@luke/database/models/workspace-store";
@@ -49,6 +48,7 @@ import {
   type FakeGitHub,
   githubReaching,
   openGithubUser,
+  repositoryIdOf,
   type SentToGitHub,
 } from "../testing/github-app-fake.js";
 import { GITHUB_PROVIDER_ID, GitHubApp } from "./github-app.js";
@@ -965,15 +965,26 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
       Effect.gen(function* () {
         yield* Effect.sync(() => vi.stubEnv(EVE_HOST_ENVIRONMENT.EVE_ORIGIN, EVE_ORIGIN));
         const pull = { state: "open", merged: false, conclusion: "success" } as const;
-        const { ref, owner, agent, task, installation } = yield* openAgent({ ...pull });
+        const {
+          github: before,
+          ref,
+          owner,
+          agent,
+          task,
+          installation,
+        } = yield* openAgent({
+          ...pull,
+        });
         yield* claimRuntimeSession(
           { userId: owner, conversationId: agent.conversationId },
           `wrun_${randomUUID()}`,
           yield* DateTime.nowAsDate,
         );
-        const id = 900_000_000 + Math.floor(Math.random() * 90_000_000);
-        // The service saw the repository under its old name before GitHub renamed it.
-        yield* noteGitHubRepository({ id, fullName: RELAY_FULL_NAME });
+        // The service reached the repository under its old name before GitHub renamed it, as a start does.
+        yield* Effect.flatMap(GitHubApp, (app) =>
+          app.repositoryReach(task.workspaceId, RELAY_FULL_NAME, undefined),
+        ).pipe(Effect.provide(before.layer));
+        const id = repositoryIdOf(RELAY);
         const renamed = `${RELAY.owner}/Rocket`;
         const github = githubReaching(
           [{ ...installation, repositories: [{ owner: RELAY.owner, name: "Rocket" }] }],
@@ -983,7 +994,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         );
         const review = {
           action: "submitted",
-          repository: { id, full_name: renamed, private: true },
+          repository: { id, full_name: renamed, updated_at: "2026-10-16T12:00:00Z", private: true },
           sender: { login: "octocat", type: "User" },
           review: {
             id: 10,
@@ -1029,6 +1040,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
             name,
             full_name: `acme/${name}`,
             owner: { login: "acme" },
+            updated_at: "2026-10-16T12:00:00Z",
           },
           changes: changes(name),
         };

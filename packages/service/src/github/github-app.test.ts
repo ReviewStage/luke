@@ -30,6 +30,7 @@ import {
   GITHUB_FIXTURE_REFUSED_CODE,
   githubReaching,
   type InstallationFixture,
+  listingTokenOf,
   memberRepositoryJson,
   openGithubUser,
   openTokenMember,
@@ -466,7 +467,12 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
         const formerly = `octo-org/relay-before-${randomUUID().slice(0, 8)}`;
         const fake = githubReaching([relay], undefined, undefined, (sent) =>
           new URL(sent.url).pathname === `/repos/${formerly}`
-            ? Response.json(memberRepositoryJson({ owner: "octo-org", name: "relay" }, false))
+            ? Response.json(
+                memberRepositoryJson(
+                  { owner: "octo-org", name: "relay", updatedAt: "2026-10-02T00:00:00Z" },
+                  false,
+                ),
+              )
             : undefined,
         );
         const owner = yield* openGithubUser();
@@ -486,6 +492,48 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
         assert.equal(
           Option.getOrThrow(yield* readTask(owner, task.id)).task.repository,
           "octo-org/relay",
+        );
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "a repository GitHub transferred to another account the workspace connects is reached through that account's installation, and a task kept under the old owner follows it",
+    () =>
+      Effect.gen(function* () {
+        const relay = relayInstallation(38);
+        const name = `relay-${randomUUID().slice(0, 8)}`;
+        const team: InstallationFixture = {
+          id: 39,
+          login: "team",
+          repositories: [{ owner: "team", name }],
+        };
+        const formerly = `octo-org/${name}`;
+        // Note that only the new owner's installation reads the repository GitHub redirects the old name to.
+        const fake = githubReaching([relay, team], undefined, undefined, (sent) =>
+          new URL(sent.url).pathname === `/repos/${formerly}`
+            ? sent.headers.get("authorization") === `Bearer ${listingTokenOf(team.id)}`
+              ? Response.json(memberRepositoryJson({ owner: "team", name }, false))
+              : Response.json({ message: "Not Found" }, { status: 404 })
+            : undefined,
+        );
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(workspace, relay);
+        yield* connectWorkspaceGitHub(workspace, team);
+        const task = yield* createTask(owner, { organizationId: workspace, repository: formerly });
+        const app = yield* GitHubApp;
+
+        const reach = yield* app
+          .repositoryReach(workspace, formerly, undefined)
+          .pipe(Effect.provide(fake.layer));
+
+        assert.equal(
+          Result.getOrUndefined(Result.map(reach, (reached) => reached.repository.fullName)),
+          `team/${name}`,
+        );
+        assert.equal(
+          Option.getOrThrow(yield* readTask(owner, task.id)).task.repository,
+          `team/${name}`,
         );
       }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
