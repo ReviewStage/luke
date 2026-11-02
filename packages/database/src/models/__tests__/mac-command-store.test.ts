@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AGENT_KIND, type AgentKind } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -268,13 +267,8 @@ it.layer(getTestDB())("the Mac command store", (it) => {
   );
 });
 
-/** A coding agent's conversation under the account, with the agent itself in the workspace given, started on the prompt given or blank, a coder unless named otherwise, answering both ids. */
-const openAgent = (
-  userId: string,
-  organizationId: string,
-  prompt: string | null = null,
-  kind: AgentKind = AGENT_KIND.CODER,
-) =>
+/** A coding agent's conversation under the account, with the agent itself in the workspace given, started on the prompt given or blank, answering both ids. */
+const openAgent = (userId: string, organizationId: string, prompt: string | null = null) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const [id, conversationId] = [randomUUID(), randomUUID()];
@@ -286,7 +280,6 @@ const openAgent = (
       organizationId,
       userId,
       conversationId,
-      kind,
       prompt,
       model: "anthropic/claude-opus-5.5",
       effort: "high",

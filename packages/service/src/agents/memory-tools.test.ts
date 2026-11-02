@@ -113,10 +113,7 @@ it.layer(getTestDB())("the coding agent's memory tools", (it) => {
         assert.equal(late.status, ACTION_RESULT_STATUS.REJECTED);
         assert.equal(past.status, ACTION_RESULT_STATUS.REJECTED);
         assert.notEqual(late.reason, past.reason);
-        assert.equal(
-          (yield* listMemories(call.workspaceId, call.userId)).length,
-          MEMORY_BOUNDS.MAX_MEMORIES,
-        );
+        assert.equal((yield* listMemories(call.workspaceId)).length, MEMORY_BOUNDS.MAX_MEMORIES);
       }),
   );
 
@@ -142,7 +139,7 @@ it.layer(getTestDB())("the coding agent's memory tools", (it) => {
       assert.equal((yield* runRemember(call, { text: fact })).outcome, MEMORY_OUTCOME.KEPT);
 
       assert.deepEqual(
-        (yield* listMemories(call.workspaceId, call.userId)).map((kept) => kept.text),
+        (yield* listMemories(call.workspaceId)).map((kept) => kept.text),
         [fact],
       );
     }),
@@ -163,7 +160,7 @@ it.layer(getTestDB())("the coding agent's memory tools", (it) => {
         unread.map((answer) => answer.status),
         unread.map(() => ACTION_RESULT_STATUS.REJECTED),
       );
-      assert.deepEqual(yield* listMemories(call.workspaceId, call.userId), []);
+      assert.deepEqual(yield* listMemories(call.workspaceId), []);
     }),
   );
 });

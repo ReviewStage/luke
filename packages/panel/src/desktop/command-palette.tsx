@@ -2143,7 +2143,7 @@ export function CommandPalette({
             originOf,
           )
         : [],
-    [tasksShown, tasks, members, onTasks, tasks, originOf],
+    [tasksShown, tasks, members, onTasks, originOf],
   );
   const reads = useReadMarks();
   const renameOffer = useTaskRenameOffer();

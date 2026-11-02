@@ -1,5 +1,5 @@
 import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
-import type { AgentAttachment, AgentKind, AgentSummary } from "@luke/features/agent-wire";
+import type { AgentAttachment, AgentSummary } from "@luke/features/agent-wire";
 import { ATTACHMENT_VIEW, attachmentView, type FileChip } from "@luke/features/attachment-model";
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import {
@@ -1150,7 +1150,6 @@ export const INBOX_HOLDER = {
 export type TasklessInboxAgent = Pick<
   AppInboxTasklessItem,
   | "agentId"
-  | "agentKind"
   | "agentTitle"
   | "agentModel"
   | "automationId"
@@ -1162,12 +1161,11 @@ export type TasklessInboxAgent = Pick<
 /**
  * An agent with no task as the Inbox names it, from its own row where main
  * lists none of its items, a link naming one whose items are all settled:
- * its title, as main's read names it, and its kind; the automation that started it, by the name its
- * run kept; and its repository and workspace where they are known.
+ * its title, as main's read names it; the automation that started it, by
+ * the name its run kept; and its repository and workspace where they are known.
  */
 export function inboxAgentOf(agent: {
   readonly id: string;
-  readonly kind?: AgentKind | undefined;
   readonly title: string | null;
   readonly model: string;
   readonly automationId?: string | null | undefined;
@@ -1177,7 +1175,6 @@ export function inboxAgentOf(agent: {
 }): TasklessInboxAgent {
   return {
     agentId: agent.id,
-    ...(agent.kind === undefined ? undefined : { agentKind: agent.kind }),
     agentTitle: agent.title,
     agentModel: agent.model,
     automationId: agent.automationId ?? null,

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { rememberMemory } from "@luke/database/models/memory-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { type MemoriesAnswer, memoriesAnswerSchema } from "@luke/features/memory-wire";
@@ -24,8 +23,6 @@ import { memoriesProcedures } from "./memories-procedures.js";
  * what the workspace's agents kept, most recently kept first, each named by
  * the member whose words it holds; a member forgets their own memories, and
  * owners and admins any, while a member's forget of a teammate's is refused;
- * a private memory is read, marked private, and forgotten by its member
- * alone, and an owner neither reads nor forgets it;
  * a deleted member's memory stays the workspace's, named by nobody; a
  * forgotten memory leaves the list and is never recalled again; an account
  * outside the workspace reads and forgets nothing; and the bearer names the
@@ -145,38 +142,6 @@ it.layer(getTestDB())("the memories procedures", (it) => {
           asOwner.map((memory) => memory.forgettable),
           [true, true],
         );
-      }),
-  );
-
-  it.effect(
-    "a private memory is its member's alone: marked private and forgettable to them, and an owner neither reads nor forgets it",
-    () =>
-      Effect.gen(function* () {
-        const { owner, teammate, workspaceId, ask, keep } = yield* openTeam;
-        yield* keep(owner, TESTS_RUN);
-        yield* rememberMemory(workspaceId, teammate, DEPLOYS, undefined, { privately: true });
-
-        const asTeammate = memoriesOf(yield* ask(readMemories(teammate, workspaceId))).memories;
-        const privateOne = asTeammate.find((memory) => memory.private);
-        assert.ok(privateOne !== undefined);
-        const byOwner = yield* ask(forget(owner, workspaceId, privateOne.id));
-
-        assert.deepEqual(
-          asTeammate.map((memory) => [memory.text, memory.private, memory.forgettable]).toSorted(),
-          [
-            [DEPLOYS, true, true],
-            [TESTS_RUN, false, false],
-          ].toSorted(),
-        );
-        assert.deepEqual(wordsOf(yield* ask(readMemories(owner, workspaceId))), [TESTS_RUN]);
-        assert.deepEqual(wordsOf(byOwner), [TESTS_RUN]);
-        assert.deepEqual(
-          wordsOf(yield* ask(readMemories(teammate, workspaceId))).toSorted(),
-          [DEPLOYS, TESTS_RUN].toSorted(),
-        );
-        assert.deepEqual(wordsOf(yield* ask(forget(teammate, workspaceId, privateOne.id))), [
-          TESTS_RUN,
-        ]);
       }),
   );
 

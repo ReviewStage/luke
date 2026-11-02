@@ -27,9 +27,7 @@ import { rememberRefusal } from "./memory-provenance.js";
  * the service's own record of the agent (`runAgentRemember`,
  * `runAgentRecall`); the model names neither, so no input carries a
  * workspace or an account. Every member's agents in the workspace share the
- * one, and no agent of another workspace reads it. An agent's transcript is
- * read by every member of the workspace, so it neither keeps a private
- * memory nor is ever answered one. Only a root coding
+ * one, and no agent of another workspace reads it. Only a root coding
  * agent is offered them, never a worker handed one job, since what the
  * workspace keeps is the judgment of an agent that heard its developer. A
  * memory is prior context, not a rule: the developer's words now win, and a
@@ -166,7 +164,7 @@ export const REMEMBER_TOOL = {
     "tests, or ships, a constraint someone stated, or a fact you confirmed in the code that a " +
     "later agent would otherwise have to rediscover. Keep only what was settled, will still " +
     "hold next time, and helps the team, never a guess, an idea still being weighed, this task's own " +
-    "detail, a remark about one member kept shared, or anything that would be a credential, " +
+    "detail, a remark about one member, or anything that would be a credential, " +
     "key, token, or password. When what was said contradicts a memory recall answered, pass " +
     "that memory's id as replaces with the corrected statement, so the old one is rewritten " +
     "rather than kept beside it. Do it quietly: never ask the developer whether to keep something and " +
@@ -209,7 +207,6 @@ function memoryRecord(memory: StoredMemory): WireRecord {
   return {
     id: memory.id,
     text: memory.text,
-    private: memory.privateTo !== null,
     updatedAt: new Date(memory.updatedAt).toISOString(),
   };
 }
@@ -272,9 +269,7 @@ export function runRemember(
   if (looksLikeCredential(text)) return Effect.succeed(rejected(MEMORY_REFUSAL.CREDENTIAL));
   return orUnavailable(
     Effect.map(
-      rememberMemory(call.workspaceId, call.userId, text, replaces, {
-        readsPrivate: false,
-      }),
+      rememberMemory(call.workspaceId, call.userId, text, replaces),
       (outcome): WireRecord => {
         switch (outcome.kind) {
           case MEMORY_OUTCOME.NOT_FOUND:
@@ -295,7 +290,7 @@ export function runRemember(
 
 /** The call's workspace's memories a query finds, best first, and how many it holds. */
 function recalled(call: MemoryCall, query: string | undefined) {
-  return Effect.map(listMemories(call.workspaceId, null), (memories) => ({
+  return Effect.map(listMemories(call.workspaceId), (memories) => ({
     found: rankMemories(memories, query),
     total: memories.length,
   }));

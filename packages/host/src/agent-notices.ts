@@ -261,7 +261,6 @@ function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice[
     automationId: item.automationId,
     automationName: item.automationName,
     repository: item.repository,
-    ...(item.agentKind === undefined ? undefined : { agentKind: item.agentKind }),
     ...(item.asking === undefined ? undefined : { asking: item.asking }),
     ...(item.channelId === undefined ? undefined : { channelId: item.channelId }),
     ...(item.startedBy === undefined ? undefined : { startedBy: item.startedBy }),
@@ -290,7 +289,6 @@ function agentsOfOpenItems(
     held.set(item.agentId, {
       ...(was ?? {
         agentId: item.agentId,
-        ...(item.agentKind === undefined ? undefined : { agentKind: item.agentKind }),
         agentTitle: item.agentTitle,
         agentModel: item.agentModel,
         automationId: item.automationId,
@@ -370,7 +368,6 @@ function sameAgents(
         was.items === held.items &&
         was.toDo === held.toDo &&
         was.updatedAt === held.updatedAt &&
-        was.agentKind === held.agentKind &&
         was.agentTitle === held.agentTitle &&
         was.agentModel === held.agentModel &&
         was.automationId === held.automationId &&

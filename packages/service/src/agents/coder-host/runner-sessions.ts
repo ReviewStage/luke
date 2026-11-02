@@ -314,7 +314,7 @@ interface RunnerMessage {
 /** The message line as the runner takes it, the turn's own words ahead of the developer's, and what to keep once the runner took it. */
 interface OpenedLine {
   readonly line: InputLine;
-  /** What the session has handed once the line is, written on the row, and the desk's notices it showed marked read; run only once the runner took the line, so one it never took leaves both for the next. */
+  /** What the session has handed once the line is, written on the row; run only once the runner took the line, so one it never took leaves it for the next. */
   readonly taken: Effect.Effect<void, never, DatabaseServices>;
 }
 

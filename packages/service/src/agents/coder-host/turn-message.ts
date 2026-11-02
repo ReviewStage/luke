@@ -194,8 +194,7 @@ export function recordNativeTurnHanded(
 /**
  * What a native harness's session has handed once its harness compacted its
  * history (`handedAfterCompaction`), so the next message hands the call's
- * words, the task, and the desk again, as eve's store hook does on eve's
- * compaction.
+ * words and the task again, as eve's store hook does on eve's compaction.
  */
 export function compactNativeTurnHanded(
   target: ConversationTarget,

@@ -23,8 +23,8 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * live-chip-names.test.ts -- a chip of a plan, an agent, a page, or a
  * section is called by what it is called now wherever the window holds it,
  * whatever words its link was written with: a plan written while still
- * Untitled by its name, an agent by its tab's name (Luke for an operator,
- * its model for one untitled), a page by its title, a section by its
+ * Untitled by its name, an agent by its tab's name (its model for one
+ * untitled), a page by its title, a section by its
  * heading; one the window cannot read keeps the words it was written with.
  * A chip naming a plan before the window ever read its task list has the
  * list followed, once between every chip and every draw, so the name lands;

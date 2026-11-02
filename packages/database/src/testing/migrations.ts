@@ -100,13 +100,14 @@ const DROPPED_TABLES = [
 /** The indexes a later migration dropped on a table that stands, by every name each held: the operator's one per member (`operator_drop`). */
 const DROPPED_INDEXES = ["coding_agent_member_operator", "agent_member_operator"] as const;
 
-/** The columns a later migration dropped, by every name each held, and the indexes that went with them: an automation's task (`20261028195432_automation_task_drop`). */
+/** The columns a later migration dropped, by every name each held, and the indexes that went with them: an automation's task (`20261028195432_automation_task_drop`), and a private memory's member (`memory_private_drop`). */
 const DROPPED_COLUMNS = [
   {
     table: "automation",
     columns: ["plan_id", "task_id"],
     indexes: ["automation_trigger_plan", "automation_trigger_task"],
   },
+  { table: "memory", columns: ["private_to"], indexes: [] },
 ] as const;
 
 /** Whether the statement names a column since dropped, or an index that went with it. */

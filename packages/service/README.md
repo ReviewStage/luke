@@ -1416,15 +1416,8 @@ the starter of the agent that kept it, or of the one that last corrected it.
 Like the workspace's git history it outlives that member: leaving keeps it,
 and deleting the account sets `user_id` null, read as a former member.
 
-A private memory is the one exception: `private_to` names the one member who
-reads and forgets it in Settings, and to every other member, an owner or
-admin included, its id names nothing. No agent keeps or recalls one, because
-an agent's transcript is read by every member, so an agent's recall reads the
-shared memories alone. It is that member's, not the workspace's, so its foreign key cascades
-and it leaves with their account. Recall and Settings read through
-`listMemories(workspaceId, readerId)`, which answers the shared memories and
-the reader's own private ones; the same words stand once only within one
-visibility, and a correction keeps the visibility of the memory it corrects.
+Recall and Settings read through `listMemories(workspaceId)`, and the same
+words stand once.
 
 The agent keeps and searches it through `remember` and `recall`
 (`src/agents/memory-tools.ts`), offered to the `coder` role alone and never a

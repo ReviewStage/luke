@@ -1,9 +1,4 @@
-import type {
-  AgentKind,
-  AgentStatus,
-  AgentSummary,
-  TasklessAgent,
-} from "@luke/features/agent-wire";
+import type { AgentStatus, AgentSummary, TasklessAgent } from "@luke/features/agent-wire";
 import type { ChannelThreadAgent } from "@luke/features/channel-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
@@ -240,7 +235,6 @@ export function tasklessSubject(
 
 /** An agent as a line read beside its thread names it: its task's row, or its channel thread; where it stands, where the line says so. */
 export type AgentLine = ChannelThreadAgent & {
-  readonly kind?: AgentKind | undefined;
   readonly status?: AgentStatus | undefined;
 };
 

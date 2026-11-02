@@ -42,7 +42,7 @@ import type {
   AccountInboxTask,
   AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
-import { AGENT_KIND, type AgentAttachment, type AgentKind } from "@luke/features/agent-wire";
+import type { AgentAttachment } from "@luke/features/agent-wire";
 import type { ChannelThreadAgent } from "@luke/features/channel-wire";
 import type { ConversationMediaType } from "@luke/features/conversation-picture-wire";
 import {
@@ -598,14 +598,13 @@ function itemVisibleTo(userId: string): SQL {
 /** The step a link names the agent's workspace by: its slug, or its id where it has none, as a plan's picture names it. */
 const AGENT_WORKSPACE_STEP = sql<string>`coalesce((select ${organization.slug} from ${organization} where ${organization.id} = ${AGENT_WORKSPACE}), ${AGENT_WORKSPACE})`;
 
-/** The agent's row under its own lock, where the account started it and is still a member of its workspace, which serializes one agent's posts; its kind says whom they may wait on. */
+/** The agent's row under its own lock, where the account started it and is still a member of its workspace, which serializes one agent's posts. */
 const lockAgent = SqlSchema.findOneOption({
   Request: AgentKeySchema,
   Result: Schema.Struct({
     id: Schema.String,
     organizationId: Schema.String,
     workspaceStep: Schema.String,
-    kind: Schema.Literals(Object.values(AGENT_KIND)),
     underPilot: Schema.Boolean,
   }),
   execute: ({ userId, agentId }) =>
@@ -615,7 +614,6 @@ const lockAgent = SqlSchema.findOneOption({
           id: agentTable.id,
           organizationId: AGENT_WORKSPACE,
           workspaceStep: AGENT_WORKSPACE_STEP,
-          kind: agentTable.kind,
           underPilot: agentUnderPilot(),
         })
         .from(agentTable)
@@ -1207,11 +1205,10 @@ const findWaitingItems = SqlSchema.findAll({
     ),
 });
 
-/** One open item of an agent with no task as the account's read carries it, with its automation and repository where a task's item names its task, and its agent's kind. */
+/** One open item of an agent with no task as the account's read carries it, with its automation and repository where a task's item names its task. */
 const TasklessRowSchema = Schema.Struct({
   id: Schema.String,
   agentId: Schema.String,
-  agentKind: Schema.Literals(Object.values(AGENT_KIND)),
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
   startedBy: Schema.String,
@@ -1239,7 +1236,6 @@ const findTasklessWaitingItems = SqlSchema.findAll({
         .select({
           id: inboxItem.id,
           agentId: inboxItem.agentId,
-          agentKind: agentTable.kind,
           agentTitle: agentTable.title,
           agentModel: agentTable.model,
           startedBy: agentTable.userId,
@@ -1356,7 +1352,6 @@ const findAutomationsWithItems = SqlSchema.findAll({
 
 /** How an agent with no task holding items is named, as an open item of it names it (`findTasklessWaitingItems`), its automation only to a reader who may read it. */
 const AGENT_HOLDING_NAMING = {
-  agentKind: agentTable.kind,
   agentTitle: agentTable.title,
   agentModel: agentTable.model,
   automationId: automation.id,
@@ -1371,7 +1366,6 @@ const AgentItemsRowSchema = Schema.Struct({
   items: Schema.Number,
   toDo: Schema.Number,
   updatedAt: InstantColumnSchema,
-  agentKind: Schema.Literals(Object.values(AGENT_KIND)),
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
   automationId: Schema.NullOr(Schema.String),
@@ -1468,7 +1462,6 @@ export function accountInboxLiveStatements(
         {
           id: inboxItem.id,
           agentId: inboxItem.agentId,
-          agentKind: agentTable.kind,
           agentTitle: agentTable.title,
           agentModel: agentTable.model,
           startedBy: agentTable.userId,
@@ -2357,7 +2350,7 @@ const findWorkspaceChannel = SqlSchema.findOneOption({
  */
 function placeOf(
   agent: InboxAgent,
-  locked: LockedWorkspace & { readonly kind: AgentKind },
+  locked: LockedWorkspace,
   post: InboxThreadPost,
 ): InboxStoreEffect<
   Result.Result<

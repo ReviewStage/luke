@@ -1,5 +1,4 @@
 import { Schema as EffectSchema } from "effect";
-import { agentKindSchema } from "./agent-wire.js";
 import { automationRunReasonSchema } from "./automation-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
@@ -120,7 +119,7 @@ export type AccountInboxTask = typeof accountInboxTaskSchema.Type;
  * One open item of an agent with no task, as the account's read carries it:
  * where a task's item names its task, this names the automation whose run
  * started the agent and the repository it works in, which together stand
- * in the task's place, and the agent's kind. The repository is null for an agent that works in none,
+ * in the task's place. The repository is null for an agent that works in none,
  * carried only to a reader that asked (`ACCOUNT_INBOX_REPOSITORYLESS`).
  * The automation, and its name with it, is null for
  * an agent no automation started, once that automation is deleted, and for
@@ -131,8 +130,6 @@ export type AccountInboxTask = typeof accountInboxTaskSchema.Type;
 export const accountTasklessEntrySchema = EffectSchema.Struct({
   id: wireUuidSchema,
   agentId: wireUuidSchema,
-  /** What kind of agent posted it; absent from a service before it, which reads as a coder. */
-  agentKind: EffectSchema.optionalKey(agentKindSchema),
   agentTitle: EffectSchema.NullOr(EffectSchema.String),
   agentModel: EffectSchema.String,
   /** The account that started the agent, as an item of a task's agent says it, and on the same terms. */
@@ -180,7 +177,6 @@ export const accountInboxAgentSchema = EffectSchema.Struct({
   items: countedNumber,
   toDo: countedNumber,
   updatedAt: countedNumber,
-  agentKind: accountTasklessEntrySchema.fields.agentKind,
   agentTitle: accountTasklessEntrySchema.fields.agentTitle,
   agentModel: accountTasklessEntrySchema.fields.agentModel,
   automationId: accountTasklessEntrySchema.fields.automationId,

@@ -716,9 +716,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         );
         const records = read.ok ? read.value.filter((record) => !awaitsTurn(record)) : [];
         const speakers = yield* teammateSpeakers(admitted.target, records);
-        const said = rotationSeedText(records.map(messageOf), seams.now(), speakers);
         // Note that Luke keeps no compaction summary of a coding agent's history, so none leads it.
-        return said;
+        return rotationSeedText(records.map(messageOf), seams.now(), speakers);
       }),
 
     checkOut: (admitted, sandbox) =>

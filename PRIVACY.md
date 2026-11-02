@@ -247,7 +247,7 @@ memory is the workspace's shared knowledge: any member's agent there
 may read it, and Settings › Memory shows it to every member with your name on
 it. No agent of another workspace reads it. Luke refuses to keep words that
 look like a key, token, or password, and agents are told never to keep a
-remark about one member as a shared memory. An agent keeps nothing on a turn an automation
+remark about one member. An agent keeps nothing on a turn an automation
 started, or once that turn has read the web, since neither's words are a
 member's. In Settings › Memory you can forget a memory
 holding your words, and the workspace's owners and admins can forget any;
@@ -256,12 +256,7 @@ project's history, a memory outlives the person who said it: leaving a
 workspace, or deleting your account, leaves the memories you kept with the
 workspace, and once your account is gone they no longer carry your name.
 Deleting a task does not remove a memory kept while working on it, and a
-workspace's memories go when the workspace does. No agent keeps or recalls
-a private memory, since your teammates can open its transcript. A private
-memory kept before that is yours alone: Settings › Memory shows it to you
-alone, marked Only you, no other member, an owner or admin included, can
-read or forget it, and it leaves with your account when you delete it rather
-than staying with the workspace.
+workspace's memories go when the workspace does.
 
 **Pinned repositories.** When you pin a repository in the sidebar, our
 service stores its name and when you pinned it under your account, so the pin

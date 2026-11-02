@@ -457,25 +457,9 @@ export function automationDraft(
   };
 }
 
-/**
- * Whether the automation a draft opened as needs no repository chosen: one
- * on a task, whose repository is its task's, and one the service took with
- * none, for as long as its runs still go to the agent it was aimed at.
- */
-export function repositoryHeld(
-  draft: AutomationDraft,
-  automation: AutomationSummary | undefined,
-): boolean {
-  if (automation === undefined) return false;
-  if (automation.planId !== null) return true;
-  const target = automation.target;
-  return (
-    (automation.repositories ?? []).length === 0 &&
-    target?.kind === AUTOMATION_TARGET.SAME_AGENT &&
-    target.agentId !== null &&
-    draft.target === AUTOMATION_TARGET.SAME_AGENT &&
-    draft.agentId === target.agentId
-  );
+/** Whether the automation a draft opened as needs no repository chosen: one on a task, whose repository is its task's. */
+export function repositoryHeld(automation: AutomationSummary | undefined): boolean {
+  return automation !== undefined && automation.planId !== null;
 }
 
 /**

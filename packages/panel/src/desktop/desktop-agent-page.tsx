@@ -140,8 +140,7 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * has a row of its own among the sidebar's tasks, what that row offers too:
  * Mark as unread or Mark as read, through a task's marks
  * (`agent-read-marks.ts`), and Pin or Unpin and Move to section, the
- * reader's own, while the agent is not archived, and never for Luke, who
- * has a row of his own kind; ⌘J and New terminal open its terminal as on a
+ * reader's own, while the agent is not archived; ⌘J and New terminal open its terminal as on a
  * task (`terminal-commands.tsx`). An archived agent takes no message, so
  * its composer gives way to its own Unarchive, which its ⋯ offers in
  * Archive's place, and it is not renamed. An agent the service will not hand the reader,

@@ -1,6 +1,6 @@
 import { keepIdentity, MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
 import { describeWire, readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
-import { Effect, Schema as EffectSchema, Option, Result, SchemaTransformation } from "effect";
+import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { AGENT_QUEUE_BOUNDS, agentQueueSchema } from "./agent-queue-wire.js";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
@@ -203,16 +203,6 @@ export const AGENT_KIND = {
 } as const;
 
 export type AgentKind = (typeof AGENT_KIND)[keyof typeof AGENT_KIND];
-
-/**
- * An agent's kind as a reader decodes it off the wire. Note that a kind this
- * build does not know reads as a coder rather than refused, because a list
- * carries every agent's kind and one row of a kind added later would
- * otherwise fail the whole list for every build shipped before it.
- */
-export const agentKindSchema = EffectSchema.Literals(Object.values(AGENT_KIND)).pipe(
-  EffectSchema.catchDecoding(() => Effect.succeed(Option.some(AGENT_KIND.CODER))),
-);
 
 /**
  * Where an agent's runner and checkout live: a Vercel Sandbox, as every

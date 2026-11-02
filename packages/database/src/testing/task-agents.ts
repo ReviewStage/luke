@@ -16,8 +16,6 @@ import { inboxMessage } from "../schemas/inbox-message.js";
 import { conversations } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 
-type AgentKind = (typeof agentTable.$inferInsert)["kind"];
-
 /**
  * task-agents.ts -- a coding agent on a test's task, and an inbox item it holds open, written beneath the store.
  *
@@ -29,13 +27,8 @@ type AgentKind = (typeof agentTable.$inferInsert)["kind"];
  * no task is written the same way.
  */
 
-/** An agent of the member's on the task, or on none, of the kind given where one is, with its own conversation; its id. */
-export const openTaskAgent = (
-  userId: string,
-  organizationId: string,
-  taskId: string | null,
-  kind?: AgentKind,
-) =>
+/** An agent of the member's on the task, or on none, with its own conversation; its id. */
+export const openTaskAgent = (userId: string, organizationId: string, taskId: string | null) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = randomUUID();
@@ -54,7 +47,6 @@ export const openTaskAgent = (
       repository: "acme/api",
       repositories: ["acme/api"],
       idempotencyKey: randomUUID(),
-      ...(kind === undefined ? undefined : { kind }),
     });
     return id;
   });
