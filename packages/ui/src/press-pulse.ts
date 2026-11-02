@@ -10,14 +10,16 @@ import { replayMotion } from "./replay-motion.js";
  * it gives fits its shape (`PRESS_PULSE`): a Button's face, the glyph and
  * words inside its box; a small control whole; a row or a card, only a
  * little, since a wide shape that gave as much would lurch; a row flush to
- * the frame around it, a card's head or a table's row, by what it holds
- * alone, since its fill shrinking inside the frame that stands still would
- * open a gap at the frame's edges; and words among words, which a
- * transform cannot move, by a fade. Each runs over the
+ * the frame around it, a table's row, by what it holds alone, since its
+ * fill shrinking inside the frame that stands still would open a gap at the
+ * frame's edges; and words among words, which a transform cannot move, by a
+ * fade. Each runs over the
  * motion tokens (`press-pulse.css`), which reduced motion and a capture run
  * hold still, and moves by `scale` or `opacity` alone, so a transform the
  * shape stands at, a drag's or a swipe's, composes with it rather than
- * being replaced. A press refused plays nothing.
+ * being replaced. A press refused plays nothing, and neither does a press
+ * that folds or unfolds: a fold's chevron turning is its answer, and a pulse
+ * on its line would move the words being read.
  */
 
 /** How a press a control took is answered, by its shape. */
@@ -28,7 +30,7 @@ export const PRESS_PULSE = {
   CONTROL: "control",
   /** A wide shape, a row or a card, gives a little and settles. */
   QUIET: "quiet",
-  /** A row flush to a frame that stands still gives a little inside its fill, which holds the frame: a card's head, a table's row. */
+  /** A row flush to a frame that stands still gives a little inside its fill, which holds the frame: a table's row. */
   FLUSH: "flush",
   /** Words among words, which no transform moves, fade a little and come back. */
   WORDS: "words",

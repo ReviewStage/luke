@@ -1,7 +1,6 @@
 import { type KeyboardEvent, type ReactNode, type RefObject, useId, useRef } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { FoldChevronIcon } from "../../face/glyphs.js";
-import { pulseOnPress } from "../../press-pulse.js";
 import { LIST_COLUMN, TASK_PROPERTY } from "../../tasks-page-model.js";
 import { BUTTON_SIZE } from "../button/button.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, CARD_SHADOW, Card } from "../card/card.js";
@@ -449,7 +448,7 @@ export function TaskRow({
               className={FOLD}
               aria-label={fold.label}
               aria-expanded={fold.open}
-              onClick={pulseOnPress(() => fold.onOpenChange(!fold.open))}
+              onClick={() => fold.onOpenChange(!fold.open)}
             >
               {/* Note that the chevron turns on the one turn every fold makes (`disclosure.css`). */}
               <span className="luke-disclosure-turn" data-open={fold.open}>
