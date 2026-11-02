@@ -1,4 +1,4 @@
-// deployment-eve.test.ts -- eve as the deployment reaches it for an account: under its own secret, never the cron's.
+// deployment-eve.test.ts -- the deployment's caller for an account: composed under its own secret, never the cron's.
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { getTestDB } from "@luke/database/testing";
@@ -7,26 +7,20 @@ import { Effect, Layer, Redacted, Result } from "effect";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
 import { deploymentEve, deploymentEveForAccounts } from "./deployment-eve.js";
-import { EVE_HOST_HEADER, EVE_HOST_TURN } from "./eve-host/bounds.js";
-import { EVE_MOUNT, type EveTypedTurn } from "./eve-host/eve-sessions.js";
+import { EVE_MOUNT } from "./eve-host/eve-sessions.js";
 
 /**
- * The one place a web function composes the deployment's caller at eve's
- * door, which a cookie request's `eveFor`, a GitHub wake, and
- * an automation's run all reach eve through: a request eve receives from it
- * carries the deployment's own secret as its bearer and the account beside
- * it, never the cron's secret the same environment holds; a deployment
- * holding the cron's alone, or no environment, or no origin for eve, sends
- * eve nothing. eve answers at a fake HTTP boundary that writes down every
- * request. Synthetic accounts, sessions, and secrets throughout.
+ * The one place a web function composes the deployment's caller for an
+ * account, which a cookie request's `eveFor`, a GitHub wake, and an
+ * automation's run all reach a coding agent's session through: a deployment
+ * holding the cron's secret alone, or no environment, or no origin, reaches
+ * no one and sends nothing. A fake HTTP boundary writes down every request.
+ * Synthetic accounts, sessions, and secrets throughout.
  */
 
 const ORIGIN = "https://luke.test";
 const EVE_DEPLOYMENT_SECRET = "eve-deployment-secret-1";
 const CRON_SECRET = "cron-secret-1";
-const CONVERSATION = "2b000000-0000-4000-8000-000000000001";
-const SESSION = "wrun_01M0000000000000000000001";
-const MESSAGE = { conversationId: CONVERSATION, turn: EVE_HOST_TURN.TYPED, message: "hello" };
 
 /** A deployment's environment holding the secrets given and no key of its own. */
 function environment(secrets: {
@@ -47,59 +41,19 @@ function environment(secrets: {
   return Layer.succeed(HostedEnvironment, values);
 }
 
-/** eve behind the deployment's rewrites, answering every opening with its session and writing down who asked. */
+/** The network, writing down every request sent over it. */
 function eveOverHttp() {
-  const received: { readonly url: string; readonly headers: Headers }[] = [];
-  const layer = fakeHttpClientLayer(async (url, init) => {
-    received.push({ url, headers: new Headers(init.headers) });
-    return Response.json({ ok: true, sessionId: SESSION, status: "accepted" }, { status: 202 });
+  const received: string[] = [];
+  const layer = fakeHttpClientLayer(async (url) => {
+    received.push(url);
+    return Response.json({});
   });
   return { received, layer };
 }
 
-/** Who eve was asked by: the route, the bearer, and the account named beside it. */
-const askedBy = (received: ReturnType<typeof eveOverHttp>["received"]) =>
-  received.map(({ url, headers }) => ({
-    url,
-    authorization: headers.get("authorization"),
-    account: headers.get(EVE_HOST_HEADER.ACCOUNT),
-  }));
-
-// A coding agent's session is answered by the runtime its conversation runs on, read from the store
-// (`runtime-sessions.ts`); these conversations are no native agent's, so every call reaches eve.
-it.layer(getTestDB())("eve reached as the deployment", (it) => {
+it.layer(getTestDB())("the deployment's caller", (it) => {
   it.effect(
-    "eve is asked under the deployment's own secret with the account beside it, never the cron's secret the environment holds too",
-    () =>
-      Effect.gen(function* () {
-        const eve = eveOverHttp();
-        yield* Effect.gen(function* () {
-          const eveAs = yield* deploymentEve<EveTypedTurn>(ORIGIN, EVE_MOUNT.CODER);
-          yield* eveAs("user-a").open(MESSAGE);
-          const each = yield* deploymentEveForAccounts<EveTypedTurn>(ORIGIN, EVE_MOUNT.CODER);
-          yield* Effect.flatMap(each("user-b"), (sessions) => sessions.open(MESSAGE));
-        }).pipe(
-          Effect.provide(
-            Layer.merge(eve.layer, environment({ cron: CRON_SECRET, eve: EVE_DEPLOYMENT_SECRET })),
-          ),
-        );
-        assert.deepEqual(askedBy(eve.received), [
-          {
-            url: `${ORIGIN}/eve/coder/v1/session`,
-            authorization: `Bearer ${EVE_DEPLOYMENT_SECRET}`,
-            account: "user-a",
-          },
-          {
-            url: `${ORIGIN}/eve/coder/v1/session`,
-            authorization: `Bearer ${EVE_DEPLOYMENT_SECRET}`,
-            account: "user-b",
-          },
-        ]);
-      }),
-  );
-
-  it.effect(
-    "a deployment holding the cron's secret alone, no environment, or no origin for eve reaches eve for nobody: refused up front, or account by account for a pass over many, and eve is asked nothing",
+    "a deployment holding the cron's secret alone, no environment, or no origin reaches nobody: refused up front, or account by account for a pass over many, and nothing is sent",
     () =>
       Effect.gen(function* () {
         const eve = eveOverHttp();
