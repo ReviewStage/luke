@@ -626,32 +626,41 @@ function seedThreads(
 
 /* ----- The credential ----- */
 
-/** Dean's Anthropic credential, sealed under the ring the local server opens it with, and marked his agents' payer. */
-function seedCredential(credential: DemoCredential) {
+/**
+ * Dean's credential sealed under the ring the local server opens it with.
+ * Note that it is sealed before anything is written, because a ring that
+ * does not parse should refuse the seed while the database is still empty.
+ */
+function sealedCredential(credential: DemoCredential) {
+  const ring = parseKeyRing(credential.ring);
+  if (Result.isFailure(ring)) {
+    return Effect.fail(new DemoSeedRefused({ step: "the provider key ring" }));
+  }
+  const owner = {
+    userId: DEMO_DEAN.id,
+    provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+    kind: credential.kind,
+  };
+  return Effect.succeed({
+    owner,
+    sealed: sealProviderKey(ring.success, owner, credential.key),
+    hint: providerKeyHint(credential.key),
+  });
+}
+
+/** Dean's sealed credential saved, and marked his agents' payer. */
+function seedCredential({
+  owner,
+  sealed,
+  hint,
+}: Effect.Success<ReturnType<typeof sealedCredential>>) {
   return Effect.gen(function* () {
-    const ring = parseKeyRing(credential.ring);
-    if (Result.isFailure(ring)) {
-      return yield* Effect.fail(new DemoSeedRefused({ step: "the provider key ring" }));
-    }
-    const owner = {
-      userId: DEMO_DEAN.id,
-      provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
-      kind: credential.kind,
-    };
-    const sealed = sealProviderKey(ring.success, owner, credential.key);
     const now = yield* Effect.map(Clock.currentTimeMillis, (at) => new Date(at));
-    yield* saveProviderKey(
-      owner.userId,
-      owner.provider,
-      owner.kind,
-      sealed,
-      providerKeyHint(credential.key),
-      null,
-      now,
-    );
+    yield* saveProviderKey(owner.userId, owner.provider, owner.kind, sealed, hint, null, now);
     const marked = yield* setProviderKeyForAgents(owner.userId, owner.provider, owner.kind, true);
-    if (!marked)
+    if (!marked) {
       return yield* Effect.fail(new DemoSeedRefused({ step: "the credential's mark for agents" }));
+    }
   });
 }
 
@@ -661,13 +670,18 @@ function seedCredential(credential: DemoCredential) {
  * Writes the acme world into a freshly migrated database, and Dean's
  * credential where one is handed in; the ids it chose. A database that
  * holds any account already is refused, a seeded one among them, so a seed
- * runs once per database.
+ * runs once per database. Note that the seed is no one transaction, since
+ * Better Auth writes through a pool of its own, so one that fails partway
+ * leaves a database to throw away, as `run.sh --demo` throws its own away
+ * on every exit; the credential is sealed first, so a ring that does not
+ * parse fails it before anything is written.
  */
 export function seedDemoWorld(
   auth: DemoAuth,
   credential: Option.Option<DemoCredential>,
 ): DemoSeedEffect<DemoSeeded> {
   return Effect.gen(function* () {
+    const sealed = yield* Effect.transposeOption(Option.map(credential, sealedCredential));
     const clock = yield* seedClock;
     const key = clientKeys();
     const { personalWorkspaceId, workspaceId, memberIds } = yield* seedPeople(auth, clock);
@@ -682,7 +696,7 @@ export function seedDemoWorld(
       posters.set(agent, { userId: row.userId, taskId: agent.task.id, agentId: row.id });
     }
     yield* seedThreads(posters, clock, key);
-    if (Option.isSome(credential)) yield* seedCredential(credential.value);
+    if (Option.isSome(sealed)) yield* seedCredential(sealed.value);
     return {
       deanId: DEMO_DEAN.id,
       personalWorkspaceId,
