@@ -9,7 +9,7 @@ import {
 import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "@luke/service/auth/oauth-clients";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
-import { jwt } from "better-auth/plugins";
+import { jwt, lastLoginMethod } from "better-auth/plugins";
 import { Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { localSignIn } from "../server/local-sign-in";
@@ -19,7 +19,8 @@ import { localSignIn } from "../server/local-sign-in";
  * the desktop's authorization, over an in-memory database holding the seeded
  * member: the desktop's PKCE flow, sent to the login page, comes back through
  * the local sign-in to the desktop's loopback with a code for that member,
- * and a browser that opens the page bare lands on the web app signed in.
+ * and a browser that opens the page bare lands on the web app signed in, each
+ * leaving the way in a sign-in records.
  * Synthetic accounts throughout.
  */
 
@@ -44,7 +45,11 @@ const PKCE = {
 const decodeTokens = Schema.decodeUnknownSync(Schema.Struct({ access_token: Schema.String }));
 const decodeUserInfo = Schema.decodeUnknownSync(Schema.Struct({ sub: Schema.String }));
 const decodeSession = Schema.decodeUnknownSync(
-  Schema.NullOr(Schema.Struct({ user: Schema.Struct({ id: Schema.String }) })),
+  Schema.NullOr(
+    Schema.Struct({
+      user: Schema.Struct({ id: Schema.String, lastLoginMethod: Schema.NullOr(Schema.String) }),
+    }),
+  ),
 );
 
 function serviceAuth() {
@@ -69,6 +74,7 @@ function serviceAuth() {
     // The plugins `auth.ts` installs that the desktop's authorization reaches, in its order.
     plugins: [
       jwt(JWT_KEY_STORAGE),
+      lastLoginMethod({ storeInDatabase: true }),
       oauthProvider({
         loginPage: LOGIN_PAGE,
         consentPage: "/consent.html",
@@ -96,6 +102,14 @@ function location(response: Response): URL {
   return new URL(next, SERVICE_URL);
 }
 
+/** The account the browser's cookie is signed in as, as the web app reads it. */
+async function sessionUser(auth: Auth, cookie: string) {
+  const session = await auth.handler(
+    new Request(`${SERVICE_URL}/api/auth/get-session`, { headers: { cookie } }),
+  );
+  return decodeSession(await session.json())?.user;
+}
+
 function navigate(auth: Auth, url: URL, cookie?: string): Promise<Response> {
   const navigation = { accept: "text/html", "sec-fetch-mode": "navigate" };
   return auth.handler(
@@ -110,7 +124,8 @@ async function loginPageOfDesktopAuthorize(auth: Auth): Promise<URL> {
     client_id: DESKTOP_OAUTH_CLIENT.id,
     redirect_uri: LOOPBACK,
     scope: "openid profile email offline_access",
-    state: "oauth-state",
+    // The desktop names the provider its card chose ahead of the state's entropy.
+    state: "google.oauth-state",
     code_challenge: PKCE.challenge,
     code_challenge_method: "S256",
     prompt: "login",
@@ -143,7 +158,8 @@ test("the desktop's PKCE sign-in completes as the seeded member through the loca
   // Authorize asked `prompt=login`, which only the sign-in's own resume drops; kept, this would land on the login page again.
   const loopback = location(await navigate(auth, location(signedIn), browser));
   assert.equal(`${loopback.origin}${loopback.pathname}`, LOOPBACK);
-  assert.equal(loopback.searchParams.get("state"), "oauth-state");
+  assert.equal(loopback.searchParams.get("state"), "google.oauth-state");
+  assert.equal((await sessionUser(auth, browser))?.lastLoginMethod, "google");
 
   const tokens = await auth.handler(
     new Request(`${SERVICE_URL}/api/auth/oauth2/token`, {
@@ -174,12 +190,9 @@ test("a browser that opens the sign-in bare lands on the web app signed in as th
   );
   assert.equal(location(signedIn).pathname, "/app");
 
-  const session = await auth.handler(
-    new Request(`${SERVICE_URL}/api/auth/get-session`, {
-      headers: { cookie: cookiesFrom(signedIn) },
-    }),
-  );
-  assert.equal(decodeSession(await session.json())?.user.id, SEEDED.id);
+  const user = await sessionUser(auth, cookiesFrom(signedIn));
+  assert.equal(user?.id, SEEDED.id);
+  assert.equal(user?.lastLoginMethod, "github");
 });
 
 test("an authorization the provider did not sign mints no session", async () => {

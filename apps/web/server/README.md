@@ -394,7 +394,9 @@ and never under `server/routes/`, so no deployed function reaches it.
 
 The one such route is the demo's sign-in (`server/local-sign-in.ts`), which
 answers `/sign-in.html` in the page's place: it mints a session for the member
-the demo seed writes, sets Better Auth's session cookie, and sends the browser
+the demo seed writes, records its way in as a sign-in does (the provider the
+desktop's `state` names, or GitHub; the web app reads it to count a session
+signed in), sets Better Auth's session cookie, and sends the browser
 back to authorize on the query the provider signed, less `prompt=login`, so the
 desktop's sign-in completes to its loopback with no provider. A bare
 `/sign-in.html` lands on `/app` signed in. Each request reads the environment

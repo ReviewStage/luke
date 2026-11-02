@@ -6,11 +6,11 @@
  * deployment's OAuth secrets never reach the Mac. The desktop's authorize
  * finds no session and sends the browser to the login page (`LOGIN_PAGE`),
  * which this answers instead: it mints a session for the member through
- * Better Auth's own adapter, sets the cookie Better Auth's sign-in would set,
- * and sends the browser back to authorize, which now sees a session and goes
- * on to the desktop's loopback as it does once a provider returns. A request
- * with no authorization to resume is a browser's own, which lands on the web
- * app signed in.
+ * Better Auth's own adapter, records the way in on the account and sets the
+ * cookie as Better Auth's sign-in would, and sends the browser back to
+ * authorize, which now sees a session and goes on to the desktop's loopback
+ * as it does once a provider returns. A request with no authorization to
+ * resume is a browser's own, which lands on the web app signed in.
  *
  * A session for anyone, unasked, is what no deployment may ever answer, so
  * two guards hold this to one machine. It mounts among the local server's own
@@ -24,6 +24,11 @@
  */
 
 import { verifyOAuthQueryParams } from "@better-auth/oauth-provider";
+import {
+  SOCIAL_PROVIDER,
+  type SocialProvider,
+  socialProviderFromState,
+} from "@luke/features/sign-in-provider";
 import { LOGIN_PAGE } from "@luke/service/auth/auth-policy";
 import type { Route } from "@luke/service/route";
 import type { AuthContext } from "better-auth";
@@ -47,6 +52,9 @@ const WEB_APP_PATH = "/app";
 const SIGNING_PARAMETERS = ["sig", "exp", "ba_iat", "ba_pl", "ba_param"] as const;
 
 const PROMPT = { PARAMETER: "prompt", LOGIN: "login" } as const;
+
+/** The authorization's parameter the desktop names the provider its card chose in, ahead of the entropy. */
+const STATE_PARAMETER = "state";
 
 const STATUS = { FOUND: 302, BAD_REQUEST: 400, FORBIDDEN: 403, CONFLICT: 409 } as const;
 
@@ -96,6 +104,18 @@ async function resumedAuthorization(
   return resumed;
 }
 
+/**
+ * The way in the sign-in records on the account, as Better Auth's
+ * `lastLoginMethod` plugin records a real one's: the provider the desktop's
+ * card chose, read from its authorization's `state` as the real login page
+ * reads it, or GitHub for a browser's own. The web app counts a session
+ * signed in only where its account names one (`@luke/host`'s cookie account
+ * source), so a sign-in that left none would land on the sign-in card.
+ */
+function loginMethod(resumed: URLSearchParams | undefined): SocialProvider {
+  return socialProviderFromState(resumed?.get(STATE_PARAMETER) ?? null) ?? SOCIAL_PROVIDER.GITHUB;
+}
+
 /** The session's cookie as Better Auth's sign-in sets it: the token signed under the secret, with the cookie's own attributes and the session's lifetime. */
 async function sessionCookie(context: SignInContext, token: string): Promise<string> {
   const { name, attributes } = context.authCookies.sessionToken;
@@ -131,6 +151,7 @@ async function signIn(auth: LocalSignInAuth, userId: string, request: Request): 
     );
   }
   const session = await context.internalAdapter.createSession(userId);
+  await context.internalAdapter.updateUser(userId, { lastLoginMethod: loginMethod(resumed) });
   return new Response(null, {
     status: STATUS.FOUND,
     headers: {
