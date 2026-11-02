@@ -81,7 +81,7 @@ import {
 } from "../ai-elements/conversation.js";
 import { useAutomation } from "../automation-directory.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { PhoneHead } from "../desktop/phone-head.js";
+import { PhoneHead, phoneFindGroups } from "../desktop/phone-head.js";
 import { unreadShown } from "../failure-report.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { useSteadyDoor } from "../steady-door.js";
@@ -1018,7 +1018,8 @@ function InboxItemMenu({
     onAskClose: close.ask,
     keyed: true,
   });
-  const groups = itemGroups(lead);
+  // Note that a phone's ⋯, the one given a lead, also stands in for ⌘F, read here as the menu is drawn rather than as the lead was made.
+  const groups = itemGroups(lead === NO_LEAD ? lead : [...lead, ...phoneFindGroups()]);
   if (groups.length === 0) return null;
   return (
     <>

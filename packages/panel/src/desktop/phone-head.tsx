@@ -15,7 +15,7 @@ import {
 } from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
-import { ActionMenu, type MenuEnds, type MenuEntry } from "./action-menu.js";
+import { ActionMenu, type MenuAction, type MenuEnds, type MenuEntry } from "./action-menu.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
 
 /**
@@ -133,7 +133,7 @@ export function PhoneBack({ back }: { back: TaskHeadBack }): React.JSX.Element {
  * that finds spreads it in as a group of its own, after its views; it is
  * no group at all where nothing offers Find, so no rule is drawn for it.
  */
-export function phoneFindGroups(): readonly (readonly MenuEntry[])[] {
+export function phoneFindGroups(): MenuAction[][] {
   if (!appCommandOffered(APP_COMMAND.FIND)) return [];
   return [
     [

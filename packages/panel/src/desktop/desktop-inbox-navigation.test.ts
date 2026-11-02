@@ -1099,6 +1099,7 @@ test("on a phone an item is headed by its way back's glyph, its task centred, wh
     "Open task",
     "Open agent",
     "Show panel",
+    "Find",
     "Copy link",
   ]) {
     assert.ok(labels.includes(offered), `the ⋯ offers ${offered}`);
