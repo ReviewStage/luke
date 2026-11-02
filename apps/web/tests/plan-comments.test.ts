@@ -236,7 +236,7 @@ function threadIn(answered: Answered): PlanCommentThread {
 /** A plan with the text above, in a workspace the owner made and the teammate joined, and an account in neither. */
 const openSharedTask = Effect.gen(function* () {
   const owner = yield* openAccount("Dean Stratakos");
-  // Vespin's key pays for no coding agent, so the owner's agent takes the thread on the owner's own keys.
+  // Our key pays for no coding agent, so the owner's agent takes the thread on the owner's own keys.
   yield* connectAgentApiKeys(owner);
   const teammate = yield* openAccount("Charles Pan");
   const outsider = yield* openAccount("Someone Else");
@@ -274,7 +274,7 @@ const startAgent = (owner: string, taskId: string) =>
 const agentLink = (taskId: string, agentId: string) =>
   `[@Invite email](https://vespin.dev/acme/plan/${taskId}/agent/${agentId})`;
 
-/** A task's Vespin's mention link, as a chip wrote it while a task had one. */
+/** A task's mention of the app, as a chip wrote it while a task had one. */
 const lukeLink = (taskId: string) => `[@Vespin](https://vespin.dev/acme/plan/${taskId}/luke)`;
 
 /** A start of a thread on the sentence above. */

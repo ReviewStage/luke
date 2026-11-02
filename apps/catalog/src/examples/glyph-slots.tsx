@@ -23,7 +23,7 @@ import { CatalogSection } from "../section";
 /**
  * glyph-slots.tsx -- a glyph's seat before a line's words in each ink: a
  * call's muted glyph, the full ink of the one item in progress, the ink its
- * holder sets, and Fullspin's face in its blue; a to-do's seat as tall as its
+ * holder sets, and the app's face in its blue; a to-do's seat as tall as its
  * first line before words that wrap; a slot its container sizes larger;
  * a page's outline inset a step inside its slot beside a person's; and a
  * to-do's glyph arriving as a press moves the step on.

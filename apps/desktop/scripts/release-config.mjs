@@ -10,8 +10,8 @@ export const RELEASE_LATEST_DMG_FILE_NAME = "Vespin.dmg";
 // feed URL — releases/latest/download/latest-mac.yml — never moves either.
 // The name is electron-updater's own convention for a macOS generic feed.
 export const RELEASE_UPDATE_FEED_FILE_NAME = "latest-mac.yml";
-// The mounted installer volume is not named bare "Vespin": it appears beside
-// Vespin.app in Finder, and both wear Vespin's icon.
+// The mounted installer volume is not named bare after the app: it appears
+// beside the app's bundle in Finder, and both wear the app's icon.
 export const RELEASE_VOLUME_NAME = "Vespin Installer";
 export const NOTARY_CREDENTIAL_SOURCE = {
   KEYCHAIN_PROFILE: "keychain-profile",

@@ -1,5 +1,5 @@
 #!/bin/sh
-# luke-host -- the host's one command: `uninstall` removes Vespin host from the account it is installed in, with no sudo, with its service, its agents' folders, its state and its releases; or, for an install that came before, as root, from a Linux box with the smolvm the install script put beside it and, with the luke-host user's home, smolvm's state and every machine left behind, or from a Mac for the user who runs it under sudo, with its LaunchAgent, its folder, its logs, and the machines and folders of the agents it made, by the record its daemon keeps of them; every other command is the daemon's own (lib/luke-host.mjs), run on the Node the release carries.
+# luke-host -- the host's one command: `uninstall` removes the host from the account it is installed in, with no sudo, with its service, its agents' folders, its state and its releases; or, for an install that came before, as root, from a Linux box with the smolvm the install script put beside it and, with the luke-host user's home, smolvm's state and every machine left behind, or from a Mac for the user who runs it under sudo, with its LaunchAgent, its folder, its logs, and the machines and folders of the agents it made, by the record its daemon keeps of them; every other command is the daemon's own (lib/luke-host.mjs), run on the Node the release carries.
 #
 # Shipped as bin/luke-host in every release tarball, a Mac's among them
 # (scripts/package.ts). The account install unpacks each release into
@@ -15,7 +15,7 @@ root="$(dirname "$(dirname "$(readlink -f "$0")")")"
 HOST_USER="luke-host"
 UNIT="luke-host.service"
 SMOLVM_DIR="/opt/luke-smolvm"
-# Where the account install puts Vespin host, under the home of the account it
+# Where the account install puts the host, under the home of the account it
 # runs as, by the names apps/web/install/install.sh gives them: the releases,
 # the state root, the command's link, and on Linux the folder of its unit.
 ACCOUNT_RELEASES=".local/share/luke-host"
@@ -25,7 +25,7 @@ ACCOUNT_UNIT_FOLDER=".config/systemd/user"
 # Where a Mac's install puts its LaunchAgent and its log, under the home of the user it runs as.
 MAC_LABEL="dev.vespin.host.standalone"
 MAC_LOG_FOLDER="Library/Logs/Vespin Host"
-# Where a Mac's install that came before put Vespin host, under the home of the user it ran as.
+# Where a Mac's install that came before put the host, under the home of the user it ran as.
 MAC_APP_FOLDER="Library/Application Support/Vespin Host"
 # The daemon's record of the agents whose folder it made, an empty file named for each, in its state root (OWNED_FOLDER in packages/host/src/local-agent-state.ts).
 OWNED_AGENTS="owned-agents"
@@ -100,7 +100,7 @@ remove_launch_agent() {
 # state root, its releases and its link, saying each. Before it changes
 # anything it says that the agents' folders go, with any work in them that
 # was not pushed, and asks to go on where a person runs it at a terminal.
-# Note that ~/.vespin/clones stays, since every Vespin install for the account
+# Note that ~/.vespin/clones stays, since every install for the account
 # shares it, and so does an install that came before, under /opt or a Mac's
 # Application Support, which is removed with its own sudo luke-host
 # uninstall, said where one stands, and so does a Linux account's lingering,
@@ -177,13 +177,13 @@ uninstall_account() {
 # it, then each of its agents' folder (~/.vespin/agents/<id>) removed, with any
 # machine an older release ran it in deleted, and its LaunchAgent, folder (the
 # release and the Mac's secret) and logs removed. Note that ~/.vespin/clones and ~/.vespin/worktrees stay, since every
-# Vespin install on the Mac shares them, the desktop app's own repositories among
+# install of ours on the Mac shares them, the desktop app's own repositories among
 # them.
 # Note that the machines are those older releases ran agents in, smolvm's, kept in the
 # user's own smolvm store rather than the state, so each is deleted by name, with the
 # smolvm such a release fetched, before the state goes; smolvm's cache of the sandbox
 # image stays with that store.
-# Note that the store and ~/.vespin/agents are shared with every Vespin app profile
+# Note that the store and ~/.vespin/agents are shared with every app profile
 # whose This Mac runs beside this install, so only the agents the daemon's
 # record names are removed, and ~/.vespin/agents and ~/.vespin only where nothing
 # else stands in them.

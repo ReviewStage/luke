@@ -11,7 +11,7 @@ import { handOffToMacApp } from "../src/app/mac-app-handoff";
 import { type FakeService, fakeService } from "./support/fake-service";
 
 /**
- * A Vespin link loaded in a tab, handed to Vespin for Mac only where the
+ * An app link loaded in a tab, handed to the Mac app only where the
  * signed-in account chose the Mac app, the tab is on a Mac, and it came to
  * the link by a fresh navigation: the place the address names goes to the
  * app in its own scheme, and every other load stays on the web. Synthetic

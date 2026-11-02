@@ -5,7 +5,7 @@ import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
 import { ICONSET_SOURCES, iconutilArguments } from "./package-config.mjs";
 
 /**
- * Builds the app's Vespin.icns from the committed brand PNGs. Skipped while
+ * Builds the app's `.icns` icon from the committed brand PNGs. Skipped while
  * the built icon is newer than every source, so dev launches pay nothing; the
  * sources are committed files, so mtime is a sound freshness answer.
  */

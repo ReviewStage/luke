@@ -8,7 +8,7 @@ import { test } from "vitest";
 import { followSwipes } from "./swipe-navigation";
 import { windowPushes } from "./window-pushes";
 
-/** A Vespin link to a task, as the system hands one to the app. */
+/** An app link to a task, as the system hands one to the app. */
 const LINK = { workspace: "workspace-1", place: { kind: LINK_PLACE.TASK, planId: "task-1" } };
 
 /**

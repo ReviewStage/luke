@@ -1,5 +1,5 @@
 /**
- * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, Notion's sign-in and a workspace's GitHub installation addresses, the workspace's members, the repositories the Vespin GitHub App reaches, the account's link choice, and nothing else, answered over a fake `HttpClient`.
+ * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, Notion's sign-in and a workspace's GitHub installation addresses, the workspace's members, the repositories our GitHub App reaches, the account's link choice, and nothing else, answered over a fake `HttpClient`.
  *
  * The Slack sign-in is settled only by the settling POST, as the service
  * answers a cookie caller. The web client's host calls the origin that
@@ -115,14 +115,14 @@ export const WORKSPACE_MEMBER = {
   role: "owner",
 } as const;
 
-/** The repositories the account reaches through the Vespin GitHub App: the App installed, reaching none yet. */
+/** The repositories the account reaches through our GitHub App: the App installed, reaching none yet. */
 export const GITHUB_REPOSITORIES = {
   installed: true,
   repositories: [],
   installationUrl: "https://github.com/apps/luke/installations/new",
 } as const;
 
-/** How the fake starts: signed in or not, and where the account chose its Vespin links open, if it chose. */
+/** How the fake starts: signed in or not, and where the account chose its app links open, if it chose. */
 interface FakeServiceOptions {
   readonly signedIn: boolean;
   readonly linkOpen?: LinkOpen;

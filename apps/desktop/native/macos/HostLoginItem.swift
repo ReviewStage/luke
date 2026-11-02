@@ -3,7 +3,7 @@ import Foundation
 import ServiceManagement
 
 /// This Mac's `luke-host` command, inside the app at `Contents/MacOS/luke-host`:
-/// the login item that runs Vespin's host daemon as the member, at login,
+/// the login item that runs our host daemon as the member, at login,
 /// whether or not the app is open, and the way the app registers it.
 ///
 /// `register`, `unregister`, and `status` act on the login item through

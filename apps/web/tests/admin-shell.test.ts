@@ -18,7 +18,7 @@ import { choose, menuItems, openViewOptions } from "./support/view-options";
  * closing on Escape or a press outside it, and Sign out, on the press, leaves
  * for the sign-in. The page runs as its entry mounts it in the browser, on
  * its own `#root`, and is unmounted after each test so no render it scheduled
- * outlives jsdom; the network, the HTTP boundary to Vespin and Better Auth, is
+ * outlives jsdom; the network, the HTTP boundary to the service and Better Auth, is
  * a fake that answers the session and a sign-out and leaves every admin read
  * hanging. jsdom lays nothing out, so a narrow room is a stage measured
  * narrow, as the browser's layout would report it.

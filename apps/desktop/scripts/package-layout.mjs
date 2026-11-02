@@ -33,7 +33,7 @@ export const NATIVE_HELPERS = [
 ];
 
 /**
- * Vespin's host daemon as this Mac runs it (`apps/host`): its release folder,
+ * Our host daemon as this Mac runs it (`apps/host`): its release folder,
  * staged by the host's own packaging (`scripts/build-host.mjs`) and shipped
  * whole in the app's resources, holding the daemon's and the runner's
  * bundles under `lib/` and the pinned Node they run on, which the app signs

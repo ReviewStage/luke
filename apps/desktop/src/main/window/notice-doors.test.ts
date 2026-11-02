@@ -6,7 +6,7 @@ import { electronNoticeDoors } from "./notice-doors";
 
 /**
  * A command ask's notification as macOS meets it: its answer from macOS says
- * whether notifications are on for Vespin, and its click brings Vespin forward.
+ * whether notifications are on for the app, and its click brings the app forward.
  *
  * Note that Electron's module is replaced whole, because it is the operating
  * system's door and answers nothing outside an Electron process.

@@ -10,7 +10,7 @@ import { pageLoadedBy } from "./support/page-load";
 
 /**
  * The web app's root opened at a plan's link on a Mac, by a fresh
- * navigation, for an account that chose to open its Vespin links in the Mac
+ * navigation, for an account that chose to open its app links in the Mac
  * app: the panel draws first, the link the tab loaded at is handed to the
  * app, and the tab stays drawn beside it, handing nothing again as the
  * visitor returns to it. One mount per file, because the panel's state read

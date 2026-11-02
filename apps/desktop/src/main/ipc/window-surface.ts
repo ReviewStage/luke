@@ -48,7 +48,7 @@ interface WindowSurfaceDependencies {
   copyImage: (png: string) => boolean;
   /** Asks where to save a file in the system's save dialog over the asking window and writes it there, answering whether it was saved. */
   saveFile: (sender: WebContents, name: string, text: string) => Promise<boolean>;
-  /** Carries a note to the people who make Fullspin, answering whether it arrived. */
+  /** Carries a note to the people who make the app, answering whether it arrived. */
   deliverFeedback: (submission: FeedbackSubmission) => Effect.Effect<FeedbackResult>;
   /** Takes a downscaled still of part of the asking window as a JPEG's data URL, none where nothing was drawn there. */
   captureStill: (sender: WebContents, rect: CapturedRect) => Promise<string | null>;
@@ -121,7 +121,7 @@ export function windowSurfaceProcedures(
         "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
       ),
     ),
-    // The pane that lists every app's notifications, Fullspin's among them.
+    // The pane that lists every app's notifications, ours among them.
     [WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS
     ].handler(() =>
