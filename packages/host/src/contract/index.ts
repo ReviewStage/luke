@@ -78,11 +78,7 @@ export {
   type PushPayload,
 } from "./pushes.js";
 export type { SettingUpdatePayload } from "./settings.js";
-export {
-  THIS_MAC_HOST_STANDING,
-  type ThisMacHostStanding,
-  thisMacHostStandingSchema,
-} from "./this-mac-host.js";
+export type { ThisMacHostRead } from "./this-mac-host.js";
 export { CONTACT_MAILTO } from "./window-surface.js";
 
 /** Every domain's procedures, one spread each, in alphabetical order. */

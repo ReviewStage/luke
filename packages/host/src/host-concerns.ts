@@ -111,11 +111,8 @@ export function hostCapabilities(
 /** The methods each platform concern answers, which a host that left it out refuses. */
 const PLATFORM_CONCERN_METHODS = {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: [GATEWAY_METHOD.MAC_COMMAND_ANSWER],
-  // Note that the panel asks nothing of a local agent's runner, which the service reaches through rows, only of This Mac's luke-host.
-  [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]: [
-    GATEWAY_METHOD.THIS_MAC_HOST_READ,
-    GATEWAY_METHOD.THIS_MAC_HOST_TURN_ON,
-  ],
+  // Note that the panel asks nothing of a local agent's runner, which the service reaches through rows, only of This Mac's host.
+  [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]: [GATEWAY_METHOD.THIS_MAC_HOST_READ],
   [HOST_PLATFORM_CONCERN.MAC_TERMINAL]: [
     GATEWAY_METHOD.MAC_REPOSITORIES_READ,
     GATEWAY_METHOD.MAC_REPOSITORY_SET,

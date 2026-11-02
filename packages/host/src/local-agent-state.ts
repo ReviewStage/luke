@@ -3,13 +3,9 @@ import { Effect, Option, Path, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 
 /**
- * local-agent-state.ts -- what a machine keeps of its local agents between runs (`local-agents.json` in its state): the device id each account registered under, the launches no exit has settled yet, how each agent has run there, the agents whose folders a discard kept, and since when, and when each agent was last used there; read and written alike by the follower (`compose-local-agents.ts`) and by This Mac's turn-on (`compose-this-mac-host.ts`). Beside it, which agents' folders this machine made (`owned-agents`).
+ * local-agent-state.ts -- what a machine keeps of its local agents between runs (`local-agents.json` in its state): the device id each account registered under, the launches no exit has settled yet, how each agent has run there, the agents whose folders a discard kept, and since when, and when each agent was last used there; read and written by the follower (`compose-local-agents.ts`). Beside it, which agents' folders this machine made (`owned-agents`).
  *
- * The follower holds the state while it follows and writes it whole; This
- * Mac's turn-on, in the app, reads and changes it in place, never while the
- * follower would write the same field: it mints the account's device id
- * before `luke-host` is enrolled under it, and hands the account's kept
- * launches to that device before its login item is registered. A file that
+ * The follower holds the state while it follows and writes it whole. A file that
  * cannot be read or decoded reads as nothing kept, and a key it does not
  * know, as one an earlier build kept, is read past and left out of the next
  * write. A write lands beside the file and is moved over it, so a write cut
@@ -112,26 +108,6 @@ export const localAgentDeviceOf = (stateRoot: string, userId: string, createId: 
     }));
     return minted;
   });
-
-/** The account the device id given was minted for on this machine; none where the state names none. */
-export const localAgentOwnerOf = (stateRoot: string, deviceId: string) =>
-  Effect.map(
-    readLocalAgentState(stateRoot),
-    ({ devices }) => Object.entries(devices).find(([, kept]) => kept === deviceId)?.[0],
-  );
-
-/**
- * Every launch kept under the account handed to the device given, so the
- * follower that runs on the device's own secret (`@luke/host/daemon`), whose
- * account is its device, settles them; whether that landed.
- */
-export const localAgentLaunchesHanded = (stateRoot: string, userId: string, deviceId: string) =>
-  changed(stateRoot, (current) => ({
-    ...current,
-    launches: current.launches.map((launch) =>
-      launch.userId === userId ? { ...launch, userId: deviceId } : launch,
-    ),
-  }));
 
 /** The agent given kept as one whose folder this machine made; a write that fails is let go, since the record only serves an uninstall. */
 export const keepOwnedAgent = (stateRoot: string, agentId: string) =>

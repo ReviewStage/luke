@@ -10,7 +10,9 @@ import {
 } from "@luke/features/device-agent-wire";
 import type { Host } from "@luke/features/host-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { THIS_MAC_HOST_STANDING, type ThisMacHostStanding } from "@luke/host/contract";
+import type { ThisMacHostRead } from "@luke/host/contract";
+import { EXPERIMENT } from "@luke/settings";
+import { experimentsOn } from "@luke/settings/testing";
 import { timeRuntime } from "@luke/ui";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -21,6 +23,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { chooseMenuItem } from "../testing/phone-head.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -261,27 +264,6 @@ it.effect(
     }),
 );
 
-/** Hosts drawn in the desktop over the hosts given, with This Mac standing as given and the beats given; how often Retry or Turn on again was asked. */
-async function machinesWithThisMac(
-  hosts: readonly Host[],
-  standing: ThisMacHostStanding,
-  beats: readonly { readonly deviceId: string; readonly ageMs: number }[] = [],
-): Promise<{ turnOns: () => number }> {
-  let turnOns = 0;
-  fakeActPort({
-    [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-    [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [...beats] }),
-    [ACT_KIND.THIS_MAC_HOST_READ]: () => Promise.resolve(standing),
-    [ACT_KIND.THIS_MAC_HOST_TURN_ON]: () => {
-      turnOns += 1;
-      return Promise.resolve(standing);
-    },
-  });
-  drawHosts();
-  await settle();
-  return { turnOns: () => turnOns };
-}
-
 /** The button whose words are these, pressed. */
 async function press(words: string): Promise<void> {
   const button = [...document.querySelectorAll("button")].find(
@@ -292,9 +274,27 @@ async function press(words: string): Promise<void> {
   await settle();
 }
 
-test("this Mac stands first on its own machine's row, with why its setup failed and Retry", async () => {
+/** Hosts drawn in the desktop over the hosts given, with the device This Mac's host's record names as given, the One host program experiment on, or with that experiment off where none is given, and the beats given. */
+async function machinesWithThisMac(
+  hosts: readonly Host[],
+  thisMac: ThisMacHostRead | undefined,
+  beats: readonly { readonly deviceId: string; readonly ageMs: number }[] = [],
+): Promise<void> {
+  fakeActPort({
+    [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
+    [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [...beats] }),
+    [ACT_KIND.THIS_MAC_HOST_READ]: () => Promise.resolve(thisMac ?? {}),
+  });
+  handState(
+    thisMac === undefined ? experimentsOn() : experimentsOn(EXPERIMENT.THIS_MAC_ACCOUNT_HOST),
+  );
+  drawHosts();
+  await settle();
+}
+
+test("this Mac stands first on the row of the machine its record names, with no Remove, setup line, or Update needed", async () => {
   const mac = "7a1c9e3b-2f4d-4c6a-8b0e-5d7f9a1c3e52";
-  const { turnOns } = await machinesWithThisMac(
+  await machinesWithThisMac(
     [
       {
         id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14",
@@ -308,25 +308,25 @@ test("this Mac stands first on its own machine's row, with why its setup failed 
         name: "Studio",
         platform: DEVICE_PLATFORM.DARWIN,
         seenAt: 0,
-        version: "0.1.0",
-        upgradeNeeded: false,
+        version: "0.0.9",
+        upgradeNeeded: true,
+        setup: DEVICE_SETUP.FAILED,
+        setupFailure: "the image pull timed out",
       },
     ],
-    {
-      standing: THIS_MAC_HOST_STANDING.SETUP_FAILED,
-      reason: "the image pull timed out",
-      deviceId: mac,
-    },
+    { deviceId: mac },
+    [{ deviceId: mac, ageMs: 0 }],
   );
   const text = document.body.textContent ?? "";
 
   assert.ok(text.indexOf("Studio (this Mac)") < text.indexOf("fra-03"), "this Mac stands first");
-  assert.ok(text.includes("the image pull timed out"));
-  await press("Retry");
-  assert.equal(turnOns(), 1);
+  assert.ok(text.includes("Online · Mac · 0.0.9"), text);
+  assert.ok(!text.includes("the image pull timed out"), "This Mac's row draws no setup line");
+  assert.ok(!text.includes("Update needed"), "This Mac's row draws no Update needed");
+  assert.equal(document.querySelector('button[aria-label="Studio (this Mac) actions"]'), null);
 });
 
-test("another Mac's row says why its setup failed, and nothing of This Mac", async () => {
+test("with One host program off, no row speaks of this Mac, and another Mac's row says why its setup failed", async () => {
   const mini = "5c2e8a1f-3b7d-4e9a-8c6f-1d3b5e7a9c20";
   await machinesWithThisMac(
     [
@@ -341,16 +341,16 @@ test("another Mac's row says why its setup failed, and nothing of This Mac", asy
         setupFailure: "Claude Code could not be installed",
       },
     ],
-    { standing: THIS_MAC_HOST_STANDING.OFF },
+    undefined,
     [{ deviceId: mini, ageMs: 0 }],
   );
   const text = document.body.textContent ?? "";
 
   assert.ok(text.includes("Couldn't set up: Claude Code could not be installed"));
-  assert.ok(!/this Mac/iu.test(text), "nothing on its row speaks of this Mac");
+  assert.ok(!/this Mac/iu.test(text), "nothing speaks of this Mac");
 });
 
-test("a host's row says its version and where its update stands, and This Mac's leaves its update to its app", async () => {
+test("a host's row says its version and where its update stands, and This Mac's draws no update that failed", async () => {
   const mac = "7a1c9e3b-2f4d-4c6a-8b0e-5d7f9a1c3e52";
   const updating: readonly Host[] = [
     { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "ams-01", update: HOST_UPDATE.WAITING },
@@ -371,7 +371,7 @@ test("a host's row says its version and where its update stands, and This Mac's 
   ].map((host) => ({ seenAt: 0, version: "0.2.1", upgradeNeeded: false, ...host }));
   await machinesWithThisMac(
     updating,
-    { standing: THIS_MAC_HOST_STANDING.RUNNING, deviceId: mac },
+    { deviceId: mac },
     updating.map((host) => ({ deviceId: host.id, ageMs: 0 })),
   );
   const text = document.body.textContent ?? "";
@@ -380,7 +380,10 @@ test("a host's row says its version and where its update stands, and This Mac's 
   assert.ok(text.includes("Update ready, waiting for agents to finish"));
   assert.ok(text.includes("Updating…"));
   assert.ok(text.includes("Couldn't update: the download did not match its checksum"));
-  assert.ok(!text.includes("this Mac's disk is full"), "This Mac's row draws no update line");
+  assert.ok(
+    !text.includes("this Mac's disk is full"),
+    "This Mac's row draws no update that failed",
+  );
 });
 
 test("each host's ⋯ is named by its host, and its Remove asks about that host first", async () => {
@@ -388,7 +391,7 @@ test("each host's ⋯ is named by its host, and its Remove asks about that host 
     { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-01" },
     { id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "sfo-02" },
   ].map((host) => ({ seenAt: 0, version: "0.2.1", upgradeNeeded: false, ...host }));
-  await machinesWithThisMac(hosts, { standing: THIS_MAC_HOST_STANDING.OFF });
+  await machinesWithThisMac(hosts, undefined);
   const more =
     document.querySelector<HTMLButtonElement>('button[aria-label="sfo-02 actions"]') ??
     assert.fail("sfo-02's ⋯ is drawn");
@@ -400,26 +403,10 @@ test("each host's ⋯ is named by its host, and its Remove asks about that host 
   assert.ok(asked.includes("Remove sfo-02?"), asked);
 });
 
-test.each([
-  {
-    case: "removed",
-    standing: THIS_MAC_HOST_STANDING.REMOVED,
-    says: "Removed from Vespin.",
-    offers: "Turn on again",
-  },
-  {
-    case: "never turned on",
-    standing: THIS_MAC_HOST_STANDING.NOT_TURNED_ON,
-    says: "Run agents here",
-    offers: "Turn on",
-  },
-])(
-  "a Mac the service does not list, $case, keeps a This Mac row with $offers",
-  async ({ standing, says, offers }) => {
-    const { turnOns } = await machinesWithThisMac([], { standing });
+test("a Mac whose host the service does not list yet keeps a This Mac row that reads offline, with nothing to press", async () => {
+  await machinesWithThisMac([], { deviceId: "2d4f6a8c-0e1b-4c3d-9e5f-7a9b1c3d5e60" });
+  const row = document.body.textContent ?? "";
 
-    assert.ok(document.body.textContent?.includes(says));
-    await press(offers);
-    assert.equal(turnOns(), 1);
-  },
-);
+  assert.ok(row.includes("This MacOffline"), row);
+  assert.equal(document.querySelectorAll("button").length, 1, "Add hosts alone is drawn");
+});

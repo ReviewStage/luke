@@ -440,10 +440,10 @@ export function composeLocalAgents(
      * The state changed and written whole, one change at a time, so a write
      * never lands over a newer one; written beside the file and moved over
      * it, so a write cut off leaves the last whole one. A write that cannot
-     * land is reported, and the next one tries again. Note that This Mac's
-     * turn-on writes the file too (`local-agent-state.ts`), never while this
-     * follower follows, so the state is read again whenever this one takes
-     * the machine's lease (`reread`).
+     * land is reported, and the next one tries again. Note that a follower
+     * that held the machine's lease before wrote the file too, never while
+     * this one follows, so the state is read again whenever this one takes
+     * the lease (`reread`).
      */
     const updateState = (change: (current: LocalAgentState) => LocalAgentState) =>
       writing.withPermit(

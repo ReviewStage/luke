@@ -57,7 +57,7 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     Layer.succeed(IdSource, { create: () => randomUUID() }),
     reporterLayer(config.report),
     Layer.succeed(TerminalSocket, openTerminalSocketOverWs),
-    thisMacHostLayer({ packaged: config.packaged, stateRoot: config.stateRoot }),
+    thisMacHostLayer(),
     // The account is the OAuth sign-in, its tokens sealed by this Mac's
     // cipher. Every sign-in's consent is a loopback on this Mac: the browser
     // hands the code back to a `node:http` listener on 127.0.0.1, the

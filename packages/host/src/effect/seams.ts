@@ -260,57 +260,38 @@ export class LocalAgentPlatform extends Context.Service<
   LocalAgentPlatformSeam
 >()("@luke/host/LocalAgentPlatform") {}
 
-/** What may be asked of This Mac's `luke-host` login item. */
-export const HOST_LOGIN_ITEM_ACT = {
-  REGISTER: "register",
-  UNREGISTER: "unregister",
-  STATUS: "status",
-} as const;
-
-export type HostLoginItemAct = (typeof HOST_LOGIN_ITEM_ACT)[keyof typeof HOST_LOGIN_ITEM_ACT];
-
-/** Where This Mac's `luke-host` login item stands (`SMAppService.Status`). */
-export const HOST_LOGIN_ITEM_STATUS = {
-  ENABLED: "enabled",
-  NOT_REGISTERED: "not-registered",
-  /** Registered, and waiting on the member in System Settings › General › Login Items. */
-  REQUIRES_APPROVAL: "requires-approval",
-  /** The app carries no such item. */
-  NOT_FOUND: "not-found",
-} as const;
-
-export type HostLoginItemStatus =
-  (typeof HOST_LOGIN_ITEM_STATUS)[keyof typeof HOST_LOGIN_ITEM_STATUS];
-
 /**
- * This Mac's `luke-host` as the desktop runs it (`compose-this-mac-host.ts`):
- * its login item asked an act, and the version of the `luke-host` the app
- * carries, which its enroll names. Each answers, never fails: what it
- * answered, or the words it could not with. A development build carries no
- * login item, so its shell answers the same acts by running the same
- * `luke-host` as a child of the app. Only the local agents concern asks for
- * it.
+ * This Mac's host as the desktop keeps it (`compose-this-mac-host.ts`): the
+ * account install the install command puts on a Mac, under the member's own
+ * home, whose LaunchAgent launchd runs at login, which every build of the
+ * app reads and controls alike. Each act answers, never fails: what it
+ * answered, or the words it could not with. Only the local agents concern
+ * asks for it.
  */
 export interface ThisMacHostSeam {
-  readonly loginItem: (
-    act: HostLoginItemAct,
-  ) => Effect.Effect<
-    Result.Result<HostLoginItemStatus, string>,
-    never,
-    ChildProcessSpawner.ChildProcessSpawner
-  >;
-  readonly version: Effect.Effect<
-    Result.Result<string, string>,
-    never,
-    ChildProcessSpawner.ChildProcessSpawner
-  >;
-  /** The Mac as its `luke-host` registers it, which its enroll names so the service creates the device where it never saw this Mac, and which machine it is where it was read. */
+  /** The install's state folder, `~/.local/state/luke-host`, holding the record its host runs on. */
+  readonly stateRoot: string;
+  /** Whether this Mac can run the host: Apple silicon, on the oldest macOS the install script takes or later. */
+  readonly runsHost: boolean;
+  /** The Mac as its host registers it, which its enroll names so the service creates the device where it never saw this Mac, and which machine it is where it was read. */
   readonly machine: Effect.Effect<
     {
       readonly name: string;
       readonly platform: DevicePlatform;
       readonly arch: DeviceArch;
     } & DeviceMachine
+  >;
+  /** Whether launchd holds the host's LaunchAgent now. */
+  readonly loaded: Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner>;
+  /** The install script given run with `/bin/sh`, the LaunchAgent let start first: the release installed or upgraded, and the host started. */
+  readonly install: (
+    script: string,
+  ) => Effect.Effect<Result.Result<void, string>, never, ChildProcessSpawner.ChildProcessSpawner>;
+  /** The host stopped and kept from starting at the next login, its files kept. */
+  readonly stop: Effect.Effect<
+    Result.Result<void, string>,
+    never,
+    ChildProcessSpawner.ChildProcessSpawner
   >;
 }
 
