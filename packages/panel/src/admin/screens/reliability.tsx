@@ -121,6 +121,7 @@ const AUTOMATION_REASON_LABEL = {
   [AUTOMATION_RUN_REASON.MISSED]: "Missed its hour",
   [AUTOMATION_RUN_REASON.AGENT_GONE]: "Agent gone",
   [AUTOMATION_RUN_REASON.SAME_SUBJECT]: "Same issue in cooldown",
+  [AUTOMATION_RUN_REASON.AGENT_REPLACED]: "Agent replaced",
 } as const satisfies Record<AutomationRunReason, string>;
 
 const NO_REASON_LABEL = "No reason recorded";

@@ -303,12 +303,16 @@ export type AutomationTargetKind = (typeof AUTOMATION_TARGET)[keyof typeof AUTOM
 
 export const automationTargetKindSchema = EffectSchema.Literals(Object.values(AUTOMATION_TARGET));
 
-/** Where a run lands: a new agent, or the one agent a run continues. */
+/**
+ * Where a run lands: a new agent, or the one agent every run continues,
+ * null until the first run starts it and the automation keeps it, as it
+ * keeps a fresh one in place of an agent gone since.
+ */
 const automationTargetSchema = EffectSchema.Union([
   EffectSchema.Struct({ kind: EffectSchema.Literal(AUTOMATION_TARGET.NEW_AGENT) }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(AUTOMATION_TARGET.SAME_AGENT),
-    agentId: wireUuidSchema,
+    agentId: EffectSchema.NullOr(wireUuidSchema),
   }),
 ]);
 
@@ -429,10 +433,12 @@ export const AUTOMATION_RUN_REASON = {
   PAUSED: "paused",
   /** It waited queued past the hour it could still be started in, the sweep down or failing all that while. */
   MISSED: "missed",
-  /** The agent the automation hands each run to is gone, archived, or no longer its creator's to reach. */
+  /** No longer produced, but still read: rows written before a run started a fresh agent in place of a gone one hold it. */
   AGENT_GONE: "agent-gone",
   /** A run on the same subject (one Sentry issue) started within the trigger's cooldown. */
   SAME_SUBJECT: "same-subject",
+  /** Not why it did not start: a run that started a fresh agent, the one its runs went to being gone or archived, which runs go to from then on. */
+  AGENT_REPLACED: "agent-replaced",
 } as const;
 
 export type AutomationRunReason =
@@ -504,16 +510,8 @@ export const automationSummarySchema = EffectSchema.Struct({
   createdAt: countedNumber,
   scope: EffectSchema.optionalKey(automationScopeSchema),
   repositories: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
-  /** Where a run lands; a same-agent target whose agent was deleted reads as no agent. */
-  target: EffectSchema.optionalKey(
-    EffectSchema.Union([
-      automationTargetSchema,
-      EffectSchema.Struct({
-        kind: EffectSchema.Literal(AUTOMATION_TARGET.SAME_AGENT),
-        agentId: EffectSchema.Null,
-      }),
-    ]),
-  ),
+  /** Where a run lands; a same-agent target reads as no agent until its first run, and once its agent is deleted until the next. */
+  target: EffectSchema.optionalKey(automationTargetSchema),
   archiveSuccessful: EffectSchema.optionalKey(EffectSchema.Boolean),
   /**
    * The address a webhook trigger's caller posts to, as the client that read

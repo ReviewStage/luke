@@ -14,10 +14,12 @@ import {
 import {
   type Automation,
   type AutomationRun,
+  adoptAutomationAgent,
   archivableRunAgents,
   createAutomation,
   deleteAutomation,
   listAutomationRuns,
+  readAutomationToRun,
   recordAutomationRun,
   updateAutomation,
 } from "@luke/database/models/automation-store";
@@ -468,7 +470,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
-    "an automation that hands every run to the same agent sends that agent the run's prompt under the run's key and starts none, and a run whose agent is archived, or stands on a task its creator does not see, fails as agent-gone",
+    "an automation that hands every run to the same agent sends that agent the run's prompt under the run's key and starts none, and a run whose agent is archived, or stands on a task its creator does not see, starts a fresh agent the automation keeps in its place, saying so",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -505,14 +507,23 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         );
 
         yield* archiveAgent(owner, first, true);
-        const gone = yield* executeAutomationRun(eve.eveFor, yield* runNow(same)).pipe(
-          Effect.provide(services),
-        );
-        assert.deepEqual(gone, {
-          status: AUTOMATION_RUN_STATUS.FAILED,
-          reason: AUTOMATION_RUN_REASON.AGENT_GONE,
-        });
+        const replacing = yield* runNow(same);
+        const replaced = yield* agentOfRun(eve, replacing);
+        assert.notEqual(replaced, first);
+        assert.equal(eve.opened.length, 2, "a fresh agent was started in its place");
         assert.equal(eve.sent.length, 1, "nothing was sent to the archived agent");
+        assert.equal(
+          Option.getOrThrow(yield* readAutomationToRun(automation.id)).targetAgentId,
+          replaced,
+          "the automation keeps the fresh agent",
+        );
+        const kept = (yield* listAutomationRuns(owner, automation.id)).find(
+          (each) => each.id === replacing.id,
+        );
+        assert.deepEqual(
+          [kept?.status, kept?.agentId, kept?.reason],
+          [AUTOMATION_RUN_STATUS.STARTED, replaced, AUTOMATION_RUN_REASON.AGENT_REPLACED],
+        );
 
         // A teammate's agent the App reaches, on a task on the teammate's own token, which the creator keeps none to read through.
         const teammate = yield* openGithubUser();
@@ -535,13 +546,9 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           prompt: null,
         });
         const aimed = yield* toSameAgent(automation, Option.getOrThrow(theirs).agent.id);
-        const unseen = yield* executeAutomationRun(eve.eveFor, yield* runNow(aimed)).pipe(
-          Effect.provide(services),
-        );
-        assert.deepEqual(unseen, {
-          status: AUTOMATION_RUN_STATUS.FAILED,
-          reason: AUTOMATION_RUN_REASON.AGENT_GONE,
-        });
+        const unseen = yield* agentOfRun(eve, yield* runNow(aimed));
+        assert.notEqual(unseen, Option.getOrThrow(theirs).agent.id);
+        assert.equal(eve.opened.length, 3, "a fresh agent was started in its stead");
         assert.equal(eve.sent.length, 1, "nothing was sent to the agent its creator does not see");
       }),
   );
@@ -575,7 +582,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
-    "a same-agent automation whose agent was deleted fails its run as agent-gone and starts none, and its first run waits on the agent's own work",
+    "a same-agent automation's first run waits on the agent's own work, and one that holds no agent, its agent deleted or none chosen yet, starts one that it keeps for every later run",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -605,7 +612,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           reason: AUTOMATION_RUN_REASON.CONCURRENCY,
         });
 
-        // Its agent deleted, the target let go: the run has nowhere to go and starts nothing.
+        // Its agent deleted, the target let go, as one made with none chosen stands: the run starts one, which it keeps.
         yield* Database.use((db) =>
           db
             .update(automationTable)
@@ -613,16 +620,88 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             .where(eq(automationTable.id, fresh.id)),
         );
         const opened = eve.opened.length;
-        const gone = yield* executeAutomationRun(
-          eve.eveFor,
-          yield* runNow({ ...busy, targetAgentId: null }),
-        ).pipe(Effect.provide(services));
-        assert.deepEqual(gone, {
-          status: AUTOMATION_RUN_STATUS.FAILED,
-          reason: AUTOMATION_RUN_REASON.AGENT_GONE,
-        });
-        assert.equal(eve.opened.length, opened, "no agent was started in its place");
+        const adopting = yield* runNow({ ...busy, targetAgentId: null });
+        const adopted = yield* agentOfRun(eve, adopting);
+        assert.notEqual(adopted, first);
+        assert.equal(eve.opened.length, opened + 1, "one agent was started");
+        assert.equal(
+          Option.getOrThrow(yield* readAutomationToRun(fresh.id)).targetAgentId,
+          adopted,
+          "the automation keeps the agent its first run started",
+        );
+        const run = (yield* listAutomationRuns(owner, fresh.id)).find(
+          (each) => each.id === adopting.id,
+        );
+        assert.equal(run?.reason, null, "a first agent replaces none");
+        // A run that started one beside it, as a concurrent first run would, keeps nothing over it.
+        assert.equal(yield* adoptAutomationAgent(fresh.id, null, first), false);
         assert.ok(agent.conversationId.length > 0);
+      }),
+  );
+
+  it.effect(
+    "a same-agent run left claimed after it opened a fresh agent is settled with that agent, which the automation keeps in place of the gone one",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation, workspaceId } = yield* openAutomation();
+        const archived = Option.getOrThrow(
+          yield* createAgent(owner, {
+            taskId: null,
+            organizationId: workspaceId,
+            idempotencyKey: randomUUID(),
+            model: SOL,
+            effort: "low",
+            planSnapshot: null,
+            prompt: "Keep the flaky tests quarantined.",
+            repository: `${RELAY.owner}/${RELAY.name}`,
+            runtime: CONVERSATION_RUNTIME.CODEX,
+            payer: AGENT_PAYER.API_KEY,
+          }),
+        ).agent.id;
+        yield* archiveAgent(owner, archived, true);
+        const same = yield* toSameAgent(automation, archived);
+        const run = yield* runNow(same);
+        // The run claimed for the gone agent opened a fresh one under its key, and its function died there.
+        const fresh = Option.getOrThrow(
+          yield* createAgent(owner, {
+            taskId: null,
+            organizationId: workspaceId,
+            idempotencyKey: run.id,
+            model: SOL,
+            effort: "low",
+            planSnapshot: null,
+            prompt: PROMPT,
+            repository: `${RELAY.owner}/${RELAY.name}`,
+            runtime: CONVERSATION_RUNTIME.CODEX,
+            payer: AGENT_PAYER.API_KEY,
+          }),
+        ).agent.id;
+        yield* ranTurn(owner, fresh, TURN_STATUS.RUNNING);
+        yield* Database.use((db) =>
+          db
+            .update(automationRun)
+            .set({ status: AUTOMATION_RUN_STATUS.STARTED, agentId: null, claimedAgentId: archived })
+            .where(eq(automationRun.id, run.id)),
+        );
+
+        yield* recoverStrandedRun({
+          id: run.id,
+          automationId: automation.id,
+          userId: owner,
+          claimedAgentId: archived,
+        });
+
+        assert.equal(
+          Option.getOrThrow(yield* readAutomationToRun(automation.id)).targetAgentId,
+          fresh,
+        );
+        const settled = (yield* listAutomationRuns(owner, automation.id)).find(
+          (each) => each.id === run.id,
+        );
+        assert.deepEqual(
+          [settled?.status, settled?.agentId, settled?.reason],
+          [AUTOMATION_RUN_STATUS.STARTED, fresh, AUTOMATION_RUN_REASON.AGENT_REPLACED],
+        );
       }),
   );
 

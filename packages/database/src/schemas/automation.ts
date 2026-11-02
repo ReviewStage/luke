@@ -117,7 +117,7 @@ export const automationRun = pgTable(
     /** A webhook firing's body as its caller sent it, bounded, for the agent's prompt; null for every other firing. */
     payload: text("payload"),
     status: text("status").$type<AutomationRunStatus>().notNull(),
-    /** Why it was skipped or failed; null while queued and once started. */
+    /** Why it was skipped or failed, or, on one that started, that it started a fresh agent in place of a gone one; null otherwise. */
     reason: text("reason").$type<AutomationRunReason>(),
     /** The coding agent it started; null before, and where that agent is gone. */
     agentId: uuid("agent_id").references(() => agentTable.id, {
