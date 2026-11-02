@@ -278,7 +278,7 @@ test("a section's byline shows only the writer's face and a few letters of time,
   assert.equal(byline?.querySelectorAll(".actor-mark").length, 1);
   assert.match(
     cardOf(view, "[data-actor-ref]", ".plan-unit-byline").textContent ?? "",
-    /^Lukenow/u,
+    /^Fullspinnow/u,
   );
 });
 
@@ -314,7 +314,7 @@ test("Fullspin's card says when it wrote, and what it wrote", async () => {
   const card = cardOf(await draw(task, { readerId: DEAN.userId }));
 
   assert.ok(card.querySelector('[data-actor-card="luke"]'), "Fullspin's card hangs");
-  assert.match(card.textContent ?? "", /^LukenowEdited Goal and Risks$/u);
+  assert.match(card.textContent ?? "", /^FullspinnowEdited Goal and Risks$/u);
 });
 
 test("an agent the plan's list holds wears its harness, hangs its tab's card, and opens its tab; one it does not hold is named alone", async () => {
