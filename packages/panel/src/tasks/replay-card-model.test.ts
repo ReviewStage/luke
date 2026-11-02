@@ -30,6 +30,7 @@ import {
   REPLAY_VERB,
   replayCallsServer,
   replayCount,
+  replayJoinedTodos,
   replayOpening,
   replayTaskTodos,
   replayVerb,
@@ -300,9 +301,19 @@ test("Claude Code's task calls among a replay's steps are drawn as the to-do lis
       inputForm: REPLAY_VALUE_FORM.JSON,
       output: "Updated task #1 status",
     }),
+    toolStep({
+      summary: "Called: TaskUpdate",
+      tool: "TaskUpdate",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: JSON.stringify({ taskId: "1", status: "in_progress" }),
+      inputForm: REPLAY_VALUE_FORM.JSON,
+      output: "Updated task #1 status",
+    }),
   ];
   const todos = replayTaskTodos(steps);
-  assert.deepEqual([...todos.keys()], [0, 2]);
+  assert.deepEqual([...todos.keys()], [0, 2, 3]);
+  // The update the next one follows is left undrawn, the run standing as its last; the create the command parts from is not.
+  assert.deepEqual([...replayJoinedTodos(steps)], [2]);
   const update = stepView(steps[2] ?? assert.fail("the update step"), todos.get(2));
   assert.ok(update.kind === STEP_VIEW.CALL);
   assert.equal(update.view.kind, CALL_KIND.TODOS);

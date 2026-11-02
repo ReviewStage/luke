@@ -10,6 +10,7 @@ import {
   type ReplayToolState,
   type ReplayValueForm,
 } from "@luke/features/agent-replay";
+import { AGENT_TOOL } from "@luke/features/agent-tools";
 import {
   AGENT_SENDER,
   type AgentSender,
@@ -499,6 +500,31 @@ export function replayTaskTodos(steps: readonly ReplayStep[]): ReadonlyMap<numbe
     lists.set(index, todosOf(fold));
   });
   return lists;
+}
+
+/** Whether a step is a to-do call a run of them may draw as one row, as the transcript draws one (`isJoinableTodos`): a whole list's write or one of Claude Code's task calls, not one that failed, whose row is where its error is read. */
+function isJoinableTodoStep(step: ReplayStep): boolean {
+  const marked = step.kind === REPLAY_STEP_KIND.TOOL ? markedToolStep(step) : undefined;
+  if (marked === undefined || markedCall(marked).state === TOOL_STATE.OUTPUT_ERROR) return false;
+  const { tool } = stepCall(marked, marked.tool);
+  return tool === AGENT_TOOL.WRITE_TODOS || isTaskCall(tool);
+}
+
+/**
+ * The places of the steps a card leaves undrawn because the to-do call
+ * straight after them stands for the run, as the transcript draws a run of
+ * to-do calls as one row, holding the list as it stood after the last;
+ * the last of a run keeps its place, and so its list (`replayTaskTodos`).
+ */
+export function replayJoinedTodos(steps: readonly ReplayStep[]): ReadonlySet<number> {
+  const joined = new Set<number>();
+  steps.forEach((step, index) => {
+    const next = steps[index + 1];
+    if (next !== undefined && isJoinableTodoStep(step) && isJoinableTodoStep(next)) {
+      joined.add(index);
+    }
+  });
+  return joined;
 }
 
 /** A call's step read back as its row: as a transcript draws its tool where its marker named one, and otherwise its kind and subject from its summary, and where it stood, its input, and its output from its marker, or from its words where the marker names none. */

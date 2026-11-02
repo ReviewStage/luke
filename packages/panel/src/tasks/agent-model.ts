@@ -1603,6 +1603,8 @@ export type AgentPart =
       /** The error's own text, on a call that ended in one. */
       readonly errorText: string | undefined;
       readonly cut?: AgentPartCut;
+      /** The first call of a run of to-do calls drawn as this one row (`joinedTodos`), which the row stays keyed by as the run grows. */
+      readonly runFrom?: string;
     }
   | { readonly kind: typeof AGENT_PART.STEP_START }
   | { readonly kind: typeof AGENT_PART.OTHER }
@@ -1981,7 +1983,7 @@ export function isTodos(
 /** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent, a to-do list and a set of pictures or a recording shown each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
   key: (part, index) => {
-    if (part.kind === AGENT_PART.TOOL) return part.callId;
+    if (part.kind === AGENT_PART.TOOL) return part.runFrom ?? part.callId;
     return part.kind === AGENT_PART.ARRIVED ? part.line.id : String(index);
   },
   part: (part) => {
@@ -2075,6 +2077,16 @@ function joinedSets(first: ToolPart, second: ToolPart): ToolPart {
   };
 }
 
+/** Whether a part is a to-do call that a run of them may draw as one row: not one that failed, whose row is where its error is read, nor one whose answer was cut. */
+function isJoinableTodos(part: AgentPart): part is ToolPart {
+  return isTodos(part) && part.state !== TOOL_STATE.OUTPUT_ERROR && part.cut === undefined;
+}
+
+/** Two to-do calls as one: the second's call, which holds the list as it stood after both, keyed by the first of the run. */
+function joinedTodos(first: ToolPart, second: ToolPart): ToolPart {
+  return { ...second, runFrom: first.runFrom ?? first.callId };
+}
+
 /**
  * The parts of a message a row is drawn from: every part but a step
  * boundary, a kind this build does not draw, and a `connection_execute`
@@ -2085,7 +2097,10 @@ function joinedSets(first: ToolPart, second: ToolPart): ToolPart {
  * one with no such call, or one that failed, keeps its row, because its row
  * is where it, or its error, is read. Each line that reached the turn
  * while it ran stands ahead of the first step after the steps it arrived
- * after, or at the end where that step has not begun.
+ * after, or at the end where that step has not begun. Every run of to-do
+ * calls with nothing drawn between them is joined into one, as Claude Code's
+ * `TaskCreate`, which adds one item per call, would otherwise draw a row per
+ * item, each repeating the list so far.
  */
 function drawnParts(
   message: AgentTranscriptMessage,
@@ -2125,6 +2140,8 @@ function drawnParts(
     }
     if (last !== undefined && isShownSet(last) && isShownSet(part)) {
       drawn[drawn.length - 1] = joinedSets(last, part);
+    } else if (last !== undefined && isJoinableTodos(last) && isJoinableTodos(part)) {
+      drawn[drawn.length - 1] = joinedTodos(last, part);
     } else {
       drawn.push(part);
     }

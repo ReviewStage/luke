@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { AGENT_TODO_STATUS, type AgentTranscriptMessage } from "@luke/features/agent-wire";
+import { TURN_ROW } from "@luke/features/turn-rows";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { test } from "vitest";
+import { AGENT_PART, agentRows } from "./agent-model.js";
 import { dockedTodos, newestTodos, taskTodos } from "./agent-todos.js";
 
 /**
@@ -151,4 +153,39 @@ test("a task first met by an update, its create on a page not yet landed or befo
     { content: "Export the invoices", status: IN_PROGRESS },
     { content: "Open the pull request", status: PENDING },
   ]);
+});
+
+test("a run of to-do calls with nothing drawn between them is one row, keyed by the run's first call and holding the call that ends it", () => {
+  const rows = (parts: readonly WireRecord[]) =>
+    agentRows(turn("turn-1", parts), true).map((row) => {
+      assert.equal(row.kind, TURN_ROW.BLOCK);
+      const { block } = row as Extract<typeof row, { kind: typeof TURN_ROW.BLOCK }>;
+      return [row.key, block.kind === AGENT_PART.TOOL ? block.callId : block.kind];
+    });
+  const text = { type: "text", text: "Next." };
+  const bash = call("b1", "Bash", { command: "ls" }, "ok");
+  const write = (callId: string) =>
+    call(callId, "write_todos", { todos: [{ content: "Round", status: "pending" }] }, "ok");
+  const four = [1, 2, 3, 4].map((n) => created(`c${n}`, String(n), `Item ${n}`));
+  // Four back-to-back creates are one row, still keyed by the first as a fifth lands.
+  assert.deepEqual(rows(four), [["c1", "c4"]]);
+  assert.deepEqual(rows(four.slice(0, 3))[0]?.[0], "c1");
+  // Another part drawn between them, or a call that failed, starts a new row.
+  assert.deepEqual(
+    rows([four[0] ?? {}, text, four[1] ?? {}, four[2] ?? {}]).map(([, id]) => id),
+    ["c1", "text", "c3"],
+  );
+  assert.deepEqual(
+    rows([four[0] ?? {}, bash, four[1] ?? {}]).map(([, id]) => id),
+    ["c1", "b1", "c2"],
+  );
+  const failed = call("f1", "TaskUpdate", { taskId: "9" }, "Error: no such task", true);
+  assert.deepEqual(
+    rows([four[0] ?? {}, failed, four[1] ?? {}, four[2] ?? {}]).map(([, id]) => id),
+    ["c1", "f1", "c3"],
+  );
+  // Whole-list writes repeated back to back are one row too, whatever the tool, and a step boundary between them draws nothing.
+  assert.deepEqual(rows([write("w1"), { type: "step-start" }, write("w2")]), [["w1", "w2"]]);
+  // The list the row holds is the one after the run's last call.
+  assert.deepEqual(taskTodos([turn("turn-1", four)]).get("c4")?.length, 4);
 });

@@ -42,6 +42,7 @@ import {
   REPLAY_PAGE,
   replayCallsServer,
   replayCount,
+  replayJoinedTodos,
   replayPage,
   replayTaskTodos,
   replayVerb,
@@ -390,6 +391,7 @@ function ReplaySteps({
   // Note that the replay's calls stand in its first message's words, which the transcript's own check for a server's call never reads.
   const callsServer = useMemo(() => replayCallsServer(steps), [steps]);
   const todos = useMemo(() => replayTaskTodos(steps), [steps]);
+  const joined = useMemo(() => replayJoinedTodos(steps), [steps]);
   const drawMore = () => {
     if (page.next === page.from) list.current?.focus({ preventScroll: true });
     setShown(steps.length - page.from + page.next);
@@ -414,15 +416,18 @@ function ReplaySteps({
         </Inline>
       )}
       <ConnectionNames needed={callsServer}>
-        {steps.slice(page.from).map((step, index) => (
-          // Note that a step is keyed by its place among them all, because the replay never changes once handed, and a page landing above keeps the rows below as they were.
-          <StepRow
-            key={page.from + index}
-            step={step}
-            todos={todos.get(page.from + index)}
-            place={place}
-          />
-        ))}
+        {steps.slice(page.from).map((step, index) =>
+          // Note that a to-do call a later one follows is left undrawn, as the transcript draws a run of them as one row, holding the list after the last.
+          joined.has(page.from + index) ? null : (
+            // Note that a step is keyed by its place among them all, because the replay never changes once handed, and a page landing above keeps the rows below as they were.
+            <StepRow
+              key={page.from + index}
+              step={step}
+              todos={todos.get(page.from + index)}
+              place={place}
+            />
+          ),
+        )}
       </ConnectionNames>
     </div>
   );
