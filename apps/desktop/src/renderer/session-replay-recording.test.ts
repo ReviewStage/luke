@@ -3,8 +3,12 @@
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
+import { CHOICE_SELECT, ChoiceList, useFilePicker } from "@luke/ui";
+import { writeWithheldSheet } from "@luke/ui/session-replay-marks";
 import { isRecord, jsonRoundTrip, text, valueFromJsonText, type WireValue } from "@luke/wire";
 import posthog, { type CaptureResult } from "posthog-js/dist/module.no-external";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { applySessionReplay } from "./session-replay";
 
@@ -15,8 +19,28 @@ import { applySessionReplay } from "./session-replay";
  * reach a recorder that arrived after the panel's bundle, and a stop that
  * arrives while they load has to hold. This runs the
  * library's own client and recorder over a page of words, through the
- * module's public door, and reads what the recording would send.
+ * module's public door, and reads what the recording would send: the page,
+ * the controls `@luke/ui` draws over ids and a picked file, and the sheets
+ * the window adopts.
  */
+
+Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+
+/**
+ * The window's adoption of constructed sheets, which jsdom lacks, so the
+ * recorder copies what the document adopts as it does in the window.
+ * Defined before the recorder starts, which is when it finds the accessor.
+ */
+const adoptedSheets = new WeakMap<Document, readonly CSSStyleSheet[]>();
+Object.defineProperty(Document.prototype, "adoptedStyleSheets", {
+  configurable: true,
+  get(this: Document) {
+    return adoptedSheets.get(this) ?? [];
+  },
+  set(this: Document, sheets: readonly CSSStyleSheet[]) {
+    adoptedSheets.set(this, [...sheets]);
+  },
+});
 
 // Nothing leaves the test: every request the client makes is answered here.
 // Stubbed before the client is imported, because it keeps the `fetch` it
@@ -30,7 +54,7 @@ const requests = vi.hoisted(() => {
   return made;
 });
 
-/** Words the page draws or is typed into it, none of which may leave in a recording. */
+/** Words and ids the page draws, carries, or is given, none of which may leave in a recording. */
 const WORDS = [
   "Quarterly",
   "roadmap",
@@ -39,6 +63,18 @@ const WORDS = [
   "typed-secret",
   "Folder",
   "private-token",
+  // A repository's name in a row's key, and a thread's id that elements name.
+  "acme/launch-plans",
+  "thread-9b1c",
+  // A file picked, and the ids a list's options stand for.
+  "budget-2027.pdf",
+  "workspace-71a2",
+  "workspace-8c4d",
+  "channel-3f0e",
+  "channel-5a6b",
+  // A diagram's class and a thread's id, in the sheets built from them.
+  "launch-review",
+  "thread-04aa",
 ];
 
 /** The gzip magic the library opens a compressed snapshot field with, as the binary string it sends. */
@@ -69,7 +105,89 @@ function drawPage(): void {
       <div contenteditable="true" role="textbox" aria-placeholder="Delete">
         <p>typed-secret <span contenteditable="false" data-chip="skill"><span class="skill-chip">/feature-branch</span></span></p>
       </div>
+      <ul>
+        <li class="sidebar-repository" data-motion-key="acme/launch-plans">
+          <span id="thread-9b1c" data-thread="thread-9b1c">roadmap</span>
+          <label for="thread-9b1c" aria-describedby="thread-9b1c">Folder</label>
+        </li>
+      </ul>
+      <svg>
+        <rect name="thread-9b1c" width="8" height="8" />
+        <a xlink:href="https://example.test/ticket?token=private-token"><text>roadmap</text></a>
+      </svg>
+      <data value="thread-9b1c">Folder</data>
     </main>`;
+}
+
+/** What `@luke/ui` draws over values a recording must not carry: a list picking a workspace, one picking channels, and a file picker. */
+function Controls(): React.JSX.Element {
+  const picker = useFilePicker({ onFiles: () => undefined });
+  return createElement(
+    "div",
+    null,
+    createElement(ChoiceList<string>, {
+      legend: "Workspace",
+      select: CHOICE_SELECT.ONE,
+      options: [
+        { value: "workspace-71a2", label: "Folder" },
+        { value: "workspace-8c4d", label: "roadmap" },
+      ],
+      value: ["workspace-8c4d"],
+      onChange: () => undefined,
+    }),
+    createElement(ChoiceList<string>, {
+      legend: "Channels",
+      select: CHOICE_SELECT.MANY,
+      options: [
+        { value: "channel-3f0e", label: "Folder" },
+        { value: "channel-5a6b", label: "roadmap" },
+      ],
+      value: [],
+      onChange: () => undefined,
+    }),
+    picker.input,
+  );
+}
+
+/** Draws the controls into the page, as the window draws them while it records. */
+async function drawControls(): Promise<void> {
+  const host = document.createElement("div");
+  document.querySelector("main")?.append(host);
+  await act(async () => createRoot(host).render(createElement(Controls)));
+}
+
+/** A person choosing in each list, then picking a file. */
+async function useControls(): Promise<void> {
+  await act(async () => {
+    document.querySelector<HTMLElement>('[role="radio"]')?.click();
+    document.querySelector<HTMLElement>('[role="checkbox"]')?.click();
+  });
+  const picker = document.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!picker) return;
+  // The system's picker is another process: the input holds what it handed over, as a browser shows a file's path.
+  Object.defineProperty(picker, "value", {
+    configurable: true,
+    get: () => "C:\\fakepath\\budget-2027.pdf",
+    set: () => undefined,
+  });
+  picker.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+/**
+ * The sheets the window adopts: one of the panel's own, which a recording
+ * keeps, a plan diagram's measuring sheet, which names the diagram's
+ * classes, and the open thread's, written again once adopted, which names
+ * the thread.
+ */
+function adoptSheets(): void {
+  const own = new CSSStyleSheet();
+  own.replaceSync(".own-sheet-rule { margin: 0; }");
+  const measuring = new CSSStyleSheet();
+  writeWithheldSheet(measuring, "#plan-diagram-1 .launch-review > * { font-size: 30px; }");
+  const thread = new CSSStyleSheet();
+  writeWithheldSheet(thread, "");
+  document.adoptedStyleSheets = [own, measuring, thread];
+  writeWithheldSheet(thread, '.comment-mark[data-threads~="thread-04aa"] { padding: 1px; }');
 }
 
 /** A person using the page: the recorder ships nothing for a page nobody touched. */
@@ -135,6 +253,9 @@ test("the recorder loads before anything records, a stop while it loads holds, a
   const sent: CaptureResult[] = [];
   posthog.on("eventCaptured", (event) => sent.push(event));
   usePage();
+  await drawControls();
+  await useControls();
+  adoptSheets();
   await vi.advanceTimersByTimeAsync(10_000);
   const snapshots = jsonRoundTrip(sent.filter((event) => event.event === "$snapshot"));
   const recording = JSON.stringify(snapshots === undefined ? undefined : opened(snapshots));
@@ -145,8 +266,13 @@ test("the recorder loads before anything records, a stop while it loads holds, a
   // A stylesheet's address and an icon's symbol are layout, not words, so the replay can still lay out.
   assert.ok(recording.includes("styles.css"), "the stylesheet's address");
   assert.ok(recording.includes("#file-icon-ts"), "the icon's symbol");
+  // So is a sheet of the panel's own, adopted: the recorder sends it where this test reads it,
+  // so a withheld sheet's rules would show below if the recorder ever sent them out of reach.
+  assert.ok(recording.includes("own-sheet-rule"), "the panel's own adopted sheet");
   // And none of its words, in a text node, an attribute, a link's address, an input's value, or
-  // an editor's words and chips (the agent's message box, `tasks/composer-field.tsx`).
+  // an editor's words and chips (the agent's message box, `tasks/composer-field.tsx`), nor an id
+  // or a repository's name an attribute carries, a picked file's name, an option's value as it
+  // is chosen, or a sheet built from a diagram's classes or a thread's id.
   for (const word of WORDS) assert.ok(!recording.includes(word), word);
   // A stop resets the client, and the recording a sign-in as someone else
   // resumes still names the build it came from, in the properties the counted

@@ -4,6 +4,7 @@ import {
   type DiagramDrawing,
   type DiagramModule,
 } from "@luke/ui/diagram-contract";
+import { writeWithheldSheet } from "@luke/ui/session-replay-marks";
 import mermaid, { type MermaidConfig } from "mermaid";
 import { diagramThemeVariables } from "./diagram-theme.js";
 
@@ -27,6 +28,15 @@ import { diagramThemeVariables } from "./diagram-theme.js";
  * labels, and an `<img>` runs nothing in any case. Draws run one at a time,
  * because Mermaid's configuration is global and a draw in the other
  * appearance must not land between a draw's two layouts.
+ *
+ * Neither layout reaches the screen recording. Each is drawn in a box of
+ * its own under the recorder's `ph-no-capture`, in the page, where
+ * Mermaid's renderers look their drawing up, rather than loose in its
+ * body: the drawing names the diagram's participants, nodes, and links in
+ * its attributes, and its `<style>`, which the recording copies unmasked,
+ * names its classes. The measuring sheet names them too, and the recorder
+ * copies every sheet the document adopts, so it is written withheld
+ * (`@luke/ui/session-replay-marks`), and no recording carries its rules.
  */
 
 /** The window's own type, as `styles/base.css` sets it, so a label reads as the words around it. */
@@ -92,21 +102,32 @@ function pictureOf(svg: SVGSVGElement): string {
   return `data:image/svg+xml;base64,${base64(new XMLSerializer().serializeToString(svg))}`;
 }
 
-/** One fence laid out twice, the second time under the first's stylesheet, and taken as a picture. */
+/** One fence laid out twice in `scratch`, the second time under the first's stylesheet, and taken as a picture. */
+async function laidOutIn(scratch: HTMLElement, id: string, code: string): Promise<DiagramDrawing> {
+  const first = parsedSvg((await mermaid.render(id, code, scratch)).svg);
+  const sheet = new CSSStyleSheet();
+  writeWithheldSheet(sheet, first?.querySelector("style")?.textContent ?? "");
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  try {
+    const drawn = parsedSvg((await mermaid.render(id, code, scratch)).svg);
+    return drawn === undefined ? REFUSED : { kind: DIAGRAM_DRAWING.DRAWN, url: pictureOf(drawn) };
+  } finally {
+    document.adoptedStyleSheets = document.adoptedStyleSheets.filter((each) => each !== sheet);
+  }
+}
+
+/** One fence drawn out of the recording: laid out in a box under the recorder's block, which goes once the picture is taken. */
 async function drawnNow(code: string, appearance: DiagramAppearance): Promise<DiagramDrawing> {
   mermaid.initialize(configIn(appearance));
   if ((await mermaid.parse(code, { suppressErrors: true })) === false) return REFUSED;
   laidOut += 1;
-  const id = `plan-diagram-${laidOut}`;
-  const first = parsedSvg((await mermaid.render(id, code)).svg);
-  const sheet = new CSSStyleSheet();
-  sheet.replaceSync(first?.querySelector("style")?.textContent ?? "");
-  document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  const scratch = document.createElement("div");
+  scratch.className = "ph-no-capture";
+  document.body.append(scratch);
   try {
-    const drawn = parsedSvg((await mermaid.render(id, code)).svg);
-    return drawn === undefined ? REFUSED : { kind: DIAGRAM_DRAWING.DRAWN, url: pictureOf(drawn) };
+    return await laidOutIn(scratch, `plan-diagram-${laidOut}`, code);
   } finally {
-    document.adoptedStyleSheets = document.adoptedStyleSheets.filter((each) => each !== sheet);
+    scratch.remove();
   }
 }
 

@@ -68,6 +68,7 @@
     "./tasks-model": "./src/tasks-model.js",
     "./pending-values": "./src/pending-values.js",
     "./diagram-contract": "./src/diagram-contract.js",
+    "./session-replay-marks": "./src/session-replay-marks.js",
     "./person-page-model": "./src/person-page-model.js",
     "./tailwind/theme.css": "./src/tailwind/theme.css",
     "./tailwind/sources.css": "./src/tailwind/sources.css"
