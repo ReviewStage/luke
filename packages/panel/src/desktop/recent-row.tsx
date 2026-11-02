@@ -6,6 +6,7 @@ import { RENAME_FAILED_NOTE } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { useCallback, useMemo, useRef } from "react";
 import { AssigneeFaceMark } from "../actor-ref.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { HOME_ROW_CONTEXT, HOME_ROW_META } from "../tasks/home-row.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
@@ -29,7 +30,8 @@ import { TaskRowStatus, taskCardOf } from "./task-card.js";
  * its card (`taskCardOf`), which it hangs beside it while the pointer rests
  * on it. Unread as the sidebar counts it, its name stands in the heavier
  * weight, and its menu offers to mark it read. Its acts are the sidebar row's (`useTaskMenuItems`), one menu
- * opened alike by its ⋯, a right-click, and the menu key; renamed from it,
+ * opened alike by its ⋯, a right-click, a long press, and the menu key, a
+ * finger's row drawing no ⋯ so its name keeps the room; renamed from it,
  * the row is its name's field until the edit ends, and a key that ends it
  * hands focus back to the row. It wears the task's id (`motionKey`), so a
  * list that moves follows it.
@@ -67,6 +69,7 @@ export function RecentRow({
   const endedByKey = useRefocusAfterEdit(rename.editing, row);
   const worn = face ? assigneeFace(task, directory) : undefined;
   const card = useMemo(() => taskCardOf(tasks, task, now), [tasks, task, now]);
+  const coarse = useCoarsePointer();
   return (
     <>
       <RowHintOptions card={card}>
@@ -112,6 +115,7 @@ export function RecentRow({
               ? undefined
               : { ...rowMenu("Task", actions.groups(), tasks.shown), footer: actions.footer }
           }
+          more={!coarse}
         />
       </RowHintOptions>
       {actions.dialog}

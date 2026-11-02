@@ -57,6 +57,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platfo
 import { handState } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { pixelsOf, wayBackGap } from "../testing/laid-length.js";
 import { playMotions } from "../testing/pane-motion.js";
@@ -1175,6 +1176,24 @@ test("an automation's whole row is its press: its owner and its next run open it
   await settle();
   assert.deepEqual(places, [{ kind: AUTOMATIONS_PAGE.LIST }], "the switch opens nothing");
   assert.ok(changes.length > 0, "and switches it");
+});
+
+test("under a finger, an automation's row draws its switch and no ⋯, and held opens its menu", async () => {
+  underAFinger();
+  const page = mount();
+  await settle();
+
+  const row = rowOf(page, SWEEP.name);
+  assert.ok(
+    row.querySelector('button[aria-label="Automation actions"]') === null,
+    "the row draws no ⋯",
+  );
+  assert.ok(row.querySelector(`[aria-label="Turn off ${SWEEP.name}"]`), "the row keeps its switch");
+  longPress(
+    row.querySelector<HTMLElement>("button.luke-list-row-main") ??
+      assert.fail("the row is a press"),
+  );
+  assert.ok(menuItem("Delete"), "held, it offers its menu");
 });
 
 test("a row opens its automation's page, headed by its name, with a crumb back to the list, and what it was saved as", async () => {

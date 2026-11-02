@@ -36,6 +36,7 @@ import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handInboxItems, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { playListMotions } from "../testing/pane-motion.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
@@ -419,6 +420,13 @@ function openRowMenu(page: HTMLElement, name: string, thing: string): string[] {
     ?.querySelector<HTMLButtonElement>(`button[aria-label="${thing} actions"]`);
   act(() => (more ?? assert.fail(`${name} offers its ⋯`)).click());
   return [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent ?? "");
+}
+
+/** The words of every item of the menus standing, a menu playing its exit left out. */
+function standingMenuItems(): string[] {
+  return [...document.querySelectorAll('[role="menu"]:not([data-leaving]) [role="menuitem"]')].map(
+    (item) => item.textContent ?? "",
+  );
 }
 
 /** A page over the fixture workspace with its slug, standing in it, as a link opens it. */
@@ -986,6 +994,37 @@ test("an automation's row offers Copy link, copying its link under the page's wo
   await settle();
 
   assert.deepEqual(copied, [`https://tryluke.dev/acme/automation/${AUTOMATIONS[0]?.id}`]);
+});
+
+test("under a finger, an agent's, a task's and an automation's rows draw no ⋯, and each held opens its menu", async () => {
+  underAFinger();
+  const { page } = mountLinked(CHARLES.userId);
+  await settle();
+
+  for (const [name, thing, offered] of [
+    ["Tenant cache keys", "Agent", "Archive"],
+    ["Retry budget dashboard", "Task", "Rename"],
+    ["Morning Sentry triage", "Automation", "Copy link"],
+  ] as const) {
+    const press = button(page, name);
+    const row = press.closest("li") ?? assert.fail(`${name} stands in its row`);
+    assert.ok(
+      row.querySelector(`button[aria-label="${thing} actions"]`) === null,
+      `${name} draws no ⋯`,
+    );
+    longPress(press);
+    assert.ok(
+      standingMenuItems().some((item) => item.startsWith(offered)),
+      `${name} held offers ${offered}`,
+    );
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+    await settle();
+    assert.deepEqual(standingMenuItems(), [], `${name}'s menu closes on Escape`);
+  }
 });
 
 test("a waiting item's row offers Copy link, written under the page's workspace", async () => {
