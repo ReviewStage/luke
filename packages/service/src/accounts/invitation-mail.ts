@@ -46,20 +46,49 @@ const ICON_PATH = "/app-icon-192.png";
 /** What the build says once where a variable is unset, by the variables' names alone. */
 const MAIL_UNSET = `${INVITATION_MAIL_ENVIRONMENT.RESEND_API_KEY} or ${INVITATION_MAIL_ENVIRONMENT.FROM} is not set, so workspace invitations are not emailed: each one's link is copied by hand.`;
 
-/** The email's dark card, as stage's invitation drew it; an email client takes inline styles alone. */
+/**
+ * The email's look, inline, since an email client takes inline styles alone:
+ * a light letter by default, which the dark-mode block below turns dark where
+ * the client honours `prefers-color-scheme`. The layout is tables, which
+ * every client, Outlook's Word engine among them, draws the same.
+ */
 const EMAIL_STYLE = {
-  BODY: "background-color:#131313;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:32px 16px",
-  CONTAINER: "margin:0 auto;max-width:560px;width:100%",
-  CARD: "background-color:#1f1f1f;border:1px solid rgba(255,255,255,0.06);border-radius:8px;box-shadow:0 24px 60px rgba(0,0,0,0.28);padding:40px",
-  ICON: "display:block;margin-bottom:24px;width:40px;height:40px;border:0",
+  BODY: "background-color:#f4f4f3;margin:0;padding:0;-webkit-text-size-adjust:100%",
+  OUTER: "background-color:#f4f4f3;padding:40px 16px",
+  CARD: "background-color:#ffffff;border:1px solid #e4e3e1;border-radius:12px",
+  CARD_CELL: "padding:40px 40px 32px",
+  FONT: "font-family:Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif",
+  ICON: "display:block;width:40px;height:40px;border:0;border-radius:10px;outline:none",
   HEADING:
-    "color:#f7f7f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:24px;font-weight:400;letter-spacing:-0.01em;line-height:1.3;margin:0 0 20px",
+    "color:#161615;font-size:22px;font-weight:600;letter-spacing:-0.01em;line-height:1.35;margin:28px 0 12px",
+  LEAD: "color:#646361;font-size:15px;line-height:1.6;margin:0 0 28px",
+  BUTTON_CELL: "background-color:#161615;border-radius:8px",
   BUTTON:
-    "display:inline-block;background-color:#ffffff;border-radius:6px;color:#171717;font-size:15px;font-weight:600;padding:12px 20px;text-decoration:none",
-  FALLBACK_LABEL: "color:#b3b3b3;font-size:13px;line-height:1.6;margin:24px 0 8px",
+    "display:inline-block;color:#ffffff;font-size:15px;font-weight:600;line-height:20px;padding:12px 22px;text-decoration:none;border-radius:8px",
+  FALLBACK_LABEL: "color:#646361;font-size:13px;line-height:1.6;margin:28px 0 4px",
   FALLBACK_LINK:
-    "color:#5a9f79;font-size:13px;line-height:1.6;text-decoration:underline;word-break:break-all",
+    "color:#161615;font-size:13px;line-height:1.6;text-decoration:underline;word-break:break-all",
+  RULE: "border:0;border-top:1px solid #ecebe9;margin:32px 0 20px",
+  FOOTNOTE: "color:#8a8987;font-size:12px;line-height:1.6;margin:0",
+  SIGNATURE: "color:#8a8987;font-size:12px;line-height:1.6;margin:16px 0 0;text-align:center",
 } as const;
+
+/**
+ * The same letter where the reader's client is dark: classes the light inline
+ * styles carry, overridden here, which a client that ignores `<style>` never
+ * reads and so leaves light.
+ */
+const DARK_STYLE = [
+  "@media (prefers-color-scheme: dark) {",
+  ".v-body, .v-outer { background-color:#121211 !important; }",
+  ".v-card { background-color:#1a1918 !important; border-color:#2a2a29 !important; }",
+  ".v-heading, .v-link { color:#f3f2ef !important; }",
+  ".v-muted { color:#a3a3a2 !important; }",
+  ".v-button-cell { background-color:#f3f2ef !important; }",
+  ".v-button { color:#121211 !important; }",
+  ".v-rule { border-top-color:#2a2a29 !important; }",
+  "}",
+].join("\n");
 
 /** One invitation as its email tells it. */
 export interface InvitationLetter {
@@ -94,28 +123,51 @@ function escapeHtml(value: string): string {
 
 /** The email for one invitation: its subject, its HTML, and the plain text that says the same. */
 function invitationEmail(letter: InvitationLetter) {
-  const { acceptUrl, workspaceName, inviterLabel } = letter;
+  const { email, acceptUrl, workspaceName, inviterLabel } = letter;
   const subject = `You're invited to join ${workspaceName} on ${PRODUCT_NAME}`;
   const heading = `${inviterLabel} invited you to join ${workspaceName} on ${PRODUCT_NAME}.`;
+  const lead = `${PRODUCT_NAME} is where your team works each task through with coding agents, from the plan to the merged pull request.`;
   const fallback = "Or paste this link into your browser:";
+  const footnote = `This invitation was sent to ${email}. If you weren't expecting it, you can ignore this email.`;
   const link = escapeHtml(acceptUrl);
+  const site = new URL("/", acceptUrl);
   const icon = escapeHtml(new URL(ICON_PATH, acceptUrl).href);
   const html = [
     "<!DOCTYPE html>",
-    '<html lang="en"><head><meta charset="utf-8"><meta name="color-scheme" content="dark only"><meta name="supported-color-schemes" content="dark"></head>',
-    `<body style="${EMAIL_STYLE.BODY}">`,
+    '<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">',
+    `<title>${escapeHtml(subject)}</title><style>${DARK_STYLE}</style></head>`,
+    `<body class="v-body" style="${EMAIL_STYLE.BODY}">`,
     `<div style="display:none;max-height:0;overflow:hidden">${escapeHtml(heading)}</div>`,
-    `<div style="${EMAIL_STYLE.CONTAINER}"><div style="${EMAIL_STYLE.CARD}">`,
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="v-outer" style="${EMAIL_STYLE.OUTER}"><tr><td align="center">`,
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px">',
+    `<tr><td class="v-card" style="${EMAIL_STYLE.CARD}"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="${EMAIL_STYLE.CARD_CELL};${EMAIL_STYLE.FONT}">`,
     `<img src="${icon}" alt="${escapeHtml(PRODUCT_NAME)}" width="40" height="40" style="${EMAIL_STYLE.ICON}">`,
-    `<h1 style="${EMAIL_STYLE.HEADING}">${escapeHtml(inviterLabel)} invited you to join <strong>${escapeHtml(workspaceName)}</strong> on ${escapeHtml(PRODUCT_NAME)}.</h1>`,
-    `<a href="${link}" style="${EMAIL_STYLE.BUTTON}">Accept invitation</a>`,
-    `<p style="${EMAIL_STYLE.FALLBACK_LABEL}">${fallback}</p>`,
-    `<a href="${link}" style="${EMAIL_STYLE.FALLBACK_LINK}">${link}</a>`,
-    "</div></div></body></html>",
+    `<h1 class="v-heading" style="${EMAIL_STYLE.HEADING};${EMAIL_STYLE.FONT}">${escapeHtml(inviterLabel)} invited you to join <strong>${escapeHtml(workspaceName)}</strong> on ${escapeHtml(PRODUCT_NAME)}</h1>`,
+    `<p class="v-muted" style="${EMAIL_STYLE.LEAD};${EMAIL_STYLE.FONT}">${escapeHtml(lead)}</p>`,
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td class="v-button-cell" style="${EMAIL_STYLE.BUTTON_CELL}">`,
+    `<a href="${link}" class="v-button" style="${EMAIL_STYLE.BUTTON};${EMAIL_STYLE.FONT}">Accept invitation</a>`,
+    "</td></tr></table>",
+    `<p class="v-muted" style="${EMAIL_STYLE.FALLBACK_LABEL};${EMAIL_STYLE.FONT}">${fallback}</p>`,
+    `<a href="${link}" class="v-link" style="${EMAIL_STYLE.FALLBACK_LINK};${EMAIL_STYLE.FONT}">${link}</a>`,
+    `<hr class="v-rule" style="${EMAIL_STYLE.RULE}">`,
+    `<p class="v-muted" style="${EMAIL_STYLE.FOOTNOTE};${EMAIL_STYLE.FONT}">${escapeHtml(footnote)}</p>`,
+    "</td></tr></table></td></tr>",
+    `<tr><td class="v-muted" style="${EMAIL_STYLE.SIGNATURE};${EMAIL_STYLE.FONT}">${escapeHtml(PRODUCT_NAME)} · <a href="${escapeHtml(site.href)}" class="v-muted" style="color:#8a8987;text-decoration:none">${escapeHtml(site.host)}</a></td></tr>`,
+    "</table></td></tr></table></body></html>",
   ].join("\n");
-  const text = [heading, "", `Accept invitation: ${acceptUrl}`, "", fallback, "", acceptUrl].join(
-    "\n",
-  );
+  const text = [
+    heading,
+    "",
+    lead,
+    "",
+    `Accept invitation: ${acceptUrl}`,
+    "",
+    fallback,
+    "",
+    acceptUrl,
+    "",
+    footnote,
+  ].join("\n");
   return { subject, html, text };
 }
 
