@@ -1,7 +1,8 @@
 <!doctype html>
-<!-- What an agent's page frame shows in the web app until pages have a sandboxed
-     origin of their own to be served from: the page opens in the Mac app. The
-     web platform (`src/app/web-platform.ts`) frames this for every page. -->
+<!-- What an agent's page frame shows in the web app where the deployment has no
+     sandbox to serve pages from: the page opens in the Mac app. The service's
+     frame of a page (`packages/service/src/pages/page-frame.ts`) sends the frame
+     here then. -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />

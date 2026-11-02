@@ -1,25 +1,25 @@
 /**
- * web-platform.ts -- what a browser tab answers for the panel: its own clipboard, a download, a new tab for a web address, the host's event count, the masked session recording, a cloud Browser tab's socket from the page, the Mac app on a Mac, and nothing for the Mac's menus or bundles.
+ * web-platform.ts -- what a browser tab answers for the panel: its own clipboard, a download, a new tab for a web address, the host's event count, the masked session recording, a cloud Browser tab's socket from the page, an agent's page through the service's frame of it, the Mac app on a Mac, and nothing for the Mac's menus or bundles.
  *
  * The web client's shell beside the host in the tab (`web-host.ts`), which
- * hands it where a surface event is counted. An agent's page has no
- * sandboxed origin of its own on the web yet, so every page's frame shows
- * one static page saying it opens in the Mac app.
+ * hands it where a surface event is counted. An agent's page is framed
+ * through the service's frame of its version on the tab's own origin, which
+ * sends the frame on to a link on the sandbox's own site, minted for the
+ * account as the frame loads, or to the page saying pages open in the Mac app
+ * where the deployment has no sandbox (`@luke/features/page-frame`).
  */
 
 import { ADMIN_PAGE_PATH } from "@luke/features/admin-wire";
 import { APP_HOME_LINK } from "@luke/features/link-home";
 import { LINK_PLATFORM, type LinkPlatform } from "@luke/features/link-open";
 import { openTargetOf } from "@luke/features/open-address";
+import { hostedPageFramePath } from "@luke/features/page-frame";
 import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import { COMMAND_KEY, type CommandKey } from "@luke/settings/shortcuts";
 import { browserLinkPlatform } from "../link-platform";
 import { PANEL_ASSET_BASE } from "./web-address";
 import { openBrowserLiveOverWebSocket } from "./web-browser-live";
-
-/** What every agent's page frame shows until pages have a sandboxed origin of their own (`public/page-in-mac-app.html`). */
-const PAGE_IN_MAC_APP = "/page-in-mac-app.html";
 
 const ignore = (): void => undefined;
 
@@ -149,7 +149,7 @@ export function webPlatform(
     copyImage: copyPng,
     saveFile: downloadText,
     focusPanel: () => window.focus(),
-    pageFrameUrl: () => new URL(PAGE_IN_MAC_APP, location.origin).href,
+    pageFrameUrl: (page) => new URL(hostedPageFramePath(page), location.origin).href,
     assetBase: () => new URL(PANEL_ASSET_BASE, location.origin).href,
     onMenuCommand: () => ignore,
     recordSurfaceEvent: shell.recordSurfaceEvent,

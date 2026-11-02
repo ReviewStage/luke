@@ -499,7 +499,7 @@ test("a content-hashed build asset is cached for a year, and nothing unhashed un
   }
 });
 
-/** The pages the web app frames itself, which this site alone may frame (`src/app/web-platform.ts`). */
+/** The pages the web app frames itself, which this site alone may frame: the one a page's frame is sent to where the deployment has no sandbox (`packages/service/src/pages/page-frame.ts`). */
 const FRAMED_BY_THE_APP: ReadonlySet<string> = new Set(["page-in-mac-app.html"]);
 
 /** The maintainers' dashboard, which runs no analytics and draws charts and accounts' pictures. */
