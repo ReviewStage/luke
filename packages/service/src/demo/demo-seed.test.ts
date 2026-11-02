@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { accountExperimentOn } from "@luke/database/models/account-store";
+import { hostBySecret, hostsOf } from "@luke/database/models/host-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { listAccountProviderKeyRows } from "@luke/database/models/provider-key-store";
+import { readRunsOnPick } from "@luke/database/models/runs-on-pick";
 import { listTasks } from "@luke/database/models/task-store";
 import { listWorkspaces } from "@luke/database/models/workspace-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
@@ -10,18 +13,28 @@ import {
   sqlClientOverPglite,
   syncListenerOverPglite,
 } from "@luke/database/testing";
-import { AGENT_PAYER } from "@luke/features/agent-wire";
+import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { drizzle } from "drizzle-orm/pglite";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { agentRuntimeChoice } from "../agents/coder-host/agent-runtime-choice.js";
 import { accountInboxPast } from "../agents/coder-host/inbox-page.js";
+import { hostSecretHash } from "../auth/device-secret.js";
 import { AGENT_KEY_RING } from "../testing/agent-credentials.js";
 import { DEMO_DATABASE_REFUSAL, demoDatabaseUrl } from "./demo-database.js";
-import { DEMO_DEAN, type DemoCredential, demoAuth, seedDemoWorld } from "./demo-seed.js";
+import {
+  DEMO_DEAN,
+  DEMO_HOST,
+  type DemoCredential,
+  type DemoHost,
+  demoAuth,
+  demoHostSecret,
+  seedDemoWorld,
+} from "./demo-seed.js";
 
 /**
  * The demo seed over a migrated PGlite of each test's own, with the
@@ -40,6 +53,7 @@ const CLAUDE_TOKEN = "demo-claude-token-fixture";
 /** The seed run over a fresh migrated PGlite, at a fixed instant, and what the reads under it answer. */
 const seededThen = <A, E, R>(
   credential: Option.Option<DemoCredential>,
+  host: Option.Option<DemoHost>,
   read: (seeded: Effect.Success<ReturnType<typeof seedDemoWorld>>) => Effect.Effect<A, E, R>,
 ) =>
   Effect.gen(function* () {
@@ -49,18 +63,22 @@ const seededThen = <A, E, R>(
     yield* TestClock.setTime(SEEDED_AT);
     const database = Layer.provideMerge(syncListenerOverPglite, sqlClientOverPglite(client));
     return yield* Effect.flatMap(
-      seedDemoWorld(demoAuth(drizzle({ client })), credential),
+      seedDemoWorld(demoAuth(drizzle({ client })), credential, host),
       read,
     ).pipe(Effect.provide(database));
   });
 
-it.effect("Dean reads back acme, its tasks, his Inbox, and a credential his agents run on", () =>
+/** The secret the host's record holds, minted once for the suite as the seed's runner mints it. */
+const HOST_SECRET = demoHostSecret();
+
+it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credential and host", () =>
   seededThen(
     Option.some({
       kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
       key: Redacted.make(CLAUDE_TOKEN),
       ring: AGENT_KEY_RING,
     }),
+    Option.some({ secretHash: HOST_SECRET.hash }),
     (seeded) =>
       Effect.gen(function* () {
         const workspaces = yield* listWorkspaces(DEMO_DEAN.id);
@@ -68,6 +86,10 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and a credential his agen
         const inbox = yield* accountInboxPast(DEMO_DEAN.id, INBOX_CURSOR_START);
         const choice = yield* agentRuntimeChoice(DEMO_DEAN.id, "anthropic/claude-opus-5.5");
         const [kept] = yield* listAccountProviderKeyRows(DEMO_DEAN.id);
+        const hosts = yield* hostsOf(DEMO_DEAN.id);
+        const caller = yield* hostBySecret(hostSecretHash(HOST_SECRET.secret));
+        const pick = yield* readRunsOnPick(DEMO_DEAN.id);
+        const ownHosts = yield* accountExperimentOn(DEMO_DEAN.id, EXPERIMENT.BRING_YOUR_OWN_HOST);
         const ring = Result.getOrThrow(parseKeyRing(AGENT_KEY_RING));
         const owner = {
           userId: DEMO_DEAN.id,
@@ -111,14 +133,35 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and a credential his agen
         assert.ok(kept !== undefined);
         const opened = openProviderKey(ring, owner, kept);
         assert.equal(Result.isSuccess(opened) && Redacted.value(opened.success), CLAUDE_TOKEN);
+        // The host the run starts is Dean's, its record's secret calls in as it, and every task, and his pick, runs on it.
+        assert.deepEqual(
+          hosts.map((host) => host.id),
+          [DEMO_HOST.id],
+        );
+        assert.deepEqual(
+          Option.getOrUndefined(
+            Option.map(caller, ({ deviceId, userId }) => ({ deviceId, userId })),
+          ),
+          { deviceId: DEMO_HOST.id, userId: DEMO_DEAN.id },
+        );
+        assert.deepEqual(
+          new Set(tasks.map((task) => task.runsOn?.deviceId)),
+          new Set([DEMO_HOST.id]),
+        );
+        assert.deepEqual(Option.getOrUndefined(pick), {
+          machine: AGENT_MACHINE.DEVICE,
+          deviceId: DEMO_HOST.id,
+        });
+        // Bring your own host stays off, since with it on the app would enroll the Mac's own account install with the demo's server.
+        assert.equal(ownHosts, false);
       }),
   ),
 );
 
 it.effect("two seeds of two fresh databases choose the same ids", () =>
   Effect.gen(function* () {
-    const first = yield* seededThen(Option.none(), Effect.succeed);
-    const second = yield* seededThen(Option.none(), Effect.succeed);
+    const first = yield* seededThen(Option.none(), Option.none(), Effect.succeed);
+    const second = yield* seededThen(Option.none(), Option.none(), Effect.succeed);
 
     assert.deepEqual(second, first);
     assert.equal(first.deanId, DEMO_DEAN.id);

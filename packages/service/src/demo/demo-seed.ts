@@ -2,6 +2,7 @@ import type { DB } from "@better-auth/drizzle-adapter";
 import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
 import { type Agent, createAgent } from "@luke/database/models/agent-store";
 import { createChannel } from "@luke/database/models/channel-store";
+import { enrollOwnDevice } from "@luke/database/models/host-store";
 import {
   actOnPlanCommentThread,
   PLAN_COMMENT_OUTCOME,
@@ -10,10 +11,13 @@ import {
 } from "@luke/database/models/plan-comments";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import { saveProviderKey, setProviderKeyForAgents } from "@luke/database/models/provider-key-store";
+import { keepRunsOnPick } from "@luke/database/models/runs-on-pick";
 import {
   createTaskOnce,
   savePlanText,
+  TASK_RUNS_IN_CLOUD,
   type TaskAssigneeNotMember,
+  type TaskRunsOnWrite,
   type TaskTreeRepositoryLocked,
   updateTask,
 } from "@luke/database/models/task-store";
@@ -25,7 +29,8 @@ import {
   storeWriter,
 } from "@luke/database/models/writer";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { MESSAGE_SENDER } from "@luke/features/agent-wire";
+import { AGENT_MACHINE, MESSAGE_SENDER } from "@luke/features/agent-wire";
+import { HOST_WIRE } from "@luke/features/host-wire";
 import { INBOX_REPLY, openAskOf } from "@luke/features/inbox-wire";
 import {
   PLAN_COMMENT_ACTION,
@@ -42,6 +47,7 @@ import { type Cause, Clock, Data, Effect, Option, type Redacted, Result } from "
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { authDatabaseAdapter } from "../auth/auth-database.js";
 import { ORGANIZATION_OPTIONS, USER_FIELDS } from "../auth/auth-policy.js";
+import { HOST_VERSION, type MintedSecret, mintHostSecret } from "../auth/device-secret.js";
 import {
   RUN_EVENT,
   RUN_STATUS,
@@ -68,6 +74,7 @@ import {
   DEMO_CHANNELS,
   DEMO_CHANNELS_AGO,
   DEMO_DEAN,
+  DEMO_HOST,
   DEMO_ID_KIND,
   DEMO_JOINED_AGO,
   DEMO_MEMBER_THREADS,
@@ -87,7 +94,7 @@ import {
 } from "./demo-world.js";
 
 /**
- * demo-seed.ts -- the demo's seed: the acme world (`demo-world.ts`) written into a freshly migrated database through the store's own models, with Dean's model credential where the run hands one in.
+ * demo-seed.ts -- the demo's seed: the acme world (`demo-world.ts`) written into a freshly migrated database through the store's own models, with Dean's model credential and his host on this Mac where the run hands them in.
  *
  * `run.sh --demo` signs in as `DEMO_DEAN` and opens on what this writes:
  * Dean's own workspace and acme beside it, with Dana, Jordan, Priya, and
@@ -104,7 +111,10 @@ import {
  * as Dean's, for his agents, sealed under `PROVIDER_KEY_ENCRYPTION_KEYS`,
  * which the local server must then be handed too, or it cannot open it. The
  * token is never logged, written to a fixture, or traced: it goes from the
- * environment to its sealed row alone.
+ * environment to its sealed row alone. Where the run starts a host on this
+ * Mac for Dean (`LUKE_DEMO_HOST_STATE`), it is enrolled as his own under
+ * `DEMO_HOST`'s id, and every task runs its agents there, with no Runs on
+ * to pick.
  *
  * Every write goes through the model a route writes through, so the seed
  * keeps up with the schema. Users are Better Auth's own rows, made by its
@@ -151,6 +161,11 @@ export interface DemoCredential {
   readonly kind: typeof PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN | typeof PROVIDER_KEY_KIND.API_KEY;
   readonly key: Redacted.Redacted<string>;
   readonly ring: Redacted.Redacted;
+}
+
+/** The host the run starts on this Mac for Dean's agents, by the hash of the device secret its record holds (`demoHostSecret`). */
+export interface DemoHost {
+  readonly secretHash: string;
 }
 
 /** The ids of what the seed wrote that it chose itself, the same for every seed of a fresh database. */
@@ -377,11 +392,17 @@ function seedComment(task: DemoTask, comment: DemoComment, clock: SeedClock, key
 }
 
 /**
- * The task under its fixed id, made by its maker and assigned, its plan
- * saved, and the comments on it; one that is done or canceled stands to do
- * until it is moved there.
+ * The task under its fixed id, made by its maker and assigned, running its
+ * agents where `runsOn` names, its plan saved, and the comments on it; one
+ * that is done or canceled stands to do until it is moved there.
  */
-function seedTask(workspaceId: string, task: DemoTask, clock: SeedClock, key: () => string) {
+function seedTask(
+  workspaceId: string,
+  task: DemoTask,
+  runsOn: TaskRunsOnWrite,
+  clock: SeedClock,
+  key: () => string,
+) {
   return Effect.gen(function* () {
     const made = yield* clock.ago(
       task.createdAgo,
@@ -392,6 +413,7 @@ function seedTask(workspaceId: string, task: DemoTask, clock: SeedClock, key: ()
         status: task.settledAgo === undefined ? task.status : TASK_STATUS.TODO,
         priority: task.priority,
         assigneeId: task.assignee.id,
+        runsOn,
         text: "",
       }),
     );
@@ -664,30 +686,66 @@ function seedCredential({
   });
 }
 
+/* ----- The host ----- */
+
+/** A device secret for the demo's host, and the hash the seed keeps of it (`DemoHost`); the secret goes to the host's record alone. */
+export function demoHostSecret(): MintedSecret {
+  return mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
+}
+
+/**
+ * The demo's host enrolled as Dean's own under its fixed id, keyed with the
+ * hash of the secret its record holds, and kept as where he last ran a
+ * task; where every task runs its agents. Note that Bring your own host is
+ * left off for him, because with it on the app keeps the Mac's one account
+ * install (~/.local/state/luke-host) running for the account signed in, and
+ * would enroll a Mac with none with the run's server; and that the host is
+ * enrolled at the service's floor, because its first call records the
+ * version it runs.
+ */
+function seedHost(host: DemoHost) {
+  return Effect.gen(function* () {
+    const enrolled = yield* enrollOwnDevice(DEMO_DEAN.id, {
+      id: DEMO_HOST.id,
+      version: HOST_VERSION.FLOOR,
+      secretHash: host.secretHash,
+      machine: { name: DEMO_HOST.name, platform: DEMO_HOST.platform, arch: DEMO_HOST.arch },
+    });
+    if (!enrolled) return yield* Effect.fail(new DemoSeedRefused({ step: "the demo's host" }));
+    const runsOn = { machine: AGENT_MACHINE.DEVICE, deviceId: DEMO_HOST.id } as const;
+    yield* keepRunsOnPick(DEMO_DEAN.id, runsOn);
+    return runsOn;
+  });
+}
+
 /* ----- The seed ----- */
 
 /**
  * Writes the acme world into a freshly migrated database, and Dean's
- * credential where one is handed in; the ids it chose. A database that
- * holds any account already is refused, a seeded one among them, so a seed
- * runs once per database. Note that the seed is no one transaction, since
- * Better Auth writes through a pool of its own, so one that fails partway
- * leaves a database to throw away, as `run.sh --demo` throws its own away
- * on every exit; the credential is sealed first, so a ring that does not
- * parse fails it before anything is written.
+ * credential and host where they are handed in, every task running its
+ * agents on that host, or in the cloud where there is none; the ids it
+ * chose. A database that holds any account already is refused, a seeded
+ * one among them, so a seed runs once per database. Note that the seed is
+ * no one transaction, since Better Auth writes through a pool of its own,
+ * so one that fails partway leaves a database to throw away, as `run.sh
+ * --demo` throws its own away on every exit; the credential is sealed
+ * first, so a ring that does not parse fails it before anything is
+ * written.
  */
 export function seedDemoWorld(
   auth: DemoAuth,
   credential: Option.Option<DemoCredential>,
+  host: Option.Option<DemoHost>,
 ): DemoSeedEffect<DemoSeeded> {
   return Effect.gen(function* () {
     const sealed = yield* Effect.transposeOption(Option.map(credential, sealedCredential));
     const clock = yield* seedClock;
     const key = clientKeys();
     const { personalWorkspaceId, workspaceId, memberIds } = yield* seedPeople(auth, clock);
+    const runsOn = Option.isSome(host) ? yield* seedHost(host.value) : TASK_RUNS_IN_CLOUD;
     const channelIds = yield* seedChannels(workspaceId, clock);
     const taskIds = yield* Effect.forEach(DEMO_TASKS, (task) =>
-      seedTask(workspaceId, task, clock, key),
+      seedTask(workspaceId, task, runsOn, clock, key),
     );
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const posters = new Map<DemoAgent, InboxAgent>();
@@ -708,4 +766,4 @@ export function seedDemoWorld(
   });
 }
 
-export { DEMO_DEAN };
+export { DEMO_DEAN, DEMO_HOST };

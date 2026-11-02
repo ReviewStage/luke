@@ -10,14 +10,22 @@ luke_require_node
 luke_ensure_dependencies
 
 # The instance `--demo` launches, the one folder of its profile a run keeps
-# (the CLIs its agents downloaded, `@luke/host`'s local-agent-tools.ts), how
-# long its local server may take to answer, and the link the app opens once
-# signed in: acme's Inbox, by the slug the seed's workspace name takes in a
-# fresh database (`@luke/service/demo/demo-world`'s `DEMO_WORKSPACE_NAME`).
+# (the CLIs the run's host fetched for its agents, `@luke/host`'s
+# local-agent-tools.ts), how long its local server may take to answer, and
+# the link the app opens once signed in: acme's Inbox, by the slug the
+# seed's workspace name takes in a fresh database
+# (`@luke/service/demo/demo-world`'s `DEMO_WORKSPACE_NAME`).
 DEMO_INSTANCE=demo
 DEMO_KEPT_FOLDER=agent-tools
 DEMO_SERVER_WAIT_SECONDS=120
 DEMO_LINK=vespin://vespin.dev/acme/inbox
+
+# The host's record of the agents whose folders it made, an empty file named
+# for each (`OWNED_FOLDER` in packages/host/src/local-agent-state.ts), and
+# where every host of this Mac makes them, under the home
+# (`DEVICE_AGENT_FOLDER.ROOT` in packages/features/src/device-agent-wire.ts).
+DEMO_OWNED_AGENTS=owned-agents
+DEMO_AGENTS_FOLDER=.vespin/agents
 
 # 32 random bytes in standard base64: a secret, or a key of the provider
 # keys' ring (`PROVIDER_KEY_ENCRYPTION_KEYS`).
@@ -28,6 +36,20 @@ demo_random_key() {
 # A loopback port nothing listens on now, as the system hands one out.
 demo_free_port() {
     node -e 'const server = require("node:net").createServer(); server.listen(0, "127.0.0.1", () => { process.stdout.write(String(server.address().port)); server.close(); })'
+}
+
+# The folders of the agents the host with the state given made, removed, as
+# `luke-host uninstall` removes its own (apps/host/scripts/luke-host.sh), so
+# no other install's agent beside them in the home's folder is touched. An
+# entry that is not an agent's id is passed over.
+demo_agents_removed() {
+    local owned id
+    for owned in "$1/$DEMO_OWNED_AGENTS"/*; do
+        id=${owned##*/}
+        if [[ -e $owned && $id =~ ^[0-9a-f-]+$ ]]; then
+            rm -rf -- "${HOME:?}/$DEMO_AGENTS_FOLDER/$id"
+        fi
+    done
 }
 
 # Running this script means "launch the build I just made", so an already-running
@@ -147,15 +169,22 @@ fi
 # migrates it and runs `auth:seed`), the acme world written into it
 # (`demo:seed`), and the local server over it (`local-server`) on a free
 # loopback port, which signs the app in as Dean
-# (apps/web/server/local-sign-in.ts). The profile is cleared but for the
-# CLIs the app's agents downloaded, so with a new database each run starts
-# from the same data. The secrets are made for the run, and each reaches
-# only the processes that read it: never the terminal, and never the app,
-# whose host daemon and its agents inherit its environment. The app is not
-# exec'd, so the trap stops the server and the database and deletes the
-# run's folder however the run ends.
+# (apps/web/server/local-sign-in.ts). Dean's agents run on a host of the
+# run's own on this Mac: `luke-host run` built from this checkout, its state
+# the demo profile, enrolled by the seed as Dean's with every task running
+# on it. So neither it nor the app, for which Dean's Bring your own host
+# stays off, touches the Mac's own host (~/.local/state/luke-host).
+# The profile is cleared but for the CLIs that host fetched, and the
+# folders of the agents it ran go with it, so with a new database each run
+# starts from the same data. The secrets are made for the run, and each
+# reaches only the processes that read it: never the terminal, the app,
+# or the host and its agents; the host's device secret is minted by the
+# seed and goes to its record alone. The app is not exec'd, so the trap
+# stops the host, the server and the database, and deletes the run's
+# folder, however the run ends.
 demo_profile="$HOME/Library/Application Support/$(luke_instance_app_name "$instance")"
 if [[ -d $demo_profile ]]; then
+    demo_agents_removed "$demo_profile"
     find "$demo_profile" -mindepth 1 -maxdepth 1 ! -name "$DEMO_KEPT_FOLDER" -exec rm -rf -- {} +
 fi
 
@@ -187,14 +216,19 @@ demo_cron_secret=$(demo_random_key)
 demo_folder=
 postgres_pid=
 server_pid=
+host_pid=
 demo_stop() {
     local pid
-    for pid in "$server_pid" "$postgres_pid"; do
+    # Note that the host stops first, which stops its agents, and that their folders go once it has.
+    for pid in "$host_pid" "$server_pid" "$postgres_pid"; do
         if [[ -n $pid ]]; then
             kill "$pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
         fi
     done
+    if [[ -n $host_pid ]]; then
+        demo_agents_removed "$demo_profile"
+    fi
     if [[ -n $demo_folder ]]; then
         rm -rf -- "$demo_folder"
     fi
@@ -213,10 +247,14 @@ until [[ -s $demo_folder/database-url ]]; do
 done
 demo_database_url=$(<"$demo_folder/database-url")
 
-# Note that the seed seals Dean's credential under the key ring the server
-# opens it with, so the two are handed the one ring.
+# Note that the port is chosen before the seed, because the host's record
+# names the origin it calls, and that the seed seals Dean's credential under
+# the key ring the server opens it with, so the two are handed the one ring.
+demo_port=$(demo_free_port)
+demo_origin="http://127.0.0.1:$demo_port"
 (
-    export DATABASE_URL="$demo_database_url" PROVIDER_KEY_ENCRYPTION_KEYS="$demo_key_ring"
+    export DATABASE_URL="$demo_database_url" PROVIDER_KEY_ENCRYPTION_KEYS="$demo_key_ring" \
+        LUKE_DEMO_HOST_STATE="$demo_profile" LUKE_DEMO_SERVICE_ORIGIN="$demo_origin"
     if [[ -n $demo_claude_token ]]; then
         export LUKE_DEMO_CLAUDE_TOKEN="$demo_claude_token"
     fi
@@ -230,8 +268,6 @@ demo_database_url=$(<"$demo_folder/database-url")
 # local-server`, because a pnpm that hands the run to the version the
 # repository pins waits on it without passing a stop on, so the trap's stop
 # would never reach the server.
-demo_port=$(demo_free_port)
-demo_origin="http://127.0.0.1:$demo_port"
 (
     export DATABASE_URL="$demo_database_url" DATABASE_URL_UNPOOLED="$demo_database_url" \
         BETTER_AUTH_SECRET="$demo_auth_secret" PROVIDER_KEY_ENCRYPTION_KEYS="$demo_key_ring" \
@@ -250,6 +286,28 @@ until curl --silent --max-time 5 --output /dev/null "$demo_origin/api/auth/ok"; 
     sleep 0.5
 done
 printf 'demo: serving %s, its log at %s\n' "$demo_origin" "$demo_folder/server.log" >&2
+
+# The host, from this checkout: the daemon's and the runner's bundles, each
+# built by its package's own script, which writes in the version the service
+# takes a host at (a bare build reports none and is refused), staged side by
+# side in a `lib/` as a release carries them, since the daemon runs the
+# runner from the `lib/` it stands in (packages/host/src/daemon/host-platform.ts).
+# It runs under node itself, as the server does, so the trap's stop reaches
+# it, and without the shell's Claude credential, which the seed alone is
+# handed: its agents run on the one saved as Dean's. The first run fetches
+# its agents' CLIs into the kept folder, and the host reads as getting ready
+# in Settings › Hosts until it has them.
+pnpm --filter @luke/host-daemon --filter @luke/agent-runner build >"$demo_folder/host-build.log" 2>&1 || {
+    printf 'error: the demo host did not build; it printed:\n' >&2
+    cat "$demo_folder/host-build.log" >&2
+    exit 1
+}
+mkdir -p "$demo_folder/host/lib"
+cp apps/host/dist/luke-host.mjs packages/agent-runner/dist/agent-runner.mjs "$demo_folder/host/lib/"
+env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY LUKE_HOST_STATE_ROOT="$demo_profile" \
+    node "$demo_folder/host/lib/luke-host.mjs" run >"$demo_folder/host.log" 2>&1 &
+host_pid=$!
+printf "demo: running this Mac's host for Dean, its log at %s\n" "$demo_folder/host.log" >&2
 
 # Note that the app is handed acme's link, because a cleared profile opens
 # the member's own workspace, which the seed leaves empty; the app holds the
