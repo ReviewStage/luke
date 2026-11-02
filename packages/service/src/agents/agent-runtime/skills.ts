@@ -1,5 +1,5 @@
 /**
- * skills.ts -- the agent skills a session is offered: the ones the repository it works on keeps, then the ones its member installed into Fullspin.
+ * skills.ts -- the agent skills a session is offered: the ones the repository it works on keeps, then the ones its member installed into the app.
  *
  * eve offers a session the skills its resolvers hand it, lists each by its
  * description, and loads one's body with `load_skill` when the developer
@@ -160,7 +160,7 @@ function installedAgentSkill(skill: InstalledSkillWithFiles): AgentSkill | undef
 }
 
 /**
- * The enabled skills the member installed into Fullspin, as eve is handed them:
+ * The enabled skills the member installed into the app, as eve is handed them:
  * the workspace's, where the agent's workspace is one the member is still
  * in, then the member's own personal ones, each with its supporting files.
  * None while the member has the Skills experiment off, and none where the

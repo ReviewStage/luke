@@ -8,6 +8,7 @@ import {
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { AGENT_AUTHOR, type AgentAuthor } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, type Redacted, Result, Schema } from "effect";
@@ -54,8 +55,8 @@ import { agentPublished } from "./published.js";
  * the agent is told, so it can tell the developer. A refusal of the pull
  * request itself, such as one already open from the branch, is the agent's
  * to read and opens nothing. The description is the agent's own, with no
- * line of Fullspin's added: where its author is a person, the trailer on its
- * commits (`checkout.ts`) names Fullspin's bot as co-author, which GitHub shows
+ * line of ours added: where its author is a person, the trailer on its
+ * commits (`checkout.ts`) names our bot as co-author, which GitHub shows
  * on the pull request, as it does for Claude Code. It merges into the
  * repository's default branch unless the agent names another base, such as
  * the branch of the pull request it stacks on; a base GitHub does not know
@@ -111,7 +112,7 @@ export const OPEN_PULL_REQUEST_TOOL = {
     "Open the pull request for a branch you pushed. head is the branch's name, title its title, body its description in " +
     "Markdown, draft whether it opens as a draft, and base the branch it merges into: the repository's default branch " +
     "where left out, or another branch on GitHub, such as the parent's branch for a stacked pull request. Use this rather than " +
-    "`gh pr create`: the service opens it as the developer who started you where you write as them, and as Fullspin's GitHub " +
+    `\`gh pr create\`: the service opens it as the developer who started you where you write as them, and as ${PRODUCT_NAME}'s GitHub ` +
     "App otherwise, and adds nothing to the description. Where GitHub refuses the developer's " +
     "own access, it is opened as the App instead and the answer says so; tell the developer, who can sign in with GitHub " +
     "again. The call answers with the pull request's address and number, or GitHub's reason it opened none.",
@@ -163,10 +164,9 @@ export function pullRequestRejected(reason: string): PullRequestToolResult {
 /** What the agent is told where the App opened its pull request in the developer's place, by why. */
 const FALLBACK_NOTE = {
   [AGENT_AUTHOR.APP_UNLINKED]:
-    "Opened as Fullspin's GitHub App: the developer's GitHub sign-in was refused. Tell them; signing in with GitHub again " +
+    `Opened as ${PRODUCT_NAME}'s GitHub App: the developer's GitHub sign-in was refused. Tell them; signing in with GitHub again ` +
     "lets a later agent open its pull requests as them.",
-  [AGENT_AUTHOR.APP_NO_PUSH]:
-    "Opened as Fullspin's GitHub App: the developer's own GitHub account may not open a pull request on this repository. Tell them.",
+  [AGENT_AUTHOR.APP_NO_PUSH]: `Opened as ${PRODUCT_NAME}'s GitHub App: the developer's own GitHub account may not open a pull request on this repository. Tell them.`,
 } as const satisfies Partial<Record<AgentAuthor, string>>;
 
 type FallbackReason = keyof typeof FALLBACK_NOTE;

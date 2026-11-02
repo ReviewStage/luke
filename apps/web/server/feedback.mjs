@@ -1,5 +1,5 @@
 /**
- * Turns one Fullspin feedback submission into email to the founders.
+ * Turns one feedback submission into email to the founders.
  *
  * This is the fixed endpoint the desktop app's composer posts to
  * (`packages/features/src/feedback/delivery.ts`), deployed with the landing page.
@@ -20,7 +20,7 @@
  */
 
 const RESEND_URL = "https://api.resend.com/emails";
-const DEFAULT_FROM = "Fullspin <feedback@tryluke.dev>";
+const DEFAULT_FROM = "Vespin <feedback@vespin.dev>";
 
 /**
  * A best-effort brake on abuse: the endpoint is public and each accepted
@@ -90,8 +90,8 @@ const FEEDBACK_LIMITS = {
 };
 
 const SUBJECT_LINE = {
-  [FEEDBACK_KIND.FEEDBACK]: "Fullspin feedback",
-  [FEEDBACK_KIND.PROMPT]: "Fullspin prompt",
+  [FEEDBACK_KIND.FEEDBACK]: "Feedback",
+  [FEEDBACK_KIND.PROMPT]: "Prompt",
 };
 
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
@@ -261,7 +261,7 @@ function emailBody(submission) {
     submission.name || submission.email
       ? `From: ${[submission.name, submission.email].filter(Boolean).join(" — ")}`
       : "From: unsigned";
-  return [submission.message, "", "—", credit, "Sent from the Fullspin panel."].join("\n");
+  return [submission.message, "", "—", credit, "Sent from the panel."].join("\n");
 }
 
 /**

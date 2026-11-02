@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
@@ -17,15 +18,13 @@ import {
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
-/** What the line says where macOS refused Fullspin's last notification, by whether this is the packaged app. */
+/** What the line says where macOS refused the app's last notification, by whether this is the packaged app. */
 const NOTIFICATIONS_OFF_WORDS = {
-  packaged:
-    "macOS has notifications off for Fullspin, so a command waiting while Fullspin is behind won't say so.",
-  development:
-    "macOS has notifications off for Electron, which is how the dev build appears to macOS, so a command waiting while Fullspin is behind won't say so.",
+  packaged: `macOS has notifications off for ${PRODUCT_NAME}, so a command waiting while ${PRODUCT_NAME} is behind won't say so.`,
+  development: `macOS has notifications off for Electron, which is how the dev build appears to macOS, so a command waiting while ${PRODUCT_NAME} is behind won't say so.`,
 } as const;
 
-/** The line under the choice where macOS refused Fullspin's last notification, and the way to turn them back on. Note that it has no name of its own, because the choice above it is what it is about. */
+/** The line under the choice where macOS refused the app's last notification, and the way to turn them back on. Note that it has no name of its own, because the choice above it is what it is about. */
 function NotificationsOff({ control }: { control: NotificationsControl }): React.JSX.Element {
   return (
     <SettingsRow
@@ -52,17 +51,17 @@ function NotificationsOff({ control }: { control: NotificationsControl }): React
 }
 
 /**
- * mac-commands-section.tsx -- the This Mac page's groups: whether Fullspin and coding agents may run shell commands here, then Startup.
+ * mac-commands-section.tsx -- the This Mac page's groups: whether the app and coding agents may run shell commands here, then Startup.
  *
  * One choice, Ask every time by default: each command is put to the
  * developer before it runs, or every command runs unasked, or none at all
  * (`compose-mac-commands.ts` in the host stops reading for commands under
- * Never). A command waiting while Fullspin is behind is the one notification
- * Fullspin posts, so where macOS refused its last one a line under the choice
+ * Never). A command waiting while the app is behind is the one notification
+ * the app posts, so where macOS refused its last one a line under the choice
  * says so and opens System Settings, where they are turned back on; a
  * development build runs inside Electron's own app, which macOS lists it
- * as, and the line names it so. Startup holds whether Fullspin opens at login, since it is the Mac
- * that starts him; it stands only where the installed app does, so a page
+ * as, and the line names it so. Startup holds whether the app opens at login, since it is the Mac
+ * that starts it; it stands only where the installed app does, so a page
  * with none of its rows draws no empty heading.
  */
 export function MacCommandsSection({

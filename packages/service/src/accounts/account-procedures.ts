@@ -10,7 +10,7 @@
  * sent.
  *
  * The preferences snapshot is five parts: the settings preferences the
- * desktop syncs, where the account's Fullspin links open, a synced setting of
+ * desktop syncs, where the account's app links open, a synced setting of
  * its own part so a build that predates it neither refuses the snapshot nor
  * clears the choice by writing the shared part back whole, the coding
  * agents' default model, effort, and context window, which Settings alone

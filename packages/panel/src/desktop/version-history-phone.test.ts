@@ -14,7 +14,8 @@ import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import type { VersionHistoryControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
-import { pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
+import { longPress, underAFinger } from "../testing/finger.js";
+import { menuItems, pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { TaskVersionHistory } from "./desktop-version-history.js";
@@ -151,6 +152,20 @@ test("on a phone the versions are headed by the way out alone, named for the ste
   assert.deepEqual(exits, ["exit"]);
 });
 
+test("under a finger a version's row draws no ⋯, and held it offers its menu", () => {
+  underAFinger();
+  const { view } = drawn(SHELL_ROOM.NARROW, { listed: true });
+  const rows = [...view.querySelectorAll<HTMLElement>('[aria-label="Version list"] li > button')];
+  const older = rows.at(-1) ?? assert.fail("the older version has a row");
+  assert.ok(view.querySelector('[aria-label="Version actions"]') === null, "no row draws a ⋯");
+
+  longPress(older);
+  const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
+    (each) => each.textContent,
+  );
+  assert.ok(offered.includes("Restore this version"), "the long press offers Restore");
+});
+
 test("on a phone a revision's sections are headed by the way back to every version, which closes them, in place of the All versions row", () => {
   const { view, exits } = drawn(SHELL_ROOM.NARROW, {
     listed: true,
@@ -168,12 +183,18 @@ test("on a phone a revision's sections are headed by the way back to every versi
   assert.deepEqual(exits, ["sections"]);
 });
 
-test("on a phone a version is headed by the way back to the list, when it was saved, and Restore this version as a button, never a ⋯ of one item", () => {
+test("on a phone a version is headed by the way back to the list, when it was saved, and a ⋯ holding Restore this version and Find, since a corner holds one control and a phone has no ⌘F", () => {
   const { view, exits } = drawn(SHELL_ROOM.NARROW, VIEWING_2);
 
   const head = readPhoneHead(view, "version");
-  assert.deepEqual([head.start, head.end], [["Versions"], ["Restore this version"]]);
+  assert.deepEqual([head.start, head.end], [["Versions"], ["Version actions"]]);
   assert.ok(head.title, "the moment it was saved is the title");
+  pressInPhoneHead(view, "version", "Version actions");
+  assert.deepEqual(
+    menuItems().map((item) => item.label),
+    ["Restore this version", "Find"],
+  );
+  pressInPhoneHead(view, "version", "Version actions");
   pressInPhoneHead(view, "version", "Versions");
   assert.deepEqual(exits, ["list"]);
 });
@@ -185,10 +206,11 @@ test("on a phone the newest version's Restore stands unavailable, as the wide ba
     viewing: VIEWING_2.viewing && { ...VIEWING_2.viewing, line: line(3), current: true },
   });
 
-  const restore = [...view.querySelectorAll<HTMLButtonElement>("header.version-head button")].find(
-    (each) => each.textContent === "Restore this version",
+  pressInPhoneHead(view, "version", "Version actions");
+  assert.deepEqual(
+    menuItems().find((item) => item.label === "Restore this version"),
+    { label: "Restore this version", disabled: true },
   );
-  assert.equal(restore?.getAttribute("aria-disabled") ?? String(restore?.disabled), "true");
 });
 
 test("a wide room keeps the versions' Back row and title and a version's Restore button, with no phone's header", () => {

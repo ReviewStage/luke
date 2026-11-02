@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_TOOL } from "@luke/features/agent-tools";
+import { AGENT_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import type { AgentTranscriptMessage } from "@luke/features/agent-wire";
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
@@ -64,23 +64,24 @@ function rowOf(tool: string, input: WireRecord, output: WireRecord) {
 
 const NO_ANSWER = { status: "accepted" };
 
-test("each of Fullspin's tools that fell through to 'Used' reads as its own verb, with no wrench", () => {
+test("each of Vespin's tools that fell through to 'Used' reads as its own verb, with no wrench", () => {
   const rows = [
     [AGENT_TOOL.LIST_TASKS, {}, "Listed the tasks"],
     [
-      AGENT_TOOL.REMEMBER,
+      AGENT_TOOL.SAVE_MEMORY,
       { text: "Words are lowercase mid-sentence." },
       "Saved to memory: Words are lowercase mid-sentence.",
     ],
-    [AGENT_TOOL.RECALL, { query: "transcript words" }, "Searched memory transcript words"],
+    [AGENT_TOOL.SEARCH_MEMORY, { query: "transcript words" }, "Searched memory transcript words"],
     [AGENT_TOOL.READ_COMMENTS, {}, "Read the comments"],
     [
       AGENT_TOOL.REPLY_TO_COMMENT,
       { threadId: "t1", text: "Done in the next push." },
       "Replied to a comment: Done in the next push.",
     ],
-    [AGENT_TOOL.RESOLVE_THREAD, { threadId: "t1" }, "Resolved a thread"],
-    [AGENT_TOOL.REOPEN_THREAD, { threadId: "t1" }, "Reopened a thread"],
+    [AGENT_TOOL.UPDATE_COMMENT, { thread: "t1", resolved: true }, "Resolved a thread"],
+    [AGENT_TOOL.UPDATE_COMMENT, { thread: "t1", resolved: false }, "Reopened a thread"],
+    [RETIRED_TOOL.RECALL, { query: "transcript words" }, "Searched memory transcript words"],
   ] as const;
   for (const [tool, input, words] of rows) {
     assert.equal(rowOf(tool, input, NO_ANSWER), words, tool);

@@ -28,6 +28,7 @@
  * the app's own files, so only the web's root listens.
  */
 
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { holdsUnkept } from "@luke/panel/composer-drafts";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { showToast } from "@luke/panel/toast";
@@ -46,7 +47,7 @@ export const PRELOAD_ERROR = "vite:preloadError";
 const RELOADED_FROM_KEY = "luke.staleBuild.reloadedFrom";
 
 /** What the toast says where the tab holds work a reload would lose. */
-const NEW_VERSION_READY = "A new version of Fullspin is ready";
+const NEW_VERSION_READY = `A new version of ${PRODUCT_NAME} is ready`;
 
 /** The entry script a page names, whose hashed address names the build it is from. */
 const ENTRY_SCRIPT = /<script\b(?=[^>]*\btype=["']module["'])[^>]*\bsrc=["']([^"']+)["']/iu;

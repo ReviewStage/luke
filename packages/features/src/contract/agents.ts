@@ -224,7 +224,7 @@ export const agentsContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/review-options` }))
     .input(idParams)
     .output(EffectSchema.flip(agentReviewOptionsAnswerSchema)),
-  /** Which of Fullspin's own tools one agent is offered, and whether its `run_on_mac` would run now, as its MCP popover reads them. */
+  /** Which of our own tools one agent is offered, and whether its `run_on_mac` would run now, as its MCP popover reads them. */
   lukeTools: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/luke-tools` }))
     .input(idParams)

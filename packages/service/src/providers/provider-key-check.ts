@@ -43,7 +43,7 @@ const PROVIDER_CHECK = {
   },
 } as const;
 
-/** The one fast request a fast check sends: the model Fullspin's fast versions lead with, at its least effort, for one token. */
+/** The one fast request a fast check sends: the model our fast versions lead with, at its least effort, for one token. */
 const FAST_CHECK = {
   URL: "https://api.anthropic.com/v1/messages",
   BETA: "fast-mode-2026-02-01",

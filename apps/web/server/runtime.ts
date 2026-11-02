@@ -58,10 +58,10 @@ export function webServicesWith(
 }
 
 /**
- * The doors to a native agent's machine, for Fullspin's MCP server's tools that
+ * The doors to a native agent's machine, for our MCP server's tools that
  * read a file the agent names: their calls run on this runtime, a
  * sandbox's under the function's own OIDC token, as every other call of
- * Fullspin's to Vercel Sandbox is made, and a local agent's as requests its Mac answers.
+ * ours to Vercel Sandbox is made, and a local agent's as requests its Mac answers.
  */
 export const webAgentSandboxDoor = agentSandboxDoors(
   runWeb,

@@ -6,6 +6,7 @@ import {
   type GitHubTokenStatus,
   type GitHubTokenSummary,
 } from "@luke/features/github-token-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { dayText } from "@luke/features/time-format";
 import { ACT_KIND } from "@luke/host/acts";
@@ -78,13 +79,13 @@ function rejectionLabel(rejection: GitHubTokenRejection): ReactNode {
     case GITHUB_TOKEN_REJECTION.NO_GITHUB_ACCOUNT:
       return (
         <>
-          No GitHub account is connected to your Fullspin account. Connect GitHub in{" "}
+          No GitHub account is connected to your {PRODUCT_NAME} account. Connect GitHub in{" "}
           <SettingsPageLink page={SETTINGS_VIEW.INTEGRATIONS} /> settings, then save the token
           again.
         </>
       );
     case GITHUB_TOKEN_REJECTION.OTHER_USER:
-      return "This token belongs to a different GitHub account than the one connected to Fullspin. Create it while signed in to the connected account.";
+      return `This token belongs to a different GitHub account than the one connected to ${PRODUCT_NAME}. Create it while signed in to the connected account.`;
     case GITHUB_TOKEN_REJECTION.UNREACHABLE:
       return "GitHub could not be reached. Try again.";
     case GITHUB_TOKEN_REJECTION.TOO_MANY_TRIES:
@@ -180,7 +181,7 @@ function SavedToken({
         confirm={removal}
         question={{
           title: "Remove your GitHub token?",
-          body: "Fullspin deletes the token it holds, and your pull requests stop using it until you add one again.",
+          body: `${PRODUCT_NAME} deletes the token it holds, and your pull requests stop using it until you add one again.`,
           verb: "Remove",
           running: "Removing",
           loss: CONFIRM_LOSS.IRREVERSIBLE,

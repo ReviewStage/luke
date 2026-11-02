@@ -31,15 +31,16 @@ import {
   type PartCut,
   storedObjectSchema,
 } from "./agent-wire.js";
+import { PRODUCT_NAME } from "./product-name.js";
 import { countedNumber } from "./service-wire.js";
 import { turnRecordOf } from "./turn-record.js";
 
 /** How many of the newest messages the live window holds. */
 export const TRANSCRIPT_WINDOW = 100;
 
-/** The names a line is sent under where no member's account names it: Fullspin's, and a member's whose account is gone. */
+/** The names a line is sent under where no member's account names it: the app's, and a member's whose account is gone. */
 const SENDER_NAME = {
-  LUKE: "Fullspin",
+  LUKE: PRODUCT_NAME,
   FORMER_MEMBER: "Former member",
 } as const;
 

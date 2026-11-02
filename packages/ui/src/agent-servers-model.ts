@@ -20,8 +20,8 @@ import { searchTokens } from "./search-tokens.js";
 /**
  * agent-servers-model.ts -- what the MCP servers popover at an agent's composer says of each server: how many tools it offers, whether this agent has it on, or how to connect it; which section it stands under; and what a search of it finds.
  *
- * Every MCP server Fullspin hands a coding agent is one account at an
- * integration, so the popover has one row per account the Fullspin account
+ * Every MCP server the service hands a coding agent is one account at an
+ * integration, so the popover has one row per account the signed-in account
  * holds at each provider the deployment offers it, and one for a provider
  * where it holds none, in the provider list's order. A provider with more
  * than one account names each row by its label ("Notion · Acme"), and one
@@ -85,9 +85,9 @@ export interface ServerRow {
   readonly provider: IntegrationProvider;
   /** The server's name: its account's connection name, or the provider's where it holds none. */
   readonly connection: string;
-  /** The account the row stands for, where the Fullspin account holds one at the provider. */
+  /** The account the row stands for, where the signed-in account holds one at the provider. */
   readonly account?: IntegrationAccount;
-  /** How many accounts the Fullspin account holds at the provider. */
+  /** How many accounts the signed-in account holds at the provider. */
   readonly accounts: number;
   readonly name: string;
   readonly kind: ServerRowKind;
@@ -150,7 +150,7 @@ function wordsOf(
     if (health.kind === CONNECTION_HEALTH.BROKEN) {
       return { problem: health.problem, ...saidOf(health.said) };
     }
-    // Note that a read Fullspin's own service could not answer is said, never drawn as a server that works.
+    // Note that a read our own service could not answer is said, never drawn as a server that works.
     return health.kind === CONNECTION_HEALTH.FAILED
       ? { problem: readFailedWords("the tools") }
       : undefined;
@@ -315,7 +315,7 @@ export interface NamedServer {
 }
 
 /**
- * Every server the Fullspin account holds, standing as `status` says, in the
+ * Every server the signed-in account holds, standing as `status` says, in the
  * provider list's order: each account at a provider, named by its label
  * where the provider has more than one, and a provider with none by itself.
  */

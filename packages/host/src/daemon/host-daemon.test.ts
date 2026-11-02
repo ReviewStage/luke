@@ -144,7 +144,7 @@ describe("a host's daemon", () => {
       pnpmConfig: "Library/Preferences/pnpm",
     },
   ])(
-    "registers as its OS ($platform) on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets and the box's one pnpm store and npm cache named in its agent's home, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group and ends once Fullspin refuses its secret",
+    "registers as its OS ($platform) on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets and the box's one pnpm store and npm cache named in its agent's home, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group and ends once Vespin refuses its secret",
     ({ os, name, platform: devicePlatform, uid, sandboxed, runnerBundle, pnpmConfig }) =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
@@ -178,7 +178,7 @@ describe("a host's daemon", () => {
                   seq: 1,
                   kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
                   payload: {
-                    checkoutPath: `${home}/.luke/agents/${AGENT_ID}/repository`,
+                    checkoutPath: `${home}/.vespin/agents/${AGENT_ID}/repository`,
                     repository: null,
                     startBranch: null,
                     firstSequence: 1,
@@ -228,7 +228,7 @@ describe("a host's daemon", () => {
         const launched = spawner.spawned.filter(isRunner);
         expect(launched).toHaveLength(1);
         const [runner] = launched;
-        const folder = `${home}/.luke/agents/${AGENT_ID}`;
+        const folder = `${home}/.vespin/agents/${AGENT_ID}`;
         expect(runner?.args).toEqual([runnerBundle]);
         expect(runner?.cwd).toBe(`${folder}/repository`);
         expect(runner?.extendEnv).toBe(false);
@@ -254,7 +254,7 @@ describe("a host's daemon", () => {
         expect(yield* fileSystem.readFileString(`${folder}/home/.npmrc`)).toBe(
           `cache="${stateRoot}/agent-packages/npm-cache"\n`,
         );
-        expect(reports).toContain("Fullspin host: Connected to Fullspin.");
+        expect(reports).toContain("Vespin host: Connected to Vespin.");
 
         removed = true;
         yield* TestClock.adjust(Duration.seconds(20));
@@ -274,7 +274,7 @@ describe("a host's daemon", () => {
   );
 
   it.effect(
-    "refused as needing an upgrade, says so once with the command to run and asks Fullspin nothing until its quiet spell has passed",
+    "refused as needing an upgrade, says so once with the command to run and asks Vespin nothing until its quiet spell has passed",
     () =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
@@ -305,7 +305,7 @@ describe("a host's daemon", () => {
 
         const upgrade = reports.filter((line) => line.includes("upgrade needed"));
         expect(upgrade).toEqual([
-          `Fullspin host: upgrade needed: Fullspin no longer accepts this version. Rerun the install command to upgrade in place: curl -fsSL ${SERVICE}/install.sh | sh`,
+          `Vespin host: upgrade needed: Vespin no longer accepts this version. Rerun the install command to upgrade in place: curl -fsSL ${SERVICE}/install.sh | sh`,
         ]);
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
@@ -435,7 +435,7 @@ describe("hostRuntime", () => {
       platform: "darwin",
       home: "/Users/ada",
       os: DARWIN_HOST,
-      stateRoot: "/Users/ada/Library/Application Support/Luke",
+      stateRoot: "/Users/ada/Library/Application Support/Vespin",
     },
     {
       platform: "linux",

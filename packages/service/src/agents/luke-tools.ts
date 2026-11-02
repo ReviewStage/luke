@@ -1,10 +1,10 @@
 /**
- * luke-tools.ts -- which of Fullspin's own tools an agent is offered, and whether its `run_on_mac` would run now, as its MCP popover reads them.
+ * luke-tools.ts -- which of our own tools an agent is offered, and whether its `run_on_mac` would run now, as its MCP popover reads them.
  *
  * The list is the one the agent's runtime hands it, by the same rules:
  * eve's tools for an agent on eve (`coder-host/tool-set.ts`'s
  * `offeredCoderTools`), and for one on Claude Code or Codex the tools of
- * Fullspin's MCP server, whose harness keeps its own shell and files
+ * our MCP server, whose harness keeps its own shell and files
  * (`luke-mcp/tools.ts`'s `offeredLukeMcpTool`), each narrowed by its
  * repository, its kind, whether a pilot started it, where it runs, and its
  * starter's Memory. Nothing is
@@ -26,7 +26,7 @@ import { offeredCoderTools } from "./coder-host/tool-set.js";
 import { LUKE_MCP_TOOLS, offeredLukeMcpTool } from "./luke-mcp/tools.js";
 import { macListening } from "./mac-command.js";
 
-/** What of an agent decides its Fullspin tools: what narrows them, and whether it runs on a provider's own harness. */
+/** What of an agent decides which of our tools it is offered: what narrows them, and whether it runs on a provider's own harness. */
 export interface LukeToolsOfferedTo {
   readonly agent: Pick<Agent, "repository" | "kind" | "machine">;
   /** Whether the agent runs on Claude Code or Codex rather than eve. */
@@ -37,7 +37,7 @@ export interface LukeToolsOfferedTo {
   readonly underPilot: boolean;
 }
 
-/** The agent's Fullspin tools, by name, in the order its runtime offers them. */
+/** Our tools the agent is offered, by name, in the order its runtime offers them. */
 export function offeredLukeTools(input: LukeToolsOfferedTo): readonly string[] {
   if (!input.native) return offeredCoderTools(input.agent, input);
   const offered = offeredLukeMcpTool(input.agent, input);

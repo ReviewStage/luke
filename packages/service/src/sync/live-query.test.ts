@@ -20,7 +20,7 @@ import { defineLiveQuery, LIVE_MODE, type LiveQuery } from "./live-query.js";
 import { Sync } from "./watch.js";
 
 /**
- * Live reads Fullspin Sync wakes, on tables only these tests create: the
+ * Live reads Sync wakes, on tables only these tests create: the
  * registry check holds a definition's statements, as Postgres plans them,
  * to the synced tables it declares and to no column they ignore; and a
  * held read on the hub answers within a coalesce window of a write to its
@@ -272,7 +272,7 @@ const onHub = <A, E, R>(
     );
   });
 
-it.layer(probeDB)("live reads Fullspin Sync wakes", (it) => {
+it.layer(probeDB)("live reads Vespin Sync wakes", (it) => {
   it.effect(
     "every live read defined reads only synced tables it declares, each captured, and no column they ignore",
     () =>

@@ -1,8 +1,8 @@
 /**
- * file-view-settings.ts -- how every File tab draws its lines, numbered or not and wrapped or scrolling sideways, and every diff as a review tool's diff settings say: Fullspin's own app settings, read and written as any other.
+ * file-view-settings.ts -- how every File tab draws its lines, numbered or not and wrapped or scrolling sideways, and every diff as a review tool's diff settings say: our own app settings, read and written as any other.
  *
  * Each is an app setting (`@luke/settings`'s `APP_SETTING_SCHEMA`, under
- * Settings › Appearance › Diffs), stored in Fullspin's settings file and carried
+ * Settings › Appearance › Diffs), stored in the app's settings file and carried
  * to every window on the settings document, so a change in one File tab,
  * diff, popover, or Settings row is drawn at once in every other, as an
  * editor's view settings are. A File tab follows the numbers and wrap, and

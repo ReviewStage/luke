@@ -97,7 +97,7 @@ function scrolled(sidebar: HTMLElement) {
   const home =
     [...sidebar.querySelectorAll("button")].find((each) => each.textContent?.startsWith("Inbox")) ??
     assert.fail("the Inbox's row");
-  const list = sidebar.querySelector('nav[aria-label="Tasks"]') ?? assert.fail("the Tasks list");
+  const list = sidebar.querySelector('nav[aria-label="My tasks"]') ?? assert.fail("the Tasks list");
   return { home: scroller.contains(home), tasks: scroller.contains(list) };
 }
 

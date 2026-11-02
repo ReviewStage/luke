@@ -71,7 +71,7 @@ export const accountAskActsContract = {
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.flip(githubTokenAnswerViewSchema)),
   [ACCOUNT_ASK_ACT_KIND.MEMORIES_READ]: actProcedure(
-    "Could not read Fullspin's memory on this system.",
+    "Could not read the workspace's memory on this system.",
   )
     .input(exactInput(memoriesReadParamsSchema))
     .output(EffectSchema.flip(memoriesAnswerViewSchema)),

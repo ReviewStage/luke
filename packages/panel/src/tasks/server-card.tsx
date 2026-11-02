@@ -39,7 +39,7 @@ import { useServerRows } from "./agent-servers.js";
  * in the popover's order, each a row of its title and its badge's words
  * that hangs what the tool does, every one, scrolling past a few, and a tool's mention its one tool's
  * row, of those the server answered with. Where the words are no agent's,
- * as a plan's or Fullspin's are, the corner is empty and the note says
+ * as a plan's or the app's are, the corner is empty and the note says
  * nothing of a switch.
  *
  * Where the words stand is told by the place drawing them

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Luke brand-asset generator — the single source of truth for the artwork.
+// Brand-asset generator — the single source of truth for the artwork.
 // The identity is the L-face: a monoline capital-L nose curling into a smile,
 // two eyes above it. Edit the constants below and re-run:
 //
@@ -373,9 +373,9 @@ const MOTIONS = {
     eyes: { kind: "lids" },
     sleepZ: true,
   },
-  // Awake but voiceless: the day's spoken allowance is spent, and Luke
+  // Awake but voiceless: the day's spoken allowance is spent, and the face
   // keeps watching. The eyes stay open on a slow single blink — a hush that
-  // closed them would read as a Luke that stopped watching, which is the
+  // closed them would read as a face that stopped watching, which is the
   // one thing this state must not say — the head holds a shade of the
   // sleeper's droop, and the whole face dims to the grayed-out idiom's ink.
   hushed: {

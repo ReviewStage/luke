@@ -15,7 +15,7 @@ import { PANEL_PATH } from "../src/app/web-address";
  * unreachable one offers nothing to press; and a signed-out visitor is
  * offered the providers, whose failure to start is announced. The page runs
  * as it does in the browser, mounted on its own `#root`; the network, the
- * HTTP boundary to Better Auth and Fullspin's route, is a fake.
+ * HTTP boundary to Better Auth and our route, is a fake.
  */
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
@@ -137,7 +137,7 @@ test("a valid invitation names its workspace and inviter and is accepted from it
     ]),
   );
   await titled(page, "Join Atlas");
-  expect(page.textContent).toContain("Grace invited you to plan in Atlas on Fullspin, as member.");
+  expect(page.textContent).toContain("Grace invited you to plan in Atlas on Vespin, as member.");
   expect(buttonNames(page)).toEqual(["Accept invitation"]);
 
   vi.mocked(globalThis.fetch).mockImplementationOnce(
@@ -154,10 +154,10 @@ test("a valid invitation names its workspace and inviter and is accepted from it
   await act(async () => settleAccept({ status: 200, body: { invitation: {}, member: {} } }));
   await act(async () => vi.advanceTimersByTimeAsync(SESSION_REREAD_DELAY_MS));
   await titled(page, "You joined Atlas");
-  expect(page.textContent).toContain("Return to Fullspin. You can close this tab.");
+  expect(page.textContent).toContain("Return to Vespin. You can close this tab.");
   expect(buttonNames(page)).toEqual([]);
   const open = page.querySelector("a");
-  expect(open?.textContent).toBe("Open Fullspin on the web");
+  expect(open?.textContent).toBe("Open Vespin on the web");
   expect(open?.getAttribute("href")).toBe(PANEL_PATH);
 });
 
@@ -171,10 +171,10 @@ test("a spent invitation says so and offers nothing to press", async () => {
   expect(buttonNames(page)).toEqual([]);
 });
 
-test("an invitation Fullspin cannot read asks for a reload and offers nothing to press", async () => {
+test("an invitation Vespin cannot read asks for a reload and offers nothing to press", async () => {
   const page = await openPage(signedInReading({ status: 500 }));
 
-  await titled(page, "Fullspin could not be reached");
+  await titled(page, "Vespin could not be reached");
   expect(page.textContent).toContain("Reload this page to try again.");
   expect(buttonNames(page)).toEqual([]);
 });

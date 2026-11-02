@@ -660,9 +660,9 @@ test("⌘K says a place it opens as Go to the place, and the menus' own words st
   assert.ok(!rows().includes("Inbox"), "the place is never said bare, as a verb would be");
 });
 
-test("the field asks to search Fullspin under All, and the kind under its filter", () => {
+test("the field asks to search Vespin under All, and the kind under its filter", () => {
   openPalette();
-  assert.equal(field().placeholder, "Search Fullspin");
+  assert.equal(field().placeholder, "Search Vespin");
 
   chooseFilter("This task");
   assert.equal(field().placeholder, "Search this task");
@@ -1571,7 +1571,7 @@ test("a task whose assignee and creator share a first name says the one the whol
   assert.deepEqual(rows(), ["Audit trail · relay · Charles Ward"]);
 });
 
-test("a task Fullspin or a coding agent made says who in its detail and is found by it, but wears who is on it rather than its maker", () => {
+test("a task Vespin or a coding agent made says who in its detail and is found by it, but wears who is on it rather than its maker", () => {
   const dean = { userId: "user-dean", name: "Dean Stratakos" };
   const task = (id: string, origin?: TaskSummary["origin"]) => ({
     id,
@@ -1605,7 +1605,7 @@ test("a task Fullspin or a coding agent made says who in its detail and is found
 
   assert.deepEqual(rows(), [
     "Invite emails · relay · by Agent",
-    "Audit log export · relay · by Fullspin",
+    "Audit log export · relay · by Vespin",
     "Rate limits · relay",
   ]);
   assert.deepEqual(marks(), [null, null, null]);
@@ -1815,7 +1815,7 @@ test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⇧�
     `Copy link to task · ${DOCUMENT_TASK.name}`,
   ]);
   assert.equal(chord, "⇧⌘C");
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${LINKED_AGENT}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${LINKED_AGENT}`]);
   assert.equal(newestToastSays(), "Link copied");
 });
 
@@ -1855,9 +1855,9 @@ test("⇧⌘C copies the link of what is open, the most specific first: the Inbo
   }
 
   assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/agent/${LINKED_AGENT}`,
-    `https://tryluke.dev/acme/agent/${LINKED_AGENT}/inbox/${itemId}`,
-    `https://tryluke.dev/acme/automation/${automationId}`,
+    `https://vespin.dev/acme/agent/${LINKED_AGENT}`,
+    `https://vespin.dev/acme/agent/${LINKED_AGENT}/inbox/${itemId}`,
+    `https://vespin.dev/acme/automation/${automationId}`,
   ]);
 });
 
@@ -1886,8 +1886,8 @@ test("on an agent's page with a page it showed open in the panel, ⇧⌘C copies
   }
 
   assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/agent/${LINKED_AGENT}/page/${pageId}`,
-    `https://tryluke.dev/acme/agent/${LINKED_AGENT}`,
+    `https://vespin.dev/acme/agent/${LINKED_AGENT}/page/${pageId}`,
+    `https://vespin.dev/acme/agent/${LINKED_AGENT}`,
   ]);
 });
 
@@ -1912,7 +1912,7 @@ test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile a
   await act(async () => undefined);
 
   assert.deepEqual(listed, ["Copy link to profile"]);
-  assert.deepEqual(copied, ["https://tryluke.dev/acme/person/user-charles"]);
+  assert.deepEqual(copied, ["https://vespin.dev/acme/person/user-charles"]);
 });
 
 test("on the home page nothing has a link, so ⇧⌘C is not offered and ⌘K lists no Copy link", () => {
@@ -1945,7 +1945,7 @@ test("with the side panel filling the window over an agent's tab, ⇧⌘C copies
   });
   await act(async () => undefined);
 
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${LINKED_AGENT}/changes`]);
+  assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${LINKED_AGENT}/changes`]);
 });
 
 test("⌘K pressed with the keyboard in the side panel offers its tab's link first, wearing ⇧⌘C, as ⇧⌘C there copies", () => {
@@ -1998,7 +1998,7 @@ test("on an agent's page in another workspace than the one listed, ⇧⌘C names
   });
   await act(async () => undefined);
 
-  assert.deepEqual(copied, [`https://tryluke.dev/beta/agent/${LINKED_AGENT}`]);
+  assert.deepEqual(copied, [`https://vespin.dev/beta/agent/${LINKED_AGENT}`]);
 });
 
 test("People lists the listed workspace's members as every people menu does, the reader first as You and the rest by name with their email, found by email too, each hanging their card, and a choice opens their page", async () => {
@@ -2736,7 +2736,7 @@ test("⌘K still offers Show inbox for a task an item waits on while its agents 
   assert.ok(rows().includes("Show inbox"), "a waiting item holds the Inbox");
 });
 
-test("⌘K draws no Issues filter, with every experiment on, since Fullspin keeps no issues of its own, and its Inbox filter finds threads under Channels", async () => {
+test("⌘K draws no Issues filter, with every experiment on, since Vespin keeps no issues of its own, and its Inbox filter finds threads under Channels", async () => {
   handState(experimentsOn(...Object.values(EXPERIMENT)));
   await paletteUnderState(tasksControl({ workspace: ACME }));
   await settle();

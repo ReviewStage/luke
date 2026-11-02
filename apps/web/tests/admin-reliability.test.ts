@@ -23,7 +23,7 @@ import { choose, menuItems, openViewOptions } from "./support/view-options";
  * by what broke and its status alone, a press on it opening its account
  * page; reads every provider's configuration in words; links product
  * analytics only where the deployment names its console; and offers the two
- * windows it reads. The network, the HTTP boundary to Fullspin, is a fake that
+ * windows it reads. The network, the HTTP boundary to the service, is a fake that
  * answers the read.
  */
 
@@ -188,9 +188,7 @@ test("the loading screen stands its sections under the same headings, saying it 
 test("each rate reads as a share with what it is a share of", async () => {
   const { page } = await openReliability(reliability());
 
-  expect(cardOf(page, "Fullspin turns failed")).toBe(
-    "Fullspin turns failed1.4%412 of 29,880 turns",
-  );
+  expect(cardOf(page, "Vespin turns failed")).toBe("Vespin turns failed1.4%412 of 29,880 turns");
   expect(cardOf(page, "Agent runs failed")).toBe("Agent runs failed6.8%68 of 1,000 runs");
   expect(cardOf(page, "Abandoned by the sweep")).toBe(
     "Abandoned by the sweep37turns past their bound",
@@ -209,7 +207,7 @@ test("a database that did not answer shows no count and no account, and says why
   expect(sectionHeadings(page)).toEqual(["Failures", "System health"]);
   expect(page.textContent).toContain("The database did not answer its probe");
   expect(page.textContent).not.toContain("Ada Lovelace");
-  expect(cardOf(page, "Fullspin turns failed")).toBe("");
+  expect(cardOf(page, "Vespin turns failed")).toBe("");
   expect(cardOf(page, "Database")).toBe("DatabaseUnreachableprobe round-trip 9 ms");
 });
 

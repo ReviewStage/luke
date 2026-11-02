@@ -1,5 +1,5 @@
 /**
- * use-sentry-read.ts -- a workspace's Sentry as the service holds it now, for the rows that offer Fullspin's Sentry integration.
+ * use-sentry-read.ts -- a workspace's Sentry as the service holds it now, for the rows that offer our Sentry integration.
  */
 
 import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";

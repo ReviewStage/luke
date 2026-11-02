@@ -28,7 +28,7 @@ import { providerOf } from "./agent-model.js";
  * plan-history-model.ts -- the version history's words for each revision, and a version of the plan drawn against another with its changes marked.
  *
  * A revision is drawn under its writer the way the rest of the window draws
- * them (`@luke/ui/actor-model`): Fullspin for the notetaker, the reader by their
+ * them (`@luke/ui/actor-model`): the app's face for the notetaker, the reader by their
  * account's picture as You, a teammate as the workspace's members list them,
  * a coding agent by its harness and title, and Earlier for the plan as it
  * stood before its history began. Its line says
@@ -105,7 +105,7 @@ function personOf(by: PlanEditor | undefined, reader: HistoryReader): Actor {
 
 /**
  * Who wrote a revision: a member, the reader as You only where the revision
- * names them; Fullspin; a coding agent by the title its row has now, wearing
+ * names them; the app; a coding agent by the title its row has now, wearing
  * the harness of the agent the line names among the task's `agents`, or no
  * harness where the agent is not among them; or the plan before history.
  */
@@ -372,7 +372,7 @@ export type RevisionSource = {
 
 /**
  * Where a revision's Open goes: an agent's tab where the line names the
- * agent, and nowhere for the developer's own, a restore, Fullspin's own saves,
+ * agent, and nowhere for the developer's own, a restore, the app's own saves,
  * whose work no tab draws, or the plan before history.
  */
 export function revisionSource(

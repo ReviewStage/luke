@@ -306,7 +306,7 @@ it.layer(getTestDB())("the runner's token route", (it) => {
             agentId: agent.agentId,
             kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
             payload: {
-              checkoutPath: "/Users/fixture/.luke/agents/a/repository",
+              checkoutPath: "/Users/fixture/.vespin/agents/a/repository",
               repository: null,
               startBranch: null,
               firstSequence: 0,
@@ -607,7 +607,7 @@ it.layer(getTestDB())("a Mac's GitHub token", (it) => {
   );
 
   it.effect(
-    "refuses an agent on a Mac running its agents on its own logins, and mints for one running them on the box on Fullspin's",
+    "refuses an agent on a Mac running its agents on its own logins, and mints for one running them on the box on Vespin's",
     () =>
       Effect.gen(function* () {
         const { ask } = yield* hostStanding;

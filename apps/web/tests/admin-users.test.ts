@@ -12,7 +12,7 @@ import { underWebAdminDoors } from "./support/admin-doors";
  * first answer lands, says it is loading, and takes typing then;
  * loaded, it counts and lists the accounts under the search, narrows them
  * at once as a maintainer types, and says no account matches in the table's
- * place when none does. The network, the HTTP boundary to Fullspin, is a fake
+ * place when none does. The network, the HTTP boundary to the service, is a fake
  * that answers the roster's read or leaves it hanging.
  */
 

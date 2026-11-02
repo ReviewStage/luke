@@ -13,6 +13,7 @@ import {
   CHIP_LOOK,
   InlineEdit,
   type ListRowFold,
+  type ListRowNest,
   PROGRESS_COUNT_LOOK,
   ProgressCount,
   TASK_ROW_CELL,
@@ -119,6 +120,7 @@ export function TaskListRow({
   onOpen,
   onStanding,
   depth,
+  nest,
   fold,
   settled,
   menuGroups = [],
@@ -144,6 +146,8 @@ export function TaskListRow({
   onStanding: (standing: TaskStanding) => void;
   /** How deep it stands nested under other rows: 0, at the top, unless said. */
   depth?: number | undefined;
+  /** Where it stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
+  nest?: ListRowNest | undefined;
   /** The rows nested under it, which it folds; none where it holds none. */
   fold?: ListRowFold | undefined;
   /** Whether it stands settled beside the rows still open, its name muted. */
@@ -258,6 +262,7 @@ export function TaskListRow({
       onOpen={onOpen}
       pressRef={press}
       depth={depth}
+      nest={nest}
       fold={fold}
       settled={settled}
     >

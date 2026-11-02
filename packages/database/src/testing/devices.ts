@@ -10,5 +10,5 @@ export const DEVICE_LAYOUT: DeviceRegistration = {
   platform: DEVICE_PLATFORM.DARWIN,
   arch: DEVICE_ARCH.ARM64,
   home: "/Users/fixture",
-  claudeExecutable: "/Applications/Fullspin.app/Contents/Resources/claude-code/cli.js",
+  claudeExecutable: "/Applications/Vespin.app/Contents/Resources/claude-code/cli.js",
 };

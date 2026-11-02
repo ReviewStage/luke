@@ -32,7 +32,7 @@ export const GATEWAY_METHOD = {
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
   /** One change to the account's sidebar sections on the service; the view takes the sections it answered. */
   TASKS_WRITE_SECTION: "tasks.writeSection",
-  /** The repositories the account reaches through the Fullspin GitHub App, read from the service now. */
+  /** The repositories the account reaches through our GitHub App, read from the service now. */
   TASKS_REPOSITORIES: "tasks.repositories",
   /** One task given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
   TASKS_SET_REPOSITORY: "tasks.setRepository",
@@ -116,11 +116,11 @@ export const GATEWAY_METHOD = {
   WORKSPACES_RENAME: "workspaces.rename",
   /** A workspace's photo set or removed on the service by an owner or admin; the view's workspaces are read again. */
   WORKSPACES_PHOTO_SET: "workspaces.photoSet",
-  /** A GitHub organization's connection to a workspace begun on the service: the Fullspin GitHub App's install address, for the caller to open. */
+  /** A GitHub organization's connection to a workspace begun on the service: our GitHub App's install address, for the caller to open. */
   WORKSPACES_GITHUB_CONNECT: "workspaces.githubConnect",
   /** A workspace's GitHub organization disconnected on the service; the view's workspaces are read again. */
   WORKSPACES_GITHUB_DISCONNECT: "workspaces.githubDisconnect",
-  /** Whether the deployment holds Fullspin's Sentry integration, and a workspace's installations of it, read from the service now; answered to the caller, never held in the view. */
+  /** Whether the deployment holds our Sentry integration, and a workspace's installations of it, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_SENTRY: "workspaces.sentry",
   /** A workspace's Sentry install begun on the service by an owner or admin: Sentry's install address, for the caller to open. */
   WORKSPACES_SENTRY_INSTALL: "workspaces.sentryInstall",
@@ -299,7 +299,7 @@ export const GATEWAY_METHOD = {
   AGENTS_CHANGES: "agents.changes",
   /** The workspace's newest chapters of one agent's pull request, with its head as GitHub holds it now; or why there are none. */
   AGENTS_CHAPTERS: "agents.chapters",
-  /** One agent's pull request's chapters generated for its head on Fullspin's own model key, or the generation already under way, answered as a read of them is. */
+  /** One agent's pull request's chapters generated for its head on our own model key, or the generation already under way, answered as a read of them is. */
   AGENTS_CHAPTERS_GENERATE: "agents.chaptersGenerate",
   /** The Claude model the account's Generate chapters runs on, read from the service now. */
   CHAPTERS_MODEL_READ: "chapters.modelRead",
@@ -327,7 +327,7 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   /** A connected plan's default for the account's coding agents turned on or off on the service; the keys as they then stand. */
   PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
-  /** A ChatGPT sign-in for Fullspin's hosted runtime, run on this Mac through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
+  /** A ChatGPT sign-in for our hosted runtime, run on this Mac through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
   CHATGPT_SIGN_IN: "chatGpt.signIn",
   /** The ChatGPT sign-in waiting on the browser, withdrawn. */
   CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
@@ -337,7 +337,7 @@ export const GATEWAY_METHOD = {
   GITHUB_TOKEN_SAVE: "githubToken.save",
   /** The member's GitHub token removed on the service; none then stands. */
   GITHUB_TOKEN_REMOVE: "githubToken.remove",
-  /** The memories Fullspin's agents kept in a workspace, read from the service now. */
+  /** The memories our agents kept in a workspace, read from the service now. */
   MEMORIES_READ: "memories.read",
   /** One memory forgotten on the service for good; the workspace's memories as they then stand. */
   MEMORIES_FORGET: "memories.forget",
@@ -436,7 +436,7 @@ export const GATEWAY_METHOD = {
   MAC_COMMAND_ANSWER: "macCommands.answer",
   /** Where This Mac's `luke-host` stands (`@luke/host/contract`'s `THIS_MAC_HOST_STANDING`), as the host last found it. */
   THIS_MAC_HOST_READ: "thisMacHost.read",
-  /** This Mac's `luke-host` turned on by the member's own act, enrolling the Mac again where Fullspin removed it or the last turn-on failed; where it then stands. */
+  /** This Mac's `luke-host` turned on by the member's own act, enrolling the Mac again where the service removed it or the last turn-on failed; where it then stands. */
   THIS_MAC_HOST_TURN_ON: "thisMacHost.turnOn",
   /** One experiment turned on or off for the signed-in account on the service; the settings as they then stand, the experiments among them. */
   EXPERIMENTS_SET: "experiments.set",

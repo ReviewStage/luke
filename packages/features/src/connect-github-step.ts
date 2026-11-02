@@ -1,4 +1,5 @@
 import { GITHUB_CONNECT_PAGE } from "./github-connection-wire.js";
+import { PRODUCT_NAME } from "./product-name.js";
 
 /**
  * connect-github-step.ts -- what the connect page was opened to do, read from its address, and Better Auth's refusals in words.
@@ -36,9 +37,8 @@ const LINK_ERROR = {
 type LinkError = (typeof LINK_ERROR)[keyof typeof LINK_ERROR];
 
 const LINK_ERROR_WORDS = {
-  [LINK_ERROR.ACCOUNT_ALREADY_LINKED]:
-    "This GitHub account belongs to another Fullspin account. Sign in with GitHub instead.",
-  [LINK_ERROR.EMAIL_MISMATCH]: "GitHub's email address does not match this Fullspin account's.",
+  [LINK_ERROR.ACCOUNT_ALREADY_LINKED]: `This GitHub account belongs to another ${PRODUCT_NAME} account. Sign in with GitHub instead.`,
+  [LINK_ERROR.EMAIL_MISMATCH]: `GitHub's email address does not match this ${PRODUCT_NAME} account's.`,
   [LINK_ERROR.UNABLE_TO_LINK]: "GitHub did not confirm this account, so it was not connected.",
 } as const satisfies Record<LinkError, string>;
 
@@ -85,14 +85,14 @@ export function connectStepFromSearch(search: string): ConnectStep {
   return { kind: CONNECT_STEP.NOTHING };
 }
 
-/** What failed, as the first words of a refusal Fullspin has no words of its own for. */
+/** What failed, as the first words of a refusal we have no words of our own for. */
 export const LINK_FAILED = {
   CONNECT: "GitHub could not be connected",
 } as const;
 
 type LinkFailed = (typeof LINK_FAILED)[keyof typeof LINK_FAILED];
 
-/** A refusal in words: ours for the codes Fullspin expects, Better Auth's own message or code for any other. */
+/** A refusal in words: ours for the codes we expect, Better Auth's own message or code for any other. */
 export function linkErrorWords(
   failed: LinkFailed,
   code: string | undefined,

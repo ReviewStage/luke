@@ -28,7 +28,7 @@
  * daemon is below it, which the host updates itself to.
  * The live agents' read answers the ids of the account's agents pinned to
  * that Mac and not archived (`GET /api/device-agents/live-agents`), which
- * the Mac keeps and removes everything else of Fullspin's it holds against.
+ * the Mac keeps and removes everything else of ours it holds against.
  * A held read answers what waits for that Mac (`GET /api/device-agents/lines`,
  * `GET /api/device-agents/requests`), a claim takes one row by its id, a
  * launch line's secrets with it, a line's claim asked again under the

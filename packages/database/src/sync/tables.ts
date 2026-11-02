@@ -1,5 +1,5 @@
 /**
- * tables.ts -- every table Fullspin Sync captures, as one list the drift check and the migration writer read.
+ * tables.ts -- every table Sync captures, as one list the drift check and the migration writer read.
  *
  * A table is synced by declaring it here (`defineSyncTable`) and writing
  * its capture into a migration (`pnpm --filter @luke/database sync:render`);

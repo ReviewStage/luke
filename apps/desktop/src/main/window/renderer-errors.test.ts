@@ -26,7 +26,7 @@ const { electronApp, FakeWindow } = await vi.hoisted(async () => {
         level,
         message,
         lineNumber: 12,
-        sourceId: "file:///Applications/Fullspin.app/renderer/index.js",
+        sourceId: "file:///Applications/Vespin.app/renderer/index.js",
       });
     }
   }
@@ -41,7 +41,7 @@ afterEach(() => {
 
 /** Opens a window at the renderer's document of that name, as Electron announces one. */
 function open(document: string): InstanceType<typeof FakeWindow> {
-  const window = new FakeWindow(`file:///Applications/Fullspin.app/renderer/${document}`);
+  const window = new FakeWindow(`file:///Applications/Vespin.app/renderer/${document}`);
   electronApp.emit("browser-window-created", {}, window);
   return window;
 }

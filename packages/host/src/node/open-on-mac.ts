@@ -1,12 +1,13 @@
 import path from "node:path";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 
 /**
- * open-on-mac.ts -- the script Open on this Mac runs in a terminal of this Mac drawn in Fullspin: a coding agent's pushed branch checked out in a worktree of Fullspin's own clone of the repository, and the repository's run command run there.
+ * open-on-mac.ts -- the script Open on this Mac runs in a terminal of this Mac drawn in the app: a coding agent's pushed branch checked out in a worktree of the app's own clone of the repository, and the repository's run command run there.
  *
- * Nothing is asked of the developer first. Fullspin keeps one clone of each
- * repository under `~/.luke`, shared by every Fullspin install, made the first
+ * Nothing is asked of the developer first. The app keeps one clone of each
+ * repository under `~/.vespin`, shared by every install, made the first
  * time a branch of it is opened, under a lock, and a worktree per branch
- * beside it; a worktree an earlier Fullspin kept under its application data is
+ * beside it; a worktree an earlier version kept under its application data is
  * left there and said. The script runs in the
  * developer's login shell with their own Git login, so their credentials
  * and tools are the ones used: it clones over HTTPS, and over SSH where
@@ -31,15 +32,15 @@ import path from "node:path";
  */
 
 /**
- * Where every Fullspin install on this Mac keeps its clones and worktrees, shared
+ * Where every install on this Mac keeps its clones and worktrees, shared
  * between them: a folder of the home folder whose path holds no space, so a
  * worktree reads to a repository's own scripts as any checkout of it would.
  */
 export function worktreesRoot(home: string): string {
-  return path.join(home, ".luke");
+  return path.join(home, ".vespin");
 }
 
-/** The folders under the root Fullspin's clones and every agent branch's worktree live in. */
+/** The folders under the root the app's clones and every agent branch's worktree live in. */
 const CLONES_FOLDER = "clones";
 const WORKTREES_FOLDER = "worktrees";
 
@@ -49,7 +50,7 @@ function repositoryFolders(repository: string): readonly [string, string] {
   return [owner, name];
 }
 
-/** Where Fullspin's own clone of a repository lives, under the state root. */
+/** Where the app's own clone of a repository lives, under the state root. */
 export function cloneFolder(stateRoot: string, repository: string): string {
   return path.join(stateRoot, CLONES_FOLDER, ...repositoryFolders(repository));
 }
@@ -63,7 +64,7 @@ function shellQuoted(word: string): string {
  * A branch as one folder name: percent-encoded, so no two branches share a
  * folder and none reaches outside it, with `+` in place of `%`, which no
  * encoded name holds otherwise. A `%` in a folder breaks the `file://` URL
- * Electron's `loadFile` makes of a path in it, which a build of Fullspin's own
+ * Electron's `loadFile` makes of a path in it, which a build of our own
  * desktop loads its windows from.
  */
 function branchFolder(branch: string): string {
@@ -83,10 +84,10 @@ export function worktreeFolder(stateRoot: string, repository: string, branch: st
 /**
  * The tidy each open runs beside its run: it finishes deleting what an
  * earlier tidy moved aside, then moves aside every other worktree of the
- * repository, this Fullspin's and an earlier one's, whose branch GitHub no
+ * repository, this version's and an earlier one's, whose branch GitHub no
  * longer has, which no run is using, which was not opened in the last day,
  * and which holds no change and no commit of the developer's, and an earlier
- * Fullspin's clone left with no worktree and no commit of the developer's. A
+ * version's clone left with no worktree and no commit of the developer's. A
  * worktree is moved aside whole and its record pruned before it is deleted,
  * so one stopped half-way is never left half a worktree. GitHub unread, it
  * tidies nothing.
@@ -132,7 +133,7 @@ const SWEEP = [
   '    only_git "$earlier_clone" &&',
   '    [ -z "$(git -C "$earlier_clone" rev-list --max-count=1 --branches --not --remotes --glob=refs/luke/*)" ]; then',
   '    mkdir -p "$trash" && mv "$earlier_clone" "$trash/$(date +%s)-$$-clone" &&',
-  '      echo "▸ Removed the clone an earlier Fullspin kept at $earlier_clone"',
+  `      echo "▸ Removed the clone an earlier ${PRODUCT_NAME} kept at $earlier_clone"`,
   "  fi",
   '  rm -rf "$trash"/* 2>/dev/null',
   "}",
@@ -142,7 +143,7 @@ const SWEEP = [
  * `opened`, which takes the shared clone's lock, runs `brought_in` under it,
  * and lets go however it ends, and `cloned`, which makes the clone the first
  * time, over HTTPS and over SSH where that fails, checking nothing out. Every
- * Fullspin install shares the clone, so the whole of bringing a branch in, its
+ * install shares the clone, so the whole of bringing a branch in, its
  * clone, fetch, worktree and config, is done under the lock. A script defines
  * `brought_in`, and sets `clone`, `https`, and `ssh`, before it calls `opened`.
  */
@@ -205,7 +206,7 @@ const OWN_REPOSITORY = [
   "}",
 ];
 
-/** The script, its values quoted, that brings the branch into a worktree of Fullspin's clone and runs the command there, where there is one; it ends with the command. */
+/** The script, its values quoted, that brings the branch into a worktree of the app's clone and runs the command there, where there is one; it ends with the command. */
 export function openOnMacScript(input: {
   /** The repository as `owner/name`, cloned from GitHub the first time. */
   readonly repository: string;
@@ -222,7 +223,7 @@ export function openOnMacScript(input: {
   readonly pullRequestHead?: boolean | undefined;
   /** The repository's run command on this Mac, run in the worktree; none where it has none, which the script says. */
   readonly command?: string | null | undefined;
-  /** The folder an earlier Fullspin kept this repository's worktrees in, under its application data, whose worktree of the branch is pointed to rather than moved; none for none. */
+  /** The folder an earlier version of the app kept this repository's worktrees in, under its application data, whose worktree of the branch is pointed to rather than moved; none for none. */
   readonly earlier?:
     | { readonly worktrees: string; readonly clone?: string | undefined }
     | undefined;
@@ -231,10 +232,10 @@ export function openOnMacScript(input: {
    * root; none where the script tidies nothing. Each open tidies the
    * repository's other worktrees there: one whose branch is gone from
    * GitHub, that no run is using, not opened in the last day, and holding
-   * nothing of the developer's, and an earlier Fullspin's clone left with none.
+   * nothing of the developer's, and an earlier version's clone left with none.
    */
   readonly trash?: string | undefined;
-  /** Where the script writes its terminal's device, which Fullspin resizes it through; none where nothing resizes it. */
+  /** Where the script writes its terminal's device, which the app resizes it through; none where nothing resizes it. */
   readonly ttyFile?: string | undefined;
   /** The terminal's size in cells as the tab first draws it. */
   readonly size?: { readonly cols: number; readonly rows: number } | undefined;
@@ -291,7 +292,7 @@ export function openOnMacScript(input: {
     "  fi",
     // Note that the head is read once, in the clone, as a commit every worktree of it shares, so the worktree fetches nothing of its own.
     '  head="$(git rev-parse --verify --quiet "$fetched^{commit}")" || return 1',
-    // Note that a worktree an earlier Fullspin made of the branch under its application data is left there, with anything of the developer's in it, and said.
+    // Note that a worktree an earlier version of the app made of the branch under its application data is left there, with anything of the developer's in it, and said.
     '  if [ ! -e "$worktree" ] && [ -n "$earlier_worktrees" ]; then',
     "    for name in $earlier_names; do",
     '      if [ -e "$earlier_worktrees/$name/.git" ]; then',
@@ -300,7 +301,7 @@ export function openOnMacScript(input: {
     "      fi",
     "    done",
     "  fi",
-    // Note that a commit is the developer's own where neither GitHub, the head just fetched, nor the head Fullspin last checked out holds it; one that cannot be read is taken for theirs.
+    // Note that a commit is the developer's own where neither GitHub, the head just fetched, nor the head the app last checked out holds it; one that cannot be read is taken for theirs.
     "  unpushed() {",
     '    found="$(git rev-list --max-count=1 "$1" --not --remotes --glob=refs/luke/* "$head" ${opened:+"$opened"})" || return 0',
     '    [ -n "$found" ]',
@@ -314,7 +315,7 @@ export function openOnMacScript(input: {
     '      echo "▸ The worktree has changes of its own; left as it stands."',
     "      return 1",
     "    fi",
-    // Note that the head Fullspin last checked out is kept as a ref of the worktree's own, so an agent's force-push over it is taken.
+    // Note that the head the app last checked out is kept as a ref of the worktree's own, so an agent's force-push over it is taken.
     '    current="$(git rev-parse --verify --quiet HEAD)" || return 1',
     '    opened="$(git rev-parse --verify --quiet refs/worktree/luke-opened)"',
     '    if unpushed "$current"; then',
@@ -356,7 +357,7 @@ export function openOnMacScript(input: {
     ...SWEEP,
     // Note that the tidy runs beside the run, so a slow network or a large delete never holds the run up.
     "( sweep ) &",
-    // Note that the run's id is kept beside Git's record of the worktree, so a tidy from any Fullspin leaves a worktree in use alone; the command takes the script's place, keeping its id.
+    // Note that the run's id is kept beside Git's record of the worktree, so a tidy from any install leaves a worktree in use alone; the command takes the script's place, keeping its id.
     'echo "$$" > "$(git rev-parse --absolute-git-dir)/luke-running"',
     'echo "▸ $branch in $(pwd)"',
     ...(input.command == null
@@ -377,7 +378,7 @@ export function openOnMacScript(input: {
  * The script, its values quoted, that makes a local agent's own repository
  * (`@luke/host`'s `compose-local-agents.ts`), at the head of the branch the
  * agent starts from, or of GitHub's default branch where it names none,
- * read in Fullspin's own clone of the repository, the clone Open on this Mac
+ * read in our own clone of the repository, the clone Open on this Mac
  * shares, under the same lock. The agent's work stays in its own folder,
  * and a worktree's Git folder would stand in the shared clone, so the agent
  * gets a repository of its own: fetched from the shared clone at that head,
@@ -448,7 +449,7 @@ export function agentWorktreeScript(input: {
  * local agent's worktree (`@luke/host`'s `compose-local-agents.ts`): it
  * prints one line, and exits 0, when the worktree holds work that is nowhere
  * else, changes `git status --porcelain` shows, commits its upstream does
- * not hold, or, with no upstream, commits on no remote branch of Fullspin's
+ * not hold, or, with no upstream, commits on no remote branch of our
  * shared clone nor a head it fetched, a local branch, checked out or not,
  * with commits on no such branch or head, a stash, or files in a folder with no
  * repository. It prints nothing and exits 0 for a worktree with nothing to
@@ -485,7 +486,7 @@ export function agentUnsavedWorkScript(input: { readonly worktree: string }): st
     "    exit 0",
     "  fi",
     "else",
-    // Note that the heads Fullspin fetched into refs/luke are GitHub's too, which the agent's own commits are not.
+    // Note that the heads we fetched into refs/luke are GitHub's too, which the agent's own commits are not.
     `  ahead="$(git rev-list --max-count=1 HEAD --not --remotes --glob='refs/luke/*')" || exit 1`,
     '  if [ -n "$ahead" ]; then',
     '    echo "it has commits on no remote branch"',

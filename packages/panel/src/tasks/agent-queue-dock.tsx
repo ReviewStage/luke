@@ -91,7 +91,7 @@ const REFUSAL_WORDS: Readonly<Record<string, string>> = {
   "agent-credential-missing": "the agent's credential is missing",
   "agent-retired": "the agent's session has ended",
   "not-permitted": "only the agent's starter can message it",
-  unavailable: "Fullspin could not reach the agent",
+  unavailable: "Could not reach the agent",
 };
 
 /** What the paused header says. */

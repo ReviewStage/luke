@@ -1,5 +1,6 @@
 import { electron } from "@better-auth/electron";
 import { oauthProvider } from "@better-auth/oauth-provider";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { bearer, jwt, lastLoginMethod, oAuthProxy, organization } from "better-auth/plugins";
@@ -67,7 +68,7 @@ function socialProvider(client: SocialClient) {
 export function socialProviders(registered: Pick<AuthSecrets, "google" | "github">) {
   return {
     google: { ...socialProvider(registered.google), scope: ["email", "profile"] },
-    // The Fullspin GitHub App's client: signing in is the user's authorization
+    // Our GitHub App's client: signing in is the user's authorization
     // of the App, and the token it leaves on the account row is the App's
     // expiring user token, refreshed by `github/github-app.ts`.
     github: { ...socialProvider(registered.github), ...GITHUB_SIGN_IN },
@@ -75,7 +76,7 @@ export function socialProviders(registered: Pick<AuthSecrets, "google" | "github
 }
 
 export const auth = betterAuth({
-  appName: "Fullspin",
+  appName: PRODUCT_NAME,
   baseURL: deployment.baseURL,
   trustedOrigins: deployment.trustedOrigins,
   secret: secrets.sessionSecret === undefined ? undefined : Redacted.value(secrets.sessionSecret),

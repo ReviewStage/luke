@@ -13,8 +13,8 @@
  * reads it without the service it is applied through.
  *
  * A sandbox opened before the timeout was shortened keeps the old one in its
- * configuration, which Vercel reapplies at every resume, so each resume Fullspin
- * asks for, and each keep-alive, lowers it first (`capSandboxTimeout`): the
+ * configuration, which Vercel reapplies at every resume, so each resume we
+ * ask for, and each keep-alive, lowers it first (`capSandboxTimeout`): the
  * session a resume opens then lives the timeout too, rather than a day.
  */
 

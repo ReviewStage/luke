@@ -16,6 +16,7 @@ import {
   type PlanCommentThread,
   planCommentWordsSchema,
 } from "@luke/features/plan-comment-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
@@ -29,7 +30,7 @@ import {
 import { logStoreFailure } from "../http/store-failure.js";
 
 /**
- * comment-tools.ts -- a plan's comments as the coding agents read and answer them: one implementation of `read_comments`, `reply_to_comment`, `resolve_thread`, and `reopen_thread`.
+ * comment-tools.ts -- a plan's comments as the coding agents read and answer them: one implementation of `read_comments`, `reply_to_comment`, and `update_comment`.
  *
  * An agent reads the threads for context at any time, but replies only where
  * someone sent a thread to it (`comment-ask.ts`), which its instructions say;
@@ -54,7 +55,7 @@ export const COMMENT_TOOL_REFUSAL = {
   NO_TASK_NAMED: `Name the task whose plan's comments to act on as taskId, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
   NO_THREAD: "No thread of this plan has that id; read_comments lists them.",
   NO_TASK: `No task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
-  RESOLVED: "The thread is resolved; reopen it before replying.",
+  RESOLVED: `The thread is resolved; reopen it with ${AGENT_TOOL.UPDATE_COMMENT} before replying.`,
   UNAVAILABLE: "The comments could not be reached; try again.",
 } as const;
 
@@ -90,7 +91,14 @@ const REPLY_INPUT = Schema.Struct({
   ),
 });
 
-const THREAD_INPUT = Schema.Struct({ taskId: TASK_ID, thread: THREAD_ID });
+const UPDATE_INPUT = Schema.Struct({
+  taskId: TASK_ID,
+  thread: THREAD_ID,
+  resolved: describeWire(
+    Schema.Boolean,
+    "true to resolve the thread once what it asked is settled; false to reopen a resolved one where it is unsettled again.",
+  ),
+});
 
 /** `read_comments`: the plan's threads as they stand. */
 export const READ_COMMENTS_TOOL = {
@@ -111,30 +119,17 @@ export const REPLY_TO_COMMENT_TOOL = {
   inputSchema: REPLY_INPUT,
 } as const;
 
-/** `resolve_thread`: a thread settled. */
-export const RESOLVE_THREAD_TOOL = {
-  name: AGENT_TOOL.RESOLVE_THREAD,
+/** `update_comment`: a thread settled, or a settled one brought back. */
+export const UPDATE_COMMENT_TOOL = {
+  name: AGENT_TOOL.UPDATE_COMMENT,
   description:
-    "Resolve one comment thread on the plan of the task taskId names, by the thread's id, once what it asked is settled; it leaves the plan's margin " +
+    "Resolve or reopen one comment thread on the plan of the task taskId names, by the thread's id: a resolved thread leaves the plan's margin " +
     "and stays in its history.",
-  inputSchema: THREAD_INPUT,
-} as const;
-
-/** `reopen_thread`: a resolved thread brought back. */
-export const REOPEN_THREAD_TOOL = {
-  name: AGENT_TOOL.REOPEN_THREAD,
-  description:
-    "Reopen one resolved comment thread on the plan of the task taskId names, by the thread's id, where what it asked is unsettled again.",
-  inputSchema: THREAD_INPUT,
+  inputSchema: UPDATE_INPUT,
 } as const;
 
 /** The four tools, in the order an agent is offered them. */
-const COMMENT_TOOLS = [
-  READ_COMMENTS_TOOL,
-  REPLY_TO_COMMENT_TOOL,
-  RESOLVE_THREAD_TOOL,
-  REOPEN_THREAD_TOOL,
-] as const;
+const COMMENT_TOOLS = [READ_COMMENTS_TOOL, REPLY_TO_COMMENT_TOOL, UPDATE_COMMENT_TOOL] as const;
 
 type CommentTool = (typeof COMMENT_TOOLS)[number];
 export type CommentToolName = CommentTool["name"];
@@ -154,7 +149,7 @@ export function commentedTaskOf(input: UnparsedWireValue): string | undefined {
 function writerOf(entry: PlanCommentEntry): string {
   switch (entry.writer.actor) {
     case PLAN_COMMENT_ACTOR.LUKE:
-      return "Fullspin";
+      return PRODUCT_NAME;
     case PLAN_COMMENT_ACTOR.AGENT:
       return entry.writer.agentId === undefined ? "agent" : `agent ${entry.writer.agentId}`;
     case PLAN_COMMENT_ACTOR.MEMBER:
@@ -180,7 +175,7 @@ function threadRead(thread: PlanCommentThread): WireRecord {
       by: writerOf(entry),
       to:
         entry.asked?.actor === PLAN_COMMENT_ACTOR.LUKE
-          ? "Fullspin"
+          ? PRODUCT_NAME
           : `agent ${entry.asked?.agentId ?? ""}`,
     }));
   return {
@@ -243,14 +238,12 @@ export function runCommentTool(
           words: read.success.words,
         });
       }
-      case AGENT_TOOL.RESOLVE_THREAD:
-      case AGENT_TOOL.REOPEN_THREAD: {
-        const read = readEither(THREAD_INPUT)(input);
+      case AGENT_TOOL.UPDATE_COMMENT: {
+        const read = readEither(UPDATE_INPUT)(input);
         if (Result.isFailure(read)) return commentToolRejected(COMMENT_TOOL_REFUSAL.UNREADABLE);
-        const action =
-          name === AGENT_TOOL.RESOLVE_THREAD
-            ? PLAN_COMMENT_ACTION.RESOLVE
-            : PLAN_COMMENT_ACTION.REOPEN;
+        const action = read.success.resolved
+          ? PLAN_COMMENT_ACTION.RESOLVE
+          : PLAN_COMMENT_ACTION.REOPEN;
         return yield* act(read.success.thread, { action });
       }
     }
@@ -262,9 +255,9 @@ export function runCommentTool(
 }
 
 /**
- * The plan's open threads as Fullspin is handed them every turn, beside the
+ * The plan's open threads as the task's assistant is handed them every turn, beside the
  * saved document: one line each, read again every turn, so a comment a
- * member left since his last turn is there to raise. Nothing where the plan
+ * member left since its last turn is there to raise. Nothing where the plan
  * holds no open thread.
  */
 export function openThreadsText(threads: readonly PlanCommentThread[]): readonly string[] {
@@ -273,5 +266,5 @@ export function openThreadsText(threads: readonly PlanCommentThread[]): readonly
   return [OPEN_THREADS_MARKER, ...open.map((thread) => JSON.stringify(threadRead(thread)))];
 }
 
-/** The marker the open threads ride behind in Fullspin's standing context. */
+/** The marker the open threads ride behind in the assistant's standing context. */
 export const OPEN_THREADS_MARKER = "[open comment threads]";

@@ -38,6 +38,7 @@ import {
 import { GLYPH } from "@luke/ui/icons";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import type { ReactNode, RefObject } from "react";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { rowMenu } from "../desktop/action-menu.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
@@ -202,7 +203,7 @@ function ListedShells({
   );
 }
 
-/** One shell's row: its press shows it, its × ends it, and its ⋯, right-click and menu key open its menu. */
+/** One shell's row: its press shows it, its × ends it, and its ⋯, right-click, long press and menu key open its menu, a finger's row keeping its × but drawing no ⋯. */
 function ShellRow({
   shell,
   shown,
@@ -217,6 +218,7 @@ function ShellRow({
 }): React.JSX.Element {
   const rename = useInlineRename(shell.id, session.onRename);
   const renaming = rename.editing;
+  const coarse = useCoarsePointer();
   const kill = `End ${shell.title}`;
   // Ending a shell ends what runs in it, which nothing brings back, so it asks first.
   const ending = useConfirmDialog(
@@ -259,6 +261,7 @@ function ShellRow({
         }
         current={shown ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={renaming ? undefined : () => session.onChoose(shell.id)}
+        more={!coarse}
         actionsAt={LIST_ROW_ACTIONS.HOVER}
         actions={
           renaming ? null : (

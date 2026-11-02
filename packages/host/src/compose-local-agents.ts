@@ -86,7 +86,7 @@ import {
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-local-agents.ts -- runs on this device the coding agents the account starts on it, each straight on the box in a folder of its own: their runners started, fed, and stopped as the service's lines say, and their tools' reads and commands answered, for as long as its gate stands (`LocalAgentsDependencies.switchedOn`: open but while Fullspin refuses the device, `daemon/host-standing.ts`).
+ * compose-local-agents.ts -- runs on this device the coding agents the account starts on it, each straight on the box in a folder of its own: their runners started, fed, and stopped as the service's lines say, and their tools' reads and commands answered, for as long as its gate stands (`LocalAgentsDependencies.switchedOn`: open but while the service refuses the device, `daemon/host-standing.ts`).
  *
  * The service writes a local agent's work as rows under this device's id
  * (`@luke/features/device-agent-wire`, `contract/device-agents.ts`): lines
@@ -104,7 +104,7 @@ import type { RunMode } from "./run-mode.js";
  * its home folder, the Claude Code and Codex its agents run on
  * (`LocalAgentPlatformSeam.tools`), and no harness signed in by itself,
  * since no login of the device's is what its agents run on, so every launch
- * carries the sign-in saved in Fullspin; then it beats every `BEAT_EVERY` while
+ * carries the sign-in saved in the account; then it beats every `BEAT_EVERY` while
  * it follows. It holds one read for its lines and one for its requests,
  * each answered by the service as soon as one waits, and claims each by its
  * id.
@@ -139,7 +139,7 @@ import type { RunMode } from "./run-mode.js";
  * starts. A launch or files line keeps the agent as one whose folder this
  * machine made (`keepOwnedAgent`), and a discard that removes the folder
  * forgets it, so an uninstall removes this machine's agents and no other
- * Fullspin install's beside it. Every time the gate opens, every agent the
+ * install's beside it. Every time the gate opens, every agent the
  * host's own state names, in how each ran or a launch it kept, is kept so
  * too, and, on a device whose agents' folders are its own alone
  * (`LocalAgentPlatformSeam.storesOwned`, a Linux host's), every agent with
@@ -173,7 +173,7 @@ import type { RunMode } from "./run-mode.js";
  * turn already running. The check of its folder for unsaved work runs on
  * the box.
  *
- * Agents on This Mac ran on the developer's own logins on it before Fullspin
+ * Agents on This Mac ran on the developer's own logins on it before we
  * gave each agent a folder of its own
  * (`LocalAgentPlatformSeam.formerlyDirect`), so there the host keeps how
  * each agent ran, beside its launches, and takes an agent from before that
@@ -192,7 +192,7 @@ import type { RunMode } from "./run-mode.js";
  * gate opens, so every agent this machine made (`ownedAgents`) has its turn
  * let go of too, whatever a run that died left in its folder. An agent this
  * machine did not make is never touched, since This Mac and a Mac's own
- * `luke-host` share the user's `~/.luke/agents`.
+ * `luke-host` share the user's `~/.vespin/agents`.
  *
  * The service's list of the device's open launches is what the device
  * runs: every beat answers it (`DeviceAgentBeat`), and the device converges
@@ -207,7 +207,7 @@ import type { RunMode } from "./run-mode.js";
  * list names none, and the device only settles what it kept.
  *
  * The device passes over the agents this machine made (`ownedAgents`),
- * never another Fullspin install's beside it, after the first beat the service
+ * never another install's beside it, after the first beat the service
  * answers and every `PASS_EVERY` after. A pass leaves an agent be while a
  * line of its is delivered or waits to be, its runner runs, or a launch of
  * its is kept. And the service's list of the device's live agents, those
@@ -317,13 +317,13 @@ const VARIABLE = {
   PATH: "PATH",
 } as const;
 
-/** The variables of the developer's own a runner and a command are started with, read from the app's environment; nothing else of Fullspin's is handed on. */
+/** The variables of the developer's own a runner and a command are started with, read from the app's environment; nothing else of the app's is handed on. */
 const HANDED_ON = [VARIABLE.HOME, VARIABLE.SHELL, VARIABLE.USER, VARIABLE.LOGNAME, VARIABLE.LANG];
 
 /** Where a device's setup stands as it registers: nothing once it is ready, else preparing, or failed and why. */
 type DeviceSetupRegister = Pick<DeviceAgentDevice, "setup" | "setupFailure">;
 
-/** What a device says of the harnesses signed in on it by itself: none, since its agents run on the sign-ins saved in Fullspin, never the device's own. */
+/** What a device says of the harnesses signed in on it by itself: none, since its agents run on the sign-ins saved in the account, never the device's own. */
 const NOT_SIGNED_IN: DeviceSignedIn = { claudeCode: false, codex: false };
 
 const decodeLaunch = Schema.decodeUnknownOption(deviceAgentLaunchPayloadSchema);
@@ -369,7 +369,7 @@ export interface LocalAgentsDependencies {
   accountId: () => string | undefined;
   /** The device id this device enrolled under, where it enrolled one, as a host does; minted once per account and kept otherwise. */
   deviceId?: string | undefined;
-  /** Whether the device may ask Fullspin now, shut while Fullspin refuses it, read every `IDLE` while the gate is open. */
+  /** Whether the device may ask the service now, shut while the service refuses it, read every `IDLE` while the gate is open. */
   switchedOn: Effect.Effect<boolean>;
   client: LocalAgentClient;
   /** The host's update of itself, where it updates itself; none on This Mac and wherever else the device does not. */
@@ -582,7 +582,7 @@ export function composeLocalAgents(
      * each keep in their own state, and each of a launch it kept; and, on a
      * device whose agents' folders are its own alone (`storesOwned`), each
      * with a folder there.
-     * Note that a Mac's are shared with another Fullspin install, so nothing
+     * Note that a Mac's are shared with another install, so nothing
      * there is taken as this one's. Keeping one kept already changes
      * nothing.
      */
@@ -760,7 +760,7 @@ export function composeLocalAgents(
      * developer's identity and shell, and their login shell's PATH, which
      * the agent's commands and the repository's script find git on, read once
      * each time the gate opens; never the rest of the app's environment,
-     * which is Fullspin's and none of the agent's.
+     * which is the app's and none of the agent's.
      */
     const shellEnvironment = Effect.map(
       loginPath,
@@ -1694,7 +1694,7 @@ export function composeLocalAgents(
 
         /**
          * One pass over the agents this machine made (`ownedAgents`), never
-         * another Fullspin install's, each left be while it is not idle
+         * another install's, each left be while it is not idle
          * (`whileIdle`). Their ids are read first, then the live agents, so
          * an agent named was made before the read was asked. Every agent left
          * out of `ORPHAN_AFTER` answered reads in a row, and not kept for work
@@ -1879,7 +1879,7 @@ export function composeLocalAgents(
           }
           if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
         }
-        // Note that no runner runs yet, so whatever a run cut off left in the folder of any agent this machine made is let go of too; the agents of another Fullspin install sharing `~/.luke/agents` are never named here.
+        // Note that no runner runs yet, so whatever a run cut off left in the folder of any agent this machine made is let go of too; the agents of another install sharing `~/.vespin/agents` are never named here.
         const kept = new Set(left.flatMap((launch) => launch.agentId ?? []));
         for (const agentId of yield* ownedAgents(kernel.stateRoot)) {
           if (!kept.has(agentId)) yield* turnLetGo(deviceAgentLayout(folder, agentId));

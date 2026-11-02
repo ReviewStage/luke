@@ -139,7 +139,7 @@ test("another agent's message in its whole shape is copied as its words alone, w
       "message",
       MESSAGE_ROLE.USER,
       [
-        "Message · [@Invite emails](https://tryluke.dev/acme/agent/a1) to you:",
+        "Message · [@Invite emails](https://vespin.dev/acme/agent/a1) to you:",
         "Rebase before you push.",
         agentMessageReplyLine("5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f"),
       ].join("\n\n"),
@@ -277,7 +277,7 @@ const FORKED_FIRST = firstMessageText(
     messageId: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
     preamble: "This is the work you continue from.",
     steps: [
-      { kind: REPLAY_STEP_KIND.LINE, summary: "Fullspin: Make it round.", words: "Make it round." },
+      { kind: REPLAY_STEP_KIND.LINE, summary: "Vespin: Make it round.", words: "Make it round." },
       {
         kind: REPLAY_STEP_KIND.TOOL,
         summary: "Ran: pnpm test",
@@ -307,7 +307,7 @@ test("an agent started from another is copied as its brief, the source's steps i
       "Fix the tile.",
       "## Forked from an earlier agent · 2 of 3 steps",
       "_1 earlier step was left out to keep the replay within its size limit._",
-      "- **Fullspin:** Make it round.\n- **Agent:** Ran: pnpm test",
+      "- **Vespin:** Make it round.\n- **Agent:** Ran: pnpm test",
       "## Developer",
       "Try a square instead.",
       "## Agent",
@@ -336,7 +336,7 @@ test("an agent started from another that has done nothing yet previews no step, 
   assert.equal(latestActivity(copied), undefined);
 });
 
-test("a summary Fullspin wrote of the source's oldest steps is copied under its line, as its words, and its steps are not counted as left out", () => {
+test("a summary Vespin wrote of the source's oldest steps is copied under its line, as its words, and its steps are not counted as left out", () => {
   const first = firstMessageText(
     "Fix the tile.",
     {
@@ -360,7 +360,7 @@ test("a summary Fullspin wrote of the source's oldest steps is copied under its 
       "## Prompt",
       "Fix the tile.",
       "## Continued from an earlier agent · 1 of 41 steps",
-      "**Summary of 40 earlier steps (written by Fullspin)**",
+      "**Summary of 40 earlier steps (written by Vespin)**",
       "> Read the tile code.\n>\n> Found the radius bug.",
       "- **Agent:** Fixed.",
     ].join("\n\n") + "\n",

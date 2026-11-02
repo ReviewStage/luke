@@ -8,7 +8,7 @@
  * found, so no page is ever a document of the app's origin. It answers a
  * frame's load alone (`page-links.ts`'s `loadsAFrame`): opened in a whole
  * tab, or by a request that names no load, a link is refused, so a page is
- * never a tab of its own on a domain of Fullspin's. What admits a request is the
+ * never a tab of its own on a domain of ours. What admits a request is the
  * link's token alone (`page-links.ts`): the route reads no cookie, needs no
  * session, and sets none. The version is read again for the
  * account the link was minted for, under the reach its mint was held to, and

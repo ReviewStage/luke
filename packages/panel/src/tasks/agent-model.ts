@@ -58,6 +58,7 @@ import {
   type ModelProvider,
 } from "@luke/features/models-wire";
 import { formatCompact, formatUsd } from "@luke/features/number-format";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
@@ -209,7 +210,7 @@ const ACTOR_STATE_OF_GLYPH = {
 
 /** Who archived an agent, and why, as its card and its archived banner say it. */
 export interface ArchivedByReading {
-  /** "Archived by Dean", "Archived by Fullspin for you", "Archived by Bill by seat for Dean", "Archived with its task by Dean". */
+  /** "Archived by Dean", "Archived by ${PRODUCT_NAME} for you", "Archived by Bill by seat for Dean", "Archived with its task by Dean". */
   readonly words: string;
   readonly reason: string | undefined;
 }
@@ -219,7 +220,7 @@ const UNNAMED_ARCHIVER = "another agent";
 
 /**
  * Who archived an agent, as the reader reads it: the member who did, or
- * Fullspin or the archiving agent and the member they acted for, "you" for the
+ * the app or the archiving agent and the member they acted for, "you" for the
  * reader's own account, the member left out once their account is gone;
  * and the reason they gave. An agent archived along with its task says so.
  */
@@ -234,7 +235,7 @@ export function archivedByReading(
     by.by === AGENT_ARCHIVER.MEMBER
       ? member
       : by.by === AGENT_ARCHIVER.LUKE
-        ? `Fullspin${forMember}`
+        ? `${PRODUCT_NAME}${forMember}`
         : `${by.agent?.name || UNNAMED_ARCHIVER}${forMember}`;
   const archived = by.withTask === true ? "Archived with its task" : "Archived";
   return {
@@ -287,7 +288,7 @@ export function agentActor(
 /**
  * What sent one of the developer's messages to an agent, as the actor named
  * over it: a teammate read against the workspace's `members` for their
- * face, a former member, Fullspin, an automation, another coding agent of the
+ * face, a former member, the app, an automation, another coding agent of the
  * workspace by its name on its harness's mark, read off the model the
  * service answers it runs on, and the mark of no known harness where it
  * answers none, or the GitHub login GitHub
@@ -295,7 +296,7 @@ export function agentActor(
  * square by whether the login is a bot's (`githubLoginActor`); none for the reader's own,
  * a message whose sender was not kept, or a member's read with no account
  * id, for the reason `teammateStarter` gives. A service older than the
- * sender's kind names Fullspin, an automation, and a former member alike by a
+ * sender's kind names the app, an automation, and a former member alike by a
  * name with no account, which the window cannot tell apart, so such a
  * sender stands by its name on the outline of someone it cannot place.
  */
@@ -424,10 +425,10 @@ export function agentStateWords(status: AgentStatus): string | undefined {
 export const START_NEEDS_REPOSITORY = "Choose a repository";
 
 /** What a call refused for a repository out of the workspace's reach says, wherever it is refused. */
-export const REPOSITORY_UNREACHED_NOTE = "Fullspin cannot reach this task's repository on GitHub.";
+export const REPOSITORY_UNREACHED_NOTE = `${PRODUCT_NAME} cannot reach this task's repository on GitHub.`;
 
 /** What a message no answer came back for says, which may have reached the agent all the same. */
-const NOT_HEARD_BACK = "Fullspin didn't hear back.";
+const NOT_HEARD_BACK = "No answer came back.";
 
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
@@ -659,13 +660,13 @@ const UNNAMED_DEVICE = "Your device";
 /** The way out every device refusal ends on, since the cloud takes any agent. */
 const RUN_IN_CLOUD = "or set this task to run in the cloud";
 
-/** How a device that went quiet is brought back, by its platform: a Mac woken and logged in on, since its host runs in its user's login session, or a Linux server's own Fullspin started. */
+/** How a device that went quiet is brought back, by its platform: a Mac woken and logged in on, since its host runs in its user's login session, or a Linux server's own host started. */
 const DEVICE_WAKE = {
   [DEVICE_PLATFORM.DARWIN]: "Wake it and log in on it",
-  [DEVICE_PLATFORM.LINUX]: "Start Fullspin on that host",
+  [DEVICE_PLATFORM.LINUX]: `Start ${PRODUCT_NAME} on that host`,
 } as const satisfies Record<DevicePlatform, string>;
 
-/** How a device whose setup failed tries it again, by its platform: Retry under This Mac in its app, or a Linux server's own Fullspin started again. */
+/** How a device whose setup failed tries it again, by its platform: Retry under This Mac in its app, or a Linux server's own host started again. */
 const SETUP_RETRY = {
   [DEVICE_PLATFORM.DARWIN]: "Choose Retry under This Mac in Settings › Hosts on it",
   [DEVICE_PLATFORM.LINUX]: "Run sudo systemctl restart luke-host on that host",
@@ -749,8 +750,8 @@ export function unrunnableChoice(
   return model === undefined ? undefined : modelConnectFailure(model);
 }
 
-/** What an agent Fullspin's key paid for says to a message, since it never moves to another payer. */
-const LUKE_PAID_REFUSAL = "Fullspin's key no longer runs agents. Continue in a new one.";
+/** What an agent our key paid for says to a message, since it never moves to another payer. */
+const LUKE_PAID_REFUSAL = `${PRODUCT_NAME}'s key no longer runs agents. Continue in a new one.`;
 
 /** The one sentence a missing credential says: the harness to connect, by the provider the service named, and what it unblocks. */
 function credentialMissingWords(
@@ -915,13 +916,13 @@ function callFailure(text: string): Failure {
 /**
  * A repository out of reach, said by why with the repository named, and
  * the press that mends it: GitHub connected, or connected again, in
- * Settings; the repository given to Fullspin's GitHub App; another repository
+ * Settings; the repository given to our GitHub App; another repository
  * chosen; the task moved to the workspace whose GitHub reaches it; or the
  * member's own token replaced in Settings › Profile, or authorized on
  * GitHub for the organization's SAML SSO. A service that said nothing more
  * says the bare sentence, which Retry answers, and so does an agent with no
  * task wherever the remedy is pressed on the task: only giving the
- * repository to Fullspin's GitHub App, and a token's remedies, are not.
+ * repository to our GitHub App, and a token's remedies, are not.
  */
 function unreachedFailure(
   unreached: RepositoryUnreached | undefined,
@@ -930,7 +931,7 @@ function unreachedFailure(
   if (unreached?.reason === REPOSITORY_UNREACHED.NOT_SELECTED) {
     return {
       reason: FAILURE_REASON.ADD_REPOSITORY,
-      text: `Fullspin's GitHub App doesn't have access to ${unreached.repository}.`,
+      text: `${PRODUCT_NAME}'s GitHub App doesn't have access to ${unreached.repository}.`,
       repository: unreached.repository,
       settingsUrl: unreached.settingsUrl,
     };
@@ -975,13 +976,13 @@ function unreachedFailure(
     case REPOSITORY_UNREACHED.NOT_CONNECTED:
       return {
         reason: FAILURE_REASON.CONNECT_GITHUB,
-        text: `This workspace isn't connected to GitHub, so Fullspin cannot reach ${repository}.`,
+        text: `This workspace isn't connected to GitHub, so ${PRODUCT_NAME} cannot reach ${repository}.`,
         taskId: taskId,
       };
     case REPOSITORY_UNREACHED.CONNECTION_LAPSED:
       return {
         reason: FAILURE_REASON.RECONNECT_GITHUB,
-        text: `This workspace's GitHub connection was removed or suspended, so Fullspin cannot reach ${repository}.`,
+        text: `This workspace's GitHub connection was removed or suspended, so ${PRODUCT_NAME} cannot reach ${repository}.`,
         taskId: taskId,
       };
     case REPOSITORY_UNREACHED.OTHER_OWNER:
@@ -1086,7 +1087,7 @@ export function messageFailureNote(
       ),
     );
   }
-  // Note that an agent Fullspin's key paid for is refused whatever is connected now, so Settings mends nothing.
+  // Note that an agent our key paid for is refused whatever is connected now, so Settings mends nothing.
   if (
     refused.failure === AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING &&
     payer === AGENT_PAYER.LUKE
@@ -1192,7 +1193,7 @@ export { agentName, modelLabel };
  * The provider whose harness runs a model, read from its catalog id, whose
  * prefix is the provider's word (`models-wire.ts`), so a tab wears its
  * harness's mark before the catalog itself is read; none for a provider
- * Fullspin runs no agent on.
+ * we run no agent on.
  */
 export function providerOf(modelId: string): ModelProvider | undefined {
   const prefix = modelId.slice(0, Math.max(0, modelId.indexOf(CATALOG_ID_SEPARATOR)));
@@ -1939,8 +1940,8 @@ export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOO
 }
 
 /**
- * Whether a delegation is a native harness's subagent, whose own work Fullspin
- * keeps no transcript of yet, so its row opens no worker's tab.
+ * Whether a delegation is a native harness's subagent, whose own work we
+ * keep no transcript of yet, so its row opens no worker's tab.
  */
 export function nativeSubagent(
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>,

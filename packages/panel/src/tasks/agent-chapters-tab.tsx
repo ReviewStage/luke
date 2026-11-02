@@ -73,7 +73,7 @@ import {
   Tooltip,
   VisuallyHidden,
 } from "@luke/ui";
-import { CheckIcon, GLYPH, RotateCwIcon, SparklesIcon } from "@luke/ui/icons";
+import { CheckIcon, GLYPH, RotateCwIcon } from "@luke/ui/icons";
 import { type ReactNode, type RefObject, useMemo, useRef, useState } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
 import { failureShown, unreadShown } from "../failure-report.js";
@@ -809,7 +809,7 @@ function ChaptersReading({
         <TabNotice>
           <p>{CHAPTERS_WORDS.STALE}</p>
           {generatable ? (
-            <Button icon={<SparklesIcon aria-hidden="true" />} onClick={read.generate}>
+            <Button icon={<GLYPH.RETRY aria-hidden="true" />} onClick={read.generate}>
               {CHAPTERS_WORDS.REGENERATE}
             </Button>
           ) : null}
@@ -894,7 +894,7 @@ function ChaptersReading({
                       [
                         {
                           label: CHAPTERS_WORDS.REGENERATE_CHAPTERS,
-                          icon: <SparklesIcon aria-hidden="true" />,
+                          icon: <GLYPH.RETRY aria-hidden="true" />,
                           onSelect: read.generate,
                         },
                       ],

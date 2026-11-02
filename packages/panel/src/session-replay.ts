@@ -50,7 +50,7 @@ import type { BundleImporter } from "./bundle-loader.js";
 import { sessionRecorderLoaded } from "./session-recorder/contract.js";
 
 /**
- * Where everything here posts. The processor's own address rather than Fullspin's
+ * Where everything here posts. The processor's own address rather than our
  * origin: nothing forwards on the user's behalf, so the processor sees the
  * address a request arrives from. Each shell's connect policy names it, and
  * the assets host beside it.
@@ -238,7 +238,7 @@ function scrubbedProperties(properties: Properties, shell: SessionReplayShell): 
  * truthiness alone, so an empty object turns recording on and supplies no
  * masking: `init`'s `session_recording` is read first and this response
  * second, so `SESSION_REPLAY_MASKING` stands. `hasFeatureFlags: false`
- * declines the flag fetch Fullspin has no use for.
+ * declines the flag fetch we have no use for.
  */
 function preloadRemoteConfig(key: string): void {
   window._POSTHOG_REMOTE_CONFIG = {
@@ -443,7 +443,7 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
         return;
       }
       // The "no-external" client: the full build without the surveys, product
-      // tours, web vitals, and the rest Fullspin never turns on, and without the
+      // tours, web vitals, and the rest we never turn on, and without the
       // recorder, which is a bundle of its own.
       void import("posthog-js/dist/module.no-external").then((module) => {
         loading = false;

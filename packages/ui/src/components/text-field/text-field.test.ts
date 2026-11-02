@@ -347,7 +347,7 @@ test("a text entry standing alone in a settings row reports itself invalid while
   ];
   for (const entry of entries) assert.equal(entry.getAttribute("aria-invalid"), null);
 
-  act(() => root.render(row("That isn't a schedule Fullspin can read.")));
+  act(() => root.render(row("That isn't a schedule Vespin can read.")));
   for (const entry of entries) assert.equal(entry.getAttribute("aria-invalid"), "true");
 
   act(() => root.render(row(undefined)));

@@ -1,5 +1,5 @@
 /**
- * github-app-fake.ts -- the Fullspin GitHub App over a GitHub that answers from a test's own script, a workspace's connected installation, and the account rows a sign-in leaves.
+ * github-app-fake.ts -- our GitHub App over a GitHub that answers from a test's own script, a workspace's connected installation, and the account rows a sign-in leaves.
  *
  * A suite stands the real `GitHubApp` over fixed settings and a fake
  * `HttpClient`, so what it holds is what the service asks GitHub and what it

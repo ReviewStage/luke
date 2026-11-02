@@ -30,7 +30,7 @@ import type { AgentsControl } from "./use-agents.js";
  * The writer is read through `@luke/ui/actor-model`'s `editActor`, against
  * the workspace's members the task's directory holds (`member-directory.tsx`),
  * and named as one target that hangs its card. A person's card says what
- * they last did in the plan, and Fullspin's when and what it wrote, both read
+ * they last did in the plan, and the app's when and what it wrote, both read
  * off who last changed each section, which the window already holds. A
  * coding agent found among the task's agents wears its harness and where
  * its work stands, hangs its tab's card, and opens its tab on a press where
@@ -112,7 +112,7 @@ const OWN_CONFLICT: ConflictWords = {
 /**
  * What a conflict says, naming who wrote the text it met as the "Edited by"
  * line names them: "Charles Pan changed this section while you were
- * editing." and "Use Charles Pan’s"; Fullspin; a coding agent as the task's list
+ * editing." and "Use Charles Pan’s"; the app; a coding agent as the task's list
  * names it, or its row where the list holds no such agent.
  */
 export function conflictWords(edit: PlanLastEdit | undefined, place: EditPlace): ConflictWords {
@@ -216,7 +216,7 @@ export function editorsOf(edits: readonly PlanLastEdit[], place: EditPlace): rea
 }
 
 /**
- * Who wrote an edit: "[Fullspin] Fullspin", "[Charles] Charles Pan". `sentence`
+ * Who wrote an edit: "[${PRODUCT_NAME}] ${PRODUCT_NAME}", "[Charles] Charles Pan". `sentence`
  * names the reader "you" inside a line that leads with other words. With
  * `faceOnly` it is the writer's face alone, their name said in the card it
  * hangs, for a section's byline, which keeps to a heading's end. Drawn

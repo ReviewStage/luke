@@ -1,7 +1,7 @@
 /**
  * page-policy.ts -- the response policy a plan's page is served under, wherever it is served from.
  *
- * A page is HTML an agent wrote, so it is served as nothing of Fullspin's own,
+ * A page is HTML an agent wrote, so it is served as nothing of our own,
  * under a policy that lets the page run its own inline scripts and the
  * libraries cdnjs serves. Under it the page may fetch or post nothing, embed
  * no frame, submit no form, and load no image or font from anywhere but

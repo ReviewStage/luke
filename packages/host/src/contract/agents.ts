@@ -66,6 +66,7 @@ import {
   hostPairingParamsSchema,
   hostPairingViewSchema,
 } from "@luke/features/host-pairing-view";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
@@ -211,7 +212,7 @@ export const agentActsContract = {
     .input(exactInput(agentPullRequestParamsSchema))
     .output(EffectSchema.flip(agentReviewOptionsAnswerViewSchema)),
   [AGENT_ACT_KIND.AGENTS_LUKE_TOOLS]: actProcedure(
-    "Could not read the agent's Fullspin tools on this system.",
+    `Could not read the agent's ${PRODUCT_NAME} tools on this system.`,
   )
     .input(exactInput(agentPullRequestParamsSchema))
     .output(EffectSchema.flip(agentLukeToolsAnswerViewSchema)),

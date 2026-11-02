@@ -53,7 +53,7 @@ const SOURCE_ID = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
 const FORKED_AT = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
 const STEPS: Replay["steps"] = [
-  { kind: REPLAY_STEP_KIND.LINE, summary: "Fullspin: Use seven days.", words: "Use seven days." },
+  { kind: REPLAY_STEP_KIND.LINE, summary: "Vespin: Use seven days.", words: "Use seven days." },
   {
     kind: REPLAY_STEP_KIND.TOOL,
     summary: "Read: invite.ts",
@@ -159,7 +159,7 @@ test("a replay is a continue with no message and a fork at one, and says its ste
 
 test("a line sent to the source is named by whoever its summary says sent it, and the source's words and calls are the agent's", () => {
   assert.deepEqual(STEPS.map(stepLine), [
-    { who: "Fullspin", line: "Use seven days." },
+    { who: "Vespin", line: "Use seven days." },
     { who: "Agent", line: "Read: invite.ts" },
     { who: "Agent", line: "Done: for now." },
   ]);
@@ -434,7 +434,7 @@ test("a line's step whose marker names when it was sent carries that moment", ()
   assert.equal(line.kind === STEP_VIEW.LINE && line.at, at);
 });
 
-test("the card's Copy copies the replay as the agent was handed it: Fullspin's summary, each line under its sender, the agent's words, and each call with its input and result", () => {
+test("the card's Copy copies the replay as the agent was handed it: Vespin's summary, each line under its sender, the agent's words, and each call with its input and result", () => {
   const words = replayWords({
     agentId: "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b",
     preamble: "Below is the work.",
@@ -483,12 +483,12 @@ test("a line's step is drawn as a sent message under its sender, and the agent's
   assert.deepEqual(
     stepView({
       kind: REPLAY_STEP_KIND.LINE,
-      summary: "Fullspin: Use seven days.",
+      summary: "Vespin: Use seven days.",
       words: "Use seven days.",
     }),
     {
       kind: STEP_VIEW.LINE,
-      sender: "Fullspin",
+      sender: "Vespin",
       sentBy: undefined,
       own: false,
       at: undefined,
@@ -544,9 +544,9 @@ test("a call's step read from its marker is drawn as its marker says, whatever i
   assert.equal(running.kind === STEP_VIEW.CALL && running.view.output, undefined);
 });
 
-test("a summary Fullspin wrote of the oldest steps is named on its row, and the steps it stands for are not left out", () => {
+test("a summary Vespin wrote of the oldest steps is named on its row, and the steps it stands for are not left out", () => {
   const summarized = replay({ summary: { text: "Read the code.", steps: 174 }, totalSteps: 180 });
-  assert.equal(summaryLine(summarized), "Summary of 174 earlier steps (written by Fullspin)");
+  assert.equal(summaryLine(summarized), "Summary of 174 earlier steps (written by Vespin)");
   assert.equal(
     leftOutLine(summarized),
     "3 earlier steps were left out to keep the replay within its size limit.",

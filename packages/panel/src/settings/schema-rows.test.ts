@@ -178,16 +178,16 @@ test("a switch flips at once, before the store answers, and is never rested for 
   const page = mount(SETTINGS_PAGE.THIS_MAC);
   held = Promise.withResolvers<ActionResult>();
 
-  act(() => control(page, "Open Fullspin at login").click());
+  act(() => control(page, "Open Vespin at login").click());
 
-  const login = control(page, "Open Fullspin at login");
+  const login = control(page, "Open Vespin at login");
   assert.equal(login.getAttribute("aria-checked"), "false");
   assert.equal(login.disabled, false);
   assert.deepEqual(written, [["openAtLogin", false]]);
 
   held.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
   await settle();
-  assert.equal(control(page, "Open Fullspin at login").getAttribute("aria-checked"), "false");
+  assert.equal(control(page, "Open Vespin at login").getAttribute("aria-checked"), "false");
   assert.equal(newestToastSays(), undefined);
 });
 
@@ -201,26 +201,26 @@ test("a switch follows the settings again once they agree with what it flipped t
       }),
   });
 
-  act(() => control(page, "Open Fullspin at login").click());
+  act(() => control(page, "Open Vespin at login").click());
   await settle();
   redraw(settingsView({ openAtLogin: false }));
-  assert.equal(control(page, "Open Fullspin at login").getAttribute("aria-checked"), "false");
+  assert.equal(control(page, "Open Vespin at login").getAttribute("aria-checked"), "false");
 
   // Another window turns it back on; the switch is the store's again, not a value held here.
   redraw(settingsView({ openAtLogin: true }));
-  assert.equal(control(page, "Open Fullspin at login").getAttribute("aria-checked"), "true");
+  assert.equal(control(page, "Open Vespin at login").getAttribute("aria-checked"), "true");
 });
 
 test("a switch the store refuses flips back and says why in a toast, and can be pressed again", async () => {
   const page = mount(SETTINGS_PAGE.THIS_MAC);
   held = Promise.withResolvers<ActionResult>();
 
-  act(() => control(page, "Open Fullspin at login").click());
-  assert.equal(control(page, "Open Fullspin at login").getAttribute("aria-checked"), "false");
+  act(() => control(page, "Open Vespin at login").click());
+  assert.equal(control(page, "Open Vespin at login").getAttribute("aria-checked"), "false");
   held.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSED });
   await settle();
 
-  const login = control(page, "Open Fullspin at login");
+  const login = control(page, "Open Vespin at login");
   assert.equal(login.getAttribute("aria-checked"), "true");
   assert.equal(login.disabled, false);
   assert.equal(newestToastSays(), REFUSED);
@@ -228,7 +228,7 @@ test("a switch the store refuses flips back and says why in a toast, and can be 
   held = undefined;
   act(() => login.click());
   await settle();
-  assert.equal(control(page, "Open Fullspin at login").getAttribute("aria-checked"), "false");
+  assert.equal(control(page, "Open Vespin at login").getAttribute("aria-checked"), "false");
 });
 
 test("a switch whose write the host refuses outright flips back with the host's sentence and is never left disabled", async () => {
@@ -237,10 +237,10 @@ test("a switch whose write the host refuses outright flips back with the host's 
     [SETTINGS_ACT_KIND.SETTING_UPDATE]: () => Promise.reject(refusedOnPort(REFUSED)),
   });
 
-  act(() => control(page, "Open Fullspin at login").click());
+  act(() => control(page, "Open Vespin at login").click());
   await settle();
 
-  const login = control(page, "Open Fullspin at login");
+  const login = control(page, "Open Vespin at login");
   assert.equal(login.getAttribute("aria-checked"), "true");
   assert.equal(login.disabled, false);
   assert.equal(newestToastSays(), REFUSED);

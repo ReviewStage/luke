@@ -2,6 +2,7 @@ import { AGENT_BOUNDS, AGENT_STATUS, hasWordsOrFiles } from "@luke/features/agen
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { MacOffer, ModelChoice } from "@luke/features/models-wire";
+import { PRODUCT_NAME } from "@luke/features/product-name";
 import {
   TASK_CREATE_RELATION_KIND,
   TASK_MODE,
@@ -216,7 +217,7 @@ const COMPOSER_WORDS = {
 /** What the card says where the member's devices could not be read, with Retry, rather than starting the task in the cloud. */
 const DEVICES_UNREAD: Failure = {
   reason: FAILURE_REASON.OTHER,
-  text: "Couldn't read your devices, so Fullspin can't tell where this task should run.",
+  text: `Couldn't read your devices, so ${PRODUCT_NAME} can't tell where this task should run.`,
 };
 
 /** The devices Runs on offers before a read lists any, or while Bring your own host is off: none, so it offers Cloud alone. */

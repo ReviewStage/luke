@@ -45,7 +45,7 @@ export const PUSH_GUARD = {
   /** A command chosen from the menu bar, for the focused window to run as its shortcut would. */
   [PUSH.MENU_COMMAND]: result<AppCommand>(isAppCommand),
   /**
-   * A Fullspin link the system handed the app: the panel is to open the place it
+   * A link of ours the system handed the app: the panel is to open the place it
    * names, in the workspace it was written under, or one of the account's
    * own, which names none. An event, as a click is, because it is an ask the
    * window answers once.

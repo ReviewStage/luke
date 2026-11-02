@@ -275,7 +275,7 @@ function echoesToken(line: string, token: string): boolean {
 }
 
 /**
- * A provider's message as Fullspin may pass it on to a window: its first line,
+ * A provider's message as we may pass it on to a window: its first line,
  * bounded, or nothing where that line is empty or holds anything a
  * credential could be: a bearer, a secret's name or a credential's name set
  * to a value, a long run of token characters, or a short one mixing letters

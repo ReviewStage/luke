@@ -7,7 +7,7 @@ import type { ReportedFailure } from "./reported-failure.js";
  *
  * Every action that asks first is one this panel cannot undo: deleting a
  * stored key, ending a grant at the provider that issued it, signing out,
- * erasing the account. Fullspin never hands any of them back — the main process
+ * erasing the account. The app never hands any of them back — the main process
  * reports where a credential resolved from and nothing more — so a control
  * pressed by mistake costs a trip somewhere else to put right. That is what
  * the confirm is for, and it is why such a control asks rather than acts.

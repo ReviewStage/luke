@@ -269,7 +269,7 @@ const agentPublishing = (userId: string, branch: string, number: number) =>
     return agent;
   });
 
-/** A Fullspin account that signed in with GitHub as the GitHub account given. */
+/** A user account that signed in with GitHub as the GitHub account given. */
 const linkedAccount = (githubId: number) =>
   Effect.gen(function* () {
     const db = yield* Database;

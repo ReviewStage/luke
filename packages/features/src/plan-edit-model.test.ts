@@ -43,12 +43,12 @@ test("one save is out at a time; words typed meanwhile save after it lands, from
 test("a conflict holds the developer's words and saves nothing until they choose", () => {
   const typed = editorTyped(editorOpened(TEXT), `${TEXT}Mine.\n`);
   const conflicted = editorAnswered(editorSent(typed, saved(typed)), {
-    conflict: { current: `${TEXT}Fullspin's.\n` },
+    conflict: { current: `${TEXT}Vespin's.\n` },
   });
 
   assert.deepEqual(conflicted.state, {
     kind: DOCUMENT_EDITOR_STATE.CONFLICT,
-    current: `${TEXT}Fullspin's.\n`,
+    current: `${TEXT}Vespin's.\n`,
   });
   assert.equal(conflicted.draft, `${TEXT}Mine.\n`);
   assert.equal(pendingSave(conflicted), undefined);
@@ -79,7 +79,7 @@ test("a failed save keeps the words, says why, and waits to be tried again or ty
 });
 
 test("a text rebased on a save's merged answer saves only what the developer typed since", () => {
-  const merged = `${TEXT}Fullspin's.\nMine.\n`;
+  const merged = `${TEXT}Vespin's.\nMine.\n`;
   const rebased = editorRebased(editorOpened(TEXT), merged, `${merged}More.\n`);
 
   assert.deepEqual(pendingSave(rebased), { document: { base: merged, value: `${merged}More.\n` } });
@@ -104,7 +104,7 @@ test("an editor left tries a failed save once more, sends nothing over a conflic
   const typed = editorTyped(editorOpened(TEXT), `${TEXT}Mine.\n`);
   const out = editorSent(typed, saved(typed));
   const failed = editorAnswered(out, { failure: TASK_CALL_FAILURE.UNANSWERED });
-  const conflicted = editorAnswered(out, { conflict: { current: `${TEXT}Fullspin's.\n` } });
+  const conflicted = editorAnswered(out, { conflict: { current: `${TEXT}Vespin's.\n` } });
 
   assert.deepEqual(leavingSave(failed), { document: { base: TEXT, value: `${TEXT}Mine.\n` } });
   assert.equal(leavingSave(conflicted), undefined);
@@ -171,12 +171,12 @@ test("Keep mine where both writers changed the same line saves mine there and th
 });
 
 test("Keep mine where both writers added a line at the same place keeps both lines, once where they match", () => {
-  const theirs = `${SECTIONS}Fullspin's point.\n`;
+  const theirs = `${SECTIONS}Vespin's point.\n`;
 
   const both = editorKeptMine(conflictedOver(`${SECTIONS}My point.\n`, theirs));
   const same = editorKeptMine(conflictedOver(theirs, theirs));
 
-  assert.equal(storedAfter(both, theirs), `${SECTIONS}Fullspin's point.\nMy point.\n`);
+  assert.equal(storedAfter(both, theirs), `${SECTIONS}Vespin's point.\nMy point.\n`);
   assert.equal(pendingSave(same), undefined);
 });
 

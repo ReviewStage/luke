@@ -20,7 +20,7 @@ import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
  * What the admin dashboard reads about the service, and only what the service's
- * own tables can answer. Every number here is an aggregate of rows Fullspin already
+ * own tables can answer. Every number here is an aggregate of rows the service already
  * stores for its own operation — signups, hosted-tier usage, and what
  * `admin-overview.ts` reads of tasks, agents, and calls — read by a
  * maintainer on their own service. It is not the desktop observing

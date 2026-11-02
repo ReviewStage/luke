@@ -9,6 +9,7 @@
 
 import { ConfigProvider, Effect, Layer, Logger } from "effect";
 import { FetchHttpClient } from "effect/http";
+import { invitationMailFromEnvironment } from "./accounts/invitation-mail.js";
 import { settledTurnListener } from "./agents/coder-host/settled-turns.js";
 import { bearerCallersLayer } from "./auth/bearer-callers.js";
 import { webSqlClient } from "./db/sql-client.js";
@@ -54,7 +55,7 @@ const gatedGitHubClient = githubRateGate.pipe(
   Layer.provide(Layer.merge(FetchHttpClient.layer, webSqlClient)),
 );
 
-/** The Fullspin GitHub App as the environment names it, named once so every layer that reaches it shares one. */
+/** Our GitHub App as the environment names it, named once so every layer that reaches it shares one. */
 const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment));
 
 /**
@@ -66,7 +67,7 @@ const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)
  * too, once per instance rather than at each invocation: `HostedEnvironment`
  * is the one place the brain model override, the accounts' key ring, and the
  * analytics processor's own deletion key and project are read, and
- * `GitHubApp` the one place the Fullspin GitHub App's id, slug, client, and
+ * `GitHubApp` the one place our GitHub App's id, slug, client, and
  * private key are.
  *
  * `IntegrationConnect` is the one place each integration's connector UID and
@@ -92,11 +93,14 @@ const githubApp = githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)
  * which a build of this layer builds once however many name it, so the gate
  * holds no pool of its own.
  *
- * `Sync` is here for the same reason: Fullspin Sync's hub holds one `LISTEN`
+ * `Sync` is here for the same reason: Sync's hub holds one `LISTEN`
  * per instance, shared by every held read and wait on it (`sync/hub.ts`),
  * over `DATABASE_URL_UNPOOLED`, and its heartbeat notifies over that same
  * connection. Without that URL its listener stays down, and every wait
  * polls on its own clock.
+ *
+ * `InvitationMail` is the one place the Resend key and the sender a
+ * workspace invitation is emailed from are read (`accounts/invitation-mail.ts`).
  *
  * `BearerCallers` keeps the caller each bearer resolved to for a minute
  * (`auth/bearer-callers.ts`), so a held read and the polls inside it ask the
@@ -133,6 +137,7 @@ export const webServices = Layer.mergeAll(
   productAnalyticsFromEnvironment.pipe(
     Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment)),
   ),
+  invitationMailFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer)),
 ).pipe(Layer.provide(webConfigProvider));
 
 /** What an effect run on a runtime over these services may require. */

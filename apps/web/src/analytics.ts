@@ -1,14 +1,14 @@
 import type { CapturedNetworkRequest, PostHog } from "posthog-js";
 
 /**
- * What tryluke.dev counts about itself. It exists to close the funnel the
+ * What vespin.dev counts about itself. It exists to close the funnel the
  * desktop opens: without the landing page and the sign-in, install-to-first-
  * session drop-off is only visible from the point someone already has an
  * account.
  *
  * The browser talks to the analytics processor directly, so the processor
  * sees the visitor's address and user agent. Nothing forwards on their behalf
- * — where the desktop's *counted* events still reach it through Fullspin's own
+ * — where the desktop's *counted* events still reach it through our own
  * service, and its recorder now posts here directly too. Say so in
  * `PRIVACY.md` rather than letting the counted events' stronger claim bleed
  * onto either.
@@ -207,8 +207,8 @@ export function startSiteAnalytics(): void {
       capture_pageview: true,
       capture_pageleave: false,
       // Visitors stay personless until they sign in, which is both cheaper
-      // and the honest shape: an anonymous visitor is not a person Fullspin
-      // knows. The identify where a sign-in completes (`completeSiteSignIn`)
+      // and the honest shape: an anonymous visitor is not a person we
+      // know. The identify where a sign-in completes (`completeSiteSignIn`)
       // is what links their earlier page views to the account, so no aliasing
       // is needed.
       person_profiles: "identified_only",

@@ -8,14 +8,14 @@ import {
 import { parsedUrl } from "./parsed-url.js";
 
 /**
- * lone-link.ts -- what a link standing alone in a paragraph of a message is drawn as: a pull request's card, a Fullspin page's, or the lines of a file at a commit; nothing for any other link, which stays the chip or link it is.
+ * lone-link.ts -- what a link standing alone in a paragraph of a message is drawn as: a pull request's card, a page of ours, or the lines of a file at a commit; nothing for any other link, which stays the chip or link it is.
  *
  * Words drawn as a document, as an Inbox item's messages are, let a link
  * that is the only thing in its paragraph stand as a one-line card of what
  * it names, where the same link inside a sentence stays a chip. Three
  * kinds earn a card: a GitHub pull request, by its repository and number,
  * from its page or any page under it (`pullRequestAddressOf`); a page an
- * agent showed on a plan, by its Fullspin link (`link-grammar.ts`); and lines of
+ * agent showed on a plan, by its own link (`link-grammar.ts`); and lines of
  * a file pinned to a commit, `https://github.com/<owner>/<name>/blob/<commit>/<path>#L3-L5`,
  * drawn as an inbox item's code card draws them, its commit whole, since the lines are
  * read at it and a read takes no abbreviation. A file's link on a branch

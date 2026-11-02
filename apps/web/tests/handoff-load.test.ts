@@ -8,7 +8,7 @@ import { pageLoadedBy } from "./support/page-load";
  * Which loads of a tab the hand-off counts as fresh, by what the browser
  * says of how it loaded the page: a navigation to the address is one; a
  * reload, a Back or Forward into the tab, or a navigation onto an entry
- * holding a place the panel saved is not, nor one Fullspin's own Open in
+ * holding a place the panel saved is not, nor one our own Open in
  * browser flagged to stay on the web, once; and a browser that says nothing
  * is taken as not.
  */

@@ -7,8 +7,8 @@ import { afterEach, expect, test, vi } from "vitest";
 /**
  * desktop-session.test.ts -- the desktop-session page says where the Mac's
  * hand-off stands: under way while the transfer is asked for and once it is
- * sent on, a link that did not come from Fullspin or a transfer Fullspin refused
- * with Open Fullspin on a Mac and nothing to press elsewhere, and a signed-out
+ * sent on, a link that did not come from us or a transfer the service refused
+ * with the Open link on a Mac and nothing to press elsewhere, and a signed-out
  * browser offered the providers,
  * whose failure to start is announced. The page runs as it does in the
  * browser, mounted on its own `#root`; the network, the HTTP boundary to
@@ -92,24 +92,24 @@ test("the hand-off says it is finishing and offers nothing to press while the tr
   expect(buttonNames(page)).toEqual([]);
 });
 
-test("a link that did not come from Fullspin says so and offers nothing to press off a Mac", async () => {
+test("a link that did not come from Vespin says so and offers nothing to press off a Mac", async () => {
   const page = await openPage(new Map(), "/desktop-session.html?state=state-1");
 
-  await titled(page, "This link did not come from Fullspin");
+  await titled(page, "This link did not come from Vespin");
   expect(page.textContent).toContain("Sign in again.");
   expect(buttonNames(page)).toEqual([]);
   expect(links(page)).toEqual([]);
 });
 
-test("a transfer Fullspin refuses says to sign in again, with nothing to press off a Mac", async () => {
+test("a transfer Vespin refuses says to sign in again, with nothing to press off a Mac", async () => {
   const page = await openPage(new Map([[TRANSFER_PATH, () => ({ status: 500 })]]));
 
-  await titled(page, "Fullspin could not be reached");
+  await titled(page, "Vespin could not be reached");
   expect(page.textContent).toContain("Sign in again.");
   expect(links(page)).toEqual([]);
 });
 
-test("on a Mac, a hand-off that ended short offers Open Fullspin, and one still finishing offers nothing", async () => {
+test("on a Mac, a hand-off that ended short offers Open Vespin, and one still finishing offers nothing", async () => {
   vi.stubGlobal("navigator", {
     userAgent:
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -120,8 +120,8 @@ test("on a Mac, a hand-off that ended short offers Open Fullspin, and one still 
   expect(links(finishing)).toEqual([]);
 
   const refused = await openPage(new Map([[TRANSFER_PATH, () => ({ status: 500 })]]));
-  await titled(refused, "Fullspin could not be reached");
-  expect(links(refused)).toEqual([["Open Fullspin", APP_HOME_LINK]]);
+  await titled(refused, "Vespin could not be reached");
+  expect(links(refused)).toEqual([["Open Vespin", APP_HOME_LINK]]);
 });
 
 test("a signed-out browser is offered the providers, and a sign-in that cannot start is announced", async () => {
@@ -132,7 +132,7 @@ test("a signed-out browser is offered the providers, and a sign-in that cannot s
     ]),
   );
   await titled(page, "Sign in to finish");
-  expect(page.textContent).toContain("Sign in with the account you use in Fullspin.");
+  expect(page.textContent).toContain("Sign in with the account you use in Vespin.");
   expect(page.querySelector('[role="alert"]')?.textContent).toBe("");
 
   await act(async () => buttonNamed(page, "Continue with Google").click());

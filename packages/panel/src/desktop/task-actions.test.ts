@@ -489,7 +489,7 @@ test("a sidebar task no one is on wears no face in a workspace of the reader alo
   assert.deepEqual(await faces(uncounted, undefined), [["unassigned"], "(unassigned)"]);
 });
 
-test("a sidebar task Fullspin or a coding agent made wears who is on it rather than their square, and its ⋯ says who made it for whom", () => {
+test("a sidebar task Vespin or a coding agent made wears who is on it rather than their square, and its ⋯ says who made it for whom", () => {
   /** Each mark the row wears, by its kind. */
   const marks = (task: TaskSummary) => {
     const { tasks, asked } = openTab();
@@ -638,7 +638,7 @@ function installClipboard(): string[] {
   return copied;
 }
 
-test("Copy link copies the plan's address on tryluke.dev, alike from the Plan tab's ⋯, the Copy link button beside its title, and its sidebar row, and says Link copied", async () => {
+test("Copy link copies the plan's address on vespin.dev, alike from the Plan tab's ⋯, the Copy link button beside its title, and its sidebar row, and says Link copied", async () => {
   const copied = installClipboard();
   mount(createElement(ToastHost));
   const opened = openTab();
@@ -648,7 +648,7 @@ test("Copy link copies the plan's address on tryluke.dev, alike from the Plan ta
     workspaces: [{ ...PERSONAL, slug: "dean" }],
     sidePanel: { ...opened.tasks.sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
   };
-  const link = `https://tryluke.dev/dean/plan/${TASK.id}`;
+  const link = `https://vespin.dev/dean/plan/${TASK.id}`;
   const copyFromMenu = async () => {
     const item = menuItems().find((candidate) => itemLabel(candidate) === "Copy link");
     assert.ok(item, "the menu offers Copy link");

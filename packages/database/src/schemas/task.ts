@@ -90,7 +90,7 @@ export const task = pgTable(
     /**
      * Who made the task, apart from the member it was made for (`user_id`):
      * that member by hand (`developer`, every task from before this column),
-     * Fullspin on their call (`notetaker`), or a coding agent acting for them
+     * the brain on their call (`notetaker`), or a coding agent acting for them
      * (`agent`), as `create_task` names its caller.
      */
     creatorActor: text("creator_actor")
@@ -110,7 +110,7 @@ export const task = pgTable(
     document: text("document").notNull(),
     /**
      * The GitHub repository the task is about, `owner/name` as GitHub spells
-     * it, confirmed reachable through the Fullspin GitHub App by the account
+     * it, confirmed reachable through our GitHub App by the account
      * before it was written; null until one is chosen, which is where every
      * task from before repositories stands and is no error.
      */
@@ -122,7 +122,7 @@ export const task = pgTable(
     githubAccess: text("github_access").$type<GitHubAccess>().notNull().default(GITHUB_ACCESS.APP),
     /**
      * The developer's own words about the task as they started it, which
-     * Fullspin is handed beside the plan to plan from; null for a task started
+     * the brain is handed beside the plan to plan from; null for a task started
      * with none. Kept as written, like the document.
      */
     brief: text("brief"),
@@ -157,8 +157,8 @@ export const task = pgTable(
     /**
      * Who moved the task to Done by hand, which archived its idle agents with
      * it (`StoredArchive`): a member, or a coding agent for its member; null
-     * while it stands in any other status, and for a Done Fullspin's own finish
-     * made, which archives nothing. An agent still at work as it moved is
+     * while it stands in any other status, and for a Done made by our own finish,
+     * which archives nothing. An agent still at work as it moved is
      * archived as its turn ends, as this archiver, while the task still stands
      * so (`task-store.ts`'s `archiveAgentOfDoneTask`).
      */
