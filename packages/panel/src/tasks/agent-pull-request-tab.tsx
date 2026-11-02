@@ -455,7 +455,7 @@ function landed<A>(part: Part<A>): A | undefined {
 /** The glyph a check wears for where it stands. */
 const CHECK_GLYPHS = {
   [CHECK_STATE.FAILED]: <XIcon />,
-  [CHECK_STATE.PENDING]: <SpinnerRing size={SPINNER_SIZE.SMALL} />,
+  [CHECK_STATE.PENDING]: <SpinnerRing />,
   [CHECK_STATE.PASSED]: <CheckIcon />,
   [CHECK_STATE.SKIPPED]: <CircleSlashIcon />,
 } as const satisfies Record<CheckState, ReactNode>;
@@ -746,7 +746,7 @@ function CheckAvatar({
   );
 }
 
-/** A check's or a deployment's lead: its glyph for where it stands, in that standing's tone, then its App's avatar where it has one. */
+/** A check's or a deployment's lead: its glyph for where it stands, in that standing's tone, in a box of a glyph's size which a running one's ring fills, then its App's avatar where it has one. */
 function CheckLead({
   tone,
   agentId,
@@ -762,7 +762,7 @@ function CheckLead({
   return (
     <span className="inline-flex items-center gap-control-gap">
       <span
-        className={`inline-grid flex-none place-items-center [&>svg]:size-check-glyph ${CHECK_INK[tone]}`}
+        className={`inline-grid size-check-glyph flex-none place-items-center [&>svg]:size-check-glyph ${CHECK_INK[tone]}`}
         data-check-state={tone}
       >
         {CHECK_GLYPHS[tone]}
