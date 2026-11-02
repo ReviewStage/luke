@@ -22,7 +22,7 @@ import {
   storeWriter,
 } from "@luke/database/models/writer";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
-import { AGENT_MACHINE, AGENT_PAYER, type AgentPayer } from "@luke/features/agent-wire";
+import { AGENT_PAYER, type AgentPayer } from "@luke/features/agent-wire";
 import { redactCredentials } from "@luke/features/credential-redaction";
 import {
   PROVIDER_KEY_KIND,
@@ -36,7 +36,6 @@ import {
   Cause,
   Clock,
   Data,
-  Duration,
   Effect,
   ErrorReporter,
   Layer,
@@ -69,7 +68,6 @@ import {
 import { providerModelOf } from "../../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { reopenTaskForWork, settleTaskAfterTurn } from "../../tasks/task-finish.js";
-import { CODER } from "../coder-host/bounds.js";
 import { isNativeRuntime } from "../coder-host/native-runtime.js";
 import { RUNNER_ENDED, runnerEnded, runnerIdled } from "../coder-host/runner-sessions.js";
 import { NativeAgentSessions } from "../coder-host/runtime-sessions.js";
@@ -223,7 +221,8 @@ export interface RunnerEventsOptions<R = never> {
   /**
    * Told once a batch that holds a launch's IDLE, and no END after it, has
    * landed, after its transaction: the warm runner retired at once where
-   * the warm window is zero (`sandboxAtRunnerIdle`). Nothing where left out.
+   * its machine's warm window is zero, or its device waits to update
+   * (`sandboxAtRunnerIdle`). Nothing where left out.
    */
   readonly idled?: (idled: RunnerEnded) => Effect.Effect<void, never, DatabaseServices>;
   /**
@@ -314,11 +313,12 @@ const waitingHandedOn = (ended: RunnerEnded, sessionId: string) =>
   });
 
 /**
- * A launch's IDLE as the sandbox hears it, where the sandbox's warm window
- * is zero (`CODER.RUNNER_WARM`), which a device's IDLE reads too: the warm
- * runner retired at once (`../coder-host/runner-sessions.ts`'s
- * `runnerIdled`), so its END stops the sandbox. With a window, the sweep
- * retires it past the window instead. A retire that fails is said in the
+ * A launch's IDLE as the sandbox or the device hears it: the warm runner
+ * retired at once where its machine's warm window is zero
+ * (`CODER.RUNNER_WARM`), as a sandbox's is, or where its device waits to
+ * switch release (`../coder-host/runner-sessions.ts`'s `runnerIdled`), so
+ * its END stops the sandbox; a device's runner otherwise stays warm, and
+ * the sweep retires it past the window. A retire that fails is said in the
  * log and passed over, because the sweep retires the runner once its grace
  * passes.
  */
@@ -326,9 +326,7 @@ export function sandboxAtRunnerIdle(
   idled: RunnerEnded,
 ): Effect.Effect<void, never, DatabaseServices> {
   const { sessionId } = idled;
-  if (sessionId === undefined || !Duration.isZero(CODER.RUNNER_WARM[AGENT_MACHINE.VERCEL])) {
-    return Effect.void;
-  }
+  if (sessionId === undefined) return Effect.void;
   return runnerIdled({ target: idled.target, sessionId, sequence: idled.sequence }).pipe(
     Effect.provide(FetchHttpClient.layer),
     Effect.asVoid,
