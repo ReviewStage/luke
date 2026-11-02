@@ -1113,6 +1113,28 @@ it.effect(
     }),
 );
 
+it.effect("a takeover the member's other window already holds is not counted again", () =>
+  Effect.gen(function* () {
+    const { peer, browser, commands } = yield* liveBrowser();
+    const panel = yield* scriptedViewer;
+    const store = world(browser);
+    store.driveAs(MEMBER, AN_HOUR_IN);
+    const { fiber } = yield* started(
+      peer,
+      commands,
+      Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+    );
+    yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.DRIVER).some((message) => message.yours));
+    yield* panel.push({ type: BROWSER_LIVE_CLIENT.TAKE_OVER });
+    yield* panel.push({ type: BROWSER_LIVE_CLIENT.HAND_BACK });
+    yield* until(() => store.counted.length === 1);
+
+    yield* panel.leave;
+    yield* Fiber.join(fiber);
+    assert.deepEqual(store.counted, [SERVER_AGENT_TOOL.BROWSER_HANDBACK]);
+  }),
+);
+
 it.effect("a hand-back the store did not take is tried again as the socket closes", () =>
   Effect.gen(function* () {
     const { peer, browser, commands } = yield* liveBrowser();

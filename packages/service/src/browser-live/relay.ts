@@ -530,10 +530,11 @@ function takeOver(view: LiveView, at: Date): Effect.Effect<void> {
     const taken = yield* Effect.result(
       view.deps.takeOver(view.reached.tab.id, view.ask.userId, heldUntil, at),
     );
-    const standing = (yield* Ref.get(view.driving)) !== undefined;
+    // Note that the member's takeover another window of theirs holds stands too, as the tab was last read, since a takeover is theirs rather than a socket's.
+    const standing = (yield* Ref.get(view.driving)) !== undefined || (yield* adoptable(view, at));
     const took = Result.isSuccess(taken) && taken.success;
     yield* Ref.set(view.driving, took ? at.getTime() : undefined);
-    // Note that a takeover this socket already held, moved on, is no new one, so it is not counted again.
+    // Note that a takeover the member already held, moved on, is no new one, so it is not counted again.
     if (took && !standing) {
       yield* view.deps.counted(
         view.ask.userId,
